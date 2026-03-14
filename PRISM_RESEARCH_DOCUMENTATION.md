@@ -57,6 +57,12 @@ PRISM’s strategic upside comes from three planned novel capabilities: a Consti
 
 Execution risk is managed through phase-gated delivery, evidence-based release criteria, and explicit production runbooks. The investment thesis is that organizations will prefer autonomous systems that can prove control, safety, and reliability under operational stress, not just benchmark performance.
 
+## 0.2 The Shift to "Agents As A Service" (AaaS)
+
+As the market matures past initial generative AI experiments, enterprise value is moving rapidly from isolated copilots to "Agents As A Service" (AaaS). Coined to describe the architectural paradigm where autonomous agents are treated as deployable, scalable, and orchestratable services, AaaS transforms AI from a static tool into an active, distributed workforce.
+
+PRISM is inherently built for this paradigm shift. By encapsulating complex multi-step reasoning, strict governance boundaries, and dynamic tool orchestration into containerized, monitorable agent services, PRISM allows enterprises to scale autonomous operations with the same rigor, API-driven accessibility, and operational telemetry as traditional microservices. This transition to AaaS positions PRISM not merely as an application, but as foundational enterprise infrastructure.
+
 ## 1. Purpose
 
 This document consolidates the full research context behind PRISM’s architecture, governance model, roadmap, and release strategy.

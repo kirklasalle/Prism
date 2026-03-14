@@ -1,4 +1,6 @@
 ﻿import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { ActivityBus } from "./core/activity/bus.js";
 import { ConsoleActivitySubscriber } from "./core/activity/console-subscriber.js";
 import { SqliteActivityStore } from "./core/activity/sqlite-store.js";
@@ -19,9 +21,12 @@ import { WorkflowExecutor } from "./core/runtime/workflow.js";
 import { builtinTools } from "./core/tools/builtin-tools.js";
 import { ToolRegistry } from "./core/tools/registry.js";
 import { MemoryQueryTool, SemanticQueryTool } from "./adapters/application/semantic-query-tool.js";
+import { nexusBridgeTools } from "./adapters/application/nexus-bridge-tool.js";
 import { ChatSessionStore } from "./core/operator/chat-session-store.js";
 import { DashboardService, type DashboardAction } from "./core/operator/dashboard-service.js";
 import { SelfReviewScheduler } from "./core/operator/self-review-scheduler.js";
+import { McpClientAdapter } from "./adapters/protocol/mcp-client-tool.js";
+import { AgentPool } from "./core/agents/agent-pool.js";
 
 async function main(): Promise<void> {
     const runtimeMode = resolveRuntimeMode(process.env.PRISM_MODE ?? process.argv[2]);
@@ -55,6 +60,33 @@ async function main(): Promise<void> {
     }
     registry.register(new SemanticQueryTool(semanticIndex, episodicMemory, sessionMemory, metricsCollector));
     registry.register(new MemoryQueryTool(semanticIndex, episodicMemory, sessionMemory, "memory_query", metricsCollector));
+    for (const tool of nexusBridgeTools()) {
+        registry.register(tool);
+    }
+
+    // Load MCP tools from .mcp/mcp-settings.json if present
+    const mcpAdapter = new McpClientAdapter();
+    const mcpSettingsPath = join(
+        process.cwd(),
+        process.env.PRISM_MCP_SETTINGS ?? ".mcp/mcp-settings.json",
+    );
+    if (existsSync(mcpSettingsPath)) {
+        try {
+            const mcpResult = await mcpAdapter.loadAndRegister(mcpSettingsPath, registry);
+            if (mcpResult.registered.length > 0) {
+                console.log(
+                    `[MCP] Registered ${mcpResult.registered.length} tool(s):`,
+                    mcpResult.registered.join(", "),
+                );
+            }
+            for (const e of mcpResult.errors) {
+                console.warn(`[MCP] ${e.server}: ${e.error}`);
+            }
+        } catch (err: unknown) {
+            console.warn(`[MCP] Skipping MCP tool load: ${String(err)}`);
+        }
+    }
+
     const orchestrator = new Orchestrator(
         sessionId, activityBus, policyEngine, registry,
         { approvalQueue, approvalTimeoutMs: 30_000 },
@@ -76,6 +108,10 @@ async function main(): Promise<void> {
         metricsCollector,
         retrievalDashboardStore,
     );
+
+    // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
+    const agentPool = new AgentPool(dashboardService.getLlmDelegate());
+    orchestrator.setAgentPool(agentPool);
     const selfReviewScheduler = new SelfReviewScheduler({
         activityBus,
         sessionId,
@@ -122,6 +158,7 @@ async function main(): Promise<void> {
         console.log("\nPRISM server mode is running. Open the dashboard in your browser.");
         await waitForShutdown(async () => {
             selfReviewScheduler.stop();
+            mcpAdapter.disconnectAll();
             sqliteStore.close();
             retrievalDashboardStore.close();
             sessionMemory.close();

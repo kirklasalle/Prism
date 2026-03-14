@@ -3,6 +3,7 @@
 ## Core Documents
 
 - README.md: strategy, architecture, current capabilities
+- INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md: implementation baseline for individual-native capabilities and gated professional/industrial packs
 - PRISM_RESEARCH_DOCUMENTATION.md: full-context research basis and evidence-to-implementation mapping
 - PRISM_PRD.md: product requirements and acceptance criteria
 - DEVELOPER_GUIDE.md: engineering standards and implementation guidance

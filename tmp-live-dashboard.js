@@ -251,7 +251,7 @@
       const activeSession = state.sessions.find(session => session.sessionId === state.selectedSessionId);
       document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Chat';
       document.getElementById('active-session-meta').textContent = activeSession
-        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' • ' + activeSession.messageCount + ' messages'
+        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' ï¿½ ' + activeSession.messageCount + ' messages'
         : 'Persistent runtime session';
 
       const chips = [];
@@ -292,7 +292,7 @@
           '<div class="' + (item.passed ? 'passed' : 'failed') + '">'
           + (item.passed ? '? ' : '? ')
           + escapeHtml(item.label)
-          + ' — ' + escapeHtml(item.detail || '')
+          + ' ï¿½ ' + escapeHtml(item.detail || '')
           + '</div>'
         ).join('')
         + '</div>'
@@ -858,7 +858,7 @@
       const delta = summary.delta;
 
       function deltaLabel(val, higherIsBad) {
-        if (val === 0) return '<span class="muted">±0</span>';
+        if (val === 0) return '<span class="muted">ï¿½0</span>';
         const positive = val > 0;
         const bad = higherIsBad ? positive : !positive;
         const color = bad ? '#ff8d8d' : '#7ecf7e';
@@ -1208,13 +1208,4 @@
     });
 
     bootstrap();
-    setInterval(async function() {
-      try {
-        await Promise.all([loadSessions(), refreshChrome(), loadMessages()]);
-        render();
-      } catch (error) {
-        state.notice = String(error);
-        render();
-      }
-    }, 2500);
   

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "impressioncore-goliath": {
+      "command": "python",
+      "args": [
+        "D:\\Projects\\impressioncore\\.mcp\\impressioncore-goliath\\server.py"
+      ],
+      "env": {
+        "GOLIATH_DEBUG": "1",
+        "PYTHONPATH": "D:\\Projects\\impressioncore\\.mcp\\impressioncore-goliath"
+      }
+    }
+  }
+}

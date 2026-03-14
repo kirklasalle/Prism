@@ -17,9 +17,13 @@ export async function testLlmProviderManager(): Promise<void> {
     assert.strictEqual(anthropic!.enabled, false);
     assert.strictEqual(anthropic!.hasApiKey, false);
 
-    const switched = await manager.setActiveSelection("ollama", "mistral:7b");
+    const ollamaSnapshot = catalog.providers.find((provider) => provider.id === "ollama");
+    const availableModel = ollamaSnapshot?.models?.[0];
+    assert.ok(availableModel, "Ollama should have at least one model");
+
+    const switched = await manager.setActiveSelection("ollama", availableModel!);
     assert.strictEqual(switched.activeProviderId, "ollama");
-    assert.strictEqual(switched.activeModel, "mistral:7b");
+    assert.strictEqual(switched.activeModel, availableModel);
 
     await assert.rejects(
         () => manager.setActiveSelection("ollama", "missing-model"),

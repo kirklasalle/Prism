@@ -1,4 +1,4 @@
-# PRISM Product Requirements Document (PRD)
+﻿# PRISM Product Requirements Document (PRD)
 
 Date: 2026-03-11  
 Status: Phase C Active  
@@ -7,34 +7,40 @@ Product: PRISM (OpenClaw)
 ## 1. Executive Summary
 
 PRISM is being developed as a world-class autonomous agent runtime that combines:
+
 - hard governance controls,
 - memory-aware decisioning,
 - robust workflow execution,
 - and explicit human authority boundaries.
+- native cross-integration for Agents As A Service (AaaS), bridging machine operations with human calendar and project management for sustainable mutual growth.
 
 The strategic objective is to move from a strong governed runtime to a **SOTA and novel agent platform** that can safely operate in open-ended, high-value computer use tasks.
 
 This PRD integrates:
+
 1. observed state from this repository,
 2. applied agentic-system research guidance,
 3. a concrete implementation plan for next-generation capabilities.
 
 Companion reference:
+
 - `PRISM_RESEARCH_DOCUMENTATION.md` (full-context research source and evidence mapping).
 
 ## 2. Product Thesis
 
 Most agent systems fail in production not because they lack model capability, but because they lack:
+
 - control-plane rigor,
 - failure-path design,
 - tool interface precision,
 - and measurable trust guarantees.
 
-PRISM’s thesis is that **governed autonomy + causal observability + adaptive execution** yields superior real-world reliability and unlocks safe scaling.
+PRISMâ€™s thesis is that **governed autonomy + causal observability + adaptive execution** yields superior real-world reliability and unlocks safe scaling.
 
 ## 3. Problem Statement
 
 Users need an agent that can:
+
 - execute real operations across files, shell, HTTP, and databases,
 - make autonomous progress on multi-step tasks,
 - escalate correctly for high-risk actions,
@@ -51,6 +57,7 @@ PRISM targets operational trust as a first-class design goal.
 From industry production guidance, successful systems use simple composable patterns first, then add autonomy when measurable value justifies complexity.
 
 Implication for PRISM:
+
 - preserve deterministic workflows as baseline,
 - selectively enable autonomous orchestration with bounded controls.
 
@@ -59,6 +66,7 @@ Implication for PRISM:
 ReAct demonstrates that interleaving reasoning and environment interaction improves task quality and interpretability.
 
 Implication for PRISM:
+
 - ensure every action step is grounded in tool outcomes and policy state,
 - avoid free-running text-only planning without environment feedback.
 
@@ -67,6 +75,7 @@ Implication for PRISM:
 Toolformer and practical agent deployments show that explicit tool invocation materially improves quality on tasks where external computation or lookup is required.
 
 Implication for PRISM:
+
 - invest in high-clarity tool schemas and robust error contracts,
 - track tool-level quality and misuse patterns.
 
@@ -75,6 +84,7 @@ Implication for PRISM:
 Controller-worker style orchestration (e.g., HuggingGPT family patterns) scales capability breadth across domains.
 
 Implication for PRISM:
+
 - maintain a central orchestrator with specialized adapters,
 - add domain workers progressively while preserving governance coherence.
 
@@ -83,6 +93,7 @@ Implication for PRISM:
 NIST AI RMF emphasizes trustworthiness through lifecycle risk management.
 
 Implication for PRISM:
+
 - map governance policies to measurable operational controls,
 - enforce reviewable risk boundaries rather than informal safety promises.
 
@@ -105,6 +116,7 @@ Implication for PRISM:
 ## 6. Existing Baseline (Repository-Aligned)
 
 Implemented today:
+
 - activity bus and hashed event stream
 - three-tier policy engine
 - approval queue + HTTP service
@@ -122,6 +134,7 @@ Definition:
 A pre-execution compiler that transforms intent + policy + memory + environment context into a constrained executable plan graph.
 
 Expected value:
+
 - reduces unsafe branching,
 - improves explainability,
 - formalizes policy conformance before execution starts.
@@ -130,11 +143,13 @@ Expected value:
 
 Definition:
 A retrieval system combining:
+
 - semantic relevance lens,
 - causal consequence lens (impact/rollback-sensitive),
 then arbitration based on confidence and risk profile.
 
 Expected value:
+
 - better decision context for high-stakes operations,
 - fewer semantically relevant but operationally unsafe recommendations.
 
@@ -144,6 +159,7 @@ Definition:
 When a workflow fails, generate candidate repair plans, evaluate under policy and quality constraints, then stage safe promotion.
 
 Expected value:
+
 - decreases manual intervention frequency,
 - improves recovery speed,
 - builds adaptive capability with control.
@@ -157,6 +173,7 @@ Expected value:
 - Denial and timeout must be testable and observable states.
 
 Acceptance criteria:
+
 - policy decision events emitted for all operations,
 - denial and timeout states represented in workflow outcomes.
 
@@ -167,6 +184,7 @@ Acceptance criteria:
 - Non-recoverable failure paths terminate with failed workflow status.
 
 Acceptance criteria:
+
 - integration tests cover success, failure, retry, timeout, approval granted, approval denied, approval timeout.
 
 ### 8.3 Memory and retrieval
@@ -176,6 +194,7 @@ Acceptance criteria:
 - Retrieval outputs must be attributable to source events.
 
 Acceptance criteria:
+
 - p95 retrieval latency tracked,
 - quality proxy metrics recorded per query cohort,
 - growth and drift diagnostics generated from rolling windows with alert outputs,
@@ -191,12 +210,79 @@ Acceptance criteria:
 - Incident reconstruction is possible from persisted traces.
 
 Acceptance criteria:
+
 - sampled sessions fully reconstructable end-to-end.
+
+### 8.5 Individual-native MVP capabilities (Phase 1)
+
+The first productization track implements native individual productivity capabilities over existing governance/runtime foundations.
+
+Scope domains:
+
+- email triage and draft workflows,
+- calendar and daily-plan workflows,
+- notes capture and structured extraction,
+- chronological tasks/events planning.
+
+Functional requirements:
+
+1. Email triage + draft
+
+- Support read/classify/summarize/draft operations with explicit send gate.
+- Require source attribution in summaries and draft rationale.
+- Enforce send operation as mutating action under tier2/tier3 policy.
+
+1. Calendar planning
+
+- Support availability lookup, conflict detection, and recommendation generation.
+- Require explicit policy path for event creation/update.
+- Persist conflict and recommendation traces for operator review.
+
+1. Notes and extraction
+
+- Support capture of unstructured note content and extraction of:
+  - action items,
+  - deadlines,
+  - follow-up entities.
+- Require extracted outputs to link back to originating note context.
+
+1. Chronological tasks/events
+
+- Support timeline generation from tasks + constraints.
+- Support reorder/replan with explicit change deltas.
+- Emit drift alerts when schedule changes exceed threshold.
+
+Tooling requirements:
+
+- New capability tools must ship with versioned tool contracts.
+- Contracts must define required args, mutation semantics, and rollback hints.
+- Contract snapshot diffs are required in release evidence.
+
+Workflow requirements:
+
+- Each capability must expose at least one workflow template with:
+  - retries,
+  - timeout policy,
+  - fallback branch.
+- Each mutation-capable workflow must define deterministic deny/timeout outcomes.
+
+Memory requirements:
+
+- Email/calendar workflows must use session + semantic retrieval modes.
+- Notes/task workflows must expose attributable retrieval references in outputs.
+- Retrieval cohort metrics for these domains must be dashboard-visible.
+
+Acceptance criteria:
+
+- four domain templates available and runnable in controlled test mode,
+- policy-path tests pass for allow/deny/timeout on mutating operations,
+- contract snapshots updated and passing regression checks,
+- retrieval attribution present in sampled workflow outputs.
 
 ## 9. Quality Gates (SLO/SLA Targets)
 
 | Domain | Metric | Target |
-|---|---|---|
+| --- | --- | --- |
 | Workflow reliability | Success on approved paths | >= 99.0% |
 | Governance latency | Policy decision p95 | <= 30ms |
 | Eventing | Activity delivery p95 | <= 200ms |
@@ -227,6 +313,7 @@ Acceptance criteria:
 ### 10.3 Release gates
 
 No promotion to next maturity ring unless:
+
 - governance regression suite is green,
 - denial/timeout paths remain stable,
 - telemetry completeness is above threshold,
@@ -245,6 +332,15 @@ No promotion to next maturity ring unless:
 - production-grade workflow planner and policy-aware task routing
 - evaluator-optimizer loop for plan quality
 - deterministic replay and comparative run analysis
+
+### Phase D1 (parallel execution track): Individual-native MVP
+
+- implement email triage/draft workflow templates
+- implement calendar conflict + day-plan templates
+- implement notes capture + extraction templates
+- implement chronological tasks/events planning templates
+- add policy-path coverage for mutation operations in all templates
+- add release evidence bundle for contracts, traces, and retrieval attribution
 
 ### Phase E (novel systems activation)
 
@@ -278,6 +374,7 @@ No promotion to next maturity ring unless:
 ## 13. Documentation and Operator Readiness Requirements
 
 Required artifacts:
+
 - README (strategy + architecture + references)
 - PRD (this file)
 - Developer Guide (implementation standards and test strategy)
@@ -287,9 +384,9 @@ All release candidates must keep documentation synchronized with runtime behavio
 
 ## 14. References
 
-1. Anthropic Engineering, Building effective agents (2024): https://www.anthropic.com/engineering/building-effective-agents
-2. ReAct paper, arXiv:2210.03629: https://arxiv.org/abs/2210.03629
-3. Toolformer paper, arXiv:2302.04761: https://arxiv.org/abs/2302.04761
-4. HuggingGPT paper, arXiv:2303.17580: https://arxiv.org/abs/2303.17580
-5. Model Context Protocol introduction: https://modelcontextprotocol.io/introduction
-6. NIST AI Risk Management Framework: https://www.nist.gov/itl/ai-risk-management-framework
+1. Anthropic Engineering, Building effective agents (2024): <https://www.anthropic.com/engineering/building-effective-agents>
+2. ReAct paper, arXiv:2210.03629: <https://arxiv.org/abs/2210.03629>
+3. Toolformer paper, arXiv:2302.04761: <https://arxiv.org/abs/2302.04761>
+4. HuggingGPT paper, arXiv:2303.17580: <https://arxiv.org/abs/2303.17580>
+5. Model Context Protocol introduction: <https://modelcontextprotocol.io/introduction>
+6. NIST AI Risk Management Framework: <https://www.nist.gov/itl/ai-risk-management-framework>

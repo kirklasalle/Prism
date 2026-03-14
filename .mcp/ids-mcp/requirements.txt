@@ -1,0 +1,22 @@
+# ImpressionCore Documentation System (IDS) MCP Server Requirements
+# Generated: 2025-06-05
+
+# Core dependencies
+pyyaml>=6.0
+rich>=13.0.0
+mcp>=1.9.0
+
+# Optional dependencies for enhanced functionality
+# These should match the main ImpressionCore project requirements
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Development and testing dependencies (optional)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Logging and monitoring
+structlog>=23.0.0
+
+# File watching for real-time updates (future feature)
+watchdog>=3.0.0

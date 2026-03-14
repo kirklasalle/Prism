@@ -1,0 +1,177 @@
+[
+  {
+    "timestamp": "2025-07-30T19:08:47.068556",
+    "source": "covenant_guardian",
+    "activity_type": "health_check",
+    "data": {
+      "timestamp": "2025-07-30T19:08:46.382694",
+      "system_health": "HEALTHY",
+      "checks": {
+        "disk_space": {
+          "overall_status": "WARNING",
+          "drives": {
+            "C:": {
+              "total_gb": 231.86,
+              "used_gb": 191.26,
+              "free_gb": 40.6,
+              "free_percent": 17.51,
+              "status": "WARNING"
+            },
+            "D:": {
+              "total_gb": 232.88,
+              "used_gb": 64.17,
+              "free_gb": 168.71,
+              "free_percent": 72.45,
+              "status": "HEALTHY"
+            },
+            "F:": {
+              "total_gb": 476.94,
+              "used_gb": 302.21,
+              "free_gb": 174.72,
+              "free_percent": 36.63,
+              "status": "HEALTHY"
+            }
+          }
+        },
+        "memory": {
+          "total_gb": 31.93,
+          "available_gb": 19.01,
+          "used_percent": 40.5,
+          "status": "HEALTHY"
+        },
+        "f_drive": {
+          "available": true,
+          "status": "HEALTHY",
+          "base_path": "F:\\ImpressionCore"
+        },
+        "directories": {
+          "overall_status": "HEALTHY",
+          "directories": {
+            "protected": {
+              "exists": true,
+              "writable": true,
+              "path": "F:\\ImpressionCore\\models\\protected",
+              "status": "HEALTHY"
+            },
+            "b3_backups": {
+              "exists": true,
+              "writable": true,
+              "path": "F:\\ImpressionCore\\models\\b3_backups",
+              "status": "HEALTHY"
+            },
+            "checkpoints": {
+              "exists": true,
+              "writable": true,
+              "path": "F:\\ImpressionCore\\training\\checkpoints",
+              "status": "HEALTHY"
+            },
+            "embeddings": {
+              "exists": true,
+              "writable": true,
+              "path": "F:\\ImpressionCore\\embeddings",
+              "status": "HEALTHY"
+            }
+          }
+        },
+        "training_processes": {
+          "active_processes": 14,
+          "processes": [
+            {
+              "pid": 1416,
+              "name": "python.exe",
+              "memory_mb": 3.86,
+              "cmdline": "d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/impressioncore-ipa/server_comprehensive.py"
+            },
+            {
+              "pid": 2468,
+              "name": "python.exe",
+              "memory_mb": 365.52,
+              "cmdline": "G:\\Program Files\\Python310\\python.exe d:/Projects/impressioncore/.mcp/impressioncore-vrgc/server.py"
+            },
+            {
+              "pid": 3112,
+              "name": "cmd.exe",
+              "memory_mb": 4.79,
+              "cmdline": "cmd.exe /c d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/web-search-mcp/server.py"
+            },
+            {
+              "pid": 3128,
+              "name": "python.exe",
+              "memory_mb": 3.84,
+              "cmdline": "d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/impressioncore-ipa/server_comprehensive.py"
+            },
+            {
+              "pid": 4404,
+              "name": "python.exe",
+              "memory_mb": 3.86,
+              "cmdline": "d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/impressioncore-vrgc/server.py"
+            },
+            {
+              "pid": 4920,
+              "name": "python.exe",
+              "memory_mb": 81.32,
+              "cmdline": "G:\\Program Files\\Python310\\python.exe d:/Projects/impressioncore/.mcp/web-search-mcp/server.py"
+            },
+            {
+              "pid": 5944,
+              "name": "python.exe",
+              "memory_mb": 3.88,
+              "cmdline": "d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/ids-mcp/server.py"
+            },
+            {
+              "pid": 6204,
+              "name": "python.exe",
+              "memory_mb": 55.93,
+              "cmdline": "G:\\Program Files\\Python310\\python.exe d:/Projects/impressioncore/.mcp/impressioncore-ipa/server_comprehensive.py"
+            },
+            {
+              "pid": 7392,
+              "name": "python.exe",
+              "memory_mb": 60.02,
+              "cmdline": "G:\\Program Files\\Python310\\python.exe d:/Projects/impressioncore/.mcp/impressioncore-ipa/server_comprehensive.py"
+            },
+            {
+              "pid": 8140,
+              "name": "cmd.exe",
+              "memory_mb": 4.79,
+              "cmdline": "cmd.exe /c d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/impressioncore-ipa/server_comprehensive.py"
+            },
+            {
+              "pid": 8352,
+              "name": "python.exe",
+              "memory_mb": 3.86,
+              "cmdline": "d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/web-search-mcp/server.py"
+            },
+            {
+              "pid": 8748,
+              "name": "python.exe",
+              "memory_mb": 62.37,
+              "cmdline": "G:\\Program Files\\Python310\\python.exe d:/Projects/impressioncore/.mcp/web-search-mcp/server.py"
+            },
+            {
+              "pid": 8788,
+              "name": "python.exe",
+              "memory_mb": 1785.34,
+              "cmdline": "G:\\Program Files\\Python310\\python.exe d:/Projects/impressioncore/.mcp/ids-mcp/server.py"
+            },
+            {
+              "pid": 9176,
+              "name": "python.exe",
+              "memory_mb": 3.84,
+              "cmdline": "d:/Projects/impressioncore/.venv310/Scripts/python.exe d:/Projects/impressioncore/.mcp/web-search-mcp/server.py"
+            }
+          ],
+          "status": "ACTIVE"
+        },
+        "embeddings": {
+          "status": "HEALTHY",
+          "embedding_directories": 0,
+          "total_files": 0,
+          "total_size_gb": 0,
+          "base_path": "F:\\ImpressionCore\\embeddings"
+        }
+      }
+    },
+    "sacred_covenant": "ACTIVE"
+  }
+]

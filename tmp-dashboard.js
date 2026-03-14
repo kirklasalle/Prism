@@ -151,7 +151,7 @@
       const activeSession = state.sessions.find(session => session.sessionId === state.selectedSessionId);
       document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Chat';
       document.getElementById('active-session-meta').textContent = activeSession
-        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' • ' + activeSession.messageCount + ' messages'
+        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' ï¿½ ' + activeSession.messageCount + ' messages'
         : 'Persistent runtime session';
 
       const chips = [];
@@ -610,13 +610,4 @@
     });
 
     bootstrap();
-    setInterval(async function() {
-      try {
-        await Promise.all([loadSessions(), refreshChrome(), loadMessages()]);
-        render();
-      } catch (error) {
-        state.notice = String(error);
-        render();
-      }
-    }, 2500);
   

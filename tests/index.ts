@@ -1,6 +1,7 @@
 import { testActivityBus } from "./activity-bus.test.js";
 import { testAdapterSafetyRegression } from "./adapter-safety.test.js";
 import { testDashboardService } from "./dashboard-service.test.js";
+import { testDomainWorkflowTemplates } from "./domain-workflow-templates.test.js";
 import { testEnvironmentProfiles } from "./environment-profiles.test.js";
 import { testLlmProviderManager } from "./llm-provider-manager.test.js";
 import { testPolicyEngine } from "./policy-engine.test.js";
@@ -32,6 +33,7 @@ async function runTests(): Promise<void> {
         { name: "SelfReviewScheduler", fn: testSelfReviewScheduler },
         { name: "ToolContracts", fn: testToolContracts },
         { name: "ToolContractSnapshots", fn: testToolContractSnapshots },
+        { name: "DomainWorkflowTemplates", fn: testDomainWorkflowTemplates },
         { name: "WorkflowOrchestrator", fn: testWorkflowOrchestrator },
     ];
 

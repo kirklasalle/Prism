@@ -1,0 +1,46 @@
+{
+  "server": {
+    "name": "ids-mcp-server",
+    "version": "1.0.0",
+    "description": "ImpressionCore Documentation System MCP Server",
+    "author": "ImpressionCore IDS Team"
+  },
+  "mcp": {
+    "protocol_version": "2024-11-05",
+    "capabilities": {
+      "tools": {
+        "listChanged": false
+      }
+    }
+  },
+  "ids": {
+    "project_root": "../..",
+    "docs_root": "../../docs",
+    "src_root": "../../src",
+    "indices": {
+      "unified_tags_index": "../../docs/unified_tags_index.yaml",
+      "file_metadata": "../../docs/file_metadata.yaml",
+      "reverse_tag_index": "../../docs/reverse_tag_index.yaml"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "ids_mcp.log",
+    "max_file_size": "10MB",
+    "backup_count": 5
+  },
+  "search": {
+    "default_max_results": 10,
+    "max_max_results": 100,
+    "scoring": {
+      "content_match": 10,
+      "tag_match": 5,
+      "tag_content_match": 3
+    }
+  },
+  "features": {
+    "rich_console": true,
+    "enhanced_ids_integration": true,
+    "real_time_indexing": false
+  }
+}

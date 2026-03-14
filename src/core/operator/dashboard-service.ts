@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
 import type { ApprovalQueue } from "../approval/approval-queue.js";
+import type { LlmDelegate } from "../agents/agent-types.js";
 import {
   ChatSessionStore,
   type ProviderSettingsInput,
@@ -954,6 +955,25 @@ export class DashboardService {
       },
     });
 
+    // Emit LLM telemetry when the reply came from a model
+    if (assistantReply.metadata.intent === "llm") {
+      this.activityBus.emit({
+        sessionId: this.status.sessionId,
+        layer: "llm",
+        operation: "llm.generation",
+        status: "succeeded",
+        details: {
+          chatSessionId: sessionId,
+          provider: assistantReply.metadata.provider,
+          model: assistantReply.metadata.model,
+          tier: assistantReply.metadata.tier,
+          degraded: assistantReply.metadata.degraded,
+          routingReason: assistantReply.metadata.routingReason,
+          correlationId,
+        },
+      });
+    }
+
     return {
       session: this.chatStore.getSession(sessionId)!,
       userMessage,
@@ -1044,6 +1064,16 @@ export class DashboardService {
       });
 
     return { accepted: true, action: action.name };
+  }
+
+  /**
+   * Return a slim LlmDelegate bound to this service's LlmProviderManager.
+   * Used by AgentPool so it shares the same provider settings and API keys.
+   */
+  getLlmDelegate(): LlmDelegate {
+    return {
+      generateForRole: (role, input) => this.llmProviders.generateForRole(role, input),
+    };
   }
 
   start(): void {
@@ -1255,6 +1285,35 @@ export class DashboardService {
           req.headers["x-prism-source"]?.toString() || "dashboard_api",
         );
         return this.json(res, 200, payload);
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/llm/provider-test") {
+      try {
+        const body = await this.readJsonBody<{ providerId?: string; apiKey?: string }>(req);
+        if (!body.providerId?.trim()) {
+          return this.json(res, 400, { error: "providerId is required." });
+        }
+        if (body.apiKey?.trim()) {
+          await this.saveProviderApiKey(body.providerId, body.apiKey.trim(), "provider-test");
+        }
+        const result = await this.llmProviders.testProvider(body.providerId);
+        if (result.ok && result.models.length > 0) {
+          const current = await this.getProviderSettings(body.providerId);
+          await this.saveProviderSettings(
+            body.providerId,
+            {
+              baseUrl: current.baseUrl ?? null,
+              apiKeyHeader: current.apiKeyHeader ?? null,
+              models: result.models,
+              defaultModel: current.defaultModel ?? null,
+            },
+            "provider-test",
+          );
+        }
+        return this.json(res, 200, result);
       } catch (error) {
         return this.json(res, 400, { error: String(error) });
       }
@@ -1706,33 +1765,51 @@ export class DashboardService {
 
     try {
       const session = this.chatStore.getSession(sessionId);
-      const generated = await this.llmProviders.generate({
-        message: content,
-        conversation: conversation
-          .filter((entry) => entry.role === "user" || entry.role === "assistant" || entry.role === "system")
-          .map((entry) => ({ role: entry.role, content: entry.content })),
-        systemPrompt: [
-          "You are PRISM's operator console assistant.",
-          "Use concise actionable responses.",
-          "Do not invent runtime state.",
-          `Runtime mode: ${this.status.mode}. Environment: ${this.status.environmentProfile}.`,
-          `Pending approvals: ${this.queue.list().length}.`,
-          `Persisted chat sessions: ${this.chatStore.listSessions().length}.`,
-        ].join("\n"),
-      }, {
-        providerId: session?.llmProviderId ?? undefined,
-        model: session?.llmModel ?? undefined,
-      });
+      const conversationHistory = conversation
+        .filter((entry) => entry.role === "user" || entry.role === "assistant" || entry.role === "system")
+        .map((entry) => ({ role: entry.role, content: entry.content }));
+
+      // If the session has an explicit provider/model override, use it directly.
+      // Otherwise, use capability-aware role routing ("chat" role).
+      const hasSessionOverride = session?.llmProviderId && session?.llmModel;
+
+      let generated;
+      if (hasSessionOverride) {
+        generated = await this.llmProviders.generate({
+          message: content,
+          conversation: conversationHistory,
+          systemPrompt: [
+            "You are PRISM's operator console assistant.",
+            "Use concise actionable responses.",
+            "Do not invent runtime state.",
+            `Runtime mode: ${this.status.mode}. Environment: ${this.status.environmentProfile}.`,
+            `Pending approvals: ${this.queue.list().length}.`,
+          ].join("\n"),
+        }, {
+          providerId: session.llmProviderId ?? undefined,
+          model: session.llmModel ?? undefined,
+        });
+      } else {
+        generated = await this.llmProviders.generateForRole("chat", {
+          message: content,
+          conversation: conversationHistory,
+          systemPrompt: "", // adaptive prompt builder will replace this
+        });
+      }
 
       if (generated?.content?.trim()) {
-        return {
-          content: generated.content,
-          metadata: {
-            intent: "llm",
-            provider: generated.providerId,
-            model: generated.model,
-          },
+        const meta: Record<string, unknown> = {
+          intent: "llm",
+          provider: generated.providerId,
+          model: generated.model,
         };
+        if ('routing' in generated) {
+          const r = generated as { routing: { profile: { tier: number }; degraded: boolean; reason: string } };
+          meta.tier = r.routing.profile.tier;
+          meta.degraded = r.routing.degraded;
+          meta.routingReason = r.routing.reason;
+        }
+        return { content: generated.content, metadata: meta };
       }
     } catch (error) {
       return {
@@ -2306,12 +2383,14 @@ function dashboardHtml(port: number): string {
       cursor: wait;
     }
     .chat {
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      min-height: calc(100vh - 36px);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 118px);
       overflow: hidden;
     }
     .chat-header {
+      flex-shrink: 0;
       padding: 22px 24px 16px;
       border-bottom: 1px solid var(--border);
       background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
@@ -2327,8 +2406,9 @@ function dashboardHtml(port: number): string {
       color: var(--muted);
     }
     .messages {
-      padding: 22px 24px;
-      overflow: auto;
+      padding: 22px 24px 200px 24px;
+      overflow-y: auto;
+      flex-grow: 1;
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -2364,9 +2444,18 @@ function dashboardHtml(port: number): string {
       background: rgba(255,255,255,0.02);
     }
     .composer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
       padding: 18px 24px 24px;
       border-top: 1px solid var(--border);
-      background: linear-gradient(180deg, transparent, rgba(255,255,255,0.03));
+      background: rgba(10, 24, 45, 0.95);
+      border-bottom-left-radius: var(--radius);
+      border-bottom-right-radius: var(--radius);
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+      z-index: 10;
+      backdrop-filter: blur(12px);
     }
     .composer-shell {
       display: grid;
@@ -2377,6 +2466,7 @@ function dashboardHtml(port: number): string {
     textarea {
       width: 100%;
       min-height: 92px;
+      max-height: 60vh;
       resize: vertical;
       border-radius: 18px;
       padding: 14px 16px;
@@ -2480,6 +2570,27 @@ function dashboardHtml(port: number): string {
       color: #ffc1c1;
     }
     .mono { font-family: "Cascadia Code", Consolas, monospace; }
+    .ps-card { border: 1px solid rgba(148,163,184,0.12); border-radius: 14px; background: rgba(255,255,255,0.02); overflow: hidden; margin-bottom: 8px; }
+    .ps-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; gap: 10px; }
+    .ps-card-header:hover { background: rgba(255,255,255,0.03); }
+    .ps-card-title { font-weight: 600; font-size: 13px; }
+    .ps-card-badges { display: flex; gap: 6px; align-items: center; }
+    .ps-badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .ps-badge-ok { background: rgba(126,207,126,0.15); color: #7ecf7e; }
+    .ps-badge-warn { background: rgba(255,200,80,0.12); color: #ffd17a; }
+    .ps-badge-off { background: rgba(148,163,184,0.10); color: var(--muted); }
+    .ps-badge-local { background: rgba(80,160,255,0.10); color: #7eb8ff; }
+    .ps-badge-remote { background: rgba(200,160,255,0.10); color: #c8a0ff; }
+    .ps-card-body { padding: 0 16px 16px; border-top: 1px solid rgba(148,163,184,0.08); }
+    .ps-field { margin-top: 10px; }
+    .ps-field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+    .ps-field input, .ps-field textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(148,163,184,0.18); background: rgba(0,0,0,0.25); color: var(--fg); font-size: 12px; font-family: inherit; box-sizing: border-box; }
+    .ps-field input:focus, .ps-field textarea:focus { outline: none; border-color: var(--accent); }
+    .ps-key-row { display: flex; gap: 8px; align-items: center; }
+    .ps-key-row input { flex: 1; }
+    .ps-test-result { margin-top: 8px; font-size: 12px; padding: 6px 10px; border-radius: 8px; }
+    .ps-test-ok { background: rgba(126,207,126,0.10); color: #7ecf7e; }
+    .ps-test-fail { background: rgba(255,141,141,0.10); color: #ffc1c1; }
     @media (max-width: 1280px) {
       .app { grid-template-columns: 260px minmax(0, 1fr); }
       .tab-grid { grid-template-columns: 1fr; }
@@ -2534,11 +2645,25 @@ function dashboardHtml(port: number): string {
       </section>
 
       <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true">
-        <div class="tab-grid">
+        <div class="tab-grid" style="grid-template-columns:1fr;">
           <section class="rail-section panel">
-            <h3>LLM Provider</h3>
+            <h3>Session Provider Assignment</h3>
             <div id="llm-provider" class="stack"></div>
           </section>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+            <section class="rail-section panel" style="flex:1;">
+              <h3>Provider Configuration</h3>
+              <div class="muted" style="margin-bottom:12px;">Configure API keys and settings for each provider. Expand a card to manage.</div>
+              <div id="provider-cards-container" class="stack"></div>
+            </section>
+            <section class="rail-section panel" style="flex:1;">
+              <h3>Model Capability Matrix</h3>
+              <div class="muted" style="margin-bottom:8px;">Available models scored by capability tier (T1 Minimal → T5 Frontier). Role routing selects the best model for each task.</div>
+              <div id="capability-matrix" class="stack"></div>
+            </section>
+          </div>
+
           <section class="rail-section panel">
             <h3>LLM Audit Trail</h3>
             <div id="llm-audit"></div>
@@ -2636,7 +2761,12 @@ function dashboardHtml(port: number): string {
       selectedTraceId: null,
       events: [],
       busy: false,
-      notice: null
+      notice: null,
+      providerSettingsCache: {},
+      expandedProviderId: null,
+      providerTestResults: {},
+      providerApiKeyVisible: {},
+      localLlmSelectionBySession: {}
     };
 
     const tabs = [
@@ -2687,9 +2817,41 @@ function dashboardHtml(port: number): string {
       return '<span class="' + badgeClass + '">' + escapeHtml(action.status) + '</span>';
     }
 
+    function getLocalLlmSelection(sessionId) {
+      if (!sessionId) {
+        return null;
+      }
+      return state.localLlmSelectionBySession[sessionId] || null;
+    }
+
+    function setLocalLlmSelection(sessionId, providerId, model) {
+      if (!sessionId || !providerId) {
+        return;
+      }
+      state.localLlmSelectionBySession[sessionId] = {
+        providerId,
+        model: model || ''
+      };
+    }
+
+    function clearLocalLlmSelection(sessionId) {
+      if (!sessionId) {
+        return;
+      }
+      if (state.localLlmSelectionBySession[sessionId]) {
+        delete state.localLlmSelectionBySession[sessionId];
+      }
+    }
+
     async function loadSessions() {
       const payload = await request('/api/chat/sessions');
       state.sessions = payload;
+      const validSessionIds = new Set(state.sessions.map(session => session.sessionId));
+      for (const sessionId of Object.keys(state.localLlmSelectionBySession)) {
+        if (!validSessionIds.has(sessionId)) {
+          delete state.localLlmSelectionBySession[sessionId];
+        }
+      }
       if (!state.selectedSessionId && state.sessions.length > 0) {
         state.selectedSessionId = state.sessions[0].sessionId;
       }
@@ -2805,7 +2967,10 @@ function dashboardHtml(port: number): string {
           + '<div class="session-title">' + escapeHtml(session.title) + '</div>'
           + '<div class="session-preview">' + escapeHtml(preview) + '</div>'
           + '<div class="session-meta"><span>' + escapeHtml(String(session.messageCount)) + ' msgs</span><span>' + escapeHtml(formatRelativeTime(session.updatedAt)) + '</span></div>'
-          + '<div class="action-buttons"><button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button></div>'
+          + '<div class="action-buttons">'
+          + '<button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button>'
+          + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="copySession(event, this.dataset.sessionId)">Copy Session</button>'
+          + '</div>'
           + '</div>';
       }).join('');
     }
@@ -2858,6 +3023,56 @@ function dashboardHtml(port: number): string {
       }
     }
 
+    async function fetchReadinessAndRefresh() {
+      try {
+        const readiness = await request('/api/readiness/recheck', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: state.selectedSessionId || '' })
+        });
+        state.readiness = readiness;
+        safeRenderStep('onboarding', renderOnboarding);
+        safeRenderStep('header', renderHeader);
+      } catch (err) {
+        state.notice = { type: 'error', message: String(err) };
+        safeRenderStep('notice', renderNotice);
+      }
+    }
+
+    async function onHeaderProviderChanged(providerId) {
+      if (!providerId || !state.selectedSessionId || !state.llmCatalog) return;
+      const provider = state.llmCatalog.providers.find(entry => entry.id === providerId);
+      const model = provider?.defaultModel || provider?.models[0] || '';
+      try {
+        state.llmCatalog = await request('/api/llm/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: providerId, model })
+        });
+        safeRenderStep('header', renderHeader);
+        safeRenderStep('llm', renderLlm);
+        await fetchReadinessAndRefresh();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function onHeaderModelChanged(model) {
+      if (!model || !state.selectedSessionId || !state.llmCatalog) return;
+      try {
+        state.llmCatalog = await request('/api/llm/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: state.llmCatalog.activeProviderId, model })
+        });
+        safeRenderStep('header', renderHeader);
+        safeRenderStep('llm', renderLlm);
+        await fetchReadinessAndRefresh();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     function renderHeader() {
       const activeSession = state.sessions.find(session => session.sessionId === state.selectedSessionId);
       document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Chat';
@@ -2873,8 +3088,50 @@ function dashboardHtml(port: number): string {
         chips.push('<span class="chip">Sessions: ' + escapeHtml(String(state.status.chatSessionCount)) + '</span>');
       }
       if (state.llmCatalog && state.llmCatalog.activeProviderId) {
-        chips.push('<span class="chip">Provider: ' + escapeHtml(state.llmCatalog.activeProviderId) + '</span>');
-        chips.push('<span class="chip">Model: ' + escapeHtml(state.llmCatalog.activeModel || '-') + '</span>');
+        let isError = false;
+        let isReady = state.readiness && state.readiness.ready;
+        const messagesArr = state.messages || [];
+        const lastError = messagesArr.slice().reverse().find(m => m.metadata && m.metadata.intent === 'llm_error');
+        if (lastError && (Date.now() - new Date(lastError.createdAt).getTime() < 300000)) {
+           isError = true;
+        }
+
+        let hueStyle = '';
+        if (isError) {
+          hueStyle = 'color: #ff8d8d; border-color: rgba(255, 141, 141, 0.4); background: rgba(255, 141, 141, 0.1);';
+        } else if (isReady) {
+          hueStyle = 'color: #7cf1c8; border-color: rgba(124, 241, 200, 0.4); background: rgba(124, 241, 200, 0.1);';
+        } else {
+          hueStyle = 'color: #f5cf6c; border-color: rgba(245, 207, 108, 0.4); background: rgba(245, 207, 108, 0.1);';
+        }
+
+        const selectBaseStyle = 'appearance: none; -moz-appearance: none; -webkit-appearance: none; outline: none; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all 0.2s ease; border-style: solid; border-width: 1px;';
+        const optionStyle = ' style="background: #1e293b; color: #edf3ff;"';
+
+        const providers = state.llmCatalog.providers || [];
+        if (providers.length > 0) {
+          let pSelect = '<select style="' + selectBaseStyle + hueStyle + '" onchange="onHeaderProviderChanged(this.value)" title="Fast switch provider">';
+          providers.forEach(p => {
+            const sel = p.id === state.llmCatalog.activeProviderId ? ' selected' : '';
+            pSelect += '<option value="' + escapeHtml(p.id) + '"' + sel + optionStyle + '>Provider: ' + escapeHtml(p.id) + '</option>';
+          });
+          pSelect += '</select>';
+          chips.push(pSelect);
+          
+          const activeP = providers.find(p => p.id === state.llmCatalog.activeProviderId);
+          if (activeP && activeP.models && activeP.models.length > 0) {
+            let mSelect = '<select style="' + selectBaseStyle + hueStyle + '" onchange="onHeaderModelChanged(this.value)" title="Fast switch model">';
+            activeP.models.forEach(m => {
+              const sel = m === state.llmCatalog.activeModel ? ' selected' : '';
+              mSelect += '<option value="' + escapeHtml(m) + '"' + sel + optionStyle + '>Model: ' + escapeHtml(m) + '</option>';
+            });
+            mSelect += '</select>';
+            chips.push(mSelect);
+          }
+        } else {
+           chips.push('<span class="chip" style="' + hueStyle + '">Provider: ' + escapeHtml(state.llmCatalog.activeProviderId) + '</span>');
+           chips.push('<span class="chip" style="' + hueStyle + '">Model: ' + escapeHtml(state.llmCatalog.activeModel || '-') + '</span>');
+        }
       }
       document.getElementById('header-chips').innerHTML = chips.join('');
     }
@@ -2922,9 +3179,15 @@ function dashboardHtml(port: number): string {
 
       const rows = state.messages.map(message => {
         const roleLabel = message.role === 'user' ? 'Operator' : message.role === 'assistant' ? 'PRISM' : 'System';
+        let extraHtml = '';
+        if (message.metadata && message.metadata.intent === 'llm_error') {
+            extraHtml = '<div style="margin-top: 14px;"><button class="secondary-button" style="font-size:12px; padding:8px 12px; display:inline-flex; align-items:center; gap:6px;" onclick="setActiveTab(&quot;settings&quot;)">&#x1F50D; Open Settings / Logs </button></div>';
+        }
+
         return '<div class="message ' + escapeHtml(message.role) + '">'
           + '<div class="message-label">' + escapeHtml(roleLabel) + '</div>'
           + '<div>' + escapeHtml(message.content) + '</div>'
+          + extraHtml
           + '<div class="message-time">' + escapeHtml(formatRelativeTime(message.createdAt)) + '</div>'
           + '</div>';
       }).join('');
@@ -2969,23 +3232,45 @@ function dashboardHtml(port: number): string {
       const draft = state.llmConfig ? state.llmConfig.draft : null;
       const draftProviderId = draft && draft.providerId ? draft.providerId : activeProviderId;
       const draftProvider = providers.find(provider => provider.id === draftProviderId) || activeProvider;
-      const draftModels = draftProvider ? (draftProvider.models || []) : [];
-      const draftModel = draft && draft.model ? draft.model : (state.llmConfig && state.llmConfig.current ? state.llmConfig.current.model : activeModel);
+      const currentModel = (state.llmConfig && state.llmConfig.current ? state.llmConfig.current.model : activeModel) || '';
+      const draftModel = draft && draft.model ? draft.model : currentModel;
+      const localSelection = getLocalLlmSelection(state.selectedSessionId);
+      const displayProviderId = localSelection && localSelection.providerId ? localSelection.providerId : draftProviderId;
+      const displayProvider = providers.find(provider => provider.id === displayProviderId) || draftProvider;
+      const displayModels = displayProvider ? (displayProvider.models || []) : [];
+      let displayModel = localSelection && localSelection.model ? localSelection.model : draftModel;
+      if ((!displayModel || !displayModels.includes(displayModel)) && displayModels.length > 0) {
+        displayModel = (displayProvider && displayProvider.defaultModel && displayModels.includes(displayProvider.defaultModel))
+          ? displayProvider.defaultModel
+          : displayModels[0];
+      }
+
+      const hasUnsavedLocalSelection = Boolean(localSelection)
+        && (localSelection.providerId !== draftProviderId || (localSelection.model || '') !== (draftModel || ''));
 
       const providerOptions = providers.map(provider =>
-        '<option value="' + escapeHtml(provider.id) + '" ' + (provider.id === draftProviderId ? 'selected' : '') + '>'
+        '<option value="' + escapeHtml(provider.id) + '" ' + (provider.id === displayProviderId ? 'selected' : '') + '>'
         + escapeHtml(provider.label + (provider.enabled ? '' : ' (unavailable)'))
         + '</option>'
       ).join('');
 
-      const modelOptions = draftModels.length > 0
-        ? draftModels.map(model =>
-          '<option value="' + escapeHtml(model) + '" ' + (model === draftModel ? 'selected' : '') + '>' + escapeHtml(model) + '</option>'
+      const modelOptions = displayModels.length > 0
+        ? displayModels.map(model =>
+          '<option value="' + escapeHtml(model) + '" ' + (model === displayModel ? 'selected' : '') + '>' + escapeHtml(model) + '</option>'
         ).join('')
         : '<option value="">No models available</option>';
 
-      const reason = draftProvider && !draftProvider.enabled && draftProvider.reason
-        ? '<div class="muted" style="margin-top:8px;color:#ffc1c1;">' + escapeHtml(draftProvider.reason) + '</div>'
+      const reason = displayProvider && !displayProvider.enabled && displayProvider.reason
+        ? '<div class="muted" style="margin-top:8px;color:#ffc1c1;">' + escapeHtml(displayProvider.reason) + '</div>'
+        : '';
+
+      const localSelectionBanner = hasUnsavedLocalSelection
+        ? '<div class="action-card" style="margin-top:10px;">'
+          + '<div class="muted">You changed provider/model locally. Click <strong>Save Draft</strong> then <strong>Apply Draft</strong> to persist for this session.</div>'
+          + '<div class="mono" style="margin-top:6px;">Pending: '
+          + escapeHtml((displayProviderId || '-') + ' / ' + (displayModel || '-'))
+          + '</div>'
+          + '</div>'
         : '';
 
       const diff = state.llmConfig && state.llmConfig.diff
@@ -3015,21 +3300,425 @@ function dashboardHtml(port: number): string {
           + '</tbody></table>'
         : '<div class="muted" style="margin-top:10px;">No config history yet.</div>';
 
+      const isLocal = displayProvider && displayProvider.kind === 'local';
+      const needsApply = hasUnsavedLocalSelection;
+
+      // When rendering dynamically from onLlmProviderChanged we shouldn't block 
+      // rendering just because a select is focused, otherwise the model dropdown
+      // won't update when you pick a new provider.
+
       container.innerHTML = ''
         + '<label class="muted" for="provider-select">Provider</label>'
-        + '<select id="provider-select" class="control-select">' + providerOptions + '</select>'
+        + '<select id="provider-select" class="control-select" onchange="onLlmProviderChanged()">' + providerOptions + '</select>'
         + '<label class="muted" for="model-select" style="margin-top:8px;display:block;">Model</label>'
-        + '<select id="model-select" class="control-select">' + modelOptions + '</select>'
-        + '<div class="action-buttons">'
-        + '<button class="secondary-button" onclick="saveLlmDraft()">Save Draft</button>'
-        + '<button class="secondary-button" ' + (!draft ? 'disabled' : '') + ' onclick="applyLlmDraft()">Apply Draft</button>'
-        + '<button class="secondary-button" ' + (!draft ? 'disabled' : '') + ' onclick="discardLlmDraft()">Discard Draft</button>'
+        + '<select id="model-select" class="control-select" onchange="onLlmModelChanged()">' + modelOptions + '</select>'
+        + '<div class="action-buttons" style="margin-top:10px;">'
+        + '<button class="primary-button" ' + (!needsApply ? 'disabled' : '') + ' onclick="quickApplyLlm()">Apply</button>'
+        + (isLocal ? '<button class="secondary-button" onclick="refreshOllamaModels()">Refresh Models</button>' : '')
         + '<button class="secondary-button" ' + (!history.length ? 'disabled' : '') + ' onclick="rollbackLlmConfig()">Rollback</button>'
         + '</div>'
-        + diffHtml
+        + (needsApply
+          ? '<div class="action-card" style="margin-top:10px;"><div class="muted">Pending: <span class="mono">' + escapeHtml((displayProviderId || '-') + ' / ' + (displayModel || '-')) + '</span> — click <strong>Apply</strong> to save.</div></div>'
+          : '<div class="muted" style="margin-top:8px;">Active: <span class="mono">' + escapeHtml((draftProviderId || '-') + ' / ' + (draftModel || '-')) + '</span></div>')
         + historyHtml
-        + '<div class="muted" style="margin-top:8px;">Keys are sourced from environment variables and never shown in UI.</div>'
         + reason;
+    }
+
+    function toggleCapabilityMatrix() {
+      state.capabilityMatrixExpanded = !state.capabilityMatrixExpanded;
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+    }
+
+    function renderCapabilityMatrix() {
+      const container = document.getElementById('capability-matrix');
+      if (!container) return;
+      if (!state.llmCatalog || !state.llmCatalog.providers) {
+        container.innerHTML = '<div class="muted">Waiting for provider catalog...</div>';
+        return;
+      }
+
+      // Default to collapsed if not specified
+      if (state.capabilityMatrixExpanded === undefined) {
+        state.capabilityMatrixExpanded = false;
+      }
+
+      const isExpanded = state.capabilityMatrixExpanded;
+
+      const tierColors = { 1: '#ff6b6b', 2: '#ffa94d', 3: '#ffd43b', 4: '#69db7c', 5: '#4dabf7' };
+      const tierLabels = { 1: 'T1 Minimal', 2: 'T2 Basic', 3: 'T3 Standard', 4: 'T4 Advanced', 5: 'T5 Frontier' };
+      const roleRequirements = {
+        classification:  { min: 1, ideal: 2 },
+        chat:            { min: 2, ideal: 3 },
+        summarization:   { min: 2, ideal: 3 },
+        'tool-selection':  { min: 3, ideal: 4 },
+        'code-generation': { min: 3, ideal: 4 },
+        'memory-indexing':  { min: 1, ideal: 2 },
+      };
+
+      // Build model list with tier info (heuristic: parse param count from name)
+      function guessTier(model, kind) {
+        var m = model.match(/:?(\\d+(?:\\.\\d+)?)\\s*[bB]/);
+        var b = m ? parseFloat(m[1]) : 0;
+        if (kind === 'local') {
+          if (b > 0 && b <= 2) return 1;
+          if (b > 2 && b <= 5) return 2;
+          if (b > 5 && b <= 15) return 3;
+          return 2; // local default
+        }
+        // cloud heuristic
+        if (/mini|flash|small|instant|haiku/i.test(model)) return 3;
+        if (/opus|5\\b|frontier/i.test(model)) return 5;
+        return 4;
+      }
+
+      var rows = [];
+      state.llmCatalog.providers.forEach(function(provider) {
+        if (!provider.enabled) return;
+        (provider.models || []).forEach(function(model) {
+          var tier = guessTier(model, provider.kind);
+          rows.push({ provider: provider.label, model: model, tier: tier, kind: provider.kind });
+        });
+      });
+
+      rows.sort(function(a, b) { return b.tier - a.tier; });
+
+      let html = '<div class="action-card" style="cursor:pointer;" onclick="toggleCapabilityMatrix()">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+        +   '<span class="muted" style="margin:0;">Model Capability Matrix</span>'
+        +   '<span class="muted" style="font-size:16px;">' + (isExpanded ? '&#x25B2;' : '&#x25BC;') + '</span>'
+        + '</div></div>';
+
+      if (!rows.length) {
+        container.innerHTML = html + '<div class="muted" style="margin-top:10px;">No enabled models found.</div>';
+        return;
+      }
+
+      html += '<div style="' + (isExpanded ? '' : 'display:block;') + '">';
+      html += '<table class="events-table" style="margin-top:10px;"><thead><tr>'
+        + '<th>Model</th><th>Provider</th><th>Tier</th><th>Locality</th>'
+        + '</tr></thead><tbody>';
+        
+      var displayRows = isExpanded ? rows : rows.slice(0, 5);
+      displayRows.forEach(function(row) {
+        var color = tierColors[row.tier] || '#aaa';
+        html += '<tr>'
+          + '<td class="mono">' + escapeHtml(row.model) + '</td>'
+          + '<td>' + escapeHtml(row.provider) + '</td>'
+          + '<td><span style="color:' + color + ';font-weight:600;">' + escapeHtml(tierLabels[row.tier] || 'T?') + '</span></td>'
+          + '<td>' + (row.kind === 'local' ? '🖥 Local' : '☁ Cloud') + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+
+      if (!isExpanded && rows.length > 5) {
+         html += '<div class="muted" style="text-align:center;margin-top:8px;font-size:12px;cursor:pointer;" onclick="toggleCapabilityMatrix()">' 
+               + '... and ' + (rows.length - 5) + ' more models (Click to expand) ...</div>';
+      }
+
+      if (isExpanded) {
+        // Role coverage summary
+        html += '<div class="muted" style="margin-top:12px;">Role Coverage</div>';
+        html += '<table class="events-table"><thead><tr><th>Task Role</th><th>Min Tier</th><th>Ideal</th><th>Status</th></tr></thead><tbody>';
+        Object.keys(roleRequirements).forEach(function(role) {
+          var req = roleRequirements[role];
+          var bestTier = 0;
+          rows.forEach(function(row) { if (row.tier > bestTier) bestTier = row.tier; });
+          var met = bestTier >= req.ideal;
+          var partial = !met && bestTier >= req.min;
+          var statusHtml = met
+            ? '<span style="color:#69db7c;">✓ Met</span>'
+            : partial
+              ? '<span style="color:#ffd43b;">⚠ Degraded</span>'
+              : '<span style="color:#ff6b6b;">✗ Unmet</span>';
+          html += '<tr><td>' + escapeHtml(role) + '</td><td>T' + req.min + '</td><td>T' + req.ideal + '</td><td>' + statusHtml + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      
+      html += '</div>';
+
+      container.innerHTML = html;
+    }
+
+    function onLlmProviderChanged() {
+      const providerSelect = document.getElementById('provider-select');
+      const providerId = providerSelect ? providerSelect.value : '';
+      if (!providerId || !state.selectedSessionId || !state.llmCatalog || !state.llmCatalog.providers) {
+        return;
+      }
+
+      const provider = state.llmCatalog.providers.find(entry => entry.id === providerId) || null;
+      const providerModels = provider ? (provider.models || []) : [];
+      const model = provider && provider.defaultModel && providerModels.includes(provider.defaultModel)
+        ? provider.defaultModel
+        : (providerModels[0] || '');
+
+      setLocalLlmSelection(state.selectedSessionId, providerId, model);
+      
+      // Explicitly trigger a re-render of just the LLM panel so the newly selected 
+      // provider's correct models populate into the second dropdown immediately.
+      safeRenderStep('llm', renderLlm); 
+    }
+
+    function onLlmModelChanged() {
+      const providerSelect = document.getElementById('provider-select');
+      const modelSelect = document.getElementById('model-select');
+      const providerId = providerSelect ? providerSelect.value : '';
+      const model = modelSelect ? modelSelect.value : '';
+      if (!providerId || !state.selectedSessionId) {
+        return;
+      }
+
+      setLocalLlmSelection(state.selectedSessionId, providerId, model);
+      safeRenderStep('llm', renderLlm); 
+    }
+
+    const PROVIDER_META = {
+      openai: { icon: '\\u{1F7E2}', desc: 'OpenAI GPT models' },
+      anthropic: { icon: '\\u{1F7E0}', desc: 'Claude models' },
+      google: { icon: '\\u{1F535}', desc: 'Gemini models' },
+      mistral: { icon: '\\u{1F7E3}', desc: 'Mistral AI models' },
+      cohere: { icon: '\\u{1F7E4}', desc: 'Cohere Command models' },
+      groq: { icon: '\\u{26A1}', desc: 'Ultra-fast inference' },
+      together: { icon: '\\u{1F91D}', desc: 'Open-source model hosting' },
+      deepseek: { icon: '\\u{1F50D}', desc: 'DeepSeek models' },
+      perplexity: { icon: '\\u{1F310}', desc: 'Search-augmented models' },
+      fireworks: { icon: '\\u{1F386}', desc: 'Fast open-source inference' },
+      openrouter: { icon: '\\u{1F500}', desc: 'Multi-provider router' },
+      ollama: { icon: '\\u{1F999}', desc: 'Local Ollama server' },
+      lmstudio: { icon: '\\u{1F4BB}', desc: 'Local LM Studio server' },
+      custom: { icon: '\\u{1F527}', desc: 'Custom OpenAI-compatible endpoint' }
+    };
+
+    function renderProviderCards() {
+      const container = document.getElementById('provider-cards-container');
+      if (!container) return;
+      if (!state.llmCatalog || !state.llmCatalog.providers) {
+        container.innerHTML = '<div class="muted">Loading providers...</div>';
+        return;
+      }
+
+      const providers = state.llmCatalog.providers;
+      let html = '';
+      for (const provider of providers) {
+        const meta = PROVIDER_META[provider.id] || { icon: '', desc: '' };
+        const isExpanded = state.expandedProviderId === provider.id;
+        const statusBadge = provider.enabled
+          ? '<span class="ps-badge ps-badge-ok">enabled</span>'
+          : '<span class="ps-badge ps-badge-off">disabled</span>';
+        const kindBadge = provider.kind === 'local'
+          ? '<span class="ps-badge ps-badge-local">local</span>'
+          : '<span class="ps-badge ps-badge-remote">remote</span>';
+        const keyBadge = provider.requiresApiKey
+          ? (provider.hasApiKey
+            ? '<span class="ps-badge ps-badge-ok">key set</span>'
+            : '<span class="ps-badge ps-badge-warn">no key</span>')
+          : '';
+
+        html += '<div class="ps-card">';
+        html += '<div class="ps-card-header" onclick="toggleProviderCard(\\'' + escapeHtml(provider.id) + '\\')">';
+        html += '<span class="ps-card-title">' + meta.icon + ' ' + escapeHtml(provider.label) + '</span>';
+        html += '<div class="ps-card-badges">' + statusBadge + kindBadge + keyBadge + '<span class="muted" style="font-size:16px;">' + (isExpanded ? '\\u25B2' : '\\u25BC') + '</span></div>';
+        html += '</div>';
+
+        if (isExpanded) {
+          const testResult = state.providerTestResults[provider.id] || null;
+          const isKeyVisible = state.providerApiKeyVisible[provider.id] || false;
+          html += '<div class="ps-card-body">';
+          html += '<div class="muted" style="margin-bottom:8px;">' + escapeHtml(meta.desc) + '</div>';
+
+          if (provider.reason) {
+            html += '<div class="muted" style="color:#ffc1c1;margin-bottom:8px;">' + escapeHtml(provider.reason) + '</div>';
+          }
+
+          html += '<div class="ps-field"><label>Base URL</label>';
+          html += '<input type="text" id="ps-url-' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.baseUrl || '') + '" placeholder="https://..." /></div>';
+
+          if (provider.requiresApiKey) {
+            html += '<div class="ps-field"><label>API Key</label>';
+            html += '<div class="ps-key-row">';
+            html += '<input type="' + (isKeyVisible ? 'text' : 'password') + '" id="ps-key-' + escapeHtml(provider.id) + '" placeholder="' + (provider.hasApiKey ? 'Key is set (enter new to replace)' : 'Enter API key') + '" />';
+            html += '<button class="secondary-button" onclick="toggleApiKeyVisibility(\\'' + escapeHtml(provider.id) + '\\')" style="white-space:nowrap;">' + (isKeyVisible ? 'Hide' : 'Show') + '</button>';
+            html += '</div></div>';
+          }
+
+          html += '<div class="ps-field"><label>Models (comma-separated)</label>';
+          html += '<textarea id="ps-models-' + escapeHtml(provider.id) + '" rows="2" placeholder="model-1, model-2">' + escapeHtml((provider.models || []).join(', ')) + '</textarea></div>';
+
+          html += '<div class="ps-field"><label>Default Model</label>';
+          html += '<input type="text" id="ps-default-' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.defaultModel || '') + '" placeholder="Default model name" /></div>';
+
+          html += '<div class="action-buttons" style="flex-wrap:wrap;">';
+          html += '<button class="secondary-button" onclick="saveProviderCardSettings(\\'' + escapeHtml(provider.id) + '\\')">Save Settings</button>';
+
+          if (provider.requiresApiKey) {
+            html += '<button class="secondary-button" onclick="saveProviderCardApiKey(\\'' + escapeHtml(provider.id) + '\\')">Save API Key</button>';
+            if (provider.hasApiKey) {
+              html += '<button class="danger-button" onclick="removeProviderCardApiKey(\\'' + escapeHtml(provider.id) + '\\')">Remove Key</button>';
+            }
+          }
+
+          html += '<button class="secondary-button" onclick="testProviderConnection(\\'' + escapeHtml(provider.id) + '\\')">Test Connection</button>';
+          html += '</div>';
+
+          if (testResult) {
+            const cls = testResult.ok ? 'ps-test-result ps-test-ok' : 'ps-test-result ps-test-fail';
+            html += '<div class="' + cls + '">' + escapeHtml(testResult.message) + '</div>';
+          }
+
+          html += '<div class="muted" style="margin-top:8px;font-size:11px;">Source: ' + escapeHtml(provider.settingsSource || 'environment') + '</div>';
+          html += '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      // Preserve any unsaved form state for the currently expanded card before rebuilding
+      if (state.expandedProviderId) {
+        const eid = state.expandedProviderId;
+        const urlEl = document.getElementById('ps-url-' + eid);
+        const keyEl = document.getElementById('ps-key-' + eid);
+        const modelsEl = document.getElementById('ps-models-' + eid);
+        const defaultEl = document.getElementById('ps-default-' + eid);
+        if (urlEl || keyEl || modelsEl || defaultEl) {
+          state.providerSettingsCache[eid] = {
+            url: urlEl ? urlEl.value : null,
+            key: keyEl ? keyEl.value : null,
+            models: modelsEl ? modelsEl.value : null,
+            default: defaultEl ? defaultEl.value : null
+          };
+        }
+      }
+
+      // If the user is actively typing in any input inside this panel, skip the DOM
+      // rebuild entirely — destroying and recreating elements always kills focus even
+      // if values are restored afterwards.  We will pick up fresh server state on the
+      // next poll cycle once they move focus away.
+      const _activeEl = document.activeElement;
+      if (_activeEl && container.contains(_activeEl) &&
+          (_activeEl.tagName === 'INPUT' || _activeEl.tagName === 'TEXTAREA' || _activeEl.tagName === 'SELECT')) {
+        return;
+      }
+
+      container.innerHTML = html;
+
+      // Restore preserved form state after innerHTML rebuild
+      if (state.expandedProviderId && state.providerSettingsCache[state.expandedProviderId]) {
+        const eid = state.expandedProviderId;
+        const cached = state.providerSettingsCache[eid];
+        const urlEl = document.getElementById('ps-url-' + eid);
+        const keyEl = document.getElementById('ps-key-' + eid);
+        const modelsEl = document.getElementById('ps-models-' + eid);
+        const defaultEl = document.getElementById('ps-default-' + eid);
+        if (urlEl && cached.url !== null) urlEl.value = cached.url;
+        if (keyEl && cached.key !== null) keyEl.value = cached.key;
+        if (modelsEl && cached.models !== null) modelsEl.value = cached.models;
+        if (defaultEl && cached.default !== null) defaultEl.value = cached.default;
+      }
+    }
+
+    function toggleProviderCard(providerId) {
+      state.expandedProviderId = state.expandedProviderId === providerId ? null : providerId;
+      render();
+    }
+
+    function toggleApiKeyVisibility(providerId) {
+      state.providerApiKeyVisible[providerId] = !state.providerApiKeyVisible[providerId];
+      render();
+    }
+
+    async function saveProviderCardSettings(providerId) {
+      const urlInput = document.getElementById('ps-url-' + providerId);
+      const modelsInput = document.getElementById('ps-models-' + providerId);
+      const defaultInput = document.getElementById('ps-default-' + providerId);
+      const baseUrl = urlInput ? urlInput.value.trim() : '';
+      const modelsRaw = modelsInput ? modelsInput.value : '';
+      const models = modelsRaw.split(',').map(function(m) { return m.trim(); }).filter(Boolean);
+      const defaultModel = defaultInput ? defaultInput.value.trim() : '';
+
+      state.notice = null;
+      try {
+        await request('/api/llm/provider-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ providerId: providerId, baseUrl: baseUrl, models: models, defaultModel: defaultModel })
+        });
+        delete state.providerSettingsCache[providerId];
+        await refreshChrome();
+        state.notice = 'Settings saved for ' + providerId + '.';
+      } catch (error) {
+        state.notice = String(error);
+      }
+      render();
+    }
+
+    async function saveProviderCardApiKey(providerId) {
+      const keyInput = document.getElementById('ps-key-' + providerId);
+      const apiKey = keyInput ? keyInput.value.trim() : '';
+      if (!apiKey) {
+        state.notice = 'Enter an API key before saving.';
+        render();
+        return;
+      }
+      state.notice = null;
+      try {
+        await request('/api/llm/provider-secret', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ providerId: providerId, apiKey: apiKey })
+        });
+        if (state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId].key = null;
+        await refreshChrome();
+        state.notice = 'API key saved for ' + providerId + '.';
+      } catch (error) {
+        state.notice = String(error);
+      }
+      render();
+    }
+
+    async function removeProviderCardApiKey(providerId) {
+      if (!confirm('Remove API key for ' + providerId + '?')) return;
+      state.notice = null;
+      try {
+        await request('/api/llm/provider-secret?providerId=' + encodeURIComponent(providerId), { method: 'DELETE' });
+        await refreshChrome();
+        state.notice = 'API key removed for ' + providerId + '.';
+      } catch (error) {
+        state.notice = String(error);
+      }
+      render();
+    }
+
+    async function testProviderConnection(providerId) {
+      state.providerTestResults[providerId] = { ok: false, message: 'Testing...' };
+      render();
+      try {
+        const keyInput = document.getElementById('ps-key-' + providerId);
+        const apiKey = keyInput ? keyInput.value.trim() : '';
+        const result = await request('/api/llm/provider-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiKey ? { providerId: providerId, apiKey: apiKey } : { providerId: providerId })
+        });
+        state.providerTestResults[providerId] = result;
+        if (result.ok && result.models && result.models.length > 0) {
+          // Update the models textarea in-place and persist in cache so it survives the next poll
+          const modelsInput = document.getElementById('ps-models-' + providerId);
+          const modelsText = result.models.join(', ');
+          if (modelsInput) modelsInput.value = modelsText;
+          if (!state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId] = {};
+          state.providerSettingsCache[providerId].models = modelsText;
+          // Clear the API key input from cache now that it has been saved server-side
+          if (apiKey) {
+            if (keyInput) keyInput.value = '';
+            if (state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId].key = null;
+          }
+          await refreshChrome();
+        }
+      } catch (error) {
+        state.providerTestResults[providerId] = { ok: false, message: String(error) };
+      }
+      render();
     }
 
     function renderLlmAudit() {
@@ -3601,6 +4290,8 @@ function dashboardHtml(port: number): string {
       safeRenderStep('releaseReadiness', renderReleaseReadiness);
       safeRenderStep('whatChanged', renderWhatChanged);
       safeRenderStep('llm', renderLlm);
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+      safeRenderStep('providerCards', renderProviderCards);
       safeRenderStep('llmAudit', renderLlmAudit);
       safeRenderStep('actions', renderActions);
       safeRenderStep('approvals', renderApprovals);
@@ -3620,6 +4311,9 @@ function dashboardHtml(port: number): string {
         return;
       }
       state.activeTab = tabId;
+      if (tabId === 'settings') {
+        refreshChrome().then(function() { render(); });
+      }
       render();
     }
 
@@ -3662,6 +4356,47 @@ function dashboardHtml(port: number): string {
       render();
     }
 
+    async function copySession(event, sessionId) {
+      event.stopPropagation();
+      const existing = state.sessions.find(session => session.sessionId === sessionId);
+      if (!existing) {
+        return;
+      }
+      
+      const button = event.currentTarget;
+      const originalText = button.textContent;
+      button.textContent = "Copying...";
+
+      try {
+        const payload = await request('/api/chat/sessions/' + encodeURIComponent(sessionId) + '/messages');
+        const messages = payload.messages || [];
+        
+        let textToCopy = "Session: " + existing.title + "\\n";
+        textToCopy += "Date: " + new Date().toLocaleString() + "\\n\\n";
+        
+        for (const msg of messages) {
+          textToCopy += "[" + msg.role.toUpperCase() + "]\\n";
+          textToCopy += msg.content + "\\n\\n";
+        }
+        
+        await navigator.clipboard.writeText(textToCopy.trim());
+        button.textContent = "Copied!";
+        button.style.backgroundColor = "#10b981";
+        button.style.color = "white";
+        button.style.borderColor = "#10b981";
+      } catch (err) {
+        console.error('Copy failed:', err);
+        button.textContent = "Failed";
+      }
+      
+      setTimeout(() => {
+        button.textContent = originalText;
+        button.style.backgroundColor = "";
+        button.style.color = "";
+        button.style.borderColor = "";
+      }, 2000);
+    }
+
     async function sendMessage() {
       const composer = document.getElementById('composer');
       const content = composer.value.trim();
@@ -3679,6 +4414,7 @@ function dashboardHtml(port: number): string {
       }
       state.busy = true;
       state.notice = null;
+      composer.value = '';
       render();
       try {
         await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages', {
@@ -3686,7 +4422,6 @@ function dashboardHtml(port: number): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content })
         });
-        composer.value = '';
         await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
       } catch (error) {
         state.notice = String(error);
@@ -3707,71 +4442,48 @@ function dashboardHtml(port: number): string {
       render();
     }
 
-    async function saveLlmDraft() {
+    async function quickApplyLlm() {
+      const localSelection = getLocalLlmSelection(state.selectedSessionId);
       const providerSelect = document.getElementById('provider-select');
       const modelSelect = document.getElementById('model-select');
-      const providerId = providerSelect ? providerSelect.value : '';
-      const model = modelSelect ? modelSelect.value : '';
-      if (!providerId) {
+      const providerId = localSelection && localSelection.providerId
+        ? localSelection.providerId
+        : (providerSelect ? providerSelect.value : '');
+      const model = localSelection
+        ? (localSelection.model || '')
+        : (modelSelect ? modelSelect.value : '');
+      if (!providerId || !state.selectedSessionId) {
         return;
       }
       state.notice = null;
       try {
-        state.llmConfig = await request('/api/llm/config/draft', {
+        state.llmCatalog = await request('/api/llm/select', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId, model })
+          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: providerId, model: model })
         });
-        await refreshChrome();
-        state.notice = 'Draft saved. Apply Draft to activate this configuration.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function applyLlmDraft() {
-      if (!state.selectedSessionId) {
-        return;
-      }
-      state.notice = null;
-      try {
-        const payload = await request('/api/llm/config/apply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId })
-        });
-        state.llmCatalog = payload.catalog;
-        state.llmConfig = payload.config;
+        clearLocalLlmSelection(state.selectedSessionId);
         const readiness = await request('/api/readiness/recheck', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, source: 'llm_apply_draft' })
-        }).catch(() => null);
+          body: JSON.stringify({ sessionId: state.selectedSessionId, source: 'llm_quick_apply' })
+        }).catch(function() { return null; });
         await refreshChrome();
         if (readiness) {
           state.readiness = readiness;
         }
-        state.notice = state.readiness && state.readiness.ready
-          ? 'Draft applied. Chat is now ready.'
-          : 'Draft applied. Complete remaining readiness checks before chatting.';
+        state.notice = 'Provider applied: ' + providerId + ' / ' + (model || 'default') + '.';
       } catch (error) {
         state.notice = String(error);
       }
       render();
     }
 
-    async function discardLlmDraft() {
-      if (!state.selectedSessionId) {
-        return;
-      }
+    async function refreshOllamaModels() {
       state.notice = null;
       try {
-        state.llmConfig = await request('/api/llm/config/draft?sessionId=' + encodeURIComponent(state.selectedSessionId), {
-          method: 'DELETE'
-        });
         await refreshChrome();
-        state.notice = 'Draft discarded.';
+        state.notice = 'Model list refreshed from local server.';
       } catch (error) {
         state.notice = String(error);
       }
@@ -3784,6 +4496,7 @@ function dashboardHtml(port: number): string {
       }
       state.notice = null;
       try {
+        clearLocalLlmSelection(state.selectedSessionId);
         const payload = await request('/api/llm/config/rollback', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3819,15 +4532,23 @@ function dashboardHtml(port: number): string {
     });
 
     bootstrap();
+
+    // Only telemetry data refreshes automatically — everything else is event-driven.
     setInterval(async function() {
       try {
-        await Promise.all([loadSessions(), refreshChrome(), loadMessages()]);
-        render();
-      } catch (error) {
-        state.notice = String(error);
-        render();
-      }
-    }, 2500);
+        // Never touch the DOM while the user has a dropdown open — it forces it closed.
+        if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
+        const [telemetrySummaryData, runtimeExcellenceData] = await Promise.all([
+          request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
+          request('/api/runtime/excellence?window=' + state.telemetryWindow).catch(() => null)
+        ]);
+        // Re-check focus after the async fetch — user may have opened a dropdown while waiting.
+        if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
+        state.telemetrySummary = telemetrySummaryData || null;
+        state.runtimeExcellence = runtimeExcellenceData || null;
+        safeRenderStep('runtimeExcellence', renderRuntimeExcellence);
+      } catch (_) { /* silent — telemetry is best-effort */ }
+    }, 30000);
   </script>
 </body>
 </html>`;

@@ -1,0 +1,37 @@
+# ImpressionCore-Goliath MCP Server Requirements
+# ==============================================
+
+# Core MCP dependencies
+mcp>=1.0.0
+
+# Rich UI enhancements (ImpressionCore standard)
+rich>=13.0.0
+
+# JSON and data handling
+pydantic>=2.0.0
+
+# Async support
+asyncio
+
+# HTTP and web functionality
+aiohttp>=3.8.0
+requests>=2.31.0
+
+# Educational data scraping
+beautifulsoup4>=4.12.0
+
+# Search functionality
+googlesearch-python>=1.2.0
+
+# Development and testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Typing support
+typing-extensions>=4.0.0
+
+# Path and file handling
+pathlib
+
+# Date and time
+python-dateutil>=2.8.0

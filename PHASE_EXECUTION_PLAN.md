@@ -72,6 +72,24 @@ Exit Criteria:
 - Performance and reliability gates met
 - Incident, rollback, and operator runbooks validated
 
+### Phase D1: Individual-native MVP (Parallel Track)
+
+Scope:
+
+- Email triage and draft workflow templates
+- Calendar conflict detection and day-plan recommendation templates
+- Notes capture + action/deadline extraction templates
+- Chronological task/event timeline templates
+- Policy-path tests for allow/deny/timeout on mutation operations
+- Contract snapshot evidence for all new capability tools
+
+Exit Criteria:
+
+- Four domain templates runnable in controlled test mode
+- Governance-path integration tests pass for all mutating operations
+- Retrieval attribution present in sampled outputs and dashboard traces
+- Tool contract snapshots updated and validated in release artifacts
+
 ### Phase E: Novel Capability Activation
 
 Scope:
@@ -128,6 +146,13 @@ For every phase completion, the following must be attached:
 
 - Go / No-Go recommendation
 - Risks and mitigations
+
+1. Individual-native capability evidence (required for Phase D1)
+
+- Domain matrix coverage report (email/calendar/notes/tasks)
+- Template-level policy-path traces (allow/deny/timeout)
+- Retrieval attribution samples per domain template
+- Contract snapshot diff and compatibility notes
 
 ## Ownership by Function
 

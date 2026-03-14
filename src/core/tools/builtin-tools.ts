@@ -2,6 +2,12 @@ import { HttpRequestTool } from "../../adapters/protocol/http-tool.js";
 import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../../adapters/system/file-tools.js";
 import { ShellTool } from "../../adapters/system/shell-tool.js";
 import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
+import {
+    CalendarPlanningTool,
+    EmailCapabilityTool,
+    NotesExtractionTool,
+    TasksTimelineTool,
+} from "../../adapters/application/individual-capability-tools.js";
 import type { Tool } from "./types.js";
 
 export function builtinTools(): Tool[] {
@@ -16,5 +22,9 @@ export function builtinTools(): Tool[] {
         new HttpRequestTool(),
         // Application adapters
         new Neo4jQueryTool(),
+        new EmailCapabilityTool(),
+        new CalendarPlanningTool(),
+        new NotesExtractionTool(),
+        new TasksTimelineTool(),
     ];
 }

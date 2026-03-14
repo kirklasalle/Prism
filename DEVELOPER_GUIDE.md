@@ -1,4 +1,4 @@
-# PRISM Developer Guide
+﻿# PRISM Developer Guide
 
 Date: 2026-03-11
 
@@ -10,6 +10,8 @@ Research baseline:
 - `PRISM_RESEARCH_DOCUMENTATION.md` (full-context architecture and evidence rationale).
 
 Design principle:
+- Human/AI Mutual Growth (AaaS integration respecting human calendar and project realities).
+
 - maximum capability under explicit control.
 
 ## 2. Engineering Principles

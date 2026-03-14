@@ -1,0 +1,60 @@
+{
+  "mcpServers": {
+    "nexus-ids": {
+      "command": "python",
+      "args": [
+        "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\ids-mcp\\server_ai_enhanced.py"
+      ],
+      "cwd": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\ids-mcp",
+      "env": {
+        "PYTHONPATH": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\ids-mcp"
+      }
+    },
+    "nexus-eds": {
+      "command": "python",
+      "args": [
+        "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-eds\\server_enhanced.py"
+      ],
+      "cwd": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-eds"
+    },
+    "nexus-ipa": {
+      "command": "python",
+      "args": [
+        "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-ipa\\server_ultimate.py"
+      ],
+      "cwd": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-ipa"
+    },
+    "nexus-goliath": {
+      "command": "python",
+      "args": [
+        "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-goliath\\server.py"
+      ],
+      "cwd": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-goliath",
+      "env": {
+        "GOLIATH_DEBUG": "1",
+        "PYTHONPATH": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-goliath"
+      }
+    },
+    "nexus-vrgc": {
+      "command": "python",
+      "args": [
+        "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-vrgc\\server_enhanced.py"
+      ],
+      "cwd": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-vrgc"
+    },
+    "nexus-dpa": {
+      "command": "python",
+      "args": [
+        "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-dpa\\server.py"
+      ],
+      "cwd": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\impressioncore-dpa"
+    },
+    "nexus-web-search": {
+      "command": "python",
+      "args": [
+        "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\web-search-mcp\\server.py"
+      ],
+      "cwd": "G:\\Users\\kirkl\\.openclaw\\workspace\\.mcp\\web-search-mcp"
+    }
+  }
+}

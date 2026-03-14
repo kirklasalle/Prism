@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "created": "2025-12-30T16:07:52.366456",
+    "last_updated": "2025-12-30T16:36:12.498285",
+    "schema_version": "1.0.0"
+  },
+  "findings": {
+    "thermal_bottleneck_v3": {
+      "source": "goliath",
+      "data": {
+        "threshold": 85,
+        "unit": "Celsius",
+        "impact": "throttling"
+      },
+      "dna": "thermal-dna-alpha-9",
+      "timestamp": "2025-12-30T16:07:52.371701"
+    },
+    "vram_limit_1050ti": {
+      "source": "ipa_demo",
+      "data": {
+        "limit_gb": 4.0,
+        "current_swarm_footprint": "1.2GB"
+      },
+      "dna": "vram-optim-2025-x1",
+      "timestamp": "2025-12-30T16:36:12.479623"
+    }
+  },
+  "digital_dna": {
+    "thermal-dna-alpha-9": "thermal_bottleneck_v3",
+    "vram-optim-2025-x1": "vram_limit_1050ti"
+  },
+  "performance_metrics": {},
+  "active_context": [
+    "1050ti",
+    "stability",
+    "hardware"
+  ]
+}

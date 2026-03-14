@@ -6,7 +6,9 @@ export type ActivityLayer =
     | "template"
     | "consolidation"
     | "governance"
-    | "performance";
+    | "performance"
+    | "llm"
+    | "agent";
 
 export type AuthorityTier = "tier1_autonomous" | "tier2_conditional" | "tier3_approval";
 

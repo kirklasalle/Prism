@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -18,7 +19,11 @@
       --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
       --radius: 22px;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
@@ -29,7 +34,13 @@
         radial-gradient(circle at top right, rgba(124, 241, 200, 0.12), transparent 24%),
         linear-gradient(180deg, #06101d 0%, #091728 44%, #07111f 100%);
     }
-    button, textarea, select { font: inherit; }
+
+    button,
+    textarea,
+    select {
+      font: inherit;
+    }
+
     .app {
       display: grid;
       grid-template-columns: 280px minmax(0, 1fr);
@@ -37,6 +48,7 @@
       padding: 18px;
       min-height: 100vh;
     }
+
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -44,18 +56,21 @@
       box-shadow: var(--shadow);
       backdrop-filter: blur(18px);
     }
+
     .sidebar {
       padding: 18px;
       display: flex;
       flex-direction: column;
       gap: 14px;
     }
+
     .workspace {
       min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 14px;
     }
+
     .tabs {
       display: flex;
       flex-wrap: wrap;
@@ -63,17 +78,18 @@
       padding: 10px;
       border-radius: 18px;
       min-height: 68px;
-      background: linear-gradient(180deg, rgba(9,17,31,0.92), rgba(9,17,31,0.84));
-      border: 1px solid rgba(105,210,255,0.20);
+      background: linear-gradient(180deg, rgba(9, 17, 31, 0.92), rgba(9, 17, 31, 0.84));
+      border: 1px solid rgba(105, 210, 255, 0.20);
       align-items: stretch;
     }
+
     .tab-button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       flex: 1 1 180px;
       min-height: 46px;
-      border: 1px solid rgba(148,163,184,0.28);
+      border: 1px solid rgba(148, 163, 184, 0.28);
       border-radius: 12px;
       background: rgba(14, 25, 43, 0.92);
       color: var(--text);
@@ -82,54 +98,112 @@
       font-weight: 700;
       transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
     }
+
     .tab-button:hover {
-      border-color: rgba(105,210,255,0.42);
+      border-color: rgba(105, 210, 255, 0.42);
       transform: translateY(-1px);
     }
+
     .tab-button:focus-visible {
-      outline: 2px solid rgba(105,210,255,0.7);
+      outline: 2px solid rgba(105, 210, 255, 0.7);
       outline-offset: 2px;
     }
+
     .tab-button.active {
       color: #04111f;
-      border-color: rgba(105,210,255,0.18);
+      border-color: rgba(105, 210, 255, 0.18);
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 10px 24px rgba(105,210,255,0.16);
+      box-shadow: 0 10px 24px rgba(105, 210, 255, 0.16);
     }
-    .tab-panel { display: block; }
-    body.js-ready .tab-panel { display: none; }
-    body.js-ready .tab-panel.active { display: block; }
+
+    .tab-panel {
+      display: block;
+    }
+
+    body.js-ready .tab-panel {
+      display: none;
+    }
+
+    body.js-ready .tab-panel.active {
+      display: block;
+    }
+
     .tab-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
       align-items: start;
     }
+
     .brand {
       padding: 16px;
       border-radius: 18px;
       background: linear-gradient(135deg, rgba(105, 210, 255, 0.16), rgba(124, 241, 200, 0.08));
       border: 1px solid rgba(105, 210, 255, 0.18);
     }
-    .eyebrow { color: var(--accent-2); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; }
-    .brand h1 { margin: 8px 0 6px; font-size: 28px; }
-    .muted { color: var(--muted); }
-    .session-list { display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+
+    .eyebrow {
+      color: var(--accent-2);
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .brand h1 {
+      margin: 8px 0 6px;
+      font-size: 28px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .session-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow: auto;
+    }
+
     .session-card {
       width: 100%;
       text-align: left;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(148,163,184,0.12);
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(148, 163, 184, 0.12);
       color: var(--text);
       padding: 14px;
       border-radius: 16px;
       cursor: pointer;
     }
-    .session-card.active { border-color: rgba(105, 210, 255, 0.48); background: rgba(105, 210, 255, 0.10); }
-    .session-title { font-weight: 700; margin-bottom: 6px; }
-    .session-preview { font-size: 12px; color: var(--muted); line-height: 1.45; }
-    .session-meta { margin-top: 8px; font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; }
-    .primary-button, .secondary-button, .danger-button {
+
+    .session-card.active {
+      border-color: rgba(105, 210, 255, 0.48);
+      background: rgba(105, 210, 255, 0.10);
+    }
+
+    .session-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .session-preview {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .session-meta {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .primary-button,
+    .secondary-button,
+    .danger-button {
       border: none;
       border-radius: 14px;
       cursor: pointer;
@@ -138,41 +212,59 @@
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
       font-weight: 700;
     }
+
     .secondary-button {
-      background: rgba(255,255,255,0.06);
+      background: rgba(255, 255, 255, 0.06);
       color: var(--text);
-      border: 1px solid rgba(148,163,184,0.14);
+      border: 1px solid rgba(148, 163, 184, 0.14);
     }
+
     .danger-button {
       color: #fff;
       background: rgba(255, 77, 77, 0.18);
       border: 1px solid rgba(255, 141, 141, 0.28);
     }
-    .primary-button[disabled], .secondary-button[disabled], .danger-button[disabled] {
+
+    .primary-button[disabled],
+    .secondary-button[disabled],
+    .danger-button[disabled] {
       opacity: 0.55;
       cursor: wait;
     }
+
     .chat {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       min-height: calc(100vh - 36px);
       overflow: hidden;
     }
+
     .chat-header {
       padding: 22px 24px 16px;
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
     }
-    .chat-header h2 { margin: 8px 0 6px; font-size: 26px; }
-    .header-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .chat-header h2 {
+      margin: 8px 0 6px;
+      font-size: 26px;
+    }
+
+    .header-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
     .chip {
       border-radius: 999px;
       padding: 6px 10px;
       font-size: 12px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(148,163,184,0.12);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(148, 163, 184, 0.12);
       color: var(--muted);
     }
+
     .messages {
       padding: 22px 24px;
       overflow: auto;
@@ -180,6 +272,7 @@
       flex-direction: column;
       gap: 16px;
     }
+
     .message {
       max-width: 86%;
       padding: 16px 18px;
@@ -188,82 +281,128 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+
     .message.user {
       margin-left: auto;
       background: linear-gradient(135deg, rgba(105, 210, 255, 0.18), rgba(105, 210, 255, 0.08));
       border: 1px solid rgba(105, 210, 255, 0.18);
     }
+
     .message.assistant {
       margin-right: auto;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(148,163,184,0.12);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(148, 163, 184, 0.12);
     }
-    .message-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-    .message-time { margin-top: 10px; font-size: 11px; color: var(--muted); }
+
+    .message-label {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .message-time {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
     .empty-state {
       margin: auto;
       max-width: 520px;
       text-align: center;
       color: var(--muted);
-      border: 1px dashed rgba(148,163,184,0.18);
+      border: 1px dashed rgba(148, 163, 184, 0.18);
       border-radius: 22px;
       padding: 28px;
-      background: rgba(255,255,255,0.02);
+      background: rgba(255, 255, 255, 0.02);
     }
+
     .composer {
       padding: 18px 24px 24px;
       border-top: 1px solid var(--border);
-      background: linear-gradient(180deg, transparent, rgba(255,255,255,0.03));
+      background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.03));
     }
+
     .composer-shell {
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 12px;
       align-items: end;
     }
+
     textarea {
       width: 100%;
       min-height: 92px;
       resize: vertical;
       border-radius: 18px;
       padding: 14px 16px;
-      border: 1px solid rgba(148,163,184,0.16);
+      border: 1px solid rgba(148, 163, 184, 0.16);
       background: rgba(2, 8, 18, 0.66);
       color: var(--text);
     }
-    textarea:focus { outline: 1px solid rgba(105, 210, 255, 0.42); }
+
+    textarea:focus {
+      outline: 1px solid rgba(105, 210, 255, 0.42);
+    }
+
     .control-select {
       width: 100%;
       text-align: left;
       border-radius: 14px;
       padding: 10px 14px;
-      border: 1px solid rgba(148,163,184,0.18);
+      border: 1px solid rgba(148, 163, 184, 0.18);
       background: rgba(6, 16, 29, 0.96);
       color: var(--text);
       appearance: none;
       -webkit-appearance: none;
       -moz-appearance: none;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
+
     .control-select:focus {
       outline: 1px solid rgba(105, 210, 255, 0.42);
       border-color: rgba(105, 210, 255, 0.34);
     }
+
     .control-select option,
     .control-select optgroup {
       background: #0b1728;
       color: var(--text);
     }
-    .composer-hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+    .composer-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
     .rail-section {
-      border: 1px solid rgba(148,163,184,0.12);
+      border: 1px solid rgba(148, 163, 184, 0.12);
       border-radius: 18px;
       padding: 16px;
-      background: rgba(255,255,255,0.03);
+      background: rgba(255, 255, 255, 0.03);
     }
-    .rail-section h3 { margin: 0 0 12px; font-size: 15px; }
-    .stack { display: flex; flex-direction: column; gap: 10px; }
-    .metric { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+
+    .rail-section h3 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -271,27 +410,64 @@
       border-radius: 999px;
       padding: 4px 10px;
       font-size: 11px;
-      border: 1px solid rgba(148,163,184,0.14);
+      border: 1px solid rgba(148, 163, 184, 0.14);
       color: var(--muted);
     }
-    .badge-running { color: #8dd8ff; border-color: rgba(105,210,255,0.34); }
-    .badge-succeeded { color: #8ff3c8; border-color: rgba(124,241,200,0.30); }
-    .badge-failed { color: #ff9f9f; border-color: rgba(255,141,141,0.30); }
-    .action-card, .approval-card {
-      border: 1px solid rgba(148,163,184,0.12);
+
+    .badge-running {
+      color: #8dd8ff;
+      border-color: rgba(105, 210, 255, 0.34);
+    }
+
+    .badge-succeeded {
+      color: #8ff3c8;
+      border-color: rgba(124, 241, 200, 0.30);
+    }
+
+    .badge-failed {
+      color: #ff9f9f;
+      border-color: rgba(255, 141, 141, 0.30);
+    }
+
+    .action-card,
+    .approval-card {
+      border: 1px solid rgba(148, 163, 184, 0.12);
       border-radius: 16px;
       padding: 14px;
-      background: rgba(255,255,255,0.025);
+      background: rgba(255, 255, 255, 0.025);
     }
-    .action-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
-    .action-buttons { display: flex; gap: 8px; margin-top: 12px; }
-    .history-table, .events-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .history-table th, .history-table td, .events-table th, .events-table td {
+
+    .action-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .history-table,
+    .events-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .history-table th,
+    .history-table td,
+    .events-table th,
+    .events-table td {
       text-align: left;
       padding: 8px 0;
-      border-bottom: 1px solid rgba(148,163,184,0.10);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.10);
       vertical-align: top;
     }
+
     .notice {
       margin-bottom: 12px;
       padding: 10px 12px;
@@ -301,18 +477,21 @@
       color: #ffc1c1;
       font-size: 12px;
     }
+
     .onboarding {
       margin: 12px 24px 0;
       padding: 14px;
       border-radius: 14px;
-      border: 1px solid rgba(148,163,184,0.16);
-      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      background: rgba(255, 255, 255, 0.03);
     }
+
     .onboarding-title {
       font-size: 13px;
       font-weight: 700;
       margin-bottom: 8px;
     }
+
     .onboarding-list {
       display: flex;
       flex-direction: column;
@@ -320,26 +499,53 @@
       font-size: 12px;
       color: var(--muted);
     }
+
     .onboarding-list .passed {
       color: var(--accent-2);
     }
+
     .onboarding-list .failed {
       color: #ffc1c1;
     }
-    .mono { font-family: "Cascadia Code", Consolas, monospace; }
-    @media (max-width: 1280px) {
-      .app { grid-template-columns: 260px minmax(0, 1fr); }
-      .tab-grid { grid-template-columns: 1fr; }
+
+    .mono {
+      font-family: "Cascadia Code", Consolas, monospace;
     }
+
+    @media (max-width: 1280px) {
+      .app {
+        grid-template-columns: 260px minmax(0, 1fr);
+      }
+
+      .tab-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
     @media (max-width: 900px) {
-      .app { grid-template-columns: 1fr; }
-      .chat { min-height: auto; }
-      .sidebar { order: 2; }
-      .tabs { gap: 8px; }
-      .tab-button { flex-basis: calc(50% - 4px); }
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .chat {
+        min-height: auto;
+      }
+
+      .sidebar {
+        order: 2;
+      }
+
+      .tabs {
+        gap: 8px;
+      }
+
+      .tab-button {
+        flex-basis: calc(50% - 4px);
+      }
     }
   </style>
 </head>
+
 <body>
   <div class="app">
     <aside class="sidebar panel">
@@ -354,13 +560,22 @@
 
     <main class="workspace">
       <section class="tabs panel" id="tabs" role="tablist" aria-label="Dashboard sections">
-        <button id="tab-button-chat" type="button" class="tab-button active" data-tab-id="chat" role="tab" aria-selected="true" aria-controls="tab-chat" tabindex="0" onclick="setActiveTab(this.dataset.tabId)">Chat Interface</button>
-        <button id="tab-button-settings" type="button" class="tab-button" data-tab-id="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Provider &amp; Settings</button>
-        <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Telemetry</button>
-        <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Logs &amp; Debug</button>
+        <button id="tab-button-chat" type="button" class="tab-button active" data-tab-id="chat" role="tab"
+          aria-selected="true" aria-controls="tab-chat" tabindex="0" onclick="setActiveTab(this.dataset.tabId)">Chat
+          Interface</button>
+        <button id="tab-button-settings" type="button" class="tab-button" data-tab-id="settings" role="tab"
+          aria-selected="false" aria-controls="tab-settings" tabindex="-1"
+          onclick="setActiveTab(this.dataset.tabId)">Provider &amp; Settings</button>
+        <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab"
+          aria-selected="false" aria-controls="tab-telemetry" tabindex="-1"
+          onclick="setActiveTab(this.dataset.tabId)">Telemetry</button>
+        <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab"
+          aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Logs
+          &amp; Debug</button>
       </section>
 
-      <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat" aria-hidden="false">
+      <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat"
+        aria-hidden="false">
         <div class="chat panel">
           <div class="chat-header">
             <div class="eyebrow">Persistent Runtime Session</div>
@@ -372,15 +587,18 @@
           <section id="messages" class="messages"></section>
           <div class="composer">
             <div class="composer-shell">
-              <textarea id="composer" placeholder="Ask for status, approvals, history, or say 'run workflow demo'."></textarea>
+              <textarea id="composer"
+                placeholder="Ask for status, approvals, history, or say 'run workflow demo'."></textarea>
               <button id="send-button" class="primary-button" onclick="sendMessage()">Send</button>
             </div>
-            <div class="composer-hint">Enter sends. Shift+Enter inserts a newline. Sessions and messages persist in SQLite.</div>
+            <div class="composer-hint">Enter sends. Shift+Enter inserts a newline. Sessions and messages persist in
+              SQLite.</div>
           </div>
         </div>
       </section>
 
-      <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true">
+      <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings"
+        aria-hidden="true">
         <div class="tab-grid">
           <section class="rail-section panel">
             <h3>LLM Provider</h3>
@@ -393,7 +611,8 @@
         </div>
       </section>
 
-      <section id="tab-telemetry" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-telemetry" aria-hidden="true">
+      <section id="tab-telemetry" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-telemetry"
+        aria-hidden="true">
         <div class="tab-grid">
           <section class="rail-section panel" style="grid-column:1/-1;padding-bottom:4px;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -709,7 +928,7 @@
       const activeSession = state.sessions.find(session => session.sessionId === state.selectedSessionId);
       document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Chat';
       document.getElementById('active-session-meta').textContent = activeSession
-        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' • ' + activeSession.messageCount + ' messages'
+        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' ï¿½ ' + activeSession.messageCount + ' messages'
         : 'Persistent runtime session';
 
       const chips = [];
@@ -750,14 +969,14 @@
           '<div class="' + (item.passed ? 'passed' : 'failed') + '">'
           + (item.passed ? '? ' : '? ')
           + escapeHtml(item.label)
-          + ' — ' + escapeHtml(item.detail || '')
+          + ' ï¿½ ' + escapeHtml(item.detail || '')
           + '</div>'
         ).join('')
         + '</div>'
         + '<div class="action-buttons" style="margin-top:10px;">'
         + '<button class="secondary-button" onclick="setActiveTab('settings')">Open Provider & Settings</button>'
-        + '</div>'
-        + (recommendations ? '<ul class="muted" style="margin:10px 0 0 18px; padding:0;">' + recommendations + '</ul>' : '');
+          + '</div>'
+          + (recommendations ? '<ul class="muted" style="margin:10px 0 0 18px; padding:0;">' + recommendations + '</ul>' : '');
     }
 
     function renderMessages() {
@@ -841,26 +1060,26 @@
         : null;
       const diffHtml = diff && diff.changedFields && diff.changedFields.length > 0
         ? '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="muted">Draft changes: ' + escapeHtml(diff.changedFields.join(', ')) + '</div>'
-          + '<div class="mono" style="margin-top:6px;">Current: ' + escapeHtml((diff.before.providerId || '-') + ' / ' + (diff.before.model || '-')) + '</div>'
-          + '<div class="mono">Draft: ' + escapeHtml((diff.after.providerId || '-') + ' / ' + (diff.after.model || '-')) + '</div>'
-          + '</div>'
+        + '<div class="muted">Draft changes: ' + escapeHtml(diff.changedFields.join(', ')) + '</div>'
+        + '<div class="mono" style="margin-top:6px;">Current: ' + escapeHtml((diff.before.providerId || '-') + ' / ' + (diff.before.model || '-')) + '</div>'
+        + '<div class="mono">Draft: ' + escapeHtml((diff.after.providerId || '-') + ' / ' + (diff.after.model || '-')) + '</div>'
+        + '</div>'
         : '<div class="muted" style="margin-top:8px;">No pending draft changes.</div>';
 
       const history = state.llmConfig && state.llmConfig.history ? state.llmConfig.history : [];
       const historyHtml = history.length > 0
         ? '<div class="muted" style="margin-top:10px;">Recent applied config</div>'
-          + '<table class="events-table"><thead><tr><th>Time</th><th>Change</th><th>Source</th></tr></thead><tbody>'
-          + history.slice(0, 5).map(entry => '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(entry.appliedAt)) + '</td>'
-            + '<td><div class="mono">'
-            + escapeHtml((entry.previousProviderId || '-') + ' / ' + (entry.previousModel || '-'))
-            + ' ? '
-            + escapeHtml((entry.nextProviderId || '-') + ' / ' + (entry.nextModel || '-'))
-            + '</div></td>'
-            + '<td>' + escapeHtml(entry.source || '-') + '</td>'
-            + '</tr>').join('')
-          + '</tbody></table>'
+        + '<table class="events-table"><thead><tr><th>Time</th><th>Change</th><th>Source</th></tr></thead><tbody>'
+        + history.slice(0, 5).map(entry => '<tr>'
+          + '<td>' + escapeHtml(formatRelativeTime(entry.appliedAt)) + '</td>'
+          + '<td><div class="mono">'
+          + escapeHtml((entry.previousProviderId || '-') + ' / ' + (entry.previousModel || '-'))
+          + ' ? '
+          + escapeHtml((entry.nextProviderId || '-') + ' / ' + (entry.nextModel || '-'))
+          + '</div></td>'
+          + '<td>' + escapeHtml(entry.source || '-') + '</td>'
+          + '</tr>').join('')
+        + '</tbody></table>'
         : '<div class="muted" style="margin-top:10px;">No config history yet.</div>';
 
       container.innerHTML = ''
@@ -1317,7 +1536,7 @@
       const delta = summary.delta;
 
       function deltaLabel(val, higherIsBad) {
-        if (val === 0) return '<span class="muted">±0</span>';
+        if (val === 0) return '<span class="muted">ï¿½0</span>';
         const positive = val > 0;
         const bad = higherIsBad ? positive : !positive;
         const color = bad ? '#ff8d8d' : '#7ecf7e';
@@ -1395,7 +1614,7 @@
           + '<td>' + escapeHtml(String(trace.eventCount)) + '</td>'
           + '<td>' + escapeHtml(trace.status) + (trace.failures > 0 ? ' (' + escapeHtml(String(trace.failures)) + ' failed)' : '') + '</td>'
           + '<td>' + escapeHtml(formatRelativeTime(trace.lastAt)) + '</td>'
-          + '</tr>').join('')
+        + '</tr>').join('')
         + '</tbody></table>';
 
       const selected = traceData.selectedTraceEvents || [];
@@ -1659,7 +1878,7 @@
       render();
     }
 
-    document.getElementById('composer').addEventListener('keydown', function(event) {
+    document.getElementById('composer').addEventListener('keydown', function (event) {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         void sendMessage();
@@ -1667,15 +1886,7 @@
     });
 
     bootstrap();
-    setInterval(async function() {
-      try {
-        await Promise.all([loadSessions(), refreshChrome(), loadMessages()]);
-        render();
-      } catch (error) {
-        state.notice = String(error);
-        render();
-      }
-    }, 2500);
   </script>
 </body>
+
 </html>

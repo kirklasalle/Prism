@@ -1,0 +1,17 @@
+# ImpressionCore VRGC MCP Server Requirements
+# Core dependencies for Virtually Robotic GitHub Copilot
+
+# System monitoring and hardware access
+psutil>=5.9.0
+GPUtil>=1.4.0
+
+# AI/ML dependencies (for torch integration)
+torch>=2.0.0
+numpy>=1.21.0
+
+# Optional MCP server dependencies
+# Uncomment if running as full MCP server
+# mcp>=0.1.0
+
+# Development and testing
+pathlib2>=2.3.7  # Fallback for older Python versions

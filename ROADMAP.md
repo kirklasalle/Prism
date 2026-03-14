@@ -49,6 +49,19 @@ Date: 2026-03-11
 
 ## Next Steps
 
+1. Individual-native MVP execution (new)
+
+- Build workflow templates for:
+  - email triage + draft
+  - calendar conflict + day planning
+  - notes capture + extraction
+  - chronological tasks/events planning
+- Add policy-path integration tests for mutating operations (allow/deny/timeout)
+- Publish release evidence bundle:
+  - tool contract snapshots
+  - retrieval attribution samples
+  - workflow trace parity checks
+
 1. Retrieval quality instrumentation
 
 - Expand profile-specific alert tuning based on production incident trends

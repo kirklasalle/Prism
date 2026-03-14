@@ -7,6 +7,7 @@ Research quick links:
 - Full-context research documentation: `PRISM_RESEARCH_DOCUMENTATION.md`
 - One-page executive summary: `PRISM_RESEARCH_DOCUMENTATION.md#0-executive-summary-one-page`
 - Board/investor half-page brief: `PRISM_RESEARCH_DOCUMENTATION.md#01-boardinvestor-brief-half-page`
+- Individual-native + domain-pack strategy: `INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md`
 
 This repository now contains:
 
@@ -18,6 +19,8 @@ This repository now contains:
 - and integration tests for approval success, denial, and timeout paths.
 
 ## Vision
+
+PRISM shifts the generative AI paradigm from isolated chat tools into **"Agents As A Service" (AaaS)**. It encapsulates complex multi-step reasoning, strict governance boundaries, and dynamic tool orchestration into an autonomous platform designed to respect the operator's constraints—bridging machine automation and human project/time management for a "Return of Growth and Integrity".
 
 PRISM’s target is not “just another assistant.”
 It is a next-generation agent operating system focused on five differentiators:

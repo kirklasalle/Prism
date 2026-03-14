@@ -1,10 +1,10 @@
-# PRISM User Guide
+﻿# PRISM User Guide
 
 Date: 2026-03-11
 
 ## 1. What PRISM is
 
-PRISM is a governed autonomous agent runtime that can execute operations across your computer environment while enforcing safety and approval controls.
+PRISM is a governed autonomous agent runtime that acts as your infrastructure for Agents As A Service (AaaS). It can execute operations across your computer environment, bridging machine automation and human calendar/project management for a " Return of Growth and Integrity.
 
 Research context reference:
 

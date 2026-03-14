@@ -1,6 +1,30 @@
 import type { ProviderSecretStore } from "./provider-secret-store.js";
+import {
+    resolveProfile,
+    selectModelForRole,
+    buildAdaptiveParams,
+    buildAdaptiveSystemPrompt,
+} from "./model-capability-matrix.js";
+import type {
+    TaskRole,
+    AvailableModel,
+    ModelRouterSelection,
+    AdaptivePromptParams,
+    ModelCapabilityProfile,
+} from "./model-capability-matrix.js";
 
-export type PrismLlmProviderId = "openai" | "anthropic" | "ollama" | "custom";
+export type { TaskRole, ModelRouterSelection, AdaptivePromptParams, ModelCapabilityProfile };
+
+export type PrismLlmProviderId =
+    | "openai" | "anthropic" | "ollama" | "custom"
+    | "google" | "mistral" | "cohere" | "groq" | "together"
+    | "deepseek" | "perplexity" | "fireworks" | "openrouter" | "lmstudio";
+
+export const ALL_PROVIDER_IDS: PrismLlmProviderId[] = [
+    "openai", "anthropic", "google", "mistral", "cohere", "groq",
+    "together", "deepseek", "perplexity", "fireworks", "openrouter",
+    "ollama", "lmstudio", "custom",
+];
 
 export interface PersistedProviderSettings {
     providerId: PrismLlmProviderId;
@@ -76,6 +100,16 @@ const ANTHROPIC_DEFAULT_MODELS = [
     "claude-3-7-sonnet-latest",
     "claude-3-5-haiku-latest",
 ];
+
+const GOOGLE_DEFAULT_MODELS = ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro"];
+const MISTRAL_DEFAULT_MODELS = ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"];
+const COHERE_DEFAULT_MODELS = ["command-r-plus", "command-r", "command-light"];
+const GROQ_DEFAULT_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"];
+const TOGETHER_DEFAULT_MODELS = ["meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"];
+const DEEPSEEK_DEFAULT_MODELS = ["deepseek-chat", "deepseek-reasoner"];
+const PERPLEXITY_DEFAULT_MODELS = ["sonar-pro", "sonar"];
+const FIREWORKS_DEFAULT_MODELS = ["accounts/fireworks/models/llama-v3p1-70b-instruct", "accounts/fireworks/models/mixtral-8x7b-instruct"];
+const OPENROUTER_DEFAULT_MODELS = ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "meta-llama/llama-3.1-70b-instruct"];
 
 function parseModelList(raw: string | undefined, fallback: string[]): string[] {
     if (!raw?.trim()) {
@@ -177,6 +211,123 @@ export class LlmProviderManager {
                 requiresApiKey: Boolean(customBaseUrl),
                 settingsSource: "environment",
             },
+            google: {
+                id: "google",
+                label: "Google AI (Gemini)",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_GOOGLE_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta/openai"),
+                apiKey: this.env.GOOGLE_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_GOOGLE_MODELS, GOOGLE_DEFAULT_MODELS),
+                defaultModel: GOOGLE_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            mistral: {
+                id: "mistral",
+                label: "Mistral AI",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_MISTRAL_BASE_URL?.trim() || "https://api.mistral.ai/v1"),
+                apiKey: this.env.MISTRAL_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_MISTRAL_MODELS, MISTRAL_DEFAULT_MODELS),
+                defaultModel: MISTRAL_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            cohere: {
+                id: "cohere",
+                label: "Cohere",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_COHERE_BASE_URL?.trim() || "https://api.cohere.com/compatibility/v1"),
+                apiKey: this.env.COHERE_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_COHERE_MODELS, COHERE_DEFAULT_MODELS),
+                defaultModel: COHERE_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            groq: {
+                id: "groq",
+                label: "Groq",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_GROQ_BASE_URL?.trim() || "https://api.groq.com/openai/v1"),
+                apiKey: this.env.GROQ_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_GROQ_MODELS, GROQ_DEFAULT_MODELS),
+                defaultModel: GROQ_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            together: {
+                id: "together",
+                label: "Together AI",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_TOGETHER_BASE_URL?.trim() || "https://api.together.xyz/v1"),
+                apiKey: this.env.TOGETHER_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_TOGETHER_MODELS, TOGETHER_DEFAULT_MODELS),
+                defaultModel: TOGETHER_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            deepseek: {
+                id: "deepseek",
+                label: "DeepSeek",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_DEEPSEEK_BASE_URL?.trim() || "https://api.deepseek.com/v1"),
+                apiKey: this.env.DEEPSEEK_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_DEEPSEEK_MODELS, DEEPSEEK_DEFAULT_MODELS),
+                defaultModel: DEEPSEEK_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            perplexity: {
+                id: "perplexity",
+                label: "Perplexity",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_PERPLEXITY_BASE_URL?.trim() || "https://api.perplexity.ai"),
+                apiKey: this.env.PERPLEXITY_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_PERPLEXITY_MODELS, PERPLEXITY_DEFAULT_MODELS),
+                defaultModel: PERPLEXITY_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            fireworks: {
+                id: "fireworks",
+                label: "Fireworks AI",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_FIREWORKS_BASE_URL?.trim() || "https://api.fireworks.ai/inference/v1"),
+                apiKey: this.env.FIREWORKS_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_FIREWORKS_MODELS, FIREWORKS_DEFAULT_MODELS),
+                defaultModel: FIREWORKS_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            openrouter: {
+                id: "openrouter",
+                label: "OpenRouter",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1"),
+                apiKey: this.env.OPENROUTER_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_OPENROUTER_MODELS, OPENROUTER_DEFAULT_MODELS),
+                defaultModel: OPENROUTER_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            lmstudio: {
+                id: "lmstudio",
+                label: "LM Studio (Local)",
+                kind: "local",
+                baseUrl: trimSlash(this.env.PRISM_LMSTUDIO_BASE_URL?.trim() || "http://127.0.0.1:1234"),
+                defaultModels: parseModelList(this.env.PRISM_LMSTUDIO_MODELS, []),
+                defaultModel: null,
+                requiresApiKey: false,
+            } as ProviderSettings,
         };
 
         this.setPersistedProviderSettings(settings);
@@ -208,13 +359,15 @@ export class LlmProviderManager {
     }
 
     async getCatalog(selection?: Partial<LlmSelection>): Promise<LlmProviderCatalog> {
-        const ollamaModels = await this.fetchOllamaModels(this.getResolvedSettings("ollama"));
-        const providers: LlmProviderSnapshot[] = [
-            this.snapshotFor("openai"),
-            this.snapshotFor("anthropic"),
-            this.snapshotFor("ollama", ollamaModels),
-            this.snapshotFor("custom"),
-        ];
+        const [ollamaModels, lmStudioModels] = await Promise.all([
+            this.fetchOllamaModels(this.getResolvedSettings("ollama")),
+            this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")),
+        ]);
+        const providers: LlmProviderSnapshot[] = ALL_PROVIDER_IDS.map((id) => {
+            if (id === "ollama") return this.snapshotFor(id, ollamaModels);
+            if (id === "lmstudio") return this.snapshotFor(id, lmStudioModels);
+            return this.snapshotFor(id);
+        });
 
         let effectiveProviderId: PrismLlmProviderId | null = this.activeProviderId;
         let effectiveModel: string | null = this.activeModel;
@@ -296,10 +449,8 @@ export class LlmProviderManager {
         }
 
         const settings = this.getResolvedSettings(catalog.activeProviderId);
-        if (catalog.activeProviderId === "openai" || catalog.activeProviderId === "custom") {
-            const content = await this.generateWithOpenAiCompatible(settings, catalog.activeModel, input);
-            return { providerId: settings.id, model: catalog.activeModel, content };
-        }
+        const profile = resolveProfile(catalog.activeModel);
+        const adaptiveParams = buildAdaptiveParams(profile);
 
         if (catalog.activeProviderId === "anthropic") {
             const content = await this.generateWithAnthropic(settings, catalog.activeModel, input);
@@ -307,23 +458,75 @@ export class LlmProviderManager {
         }
 
         if (catalog.activeProviderId === "ollama") {
-            const content = await this.generateWithOllama(settings, catalog.activeModel, input);
+            const content = await this.generateWithOllama(settings, catalog.activeModel, input, adaptiveParams);
             return { providerId: settings.id, model: catalog.activeModel, content };
         }
 
-        return null;
+        // All other providers use OpenAI-compatible API
+        const content = await this.generateWithOpenAiCompatible(settings, catalog.activeModel, input);
+        return { providerId: settings.id, model: catalog.activeModel, content };
+    }
+
+    /**
+     * Route a request to the best available model for a given task role.
+     *
+     * Builds the available-model inventory from the current catalog,
+     * selects the best model for the role, applies adaptive prompt
+     * parameters, and generates.
+     */
+    async generateForRole(
+        role: TaskRole,
+        input: LlmGenerationInput,
+    ): Promise<(LlmGenerationOutput & { routing: ModelRouterSelection; adaptiveParams: AdaptivePromptParams }) | null> {
+        const catalog = await this.getCatalog();
+        const availableModels: AvailableModel[] = [];
+
+        for (const provider of catalog.providers) {
+            if (!provider.enabled) continue;
+            for (const model of provider.models) {
+                availableModels.push({
+                    providerId: provider.id,
+                    model,
+                    locality: provider.kind === "local" ? "local" : "cloud",
+                });
+            }
+        }
+
+        const routing = selectModelForRole(role, availableModels);
+        if (!routing) return null;
+
+        const adaptiveParams = buildAdaptiveParams(routing.profile);
+
+        // Build adaptive system prompt (replaces the static one from input)
+        const adaptiveSystemPrompt = buildAdaptiveSystemPrompt(routing.profile);
+
+        // Trim conversation to the adaptive window size
+        const trimmedConversation = input.conversation.slice(-adaptiveParams.conversationWindow);
+
+        const adaptedInput: LlmGenerationInput = {
+            message: input.message,
+            conversation: trimmedConversation,
+            systemPrompt: adaptiveSystemPrompt,
+        };
+
+        const result = await this.generate(adaptedInput, {
+            providerId: routing.providerId,
+            model: routing.model,
+        });
+
+        if (!result) return null;
+
+        return { ...result, routing, adaptiveParams };
     }
 
     resolveProvider(providerId: string): PrismLlmProviderId | null {
-        if (providerId === "openai" || providerId === "anthropic" || providerId === "ollama" || providerId === "custom") {
-            return providerId;
-        }
-        return null;
+        return ALL_PROVIDER_IDS.includes(providerId as PrismLlmProviderId)
+            ? (providerId as PrismLlmProviderId)
+            : null;
     }
 
     private findFirstEnabledProvider(): PrismLlmProviderId | null {
-        const ordered: PrismLlmProviderId[] = ["ollama", "openai", "anthropic", "custom"];
-        for (const id of ordered) {
+        for (const id of ALL_PROVIDER_IDS) {
             const snapshot = this.snapshotFor(id);
             if (snapshot.enabled) {
                 return id;
@@ -440,6 +643,97 @@ export class LlmProviderManager {
         }
     }
 
+    private async fetchLmStudioModels(settings: ProviderSettings): Promise<string[]> {
+        try {
+            const response = await fetch(`${settings.baseUrl}/v1/models`, {
+                method: "GET",
+                headers: { Accept: "application/json" },
+            });
+            if (!response.ok) {
+                return settings.defaultModels;
+            }
+            const payload = await response.json() as { data?: Array<{ id?: string }> };
+            const ids = (payload.data ?? [])
+                .map((entry) => entry.id?.trim())
+                .filter((value): value is string => Boolean(value));
+            return ids.length > 0 ? ids : settings.defaultModels;
+        } catch {
+            return settings.defaultModels;
+        }
+    }
+
+    async testProvider(providerId: string): Promise<{ ok: boolean; message: string; models: string[] }> {
+        const resolved = this.resolveProvider(providerId);
+        if (!resolved) {
+            return { ok: false, message: "Unknown provider.", models: [] };
+        }
+        const settings = this.getResolvedSettings(resolved);
+        if (!settings.baseUrl?.trim()) {
+            return { ok: false, message: "Base URL not configured.", models: [] };
+        }
+        try {
+            if (resolved === "ollama") {
+                const response = await fetch(`${settings.baseUrl}/api/tags`, { method: "GET" });
+                if (!response.ok) {
+                    return { ok: false, message: `Ollama returned ${response.status}.`, models: [] };
+                }
+                const payload = await response.json() as { models?: Array<{ name?: string }> };
+                const models = (payload.models ?? []).map((m) => m.name?.trim() ?? "").filter(Boolean);
+                const final = models.length > 0 ? models : settings.defaultModels;
+                return { ok: true, message: `Connected to Ollama. ${final.length} model(s) found.`, models: final };
+            }
+            if (resolved === "lmstudio") {
+                const response = await fetch(`${settings.baseUrl}/v1/models`, { method: "GET", headers: { Accept: "application/json" } });
+                if (!response.ok) {
+                    return { ok: false, message: `LM Studio returned ${response.status}.`, models: [] };
+                }
+                const payload = await response.json() as { data?: Array<{ id?: string }> };
+                const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
+                const final = models.length > 0 ? models : settings.defaultModels;
+                return { ok: true, message: `Connected to LM Studio. ${final.length} model(s) found.`, models: final };
+            }
+            if (resolved === "anthropic") {
+                // Try the model list endpoint first
+                const listResp = await fetch(`${settings.baseUrl}/models`, {
+                    method: "GET",
+                    headers: { "x-api-key": settings.apiKey ?? "", "anthropic-version": "2023-06-01", Accept: "application/json" },
+                });
+                if (listResp.ok) {
+                    const payload = await listResp.json() as { data?: Array<{ id?: string }> };
+                    const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
+                    const final = models.length > 0 ? models : settings.defaultModels;
+                    return { ok: true, message: `Connected to Anthropic. ${final.length} model(s) found.`, models: final };
+                }
+                // Fall back to a minimal chat probe
+                const probeResp = await fetch(`${settings.baseUrl}/messages`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-api-key": settings.apiKey ?? "", "anthropic-version": "2023-06-01" },
+                    body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+                });
+                return probeResp.ok || probeResp.status === 400
+                    ? { ok: true, message: "Connected to Anthropic.", models: settings.defaultModels }
+                    : { ok: false, message: `Anthropic returned ${probeResp.status}.`, models: [] };
+            }
+            // OpenAI-compatible: fetch model list
+            const authHeader = settings.apiKeyHeader === "Authorization"
+                ? { Authorization: `Bearer ${settings.apiKey ?? ""}` }
+                : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
+            const response = await fetch(`${settings.baseUrl}/models`, {
+                method: "GET",
+                headers: { ...authHeader, Accept: "application/json" },
+            });
+            if (!response.ok) {
+                return { ok: false, message: `Provider returned ${response.status}.`, models: [] };
+            }
+            const payload = await response.json() as { data?: Array<{ id?: string }> };
+            const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
+            const final = models.length > 0 ? models : settings.defaultModels;
+            return { ok: true, message: `Provider connected. ${final.length} model(s) found.`, models: final };
+        } catch (error) {
+            return { ok: false, message: String(error), models: [] };
+        }
+    }
+
     private async generateWithOpenAiCompatible(
         settings: ProviderSettings,
         model: string,
@@ -449,25 +743,32 @@ export class LlmProviderManager {
             ? { Authorization: `Bearer ${settings.apiKey}` }
             : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
 
+        const payloadBody: any = {
+            model,
+            messages: [
+                { role: "system", content: input.systemPrompt },
+                ...input.conversation.map((entry) => ({ role: entry.role, content: entry.content })),
+                { role: "user", content: input.message },
+            ],
+        };
+
+        // Reasoning models typically restrict temperature overrides to exactly 1.
+        if (!model.startsWith("o1") && !model.startsWith("o3") && !model.includes("gpt-5")) {
+            payloadBody.temperature = 0.3;
+        }
+
         const response = await fetch(`${settings.baseUrl}/chat/completions`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 ...authHeader,
             },
-            body: JSON.stringify({
-                model,
-                messages: [
-                    { role: "system", content: input.systemPrompt },
-                    ...input.conversation.map((entry) => ({ role: entry.role, content: entry.content })),
-                    { role: "user", content: input.message },
-                ],
-                temperature: 0.3,
-            }),
+            body: JSON.stringify(payloadBody),
         });
 
         if (!response.ok) {
-            throw new Error(`Provider request failed (${response.status})`);
+            const errText = await response.text().catch(() => "");
+            throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
         const payload = await response.json() as {
@@ -505,7 +806,8 @@ export class LlmProviderManager {
         });
 
         if (!response.ok) {
-            throw new Error(`Provider request failed (${response.status})`);
+            const errText = await response.text().catch(() => "");
+            throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
         const payload = await response.json() as {
@@ -529,6 +831,7 @@ export class LlmProviderManager {
         settings: ProviderSettings,
         model: string,
         input: LlmGenerationInput,
+        adaptiveParams?: AdaptivePromptParams,
     ): Promise<string> {
         const prompt = [
             input.systemPrompt,
@@ -536,6 +839,10 @@ export class LlmProviderManager {
             `USER: ${input.message}`,
             "ASSISTANT:",
         ].join("\n\n");
+
+        const numCtx = adaptiveParams?.numCtx ?? 4096;
+        const numPredict = adaptiveParams?.numPredict ?? 512;
+        const temperature = adaptiveParams?.temperature ?? 0.3;
 
         const response = await fetch(`${settings.baseUrl}/api/generate`, {
             method: "POST",
@@ -547,13 +854,16 @@ export class LlmProviderManager {
                 prompt,
                 stream: false,
                 options: {
-                    temperature: 0.3,
+                    temperature,
+                    num_ctx: numCtx,
+                    num_predict: numPredict,
                 },
             }),
         });
 
         if (!response.ok) {
-            throw new Error(`Provider request failed (${response.status})`);
+            const errText = await response.text().catch(() => "");
+            throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
         const payload = await response.json() as { response?: string };
