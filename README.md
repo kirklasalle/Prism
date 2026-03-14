@@ -1,4 +1,4 @@
-# PRISM (OpenClaw)
+# PRISM
 
 PRISM is a policy-governed, full-computer-use agent runtime designed to evolve into a world-class, state-of-the-art (SOTA), and novel agent platform for high-trust autonomous operations.
 
