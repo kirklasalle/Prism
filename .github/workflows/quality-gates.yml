@@ -1,0 +1,50 @@
+name: PRISM Quality Gates
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run performance qualification
+        run: npm run perf:qualify
+        env:
+          PRISM_ENV_PROFILE: staging
+
+      - name: Generate tool contract snapshot
+        run: npm run contracts:snapshot
+
+      - name: Upload performance qualification artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-qualification
+          path: prism-output/perf-qualification.json
+          if-no-files-found: warn
+
+      - name: Upload tool contract snapshot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tool-contract-snapshot
+          path: prism-output/tool-contract-snapshot.json
+          if-no-files-found: warn

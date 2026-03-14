@@ -1,0 +1,20 @@
+import { HttpRequestTool } from "../../adapters/protocol/http-tool.js";
+import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../../adapters/system/file-tools.js";
+import { ShellTool } from "../../adapters/system/shell-tool.js";
+import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
+import type { Tool } from "./types.js";
+
+export function builtinTools(): Tool[] {
+    return [
+        // System adapters
+        new ShellTool(),
+        new FileReadTool(),
+        new FileWriteTool(),
+        new FileDeleteTool(),
+        new FileListTool(),
+        // Protocol adapters
+        new HttpRequestTool(),
+        // Application adapters
+        new Neo4jQueryTool(),
+    ];
+}

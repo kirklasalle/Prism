@@ -1,0 +1,26 @@
+{
+    "name": "prism-core",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "start": "node dist/src/index.js",
+        "start:server": "set PRISM_MODE=server&& node dist/src/index.js",
+        "dev": "tsx src/index.ts",
+        "test": "npm run build && node dist/tests/index.js",
+        "perf:qualify": "npm run build && node dist/src/benchmarks/performance-qualification.js",
+        "perf:qualify:dev": "set PRISM_ENV_PROFILE=dev&& npm run perf:qualify",
+        "perf:qualify:staging": "set PRISM_ENV_PROFILE=staging&& npm run perf:qualify",
+        "perf:qualify:prod": "set PRISM_ENV_PROFILE=prod&& npm run perf:qualify",
+        "contracts:snapshot": "npm run build && node dist/src/benchmarks/tool-contract-snapshot.js",
+        "release:validate": "npm run build && node dist/src/benchmarks/release-validation.js",
+        "release:validate:strict": "npm run build && node dist/src/benchmarks/release-validation.js --strict"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "tsx": "^4.19.0",
+        "typescript": "^5.8.0"
+    }
+}
