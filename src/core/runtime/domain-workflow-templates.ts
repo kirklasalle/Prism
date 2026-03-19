@@ -13,7 +13,8 @@ export function createDomainWorkflowTemplates(
                     id: "email_scan",
                     operation: "email_ops",
                     args: {
-                        action: "summarize",
+                        action: "triage_inbox",
+                        mode: "summary_and_priority",
                         threadId: "thread-default",
                     },
                     risk: "low",
@@ -25,7 +26,7 @@ export function createDomainWorkflowTemplates(
                     id: "email_send",
                     operation: "email_ops",
                     args: {
-                        action: "send",
+                        action: "send_draft",
                         threadId: "thread-default",
                         rollbackHint: "Revert outbound message in transport queue.",
                     },
@@ -56,7 +57,8 @@ export function createDomainWorkflowTemplates(
                     id: "calendar_fetch",
                     operation: "calendar_plan",
                     args: {
-                        action: "availability_lookup",
+                        action: "detect_conflicts",
+                        planningWindow: "day",
                         calendarId: "calendar-default",
                     },
                     risk: "low",
@@ -68,7 +70,7 @@ export function createDomainWorkflowTemplates(
                     id: "calendar_commit",
                     operation: "calendar_plan",
                     args: {
-                        action: "create_or_update_event",
+                        action: "commit_day_plan",
                         calendarId: "calendar-default",
                         rollbackHint: "Restore prior event snapshot.",
                     },
@@ -80,7 +82,7 @@ export function createDomainWorkflowTemplates(
                     id: "calendar_propose_fallback",
                     operation: "calendar_plan",
                     args: {
-                        action: "propose",
+                        action: "propose_day_plan",
                         calendarId: "calendar-default",
                     },
                     risk: "low",
@@ -108,6 +110,7 @@ export function createDomainWorkflowTemplates(
                     operation: "notes_extract",
                     args: {
                         action: "capture",
+                        extractMode: "action_and_deadline_candidates",
                         noteId: "note-default",
                     },
                     risk: "low",
@@ -119,7 +122,7 @@ export function createDomainWorkflowTemplates(
                     id: "notes_persist",
                     operation: "notes_extract",
                     args: {
-                        action: "persist",
+                        action: "extract_actions_deadlines",
                         noteId: "note-default",
                         rollbackHint: "Reinstate previous note version.",
                     },
@@ -158,7 +161,7 @@ export function createDomainWorkflowTemplates(
                     id: "tasks_analyze",
                     operation: "tasks_timeline",
                     args: {
-                        action: "plan",
+                        action: "build_chronological_plan",
                         timelineId: "timeline-default",
                     },
                     risk: "low",
@@ -170,7 +173,7 @@ export function createDomainWorkflowTemplates(
                     id: "tasks_commit",
                     operation: "tasks_timeline",
                     args: {
-                        action: "commit",
+                        action: "commit_chronological_timeline",
                         timelineId: "timeline-default",
                         rollbackHint: "Restore prior committed timeline state.",
                     },
@@ -183,7 +186,7 @@ export function createDomainWorkflowTemplates(
                     id: "tasks_replan_fallback",
                     operation: "tasks_timeline",
                     args: {
-                        action: "replan",
+                        action: "rebuild_chronological_plan",
                         timelineId: "timeline-default",
                     },
                     risk: "low",

@@ -1,12 +1,19 @@
 # PRISM
 
+*Note: PRISM is an original, new, and novel State-of-the-Art (SOTA) agent framework developed by Kirk LaSalle (03/16/2026). Initial development used an empty OpenClaw directory to study dominant current standards before performing a Baton Pass into the fully bespoke PRISM architecture.*
+
 PRISM is a policy-governed, full-computer-use agent runtime designed to evolve into a world-class, state-of-the-art (SOTA), and novel agent platform for high-trust autonomous operations.
+
+Current named release: **Prism v0.2.0 — D2 Parity**.
 
 Research quick links:
 
 - Full-context research documentation: `PRISM_RESEARCH_DOCUMENTATION.md`
 - One-page executive summary: `PRISM_RESEARCH_DOCUMENTATION.md#0-executive-summary-one-page`
 - Board/investor half-page brief: `PRISM_RESEARCH_DOCUMENTATION.md#01-boardinvestor-brief-half-page`
+- Full parity gap blueprint: `PRISM_GAP_ANALYSIS.md`
+- Investor parity appendix: `INVESTOR_APPENDIX_PARITY.md`
+- Licensing and brand appendix: `LICENSING_BRAND_APPENDIX.md`
 - Individual-native + domain-pack strategy: `INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md`
 
 This repository now contains:

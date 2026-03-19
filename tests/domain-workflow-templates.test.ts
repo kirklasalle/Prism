@@ -73,6 +73,18 @@ async function testTemplatesAvailable(): Promise<void> {
         assert.ok(dag.steps.some((step) => step.mutatesState));
         assert.ok(dag.fallbacks.length >= 1);
     }
+
+    const emailScan = templates.email.steps.find((step) => step.id === "email_scan");
+    assert.strictEqual(emailScan?.args.action, "triage_inbox");
+
+    const calendarFetch = templates.calendar.steps.find((step) => step.id === "calendar_fetch");
+    assert.strictEqual(calendarFetch?.args.action, "detect_conflicts");
+
+    const notesPersist = templates.notes.steps.find((step) => step.id === "notes_persist");
+    assert.strictEqual(notesPersist?.args.action, "extract_actions_deadlines");
+
+    const tasksAnalyze = templates.tasks.steps.find((step) => step.id === "tasks_analyze");
+    assert.strictEqual(tasksAnalyze?.args.action, "build_chronological_plan");
 }
 
 async function testCalendarAllowPath(): Promise<void> {
@@ -141,7 +153,7 @@ async function testEmailDenyPathFallback(): Promise<void> {
 async function testTasksTimeoutPathFallback(): Promise<void> {
     const { bus, orchestrator, workflowExecutor, approvalQueue } = createHarness([
         new MockTool("tasks_timeline", async (request) => {
-            if (request.args.action === "commit") {
+            if (String(request.args.action).includes("commit")) {
                 await sleep(40);
             }
 

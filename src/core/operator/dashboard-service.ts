@@ -1,8 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
+import { SqliteActivityStore } from "../activity/sqlite-store.js";
 import type { ApprovalQueue } from "../approval/approval-queue.js";
 import type { LlmDelegate } from "../agents/agent-types.js";
 import {
@@ -22,6 +24,9 @@ import {
   WindowsProtectedFileProviderSecretStore,
   type ProviderSecretStore,
 } from "./provider-secret-store.js";
+import { SessionTraceExplorer, type SessionTraceBundle } from "./session-trace-explorer.js";
+import { PolicyAuditExporter, type PolicyAuditBundle } from "./policy-audit-exporter.js";
+import { SessionPackageSqliteStore } from "./session-package-sqlite-store.js";
 import type { RetrievalMetricsCollector } from "../memory/retrieval-metrics.js";
 import type { RetrievalDashboardStore } from "../memory/retrieval-dashboard-store.js";
 
@@ -186,6 +191,107 @@ export interface RuntimeExcellenceSnapshot {
     trigger: string;
     action: string;
   }>;
+}
+
+export type SessionPackageStatus = "planned" | "running" | "blocked" | "complete";
+
+export interface SessionPackageRecord {
+  packageId: string;
+  title: string;
+  areaOfInterest: string | null;
+  objective: string | null;
+  successCriteria: string | null;
+  dependencies: string[];
+  status: SessionPackageStatus;
+  createdAt: string;
+  updatedAt: string;
+  sessionIds: string[];
+  lastRunAt: string | null;
+  lastExportAt: string | null;
+  exportArtifactPath: string | null;
+}
+
+export interface SessionPackageSummary {
+  chapterCount: number;
+  completedChapterCount: number;
+  completionPct: number;
+  lastActiveAt: string | null;
+  lastActiveSessionTitle: string | null;
+  latestPolicyDecision: "allow" | "deny" | "require_approval" | null;
+  pendingApprovalCount: number;
+}
+
+export interface SessionPackageEnvelope extends SessionPackageRecord {
+  summary: SessionPackageSummary;
+}
+
+export interface SessionPackageHistoryEntry {
+  historyId: string;
+  packageId: string;
+  title: string;
+  action: "created" | "status_changed" | "workflow_started" | "workflow_paused" | "workflow_blocked" | "workflow_completed" | "exported" | "unpackaged";
+  timestamp: string;
+  status: SessionPackageStatus;
+  previousStatus: SessionPackageStatus | null;
+  nextStatus: SessionPackageStatus | null;
+  source: string;
+  message: string | null;
+  targetSessionId: string | null;
+}
+
+export interface SessionPackageReleaseSnapshot {
+  totalPackages: number;
+  byStatus: Record<SessionPackageStatus, number>;
+  exportedCount: number;
+  latestExportArtifactPath: string | null;
+  latestExportedAt: string | null;
+  completeWithoutExportCount: number;
+}
+
+export interface SessionPackageTraceExport {
+  exportedAt: string;
+  artifactPath: string;
+  package: SessionPackageEnvelope;
+  chapters: Array<{
+    sessionId: string;
+    sessionTitle: string;
+    trace: SessionTraceBundle;
+    policyAudit: PolicyAuditBundle;
+  }>;
+  aggregate: {
+    totalEvents: number;
+    totalPolicyRecords: number;
+    chaptersExported: number;
+  };
+}
+
+interface SessionPackageStoreSnapshot {
+  packages: SessionPackageRecord[];
+  history: SessionPackageHistoryEntry[];
+}
+
+export interface SessionPackageMetrics {
+  generatedAt: string;
+  totals: {
+    all: number;
+    byStatus: Record<SessionPackageStatus, number>;
+  };
+  chapterStats: {
+    total: number;
+    avg: number;
+    min: number;
+    max: number;
+  };
+  exportStats: {
+    exportedCount: number;
+    exportRate: number;
+    completeWithoutExportCount: number;
+  };
+  historyStats: {
+    totalEntries: number;
+    actionFrequency: Array<{ action: string; count: number }>;
+  };
+  creationTrend: Array<{ day: string; count: number }>;
 }
 
 interface ProviderSettingsPayload {
@@ -524,6 +630,14 @@ export class DashboardService {
   private readonly actionStates = new Map<string, DashboardActionState>();
   private readonly actionHistory: DashboardActionHistoryEntry[] = [];
   private readonly actionHistoryLimit = 25;
+  private readonly sessionPackageStorePath: string;
+  private readonly sessionPackageExportDir: string;
+  private readonly sessionPackageHistoryLimit = 250;
+  private sessionPackages: SessionPackageRecord[] = [];
+  private sessionPackageHistory: SessionPackageHistoryEntry[] = [];
+  private readonly pkgStore?: SessionPackageSqliteStore;
+  private readonly traceExplorer?: SessionTraceExplorer;
+  private readonly policyAuditExporter?: PolicyAuditExporter;
 
   constructor(
     private readonly queue: ApprovalQueue,
@@ -535,9 +649,18 @@ export class DashboardService {
     private readonly metricsCollector?: RetrievalMetricsCollector,
     private readonly retrievalDashboardStore?: RetrievalDashboardStore,
     providerSecretStore?: ProviderSecretStore,
+    activityStore?: SqliteActivityStore,
+    sessionPackageStorePath: string = "prism-output/dashboard-session-packages.json",
+    sessionPackageExportDir: string = "prism-output/packages",
   ) {
     this.providerSecretStore = providerSecretStore ?? new WindowsProtectedFileProviderSecretStore();
     this.llmProviders = new LlmProviderManager(process.env, this.chatStore.listProviderSettings(), this.providerSecretStore);
+    this.sessionPackageStorePath = sessionPackageStorePath;
+    this.sessionPackageExportDir = sessionPackageExportDir;
+    this.traceExplorer = activityStore ? new SessionTraceExplorer(activityStore) : undefined;
+    this.policyAuditExporter = activityStore ? new PolicyAuditExporter(activityStore) : undefined;
+    this.pkgStore = activityStore ? new SessionPackageSqliteStore(activityStore.dbPath) : undefined;
+    this.loadSessionPackageStore();
     for (const action of actions) {
       this.actionsByName.set(action.name, action);
       this.actionStates.set(action.name, {
@@ -570,6 +693,517 @@ export class DashboardService {
 
   listChatSessions(): ChatSessionSummary[] {
     return this.chatStore.listSessions();
+  }
+
+  listSessionPackages(): SessionPackageEnvelope[] {
+    return [...this.sessionPackages]
+      .map((pkg) => ({
+        ...pkg,
+        summary: this.buildSessionPackageSummary(pkg),
+      }))
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  }
+
+  listSessionPackageHistory(limit = 20): SessionPackageHistoryEntry[] {
+    return this.sessionPackageHistory.slice(0, Math.max(1, limit));
+  }
+
+  getSessionPackageReleaseSnapshot(): SessionPackageReleaseSnapshot {
+    const snapshot: SessionPackageReleaseSnapshot = {
+      totalPackages: this.sessionPackages.length,
+      byStatus: {
+        planned: 0,
+        running: 0,
+        blocked: 0,
+        complete: 0,
+      },
+      exportedCount: 0,
+      latestExportArtifactPath: null,
+      latestExportedAt: null,
+      completeWithoutExportCount: 0,
+    };
+
+    for (const pkg of this.sessionPackages) {
+      snapshot.byStatus[pkg.status] += 1;
+      if (pkg.exportArtifactPath) {
+        snapshot.exportedCount += 1;
+      }
+      if (pkg.status === "complete" && !pkg.exportArtifactPath) {
+        snapshot.completeWithoutExportCount += 1;
+      }
+      if (pkg.lastExportAt && (!snapshot.latestExportedAt || pkg.lastExportAt > snapshot.latestExportedAt)) {
+        snapshot.latestExportedAt = pkg.lastExportAt;
+        snapshot.latestExportArtifactPath = pkg.exportArtifactPath;
+      }
+    }
+
+    return snapshot;
+  }
+
+  getSessionPackageMetrics(): SessionPackageMetrics {
+    const now = new Date().toISOString();
+    const packages = this.sessionPackages;
+    const history = this.sessionPackageHistory;
+
+    const byStatus: Record<SessionPackageStatus, number> = { planned: 0, running: 0, blocked: 0, complete: 0 };
+    let totalChapters = 0;
+    let minChapters = Infinity;
+    let maxChapters = 0;
+    let exportedCount = 0;
+    let completeWithoutExport = 0;
+
+    for (const pkg of packages) {
+      byStatus[pkg.status] = (byStatus[pkg.status] ?? 0) + 1;
+      const chapters = pkg.sessionIds.length;
+      totalChapters += chapters;
+      if (chapters < minChapters) minChapters = chapters;
+      if (chapters > maxChapters) maxChapters = chapters;
+      if (pkg.exportArtifactPath) exportedCount++;
+      if (pkg.status === "complete" && !pkg.exportArtifactPath) completeWithoutExport++;
+    }
+
+    const avg = packages.length > 0 ? totalChapters / packages.length : 0;
+    const exportRate = packages.length > 0 ? exportedCount / packages.length : 0;
+    const safeMin = packages.length > 0 ? minChapters : 0;
+    const safeMax = packages.length > 0 ? maxChapters : 0;
+
+    if (this.pkgStore) {
+      return {
+        generatedAt: now,
+        totals: { all: packages.length, byStatus },
+        chapterStats: { total: totalChapters, avg: Number(avg.toFixed(2)), min: safeMin, max: safeMax },
+        exportStats: { exportedCount, exportRate: Number(exportRate.toFixed(4)), completeWithoutExportCount: completeWithoutExport },
+        historyStats: {
+          totalEntries: history.length,
+          actionFrequency: this.pkgStore.actionFrequency(10),
+        },
+        creationTrend: this.pkgStore.packageCreatedPerDay(7),
+      };
+    }
+
+    // Fallback: compute from in-memory data when no SQLite store
+    const actionCounts = new Map<string, number>();
+    for (const entry of history) {
+      actionCounts.set(entry.action, (actionCounts.get(entry.action) ?? 0) + 1);
+    }
+    const actionFrequency = Array.from(actionCounts.entries())
+      .map(([action, count]) => ({ action, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const trendMap = new Map<string, number>();
+    for (const pkg of packages) {
+      const ts = Date.parse(pkg.createdAt);
+      if (ts >= sevenDaysAgo) {
+        const day = pkg.createdAt.substring(0, 10);
+        trendMap.set(day, (trendMap.get(day) ?? 0) + 1);
+      }
+    }
+    const creationTrend = Array.from(trendMap.entries())
+      .map(([day, count]) => ({ day, count }))
+      .sort((a, b) => a.day.localeCompare(b.day));
+
+    return {
+      generatedAt: now,
+      totals: { all: packages.length, byStatus },
+      chapterStats: { total: totalChapters, avg: Number(avg.toFixed(2)), min: safeMin, max: safeMax },
+      exportStats: { exportedCount, exportRate: Number(exportRate.toFixed(4)), completeWithoutExportCount: completeWithoutExport },
+      historyStats: { totalEntries: history.length, actionFrequency },
+      creationTrend,
+    };
+  }
+
+  createSessionPackage(payload: {
+    title?: string;
+    areaOfInterest?: string | null;
+    objective?: string | null;
+    successCriteria?: string | null;
+    dependencies?: string[];
+    sessionIds?: string[];
+    status?: SessionPackageStatus;
+    source?: string;
+  }): SessionPackageEnvelope {
+    const now = new Date().toISOString();
+    const validSessions = new Set(this.chatStore.listSessions().map((session) => session.sessionId));
+    const requestedSessionIds = Array.isArray(payload.sessionIds)
+      ? payload.sessionIds.filter((sessionId) => typeof sessionId === "string" && validSessions.has(sessionId))
+      : [];
+    if (requestedSessionIds.length === 0) {
+      throw new Error("Package must include at least one valid session chapter.");
+    }
+
+    const packagedSessionIds = new Set(this.sessionPackages.flatMap((pkg) => pkg.sessionIds));
+    const overlaps = requestedSessionIds.filter((sessionId) => packagedSessionIds.has(sessionId));
+    if (overlaps.length > 0) {
+      throw new Error("Some sessions are already packaged: " + overlaps.join(", "));
+    }
+
+    const record: SessionPackageRecord = {
+      packageId: `pkg-${randomUUID()}`,
+      title: payload.title?.trim() || `Session Package ${now}`,
+      areaOfInterest: payload.areaOfInterest?.trim() || null,
+      objective: payload.objective?.trim() || null,
+      successCriteria: payload.successCriteria?.trim() || null,
+      dependencies: Array.isArray(payload.dependencies) ? payload.dependencies.map((item) => String(item).trim()).filter(Boolean) : [],
+      status: normalizeSessionPackageStatus(payload.status),
+      createdAt: now,
+      updatedAt: now,
+      sessionIds: requestedSessionIds,
+      lastRunAt: null,
+      lastExportAt: null,
+      exportArtifactPath: null,
+    };
+
+    this.sessionPackages.unshift(record);
+    this.recordSessionPackageHistory({
+      packageId: record.packageId,
+      title: record.title,
+      action: "created",
+      timestamp: now,
+      status: record.status,
+      previousStatus: null,
+      nextStatus: record.status,
+      source: payload.source || "dashboard_api",
+      message: `Created package with ${record.sessionIds.length} chapters.`,
+      targetSessionId: null,
+    });
+    this.persistSessionPackageStore();
+    this.activityBus.emit({
+      sessionId: this.status.sessionId,
+      layer: "causal",
+      operation: "dashboard.package.created",
+      status: "succeeded",
+      details: {
+        packageId: record.packageId,
+        title: record.title,
+        chapterCount: record.sessionIds.length,
+        source: payload.source || "dashboard_api",
+      },
+    });
+    return this.getSessionPackage(record.packageId);
+  }
+
+  getSessionPackage(packageId: string): SessionPackageEnvelope {
+    const pkg = this.sessionPackages.find((entry) => entry.packageId === packageId);
+    if (!pkg) {
+      throw new Error(`Unknown package: ${packageId}`);
+    }
+    return {
+      ...pkg,
+      summary: this.buildSessionPackageSummary(pkg),
+    };
+  }
+
+  updateSessionPackage(packageId: string, patch: {
+    title?: string;
+    areaOfInterest?: string | null;
+    objective?: string | null;
+    successCriteria?: string | null;
+    dependencies?: string[];
+    status?: SessionPackageStatus;
+    lastRunAt?: string | null;
+    lastExportAt?: string | null;
+    exportArtifactPath?: string | null;
+    source?: string;
+    message?: string | null;
+    targetSessionId?: string | null;
+    historyAction?: SessionPackageHistoryEntry["action"];
+  }): SessionPackageEnvelope {
+    const index = this.sessionPackages.findIndex((entry) => entry.packageId === packageId);
+    if (index === -1) {
+      throw new Error(`Unknown package: ${packageId}`);
+    }
+
+    const existing = this.sessionPackages[index]!;
+    const previousStatus = existing.status;
+    const nextStatus = patch.status ? normalizeSessionPackageStatus(patch.status) : existing.status;
+    const updatedAt = new Date().toISOString();
+    const updated: SessionPackageRecord = {
+      ...existing,
+      title: patch.title === undefined ? existing.title : (patch.title.trim() || existing.title),
+      areaOfInterest: patch.areaOfInterest === undefined ? existing.areaOfInterest : (patch.areaOfInterest?.trim() || null),
+      objective: patch.objective === undefined ? existing.objective : (patch.objective?.trim() || null),
+      successCriteria: patch.successCriteria === undefined ? existing.successCriteria : (patch.successCriteria?.trim() || null),
+      dependencies: patch.dependencies === undefined
+        ? existing.dependencies
+        : patch.dependencies.map((item) => String(item).trim()).filter(Boolean),
+      status: nextStatus,
+      updatedAt,
+      lastRunAt: patch.lastRunAt === undefined ? existing.lastRunAt : patch.lastRunAt,
+      lastExportAt: patch.lastExportAt === undefined ? existing.lastExportAt : patch.lastExportAt,
+      exportArtifactPath: patch.exportArtifactPath === undefined ? existing.exportArtifactPath : patch.exportArtifactPath,
+    };
+    this.sessionPackages[index] = updated;
+
+    const statusChanged = previousStatus !== updated.status;
+    if (statusChanged || patch.historyAction || patch.message || patch.exportArtifactPath !== undefined) {
+      this.recordSessionPackageHistory({
+        packageId: updated.packageId,
+        title: updated.title,
+        action: patch.historyAction || (statusChanged ? "status_changed" : "exported"),
+        timestamp: updatedAt,
+        status: updated.status,
+        previousStatus,
+        nextStatus: updated.status,
+        source: patch.source || "dashboard_api",
+        message: patch.message || null,
+        targetSessionId: patch.targetSessionId || null,
+      });
+    }
+
+    this.persistSessionPackageStore();
+    this.activityBus.emit({
+      sessionId: this.status.sessionId,
+      layer: "causal",
+      operation: "dashboard.package.updated",
+      status: "succeeded",
+      details: {
+        packageId: updated.packageId,
+        source: patch.source || "dashboard_api",
+        previousStatus,
+        nextStatus: updated.status,
+        targetSessionId: patch.targetSessionId || null,
+      },
+    });
+
+    return this.getSessionPackage(updated.packageId);
+  }
+
+  deleteSessionPackage(packageId: string, source: string = "dashboard_api"): { deleted: true } {
+    const existing = this.sessionPackages.find((entry) => entry.packageId === packageId);
+    if (!existing) {
+      throw new Error(`Unknown package: ${packageId}`);
+    }
+
+    this.sessionPackages = this.sessionPackages.filter((entry) => entry.packageId !== packageId);
+    this.pkgStore?.deletePackage(packageId);
+    this.recordSessionPackageHistory({
+      packageId: existing.packageId,
+      title: existing.title,
+      action: "unpackaged",
+      timestamp: new Date().toISOString(),
+      status: existing.status,
+      previousStatus: existing.status,
+      nextStatus: null,
+      source,
+      message: "Package restored to top-level history.",
+      targetSessionId: null,
+    });
+    this.persistSessionPackageStore();
+    this.activityBus.emit({
+      sessionId: this.status.sessionId,
+      layer: "causal",
+      operation: "dashboard.package.deleted",
+      status: "succeeded",
+      details: {
+        packageId: existing.packageId,
+        title: existing.title,
+        source,
+      },
+    });
+    return { deleted: true };
+  }
+
+  exportSessionPackage(packageId: string, source: string = "dashboard_api"): SessionPackageTraceExport {
+    if (!this.traceExplorer || !this.policyAuditExporter) {
+      throw new Error("Session package export is unavailable because the activity store is not configured.");
+    }
+
+    const pkg = this.getSessionPackage(packageId);
+    const sessionsById = new Map(this.chatStore.listSessions().map((session) => [session.sessionId, session]));
+    const chapters = pkg.sessionIds
+      .map((sessionId) => sessionsById.get(sessionId))
+      .filter((session): session is ChatSessionSummary => Boolean(session))
+      .map((session) => ({
+        sessionId: session.sessionId,
+        sessionTitle: session.title,
+        trace: this.traceExplorer!.exportBundle({ sessionId: session.sessionId }),
+        policyAudit: this.policyAuditExporter!.exportBundle({ sessionId: session.sessionId }),
+      }));
+
+    const exportedAt = new Date().toISOString();
+    const artifactPath = join(this.sessionPackageExportDir, `${pkg.packageId}-${exportedAt.replace(/[:.]/g, "-")}.json`);
+    const payload: SessionPackageTraceExport = {
+      exportedAt,
+      artifactPath,
+      package: pkg,
+      chapters,
+      aggregate: {
+        totalEvents: chapters.reduce((sum, chapter) => sum + chapter.trace.eventCount, 0),
+        totalPolicyRecords: chapters.reduce((sum, chapter) => sum + chapter.policyAudit.recordCount, 0),
+        chaptersExported: chapters.length,
+      },
+    };
+
+    mkdirSync(this.sessionPackageExportDir, { recursive: true });
+    writeFileSync(artifactPath, JSON.stringify(payload, null, 2), "utf-8");
+    this.updateSessionPackage(packageId, {
+      lastExportAt: exportedAt,
+      exportArtifactPath: artifactPath,
+      source,
+      message: `Trace export written to ${artifactPath}`,
+      historyAction: "exported",
+    });
+    return {
+      ...payload,
+      package: this.getSessionPackage(packageId),
+    };
+  }
+
+  private loadSessionPackageStore(): void {
+    if (this.pkgStore) {
+      this.sessionPackages = this.pkgStore.listPackages().map((row) => this.normalizeSessionPackageRecord(row as Partial<SessionPackageRecord>));
+      this.sessionPackageHistory = this.pkgStore.listHistory(this.sessionPackageHistoryLimit).map((entry) => this.normalizeSessionPackageHistoryEntry(entry as Partial<SessionPackageHistoryEntry>));
+      if (this.sessionPackages.length === 0 && existsSync(this.sessionPackageStorePath)) {
+        this.importLegacyJsonToSqlite();
+      }
+      return;
+    }
+
+    if (!existsSync(this.sessionPackageStorePath)) {
+      this.sessionPackages = [];
+      this.sessionPackageHistory = [];
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(readFileSync(this.sessionPackageStorePath, "utf-8")) as Partial<SessionPackageStoreSnapshot>;
+      this.sessionPackages = Array.isArray(parsed.packages)
+        ? parsed.packages.map((pkg) => this.normalizeSessionPackageRecord(pkg))
+        : [];
+      this.sessionPackageHistory = Array.isArray(parsed.history)
+        ? parsed.history.map((entry) => this.normalizeSessionPackageHistoryEntry(entry))
+        : [];
+    } catch {
+      this.sessionPackages = [];
+      this.sessionPackageHistory = [];
+    }
+  }
+
+  private importLegacyJsonToSqlite(): void {
+    if (!this.pkgStore) return;
+    try {
+      const parsed = JSON.parse(readFileSync(this.sessionPackageStorePath, "utf-8")) as Partial<SessionPackageStoreSnapshot>;
+      const packages = Array.isArray(parsed.packages)
+        ? parsed.packages.map((pkg) => this.normalizeSessionPackageRecord(pkg))
+        : [];
+      const history = Array.isArray(parsed.history)
+        ? parsed.history.map((entry) => this.normalizeSessionPackageHistoryEntry(entry))
+        : [];
+      for (const pkg of packages) {
+        this.pkgStore.upsertPackage(pkg);
+      }
+      for (const entry of history) {
+        this.pkgStore.upsertHistoryEntry(entry);
+      }
+      this.sessionPackages = packages;
+      this.sessionPackageHistory = history;
+    } catch {
+      // leave arrays empty if legacy file is corrupt
+    }
+  }
+
+  private persistSessionPackageStore(): void {
+    if (this.pkgStore) {
+      for (const pkg of this.sessionPackages) {
+        this.pkgStore.upsertPackage(pkg);
+      }
+      const limit = this.sessionPackageHistoryLimit;
+      for (const entry of this.sessionPackageHistory.slice(0, limit)) {
+        this.pkgStore.upsertHistoryEntry(entry);
+      }
+      return;
+    }
+    mkdirSync(dirname(this.sessionPackageStorePath), { recursive: true });
+    const payload: SessionPackageStoreSnapshot = {
+      packages: this.sessionPackages.map((pkg) => this.normalizeSessionPackageRecord(pkg)),
+      history: this.sessionPackageHistory.slice(0, this.sessionPackageHistoryLimit),
+    };
+    writeFileSync(this.sessionPackageStorePath, JSON.stringify(payload, null, 2), "utf-8");
+  }
+
+  private normalizeSessionPackageRecord(pkg: Partial<SessionPackageRecord>): SessionPackageRecord {
+    return {
+      packageId: String(pkg.packageId || `pkg-${randomUUID()}`),
+      title: String(pkg.title || "Session Package"),
+      areaOfInterest: pkg.areaOfInterest == null ? null : String(pkg.areaOfInterest),
+      objective: pkg.objective == null ? null : String(pkg.objective),
+      successCriteria: pkg.successCriteria == null ? null : String(pkg.successCriteria),
+      dependencies: Array.isArray(pkg.dependencies) ? pkg.dependencies.map((item) => String(item)).filter(Boolean) : [],
+      status: normalizeSessionPackageStatus(pkg.status),
+      createdAt: String(pkg.createdAt || new Date(0).toISOString()),
+      updatedAt: String(pkg.updatedAt || pkg.createdAt || new Date(0).toISOString()),
+      sessionIds: Array.isArray(pkg.sessionIds) ? pkg.sessionIds.map((item) => String(item)).filter(Boolean) : [],
+      lastRunAt: pkg.lastRunAt == null ? null : String(pkg.lastRunAt),
+      lastExportAt: pkg.lastExportAt == null ? null : String(pkg.lastExportAt),
+      exportArtifactPath: pkg.exportArtifactPath == null ? null : String(pkg.exportArtifactPath),
+    };
+  }
+
+  private normalizeSessionPackageHistoryEntry(entry: Partial<SessionPackageHistoryEntry>): SessionPackageHistoryEntry {
+    const action = entry.action;
+    const validAction: SessionPackageHistoryEntry["action"] =
+      action === "created" || action === "status_changed" ||
+      action === "workflow_started" || action === "workflow_paused" ||
+      action === "workflow_blocked" || action === "workflow_completed" ||
+      action === "exported" || action === "unpackaged"
+        ? action : "status_changed";
+    return {
+      historyId: String(entry.historyId || randomUUID()),
+      packageId: String(entry.packageId || ""),
+      title: String(entry.title || "Session Package"),
+      action: validAction,
+      timestamp: String(entry.timestamp || new Date(0).toISOString()),
+      status: normalizeSessionPackageStatus(entry.status),
+      previousStatus: entry.previousStatus == null ? null : normalizeSessionPackageStatus(entry.previousStatus),
+      nextStatus: entry.nextStatus == null ? null : normalizeSessionPackageStatus(entry.nextStatus),
+      source: String(entry.source || "dashboard_api"),
+      message: entry.message == null ? null : String(entry.message),
+      targetSessionId: entry.targetSessionId == null ? null : String(entry.targetSessionId),
+    };
+  }
+
+  private buildSessionPackageSummary(pkg: SessionPackageRecord): SessionPackageSummary {
+    const sessionsById = new Map(this.chatStore.listSessions().map((session) => [session.sessionId, session]));
+    const sessions = pkg.sessionIds
+      .map((sessionId) => sessionsById.get(sessionId))
+      .filter((session): session is ChatSessionSummary => Boolean(session));
+    const lastActiveSession = [...sessions].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0] ?? null;
+    const packageEvents = this.listPackageActivityEvents(pkg.sessionIds)
+      .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+    const latestPolicyEvent = packageEvents.find((event) => Boolean(event.policyDecision)) ?? null;
+    const pendingApprovalCount = this.queue.list().filter((item) => pkg.sessionIds.includes(item.sessionId)).length;
+    const completedChapterCount = sessions.filter((session) => session.messageCount > 1).length;
+
+    return {
+      chapterCount: pkg.sessionIds.length,
+      completedChapterCount,
+      completionPct: pkg.sessionIds.length > 0 ? Math.round((completedChapterCount / pkg.sessionIds.length) * 100) : 0,
+      lastActiveAt: lastActiveSession?.updatedAt ?? null,
+      lastActiveSessionTitle: lastActiveSession?.title ?? null,
+      latestPolicyDecision: latestPolicyEvent?.policyDecision ?? null,
+      pendingApprovalCount,
+    };
+  }
+
+  private listPackageActivityEvents(sessionIds: string[]): ActivityEvent[] {
+    if (this.traceExplorer) {
+      return sessionIds.flatMap((sessionId) => this.traceExplorer!.query({ sessionId }));
+    }
+
+    const sessionIdSet = new Set(sessionIds);
+    return this.activityBus.listEvents().filter((event) => sessionIdSet.has(event.sessionId));
+  }
+
+  private recordSessionPackageHistory(entry: Omit<SessionPackageHistoryEntry, "historyId">): void {
+    this.sessionPackageHistory.unshift({
+      historyId: randomUUID(),
+      ...entry,
+    });
+    if (this.sessionPackageHistory.length > this.sessionPackageHistoryLimit) {
+      this.sessionPackageHistory.length = this.sessionPackageHistoryLimit;
+    }
   }
 
   createChatSession(title?: string): ChatSessionSummary {
@@ -1099,6 +1733,7 @@ export class DashboardService {
   }
 
   stop(): Promise<void> {
+    this.pkgStore?.close();
     return new Promise((resolve, reject) => {
       this.server.close((err) => (err ? reject(err) : resolve()));
     });
@@ -1210,6 +1845,101 @@ export class DashboardService {
 
     if (method === "GET" && url === "/api/chat/sessions") {
       return this.json(res, 200, this.listChatSessions());
+    }
+
+    if (method === "GET" && url === "/api/session-packages") {
+      return this.json(res, 200, {
+        packages: this.listSessionPackages(),
+        releaseSnapshot: this.getSessionPackageReleaseSnapshot(),
+      });
+    }
+
+    if (method === "GET" && url === "/api/session-packages/metrics") {
+      return this.json(res, 200, this.getSessionPackageMetrics());
+    }
+
+    if (method === "GET" && url.startsWith("/api/session-packages/history")) {
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const limit = Math.max(1, Number(parsed.searchParams.get("limit") ?? 20));
+        return this.json(res, 200, { history: this.listSessionPackageHistory(limit) });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/session-packages") {
+      try {
+        const body = await this.readJsonBody<{
+          title?: string;
+          areaOfInterest?: string | null;
+          objective?: string | null;
+          successCriteria?: string | null;
+          dependencies?: string[];
+          sessionIds?: string[];
+          status?: SessionPackageStatus;
+        }>(req);
+        const pkg = this.createSessionPackage({
+          ...body,
+          source: req.headers["x-prism-source"]?.toString() || "dashboard_api",
+        });
+        return this.json(res, 201, { package: pkg });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    const sessionPackageExportMatch = /^\/api\/session-packages\/([^/]+)\/export$/.exec(url);
+    if (sessionPackageExportMatch && method === "POST") {
+      try {
+        const packageId = decodeURIComponent(sessionPackageExportMatch[1]!);
+        const payload = this.exportSessionPackage(
+          packageId,
+          req.headers["x-prism-source"]?.toString() || "dashboard_api",
+        );
+        return this.json(res, 200, payload);
+      } catch (error) {
+        const status = /unavailable/i.test(String(error)) ? 501 : 400;
+        return this.json(res, status, { error: String(error) });
+      }
+    }
+
+    const sessionPackageMatch = /^\/api\/session-packages\/([^/]+)$/.exec(url);
+    if (sessionPackageMatch && method === "PATCH") {
+      try {
+        const packageId = decodeURIComponent(sessionPackageMatch[1]!);
+        const body = await this.readJsonBody<{
+          title?: string;
+          areaOfInterest?: string | null;
+          objective?: string | null;
+          successCriteria?: string | null;
+          dependencies?: string[];
+          status?: SessionPackageStatus;
+          lastRunAt?: string | null;
+          message?: string | null;
+          targetSessionId?: string | null;
+          historyAction?: SessionPackageHistoryEntry["action"];
+        }>(req);
+        const pkg = this.updateSessionPackage(packageId, {
+          ...body,
+          source: req.headers["x-prism-source"]?.toString() || "dashboard_api",
+        });
+        return this.json(res, 200, { package: pkg });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (sessionPackageMatch && method === "DELETE") {
+      try {
+        const packageId = decodeURIComponent(sessionPackageMatch[1]!);
+        return this.json(res, 200, this.deleteSessionPackage(
+          packageId,
+          req.headers["x-prism-source"]?.toString() || "dashboard_api",
+        ));
+      } catch (error) {
+        return this.json(res, 404, { error: String(error) });
+      }
     }
 
     if (method === "GET" && url.startsWith("/api/llm/provider-settings")) {
@@ -2359,6 +3089,55 @@ function dashboardHtml(port: number): string {
     .session-title { font-weight: 700; margin-bottom: 6px; }
     .session-preview { font-size: 12px; color: var(--muted); line-height: 1.45; }
     .session-meta { margin-top: 8px; font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; }
+    .session-package-card {
+      border: 1px solid rgba(124, 241, 200, 0.24);
+      background: rgba(124, 241, 200, 0.05);
+    }
+    .session-package-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .session-package-badge {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+    }
+    .pkg-status-badge {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-radius: 8px;
+      padding: 2px 9px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      line-height: 1.6;
+    }
+    .pkg-status-badge.planned  { background: rgba(148,163,184,0.15); color: #94a3b8; }
+    .pkg-status-badge.running  { background: rgba(105,210,255,0.20); color: #69d2ff; }
+    .pkg-status-badge.blocked  { background: rgba(255,170,50,0.22);  color: #ffaa32; }
+    .pkg-status-badge.complete { background: rgba(124,241,200,0.22); color: #7cf1c8; }
+    .session-package-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .session-package-children {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-left: 10px;
+      border-left: 1px solid rgba(148,163,184,0.22);
+    }
+    .session-card.session-chapter {
+      padding: 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.01);
+    }
     .primary-button, .secondary-button, .danger-button {
       border: none;
       border-radius: 14px;
@@ -2612,6 +3391,7 @@ function dashboardHtml(port: number): string {
         <h1>PRISM Chat</h1>
         <div class="muted">http://localhost:${port}</div>
       </div>
+      <button class="secondary-button" onclick="packageSessions()">Package Sessions</button>
       <button class="primary-button" onclick="createSession()">New Session</button>
       <div id="session-list" class="session-list"></div>
     </aside>
@@ -2698,6 +3478,10 @@ function dashboardHtml(port: number): string {
             <div id="release-readiness"></div>
           </section>
           <section class="rail-section panel">
+            <h3>Package History</h3>
+            <div id="package-history"></div>
+          </section>
+          <section class="rail-section panel">
             <h3>Self Review</h3>
             <div id="self-review"></div>
           </section>
@@ -2766,7 +3550,11 @@ function dashboardHtml(port: number): string {
       expandedProviderId: null,
       providerTestResults: {},
       providerApiKeyVisible: {},
-      localLlmSelectionBySession: {}
+      localLlmSelectionBySession: {},
+      sessionPackages: [],
+      sessionPackageHistory: [],
+      packageReleaseSnapshot: null,
+      expandedSessionPackages: {}
     };
 
     const tabs = [
@@ -2804,6 +3592,319 @@ function dashboardHtml(port: number): string {
         return value;
       }
       return date.toLocaleString();
+    }
+
+    function safeIso(value) {
+      const date = new Date(value || 0);
+      if (Number.isNaN(date.getTime())) {
+        return new Date(0).toISOString();
+      }
+      return date.toISOString();
+    }
+
+    function reconcileExpandedSessionPackages() {
+      const validPackageIds = new Set((state.sessionPackages || []).map(pkg => pkg.packageId));
+      for (const packageId of Object.keys(state.expandedSessionPackages || {})) {
+        if (!validPackageIds.has(packageId)) {
+          delete state.expandedSessionPackages[packageId];
+        }
+      }
+    }
+
+    async function loadSessionPackages() {
+      const payload = await request('/api/session-packages');
+      state.sessionPackages = Array.isArray(payload.packages) ? payload.packages : [];
+      state.packageReleaseSnapshot = payload.releaseSnapshot || null;
+      reconcileExpandedSessionPackages();
+    }
+
+    async function loadSessionPackageHistory() {
+      const payload = await request('/api/session-packages/history?limit=12').catch(() => ({ history: [] }));
+      state.sessionPackageHistory = Array.isArray(payload.history) ? payload.history : [];
+    }
+
+    async function mutateSessionPackage(packageId, patch, noticeText) {
+      await request('/api/session-packages/' + encodeURIComponent(packageId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch || {})
+      });
+      await Promise.all([loadSessionPackages(), loadSessionPackageHistory()]);
+      if (noticeText) {
+        state.notice = noticeText;
+      }
+    }
+
+    function getPackagedSessionIdSet() {
+      const packaged = new Set();
+      for (const pkg of state.sessionPackages || []) {
+        for (const sessionId of pkg.sessionIds || []) {
+          packaged.add(sessionId);
+        }
+      }
+      return packaged;
+    }
+
+    function buildSessionTimeline() {
+      const bySessionId = new Map(state.sessions.map(session => [session.sessionId, session]));
+      const packagedSessionIds = getPackagedSessionIdSet();
+      const timeline = [];
+
+      for (const session of state.sessions) {
+        if (!packagedSessionIds.has(session.sessionId)) {
+          timeline.push({ type: 'session', timestamp: safeIso(session.updatedAt), session });
+        }
+      }
+
+      for (const pkg of state.sessionPackages || []) {
+        const sessions = (pkg.sessionIds || [])
+          .map(sessionId => bySessionId.get(sessionId))
+          .filter(Boolean)
+          .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
+        if (!sessions.length) {
+          continue;
+        }
+        const latestTimestamp = sessions.reduce((latest, session) => {
+          const updated = safeIso(session.updatedAt);
+          return updated > latest ? updated : latest;
+        }, safeIso(pkg.updatedAt || pkg.createdAt));
+        timeline.push({
+          type: 'package',
+          timestamp: latestTimestamp,
+          pkg,
+          sessions,
+        });
+      }
+
+      return timeline.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+    }
+
+    async function packageSessions() {
+      const packagedSessionIds = getPackagedSessionIdSet();
+      const candidates = state.sessions
+        .filter(session => !packagedSessionIds.has(session.sessionId))
+        .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
+
+      if (candidates.length === 0) {
+        state.notice = 'No un-packaged sessions available.';
+        render();
+        return;
+      }
+
+      const packageId = 'pkg-' + Date.now();
+      const createdAt = new Date().toISOString();
+      const suggestedTitle = 'Session Package • ' + formatRelativeTime(createdAt);
+      const packageTitleInput = prompt('Package title:', suggestedTitle);
+      if (packageTitleInput === null) {
+        return;
+      }
+      const areaOfInterestInput = prompt('Area of interest (optional):', '');
+      if (areaOfInterestInput === null) {
+        return;
+      }
+      const objectiveInput = prompt('Package objective (optional):', '');
+      if (objectiveInput === null) {
+        return;
+      }
+      const successCriteriaInput = prompt('Success criteria (optional):', '');
+      if (successCriteriaInput === null) {
+        return;
+      }
+      const dependenciesInput = prompt('Dependencies (comma separated, optional):', '');
+      if (dependenciesInput === null) {
+        return;
+      }
+      const dependencies = dependenciesInput
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+
+      await request('/api/session-packages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: (packageTitleInput || '').trim() || suggestedTitle,
+          areaOfInterest: (areaOfInterestInput || '').trim() || null,
+          objective: (objectiveInput || '').trim() || null,
+          successCriteria: (successCriteriaInput || '').trim() || null,
+          dependencies,
+          status: 'planned',
+          sessionIds: candidates.map(session => session.sessionId)
+        })
+      });
+      await Promise.all([loadSessionPackages(), loadSessionPackageHistory()]);
+      if (state.sessionPackages[0]) {
+        state.expandedSessionPackages[state.sessionPackages[0].packageId] = true;
+      }
+      state.notice = 'Packaged ' + candidates.length + ' sessions into a binder.';
+      render();
+    }
+
+    function toggleSessionPackage(packageId) {
+      const current = Boolean(state.expandedSessionPackages[packageId]);
+      state.expandedSessionPackages[packageId] = !current;
+      render();
+    }
+
+    function getSessionsForPackage(pkg) {
+      const bySessionId = new Map(state.sessions.map(session => [session.sessionId, session]));
+      return (pkg.sessionIds || [])
+        .map(sessionId => bySessionId.get(sessionId))
+        .filter(Boolean)
+        .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
+    }
+
+    async function runPackageWorkflow(event, packageId) {
+      event.stopPropagation();
+      const pkg = (state.sessionPackages || []).find(item => item.packageId === packageId);
+      if (!pkg) {
+        return;
+      }
+
+      const sessions = getSessionsForPackage(pkg);
+      if (!sessions.length) {
+        state.notice = 'Package has no active session chapters.';
+        render();
+        return;
+      }
+
+      const targetSession = sessions[0];
+      state.selectedSessionId = targetSession.sessionId;
+
+      if (!state.readiness || !state.readiness.ready) {
+        state.notice = 'Complete provider readiness before running package workflow.';
+        state.activeTab = 'settings';
+        render();
+        return;
+      }
+
+      const orchestrationPrompt = [
+        'Execute multi-session package workflow orchestration for this binder.',
+        'Package title: ' + (pkg.title || 'Session Package'),
+        'Area of interest: ' + (pkg.areaOfInterest || 'unspecified'),
+        'Objective: ' + (pkg.objective || 'unspecified'),
+        'Success criteria: ' + (pkg.successCriteria || 'unspecified'),
+        'Dependencies: ' + ((pkg.dependencies || []).length ? pkg.dependencies.join(', ') : 'none'),
+        'Session chapters in scope: ' + sessions.map(session => session.title).join(' | '),
+        'Produce an execution plan with ordered phases, required approvals, and data orchestration checkpoints.'
+      ].join('\n');
+
+      const previousStatus = pkg.status || 'planned';
+      state.busy = true;
+      state.notice = null;
+      render();
+      try {
+        await mutateSessionPackage(packageId, {
+          status: 'running',
+          lastRunAt: new Date().toISOString(),
+          historyAction: 'workflow_started',
+          message: 'Workflow launched from package controls.',
+          targetSessionId: targetSession.sessionId
+        });
+        await request('/api/chat/sessions/' + encodeURIComponent(targetSession.sessionId) + '/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: orchestrationPrompt })
+        });
+        await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
+        state.notice = 'Package workflow started in chapter session "' + targetSession.title + '".';
+      } catch (error) {
+        await mutateSessionPackage(packageId, {
+          status: previousStatus,
+          historyAction: 'status_changed',
+          message: 'Workflow launch failed; restored previous status.',
+          targetSessionId: targetSession.sessionId
+        }).catch(() => null);
+        state.notice = String(error);
+      } finally {
+        state.busy = false;
+        render();
+      }
+    }
+
+    async function setPackageStatus(event, packageId, nextStatus, actionLabel) {
+      event.stopPropagation();
+      const pkg = (state.sessionPackages || []).find(p => p.packageId === packageId);
+      if (!pkg) {
+        return;
+      }
+      const actionMap = {
+        planned: 'workflow_paused',
+        running: 'workflow_started',
+        blocked: 'workflow_blocked',
+        complete: 'workflow_completed'
+      };
+      await mutateSessionPackage(packageId, {
+        status: nextStatus,
+        historyAction: actionMap[nextStatus] || 'status_changed',
+        message: actionLabel || ('Package status set to ' + nextStatus + '.')
+      }, 'Package marked ' + nextStatus + '.');
+      render();
+    }
+
+    async function cyclePackageStatus(event, packageId) {
+      event.stopPropagation();
+      const pkg = (state.sessionPackages || []).find(p => p.packageId === packageId);
+      if (!pkg) {
+        return;
+      }
+      const cycle = ['planned', 'running', 'blocked', 'complete'];
+      const idx = cycle.indexOf(pkg.status || 'planned');
+      await setPackageStatus(event, packageId, cycle[(idx + 1) % cycle.length], 'Status advanced from package badge.');
+    }
+
+    async function exportPackageTrace(event, packageId) {
+      event.stopPropagation();
+      state.busy = true;
+      state.notice = null;
+      render();
+      try {
+        const payload = await request('/api/session-packages/' + encodeURIComponent(packageId) + '/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = packageId + '-trace-export.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
+        state.notice = 'Package trace export generated.';
+      } catch (error) {
+        state.notice = String(error);
+      } finally {
+        state.busy = false;
+        render();
+      }
+    }
+
+    async function unpackageSessionPackage(event, packageId) {
+      event.stopPropagation();
+      const existing = (state.sessionPackages || []).find(pkg => pkg.packageId === packageId);
+      if (!existing) {
+        return;
+      }
+
+      const confirmed = confirm('Unpackage "' + existing.title + '" and restore all chapters to top-level history?');
+      if (!confirmed) {
+        return;
+      }
+
+      await request('/api/session-packages/' + encodeURIComponent(packageId), {
+        method: 'DELETE'
+      });
+      state.sessionPackages = state.sessionPackages.filter(pkg => pkg.packageId !== packageId);
+      if (state.expandedSessionPackages[packageId]) {
+        delete state.expandedSessionPackages[packageId];
+      }
+      await loadSessionPackageHistory();
+      state.notice = 'Unpackaged "' + existing.title + '".';
+      render();
     }
 
     function statusBadge(action) {
@@ -2869,6 +3970,7 @@ function dashboardHtml(port: number): string {
       state.selectedSessionId = payload.session.sessionId;
       await loadSessions();
       await loadMessages();
+      await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
       render();
     }
 
@@ -2895,7 +3997,7 @@ function dashboardHtml(port: number): string {
       const tracesUrl = '/api/traces?limit=10'
         + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '')
         + (state.selectedTraceId ? '&correlationId=' + encodeURIComponent(state.selectedTraceId) : '');
-      const [status, readiness, llmCatalog, llmConfig, llmAuditEvents, pending, actions, actionHistory, traceData, events, retrievalData, prioritizedAlertsData, telemetrySummaryData, runtimeExcellenceData, releaseValidationData, releaseDecisionData, selfReviewLatest, selfReviewHistory] = await Promise.all([
+      const [status, readiness, llmCatalog, llmConfig, llmAuditEvents, pending, actions, actionHistory, traceData, events, retrievalData, prioritizedAlertsData, telemetrySummaryData, runtimeExcellenceData, releaseValidationData, releaseDecisionData, selfReviewLatest, selfReviewHistory, packagePayload, packageHistoryPayload] = await Promise.all([
         request('/api/status'),
         request(readinessUrl).catch(() => null),
         llmUrl ? request(llmUrl) : Promise.resolve(null),
@@ -2913,7 +4015,9 @@ function dashboardHtml(port: number): string {
         request('/api/release/validation/latest').catch(() => ({ report: null })),
         request('/api/release/decision/latest').catch(() => ({ report: null })),
         request('/api/self-review/latest').catch(() => ({ report: null })),
-        request('/api/self-review/history?limit=5').catch(() => ({ reports: [] }))
+        request('/api/self-review/history?limit=5').catch(() => ({ reports: [] })),
+        request('/api/session-packages').catch(() => ({ packages: [], releaseSnapshot: null })),
+        request('/api/session-packages/history?limit=12').catch(() => ({ history: [] }))
       ]);
       state.status = status;
       state.readiness = readiness;
@@ -2933,6 +4037,10 @@ function dashboardHtml(port: number): string {
       state.runtimeExcellence = runtimeExcellenceData || null;
       state.releaseValidation = releaseValidationData ? (releaseValidationData.report || null) : null;
       state.releaseDecision = releaseDecisionData ? (releaseDecisionData.report || null) : null;
+      state.sessionPackages = Array.isArray(packagePayload.packages) ? packagePayload.packages : [];
+      state.packageReleaseSnapshot = packagePayload.releaseSnapshot || null;
+      state.sessionPackageHistory = Array.isArray(packageHistoryPayload.history) ? packageHistoryPayload.history : [];
+      reconcileExpandedSessionPackages();
       if (state.selectedTraceId && (!traceData || !traceData.traces || !traceData.traces.some(trace => trace.correlationId === state.selectedTraceId))) {
         state.selectedTraceId = null;
       }
@@ -2960,10 +4068,14 @@ function dashboardHtml(port: number): string {
         return;
       }
 
-      container.innerHTML = state.sessions.map(session => {
+      const renderSessionCard = function(session, extraClass) {
         const preview = session.lastMessagePreview || 'Start a new conversation.';
         const activeClass = state.selectedSessionId === session.sessionId ? ' active' : '';
-        return '<div class="session-card' + activeClass + '" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="selectSession(this.dataset.sessionId)">'
+        const className = (extraClass ? ' ' + extraClass : '');
+        const onClick = extraClass === 'session-chapter'
+          ? 'event.stopPropagation(); selectSession(this.dataset.sessionId)'
+          : 'selectSession(this.dataset.sessionId)';
+        return '<div class="session-card' + activeClass + className + '" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="' + onClick + '">'
           + '<div class="session-title">' + escapeHtml(session.title) + '</div>'
           + '<div class="session-preview">' + escapeHtml(preview) + '</div>'
           + '<div class="session-meta"><span>' + escapeHtml(String(session.messageCount)) + ' msgs</span><span>' + escapeHtml(formatRelativeTime(session.updatedAt)) + '</span></div>'
@@ -2971,6 +4083,67 @@ function dashboardHtml(port: number): string {
           + '<button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button>'
           + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="copySession(event, this.dataset.sessionId)">Copy Session</button>'
           + '</div>'
+          + '</div>';
+      };
+
+      const timeline = buildSessionTimeline();
+      container.innerHTML = timeline.map(entry => {
+        if (entry.type === 'session') {
+          return renderSessionCard(entry.session);
+        }
+
+        const expanded = Boolean(state.expandedSessionPackages[entry.pkg.packageId]);
+        const childHtml = expanded
+          ? '<div class="session-package-children">'
+            + entry.sessions.map(session => renderSessionCard(session, 'session-chapter')).join('')
+            + '</div>'
+          : '';
+
+        const pkgStatus = entry.pkg.status || 'planned';
+        const summary = entry.pkg.summary || {};
+        const canPause = pkgStatus === 'running';
+        const canResume = pkgStatus === 'planned' || pkgStatus === 'blocked';
+        return '<div class="session-card session-package-card" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="toggleSessionPackage(this.dataset.packageId)">'
+          + '<div class="session-package-head">'
+          + '<div class="session-title">' + escapeHtml(entry.pkg.title) + '</div>'
+          + '<div style="display:flex;align-items:center;gap:8px;">'
+          + '<button class="pkg-status-badge ' + escapeHtml(pkgStatus) + '" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="cyclePackageStatus(event, this.dataset.packageId)" title="Click to advance status">' + escapeHtml(pkgStatus.toUpperCase()) + '</button>'
+          + '<div class="session-package-badge">' + (expanded ? 'Collapse' : 'Expand') + '</div>'
+          + '</div>'
+          + '</div>'
+          + (entry.pkg.areaOfInterest
+            ? '<div class="session-preview">Area: ' + escapeHtml(entry.pkg.areaOfInterest) + '</div>'
+            : '')
+          + (entry.pkg.objective
+            ? '<div class="session-preview">Objective: ' + escapeHtml(entry.pkg.objective) + '</div>'
+            : '')
+          + (entry.pkg.successCriteria
+            ? '<div class="session-preview">Success: ' + escapeHtml(entry.pkg.successCriteria) + '</div>'
+            : '')
+          + ((entry.pkg.dependencies || []).length
+            ? '<div class="session-preview">Dependencies: ' + escapeHtml(entry.pkg.dependencies.join(', ')) + '</div>'
+            : '')
+          + '<div class="session-preview">Session chapters: ' + escapeHtml(String(entry.sessions.length)) + '</div>'
+          + (summary.lastActiveSessionTitle
+            ? '<div class="session-preview">Last active: ' + escapeHtml(summary.lastActiveSessionTitle) + ' · ' + escapeHtml(formatRelativeTime(summary.lastActiveAt)) + '</div>'
+            : '')
+          + '<div class="session-preview">Progress: ' + escapeHtml(String(summary.completedChapterCount || 0)) + '/' + escapeHtml(String(summary.chapterCount || entry.sessions.length)) + ' chapters active (' + escapeHtml(String(summary.completionPct || 0)) + '%)</div>'
+          + '<div class="session-preview">Policy: ' + escapeHtml(summary.latestPolicyDecision || 'none') + ' · Pending approvals: ' + escapeHtml(String(summary.pendingApprovalCount || 0)) + '</div>'
+          + '<div class="session-meta"><span>Package</span><span>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</span></div>'
+          + '<div class="session-package-actions">'
+          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="runPackageWorkflow(event, this.dataset.packageId)">Run Package Workflow</button>'
+          + (canResume
+            ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;running&quot;, &quot;Package resumed from controls.&quot;)">Resume</button>'
+            : '')
+          + (canPause
+            ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;planned&quot;, &quot;Package paused from controls.&quot;)">Pause</button>'
+            : '')
+          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;blocked&quot;, &quot;Package marked blocked from controls.&quot;)">Mark Blocked</button>'
+          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;complete&quot;, &quot;Package marked complete from controls.&quot;)">Complete</button>'
+          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="exportPackageTrace(event, this.dataset.packageId)">Export Trace</button>'
+          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="unpackageSessionPackage(event, this.dataset.packageId)">Unpackage</button>'
+          + '</div>'
+          + childHtml
           + '</div>';
       }).join('');
     }
@@ -4091,9 +5264,22 @@ function dashboardHtml(port: number): string {
       const container = document.getElementById('release-readiness');
       const report = state.releaseValidation;
       const decision = state.releaseDecision;
+      const packageSnapshot = state.packageReleaseSnapshot;
       if (!report) {
-        container.innerHTML = '<div class="muted">No release validation artifact found yet.</div>'
+        let html = '<div class="muted">No release validation artifact found yet.</div>'
           + '<div class="muted" style="margin-top:8px;">Run <span class="mono">npm run release:validate</span> to generate one.</div>';
+        if (packageSnapshot && packageSnapshot.totalPackages > 0) {
+          html += '<div class="action-card" style="margin-top:10px;">'
+            + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Package Evidence</div>'
+            + '<div class="metric"><span class="muted">Packages</span><span class="mono">' + escapeHtml(String(packageSnapshot.totalPackages)) + '</span></div>'
+            + '<div class="metric"><span class="muted">Exports</span><span class="mono">' + escapeHtml(String(packageSnapshot.exportedCount || 0)) + '</span></div>'
+            + '<div class="metric"><span class="muted">Complete without export</span><span class="mono">' + escapeHtml(String(packageSnapshot.completeWithoutExportCount || 0)) + '</span></div>'
+            + (packageSnapshot.latestExportArtifactPath
+              ? '<div class="muted" style="margin-top:8px;word-break:break-all;">Latest export: ' + escapeHtml(packageSnapshot.latestExportArtifactPath) + '</div>'
+              : '')
+            + '</div>';
+        }
+        container.innerHTML = html;
         return;
       }
 
@@ -4116,6 +5302,18 @@ function dashboardHtml(port: number): string {
         html += '<div class="action-card" style="margin-top:10px;">'
           + '<div class="metric"><span class="muted">Recommendation</span><span class="mono" style="' + recommendationTone + '">' + escapeHtml(decision.recommendation || '-') + '</span></div>'
           + '<div class="metric"><span class="muted">Risk level</span><span class="mono">' + escapeHtml(decision.riskLevel || '-') + '</span></div>'
+          + '</div>';
+      }
+
+      if (packageSnapshot && packageSnapshot.totalPackages > 0) {
+        html += '<div class="action-card" style="margin-top:10px;">'
+          + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Package Evidence</div>'
+          + '<div class="metric"><span class="muted">By status</span><span class="mono">planned ' + escapeHtml(String(packageSnapshot.byStatus.planned || 0)) + ' / running ' + escapeHtml(String(packageSnapshot.byStatus.running || 0)) + ' / blocked ' + escapeHtml(String(packageSnapshot.byStatus.blocked || 0)) + ' / complete ' + escapeHtml(String(packageSnapshot.byStatus.complete || 0)) + '</span></div>'
+          + '<div class="metric"><span class="muted">Exports</span><span class="mono">' + escapeHtml(String(packageSnapshot.exportedCount || 0)) + '</span></div>'
+          + '<div class="metric"><span class="muted">Complete without export</span><span class="mono">' + escapeHtml(String(packageSnapshot.completeWithoutExportCount || 0)) + '</span></div>'
+          + (packageSnapshot.latestExportArtifactPath
+            ? '<div class="muted" style="margin-top:8px;word-break:break-all;">Latest export: ' + escapeHtml(packageSnapshot.latestExportArtifactPath) + '</div>'
+            : '')
           + '</div>';
       }
 
@@ -4199,6 +5397,27 @@ function dashboardHtml(port: number): string {
 
       html += '</div>';
       container.innerHTML = html;
+    }
+
+    function renderPackageHistory() {
+      const container = document.getElementById('package-history');
+      const history = state.sessionPackageHistory || [];
+      if (!container) {
+        return;
+      }
+      if (!history.length) {
+        container.innerHTML = '<div class="muted">No package history yet.</div>';
+        return;
+      }
+      container.innerHTML = '<table class="events-table"><thead><tr><th>Time</th><th>Package</th><th>Action</th><th>Status</th></tr></thead><tbody>'
+        + history.map(entry => '<tr>'
+          + '<td>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</td>'
+          + '<td><div>' + escapeHtml(entry.title || entry.packageId) + '</div>'
+          + (entry.message ? '<div class="muted" style="margin-top:4px;">' + escapeHtml(entry.message) + '</div>' : '') + '</td>'
+          + '<td>' + escapeHtml(entry.action) + '</td>'
+          + '<td>' + escapeHtml(entry.status || '-') + '</td>'
+          + '</tr>').join('')
+        + '</tbody></table>';
     }
 
     function renderEvents() {
@@ -4288,6 +5507,7 @@ function dashboardHtml(port: number): string {
       safeRenderStep('overview', renderOverview);
       safeRenderStep('runtimeExcellence', renderRuntimeExcellence);
       safeRenderStep('releaseReadiness', renderReleaseReadiness);
+      safeRenderStep('packageHistory', renderPackageHistory);
       safeRenderStep('whatChanged', renderWhatChanged);
       safeRenderStep('llm', renderLlm);
       safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
@@ -4533,6 +5753,14 @@ function dashboardHtml(port: number): string {
 
     bootstrap();
 
+    window.packageSessions = packageSessions;
+    window.toggleSessionPackage = toggleSessionPackage;
+    window.runPackageWorkflow = runPackageWorkflow;
+    window.unpackageSessionPackage = unpackageSessionPackage;
+    window.cyclePackageStatus = cyclePackageStatus;
+    window.setPackageStatus = setPackageStatus;
+    window.exportPackageTrace = exportPackageTrace;
+
     // Only telemetry data refreshes automatically — everything else is event-driven.
     setInterval(async function() {
       try {
@@ -4611,4 +5839,8 @@ function buildSessionConfigDiff(
       model: afterModel ?? null,
     },
   };
+}
+
+function normalizeSessionPackageStatus(value: unknown): SessionPackageStatus {
+  return value === "running" || value === "blocked" || value === "complete" ? value : "planned";
 }

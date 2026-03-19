@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -116,6 +116,14 @@ async function main(): Promise<void> {
     const outputPath = process.env.PRISM_RELEASE_VALIDATION_OUTPUT_PATH ?? "prism-output/release-validation.json";
     const perfPath = process.env.PRISM_PERF_OUTPUT_PATH ?? "prism-output/perf-qualification.json";
     const contractPath = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? "prism-output/tool-contract-snapshot.json";
+    const latestReleaseCandidate = resolveLatestReleaseCandidateDir();
+    const releasePacketManifestPath = latestReleaseCandidate
+        ? `${latestReleaseCandidate}/release-packet-manifest.md`
+        : undefined;
+    const governancePathReportPath = latestReleaseCandidate
+        ? `${latestReleaseCandidate}/governance-path-report.md`
+        : undefined;
+    const runbookPath = "PRODUCTION_RELEASE_RUNBOOK.md";
 
     const commands = [
         "node dist/tests/index.js",
@@ -138,9 +146,18 @@ async function main(): Promise<void> {
             perfQualification: existsSync(perfPath),
             contractSnapshot: existsSync(contractPath),
         },
-        stagingValidated: process.env.PRISM_STAGING_VALIDATED === "1",
-        rollbackRehearsed: process.env.PRISM_ROLLBACK_REHEARSED === "1",
-        runbooksCurrent: process.env.PRISM_RUNBOOKS_CURRENT === "1",
+        stagingValidated: resolveBooleanOverride(
+            process.env.PRISM_STAGING_VALIDATED,
+            detectStagingValidated(perfPath, contractPath, releasePacketManifestPath),
+        ),
+        rollbackRehearsed: resolveBooleanOverride(
+            process.env.PRISM_ROLLBACK_REHEARSED,
+            detectRollbackRehearsed(governancePathReportPath),
+        ),
+        runbooksCurrent: resolveBooleanOverride(
+            process.env.PRISM_RUNBOOKS_CURRENT,
+            detectRunbooksCurrent(runbookPath),
+        ),
         strictMode,
     });
 
@@ -175,6 +192,90 @@ async function main(): Promise<void> {
     if (!artifact.passed) {
         process.exitCode = 1;
     }
+}
+
+function resolveBooleanOverride(override: string | undefined, detected: boolean): boolean {
+    if (override === "1") {
+        return true;
+    }
+    if (override === "0") {
+        return false;
+    }
+    return detected;
+}
+
+function resolveLatestReleaseCandidateDir(): string | null {
+    const releasesRoot = "prism-output/releases";
+    if (!existsSync(releasesRoot)) {
+        return null;
+    }
+
+    const entries = readdirSync(releasesRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => `${releasesRoot}/${entry.name}`)
+        .sort((a, b) => {
+            const aTime = statSync(a).mtimeMs;
+            const bTime = statSync(b).mtimeMs;
+            return bTime - aTime;
+        });
+
+    return entries.length > 0 ? entries[0]! : null;
+}
+
+function readJsonFlag(pathValue: string | undefined, key: string): boolean {
+    if (!pathValue || !existsSync(pathValue)) {
+        return false;
+    }
+    try {
+        const raw = readFileSync(pathValue, "utf-8");
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        return parsed[key] === true;
+    } catch {
+        return false;
+    }
+}
+
+function fileIncludesAll(pathValue: string | undefined, terms: string[]): boolean {
+    if (!pathValue || !existsSync(pathValue)) {
+        return false;
+    }
+    try {
+        const text = readFileSync(pathValue, "utf-8").toLowerCase();
+        return terms.every((term) => text.includes(term.toLowerCase()));
+    } catch {
+        return false;
+    }
+}
+
+function detectStagingValidated(
+    perfPath: string,
+    contractPath: string,
+    releasePacketManifestPath?: string,
+): boolean {
+    const stage2Passed = readJsonFlag("prism-output/e-stage2-qualification-summary.json", "passed");
+    const ciGatePassed = readJsonFlag("prism-output/ci-gate-summary.json", "passed");
+    const packetComplete = fileIncludesAll(releasePacketManifestPath, ["packet complete", "yes"]);
+
+    return (
+        existsSync(perfPath) &&
+        existsSync(contractPath) &&
+        stage2Passed &&
+        ciGatePassed &&
+        packetComplete
+    );
+}
+
+function detectRollbackRehearsed(governancePathReportPath?: string): boolean {
+    return fileIncludesAll(governancePathReportPath, ["timeout", "revoke", "pass"]);
+}
+
+function detectRunbooksCurrent(runbookPath: string): boolean {
+    return fileIncludesAll(runbookPath, [
+        "stage 3: production go/no-go",
+        "pre-production checklist",
+        "phase_d2_release_packet_template.md",
+        "requirements_traceability_matrix.md",
+    ]);
 }
 
 function runCommand(command: string): { command: string; ok: boolean; exitCode: number } {

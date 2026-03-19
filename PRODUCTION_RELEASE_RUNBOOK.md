@@ -14,12 +14,22 @@ Provide a step-by-step path from staging-ready build to production deployment wi
 2. Run full build and full test suite
 3. Verify documentation synchronization
 4. Generate release notes and risk summary
-5. Run automated release validation gate: `npm run release:validate`
+5. Run automated release validation gate: `npm run release:validate:strict`
+6. Create release packet directory using `PHASE_D2_RELEASE_PACKET_TEMPLATE.md`
+7. Validate profile parity package completeness:
+
+- profile parity matrix,
+- governance-path evidence for shell/container/plugin operations,
+- execution mode qualification report (`fast`, `balanced`, `governed`)
+
+1. Verify `REQUIREMENTS_TRACEABILITY_MATRIX.md` status table is completed for all D2 requirement IDs
+2. Verify `release-packet-manifest.md` is present and matches actual packet contents
 
 Exit:
 
 - Candidate artifact produced and signed off for staging
 - `prism-output/release-validation.json` generated with gate outcomes and build metadata
+- Phase D2 release packet generated under `prism-output/releases/<candidate-id>/`
 
 ### Stage 2: Staging Qualification
 
@@ -28,6 +38,9 @@ Exit:
 3. Run latency and throughput checks against SLO targets
 4. Validate retrieval diagnostics and alert behavior
 5. Execute denial/timeout operational drills
+6. Execute revoke drills for long-running terminal and container sessions
+7. Validate plugin/adaptor pack compatibility and trust-policy behavior
+8. Validate release packet completeness against `PHASE_D2_RELEASE_PACKET_TEMPLATE.md` Section 4
 
 Exit:
 
@@ -48,6 +61,14 @@ Decision input:
 - Open risks and mitigations
 - Rollback readiness
 - Strict release gate report (`npm run release:validate:strict`)
+- Phase D2 evidence package:
+  - parity matrix validation,
+  - governance-path report,
+  - mode qualification report,
+  - investor/licensing claim alignment check,
+  - completed traceability matrix review,
+  - release packet manifest review,
+  - release packet validation checklist
 
 Decision:
 
@@ -79,6 +100,8 @@ Trigger conditions:
 - Approval gate failure
 - Severe latency regression
 - Data/persistence corruption indicators
+- Profile parity regression (capability mismatch between Individual and Business)
+- Plugin trust-policy bypass or compatibility validation failure in production
 
 Steps:
 
@@ -120,6 +143,12 @@ P2:
 - Runbooks and docs current
 - Release owner assigned
 - Incident commander on-call aware
+- Profile parity matrix validated and archived
+- Governance-path evidence archived for shell/container/plugin operations
+- Investor/licensing appendix claims checked against validated release artifacts
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md` checked and signed by Product/Governance
+- `PHASE_D2_RELEASE_PACKET_TEMPLATE.md` checklist completed and archived with candidate packet
+- `release-packet-manifest.md` validated against packet contents
 
 ## Postmortem Requirements
 

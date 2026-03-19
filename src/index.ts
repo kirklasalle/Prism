@@ -18,6 +18,7 @@ import { SessionMemoryStore } from "./core/memory/session-memory.js";
 import { PolicyEngine } from "./core/policy/engine.js";
 import { Orchestrator } from "./core/runtime/orchestrator.js";
 import { WorkflowExecutor } from "./core/runtime/workflow.js";
+import { resolveExecutionProfileFromEnv, describeExecutionProfileResolution } from "./core/config/execution-mode-config.js";
 import { builtinTools } from "./core/tools/builtin-tools.js";
 import { ToolRegistry } from "./core/tools/registry.js";
 import { MemoryQueryTool, SemanticQueryTool } from "./adapters/application/semantic-query-tool.js";
@@ -87,9 +88,10 @@ async function main(): Promise<void> {
         }
     }
 
+    const executionProfile = resolveExecutionProfileFromEnv(environmentProfile);
     const orchestrator = new Orchestrator(
         sessionId, activityBus, policyEngine, registry,
-        { approvalQueue, approvalTimeoutMs: 30_000 },
+        { approvalQueue, approvalTimeoutMs: 30_000, executionProfile },
     );
     const workflowExecutor = new WorkflowExecutor();
     const dashboardActions = createDashboardActions(orchestrator, workflowExecutor, approvalQueue, sessionId);
@@ -107,6 +109,8 @@ async function main(): Promise<void> {
         Number.isFinite(dashboardPort) ? dashboardPort : 7070,
         metricsCollector,
         retrievalDashboardStore,
+        undefined,
+        sqliteStore,
     );
 
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
@@ -128,6 +132,7 @@ async function main(): Promise<void> {
     console.log("=".repeat(60));
     console.log("  PRISM RUNTIME -- Session:", sessionId);
     console.log("  Environment profile:", environmentProfile);
+    console.log("  Execution profile:", describeExecutionProfileResolution(executionProfile, environmentProfile));
     console.log("  Mode:", runtimeMode);
     console.log("  Dashboard:", `http://localhost:${dashboardPort}`);
     console.log(

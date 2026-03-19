@@ -91,6 +91,17 @@ if /I "%PRISM_SKIP_LAUNCH%"=="1" (
   goto :eof
 )
 
+REM Configuration: execution profile determines policy governance tier availability.
+REM   Default (inferred from environment): dev -> INDIVIDUAL_PROFILE, prod -> BUSINESS_PROFILE
+REM   To override:
+REM     set PRISM_EXECUTION_PROFILE=business   (or 'individual')
+REM     set PRISM_EXECUTION_SEGMENT=business   (or 'individual')
+REM   Examples:
+REM     For production with strict governance (default):   (no override needed, inferred from prod)
+REM     For development with fast defaults (default):      (no override needed, inferred from dev)
+REM     For dev/staging with business rules:               set PRISM_EXECUTION_PROFILE=business
+REM     For production with individual profile (not recommended):  set PRISM_EXECUTION_PROFILE=individual
+
 set PRISM_MODE=server
 set PRISM_ENV_PROFILE=dev
 if not defined PRISM_DASHBOARD_PORT set "PRISM_DASHBOARD_PORT=7070"

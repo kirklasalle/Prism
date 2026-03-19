@@ -2,7 +2,7 @@
 
 Date: 2026-03-11  
 Status: Phase C Active  
-Product: PRISM (OpenClaw)
+Product: PRISM (Original SOTA Development by Kirk LaSalle, 03/16/2026)
 
 ## 1. Executive Summary
 
@@ -25,6 +25,7 @@ This PRD integrates:
 Companion reference:
 
 - `PRISM_RESEARCH_DOCUMENTATION.md` (full-context research source and evidence mapping).
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md` (parity requirement-to-test-to-artifact mapping for Phase D2).
 
 ## 2. Product Thesis
 
@@ -279,6 +280,53 @@ Acceptance criteria:
 - contract snapshots updated and passing regression checks,
 - retrieval attribution present in sampled workflow outputs.
 
+### 8.6 Capability parity program requirements (Phase D2)
+
+PRISM must deliver capability parity with top-tier agent classes while preserving profile-specific operational behavior.
+
+Functional requirements:
+
+1. Dual-profile parity contract
+
+- `PRISM Individual` and `PRISM Business` must expose equivalent capability surfaces for:
+  - tool invocation,
+  - terminal session operations,
+  - container sandbox lifecycle,
+  - dynamic staged tool execution,
+  - adapter/plugin pack usage.
+- Business profile adds governance rigor and must not reduce capability availability.
+
+1. Terminal virtualization
+
+- Support persistent terminal channels with lifecycle controls:
+  - start,
+  - stop,
+  - timeout,
+  - revoke.
+- Persist session lineage and policy decisions for mutating commands.
+
+1. Container orchestration
+
+- Support sandbox create/start/stop/destroy and snapshot/revert operations.
+- Enforce resource and network guardrails via policy-controlled runtime metadata.
+
+1. Dynamic staged tools
+
+- Candidate dynamic tools must be generated only inside isolated sandbox execution context.
+- Tool contract extraction and risk classification are required before controlled registration.
+
+1. Adapter/plugin packs
+
+- Pack manifests must include compatibility metadata and capability scopes.
+- Business profile requires trust/provenance validation before install/enable.
+
+Acceptance criteria:
+
+- profile-equivalence tests confirm equal capability availability in both profiles,
+- governance-path tests pass for allow/deny/timeout/revoke across shell/container/plugin operations,
+- high-risk operations emit reason-coded policy decisions and replayable lineage,
+- execution mode qualification results documented for `fast`, `balanced`, and `governed`.
+
 ## 9. Quality Gates (SLO/SLA Targets)
 
 | Domain | Metric | Target |
@@ -290,6 +338,13 @@ Acceptance criteria:
 | Retrieval | Query latency p95 | <= 50ms (hot memory) |
 | Persistence | SQLite write latency p95 | <= 100ms |
 | Approval flow | Operator response path p99 | <= 5s (excluding human delay) |
+
+Parity-program gate requirements:
+
+- profile parity matrix must be complete and validated,
+- business governance-path pass rate must remain 100% for high-risk parity operations,
+- investor and licensing appendix claims must map to implemented and tested capabilities.
+- requirements traceability matrix must be completed for all D2 requirement IDs.
 
 ## 10. Evaluation Strategy
 
@@ -341,6 +396,15 @@ No promotion to next maturity ring unless:
 - implement chronological tasks/events planning templates
 - add policy-path coverage for mutation operations in all templates
 - add release evidence bundle for contracts, traces, and retrieval attribution
+
+### Phase D2 (parallel execution track): Capability parity program
+
+- implement dual-profile capability parity contract
+- implement terminal virtualization and lifecycle controls
+- implement container orchestration adapter and sandbox lifecycle controls
+- implement dynamic staged tool path with contract extraction and tier routing
+- implement adapter/plugin pack manifest compatibility and trust policy behavior
+- implement governance-path and profile-equivalence test coverage
 
 ### Phase E (novel systems activation)
 

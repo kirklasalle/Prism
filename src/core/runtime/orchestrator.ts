@@ -11,19 +11,25 @@ import type { AgentPool } from "../agents/agent-pool.js";
 import type { SubAgentRequest, SubAgentResult } from "../agents/agent-types.js";
 import { TaskDecomposer } from "../agents/task-decomposer.js";
 import type { DecomposedPlan } from "../agents/task-decomposer.js";
+import { normalizeRequestByGovernance } from "../tools/governance-normalizer.js";
+import type { ExecutionProfile } from "../policy/execution-profiles.js";
+import { INDIVIDUAL_PROFILE, BUSINESS_PROFILE, resolveExecutionProfile } from "../policy/execution-profiles.js";
 
-export type { SubAgentRequest, SubAgentResult, DecomposedPlan };
+export type { SubAgentRequest, SubAgentResult, DecomposedPlan, ExecutionProfile };
+export { INDIVIDUAL_PROFILE, BUSINESS_PROFILE, resolveExecutionProfile };
 
 export interface OrchestratorOptions {
     approvalQueue?: ApprovalQueue;
     approvalTimeoutMs?: number;
     agentPool?: AgentPool;
+    executionProfile?: ExecutionProfile;
 }
 
 export class Orchestrator {
     private readonly approvalQueue: ApprovalQueue | undefined;
     private readonly approvalTimeoutMs: number;
     private agentPool: AgentPool | undefined;
+    private executionProfile: ExecutionProfile;
 
     constructor(
         private readonly sessionId: string,
@@ -35,11 +41,17 @@ export class Orchestrator {
         this.approvalQueue = options.approvalQueue;
         this.approvalTimeoutMs = options.approvalTimeoutMs ?? 30_000;
         this.agentPool = options.agentPool;
+        this.executionProfile = options.executionProfile ?? INDIVIDUAL_PROFILE;
     }
 
     /** Provide or replace the AgentPool after construction. */
     setAgentPool(pool: AgentPool): void {
         this.agentPool = pool;
+    }
+
+    /** Provide or replace the ExecutionProfile after construction. */
+    setExecutionProfile(profile: ExecutionProfile): void {
+        this.executionProfile = profile;
     }
 
     /**
@@ -77,12 +89,33 @@ export class Orchestrator {
             details: { args: request.args },
         });
 
+        // Resolve tool and normalize governance before policy evaluation
+        const tool = this.toolRegistry.get(request.operation);
+        let normalizedRequest = request;
+        if (tool) {
+            const result = normalizeRequestByGovernance(request, tool.governance);
+            normalizedRequest = result.normalized;
+            if (result.normalizations.length > 0) {
+                this.activityBus.emit({
+                    sessionId: this.sessionId,
+                    layer: "governance",
+                    operation: `${request.operation}.governance_normalized`,
+                    status: "succeeded",
+                    details: {
+                        message: "Request normalized based on tool governance schema.",
+                        normalizations: result.normalizations,
+                    },
+                });
+            }
+        }
+
         const policy = this.policyEngine.evaluate({
-            operation: request.operation,
-            risk: request.risk,
-            mutatesState: request.mutatesState,
-            rollbackPlan: request.rollbackPlan,
+            operation: normalizedRequest.operation,
+            risk: normalizedRequest.risk,
+            mutatesState: normalizedRequest.mutatesState,
+            rollbackPlan: normalizedRequest.rollbackPlan,
             isWhitelisted: false,
+            executionProfile: this.executionProfile,
         });
 
         this.activityBus.emit({
@@ -92,8 +125,8 @@ export class Orchestrator {
             status: policy.decision === "deny" ? "failed" : "succeeded",
             authorityTier: policy.tier,
             policyDecision: policy.decision,
-            details: { reasons: policy.reasons },
-            rollbackPlan: request.rollbackPlan,
+            details: { reasons: policy.reasons, executionSegment: this.executionProfile.segment },
+            rollbackPlan: normalizedRequest.rollbackPlan,
         });
 
         if (policy.decision === "deny") {
@@ -125,13 +158,13 @@ export class Orchestrator {
                     message: "Waiting for live approval via ApprovalService.",
                     approvalServiceUrl: "http://localhost:7070",
                 },
-                rollbackPlan: request.rollbackPlan,
+                rollbackPlan: normalizedRequest.rollbackPlan,
             });
 
             const approved = await this.approvalQueue.request(
                 this.sessionId,
                 request.operation,
-                { args: request.args, risk: request.risk, rollbackPlan: request.rollbackPlan },
+                { args: normalizedRequest.args, risk: normalizedRequest.risk, rollbackPlan: normalizedRequest.rollbackPlan },
                 this.approvalTimeoutMs,
             );
 
@@ -160,7 +193,6 @@ export class Orchestrator {
         }
 
         // Execute tool — reached by tier1/tier2 directly, or tier3 after approval
-        const tool = this.toolRegistry.get(request.operation);
         if (!tool) {
             this.activityBus.emit({
                 sessionId: this.sessionId,
@@ -174,7 +206,7 @@ export class Orchestrator {
             return;
         }
 
-        const contractErrors = this.toolRegistry.validateRequest(request);
+        const contractErrors = this.toolRegistry.validateRequest(normalizedRequest);
         if (contractErrors.length > 0) {
             this.activityBus.emit({
                 sessionId: this.sessionId,
@@ -188,7 +220,7 @@ export class Orchestrator {
             return;
         }
 
-        const result = await tool.execute(request);
+        const result = await tool.execute(normalizedRequest);
 
         this.activityBus.emit({
             sessionId: this.sessionId,
@@ -200,7 +232,7 @@ export class Orchestrator {
             durationMs: Date.now() - start,
             details: result.output,
             sideEffects: result.sideEffects,
-            rollbackPlan: request.rollbackPlan,
+            rollbackPlan: normalizedRequest.rollbackPlan,
         });
     }
 

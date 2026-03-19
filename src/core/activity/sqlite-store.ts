@@ -6,7 +6,7 @@ export class SqliteActivityStore implements ActivitySubscriber {
     private readonly insertStmt: StatementSync;
     private readonly selectStmt: StatementSync;
 
-    constructor(dbPath: string = "prism-activity.db") {
+    constructor(readonly dbPath: string = "prism-activity.db") {
         this.db = new DatabaseSync(dbPath);
         this.migrate();
 

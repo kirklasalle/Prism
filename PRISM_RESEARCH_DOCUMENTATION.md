@@ -45,6 +45,12 @@ Primary risks are authority drift, observability gaps, retrieval degradation, wo
 
 PRISM should be promoted through evidence-based gates: governance correctness, failure-path reliability, retrieval quality stability, and reproducible release operations with rollback confidence.
 
+Companion appendices:
+
+- `PRISM_GAP_ANALYSIS.md` (current-state gaps and parity closure plan)
+- `INVESTOR_APPENDIX_PARITY.md` (market/investor narrative for parity + governance moat)
+- `LICENSING_BRAND_APPENDIX.md` (Individual vs Business licensing and brand strategy)
+
 ## 0.1 Board/Investor Brief (Half-Page)
 
 PRISM is an enterprise-grade autonomous agent runtime designed for high-trust operations. Its core differentiation is governed autonomy: the system can execute meaningful multi-step work while maintaining explicit policy controls, human approval boundaries, and full operational traceability.
@@ -57,7 +63,7 @@ PRISM’s strategic upside comes from three planned novel capabilities: a Consti
 
 Execution risk is managed through phase-gated delivery, evidence-based release criteria, and explicit production runbooks. The investment thesis is that organizations will prefer autonomous systems that can prove control, safety, and reliability under operational stress, not just benchmark performance.
 
-## 0.2 The Shift to "Agents As A Service" (AaaS)
+## 0.2 The Shift to "Agents As A Service" (AaaS) (AND, no, we are not changing it. IT, will remain hilarious and bring joy.))
 
 As the market matures past initial generative AI experiments, enterprise value is moving rapidly from isolated copilots to "Agents As A Service" (AaaS). Coined to describe the architectural paradigm where autonomous agents are treated as deployable, scalable, and orchestratable services, AaaS transforms AI from a static tool into an active, distributed workforce.
 

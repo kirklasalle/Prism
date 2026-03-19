@@ -1,6 +1,8 @@
 import { HttpRequestTool } from "../../adapters/protocol/http-tool.js";
+import { ContainerSandboxTool } from "../../adapters/system/container-sandbox-tool.js";
 import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../../adapters/system/file-tools.js";
 import { ShellTool } from "../../adapters/system/shell-tool.js";
+import { TerminalSessionTool } from "../../adapters/system/terminal-session-tool.js";
 import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
 import {
     CalendarPlanningTool,
@@ -14,6 +16,8 @@ export function builtinTools(): Tool[] {
     return [
         // System adapters
         new ShellTool(),
+        new TerminalSessionTool(),
+        new ContainerSandboxTool(),
         new FileReadTool(),
         new FileWriteTool(),
         new FileDeleteTool(),

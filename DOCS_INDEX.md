@@ -9,6 +9,11 @@
 - DEVELOPER_GUIDE.md: engineering standards and implementation guidance
 - USER_GUIDE.md: operator-facing usage and troubleshooting
 - ROADMAP.md: status and near-term priorities
+- PRISM_GAP_ANALYSIS.md: technical gap baseline and parity implementation blueprint
+- REQUIREMENTS_TRACEABILITY_MATRIX.md: requirement-to-test-to-artifact mapping for Phase D2 parity release gating
+- PHASE_D2_RELEASE_PACKET_TEMPLATE.md: required artifact structure, file templates, and sign-off checklist for Phase D2 candidate releases
+- INVESTOR_APPENDIX_PARITY.md: investor narrative for parity + governance moat
+- LICENSING_BRAND_APPENDIX.md: licensing and brand framework for Individual vs Business profiles
 
 ## Delivery and Release Support
 
@@ -24,6 +29,11 @@
 4. ROADMAP.md
 5. DEVELOPER_GUIDE.md
 6. USER_GUIDE.md
-7. PHASE_EXECUTION_PLAN.md
-8. TEST_STRATEGY.md
-9. PRODUCTION_RELEASE_RUNBOOK.md
+7. PRISM_GAP_ANALYSIS.md
+8. REQUIREMENTS_TRACEABILITY_MATRIX.md
+9. PHASE_D2_RELEASE_PACKET_TEMPLATE.md
+10. INVESTOR_APPENDIX_PARITY.md
+11. LICENSING_BRAND_APPENDIX.md
+12. PHASE_EXECUTION_PLAN.md
+13. TEST_STRATEGY.md
+14. PRODUCTION_RELEASE_RUNBOOK.md

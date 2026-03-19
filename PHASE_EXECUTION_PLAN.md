@@ -90,6 +90,38 @@ Exit Criteria:
 - Retrieval attribution present in sampled outputs and dashboard traces
 - Tool contract snapshots updated and validated in release artifacts
 
+### Phase D2: Capability Parity Program (Parallel Track)
+
+Scope:
+
+- Establish two operating profiles with shared capability surface:
+ 	- `PRISM Individual` (capability-first profile)
+ 	- `PRISM Business` (governance-first profile)
+- Add terminal virtualization subsystem:
+ 	- persistent terminal session channels
+ 	- controlled environment injection
+ 	- session lifecycle controls (start/stop/revoke/timeout)
+- Add container orchestration adapter:
+ 	- sandbox lifecycle (create/start/stop/destroy)
+ 	- snapshot/revert support
+ 	- resource quotas and guardrails
+- Add dynamic tool staging pipeline:
+ 	- transient tool generation in sandbox
+ 	- contract extraction and risk classification
+ 	- controlled registration via policy route
+- Add adapter/plugin pack framework:
+ 	- manifest schema and compatibility checks
+ 	- signed trust metadata for business profile install path
+- Extend governance policy matrix for shell/container/plugin actions.
+
+Exit Criteria:
+
+- Capability parity features available in both profiles.
+- Business profile policy-path tests pass for allow/deny/timeout/revoke.
+- Event lineage and reason-code telemetry validated for high-risk operations.
+- Profile-specific SLO qualification evidence attached.
+- Traceability matrix links parity claims to tests and artifacts.
+
 ### Phase E: Novel Capability Activation
 
 Scope:
@@ -153,6 +185,13 @@ For every phase completion, the following must be attached:
 - Template-level policy-path traces (allow/deny/timeout)
 - Retrieval attribution samples per domain template
 - Contract snapshot diff and compatibility notes
+
+1. Capability parity evidence (required for Phase D2)
+
+- Profile parity matrix (`Individual` vs `Business`) with capability equivalence proof
+- Terminal/container/plugin governance-path test report (allow/deny/timeout/revoke)
+- Performance qualification report for execution modes (`fast`, `balanced`, `governed`)
+- Investor/licensing appendix alignment check signed off by product/governance
 
 ## Ownership by Function
 

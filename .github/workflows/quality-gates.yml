@@ -33,6 +33,21 @@ jobs:
       - name: Generate tool contract snapshot
         run: npm run contracts:snapshot
 
+      - name: Run Stage 2 aggregate qualification
+        run: npm run e:qualify:stage2
+
+      - name: Run business trust qualification
+        run: npm run g:trust:qualify
+
+      - name: Run event lineage qualification
+        run: npm run j:lineage:qualify
+
+      - name: Run strict release validation
+        run: npm run release:validate:strict
+
+      - name: Run CI gate integrity check
+        run: npm run ci:gate:check
+
       - name: Upload performance qualification artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,4 +62,44 @@ jobs:
         with:
           name: tool-contract-snapshot
           path: prism-output/tool-contract-snapshot.json
+          if-no-files-found: warn
+
+      - name: Upload Stage 2 qualification artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e-stage2-qualification-summary
+          path: prism-output/e-stage2-qualification-summary.json
+          if-no-files-found: warn
+
+      - name: Upload release validation artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-validation
+          path: prism-output/release-validation.json
+          if-no-files-found: warn
+
+      - name: Upload CI gate summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-gate-summary
+          path: prism-output/ci-gate-summary.json
+          if-no-files-found: warn
+
+      - name: Upload event lineage bundle artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: event-lineage-bundle
+          path: prism-output/event-lineage-bundle.json
+          if-no-files-found: warn
+
+      - name: Upload reason-code telemetry artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reason-code-telemetry-samples
+          path: prism-output/reason-code-telemetry-samples.json
           if-no-files-found: warn

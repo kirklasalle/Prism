@@ -1,6 +1,6 @@
 {
     "name": "prism-core",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "private": true,
     "type": "module",
     "scripts": {
@@ -8,18 +8,32 @@
         "start": "node dist/src/index.js",
         "start:server": "set PRISM_MODE=server&& node dist/src/index.js",
         "dev": "tsx src/index.ts",
-        "test": "npm run build && node dist/tests/index.js",
+        "test": "npm run build && node dist/tests/index.js && node ./node_modules/mocha/bin/mocha.js \"dist/tests/terminal-session-adapter.test.js\" \"dist/tests/container-sandbox-adapter.test.js\" \"dist/tests/tool-contract-extractor.test.js\" \"dist/tests/profile-parity.test.js\" \"dist/tests/business-trust-validator.test.js\" \"dist/tests/event-lineage-telemetry.test.js\" \"dist/tests/agent-pool.test.js\" \"dist/tests/mcp-client-tool.test.js\" \"dist/tests/nexus-bridge-tool.test.js\" \"dist/tests/parallel-execution.test.js\" \"dist/tests/model-capability-matrix.test.js\" \"dist/tests/plugin-pack-validator.test.js\" \"dist/tests/task-decomposer.test.js\"",
         "perf:qualify": "npm run build && node dist/src/benchmarks/performance-qualification.js",
         "perf:qualify:dev": "set PRISM_ENV_PROFILE=dev&& npm run perf:qualify",
         "perf:qualify:staging": "set PRISM_ENV_PROFILE=staging&& npm run perf:qualify",
         "perf:qualify:prod": "set PRISM_ENV_PROFILE=prod&& npm run perf:qualify",
+        "e1:qualify": "npm run build && node dist/src/benchmarks/e1-individual-qualification.js",
+        "e2:qualify": "npm run build && node dist/src/benchmarks/e2-business-qualification.js",
+        "e3:qualify": "npm run build && node dist/src/benchmarks/e3-policy-stress.js",
+        "e4:qualify": "npm run build && node dist/src/benchmarks/e4-profile-switch-qualification.js",
+        "e:qualify:stage2": "npm run build && node dist/src/benchmarks/e-stage2-qualification.js",
+        "d1:qualify": "npm run build && node dist/src/benchmarks/d1-workflow-template-qualification.js",
+        "g:trust:qualify": "npm run build && node ./node_modules/mocha/bin/mocha.js \"dist/tests/business-trust-validator.test.js\"",
+        "j:lineage:qualify": "npm run build && node dist/src/benchmarks/j-event-lineage-qualification.js && node ./node_modules/mocha/bin/mocha.js \"dist/tests/event-lineage-telemetry.test.js\"",
+        "ci:gate:check": "npm run build && node dist/src/benchmarks/ci-gate-check.js",
         "contracts:snapshot": "npm run build && node dist/src/benchmarks/tool-contract-snapshot.js",
         "release:validate": "npm run build && node dist/src/benchmarks/release-validation.js",
         "release:validate:strict": "npm run build && node dist/src/benchmarks/release-validation.js --strict"
     },
-    "dependencies": {},
+    "dependencies": {
+        "sqlite3": "^6.0.1",
+        "uuid": "^13.0.0"
+    },
     "devDependencies": {
+        "@types/mocha": "^10.0.10",
         "@types/node": "^24.0.0",
+        "mocha": "^11.7.5",
         "tsx": "^4.19.0",
         "typescript": "^5.8.0"
     }

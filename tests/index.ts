@@ -1,10 +1,14 @@
 import { testActivityBus } from "./activity-bus.test.js";
 import { testAdapterSafetyRegression } from "./adapter-safety.test.js";
 import { testDashboardService } from "./dashboard-service.test.js";
+import { testD2SystemTools } from "./d2-system-tools.test.js";
+import { testD2GovernancePaths } from "./d2-governance-paths.test.js";
 import { testDomainWorkflowTemplates } from "./domain-workflow-templates.test.js";
 import { testEnvironmentProfiles } from "./environment-profiles.test.js";
 import { testLlmProviderManager } from "./llm-provider-manager.test.js";
 import { testPolicyEngine } from "./policy-engine.test.js";
+import { testOrchestratorExecutionProfile } from "./orchestrator-execution-profile.test.js";
+import { testPolicyAuditExporter, testSessionTraceExplorer } from "./operator-surfaces.test.js";
 import { testEpisodicMemory, testRetrievalMetricsCollector, testSemanticMemoryIndex } from "./memory.test.js";
 import { testReplayHarness } from "./replay.test.js";
 import { testReleaseValidationGates } from "./release-validation.test.js";
@@ -18,10 +22,15 @@ import { testWorkflowOrchestrator } from "./workflow.test.js";
 async function runTests(): Promise<void> {
     const tests = [
         { name: "PolicyEngine", fn: testPolicyEngine },
+        { name: "OrchestratorExecutionProfile", fn: testOrchestratorExecutionProfile },
+        { name: "D2GovernancePaths", fn: testD2GovernancePaths },
         { name: "ActivityBus", fn: testActivityBus },
         { name: "AdapterSafetyRegression", fn: testAdapterSafetyRegression },
         { name: "DashboardService", fn: testDashboardService },
+        { name: "D2SystemTools", fn: testD2SystemTools },
         { name: "LlmProviderManager", fn: testLlmProviderManager },
+        { name: "SessionTraceExplorer", fn: testSessionTraceExplorer },
+        { name: "PolicyAuditExporter", fn: testPolicyAuditExporter },
         { name: "EnvironmentProfiles", fn: testEnvironmentProfiles },
         { name: "ReplayHarness", fn: testReplayHarness },
         { name: "ReleaseValidationGates", fn: testReleaseValidationGates },

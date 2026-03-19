@@ -27,6 +27,11 @@ export interface ActivityEvent {
     sideEffects?: Array<{
         type: "file" | "process" | "network" | "database" | "api";
         description: string;
+        action?: string;
+        resource?: string;
+        mutating?: boolean;
+        reversible?: boolean;
+        rollbackPlan?: string;
     }>;
     rollbackPlan?: string;
     hash?: string;

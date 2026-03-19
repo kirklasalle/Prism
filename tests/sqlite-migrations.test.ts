@@ -4,11 +4,13 @@ import { DatabaseSync } from "node:sqlite";
 import { SqliteActivityStore } from "../src/core/activity/sqlite-store.js";
 import { RetrievalDashboardStore } from "../src/core/memory/retrieval-dashboard-store.js";
 import { SessionMemoryStore } from "../src/core/memory/session-memory.js";
+import { SessionPackageSqliteStore } from "../src/core/operator/session-package-sqlite-store.js";
 
 export async function testSqliteMigrations(): Promise<void> {
     await testActivityStoreMigrationCompatibility();
     await testRetrievalDashboardMigrationCompatibility();
     await testSessionSummaryMigrationCompatibility();
+    await testSessionPackageMigrationCompatibility();
 
     console.log("✓ SQLite migration compatibility tests passed");
 }
@@ -137,4 +139,97 @@ function cleanup(dbPath: string): void {
     if (existsSync(dbPath)) {
         unlinkSync(dbPath);
     }
+}
+
+async function testSessionPackageMigrationCompatibility(): Promise<void> {
+    const dbPath = "./prism-test-migration-session-package.db";
+    cleanup(dbPath);
+
+    // Simulate an older schema that predates title, area_of_interest, objective,
+    // success_criteria, dependencies, last_run_at, last_export_at, export_artifact_path
+    // and history columns: title, previous_status, next_status, source, message, target_session_id
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE session_packages (
+        package_id  TEXT PRIMARY KEY,
+        status      TEXT NOT NULL DEFAULT 'planned',
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        session_ids TEXT NOT NULL DEFAULT '[]'
+      );
+      CREATE TABLE session_package_history (
+        history_id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL,
+        action     TEXT NOT NULL DEFAULT 'status_changed',
+        timestamp  TEXT NOT NULL,
+        status     TEXT NOT NULL DEFAULT 'planned'
+      );
+    `);
+    db.close();
+
+    // Opening the store must migrate all missing columns without error
+    const store = new SessionPackageSqliteStore(dbPath);
+
+    const now = new Date().toISOString();
+    store.upsertPackage({
+        packageId: "pkg-migration-1",
+        title: "Migration Test Package",
+        areaOfInterest: "testing",
+        objective: "Verify migration",
+        successCriteria: "All columns present",
+        dependencies: ["dep-a"],
+        status: "planned",
+        createdAt: now,
+        updatedAt: now,
+        sessionIds: ["sess-1", "sess-2"],
+        lastRunAt: null,
+        lastExportAt: null,
+        exportArtifactPath: null,
+    });
+
+    const retrieved = store.getPackage("pkg-migration-1");
+    assert.ok(retrieved, "package should be retrievable after migration");
+    assert.strictEqual(retrieved!.title, "Migration Test Package");
+    assert.strictEqual(retrieved!.areaOfInterest, "testing");
+    assert.strictEqual(retrieved!.objective, "Verify migration");
+    assert.deepStrictEqual(retrieved!.dependencies, ["dep-a"]);
+    assert.deepStrictEqual(retrieved!.sessionIds, ["sess-1", "sess-2"]);
+    assert.strictEqual(retrieved!.exportArtifactPath, null);
+
+    store.upsertHistoryEntry({
+        historyId: "hist-migration-1",
+        packageId: "pkg-migration-1",
+        title: "Migration Test Package",
+        action: "created",
+        timestamp: now,
+        status: "planned",
+        previousStatus: null,
+        nextStatus: null,
+        source: "migration_test",
+        message: "created during migration test",
+        targetSessionId: null,
+    });
+
+    const history = store.listHistory(10);
+    assert.strictEqual(history.length, 1);
+    assert.strictEqual(history[0]!.action, "created");
+    assert.strictEqual(history[0]!.source, "migration_test");
+    assert.strictEqual(history[0]!.message, "created during migration test");
+
+    // Analytics methods must work after migration
+    const countByStatus = store.packageCountByStatus();
+    assert.strictEqual(countByStatus["planned"], 1);
+
+    const trend = store.packageCreatedPerDay(7);
+    assert.ok(Array.isArray(trend));
+    assert.strictEqual(trend.length, 1);
+    assert.strictEqual(trend[0]!.count, 1);
+
+    const freq = store.actionFrequency(5);
+    assert.ok(Array.isArray(freq));
+    assert.strictEqual(freq.length, 1);
+    assert.strictEqual(freq[0]!.action, "created");
+
+    store.close();
+    cleanup(dbPath);
 }

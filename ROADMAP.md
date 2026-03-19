@@ -49,6 +49,31 @@ Date: 2026-03-11
 
 ## Next Steps
 
+1. Capability Parity Program (new)
+
+- Objective:
+  - Deliver top-tier agent capability parity for `PRISM Individual` while preserving mandatory tiered governance in `PRISM Business`.
+- Operating profiles:
+  - `PRISM Individual`: high-capability defaults for tool use, terminal virtualization, and containerized workflows.
+  - `PRISM Business`: same capability surface with policy-tier enforcement, approval pathways, and auditable operations.
+- Milestones:
+  - M1 Capability Surface Parity
+    - terminal session virtualization and persistent channel management
+    - container orchestration adapter (create/start/stop/destroy, snapshot/revert, quotas)
+    - dynamic transient tool staging and controlled registration path
+    - adapter pack manifest and compatibility validator
+  - M2 Governance Completion
+    - policy tier mapping for shell/container/plugin actions
+    - approval/revoke/timeout semantics for long-running sessions
+    - reason-code telemetry and event lineage for high-risk operations
+  - M3 Performance Qualification
+    - profile-specific SLO targets and qualification gates
+    - execution mode qualification: `fast`, `balanced`, `governed`
+  - M4 Release Readiness
+    - parity claim traceability matrix
+    - investor appendix and licensing-brand appendix
+    - go/no-go evidence package and runbook update
+
 1. Individual-native MVP execution (new)
 
 - Build workflow templates for:

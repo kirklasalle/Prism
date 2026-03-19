@@ -1,5 +1,9 @@
 import assert from "node:assert";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
+import { SqliteActivityStore } from "../src/core/activity/sqlite-store.js";
 import { ApprovalQueue } from "../src/core/approval/approval-queue.js";
 import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import {
@@ -238,6 +242,31 @@ export async function testDashboardService(): Promise<void> {
         }).on("error", reject);
     });
 
+    const requestJson = (method: string, path: string, body?: unknown): Promise<unknown> => new Promise((resolve, reject) => {
+        const req = http.request({
+            hostname: "127.0.0.1",
+            port: telemetryPort,
+            path,
+            method,
+            headers: body == null ? {} : { "Content-Type": "application/json" },
+        }, (res) => {
+            let payload = "";
+            res.on("data", (chunk: Buffer) => { payload += chunk; });
+            res.on("end", () => {
+                try {
+                    resolve(JSON.parse(payload || "{}"));
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
+        req.on("error", reject);
+        if (body != null) {
+            req.write(JSON.stringify(body));
+        }
+        req.end();
+    });
+
     const shellHtml = await fetchText("/");
     assert.ok(shellHtml.includes('role="tablist" aria-label="Dashboard sections"'));
     assert.ok(shellHtml.includes('body.js-ready .tab-panel { display: none; }'));
@@ -354,6 +383,195 @@ export async function testDashboardService(): Promise<void> {
     };
     assert.strictEqual(selectedTrace.selectedCorrelationId, "trace-abc");
     assert.strictEqual(selectedTrace.selectedTraceEvents.length, 2);
+
+    const packageTempDir = mkdtempSync(join(tmpdir(), "prism-dashboard-packages-"));
+    const packageDbPath = join(packageTempDir, "activity.db");
+    const packageStorePath = join(packageTempDir, "dashboard-session-packages.json");
+    const packageExportDir = join(packageTempDir, "exports");
+    const packageBus = new ActivityBus();
+    const packageSqlite = new SqliteActivityStore(packageDbPath);
+    packageBus.subscribe(packageSqlite);
+    const packageChatStore = new ChatSessionStore(":memory:");
+    const packageService = new DashboardService(
+        new ApprovalQueue(),
+        packageBus,
+        { sessionId: "pkg-session", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString() },
+        packageChatStore,
+        [],
+        0,
+        undefined,
+        undefined,
+        new InMemoryProviderSecretStore(),
+        packageSqlite,
+        packageStorePath,
+        packageExportDir,
+    );
+    packageService.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const packageAddress = (packageService as unknown as { server: { address(): { port: number } | null } }).server.address();
+    const packagePort = packageAddress ? packageAddress.port : 0;
+    assert.ok(packagePort > 0, "package service should bind to a real port");
+
+    const packageRequestJson = (method: string, path: string, body?: unknown): Promise<unknown> => new Promise((resolve, reject) => {
+        const req = http.request({
+            hostname: "127.0.0.1",
+            port: packagePort,
+            path,
+            method,
+            headers: body == null ? {} : { "Content-Type": "application/json" },
+        }, (res) => {
+            let payload = "";
+            res.on("data", (chunk: Buffer) => { payload += chunk; });
+            res.on("end", () => {
+                try {
+                    resolve(JSON.parse(payload || "{}"));
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
+        req.on("error", reject);
+        if (body != null) {
+            req.write(JSON.stringify(body));
+        }
+        req.end();
+    });
+
+    const chapterOne = packageService.createChatSession("Chapter One");
+    const chapterTwo = packageService.createChatSession("Chapter Two");
+    packageChatStore.appendMessage(chapterOne.sessionId, "user", "chapter one input");
+    packageChatStore.appendMessage(chapterOne.sessionId, "assistant", "chapter one output");
+    packageChatStore.appendMessage(chapterTwo.sessionId, "user", "chapter two input");
+    packageBus.emit({
+        sessionId: chapterOne.sessionId,
+        layer: "causal",
+        operation: "pkg.chapter_one",
+        status: "succeeded",
+        policyDecision: "allow",
+        details: { chatSessionId: chapterOne.sessionId },
+    });
+    packageBus.emit({
+        sessionId: chapterTwo.sessionId,
+        layer: "governance",
+        operation: "pkg.chapter_two",
+        status: "failed",
+        policyDecision: "require_approval",
+        details: { chatSessionId: chapterTwo.sessionId, reasonCode: "needs_approval" },
+    });
+
+    const createdPackage = await packageRequestJson("POST", "/api/session-packages", {
+        title: "Release Binder",
+        areaOfInterest: "release",
+        objective: "Drive release evidence",
+        successCriteria: "Binder exported",
+        dependencies: ["release-validation"],
+        sessionIds: [chapterOne.sessionId, chapterTwo.sessionId],
+    }) as {
+        package: {
+            packageId: string;
+            status: string;
+            summary: { chapterCount: number; completedChapterCount: number; latestPolicyDecision: string | null };
+        };
+    };
+    assert.ok(createdPackage.package.packageId);
+    assert.strictEqual(createdPackage.package.status, "planned");
+    assert.strictEqual(createdPackage.package.summary.chapterCount, 2);
+    assert.strictEqual(createdPackage.package.summary.completedChapterCount, 1);
+    assert.strictEqual(createdPackage.package.summary.latestPolicyDecision, "require_approval");
+
+    const patchedPackage = await packageRequestJson("PATCH", "/api/session-packages/" + encodeURIComponent(createdPackage.package.packageId), {
+        status: "blocked",
+        historyAction: "workflow_blocked",
+        message: "Blocked during dashboard test.",
+    }) as {
+        package: { status: string };
+    };
+    assert.strictEqual(patchedPackage.package.status, "blocked");
+
+    const exportedPackage = await packageRequestJson("POST", "/api/session-packages/" + encodeURIComponent(createdPackage.package.packageId) + "/export", {}) as {
+        artifactPath: string;
+        package: { exportArtifactPath: string | null; lastExportAt: string | null };
+        aggregate: { totalEvents: number; totalPolicyRecords: number; chaptersExported: number };
+    };
+    assert.ok(exportedPackage.artifactPath.includes("exports"));
+    assert.strictEqual(exportedPackage.package.exportArtifactPath, exportedPackage.artifactPath);
+    assert.ok(exportedPackage.package.lastExportAt);
+    assert.strictEqual(exportedPackage.aggregate.chaptersExported, 2);
+    assert.ok(exportedPackage.aggregate.totalEvents >= 2);
+    assert.ok(exportedPackage.aggregate.totalPolicyRecords >= 2);
+    const exportArtifact = JSON.parse(readFileSync(exportedPackage.artifactPath, "utf-8")) as { package: { title: string } };
+    assert.strictEqual(exportArtifact.package.title, "Release Binder");
+
+    const packageList = await packageRequestJson("GET", "/api/session-packages") as {
+        packages: Array<{ packageId: string }>;
+        releaseSnapshot: { exportedCount: number; latestExportArtifactPath: string | null };
+    };
+    assert.strictEqual(packageList.packages.length, 1);
+    assert.strictEqual(packageList.releaseSnapshot.exportedCount, 1);
+    assert.strictEqual(packageList.releaseSnapshot.latestExportArtifactPath, exportedPackage.artifactPath);
+
+    const packageHistory = await packageRequestJson("GET", "/api/session-packages/history?limit=10") as {
+        history: Array<{ action: string; packageId: string }>;
+    };
+    assert.ok(packageHistory.history.some((entry) => entry.action === "created" && entry.packageId === createdPackage.package.packageId));
+    assert.ok(packageHistory.history.some((entry) => entry.action === "workflow_blocked" && entry.packageId === createdPackage.package.packageId));
+    assert.ok(packageHistory.history.some((entry) => entry.action === "exported" && entry.packageId === createdPackage.package.packageId));
+
+    // -- Metrics endpoint --
+    const metrics = await packageRequestJson("GET", "/api/session-packages/metrics") as {
+        generatedAt: string;
+        totals: { all: number; byStatus: { planned: number; running: number; blocked: number; complete: number } };
+        chapterStats: { total: number; avg: number; min: number; max: number };
+        exportStats: { exportedCount: number; exportRate: number; completeWithoutExportCount: number };
+        historyStats: { totalEntries: number; actionFrequency: Array<{ action: string; count: number }> };
+        creationTrend: Array<{ day: string; count: number }>;
+    };
+    assert.ok(metrics.generatedAt);
+    assert.strictEqual(metrics.totals.all, 1);
+    assert.ok(metrics.totals.byStatus.blocked >= 1);
+    assert.strictEqual(metrics.chapterStats.total, 2);
+    assert.strictEqual(metrics.chapterStats.min, 2);
+    assert.strictEqual(metrics.chapterStats.max, 2);
+    assert.ok(metrics.chapterStats.avg > 0);
+    assert.strictEqual(metrics.exportStats.exportedCount, 1);
+    assert.ok(metrics.exportStats.exportRate > 0);
+    assert.ok(metrics.historyStats.totalEntries >= 3);
+    assert.ok(Array.isArray(metrics.historyStats.actionFrequency));
+    assert.ok(metrics.historyStats.actionFrequency.length > 0);
+    assert.ok(Array.isArray(metrics.creationTrend));
+    assert.ok(metrics.creationTrend.length > 0);
+
+    // -- SQLite persistence: reload service on same DB, verify packages survive --
+    await packageService.stop();
+
+    const reloadSqlite = new SqliteActivityStore(packageDbPath);
+    const reloadChatStore = new ChatSessionStore(":memory:");
+    const reloadService = new DashboardService(
+        new ApprovalQueue(),
+        new ActivityBus(),
+        { sessionId: "pkg-reload", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString() },
+        reloadChatStore,
+        [],
+        0,
+        undefined,
+        undefined,
+        new InMemoryProviderSecretStore(),
+        reloadSqlite,
+        packageStorePath,
+        packageExportDir,
+    );
+    const reloadedPackages = reloadService.listSessionPackages();
+    assert.strictEqual(reloadedPackages.length, 1, "packages must persist across service restart via SQLite");
+    assert.strictEqual(reloadedPackages[0]!.packageId, createdPackage.package.packageId);
+    assert.strictEqual(reloadedPackages[0]!.sessionIds.length, 2);
+    assert.ok(reloadedPackages[0]!.exportArtifactPath, "export path must survive restart");
+    reloadService.stop().catch(() => { /* ignore */ });
+    reloadSqlite.close();
+    reloadChatStore.close();
+
+    packageSqlite.close();
+    packageChatStore.close();
+    rmSync(packageTempDir, { recursive: true, force: true });
 
     telemetryService.stop();
     telemetryStore.close();

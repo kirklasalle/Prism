@@ -97,6 +97,15 @@ Current implementation:
 4. Failure without fallback -> workflow fails
 5. Failure with fallback -> workflow recovers and completes
 
+### Governance-critical parity scenarios (Phase D2)
+
+1. Terminal session revoke -> active high-risk command path is blocked and logged
+2. Terminal session timeout -> operation is halted with deterministic workflow outcome
+3. Container privileged action denied -> sandbox state remains policy-compliant
+4. Container snapshot/revert path -> side effects are traceable and replayable
+5. Plugin/adaptor pack compatibility mismatch -> install blocked with structured policy reason
+6. Plugin/adaptor pack trust failure in Business profile -> enable blocked with audit event
+
 ## Adapter Safety Regression Matrix (Phase D)
 
 ### System adapter: `shell_exec`
@@ -143,6 +152,20 @@ Minimum for production promotion:
 - Performance tests meet SLO thresholds
 - Migration and rollback tests validated
 
+Additional minimum for parity-program promotion (Phase D2):
+
+- Profile-equivalence tests pass for capability availability (`Individual` == `Business` surface)
+- Governance-path tests pass for shell/container/plugin operations:
+ 	- allow,
+ 	- deny,
+ 	- timeout,
+ 	- revoke
+- Execution mode qualification report generated for:
+ 	- `fast`,
+ 	- `balanced`,
+ 	- `governed`
+- Traceability matrix generated mapping parity claims to tests and artifacts
+
 ## Artifact Requirements Per Test Run
 
 Every formal candidate run must produce:
@@ -152,6 +175,13 @@ Every formal candidate run must produce:
 - Coverage summary (where applicable)
 - Environment metadata
 - Commit/build identifier
+
+Parity-program artifact additions:
+
+- Profile parity matrix artifact (`Individual` vs `Business` capability equivalence)
+- Governance reason-code samples for shell/container/plugin high-risk operations
+- Session lineage replay samples for terminal and container lifecycle events
+- Plugin/adaptor pack compatibility and trust-check evidence
 
 ## Short-Term Additions (Remaining)
 
