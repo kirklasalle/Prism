@@ -1145,9 +1145,9 @@ export class DashboardService {
     const action = entry.action;
     const validAction: SessionPackageHistoryEntry["action"] =
       action === "created" || action === "status_changed" ||
-      action === "workflow_started" || action === "workflow_paused" ||
-      action === "workflow_blocked" || action === "workflow_completed" ||
-      action === "exported" || action === "unpackaged"
+        action === "workflow_started" || action === "workflow_paused" ||
+        action === "workflow_blocked" || action === "workflow_completed" ||
+        action === "exported" || action === "unpackaged"
         ? action : "status_changed";
     return {
       historyId: String(entry.historyId || randomUUID()),
@@ -3787,7 +3787,7 @@ function dashboardHtml(port: number): string {
         'Dependencies: ' + ((pkg.dependencies || []).length ? pkg.dependencies.join(', ') : 'none'),
         'Session chapters in scope: ' + sessions.map(session => session.title).join(' | '),
         'Produce an execution plan with ordered phases, required approvals, and data orchestration checkpoints.'
-      ].join('\n');
+      ].join('\\n');
 
       const previousStatus = pkg.status || 'planned';
       state.busy = true;

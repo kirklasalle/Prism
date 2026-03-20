@@ -48,6 +48,11 @@ if not defined PRISM_DASHBOARD_PORT set "PRISM_DASHBOARD_PORT=7070"
 
 echo [SETUP] Clearing any previous instances running on port %PRISM_DASHBOARD_PORT%...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %PRISM_DASHBOARD_PORT% -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":%PRISM_DASHBOARD_PORT% .*LISTENING"') do taskkill /PID %%p /F >nul 2>nul
+
+echo [SETUP] Clearing prior PRISM runtime tasks...
+taskkill /FI "WINDOWTITLE eq PRISM Server*" /T /F >nul 2>nul
+powershell -NoProfile -Command "$root=(Get-Location).Path; Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine -like ('*' + $root + '*dist\\src\\index.js*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo [BUILD] Building PRISM...
 call npm run build
