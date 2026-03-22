@@ -19,7 +19,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-for /f %%i in ('node -p "process.versions.node.split(''.'')[0]"') do set "PRISM_NODE_MAJOR=%%i"
+for /f %%i in ('node -p "process.versions.node.split('.')[0]"') do set "PRISM_NODE_MAJOR=%%i"
 if not defined PRISM_NODE_MAJOR (
   echo [ERROR] Unable to determine Node.js version.
   pause

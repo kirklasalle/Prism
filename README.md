@@ -8,13 +8,13 @@ Current named release: **Prism v0.2.0 — D2 Parity**.
 
 Research quick links:
 
-- Full-context research documentation: `PRISM_RESEARCH_DOCUMENTATION.md`
-- One-page executive summary: `PRISM_RESEARCH_DOCUMENTATION.md#0-executive-summary-one-page`
-- Board/investor half-page brief: `PRISM_RESEARCH_DOCUMENTATION.md#01-boardinvestor-brief-half-page`
-- Full parity gap blueprint: `PRISM_GAP_ANALYSIS.md`
-- Investor parity appendix: `INVESTOR_APPENDIX_PARITY.md`
-- Licensing and brand appendix: `LICENSING_BRAND_APPENDIX.md`
-- Individual-native + domain-pack strategy: `INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md`
+- Full-context research documentation: `docs/PRISM_RESEARCH_DOCUMENTATION.md`
+- One-page executive summary: `docs/PRISM_RESEARCH_DOCUMENTATION.md#0-executive-summary-one-page`
+- Board/investor half-page brief: `docs/PRISM_RESEARCH_DOCUMENTATION.md#01-boardinvestor-brief-half-page`
+- Full parity gap blueprint: `docs/PRISM_GAP_ANALYSIS.md`
+- Investor parity appendix: `docs/INVESTOR_APPENDIX_PARITY.md`
+- Licensing and brand appendix: `docs/LICENSING_BRAND_APPENDIX.md`
+- Individual-native + domain-pack strategy: `docs/INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md`
 
 This repository now contains:
 
@@ -77,6 +77,16 @@ It is a next-generation agent operating system focused on five differentiators:
   - retries
   - step timeout
   - `always`, `on_failure`, and `on_timeout` fallback routing
+- **Operator Dashboard** (`http://localhost:7070`):
+  - Tab-based navigation: Chat Interface, Provider & Settings, Tools & Plugins, Telemetry, Logs & Debug
+  - Collapsible panels with persistent expand/collapse state
+  - Provider & Settings tab: Session Provider Assignment, Provider Configuration, Model Capability Matrix, Settings (runtime config), LLM Audit Trail (JSON/CSV export)
+  - Tools & Plugins tab:
+    - **Tools** — 19 built-in tools across System (7), Application (5), Knowledge (3), and Integration (4) categories with risk-level and mutation badges
+    - **Plugins** — 7 MCP server plugins: ids-mcp, web-search-mcp, and ImpressionCore suite (eds, ipa, goliath, vrgc, dpa) with type and status badges
+    - **Utilities** — 30 system utilities across Benchmarks & Qualification (11), Operator Services (5), Memory & Retrieval (5), Activity & Audit (3), Replay & Verification (3), Configuration (3)
+  - 38+ HTTP API routes for programmatic access
+  - WebSocket for real-time event streaming
 
 ## Why this architecture is aligned with modern agent research
 
@@ -167,8 +177,12 @@ PRISM is intentionally built to remove those failure modes from the start.
 
 1. Double-click `start_web.bat`
 2. PRISM starts in server mode and opens dashboard: `http://localhost:7070`
-3. Use dashboard **Actions** to run demo operations directly from the browser
-4. Use **Pending Approvals** to approve/deny Tier-3 requests
+3. Use the **Chat Interface** tab for conversational LLM interaction
+4. Use the **Provider & Settings** tab to configure LLM providers, review model capabilities, adjust runtime settings, and view the LLM Audit Trail
+5. Use the **Tools & Plugins** tab to browse all 19 built-in tools, 7 MCP plugins, and 30 system utilities
+6. Use the **Telemetry** tab for retrieval observability and performance metrics
+7. Use the **Logs & Debug** tab to inspect the activity event stream
+8. Use **Pending Approvals** to approve/deny Tier-3 requests
 
 Optional startup preflight modes:
 
@@ -275,7 +289,7 @@ Programmatic APIs:
 
 Dashboard audit view:
 
-- The right rail now includes **LLM Audit Trail**.
+- The **Provider & Settings** tab includes the **LLM Audit Trail** panel.
 - It shows provider switch success/failure counts and recent selection transitions (`requested -> selected`) scoped to the current chat session.
 - Use **Export JSON** in the LLM Audit Trail panel to download the current session-scoped provider-switch audit payload for compliance handoff.
 - Use **Copy JSON** to place the same scoped audit payload directly on clipboard for incident/ticket workflows.
@@ -293,7 +307,7 @@ The dashboard exposes retrieval quality telemetry via HTTP APIs and a dedicated 
 
 **Dashboard retrieval panel:**
 
-- The right rail includes **Retrieval Observability**.
+- The **Telemetry** tab includes **Retrieval Observability**.
 - It displays the top 5 active alerts with color highlighting for severity.
 - Alerts are tuned per environment profile (`dev`, `staging`, `prod`) via centralized `RetrievalAlertPolicy`.
 

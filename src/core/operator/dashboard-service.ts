@@ -2196,6 +2196,18 @@ export class DashboardService {
     }
 
     const chatSessionMatch = /^\/api\/chat\/sessions\/([^/]+)$/.exec(url);
+    if (chatSessionMatch && method === "PATCH") {
+      try {
+        const sessionId = decodeURIComponent(chatSessionMatch[1]!);
+        const body = await this.readJsonBody<{ title?: string }>(req);
+        if (!body.title?.trim()) return this.json(res, 400, { error: "title is required." });
+        this.chatStore.updateSessionTitle(sessionId, body.title.trim());
+        return this.json(res, 200, { updated: true });
+      } catch (error) {
+        return this.json(res, 404, { error: String(error) });
+      }
+    }
+
     if (chatSessionMatch && method === "DELETE") {
       try {
         const sessionId = decodeURIComponent(chatSessionMatch[1]!);
@@ -2992,10 +3004,39 @@ function dashboardHtml(port: number): string {
     button, textarea, select { font: inherit; }
     .app {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
-      gap: 18px;
+      grid-template-columns: var(--sidebar-width, 340px) auto minmax(0, 1fr);
+      gap: 0;
       padding: 18px;
       min-height: 100vh;
+    }
+    .resize-handle {
+      width: 6px;
+      cursor: col-resize;
+      background: transparent;
+      position: relative;
+      z-index: 10;
+      transition: background 0.15s;
+    }
+    .resize-handle:hover,
+    .resize-handle.active {
+      background: rgba(105, 210, 255, 0.25);
+    }
+    .resize-handle::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2px;
+      height: 32px;
+      border-radius: 2px;
+      background: rgba(148, 163, 184, 0.25);
+      transition: background 0.15s, height 0.15s;
+    }
+    .resize-handle:hover::after,
+    .resize-handle.active::after {
+      background: rgba(105, 210, 255, 0.5);
+      height: 48px;
     }
     .panel {
       background: var(--panel);
@@ -3009,10 +3050,13 @@ function dashboardHtml(port: number): string {
       display: flex;
       flex-direction: column;
       gap: 14px;
+      overflow: hidden;
+      min-width: 200px;
     }
     .workspace {
       min-width: 0;
       display: flex;
+      margin-left: 12px;
       flex-direction: column;
       gap: 14px;
     }
@@ -3122,8 +3166,21 @@ function dashboardHtml(port: number): string {
     .pkg-status-badge.complete { background: rgba(124,241,200,0.22); color: #7cf1c8; }
     .session-package-actions {
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
       margin-top: 10px;
+    }
+    .session-package-actions .secondary-button,
+    .session-package-actions .primary-button,
+    .session-package-actions .danger-button {
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 8px 12px;
+      font-size: 12px;
     }
     .session-package-children {
       margin-top: 10px;
@@ -3159,7 +3216,7 @@ function dashboardHtml(port: number): string {
     }
     .primary-button[disabled], .secondary-button[disabled], .danger-button[disabled] {
       opacity: 0.55;
-      cursor: wait;
+      cursor: not-allowed;
     }
     .chat {
       position: relative;
@@ -3349,6 +3406,16 @@ function dashboardHtml(port: number): string {
       color: #ffc1c1;
     }
     .mono { font-family: "Cascadia Code", Consolas, monospace; }
+    .collapsible-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; padding: 0; margin: 0; }
+    .collapsible-header:hover { opacity: 0.85; }
+    .collapsible-header h3 { margin: 0; }
+    .collapse-chevron { font-size: 14px; color: var(--muted); transition: transform 0.2s ease; margin-left: 8px; }
+    .collapsible-body { overflow: hidden; }
+    .collapsible-body.collapsed { display: none; }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .settings-item { display: flex; flex-direction: column; gap: 2px; }
+    .settings-item-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .settings-item-value { font-size: 13px; color: var(--fg); font-family: "Cascadia Code", Consolas, monospace; word-break: break-all; }
     .ps-card { border: 1px solid rgba(148,163,184,0.12); border-radius: 14px; background: rgba(255,255,255,0.02); overflow: hidden; margin-bottom: 8px; }
     .ps-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; gap: 10px; }
     .ps-card-header:hover { background: rgba(255,255,255,0.03); }
@@ -3371,21 +3438,23 @@ function dashboardHtml(port: number): string {
     .ps-test-ok { background: rgba(126,207,126,0.10); color: #7ecf7e; }
     .ps-test-fail { background: rgba(255,141,141,0.10); color: #ffc1c1; }
     @media (max-width: 1280px) {
-      .app { grid-template-columns: 260px minmax(0, 1fr); }
+      .app { grid-template-columns: var(--sidebar-width, 310px) auto minmax(0, 1fr); }
       .tab-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 900px) {
-      .app { grid-template-columns: 1fr; }
+      .app { grid-template-columns: 1fr !important; }
+      .resize-handle { display: none; }
       .chat { min-height: auto; }
-      .sidebar { order: 2; }
+      .sidebar { order: 2; min-width: unset; }
+      .workspace { margin-left: 0; }
       .tabs { gap: 8px; }
       .tab-button { flex-basis: calc(50% - 4px); }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar panel">
+  <div class="app" id="app">
+    <aside class="sidebar panel" id="sidebar">
       <div class="brand">
         <div class="eyebrow">Frontier Operator Console</div>
         <h1>PRISM Chat</h1>
@@ -3395,11 +3464,13 @@ function dashboardHtml(port: number): string {
       <button class="primary-button" onclick="createSession()">New Session</button>
       <div id="session-list" class="session-list"></div>
     </aside>
+    <div class="resize-handle" id="resize-handle"></div>
 
     <main class="workspace">
       <section class="tabs panel" id="tabs" role="tablist" aria-label="Dashboard sections">
         <button id="tab-button-chat" type="button" class="tab-button active" data-tab-id="chat" role="tab" aria-selected="true" aria-controls="tab-chat" tabindex="0" onclick="setActiveTab(this.dataset.tabId)">Chat Interface</button>
         <button id="tab-button-settings" type="button" class="tab-button" data-tab-id="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Provider &amp; Settings</button>
+        <button id="tab-button-tools" type="button" class="tab-button" data-tab-id="tools" role="tab" aria-selected="false" aria-controls="tab-tools" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Tools &amp; Plugins</button>
         <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Telemetry</button>
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Logs &amp; Debug</button>
       </section>
@@ -3427,26 +3498,88 @@ function dashboardHtml(port: number): string {
       <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true">
         <div class="tab-grid" style="grid-template-columns:1fr;">
           <section class="rail-section panel">
-            <h3>Session Provider Assignment</h3>
-            <div id="llm-provider" class="stack"></div>
+            <div class="collapsible-header" onclick="togglePanelCollapse('sessionProvider')">
+              <h3>Session Provider Assignment</h3>
+              <span class="collapse-chevron" id="chevron-sessionProvider">\u25BC</span>
+            </div>
+            <div class="collapsible-body" id="body-sessionProvider">
+              <div id="llm-provider" class="stack"></div>
+            </div>
           </section>
           
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
             <section class="rail-section panel" style="flex:1;">
-              <h3>Provider Configuration</h3>
-              <div class="muted" style="margin-bottom:12px;">Configure API keys and settings for each provider. Expand a card to manage.</div>
-              <div id="provider-cards-container" class="stack"></div>
+              <div class="collapsible-header" onclick="togglePanelCollapse('providerConfig')">
+                <h3>Provider Configuration</h3>
+                <span class="collapse-chevron" id="chevron-providerConfig">\u25BC</span>
+              </div>
+              <div class="collapsible-body" id="body-providerConfig">
+                <div class="muted" style="margin-bottom:12px;">Configure API keys and settings for each provider. Expand a card to manage.</div>
+                <div id="provider-cards-container" class="stack"></div>
+              </div>
             </section>
             <section class="rail-section panel" style="flex:1;">
-              <h3>Model Capability Matrix</h3>
-              <div class="muted" style="margin-bottom:8px;">Available models scored by capability tier (T1 Minimal → T5 Frontier). Role routing selects the best model for each task.</div>
-              <div id="capability-matrix" class="stack"></div>
+              <div class="collapsible-header" onclick="togglePanelCollapse('modelMatrix')">
+                <h3>Model Capability Matrix</h3>
+                <span class="collapse-chevron" id="chevron-modelMatrix">\u25BC</span>
+              </div>
+              <div class="collapsible-body" id="body-modelMatrix">
+                <div class="muted" style="margin-bottom:8px;">Available models scored by capability tier (T1 Minimal \u2192 T5 Frontier). Role routing selects the best model for each task.</div>
+                <div id="capability-matrix" class="stack"></div>
+              </div>
             </section>
           </div>
 
           <section class="rail-section panel">
-            <h3>LLM Audit Trail</h3>
-            <div id="llm-audit"></div>
+            <div class="collapsible-header" onclick="togglePanelCollapse('settingsPanel')">
+              <h3>Settings</h3>
+              <span class="collapse-chevron" id="chevron-settingsPanel">\u25BC</span>
+            </div>
+            <div class="collapsible-body" id="body-settingsPanel">
+              <div id="settings-panel" class="stack"></div>
+            </div>
+          </section>
+
+          <section class="rail-section panel">
+            <div class="collapsible-header" onclick="togglePanelCollapse('llmAudit')">
+              <h3>LLM Audit Trail</h3>
+              <span class="collapse-chevron" id="chevron-llmAudit">\u25BC</span>
+            </div>
+            <div class="collapsible-body" id="body-llmAudit">
+              <div id="llm-audit"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-tools" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-tools" aria-hidden="true">
+        <div class="tab-grid" style="grid-template-columns:1fr;">
+          <section class="rail-section panel">
+            <div class="collapsible-header" onclick="togglePanelCollapse('toolsPanel')">
+              <h3>Tools</h3>
+              <span class="collapse-chevron" id="chevron-toolsPanel">\u25BC</span>
+            </div>
+            <div class="collapsible-body" id="body-toolsPanel">
+              <div id="tools-panel" class="stack"></div>
+            </div>
+          </section>
+          <section class="rail-section panel">
+            <div class="collapsible-header" onclick="togglePanelCollapse('pluginsPanel')">
+              <h3>Plugins</h3>
+              <span class="collapse-chevron" id="chevron-pluginsPanel">\u25BC</span>
+            </div>
+            <div class="collapsible-body" id="body-pluginsPanel">
+              <div id="plugins-panel" class="stack"></div>
+            </div>
+          </section>
+          <section class="rail-section panel">
+            <div class="collapsible-header" onclick="togglePanelCollapse('utilitiesPanel')">
+              <h3>Utilities</h3>
+              <span class="collapse-chevron" id="chevron-utilitiesPanel">\u25BC</span>
+            </div>
+            <div class="collapsible-body" id="body-utilitiesPanel">
+              <div id="utilities-panel" class="stack"></div>
+            </div>
           </section>
         </div>
       </section>
@@ -3554,12 +3687,27 @@ function dashboardHtml(port: number): string {
       sessionPackages: [],
       sessionPackageHistory: [],
       packageReleaseSnapshot: null,
-      expandedSessionPackages: {}
+      expandedSessionPackages: {},
+      matrixSortCol: 'tier',
+      matrixSortAsc: false,
+      matrixFilterProvider: '',
+      matrixFilterTier: '',
+      matrixFilterLocality: '',
+      matrixFilterText: '',
+      sessionProviderCollapsed: false,
+      providerConfigCollapsed: false,
+      modelMatrixCollapsed: false,
+      settingsPanelCollapsed: false,
+      llmAuditCollapsed: false,
+      toolsPanelCollapsed: false,
+      pluginsPanelCollapsed: false,
+      utilitiesPanelCollapsed: false
     };
 
     const tabs = [
       { id: 'chat', label: 'Chat Interface' },
       { id: 'settings', label: 'Provider & Settings' },
+      { id: 'tools', label: 'Tools & Plugins' },
       { id: 'telemetry', label: 'Telemetry' },
       { id: 'logs', label: 'Logs & Debug' }
     ];
@@ -4081,6 +4229,7 @@ function dashboardHtml(port: number): string {
           + '<div class="session-meta"><span>' + escapeHtml(String(session.messageCount)) + ' msgs</span><span>' + escapeHtml(formatRelativeTime(session.updatedAt)) + '</span></div>'
           + '<div class="action-buttons">'
           + '<button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button>'
+          + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="renameSession(event, this.dataset.sessionId)">Rename</button>'
           + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="copySession(event, this.dataset.sessionId)">Copy Session</button>'
           + '</div>'
           + '</div>';
@@ -4222,11 +4371,16 @@ function dashboardHtml(port: number): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: providerId, model })
         });
+        clearLocalLlmSelection(state.selectedSessionId);
         safeRenderStep('header', renderHeader);
         safeRenderStep('llm', renderLlm);
         await fetchReadinessAndRefresh();
+        state.notice = 'Provider switched to ' + providerId + ' / ' + (model || 'default') + '.';
+        safeRenderStep('notice', renderNotice);
       } catch (err) {
         console.error(err);
+        state.notice = { type: 'error', message: 'Failed to switch provider: ' + String(err) };
+        safeRenderStep('notice', renderNotice);
       }
     }
 
@@ -4238,11 +4392,16 @@ function dashboardHtml(port: number): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: state.llmCatalog.activeProviderId, model })
         });
+        clearLocalLlmSelection(state.selectedSessionId);
         safeRenderStep('header', renderHeader);
         safeRenderStep('llm', renderLlm);
         await fetchReadinessAndRefresh();
+        state.notice = 'Model switched to ' + model + '.';
+        safeRenderStep('notice', renderNotice);
       } catch (err) {
         console.error(err);
+        state.notice = { type: 'error', message: 'Failed to switch model: ' + String(err) };
+        safeRenderStep('notice', renderNotice);
       }
     }
 
@@ -4474,7 +4633,10 @@ function dashboardHtml(port: number): string {
         : '<div class="muted" style="margin-top:10px;">No config history yet.</div>';
 
       const isLocal = displayProvider && displayProvider.kind === 'local';
-      const needsApply = hasUnsavedLocalSelection;
+      const sessionNeedsBind = state.readiness && state.readiness.requirements
+        ? !state.readiness.requirements.find(function(r) { return r.id === 'provider-model-selected'; }).passed
+        : false;
+      const needsApply = hasUnsavedLocalSelection || (sessionNeedsBind && Boolean(displayProviderId));
 
       // When rendering dynamically from onLlmProviderChanged we shouldn't block 
       // rendering just because a select is focused, otherwise the model dropdown
@@ -4497,8 +4659,35 @@ function dashboardHtml(port: number): string {
         + reason;
     }
 
+    function togglePanelCollapse(panelKey) {
+      var stateKey = panelKey + 'Collapsed';
+      state[stateKey] = !state[stateKey];
+      var chevron = document.getElementById('chevron-' + panelKey);
+      var body = document.getElementById('body-' + panelKey);
+      if (chevron) { chevron.textContent = state[stateKey] ? '\u25B6' : '\u25BC'; }
+      if (body) {
+        if (state[stateKey]) { body.classList.add('collapsed'); }
+        else { body.classList.remove('collapsed'); }
+      }
+    }
+
     function toggleCapabilityMatrix() {
       state.capabilityMatrixExpanded = !state.capabilityMatrixExpanded;
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+    }
+
+    function setMatrixSort(col) {
+      if (state.matrixSortCol === col) {
+        state.matrixSortAsc = !state.matrixSortAsc;
+      } else {
+        state.matrixSortCol = col;
+        state.matrixSortAsc = col === 'model' || col === 'provider';
+      }
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+    }
+
+    function setMatrixFilter(field, value) {
+      state['matrixFilter' + field.charAt(0).toUpperCase() + field.slice(1)] = value;
       safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
     }
 
@@ -4510,7 +4699,6 @@ function dashboardHtml(port: number): string {
         return;
       }
 
-      // Default to collapsed if not specified
       if (state.capabilityMatrixExpanded === undefined) {
         state.capabilityMatrixExpanded = false;
       }
@@ -4528,7 +4716,6 @@ function dashboardHtml(port: number): string {
         'memory-indexing':  { min: 1, ideal: 2 },
       };
 
-      // Build model list with tier info (heuristic: parse param count from name)
       function guessTier(model, kind) {
         var m = model.match(/:?(\\d+(?:\\.\\d+)?)\\s*[bB]/);
         var b = m ? parseFloat(m[1]) : 0;
@@ -4536,47 +4723,111 @@ function dashboardHtml(port: number): string {
           if (b > 0 && b <= 2) return 1;
           if (b > 2 && b <= 5) return 2;
           if (b > 5 && b <= 15) return 3;
-          return 2; // local default
+          return 2;
         }
-        // cloud heuristic
         if (/mini|flash|small|instant|haiku/i.test(model)) return 3;
         if (/opus|5\\b|frontier/i.test(model)) return 5;
         return 4;
       }
 
-      var rows = [];
+      var allRows = [];
+      var providerSet = {};
       state.llmCatalog.providers.forEach(function(provider) {
-        if (!provider.enabled) return;
-        (provider.models || []).forEach(function(model) {
+        if (!provider.models || !provider.models.length) return;
+        providerSet[provider.id] = provider.label;
+        provider.models.forEach(function(model) {
           var tier = guessTier(model, provider.kind);
-          rows.push({ provider: provider.label, model: model, tier: tier, kind: provider.kind });
+          allRows.push({ provider: provider.label, providerId: provider.id, model: model, tier: tier, kind: provider.kind, enabled: provider.enabled });
         });
       });
 
-      rows.sort(function(a, b) { return b.tier - a.tier; });
+      var rows = allRows.filter(function(row) {
+        if (state.matrixFilterProvider && row.providerId !== state.matrixFilterProvider) return false;
+        if (state.matrixFilterTier && row.tier !== Number(state.matrixFilterTier)) return false;
+        if (state.matrixFilterLocality && row.kind !== state.matrixFilterLocality) return false;
+        if (state.matrixFilterText) {
+          var q = state.matrixFilterText.toLowerCase();
+          if (row.model.toLowerCase().indexOf(q) === -1 && row.provider.toLowerCase().indexOf(q) === -1) return false;
+        }
+        return true;
+      });
+
+      var sortCol = state.matrixSortCol || 'tier';
+      var sortAsc = state.matrixSortAsc;
+      rows.sort(function(a, b) {
+        var va, vb;
+        if (sortCol === 'model') { va = a.model.toLowerCase(); vb = b.model.toLowerCase(); }
+        else if (sortCol === 'provider') { va = a.provider.toLowerCase(); vb = b.provider.toLowerCase(); }
+        else if (sortCol === 'tier') { va = a.tier; vb = b.tier; }
+        else if (sortCol === 'locality') { va = a.kind; vb = b.kind; }
+        else { va = a.tier; vb = b.tier; }
+        if (va < vb) return sortAsc ? -1 : 1;
+        if (va > vb) return sortAsc ? 1 : -1;
+        if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+        return 0;
+      });
+
+      function sortArrow(col) {
+        if (state.matrixSortCol !== col) return '';
+        return state.matrixSortAsc ? ' \u25B2' : ' \u25BC';
+      }
 
       let html = '<div class="action-card" style="cursor:pointer;" onclick="toggleCapabilityMatrix()">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;">'
         +   '<span class="muted" style="margin:0;">Model Capability Matrix</span>'
-        +   '<span class="muted" style="font-size:16px;">' + (isExpanded ? '&#x25B2;' : '&#x25BC;') + '</span>'
+        +   '<span class="muted" style="font-size:11px;">' + escapeHtml(rows.length + ' / ' + allRows.length + ' models') + '  ' + (isExpanded ? '&#x25B2;' : '&#x25BC;') + '</span>'
         + '</div></div>';
 
-      if (!rows.length) {
-        container.innerHTML = html + '<div class="muted" style="margin-top:10px;">No enabled models found.</div>';
+      if (!allRows.length) {
+        container.innerHTML = html + '<div class="muted" style="margin-top:10px;">No models found. Configure and test a provider to populate the matrix.</div>';
         return;
       }
 
-      html += '<div style="' + (isExpanded ? '' : 'display:block;') + '">';
-      html += '<table class="events-table" style="margin-top:10px;"><thead><tr>'
-        + '<th>Model</th><th>Provider</th><th>Tier</th><th>Locality</th>'
+      html += '<div>';
+
+      var filterStyle = 'padding:5px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;';
+      var providerIds = Object.keys(providerSet);
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">';
+      html += '<input type="text" placeholder="Search models\u2026" value="' + escapeHtml(state.matrixFilterText || '') + '" oninput="setMatrixFilter(&#39;text&#39;, this.value)" style="' + filterStyle + 'flex:1;min-width:120px;" />';
+      html += '<select onchange="setMatrixFilter(&#39;provider&#39;, this.value)" style="' + filterStyle + '">';
+      html += '<option value="">All Providers</option>';
+      providerIds.forEach(function(id) {
+        var sel = state.matrixFilterProvider === id ? ' selected' : '';
+        html += '<option value="' + escapeHtml(id) + '"' + sel + '>' + escapeHtml(providerSet[id]) + '</option>';
+      });
+      html += '</select>';
+      html += '<select onchange="setMatrixFilter(&#39;tier&#39;, this.value)" style="' + filterStyle + '">';
+      html += '<option value="">All Tiers</option>';
+      for (var t = 5; t >= 1; t--) {
+        var sel = state.matrixFilterTier === String(t) ? ' selected' : '';
+        html += '<option value="' + t + '"' + sel + '>' + tierLabels[t] + '</option>';
+      }
+      html += '</select>';
+      html += '<select onchange="setMatrixFilter(&#39;locality&#39;, this.value)" style="' + filterStyle + '">';
+      html += '<option value=""' + (!state.matrixFilterLocality ? ' selected' : '') + '>All</option>';
+      html += '<option value="local"' + (state.matrixFilterLocality === 'local' ? ' selected' : '') + '>Local</option>';
+      html += '<option value="remote"' + (state.matrixFilterLocality === 'remote' ? ' selected' : '') + '>Cloud</option>';
+      html += '</select>';
+      html += '</div>';
+
+      var thStyle = 'cursor:pointer;user-select:none;';
+      html += '<table class="events-table" style="margin-top:8px;"><thead><tr>'
+        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;model&#39;)">Model' + sortArrow('model') + '</th>'
+        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;provider&#39;)">Provider' + sortArrow('provider') + '</th>'
+        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;tier&#39;)">Tier' + sortArrow('tier') + '</th>'
+        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;locality&#39;)">Locality' + sortArrow('locality') + '</th>'
         + '</tr></thead><tbody>';
-        
+
       var displayRows = isExpanded ? rows : rows.slice(0, 5);
+      if (!displayRows.length) {
+        html += '<tr><td colspan="4" class="muted" style="text-align:center;">No models match the current filters.</td></tr>';
+      }
       displayRows.forEach(function(row) {
         var color = tierColors[row.tier] || '#aaa';
-        html += '<tr>'
+        var dimStyle = row.enabled ? '' : ' style="opacity:0.5;"';
+        html += '<tr' + dimStyle + '>'
           + '<td class="mono">' + escapeHtml(row.model) + '</td>'
-          + '<td>' + escapeHtml(row.provider) + '</td>'
+          + '<td>' + escapeHtml(row.provider) + (row.enabled ? '' : ' <span style="font-size:10px;color:var(--muted);">(unconfigured)</span>') + '</td>'
           + '<td><span style="color:' + color + ';font-weight:600;">' + escapeHtml(tierLabels[row.tier] || 'T?') + '</span></td>'
           + '<td>' + (row.kind === 'local' ? '🖥 Local' : '☁ Cloud') + '</td>'
           + '</tr>';
@@ -4589,13 +4840,12 @@ function dashboardHtml(port: number): string {
       }
 
       if (isExpanded) {
-        // Role coverage summary
         html += '<div class="muted" style="margin-top:12px;">Role Coverage</div>';
         html += '<table class="events-table"><thead><tr><th>Task Role</th><th>Min Tier</th><th>Ideal</th><th>Status</th></tr></thead><tbody>';
         Object.keys(roleRequirements).forEach(function(role) {
           var req = roleRequirements[role];
           var bestTier = 0;
-          rows.forEach(function(row) { if (row.tier > bestTier) bestTier = row.tier; });
+          rows.forEach(function(row) { if (row.enabled && row.tier > bestTier) bestTier = row.tier; });
           var met = bestTier >= req.ideal;
           var partial = !met && bestTier >= req.min;
           var statusHtml = met
@@ -4607,7 +4857,7 @@ function dashboardHtml(port: number): string {
         });
         html += '</tbody></table>';
       }
-      
+
       html += '</div>';
 
       container.innerHTML = html;
@@ -4818,6 +5068,7 @@ function dashboardHtml(port: number): string {
         });
         delete state.providerSettingsCache[providerId];
         await refreshChrome();
+        safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
         state.notice = 'Settings saved for ' + providerId + '.';
       } catch (error) {
         state.notice = String(error);
@@ -4891,6 +5142,7 @@ function dashboardHtml(port: number): string {
       } catch (error) {
         state.providerTestResults[providerId] = { ok: false, message: String(error) };
       }
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
       render();
     }
 
@@ -5062,6 +5314,215 @@ function dashboardHtml(port: number): string {
 
     function metricRow(label, value) {
       return '<div class="metric"><span class="muted">' + escapeHtml(label) + '</span><span class="mono">' + escapeHtml(value) + '</span></div>';
+    }
+
+    function renderSettingsPanel() {
+      var container = document.getElementById('settings-panel');
+      if (!container) return;
+      var items = [];
+      if (state.status) {
+        items.push({ label: 'Uptime', value: (state.status.uptimeSeconds || 0) + 's' });
+        items.push({ label: 'Event Count', value: String(state.status.eventCount || 0) });
+        items.push({ label: 'Server Status', value: state.status.status || 'unknown' });
+        if (state.status.version) items.push({ label: 'Version', value: state.status.version });
+        if (state.status.nodeVersion) items.push({ label: 'Node Version', value: state.status.nodeVersion });
+        if (state.status.platform) items.push({ label: 'Platform', value: state.status.platform });
+      }
+      if (state.readiness && state.readiness.requirements) {
+        var reqs = state.readiness.requirements;
+        for (var i = 0; i < reqs.length; i++) {
+          items.push({ label: reqs[i].label || reqs[i].id, value: reqs[i].met ? '\u2713 Met' : '\u2717 Not met' });
+        }
+      }
+      var activeProvider = state.llmCatalog ? (state.llmCatalog.activeProviderId || 'none') : 'unknown';
+      var activeModel = state.llmCatalog ? (state.llmCatalog.activeModel || 'none') : 'unknown';
+      items.push({ label: 'Active Provider', value: activeProvider });
+      items.push({ label: 'Active Model', value: activeModel });
+      items.push({ label: 'Active Tab', value: state.activeTab });
+      items.push({ label: 'Sessions Count', value: String((state.sessions || []).length) });
+      if (!items.length) {
+        container.innerHTML = '<div class="muted">No system settings available.</div>';
+        return;
+      }
+      var html = '<div class="muted" style="margin-bottom:12px;">System configuration and runtime information.</div>';
+      html += '<div class="settings-grid">';
+      for (var j = 0; j < items.length; j++) {
+        html += '<div class="settings-item">';
+        html += '<span class="settings-item-label">' + escapeHtml(items[j].label) + '</span>';
+        html += '<span class="settings-item-value">' + escapeHtml(items[j].value) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function renderToolsPanel() {
+      var container = document.getElementById('tools-panel');
+      if (!container) return;
+
+      var tools = [
+        { name: 'file_read', cat: 'System', desc: 'Read file contents with encoding support', risk: 'low', mut: false },
+        { name: 'file_write', cat: 'System', desc: 'Write or append content to files', risk: 'medium', mut: true },
+        { name: 'file_delete', cat: 'System', desc: 'Delete files and directories', risk: 'high', mut: true },
+        { name: 'file_list', cat: 'System', desc: 'List directory contents with file type detection', risk: 'low', mut: false },
+        { name: 'shell_exec', cat: 'System', desc: 'Execute shell commands with blocked-pattern protection', risk: 'high', mut: true },
+        { name: 'terminal_session', cat: 'System', desc: 'Manage interactive terminal sessions with lifecycle control', risk: 'medium', mut: true },
+        { name: 'container_sandbox', cat: 'System', desc: 'Create and manage containerized sandbox environments', risk: 'medium', mut: true },
+        { name: 'http_request', cat: 'Integration', desc: 'Execute HTTP requests (GET/POST/PUT/PATCH/DELETE)', risk: 'medium', mut: true },
+        { name: 'email_ops', cat: 'Application', desc: 'Email operations \u2014 summarize, reply, and send', risk: 'medium', mut: true },
+        { name: 'calendar_plan', cat: 'Application', desc: 'Calendar management \u2014 availability and scheduling', risk: 'medium', mut: true },
+        { name: 'notes_extract', cat: 'Application', desc: 'Notes management \u2014 capture, extract, and persist', risk: 'medium', mut: true },
+        { name: 'tasks_timeline', cat: 'Application', desc: 'Task timeline planning and commitment', risk: 'medium', mut: true },
+        { name: 'neo4j_query', cat: 'Knowledge', desc: 'Execute Cypher queries against Neo4j graph database', risk: 'medium', mut: false },
+        { name: 'memory_query', cat: 'Knowledge', desc: 'Query episodic, semantic, or session memory stores', risk: 'low', mut: false },
+        { name: 'semantic_query', cat: 'Knowledge', desc: 'Semantic memory index with multiple retrieval modes', risk: 'low', mut: false },
+        { name: 'nexus_check_hotline', cat: 'Integration', desc: 'Read broadcast messages from Nexus hotline', risk: 'low', mut: false },
+        { name: 'nexus_read_memory', cat: 'Integration', desc: 'Read Nexus primary memory store', risk: 'low', mut: false },
+        { name: 'nexus_log_insight', cat: 'Integration', desc: 'Append insights to Nexus daily memory log', risk: 'medium', mut: true },
+        { name: 'nexus_broadcast', cat: 'Integration', desc: 'Send STP messages to Nexus thread or hotline', risk: 'medium', mut: true }
+      ];
+
+      var riskColor = { low: '#7ecf7e', medium: '#ffd17a', high: '#ffc1c1' };
+      var riskBg = { low: 'rgba(126,207,126,0.15)', medium: 'rgba(255,200,80,0.12)', high: 'rgba(255,141,141,0.12)' };
+      var catIcon = { System: '\uD83D\uDDA5\uFE0F', Application: '\uD83D\uDCCB', Knowledge: '\uD83E\uDDE0', Integration: '\uD83D\uDD17' };
+
+      var categories = ['System', 'Application', 'Knowledge', 'Integration'];
+      var html = '<div class="muted" style="margin-bottom:8px;">'
+        + tools.length + ' built-in tools registered across ' + categories.length + ' categories.</div>';
+
+      for (var c = 0; c < categories.length; c++) {
+        var cat = categories[c];
+        var catTools = tools.filter(function(t) { return t.cat === cat; });
+        if (!catTools.length) continue;
+        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (catIcon[cat] || '') + ' ' + escapeHtml(cat) + ' <span class="muted">(' + catTools.length + ')</span></div>';
+        for (var i = 0; i < catTools.length; i++) {
+          var t = catTools[i];
+          html += '<div class="ps-card" style="margin-bottom:6px;">';
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;gap:8px;">';
+          html += '<div style="flex:1;min-width:0;">';
+          html += '<span style="font-weight:600;font-size:13px;">' + escapeHtml(t.name) + '</span>';
+          html += '<div class="muted" style="font-size:11px;margin-top:2px;">' + escapeHtml(t.desc) + '</div>';
+          html += '</div>';
+          html += '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">';
+          html += '<span class="ps-badge" style="background:' + riskBg[t.risk] + ';color:' + riskColor[t.risk] + ';">' + escapeHtml(t.risk) + '</span>';
+          html += '<span class="ps-badge" style="background:' + (t.mut ? 'rgba(255,200,80,0.12);color:#ffd17a' : 'rgba(126,207,126,0.15);color:#7ecf7e') + ';">' + (t.mut ? 'mutating' : 'read-only') + '</span>';
+          html += '</div></div></div>';
+        }
+      }
+      container.innerHTML = html;
+    }
+
+    function renderPluginsPanel() {
+      var container = document.getElementById('plugins-panel');
+      if (!container) return;
+
+      var plugins = [
+        { name: 'ids-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'IDS identity services \u2014 authentication, token lifecycle, and credential management', status: 'Active' },
+        { name: 'impressioncore-eds', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Enterprise Data Services \u2014 structured data ingestion, transformation, and schema enforcement', status: 'Active' },
+        { name: 'impressioncore-ipa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Intelligent Process Automation \u2014 task queuing, workflow dispatch, and RPA bridge', status: 'Active' },
+        { name: 'impressioncore-goliath', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Large-scale data pipeline orchestration \u2014 batch ETL, partitioned processing, and backpressure control', status: 'Active' },
+        { name: 'impressioncore-vrgc', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Visual Rendering & Graphics Compute \u2014 image generation, chart rendering, and GPU-accelerated transforms', status: 'Active' },
+        { name: 'impressioncore-dpa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Document Processing & Analytics \u2014 PDF extraction, OCR, and document classification', status: 'Active' },
+        { name: 'web-search-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'Web search provider \u2014 query routing, result aggregation, and safe content filtering', status: 'Active' }
+      ];
+
+      var groupIcon = { 'In-Repo': '\uD83D\uDCC1', 'ImpressionCore Suite': '\uD83E\uDDE9' };
+      var groups = ['In-Repo', 'ImpressionCore Suite'];
+
+      var html = '<div class="muted" style="margin-bottom:8px;">'
+        + plugins.length + ' MCP plugins registered across ' + groups.length + ' sources.</div>';
+
+      for (var g = 0; g < groups.length; g++) {
+        var grp = groups[g];
+        var grpPlugins = plugins.filter(function(p) { return p.group === grp; });
+        if (!grpPlugins.length) continue;
+        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (groupIcon[grp] || '') + ' ' + escapeHtml(grp) + ' <span class="muted">(' + grpPlugins.length + ')</span></div>';
+        for (var i = 0; i < grpPlugins.length; i++) {
+          var p = grpPlugins[i];
+          html += '<div class="ps-card" style="margin-bottom:6px;">';
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;gap:8px;">';
+          html += '<div style="flex:1;min-width:0;">';
+          html += '<span style="font-weight:600;font-size:13px;">' + escapeHtml(p.name) + '</span>';
+          html += '<span class="ps-badge" style="margin-left:8px;background:rgba(130,170,255,0.12);color:#82aaff;font-size:10px;">' + escapeHtml(p.type) + '</span>';
+          html += '<div class="muted" style="font-size:11px;margin-top:2px;">' + escapeHtml(p.desc) + '</div>';
+          html += '</div>';
+          html += '<span class="ps-badge" style="background:rgba(126,207,126,0.15);color:#7ecf7e;">' + escapeHtml(p.status) + '</span>';
+          html += '</div></div>';
+        }
+      }
+      container.innerHTML = html;
+    }
+
+    function renderUtilitiesPanel() {
+      var container = document.getElementById('utilities-panel');
+      if (!container) return;
+
+      var utils = [
+        { name: 'tool-contract-snapshot', cat: 'Benchmarks & Qualification', desc: 'Generate versioned tool contract snapshots for release evidence' },
+        { name: 'release-validation', cat: 'Benchmarks & Qualification', desc: 'Run release gate checks \u2014 test/build/perf/contract/policy validation' },
+        { name: 'ci-gate-check', cat: 'Benchmarks & Qualification', desc: 'CI quality gate \u2014 test pass, perf qualification, artifact upload' },
+        { name: 'perf-qualification', cat: 'Benchmarks & Qualification', desc: 'Performance SLO harness \u2014 p50/p95/p99 latency gates with contention scenarios' },
+        { name: 'e1-individual-qualification', cat: 'Benchmarks & Qualification', desc: 'Individual profile qualification \u2014 tool invocation, workflow, and terminal tests' },
+        { name: 'e2-business-qualification', cat: 'Benchmarks & Qualification', desc: 'Business profile qualification \u2014 governance paths, approval flows, and audit checks' },
+        { name: 'e3-policy-stress', cat: 'Benchmarks & Qualification', desc: 'Policy engine stress test \u2014 rapid tier routing under concurrency load' },
+        { name: 'e4-profile-switch-qualification', cat: 'Benchmarks & Qualification', desc: 'Profile hot-switch qualification \u2014 runtime transition fidelity and state preservation' },
+        { name: 'd1-workflow-template-qualification', cat: 'Benchmarks & Qualification', desc: 'Workflow template qualification \u2014 retry/timeout/fallback path completion' },
+        { name: 'e-stage2-qualification-summary', cat: 'Benchmarks & Qualification', desc: 'Aggregate stage-2 qualification summary across all E-series suites' },
+        { name: 'j-event-lineage-bundle', cat: 'Benchmarks & Qualification', desc: 'Event lineage bundle \u2014 full causal chain export for audit and replay' },
+
+        { name: 'SelfReviewScheduler', cat: 'Operator Services', desc: 'Automated self-review scheduling \u2014 daily, weekly, and monthly audit cycles' },
+        { name: 'SessionTraceExplorer', cat: 'Operator Services', desc: 'Session trace browser \u2014 search, filter, and inspect activity event chains' },
+        { name: 'PolicyAuditExporter', cat: 'Operator Services', desc: 'Export policy audit logs \u2014 JSON/CSV/NDJSON with reason-code annotations' },
+        { name: 'SessionPackageSqliteStore', cat: 'Operator Services', desc: 'SQLite-backed session package persistence and migration management' },
+        { name: 'DashboardService', cat: 'Operator Services', desc: 'Dashboard HTTP server \u2014 38 API routes, WebSocket, and static UI serving' },
+
+        { name: 'SemanticMemoryIndex', cat: 'Memory & Retrieval', desc: 'Semantic memory index with configurable embedding and multi-mode retrieval' },
+        { name: 'EpisodicMemory', cat: 'Memory & Retrieval', desc: 'Episodic memory buffer with rolling window and recency-weighted recall' },
+        { name: 'SessionMemoryStore', cat: 'Memory & Retrieval', desc: 'Per-session memory persistence with summary extraction and compaction' },
+        { name: 'RetrievalMetricsCollector', cat: 'Memory & Retrieval', desc: 'Retrieval quality instrumentation \u2014 hit-rate, coverage, novelty, utility scoring' },
+        { name: 'RetrievalDashboardStore', cat: 'Memory & Retrieval', desc: 'SQLite-backed retrieval cohort dashboard snapshots and trend persistence' },
+
+        { name: 'ActivityBus', cat: 'Activity & Audit', desc: 'Central event bus with SHA-256 hash chain and typed subscriber dispatch' },
+        { name: 'SqliteActivityStore', cat: 'Activity & Audit', desc: 'SQLite subscriber for durable activity event persistence and querying' },
+        { name: 'ConsoleActivitySubscriber', cat: 'Activity & Audit', desc: 'Console subscriber for development-mode real-time event logging' },
+
+        { name: 'normalizeReplayEvent', cat: 'Replay & Verification', desc: 'Normalize recorded events into deterministic replay format' },
+        { name: 'buildReplaySignature', cat: 'Replay & Verification', desc: 'Generate cryptographic replay signatures for trace parity verification' },
+        { name: 'compareReplayParity', cat: 'Replay & Verification', desc: 'Compare replay runs and report divergence with diff annotations' },
+
+        { name: 'resolveExecutionProfileFromEnv', cat: 'Configuration', desc: 'Resolve execution profile from environment variables (fast/balanced/governed)' },
+        { name: 'resolveEnvironmentProfile', cat: 'Configuration', desc: 'Resolve environment profile (dev/staging/prod) with SLO preset selection' },
+        { name: 'getPerformanceSloProfile', cat: 'Configuration', desc: 'Return performance SLO thresholds for the active environment profile' }
+      ];
+
+      var catIcon = {
+        'Benchmarks & Qualification': '\uD83C\uDFAF',
+        'Operator Services': '\u2699\uFE0F',
+        'Memory & Retrieval': '\uD83E\uDDE0',
+        'Activity & Audit': '\uD83D\uDCCA',
+        'Replay & Verification': '\uD83D\uDD01',
+        'Configuration': '\uD83D\uDD27'
+      };
+      var categories = ['Benchmarks & Qualification', 'Operator Services', 'Memory & Retrieval', 'Activity & Audit', 'Replay & Verification', 'Configuration'];
+
+      var html = '<div class="muted" style="margin-bottom:8px;">'
+        + utils.length + ' utilities registered across ' + categories.length + ' categories.</div>';
+
+      for (var c = 0; c < categories.length; c++) {
+        var cat = categories[c];
+        var catUtils = utils.filter(function(u) { return u.cat === cat; });
+        if (!catUtils.length) continue;
+        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (catIcon[cat] || '') + ' ' + escapeHtml(cat) + ' <span class="muted">(' + catUtils.length + ')</span></div>';
+        for (var i = 0; i < catUtils.length; i++) {
+          var u = catUtils[i];
+          html += '<div class="ps-card" style="margin-bottom:6px;">';
+          html += '<div style="padding:10px 14px;">';
+          html += '<span style="font-weight:600;font-size:13px;">' + escapeHtml(u.name) + '</span>';
+          html += '<div class="muted" style="font-size:11px;margin-top:2px;">' + escapeHtml(u.desc) + '</div>';
+          html += '</div></div>';
+        }
+      }
+      container.innerHTML = html;
     }
 
     function renderActions() {
@@ -5513,6 +5974,10 @@ function dashboardHtml(port: number): string {
       safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
       safeRenderStep('providerCards', renderProviderCards);
       safeRenderStep('llmAudit', renderLlmAudit);
+      safeRenderStep('settingsPanel', renderSettingsPanel);
+      safeRenderStep('toolsPanel', renderToolsPanel);
+      safeRenderStep('pluginsPanel', renderPluginsPanel);
+      safeRenderStep('utilitiesPanel', renderUtilitiesPanel);
       safeRenderStep('actions', renderActions);
       safeRenderStep('approvals', renderApprovals);
       safeRenderStep('actionHistory', renderActionHistory);
@@ -5573,6 +6038,28 @@ function dashboardHtml(port: number): string {
         state.notice = String(error);
       }
 
+      render();
+    }
+
+    async function renameSession(event, sessionId) {
+      event.stopPropagation();
+      var session = state.sessions.find(function(s) { return s.sessionId === sessionId; });
+      if (!session) return;
+      var newTitle = prompt('Rename session:', session.title);
+      if (!newTitle || !newTitle.trim() || newTitle.trim() === session.title) return;
+      try {
+        await request('/api/chat/sessions/' + encodeURIComponent(sessionId), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: newTitle.trim() })
+        });
+        await loadSessions();
+        safeRenderStep('sessionList', renderSessionList);
+        safeRenderStep('header', renderHeader);
+        state.notice = 'Session renamed.';
+      } catch (err) {
+        state.notice = { type: 'error', message: String(err) };
+      }
       render();
     }
 
@@ -5777,6 +6264,38 @@ function dashboardHtml(port: number): string {
         safeRenderStep('runtimeExcellence', renderRuntimeExcellence);
       } catch (_) { /* silent — telemetry is best-effort */ }
     }, 30000);
+  </script>
+  <script>
+  (function() {
+    var handle = document.getElementById('resize-handle');
+    var app = document.getElementById('app');
+    var sidebar = document.getElementById('sidebar');
+    if (!handle || !app || !sidebar) return;
+    var dragging = false;
+    var startX = 0;
+    var startWidth = 0;
+    handle.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      dragging = true;
+      startX = e.clientX;
+      startWidth = sidebar.getBoundingClientRect().width;
+      handle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', function(e) {
+      if (!dragging) return;
+      var newWidth = Math.max(200, Math.min(600, startWidth + (e.clientX - startX)));
+      app.style.setProperty('--sidebar-width', newWidth + 'px');
+    });
+    document.addEventListener('mouseup', function() {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  })();
   </script>
 </body>
 </html>`;

@@ -40,7 +40,7 @@ echo   3. The server is configured in .vscode/settings.json
 echo   4. Start using IDS tools in your AI conversations!
 echo.
 echo 📖 Documentation:
-echo   - User Guide: USER_GUIDE.md
-echo   - Developer Guide: DEVELOPER_GUIDE.md
+echo   - User Guide: docs/USER_GUIDE.md
+echo   - Developer Guide: docs/DEVELOPER_GUIDE.md
 echo   - VS Code Setup: vscode_integration_guide.md
 pause
