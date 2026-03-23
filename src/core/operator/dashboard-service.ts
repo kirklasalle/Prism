@@ -5756,6 +5756,11 @@ function dashboardHtml(port: number): string {
       matrixFilterTier: '',
       matrixFilterLocality: '',
       matrixFilterText: '',
+      matrixDraftPattern: '',
+      matrixDraftTier: '',
+      matrixDraftLocality: 'local',
+      matrixDraftStrengths: '',
+      matrixEditingPattern: null,
       sessionProviderCollapsed: false,
       providerConfigCollapsed: true,
       modelMatrixCollapsed: false,
@@ -7188,6 +7193,93 @@ function dashboardHtml(port: number): string {
       safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
     }
 
+    function setMatrixDraftField(field, value) {
+      state['matrixDraft' + field.charAt(0).toUpperCase() + field.slice(1)] = value;
+    }
+
+    function clearMatrixDraft() {
+      state.matrixDraftPattern = '';
+      state.matrixDraftTier = '';
+      state.matrixDraftLocality = 'local';
+      state.matrixDraftStrengths = '';
+      state.matrixEditingPattern = null;
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+    }
+
+    function startMatrixEdit(pattern) {
+      var entries = Array.isArray(state.modelMatrixEntries) ? state.modelMatrixEntries : [];
+      var found = null;
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i] && entries[i].pattern === pattern) {
+          found = entries[i];
+          break;
+        }
+      }
+      if (!found) return;
+      state.matrixDraftPattern = found.pattern || '';
+      state.matrixDraftTier = found.tier != null ? String(found.tier) : '';
+      state.matrixDraftLocality = found.locality || 'local';
+      state.matrixDraftStrengths = Array.isArray(found.strengths) ? found.strengths.join(', ') : '';
+      state.matrixEditingPattern = found.pattern || null;
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+    }
+
+    async function saveMatrixEntry() {
+      var pattern = String(state.matrixDraftPattern || '').trim();
+      if (!pattern) {
+        state.notice = { type: 'error', message: 'Model matrix pattern is required.' };
+        render();
+        return;
+      }
+      var tierValue = Number(state.matrixDraftTier);
+      var locality = String(state.matrixDraftLocality || '').trim();
+      var strengths = String(state.matrixDraftStrengths || '')
+        .split(',')
+        .map(function(part) { return part.trim(); })
+        .filter(function(part) { return !!part; });
+      var payload = { pattern: pattern };
+      if (!Number.isNaN(tierValue) && tierValue >= 1 && tierValue <= 5) {
+        payload.tier = tierValue;
+      }
+      if (locality === 'local' || locality === 'remote') {
+        payload.locality = locality;
+      }
+      if (strengths.length > 0) {
+        payload.strengths = strengths;
+      }
+      try {
+        await request('/api/models/matrix', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        await refreshChrome();
+        state.notice = 'Model matrix entry saved: ' + pattern;
+        clearMatrixDraft();
+        render();
+      } catch (error) {
+        state.notice = { type: 'error', message: 'Failed to save model matrix entry: ' + String(error) };
+        render();
+      }
+    }
+
+    async function deleteMatrixEntry(pattern) {
+      if (!pattern) return;
+      if (!confirm('Delete model matrix entry "' + pattern + '"?')) return;
+      try {
+        await request('/api/models/matrix/' + encodeURIComponent(pattern), { method: 'DELETE' });
+        await refreshChrome();
+        if (state.matrixEditingPattern === pattern) {
+          clearMatrixDraft();
+        }
+        state.notice = 'Model matrix entry deleted: ' + pattern;
+        render();
+      } catch (error) {
+        state.notice = { type: 'error', message: 'Failed to delete model matrix entry: ' + String(error) };
+        render();
+      }
+    }
+
     function renderCapabilityMatrix() {
       const container = document.getElementById('capability-matrix');
       if (!container) return;
@@ -7331,6 +7423,60 @@ function dashboardHtml(port: number): string {
       html += '<option value="local"' + (state.matrixFilterLocality === 'local' ? ' selected' : '') + '>Local</option>';
       html += '<option value="remote"' + (state.matrixFilterLocality === 'remote' ? ' selected' : '') + '>Cloud</option>';
       html += '</select>';
+      html += '</div>';
+
+      html += '<div class="panel" style="padding:10px;margin-top:8px;">';
+      html += '<div class="muted" style="font-size:12px;font-weight:600;margin-bottom:8px;">'
+        + (state.matrixEditingPattern ? 'Edit Matrix Entry' : 'Create Matrix Entry')
+        + '</div>';
+      html += '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 2fr auto auto;gap:6px;align-items:center;">';
+      html += '<input type="text" placeholder="pattern (example: gpt-4o* or llama3.1:8b)" value="' + escapeHtml(state.matrixDraftPattern || '') + '" oninput="setMatrixDraftField(\'pattern\', this.value)" style="' + filterStyle + 'width:100%;" />';
+      html += '<select onchange="setMatrixDraftField(\'tier\', this.value)" style="' + filterStyle + '">';
+      html += '<option value=""' + (!state.matrixDraftTier ? ' selected' : '') + '>Tier</option>';
+      for (var mt = 1; mt <= 5; mt++) {
+        html += '<option value="' + mt + '"' + (state.matrixDraftTier === String(mt) ? ' selected' : '') + '>T' + mt + '</option>';
+      }
+      html += '</select>';
+      html += '<select onchange="setMatrixDraftField(\'locality\', this.value)" style="' + filterStyle + '">';
+      html += '<option value="local"' + (state.matrixDraftLocality === 'local' ? ' selected' : '') + '>Local</option>';
+      html += '<option value="remote"' + (state.matrixDraftLocality === 'remote' ? ' selected' : '') + '>Cloud</option>';
+      html += '</select>';
+      html += '<input type="text" placeholder="strengths (comma-separated)" value="' + escapeHtml(state.matrixDraftStrengths || '') + '" oninput="setMatrixDraftField(\'strengths\', this.value)" style="' + filterStyle + 'width:100%;" />';
+      html += '<button class="secondary-button" style="padding:5px 10px;font-size:11px;" onclick="saveMatrixEntry()">Save</button>';
+      html += '<button class="secondary-button" style="padding:5px 10px;font-size:11px;" onclick="clearMatrixDraft()">Clear</button>';
+      html += '</div>';
+      html += '</div>';
+
+      var matrixRows = matrixEntries.slice().sort(function(a, b) {
+        var pa = String((a && a.pattern) || '').toLowerCase();
+        var pb = String((b && b.pattern) || '').toLowerCase();
+        if (pa < pb) return -1;
+        if (pa > pb) return 1;
+        return 0;
+      });
+
+      html += '<div class="panel" style="padding:10px;margin-top:8px;">';
+      html += '<div class="muted" style="font-size:12px;font-weight:600;margin-bottom:8px;">Registered Matrix Entries (' + matrixRows.length + ')</div>';
+      if (!matrixRows.length) {
+        html += '<div class="muted" style="font-size:12px;">No registered model matrix entries.</div>';
+      } else {
+        html += '<table class="events-table"><thead><tr><th>Pattern</th><th>Tier</th><th>Locality</th><th>Strengths</th><th>Actions</th></tr></thead><tbody>';
+        matrixRows.forEach(function(entry) {
+          var pattern = entry.pattern || '';
+          var strengthsText = Array.isArray(entry.strengths) ? entry.strengths.join(', ') : '';
+          html += '<tr>'
+            + '<td class="mono">' + escapeHtml(pattern) + '</td>'
+            + '<td>' + escapeHtml(entry.tier != null ? 'T' + entry.tier : '-') + '</td>'
+            + '<td>' + escapeHtml(entry.locality || '-') + '</td>'
+            + '<td>' + escapeHtml(strengthsText || '-') + '</td>'
+            + '<td style="white-space:nowrap;">'
+              + '<button class="secondary-button" style="padding:3px 8px;font-size:11px;margin-right:6px;" data-pattern="' + escapeHtml(pattern) + '" onclick="startMatrixEdit(this.dataset.pattern)">Edit</button>'
+              + '<button class="danger-button" style="padding:3px 8px;font-size:11px;" data-pattern="' + escapeHtml(pattern) + '" onclick="deleteMatrixEntry(this.dataset.pattern)">Delete</button>'
+            + '</td>'
+          + '</tr>';
+        });
+        html += '</tbody></table>';
+      }
       html += '</div>';
 
       var thStyle = 'cursor:pointer;user-select:none;';
@@ -11081,6 +11227,14 @@ function dashboardHtml(port: number): string {
     window.setTelemetryWindow = setTelemetryWindow;
     window.refreshNetworkInterfaces = refreshNetworkInterfaces;
     window.runNetworkCommand = runNetworkCommand;
+    window.toggleCapabilityMatrix = toggleCapabilityMatrix;
+    window.setMatrixSort = setMatrixSort;
+    window.setMatrixFilter = setMatrixFilter;
+    window.setMatrixDraftField = setMatrixDraftField;
+    window.startMatrixEdit = startMatrixEdit;
+    window.clearMatrixDraft = clearMatrixDraft;
+    window.saveMatrixEntry = saveMatrixEntry;
+    window.deleteMatrixEntry = deleteMatrixEntry;
 
     // Only telemetry data refreshes automatically — everything else is event-driven.
     setInterval(async function() {
