@@ -4,6 +4,7 @@ import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { workspacePath } from "../core/config/workspace-resolver.js";
 import { ActivityBus } from "../core/activity/bus.js";
 import { SqliteActivityStore } from "../core/activity/sqlite-store.js";
 import type { ActivityEvent } from "../core/activity/types.js";
@@ -86,7 +87,7 @@ const SLO_EVENT_P95_MS = readNumberEnv("PRISM_SLO_EVENT_P95_MS", ACTIVE_SLO_PROF
 const SLO_TELEMETRY_OVERHEAD_P95_MS = readNumberEnv("PRISM_SLO_TELEMETRY_OVERHEAD_P95_MS", ACTIVE_SLO_PROFILE.telemetryOverheadP95Ms);
 const SLO_PERSISTENCE_OVERHEAD_P95_MS = readNumberEnv("PRISM_SLO_PERSISTENCE_OVERHEAD_P95_MS", ACTIVE_SLO_PROFILE.persistenceOverheadP95Ms);
 const SLO_APPROVAL_PATHWAY_P99_MS = readNumberEnv("PRISM_SLO_APPROVAL_PATHWAY_P99_MS", ACTIVE_SLO_PROFILE.approvalPathwayP99Ms);
-const PERF_OUTPUT_PATH = process.env.PRISM_PERF_OUTPUT_PATH ?? "prism-output/perf-qualification.json";
+const PERF_OUTPUT_PATH = process.env.PRISM_PERF_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "perf-qualification.json");
 
 async function main(): Promise<void> {
     const policyResult = benchmarkPolicyEngine(POLICY_ITERATIONS);

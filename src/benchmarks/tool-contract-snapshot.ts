@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workspacePath } from "../core/config/workspace-resolver.js";
 import { MemoryQueryTool, SemanticQueryTool } from "../adapters/application/semantic-query-tool.js";
 import { EpisodicMemory } from "../core/memory/episodic-memory.js";
 import { SemanticMemoryIndex } from "../core/memory/semantic-memory.js";
@@ -14,8 +15,8 @@ import {
 } from "../core/tools/contract-snapshot.js";
 import type { Tool } from "../core/tools/types.js";
 
-const SNAPSHOT_OUTPUT_PATH = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? "prism-output/tool-contract-snapshot.json";
-const DIFF_OUTPUT_PATH = process.env.PRISM_CONTRACT_DIFF_OUTPUT_PATH ?? "prism-output/tool-contract-diff.json";
+const SNAPSHOT_OUTPUT_PATH = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-snapshot.json");
+const DIFF_OUTPUT_PATH = process.env.PRISM_CONTRACT_DIFF_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-diff.json");
 const BASELINE_PATH = process.env.PRISM_CONTRACT_BASELINE_PATH;
 
 async function main(): Promise<void> {

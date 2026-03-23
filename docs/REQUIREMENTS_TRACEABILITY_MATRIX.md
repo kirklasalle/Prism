@@ -109,3 +109,16 @@ This snapshot links investor/licensing-facing claims to validated implementation
 ## 6. Governance Rule
 
 No Phase D2 Go decision is valid if any high-risk requirement (`D2-R2`, `D2-R3`, `D2-R6`, `D2-R7`, `D2-R9`, `D2-R11`) is marked `fail` without explicit risk acceptance signed by Product/Governance and Operations.
+
+## 7. Phase D3 Agent Control & Swarm Requirements
+
+| Requirement ID | Source | Requirement | Verification Method | Evidence Artifact(s) | Owner | Gate |
+| --- | --- | --- | --- | --- | --- | --- |
+| D3-R1 | `PRISM_PRD.md` §8.8 | Agent lifecycle management (spawn, stop, promote, demote, reap, persist, restore) | Lifecycle integration tests | Agent lifecycle test report | Engineering | Phase D3 |
+| D3-R2 | `PRISM_PRD.md` §8.8 | Per-agent model assignment with dynamic switching | Model override dispatch tests + telemetry verification | Model assignment test report, telemetry samples | Engineering | Phase D3 |
+| D3-R3 | `PRISM_PRD.md` §8.8 | Swarm orchestration (mesh, star, pipeline, broadcast topologies) | Swarm topology integration tests | Swarm orchestration test report (4 topologies) | Engineering | Phase D3 |
+| D3-R4 | `PRISM_PRD.md` §8.8 | Chat-to-agent routing via classifier-first intent detection | Routing integration tests | Routing distribution report | Engineering | Phase D3 |
+| D3-R5 | `PRISM_PRD.md` §8.8 | Intelligent telemetry with pattern detection and promotion recommendations | Telemetry analysis tests | Telemetry pattern samples, promotion recommendation evidence | Engineering | Phase D3 |
+| D3-R6 | `DEVELOPER_GUIDE.md` §7A | Dashboard Agent Control tab wired with real data (no mock handlers) | UI integration tests + manual verification | Dashboard screenshot evidence, API response samples | Engineering + QA | Phase D3 |
+| D3-R7 | `PHASE_EXECUTION_PLAN.md` D3 | Workspace persistence survives server reboot | Restart round-trip test | Persistence verification report | Engineering | Phase D3 |
+| D3-R8 | `PRISM_PRD.md` §8.8 | Agent state restored on boot (permanent lifecycle agents) | Boot restore integration test | Restore verification report | Engineering | Phase D3 |

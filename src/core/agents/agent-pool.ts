@@ -5,6 +5,7 @@ import type {
     SubAgentRequest,
     SubAgentResult,
     LlmDelegate,
+    AgentModelOverride,
 } from "./agent-types.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -57,6 +58,8 @@ const DEFAULT_AGENTS: SubAgentDefinition[] = [
 export class AgentPool {
     private readonly agents = new Map<string, SubAgentDefinition>();
     private llmDelegate: LlmDelegate | null;
+    private onDispatch?: (agentId: string) => void;
+    private onDispatchComplete?: (agentId: string, result: SubAgentResult) => void;
 
     constructor(delegate: LlmDelegate | null = null) {
         this.llmDelegate = delegate;
@@ -69,6 +72,15 @@ export class AgentPool {
      *  the delegate is not available at construction time. */
     setLlmDelegate(delegate: LlmDelegate): void {
         this.llmDelegate = delegate;
+    }
+
+    /** Set callbacks called before/after dispatch for lifecycle and telemetry hooks. */
+    setDispatchHooks(
+        onDispatch: (agentId: string) => void,
+        onDispatchComplete: (agentId: string, result: SubAgentResult) => void,
+    ): void {
+        this.onDispatch = onDispatch;
+        this.onDispatchComplete = onDispatchComplete;
     }
 
     /** Register a custom agent. Overwrites any existing agent with the same id. */
@@ -137,23 +149,22 @@ export class AgentPool {
         // ── Build prompt and generate ────────────────────────────────────────
         const systemPrompt = buildSystemPrompt(agent, request.context);
 
+        this.onDispatch?.(agent.agentId);
+
         try {
             const result = await this.llmDelegate.generateForRole(agent.role, {
                 message: request.goal,
                 conversation: [],
                 systemPrompt,
-            });
+            }, agent.agentId);
 
             if (!result) {
-                return failure(
-                    traceId,
-                    start,
-                    agent.agentId,
-                    `No model available for role: ${agent.role}`,
-                );
+                const fail = failure(traceId, start, agent.agentId, `No model available for role: ${agent.role}`);
+                this.onDispatchComplete?.(agent.agentId, fail);
+                return fail;
             }
 
-            return {
+            const success: SubAgentResult = {
                 ok: true,
                 content: result.content,
                 agentId: agent.agentId,
@@ -163,8 +174,12 @@ export class AgentPool {
                 traceId,
                 routing: result.routing,
             };
+            this.onDispatchComplete?.(agent.agentId, success);
+            return success;
         } catch (err: unknown) {
-            return failure(traceId, start, agent.agentId, String(err));
+            const fail = failure(traceId, start, agent.agentId, String(err));
+            this.onDispatchComplete?.(agent.agentId, fail);
+            return fail;
         }
     }
 }

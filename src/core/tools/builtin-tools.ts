@@ -10,6 +10,8 @@ import {
     NotesExtractionTool,
     TasksTimelineTool,
 } from "../../adapters/application/individual-capability-tools.js";
+import { NetworkTool } from "../../adapters/network/network-tool.js";
+import { VisionCaptureTool } from "../../adapters/system/vision-capture-tool.js";
 import type { Tool } from "./types.js";
 
 export function builtinTools(): Tool[] {
@@ -24,11 +26,15 @@ export function builtinTools(): Tool[] {
         new FileListTool(),
         // Protocol adapters
         new HttpRequestTool(),
+        // Network adapters
+        new NetworkTool(),
         // Application adapters
         new Neo4jQueryTool(),
         new EmailCapabilityTool(),
         new CalendarPlanningTool(),
         new NotesExtractionTool(),
         new TasksTimelineTool(),
+        // Vision adapters
+        new VisionCaptureTool(),
     ];
 }

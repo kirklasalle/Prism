@@ -71,6 +71,8 @@ PRISM moat components:
    - parity for developers and individuals, governance rigor for enterprises.
 4. **Evidence-gated delivery model**
    - milestone completion requires test, performance, and safety artifacts.
+5. **Intelligent multi-agent orchestration**
+   - governed agent lifecycle (ephemeral/semi-permanent/permanent) with per-agent model assignment, swarm coordination (4 topologies), and intelligent telemetry. No competitor offers governed lifecycle management with dynamic model switching and promotion intelligence at the agent level.
 
 ## 5. Capability Parity Program (Execution Milestones)
 
@@ -97,6 +99,15 @@ PRISM moat components:
 - parity claim traceability matrix,
 - investor and licensing-brand consistency checks,
 - go/no-go decision package.
+
+### M5: Agent Control & Swarm Intelligence
+
+- agent lifecycle management (ephemeral/semi-permanent/permanent),
+- per-agent model assignment with dynamic switching,
+- swarm orchestration across four topologies (mesh/star/pipeline/broadcast),
+- intelligent telemetry with promotion recommendations,
+- chat-to-agent routing (classifier-first intent detection),
+- dashboard Agent Control tab wiring with real data.
 
 ## 6. Key Risks and Mitigations
 

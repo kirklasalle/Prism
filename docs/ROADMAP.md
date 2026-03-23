@@ -47,16 +47,32 @@ Date: 2026-03-11
   - Developer Guide added
   - User Guide added
 - **Operator Dashboard UI enhancements (complete):**
-  - Tab-based navigation: Chat Interface, Provider & Settings, Tools & Plugins, Telemetry, Logs & Debug
+  - Tab-based navigation: Chat Interface, Provider & Settings, Tools & Plugins, Network, Telemetry, Logs & Debug
   - Collapsible panel system with persistent expand/collapse state and chevron indicators
   - Provider & Settings tab: Session Provider Assignment, Provider Configuration, Model Capability Matrix, Settings (runtime config), LLM Audit Trail with JSON/CSV export
   - Tools & Plugins tab with full inventories:
     - Tools panel: 19 built-in tools across System (7), Application (5), Knowledge (3), Integration (4) with risk-level and mutation badges
     - Plugins panel: 7 MCP server plugins (ids-mcp, web-search-mcp, ImpressionCore suite) with type and status badges
     - Utilities panel: 30 system utilities across 6 categories (Benchmarks, Operator Services, Memory, Activity, Replay, Configuration)
+  - Network tab with full network command governance:
+    - Network Tools panel: ~50 curated commands across Tier 1 (diagnostics), Tier 2 (config inspection), Tier 3 (mutating) with platform badges
+    - Network Settings panel: live interface data viewer (ipconfig/ifconfig)
+    - Network Telemetry panel: command execution counters, tier distribution, error rates
+    - Network Console panel: interactive command input with real-time output
+    - NetworkTool adapter (`network_exec`) with curated allowlist, blocked pattern safety, and per-command tier classification
+    - 3 new API endpoints: `/api/network/interfaces`, `/api/network/exec`, `/api/network/telemetry`
   - ARIA-compliant tab navigation for accessibility
   - WebSocket real-time event streaming
   - 38+ HTTP API routes for programmatic dashboard access
+- **Persistent Workspace (Prism_Refraction) (complete):**
+  - OS-aware workspace resolver (`workspace-resolver.ts`) — Windows/macOS/Linux detection with `PRISM_WORKSPACE_ROOT` override
+  - All SQLite stores, benchmarks, application tools, and MCP config use workspace paths
+  - Workspace manifest (`prism-workspace.json`) with version, profile, and platform tracking
+  - Structured subdirectories: `config/`, `artifacts/`, `data/`, `state/`, `characters/`, `logs/`
+  - Legacy path detection with migration notices
+  - Character briefs directory with JSON schema and example agent definitions
+  - `start_web.bat` workspace verification on startup
+  - Dashboard Settings panel shows active workspace root
 
 ## Next Steps
 
@@ -84,6 +100,26 @@ Date: 2026-03-11
     - parity claim traceability matrix
     - investor appendix and licensing-brand appendix
     - go/no-go evidence package and runbook update
+
+1. Agent Control & Swarm Intelligence (new — Phase D3)
+
+- Objective:
+  - Deliver a fully wired agent control system where the majority of tasks are dispatched through managed agents with intelligent lifecycle tracking and multi-agent swarm capabilities.
+- Core capabilities:
+  - Agent lifecycle management with three tiers: ephemeral (per-task, auto-reaped), semi-permanent (survives across tasks, idle-reaped), permanent (persists until manual stop, survives server restarts).
+  - Per-agent model assignment: dynamic provider/model override per agent, changeable at runtime without restart. Override precedence: agent > role > automatic tier selection.
+  - Intelligent telemetry: per-agent metrics, dispatch pattern detection over 1h/1d/7d windows, lifecycle promotion recommendations, model performance tracking per role.
+  - Swarm orchestration with four topologies: mesh (parallel sub-tasks), star (coordinator delegates to workers), pipeline (sequential handoff), broadcast (same prompt, best result selected).
+  - Chat-to-agent routing: classifier-first intent detection routes majority of tasks through specialized agents (coder, summarizer, planner, indexer, chat).
+  - Workspace persistence fix: error surfacing, write-then-verify, env var precedence correction.
+- Exit criteria:
+  - Agent lifecycle tests pass (spawn/stop/promote/reap/persist/restore)
+  - Swarm execution verified for all four topologies
+  - Telemetry producing actionable pattern insights and promotion recommendations
+  - Per-agent model assignment confirmed via dispatch telemetry
+  - Chat messages routed through agents by default
+  - Workspace change persists across server reboot
+  - Dashboard Agent Control tab fully wired (no mock handlers)
 
 1. Individual-native MVP execution (new)
 

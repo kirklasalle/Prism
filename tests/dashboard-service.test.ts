@@ -30,6 +30,7 @@ export async function testDashboardService(): Promise<void> {
             environmentProfile: "test",
             mode: "server",
             startedAt: new Date().toISOString(),
+            executionProfileSegment: "individual",
         },
         chatSessionStore,
         [
@@ -203,7 +204,7 @@ export async function testDashboardService(): Promise<void> {
     const telemetryService = new DashboardService(
         new ApprovalQueue(),
         telemetryBus,
-        { sessionId: "tel-session", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString() },
+        { sessionId: "tel-session", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString(), executionProfileSegment: "individual" },
         telemetryStore,
         [],
         0,
@@ -395,7 +396,7 @@ export async function testDashboardService(): Promise<void> {
     const packageService = new DashboardService(
         new ApprovalQueue(),
         packageBus,
-        { sessionId: "pkg-session", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString() },
+        { sessionId: "pkg-session", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString(), executionProfileSegment: "individual" },
         packageChatStore,
         [],
         0,
@@ -549,7 +550,7 @@ export async function testDashboardService(): Promise<void> {
     const reloadService = new DashboardService(
         new ApprovalQueue(),
         new ActivityBus(),
-        { sessionId: "pkg-reload", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString() },
+        { sessionId: "pkg-reload", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString(), executionProfileSegment: "individual" },
         reloadChatStore,
         [],
         0,

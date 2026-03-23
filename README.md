@@ -49,7 +49,13 @@ It is a next-generation agent operating system focused on five differentiators:
    - Tool contracts are treated as precision interfaces, not helper wrappers.
    - Safety constraints and rollback semantics are model-visible.
 
-5. **Trust-by-Design Telemetry**
+5. **Intelligent Multi-Agent Orchestration**
+   - Agents are first-class runtime entities with managed lifecycles (ephemeral, semi-permanent, permanent).
+   - Per-agent model assignment enables right-sizing: fast local models for classification, frontier models for complex reasoning.
+   - Swarm coordination enables parallel multi-agent goal completion under policy governance.
+   - Intelligent telemetry learns operational patterns and recommends agent lifecycle promotions.
+
+6. **Trust-by-Design Telemetry**
    - Structured activity events are hashed and persisted.
    - Quality gates are measurable, not anecdotal.
 
@@ -77,15 +83,23 @@ It is a next-generation agent operating system focused on five differentiators:
   - retries
   - step timeout
   - `always`, `on_failure`, and `on_timeout` fallback routing
+- **Agent Control & Intelligent Orchestration:**
+  - Agent lifecycle management with three tiers: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop)
+  - Per-agent model assignment: dynamic provider/model override per agent, hot-swappable at runtime
+  - Intelligent agent telemetry: pattern detection, role hotspot analysis, lifecycle promotion recommendations
+  - Chat-to-agent routing: classifier-first intent detection routes the majority of tasks through specialized agents (coder, summarizer, planner, indexer)
+  - Swarm orchestration: multi-agent goal completion with four topologies (mesh, star, pipeline, broadcast)
+  - Task decomposition with dependency-aware parallel batch execution
 - **Operator Dashboard** (`http://localhost:7070`):
-  - Tab-based navigation: Chat Interface, Provider & Settings, Tools & Plugins, Telemetry, Logs & Debug
+  - Tab-based navigation: Chat Interface, Provider & Settings, Tools & Plugins, Agentic Control, Computer Control, Workspace, Network, Telemetry, Logs & Debug
   - Collapsible panels with persistent expand/collapse state
   - Provider & Settings tab: Session Provider Assignment, Provider Configuration, Model Capability Matrix, Settings (runtime config), LLM Audit Trail (JSON/CSV export)
   - Tools & Plugins tab:
     - **Tools** — 19 built-in tools across System (7), Application (5), Knowledge (3), and Integration (4) categories with risk-level and mutation badges
     - **Plugins** — 7 MCP server plugins: ids-mcp, web-search-mcp, and ImpressionCore suite (eds, ipa, goliath, vrgc, dpa) with type and status badges
     - **Utilities** — 30 system utilities across Benchmarks & Qualification (11), Operator Services (5), Memory & Retrieval (5), Activity & Audit (3), Replay & Verification (3), Configuration (3)
-  - 38+ HTTP API routes for programmatic access
+  - Network tab: ~50 curated network commands (ipconfig, ping, tracert, netstat, netsh, arp, nslookup, route, net, etc.) with tier-based governance, live interface viewer, telemetry counters, and interactive console
+  - 41+ HTTP API routes for programmatic access
   - WebSocket for real-time event streaming
 
 ## Why this architecture is aligned with modern agent research
@@ -166,10 +180,26 @@ PRISM is intentionally built to remove those failure modes from the start.
 - `src/core/runtime`: orchestrator and workflow executor
 - `src/core/approval`: approval queue and HTTP service
 - `src/core/memory`: episodic/session/semantic memory + retrieval metrics
+- `src/core/agents`: agent pool, lifecycle manager, telemetry collector, swarm coordinator, agent router, task decomposer
+- `src/core/config`: workspace resolver, execution profiles, environment config
 - `src/adapters/system`: shell/filesystem tools
 - `src/adapters/protocol`: HTTP tool
 - `src/adapters/application`: Neo4j + memory query tools
+- `src/adapters/network`: curated network diagnostics and config tools
+- `characters/`: example agent character briefs (JSON)
 - `tests`: unit and integration tests, including workflow governance scenarios
+
+### Workspace (Prism_Refraction)
+
+All runtime data is stored outside the source tree in an OS-aware persistent workspace:
+
+| Platform | Default Path |
+|----------|-------------|
+| Windows  | `%USERPROFILE%\Documents\Prism_Refraction` |
+| macOS    | `~/Documents/Prism_Refraction` |
+| Linux    | `$XDG_DATA_HOME/Prism_Refraction` |
+
+Override with `PRISM_WORKSPACE_ROOT` env var. Subdirectories include `config/`, `artifacts/`, `data/`, `state/`, `characters/`, and `logs/`. See the [User Guide](docs/USER_GUIDE.md#6-workspace--persistence) for full layout.
 
 ## Run
 
@@ -180,9 +210,10 @@ PRISM is intentionally built to remove those failure modes from the start.
 3. Use the **Chat Interface** tab for conversational LLM interaction
 4. Use the **Provider & Settings** tab to configure LLM providers, review model capabilities, adjust runtime settings, and view the LLM Audit Trail
 5. Use the **Tools & Plugins** tab to browse all 19 built-in tools, 7 MCP plugins, and 30 system utilities
-6. Use the **Telemetry** tab for retrieval observability and performance metrics
-7. Use the **Logs & Debug** tab to inspect the activity event stream
-8. Use **Pending Approvals** to approve/deny Tier-3 requests
+6. Use the **Network** tab to run curated network diagnostics, view live interface data, and monitor network operations
+7. Use the **Telemetry** tab for retrieval observability and performance metrics
+8. Use the **Logs & Debug** tab to inspect the activity event stream
+9. Use **Pending Approvals** to approve/deny Tier-3 requests
 
 Optional startup preflight modes:
 

@@ -4,3 +4,4 @@ dist/
 prism-output/
 tmp/
 .venv/
+.prism-preferences.json

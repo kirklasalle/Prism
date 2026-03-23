@@ -106,6 +106,22 @@ Current implementation:
 5. Plugin/adaptor pack compatibility mismatch -> install blocked with structured policy reason
 6. Plugin/adaptor pack trust failure in Business profile -> enable blocked with audit event
 
+### Governance-critical agent control scenarios (Phase D3)
+
+1. Agent spawn with model override -> dispatch uses assigned model, telemetry confirms
+2. Agent promote ephemeral -> semi-permanent -> state persists across tasks within session
+3. Agent promote to permanent -> state persists across server restarts
+4. Agent demote permanent -> semi-permanent -> no longer restored on reboot
+5. Idle ephemeral agent -> reaped after configured timeout
+6. Per-agent model reassignment -> next dispatch uses new model immediately
+7. Swarm mesh topology -> all agents receive messages, results aggregated
+8. Swarm star topology -> coordinator dispatches to workers, collects results
+9. Swarm pipeline topology -> sequential handoff completes in order
+10. Swarm broadcast topology -> single message dispatched to all, results merged
+11. Swarm timeout -> running swarm stopped, partial results returned with failure status
+12. Chat-to-agent routing -> classifier determines intent, correct agent dispatched
+13. Telemetry promotion recommendation -> ephemeral agent exceeding threshold flagged
+
 ## Adapter Safety Regression Matrix (Phase D)
 
 ### System adapter: `shell_exec`
@@ -156,14 +172,14 @@ Additional minimum for parity-program promotion (Phase D2):
 
 - Profile-equivalence tests pass for capability availability (`Individual` == `Business` surface)
 - Governance-path tests pass for shell/container/plugin operations:
- 	- allow,
- 	- deny,
- 	- timeout,
- 	- revoke
+  - allow,
+  - deny,
+  - timeout,
+  - revoke
 - Execution mode qualification report generated for:
- 	- `fast`,
- 	- `balanced`,
- 	- `governed`
+  - `fast`,
+  - `balanced`,
+  - `governed`
 - Traceability matrix generated mapping parity claims to tests and artifacts
 
 ## Artifact Requirements Per Test Run
@@ -182,6 +198,15 @@ Parity-program artifact additions:
 - Governance reason-code samples for shell/container/plugin high-risk operations
 - Session lineage replay samples for terminal and container lifecycle events
 - Plugin/adaptor pack compatibility and trust-check evidence
+
+Additional minimum for agent control promotion (Phase D3):
+
+- Agent lifecycle tests pass (spawn/stop/promote/demote/reap/persist/restore)
+- Per-agent model assignment verified (override applied, telemetry confirms model)
+- Swarm orchestration tests pass for all four topologies (mesh/star/pipeline/broadcast)
+- Chat-to-agent routing tests pass (classifier-first intent detection)
+- Agent telemetry pattern detection samples generated
+- Dashboard Agent Control tab verified (real data, no mock handlers)
 
 ## Short-Term Additions (Remaining)
 

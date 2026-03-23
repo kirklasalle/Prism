@@ -450,20 +450,20 @@ PRISM reaches research-informed production maturity when:
 - True parallel execution via `Promise.allSettled()` in `Orchestrator.runDecomposed()`
 - Per-dispatch policy governance and activity tracing
 
-**Not yet implemented (swarm gaps):**
+**Implemented (Phase D3 — Agent Control & Swarm Intelligence):**
 
-1. Step result chaining — parallel batch outputs do not feed into dependent steps
-2. Dynamic agent lifecycle — agents are pre-registered, no runtime spawn/retire
-3. Inter-agent messaging — agents execute independently, coordination only via ActivityBus events
-4. Swarm-level governance — rollback and policy apply per-operation, not per-swarm
-5. Nested workflows — DAGs cannot invoke sub-DAGs or decomposed sub-plans
+1. Agent lifecycle management — ephemeral/semi-permanent/permanent tiers with spawn, stop, promote, demote, reap, persist, and restore
+2. Per-agent model assignment — dynamic LLM provider/model override per agent via `agentOverrides` in RoutingConfig, validated against model capability matrix
+3. Chat-to-agent routing — classifier-first intent detection routes majority of chat requests through specialized agents rather than direct LLM calls
+4. Swarm orchestration — four topologies (mesh, star, pipeline, broadcast) with coordinator lifecycle, timeout budgets, and per-step governance
+5. Intelligent telemetry — dispatch frequency analysis, latency distributions, promotion recommendations, efficiency pattern detection
+6. Dashboard wiring — real Agent Control tab with live data replacing mock handlers
 
-**Swarm roadmap path:**
+**Remaining swarm evolution (future phases):**
 
-- Phase 1: Wire step result chaining into `runDecomposed()` output→input mapping
-- Phase 2: Dynamic agent registration (spawn/retire agents at runtime via AgentPool)
-- Phase 3: Inter-agent messaging channels via ActivityBus event pub/sub
-- Phase 4: Swarm-level governance policies, budget constraints, and atomic swarm rollback
+1. Step result chaining — parallel batch outputs feeding into dependent steps via output→input mapping
+2. Nested workflows — DAGs invoking sub-DAGs or decomposed sub-plans
+3. Swarm-level atomic rollback — coordinated rollback across all swarm participants on failure
 
 ### 12.4 Synthesis: Governed Swarm Intelligence
 
@@ -474,5 +474,11 @@ PRISM reaches research-informed production maturity when:
 1. Autonomous Research Loop workflow template (from autoresearch pattern, governed by Prism policy)
 2. Campaign-scoped execution with budget constraints (time, cost, iteration count)
 3. Metric-driven rollback gates (compare step output vs. baseline, auto-decide keep/discard)
-4. Swarm result chaining (Phase 1 swarm gap closure)
+4. Swarm result chaining (output→input mapping across parallel batch boundaries)
 5. CCC pre-compilation of plan graphs (validated by Hermes compile-first architecture)
+
+**Competitive positioning (Phase D3):**
+
+- vs. AutoGen/CrewAI: PRISM adds governed lifecycle (ephemeral/semi-permanent/permanent), per-agent model assignment with dynamic switching, tiered policy enforcement per dispatch, and intelligent telemetry with promotion recommendations. AutoGen/CrewAI offer ungoverned multi-agent patterns without lifecycle management or model-level control.
+- vs. LangGraph: PRISM's swarm topologies (mesh/star/pipeline/broadcast) are first-class runtime primitives with timeout budgets and activity tracing, whereas LangGraph requires manual graph construction for equivalent coordination patterns.
+- vs. OpenClaw Agents: PRISM preserves full causal observability and approval gates for every agent dispatch, ensuring enterprise-grade auditability that OpenClaw's agent system does not provide.

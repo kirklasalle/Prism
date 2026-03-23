@@ -40,8 +40,41 @@ Design principle:
 - `src/core/runtime`: orchestrator and workflow execution
 - `src/core/approval`: approval queue/service
 - `src/core/memory`: episodic/session/semantic retrieval and metrics
-- `src/adapters/*`: system/protocol/application tool implementations
+- `src/core/config`: workspace resolver, execution profiles, environment config
+- `src/core/agents`: agent pool, agent lifecycle, agent types, agent router, swarm coordinator, telemetry collector
+- `src/core/operator`: dashboard service, LLM provider manager, agentic executor
+- `src/adapters/*`: system/protocol/application/network tool implementations
 - `tests`: unit and integration tests
+
+### 3.1 Workspace Resolution
+
+All runtime data (databases, artifacts, config) is stored outside the source tree in a persistent workspace directory resolved by `src/core/config/workspace-resolver.ts`.
+
+**Default locations:**
+
+| Platform | Path |
+|----------|------|
+| Windows  | `%USERPROFILE%\Documents\Prism_Refraction` |
+| macOS    | `~/Documents/Prism_Refraction` |
+| Linux    | `$XDG_DATA_HOME/Prism_Refraction` |
+
+Set `PRISM_WORKSPACE_ROOT` to override.
+
+**Key exports:**
+
+| Function | Purpose |
+|----------|---------|
+| `resolveWorkspaceRoot()` | Returns the absolute workspace path (cached) |
+| `workspacePath(...segments)` | Join helper for workspace-relative paths |
+| `workspaceDbPath()` | SQLite database path |
+| `workspaceArtifactsDir()` | Benchmarks, releases, contracts directory |
+| `workspaceDataDir()` | Application tool data (tasks/notes/email/calendar) |
+| `workspaceConfigDir()` | MCP settings, runtime config |
+| `workspaceCharactersDir()` | Agent character brief definitions |
+| `ensureWorkspaceStructure(profile)` | Creates all subdirs + writes manifest |
+| `detectLegacyPaths()` | Returns list of CWD-relative legacy paths for migration notices |
+
+All per-artifact env var overrides (`PRISM_DATA_DIR`, `PRISM_PERF_OUTPUT_PATH`, `PRISM_MCP_SETTINGS`, etc.) still take precedence over workspace defaults.
 
 ## 4. Runtime Control Flow (Authoritative)
 
@@ -136,6 +169,7 @@ Current tabs:
 { id: 'chat', label: 'Chat Interface' }
 { id: 'provider', label: 'Provider & Settings' }
 { id: 'tools', label: 'Tools & Plugins' }
+{ id: 'network', label: 'Network' }
 { id: 'telemetry', label: 'Telemetry' }
 { id: 'logs', label: 'Logs & Debug' }
 ```
@@ -214,6 +248,84 @@ The dashboard exposes 38+ HTTP API routes. Key route groups:
 ### 7.8 WebSocket
 
 The dashboard uses a WebSocket connection for real-time event streaming. The client connects on page load and receives push updates for new activity events, approval state changes, and provider switch notifications without polling.
+
+## 7A. Agent Lifecycle & Swarm Architecture
+
+### 7A.1 Agent lifecycle
+
+Agents in PRISM have three lifecycle states:
+
+- **Ephemeral**: spawned for a single task, automatically reaped after completion or idle timeout.
+- **Semi-permanent**: promoted from ephemeral based on dispatch frequency or operator action. Survives across tasks within a session but not across server restarts.
+- **Permanent**: persisted to workspace and restored on boot. The 6 built-in agents (classifier, chat, summarizer, planner, coder, indexer) are permanent by default.
+
+Lifecycle transitions: `spawn()` → ephemeral, `promote()` → semi-permanent or permanent, `demote()` → lower tier, `stop()` → removed, `reap()` → idle cleanup.
+
+Key module: `src/core/agents/agent-lifecycle.ts` (`AgentLifecycleManager`)
+
+### 7A.2 Per-agent model assignment
+
+Every agent can be assigned a specific LLM provider and model via `setAgentModelOverride(agentId, provider, model)` on the `LlmProviderManager`. When `AgentPool.dispatch()` is called, it passes the `agentId` to `generateForRole()`, which checks `agentOverrides[agentId]` before falling back to role-based or automatic selection.
+
+Models can be switched dynamically at any time. The model capability matrix validates that the assigned model meets the minimum tier requirement for the agent's `TaskRole`.
+
+Key module: `src/core/operator/llm-provider-manager.ts` (agentOverrides in RoutingConfig)
+
+### 7A.3 Chat-to-agent routing
+
+Chat messages are routed through agents rather than going directly to an LLM provider. The flow:
+
+1. User message enters `generateAssistantReply()`
+2. `AgentRouter.classify()` sends the message to the classifier agent to determine intent
+3. Based on classification, the router selects the appropriate agent (chat, coder, summarizer, etc.)
+4. `AgentPool.dispatch()` executes with the selected agent and its model assignment
+5. If the task is complex, `TaskDecomposer` breaks it into sub-agent steps executed in parallel batches
+
+Key module: `src/core/agents/agent-router.ts` (`AgentRouter`)
+
+### 7A.4 Swarm orchestration
+
+Swarms coordinate multiple agents toward a shared goal. Four topologies are supported:
+
+| Topology | Pattern | Use Case |
+| --- | --- | --- |
+| mesh | All-to-all peer communication | Collaborative brainstorming, consensus |
+| star | Coordinator → N workers | Divide-and-conquer, map-reduce |
+| pipeline | Sequential handoff A → B → C | Multi-stage processing, refinement chains |
+| broadcast | One message → all agents, aggregate | Parallel evaluation, voting |
+
+Swarm lifecycle: `create` → `start` → running (with step tracking) → `complete` or `failed`. Each swarm has a timeout budget and per-step governance via the policy engine.
+
+Key module: `src/core/agents/swarm-coordinator.ts` (`SwarmCoordinator`)
+
+### 7A.5 Intelligent telemetry
+
+The `AgentTelemetryCollector` captures per-dispatch metrics and derives operational intelligence:
+
+- Dispatch frequency histograms per agent/role
+- Latency distributions (p50/p95/p99) per agent and model
+- Token usage tracking per dispatch
+- Promotion recommendations for ephemeral agents exceeding dispatch thresholds
+- Efficiency pattern detection (bottlenecks, underutilized agents)
+
+Telemetry is emitted to the ActivityBus on the `"agent"` layer and persisted for historical analysis.
+
+Key module: `src/core/agents/agent-telemetry-collector.ts` (`AgentTelemetryCollector`)
+
+### 7A.6 API routes (Agent Control)
+
+| Route | Method | Purpose |
+| --- | --- | --- |
+| `/api/agents` | GET | List all agents with lifecycle state, model assignment, and telemetry summary |
+| `/api/agents/launch` | POST | Spawn a new agent instance with role, model override, and lifecycle tier |
+| `/api/agents/stop` | POST | Stop an agent by ID |
+| `/api/agents/:id/model` | POST | Reassign model for an agent |
+| `/api/agents/:id/promote` | POST | Promote agent lifecycle tier |
+| `/api/agents/:id/demote` | POST | Demote agent lifecycle tier |
+| `/api/agents/telemetry` | GET | Retrieve telemetry summary and recommendations |
+| `/api/swarms/create` | POST | Create a new swarm with topology, agents, and goal |
+| `/api/swarms` | GET | List active swarms with status |
+| `/api/swarms/:id/stop` | POST | Stop a running swarm |
 
 ## 8. Safety and Governance Standards
 
@@ -365,6 +477,11 @@ Profile-level SLO policy:
 7. Container orchestration adapter
 8. Dynamic tool staging pipeline
 9. Signed adapter pack framework
+10. Agent lifecycle manager (spawn/stop/promote/reap/persist)
+11. Per-agent model assignment and dynamic switching
+12. Chat-to-agent routing (classifier-first)
+13. Swarm coordinator (mesh/star/pipeline/broadcast)
+14. Intelligent agent telemetry and pattern detection
 
 ## 14. Mid-Term Novel System Tracks
 

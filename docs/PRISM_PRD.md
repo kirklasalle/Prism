@@ -297,6 +297,7 @@ The dashboard must provide a tab-based navigation system with the following tabs
 | Chat Interface | Real-time conversational interface with session-scoped LLM provider binding |
 | Provider & Settings | LLM provider configuration, model capability matrix, runtime settings, and audit trail |
 | Tools & Plugins | Inventory of built-in tools, registered MCP plugins, and system utilities |
+| Network | Curated network command execution with tier-based governance, live interface viewer, telemetry, and interactive console |
 | Telemetry | Runtime telemetry, retrieval observability, and performance metrics |
 | Logs & Debug | Activity event stream, error inspection, and debug-level trace output |
 
@@ -344,7 +345,29 @@ Acceptance criteria:
 - Utilities panel displays all 30 registered utilities across 6 categories.
 - All panels support collapsible headers.
 
-#### 8.7.5 Dashboard API surface
+#### 8.7.5 Network tab panels
+
+The Network tab must contain four panels:
+
+1. **Network Tools** — Curated catalog of ~50 network commands organized by security tier (Tier 1: read-only diagnostics, Tier 2: config inspection, Tier 3: mutating operations). Each command entry displays name, description, tier badge (green/amber/red), and platform badge (WIN/LINUX/CROSS).
+
+2. **Network Settings** — Live network interface data viewer. Users can refresh to query system interfaces and display adapter details (IP address, MAC, DHCP, DNS, gateway).
+
+3. **Network Telemetry** — Network operation metrics: total commands executed, per-tier counts, error count, and most recent command.
+
+4. **Network Console** — Interactive command console for executing network commands in real time. Only commands from the curated allowlist are permitted; blocked patterns are rejected.
+
+Acceptance criteria:
+
+- Network Tools panel displays all curated commands with tier and platform badges.
+- Network Settings panel queries and displays live interface data on user request.
+- Network Telemetry panel updates counters after each command execution.
+- Network Console accepts commands, validates against allowlist, and displays structured output.
+- All panels support collapsible headers.
+- NetworkTool adapter enforces curated allowlist with blocked pattern safety.
+- Three API endpoints operational: `GET /api/network/interfaces`, `POST /api/network/exec`, `GET /api/network/telemetry`.
+
+#### 8.7.6 Dashboard API surface
 
 The dashboard must expose a minimum set of HTTP API routes for programmatic access:
 
@@ -401,6 +424,95 @@ Acceptance criteria:
 - execution mode qualification results documented for `fast`, `balanced`, and `governed`.
 
 ## 9. Quality Gates (SLO/SLA Targets)
+
+### 8.8 Agent Control & Swarm Orchestration Requirements (Phase D3)
+
+PRISM must deliver a fully wired agent control system where the majority of tasks are dispatched through managed agents with intelligent lifecycle tracking and multi-agent swarm capabilities.
+
+#### 8.8.1 Agent lifecycle management
+
+- Support three lifecycle tiers: ephemeral (spawned per-task, auto-reaped after idle timeout), semi-permanent (survives across tasks, reaped after extended idle), permanent (persists until manually stopped).
+- Agents must persist across server restarts: permanent and semi-permanent agents serialized to workspace `state/agent-registry.json` and restored on boot.
+- Idle reaper runs on configurable interval (default 60s) to garbage-collect expired ephemeral and semi-permanent agents.
+- All lifecycle transitions (spawn, stop, promote, reap) must emit ActivityBus events on the `agent` layer.
+
+Acceptance criteria:
+
+- spawn/stop/promote operations functional via dashboard and API,
+- permanent agents survive server restart,
+- idle reaper correctly garbage-collects expired agents.
+
+#### 8.8.2 Per-agent model assignment
+
+- Each agent instance supports an optional model override (`providerId` + `model`).
+- Override precedence: agent-specific override > role-based routing override > automatic tier selection.
+- Model assignments are dynamically changeable at runtime without agent restart.
+- Model override changes emit audit events to ActivityBus.
+
+Acceptance criteria:
+
+- per-agent model override applied on next dispatch,
+- clearing override reverts to role-based auto-selection,
+- dashboard shows current model assignment per agent.
+
+#### 8.8.3 Intelligent agent telemetry
+
+- Per-agent metrics: tasks completed/failed, average response time, model usage history, error patterns, role distribution.
+- Global metrics: total dispatches, active agent count, role hotspots (dispatches per role with avg latency and best model).
+- Pattern detection: track dispatch frequency per role over 1h/1d/7d sliding windows.
+- Promotion recommendations: if a role dispatches above threshold consistently, recommend promoting its agent from ephemeral to semi-permanent; if semi-permanent alive >7d, recommend permanent.
+- Model performance tracking: if model X is consistently faster/better for role Y, recommend override.
+
+Acceptance criteria:
+
+- telemetry summary available via API and dashboard,
+- pattern insights surface after sustained dispatch activity,
+- promotion recommendations appear with one-click action in dashboard.
+
+#### 8.8.4 Swarm orchestration
+
+- Support four swarm topologies:
+  - **Mesh**: all agents work sub-tasks in parallel, results merged.
+  - **Star**: coordinator agent delegates to worker agents, collects/merges results.
+  - **Pipeline**: sequential handoff — output of agent A becomes input of agent B.
+  - **Broadcast**: same prompt to all agents, best result selected.
+- Swarm creation specifies goal, topology, agent count, and optional role distribution.
+- Swarm agents default to ephemeral lifecycle; dissolved when swarm completes.
+- All swarm operations emit ActivityBus events for governance and telemetry.
+
+Acceptance criteria:
+
+- swarms creatable via dashboard and API,
+- all four topologies execute correctly,
+- swarm dissolution stops all member agents and collects results.
+
+#### 8.8.5 Chat-to-agent routing
+
+- The majority of chat tasks must be dispatched through specialized agents rather than direct LLM calls.
+- Classification-first routing: a fast classifier agent (T1/T2 model) determines intent before routing.
+- Routing targets: code requests → coder agent, summaries → summarizer, complex multi-step → TaskDecomposer → ephemeral swarm, memory/search → indexer, general → chat.
+- Fallback to direct LLM if agent dispatch fails.
+
+Acceptance criteria:
+
+- chat messages routed through agents by default,
+- telemetry shows per-agent dispatch distribution,
+- complex tasks decomposed and executed via multi-agent plans.
+
+#### 8.8.6 Workspace persistence reliability
+
+- Workspace location changes must persist reliably across server reboots.
+- Write failures must be surfaced to the operator (not silently swallowed).
+- Write-then-verify: after persisting preferences, immediately read back to confirm.
+- Environment variable override must not silently override newer user preferences.
+
+Acceptance criteria:
+
+- workspace change → restart → new location loads,
+- write failure produces visible error in dashboard,
+- preferences file verified after write.
+
+## 9-continued. Quality Gates (SLO/SLA Targets)
 
 | Domain | Metric | Target |
 | --- | --- | --- |
@@ -478,6 +590,16 @@ No promotion to next maturity ring unless:
 - implement dynamic staged tool path with contract extraction and tier routing
 - implement adapter/plugin pack manifest compatibility and trust policy behavior
 - implement governance-path and profile-equivalence test coverage
+
+### Phase D3 (parallel execution track): Agent Control & Swarm Intelligence
+
+- implement agent lifecycle management (ephemeral/semi-permanent/permanent tiers)
+- implement per-agent model assignment with dynamic runtime switching
+- implement intelligent agent telemetry with pattern detection and promotion recommendations
+- implement swarm coordinator with four topologies (mesh/star/pipeline/broadcast)
+- implement chat-to-agent routing (classifier-first, majority of tasks through agents)
+- implement workspace persistence reliability fix
+- wire Agent Control dashboard tab with real data (replace mock handlers)
 
 ### Phase E (novel systems activation)
 

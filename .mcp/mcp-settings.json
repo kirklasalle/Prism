@@ -1,74 +1,74 @@
 {
   "mcpServers": {
     "ids-mcp": {
-      "command": "python",
+      "command": "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
       "args": [
         "D:\\Projects\\impressioncore\\.mcp\\ids-mcp\\server_ai_enhanced.py"
       ],
       "cwd": "D:\\Projects\\impressioncore\\.mcp\\ids-mcp",
       "env": {
-        "PYTHONPATH": "D:\\Projects\\impressioncore\\.venv310\\Lib\\site-packages;D:\\Projects\\impressioncore\\.mcp\\ids-mcp"
+        "PYTHONPATH": "D:\\Projects\\Prism\\.venv\\Lib\\site-packages;D:\\Projects\\impressioncore\\.mcp\\ids-mcp"
       }
     },
     "impressioncore-eds": {
-      "command": "python",
+      "command": "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
       "args": [
         "D:\\Projects\\impressioncore\\.mcp\\impressioncore-eds\\server_enhanced.py"
       ],
       "cwd": "D:\\Projects\\impressioncore\\.mcp\\impressioncore-eds",
       "env": {
-        "PYTHONPATH": "D:\\Projects\\impressioncore\\.venv310\\Lib\\site-packages"
+        "PYTHONPATH": "D:\\Projects\\Prism\\.venv\\Lib\\site-packages"
       }
     },
     "impressioncore-ipa": {
-      "command": "python",
+      "command": "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
       "args": [
         "D:\\Projects\\impressioncore\\.mcp\\impressioncore-ipa\\server_ultimate.py"
       ],
       "cwd": "D:\\Projects\\impressioncore\\.mcp\\impressioncore-ipa",
       "env": {
-        "PYTHONPATH": "D:\\Projects\\impressioncore\\.venv310\\Lib\\site-packages"
+        "PYTHONPATH": "D:\\Projects\\Prism\\.venv\\Lib\\site-packages"
       }
     },
     "impressioncore-goliath": {
-      "command": "python",
+      "command": "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
       "args": [
         "D:\\Projects\\impressioncore\\.mcp\\impressioncore-goliath\\server.py"
       ],
       "cwd": "D:\\Projects\\impressioncore\\.mcp\\impressioncore-goliath",
       "env": {
         "GOLIATH_DEBUG": "1",
-        "PYTHONPATH": "D:\\Projects\\impressioncore\\.venv310\\Lib\\site-packages;D:\\Projects\\impressioncore\\.mcp\\impressioncore-goliath"
+        "PYTHONPATH": "D:\\Projects\\Prism\\.venv\\Lib\\site-packages;D:\\Projects\\impressioncore\\.mcp\\impressioncore-goliath"
       }
     },
     "impressioncore-vrgc": {
-      "command": "python",
+      "command": "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
       "args": [
         "D:\\Projects\\impressioncore\\.mcp\\impressioncore-vrgc\\server_enhanced.py"
       ],
       "cwd": "D:\\Projects\\impressioncore\\.mcp\\impressioncore-vrgc",
       "env": {
-        "PYTHONPATH": "D:\\Projects\\impressioncore\\.venv310\\Lib\\site-packages"
+        "PYTHONPATH": "D:\\Projects\\Prism\\.venv\\Lib\\site-packages"
       }
     },
     "impressioncore-dpa": {
-      "command": "python",
+      "command": "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
       "args": [
         "D:\\Projects\\impressioncore\\.mcp\\impressioncore-dpa\\server.py"
       ],
       "cwd": "D:\\Projects\\impressioncore\\.mcp\\impressioncore-dpa",
       "env": {
-        "PYTHONPATH": "D:\\Projects\\impressioncore\\.venv310\\Lib\\site-packages"
+        "PYTHONPATH": "D:\\Projects\\Prism\\.venv\\Lib\\site-packages"
       }
     },
     "web-search-mcp": {
-      "command": "python",
+      "command": "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
       "args": [
         "D:\\Projects\\impressioncore\\.mcp\\web-search-mcp\\server.py"
       ],
       "cwd": "D:\\Projects\\impressioncore\\.mcp\\web-search-mcp",
       "env": {
-        "PYTHONPATH": "D:\\Projects\\impressioncore\\.venv310\\Lib\\site-packages"
+        "PYTHONPATH": "D:\\Projects\\Prism\\.venv\\Lib\\site-packages"
       }
     }
   }

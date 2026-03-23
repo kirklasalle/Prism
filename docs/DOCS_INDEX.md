@@ -37,3 +37,20 @@
 12. PHASE_EXECUTION_PLAN.md
 13. TEST_STRATEGY.md
 14. PRODUCTION_RELEASE_RUNBOOK.md
+
+## Phase D3 Agent Control & Swarm Intelligence
+
+The following documents have been updated to reflect Phase D3 capabilities:
+
+- PRISM_PRD.md §8.8: Agent Control & Swarm Orchestration requirements
+- DEVELOPER_GUIDE.md §7A: Agent Lifecycle & Swarm Architecture
+- USER_GUIDE.md §5.6: Agentic Control tab
+- PRISM_RESEARCH_DOCUMENTATION.md §12.3–12.4: Swarm implementation status and competitive positioning
+- ROADMAP.md: Phase D3 entry
+- PRISM_GAP_ANALYSIS.md: Gap 5 + Milestone M5
+- PHASE_EXECUTION_PLAN.md: Phase D3 scope and gate evidence
+- TEST_STRATEGY.md: Phase D3 governance scenarios and release gates
+- REQUIREMENTS_TRACEABILITY_MATRIX.md: D3-R1 through D3-R8
+- INVESTOR_APPENDIX_PARITY.md: Moat component 5 + Milestone M5
+- LICENSING_BRAND_APPENDIX.md: Agent Orchestration Package
+- INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md: Layer B agent orchestration

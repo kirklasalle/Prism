@@ -28,6 +28,20 @@ import { DashboardService, type DashboardAction } from "./core/operator/dashboar
 import { SelfReviewScheduler } from "./core/operator/self-review-scheduler.js";
 import { McpClientAdapter } from "./adapters/protocol/mcp-client-tool.js";
 import { AgentPool } from "./core/agents/agent-pool.js";
+import { AgentLifecycleManager } from "./core/agents/agent-lifecycle.js";
+import { AgentTelemetryCollector } from "./core/agents/agent-telemetry-collector.js";
+import { AgentRouter } from "./core/agents/agent-router.js";
+import { SwarmCoordinator } from "./core/agents/swarm-coordinator.js";
+import type { DispatchTelemetryRecord, SubAgentResult } from "./core/agents/agent-types.js";
+import {
+    ensureWorkspaceStructure,
+    resolveWorkspaceRoot,
+    workspaceDbPath,
+    workspacePath,
+    workspaceConfigDir,
+    workspaceArtifactsDir,
+    detectLegacyPaths,
+} from "./core/config/workspace-resolver.js";
 
 async function main(): Promise<void> {
     const runtimeMode = resolveRuntimeMode(process.env.PRISM_MODE ?? process.argv[2]);
@@ -36,17 +50,30 @@ async function main(): Promise<void> {
         process.env.PRISM_ENV_PROFILE ?? (process.env.CI ? "staging" : "dev"),
     );
     const retrievalAlertProfile = resolveRetrievalAlertProfile(environmentProfile);
+
+    // Initialize persistent workspace
+    ensureWorkspaceStructure(environmentProfile);
+    const wsRoot = resolveWorkspaceRoot();
+    const dbPath = workspaceDbPath();
+    const legacy = detectLegacyPaths();
+    if (legacy.found) {
+        console.log(
+            `[PRISM][workspace] Legacy CWD-relative paths detected: ${legacy.paths.join(", ")}. ` +
+            `Workspace is now at: ${wsRoot}`,
+        );
+    }
+
     const sessionId = randomUUID();
     const activityBus = new ActivityBus();
-    const sqliteStore = new SqliteActivityStore("prism-activity.db");
+    const sqliteStore = new SqliteActivityStore(dbPath);
     const episodicMemory = new EpisodicMemory(600);
     const metricsCollector = new RetrievalMetricsCollector(1000, 100, {
         ...withRetrievalAlertPolicyProfile(retrievalAlertProfile),
     });
     const semanticIndex = new SemanticMemoryIndex();
-    const retrievalDashboardStore = new RetrievalDashboardStore("prism-activity.db");
-    const sessionMemory = new SessionMemoryStore("prism-activity.db");
-    const chatSessionStore = new ChatSessionStore("prism-activity.db");
+    const retrievalDashboardStore = new RetrievalDashboardStore(dbPath);
+    const sessionMemory = new SessionMemoryStore(dbPath);
+    const chatSessionStore = new ChatSessionStore(dbPath);
     const approvalQueue = new ApprovalQueue();
     const startedAt = new Date().toISOString();
     activityBus.subscribe(new ConsoleActivitySubscriber());
@@ -65,12 +92,12 @@ async function main(): Promise<void> {
         registry.register(tool);
     }
 
-    // Load MCP tools from .mcp/mcp-settings.json if present
+    // Load MCP tools from workspace config or CWD fallback
     const mcpAdapter = new McpClientAdapter();
-    const mcpSettingsPath = join(
-        process.cwd(),
-        process.env.PRISM_MCP_SETTINGS ?? ".mcp/mcp-settings.json",
-    );
+    const mcpSettingsPath = process.env.PRISM_MCP_SETTINGS
+        ?? (existsSync(join(workspaceConfigDir(), "mcp-settings.json"))
+            ? join(workspaceConfigDir(), "mcp-settings.json")
+            : join(process.cwd(), ".mcp/mcp-settings.json"));
     if (existsSync(mcpSettingsPath)) {
         try {
             const mcpResult = await mcpAdapter.loadAndRegister(mcpSettingsPath, registry);
@@ -103,6 +130,7 @@ async function main(): Promise<void> {
             environmentProfile,
             mode: runtimeMode,
             startedAt,
+            executionProfileSegment: executionProfile.segment,
         },
         chatSessionStore,
         dashboardActions,
@@ -111,15 +139,116 @@ async function main(): Promise<void> {
         retrievalDashboardStore,
         undefined,
         sqliteStore,
+        undefined,
+        undefined,
+        registry,
     );
 
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
-    const agentPool = new AgentPool(dashboardService.getLlmDelegate());
+    const llmDelegate = dashboardService.getLlmDelegate();
+    const agentTelemetry = new AgentTelemetryCollector();
+    const agentLifecycle = new AgentLifecycleManager({
+      onSpawn: (inst) => {
+        activityBus.emit({
+          sessionId, layer: "agent", operation: "agent.spawned",
+          status: "succeeded", details: { agentId: inst.agentId, role: inst.role, lifecycle: inst.lifecycle },
+        });
+      },
+      onStop: (agentId) => {
+        activityBus.emit({
+          sessionId, layer: "agent", operation: "agent.stopped",
+          status: "succeeded", details: { agentId },
+        });
+      },
+      onPromote: (agentId, from, to) => {
+        activityBus.emit({
+          sessionId, layer: "agent", operation: "agent.promoted",
+          status: "succeeded", details: { agentId, from, to },
+        });
+      },
+      onReap: (agentId) => {
+        activityBus.emit({
+          sessionId, layer: "agent", operation: "agent.reaped",
+          status: "succeeded", details: { agentId },
+        });
+      },
+    });
+
+    // Restore persisted agents from workspace
+    try {
+      const persistPath = workspacePath("state", "agents.json");
+      const { readFileSync } = await import("node:fs");
+      if (existsSync(persistPath)) {
+        const persisted = JSON.parse(readFileSync(persistPath, "utf-8"));
+        if (Array.isArray(persisted)) {
+          agentLifecycle.restoreFromPersisted(persisted);
+          console.log(`[PRISM][agents] Restored ${persisted.length} persisted agent(s)`);
+        }
+      }
+    } catch {
+      // No persisted agents or parse error — continue with defaults
+    }
+
+    // Sync lifecycle model overrides to LLM routing config
+    const llmProviders = dashboardService.getLlmProviderManager();
+    for (const inst of agentLifecycle.list()) {
+      if (inst.modelOverride) {
+        llmProviders.setAgentModelOverride(inst.agentId, inst.modelOverride.providerId, inst.modelOverride.model);
+      }
+    }
+
+    const agentPool = new AgentPool(llmDelegate);
+
+    // Register all lifecycle agents in the pool
+    for (const inst of agentLifecycle.list()) {
+      agentPool.register({ agentId: inst.agentId, role: inst.role, description: inst.description, systemContext: inst.systemContext });
+    }
+
+    // Wire dispatch hooks for lifecycle tracking and telemetry
+    agentPool.setDispatchHooks(
+      (agentId) => agentLifecycle.recordDispatch(agentId),
+      (agentId, result: SubAgentResult) => {
+        agentLifecycle.recordDispatchComplete(agentId);
+        const inst = agentLifecycle.get(agentId);
+        agentTelemetry.record({
+          agentId,
+          role: inst?.role ?? "chat",
+          model: result.model ?? "unknown",
+          providerId: result.routing?.providerId ?? "unknown",
+          durationMs: result.durationMs,
+          ok: result.ok,
+          timestamp: Date.now(),
+        });
+      },
+    );
+
+    const swarmCoordinator = new SwarmCoordinator(agentPool, (swarm) => {
+      activityBus.emit({
+        sessionId, layer: "agent", operation: "swarm.updated",
+        status: "succeeded", details: { swarmId: swarm.swarmId, state: swarm.state, topology: swarm.topology },
+      });
+    });
+
+    const agentRouter = new AgentRouter(agentPool, llmDelegate);
+
+    // Wire agent control into dashboard
+    dashboardService.setAgentControl({
+      lifecycle: agentLifecycle,
+      telemetry: agentTelemetry,
+      swarm: swarmCoordinator,
+      pool: agentPool,
+      router: agentRouter,
+    });
+
+    // Start ephemeral agent reaper
+    agentLifecycle.startReaper();
+
     orchestrator.setAgentPool(agentPool);
     const selfReviewScheduler = new SelfReviewScheduler({
         activityBus,
         sessionId,
         environmentProfile,
+        outputDir: workspacePath("artifacts", "self-review"),
         intervalsMs: {
             daily: resolveIntervalMs(process.env.PRISM_SELF_REVIEW_DAILY_MS, 24 * 60 * 60 * 1000),
             weekly: resolveIntervalMs(process.env.PRISM_SELF_REVIEW_WEEKLY_MS, 7 * 24 * 60 * 60 * 1000),
@@ -162,6 +291,17 @@ async function main(): Promise<void> {
 
         console.log("\nPRISM server mode is running. Open the dashboard in your browser.");
         await waitForShutdown(async () => {
+            // Persist agent state before shutdown
+            try {
+                const { writeFileSync, mkdirSync } = await import("node:fs");
+                const persistDir = workspacePath("state");
+                mkdirSync(persistDir, { recursive: true });
+                const persistPath = workspacePath("state", "agents.json");
+                writeFileSync(persistPath, JSON.stringify(agentLifecycle.serializePersistent(), null, 2));
+            } catch {
+                // Best-effort persistence
+            }
+            agentLifecycle.stopReaper();
             selfReviewScheduler.stop();
             mcpAdapter.disconnectAll();
             sqliteStore.close();

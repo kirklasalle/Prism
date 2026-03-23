@@ -2,8 +2,20 @@ import type { ProviderSecretStore } from "./provider-secret-store.js";
 import {
     resolveProfile,
     selectModelForRole,
+    selectModelForModality,
+    getModalitySummary,
+    detectRequestModality,
     buildAdaptiveParams,
     buildAdaptiveSystemPrompt,
+    getRoleRequirements,
+    getKnownProfiles,
+    registerModelProfile,
+    updateModelProfile,
+    removeModelProfile,
+    getRuntimeProfiles,
+    loadRuntimeProfiles,
+    ALL_TASK_ROLES,
+    ALL_MODALITIES,
 } from "./model-capability-matrix.js";
 import type {
     TaskRole,
@@ -11,9 +23,26 @@ import type {
     ModelRouterSelection,
     AdaptivePromptParams,
     ModelCapabilityProfile,
+    ModelModality,
+    ModalityDetectionInput,
 } from "./model-capability-matrix.js";
 
-export type { TaskRole, ModelRouterSelection, AdaptivePromptParams, ModelCapabilityProfile };
+export type RoutingStrategy = "single" | "multi" | "modality";
+
+export interface RoutingOverrideEntry {
+    providerId: string;
+    model: string;
+}
+
+export interface RoutingConfig {
+    strategy: RoutingStrategy;
+    roleOverrides: Record<string, RoutingOverrideEntry | null>;
+    agentOverrides: Record<string, RoutingOverrideEntry | null>;
+    modalityOverrides: Record<string, RoutingOverrideEntry | null>;
+    preferredModality: string | null;
+}
+
+export type { TaskRole, ModelRouterSelection, AdaptivePromptParams, ModelCapabilityProfile, ModelModality };
 
 export type PrismLlmProviderId =
     | "openai" | "anthropic" | "ollama" | "custom"
@@ -77,15 +106,60 @@ interface ProviderSettings {
 
 interface LlmGenerationInput {
     message: string;
-    conversation: Array<{ role: "user" | "assistant" | "system"; content: string }>;
+    conversation: Array<{
+        role: "user" | "assistant" | "system" | "tool";
+        content: string | LlmContentPart[];
+        tool_call_id?: string;
+        tool_calls?: LlmToolCall[];
+    }>;
     systemPrompt: string;
+    tools?: LlmToolDefinition[];
+    tool_choice?: "auto" | "none" | "required";
+    stream?: boolean;
 }
 
 interface LlmGenerationOutput {
     providerId: PrismLlmProviderId;
     model: string;
     content: string;
+    toolCalls?: LlmToolCall[];
+    stopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop";
 }
+
+export interface LlmToolDefinition {
+    name: string;
+    description: string;
+    parameters: {
+        type: "object";
+        properties: Record<string, LlmToolParameterSchema>;
+        required?: string[];
+    };
+}
+
+export interface LlmToolParameterSchema {
+    type: string;
+    description?: string;
+    enum?: string[];
+    items?: LlmToolParameterSchema;
+}
+
+export interface LlmToolCall {
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+}
+
+export interface LlmContentPart {
+    type: "text" | "image_url";
+    text?: string;
+    image_url?: { url: string; detail?: "auto" | "low" | "high" };
+}
+
+export type LlmStreamChunk =
+    | { type: "text_delta"; text: string }
+    | { type: "tool_call_start"; id: string; name: string }
+    | { type: "tool_call_delta"; id: string; arguments: string }
+    | { type: "done"; stopReason: string };
 
 const OPENAI_DEFAULT_MODELS = [
     "gpt-4.1",
@@ -149,6 +223,13 @@ export class LlmProviderManager {
     private readonly persistedSettings = new Map<PrismLlmProviderId, PersistedProviderSettings>();
     private activeProviderId: PrismLlmProviderId | null;
     private activeModel: string | null;
+    private routingConfig: RoutingConfig = {
+        strategy: "single",
+        roleOverrides: {},
+        agentOverrides: {},
+        modalityOverrides: {},
+        preferredModality: null,
+    };
 
     constructor(
         private readonly env: NodeJS.ProcessEnv = process.env,
@@ -453,18 +534,15 @@ export class LlmProviderManager {
         const adaptiveParams = buildAdaptiveParams(profile);
 
         if (catalog.activeProviderId === "anthropic") {
-            const content = await this.generateWithAnthropic(settings, catalog.activeModel, input);
-            return { providerId: settings.id, model: catalog.activeModel, content };
+            return this.generateWithAnthropic(settings, catalog.activeModel, input);
         }
 
         if (catalog.activeProviderId === "ollama") {
-            const content = await this.generateWithOllama(settings, catalog.activeModel, input, adaptiveParams);
-            return { providerId: settings.id, model: catalog.activeModel, content };
+            return this.generateWithOllama(settings, catalog.activeModel, input, adaptiveParams);
         }
 
         // All other providers use OpenAI-compatible API
-        const content = await this.generateWithOpenAiCompatible(settings, catalog.activeModel, input);
-        return { providerId: settings.id, model: catalog.activeModel, content };
+        return this.generateWithOpenAiCompatible(settings, catalog.activeModel, input);
     }
 
     /**
@@ -477,6 +555,7 @@ export class LlmProviderManager {
     async generateForRole(
         role: TaskRole,
         input: LlmGenerationInput,
+        agentId?: string,
     ): Promise<(LlmGenerationOutput & { routing: ModelRouterSelection; adaptiveParams: AdaptivePromptParams }) | null> {
         const catalog = await this.getCatalog();
         const availableModels: AvailableModel[] = [];
@@ -492,7 +571,41 @@ export class LlmProviderManager {
             }
         }
 
-        const routing = selectModelForRole(role, availableModels);
+        let routing: ModelRouterSelection | null = null;
+
+        // Check routing overrides (agent-level first, then role-level)
+        if (this.routingConfig.strategy === "multi") {
+            const agentOverride = agentId ? this.routingConfig.agentOverrides[agentId] : null;
+            const roleOverride = this.routingConfig.roleOverrides[role] ?? null;
+            const override = agentOverride ?? roleOverride;
+            if (override) {
+                const profile = resolveProfile(override.model);
+                const req = getRoleRequirements(role);
+                routing = {
+                    providerId: override.providerId,
+                    model: override.model,
+                    profile,
+                    degraded: profile.tier < req.minimumTier,
+                    reason: `Manual override (${override.providerId}/${override.model})`,
+                };
+            }
+        }
+
+        // Modality-based routing: detect modality from input and route accordingly
+        if (!routing && this.routingConfig.strategy === "modality") {
+            const modalityInput = {
+                message: input.message,
+                conversation: input.conversation as Array<{ content: string | Array<{ type: "text" | "image_url"; text?: string; image_url?: { url: string } }> }>,
+            };
+            routing = this.resolveModelForModalityRequest(
+                modalityInput,
+                availableModels,
+            );
+        }
+
+        if (!routing) {
+            routing = selectModelForRole(role, availableModels);
+        }
         if (!routing) return null;
 
         const adaptiveParams = buildAdaptiveParams(routing.profile);
@@ -507,6 +620,9 @@ export class LlmProviderManager {
             message: input.message,
             conversation: trimmedConversation,
             systemPrompt: adaptiveSystemPrompt,
+            tools: input.tools,
+            tool_choice: input.tool_choice,
+            stream: input.stream,
         };
 
         const result = await this.generate(adaptedInput, {
@@ -517,6 +633,214 @@ export class LlmProviderManager {
         if (!result) return null;
 
         return { ...result, routing, adaptiveParams };
+    }
+
+    // ── Routing configuration ──────────────────────────────────────────
+
+    getRoutingConfig(): RoutingConfig {
+        return { ...this.routingConfig };
+    }
+
+    setRoutingConfig(config: RoutingConfig): void {
+        const strategy = config.strategy === "multi" ? "multi" : config.strategy === "modality" ? "modality" : "single";
+        this.routingConfig = {
+            strategy,
+            roleOverrides: { ...config.roleOverrides },
+            agentOverrides: { ...config.agentOverrides },
+            modalityOverrides: { ...(config.modalityOverrides || {}) },
+            preferredModality: config.preferredModality || null,
+        };
+    }
+
+    /** Set a per-agent model override. Enables multi routing strategy automatically. */
+    setAgentModelOverride(agentId: string, providerId: string, model: string): void {
+        this.routingConfig.agentOverrides[agentId] = { providerId, model };
+        if (this.routingConfig.strategy !== "multi") {
+            this.routingConfig.strategy = "multi";
+        }
+    }
+
+    /** Remove a per-agent model override. */
+    clearAgentModelOverride(agentId: string): void {
+        delete this.routingConfig.agentOverrides[agentId];
+    }
+
+    /** Get the current agent model override for a given agent, or null. */
+    getAgentModelOverride(agentId: string): { providerId: string; model: string } | null {
+        return this.routingConfig.agentOverrides[agentId] ?? null;
+    }
+
+    async suggestRoutingForAllRoles(): Promise<Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>> {
+        const catalog = await this.getCatalog();
+        const availableModels: AvailableModel[] = [];
+        for (const provider of catalog.providers) {
+            if (!provider.enabled) continue;
+            for (const model of provider.models) {
+                availableModels.push({
+                    providerId: provider.id,
+                    model,
+                    locality: provider.kind === "local" ? "local" : "cloud",
+                });
+            }
+        }
+        const result: Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null> = {};
+        for (const role of ALL_TASK_ROLES) {
+            const sel = selectModelForRole(role, availableModels);
+            result[role] = sel
+                ? { providerId: sel.providerId, model: sel.model, tier: sel.profile.tier, degraded: sel.degraded, reason: sel.reason }
+                : null;
+        }
+        return result;
+    }
+
+    async getModelProfiles(): Promise<Record<string, { tier: number; strengths: string[]; locality: string; contextWindow: number; parametersBillions: number; modalities: string[] }>> {
+        const catalog = await this.getCatalog();
+        const profiles: Record<string, { tier: number; strengths: string[]; locality: string; contextWindow: number; parametersBillions: number; modalities: string[] }> = {};
+        for (const provider of catalog.providers) {
+            for (const model of provider.models) {
+                const profile = resolveProfile(model);
+                profiles[model] = {
+                    tier: profile.tier,
+                    strengths: [...profile.strengths],
+                    modalities: [...(profile.modalities ?? ["text"])],
+                    locality: profile.locality,
+                    contextWindow: profile.contextWindow,
+                    parametersBillions: profile.parametersBillions,
+                };
+            }
+        }
+        return profiles;
+    }
+
+    // ── Modality-Based Routing ─────────────────────────────────────────
+
+    async suggestRoutingForAllModalities(): Promise<Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>> {
+        const catalog = await this.getCatalog();
+        const availableModels: AvailableModel[] = [];
+        for (const provider of catalog.providers) {
+            if (!provider.enabled) continue;
+            for (const model of provider.models) {
+                availableModels.push({
+                    providerId: provider.id,
+                    model,
+                    locality: provider.kind === "local" ? "local" : "cloud",
+                });
+            }
+        }
+        const result: Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null> = {};
+        for (const modality of ALL_MODALITIES) {
+            const sel = selectModelForModality([modality.id], availableModels);
+            result[modality.id] = sel
+                ? { providerId: sel.providerId, model: sel.model, tier: sel.profile.tier, degraded: sel.degraded, reason: sel.reason }
+                : null;
+        }
+        return result;
+    }
+
+    async getModalitySummary(): Promise<Array<{ id: string; label: string; icon: string; description: string; modelCount: number }>> {
+        const catalog = await this.getCatalog();
+        const availableModels: AvailableModel[] = [];
+        for (const provider of catalog.providers) {
+            if (!provider.enabled) continue;
+            for (const model of provider.models) {
+                availableModels.push({
+                    providerId: provider.id,
+                    model,
+                    locality: provider.kind === "local" ? "local" : "cloud",
+                });
+            }
+        }
+        return getModalitySummary(availableModels);
+    }
+
+    /**
+     * Resolve the best model for a request, auto-detecting modality from content.
+     * Used when strategy is "modality".
+     */
+    resolveModelForModalityRequest(
+        input: ModalityDetectionInput,
+        available: AvailableModel[],
+    ): ModelRouterSelection | null {
+        const detectedModalities = detectRequestModality(input) as ModelModality[];
+
+        // Check modality overrides first
+        for (const modality of detectedModalities) {
+            const override = this.routingConfig.modalityOverrides[modality];
+            if (override) {
+                const profile = resolveProfile(override.model);
+                return {
+                    providerId: override.providerId,
+                    model: override.model,
+                    profile,
+                    degraded: false,
+                    reason: `Modality override for ${modality} (${override.providerId}/${override.model})`,
+                };
+            }
+        }
+
+        return selectModelForModality(detectedModalities, available);
+    }
+
+    // ── Model Matrix Management (Phase 5) ──────────────────────────────
+
+    getFullModelMatrix(): { known: readonly ModelCapabilityProfile[]; runtime: readonly ModelCapabilityProfile[] } {
+        return {
+            known: getKnownProfiles(),
+            runtime: getRuntimeProfiles(),
+        };
+    }
+
+    registerModel(profile: ModelCapabilityProfile): void {
+        registerModelProfile(profile);
+    }
+
+    updateModel(pattern: string, patch: Partial<ModelCapabilityProfile>): boolean {
+        return updateModelProfile(pattern, patch);
+    }
+
+    removeModel(pattern: string): boolean {
+        return removeModelProfile(pattern);
+    }
+
+    loadPersistedProfiles(profiles: ModelCapabilityProfile[]): void {
+        loadRuntimeProfiles(profiles);
+    }
+
+    /** Discover models from a provider by querying its API. */
+    async discoverProviderModels(providerId: string): Promise<{
+        known: string[];
+        unknown: string[];
+        suggested: ModelCapabilityProfile[];
+    }> {
+        const snapshot = this.snapshotFor(providerId as PrismLlmProviderId);
+        const catalogModels = snapshot.models;
+        const knownProfiles = getKnownProfiles();
+
+        const known: string[] = [];
+        const unknown: string[] = [];
+        const suggested: ModelCapabilityProfile[] = [];
+
+        for (const model of catalogModels) {
+            const profile = resolveProfile(model);
+            // If the resolved profile pattern matches something in known registry, it's known
+            const isKnown = knownProfiles.some(
+                (kp) => kp.pattern === profile.pattern && kp.label !== model,
+            ) || profile.pattern !== model;
+
+            if (isKnown) {
+                known.push(model);
+            } else {
+                unknown.push(model);
+                suggested.push({
+                    ...profile,
+                    pattern: model,
+                    label: model,
+                    modalities: profile.modalities ?? ["text"],
+                });
+            }
+        }
+
+        return { known, unknown, suggested };
     }
 
     resolveProvider(providerId: string): PrismLlmProviderId | null {
@@ -738,23 +1062,59 @@ export class LlmProviderManager {
         settings: ProviderSettings,
         model: string,
         input: LlmGenerationInput,
-    ): Promise<string> {
+    ): Promise<LlmGenerationOutput> {
         const authHeader = settings.apiKeyHeader === "Authorization"
             ? { Authorization: `Bearer ${settings.apiKey}` }
             : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
 
+        const messages: any[] = [
+            { role: "system", content: input.systemPrompt },
+        ];
+
+        for (const entry of input.conversation) {
+            if (entry.role === "tool") {
+                messages.push({
+                    role: "tool",
+                    tool_call_id: entry.tool_call_id,
+                    content: typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content),
+                });
+            } else if (entry.role === "assistant" && entry.tool_calls?.length) {
+                messages.push({
+                    role: "assistant",
+                    content: typeof entry.content === "string" ? (entry.content || null) : null,
+                    tool_calls: entry.tool_calls.map((tc) => ({
+                        id: tc.id,
+                        type: "function",
+                        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+                    })),
+                });
+            } else {
+                messages.push({ role: entry.role, content: entry.content });
+            }
+        }
+
+        messages.push({ role: "user", content: input.message });
+
+        const usesLegacyMaxTokens = /^(gpt-3\.5|gpt-4-\d{4}|gpt-4-turbo)/.test(model);
         const payloadBody: any = {
             model,
-            messages: [
-                { role: "system", content: input.systemPrompt },
-                ...input.conversation.map((entry) => ({ role: entry.role, content: entry.content })),
-                { role: "user", content: input.message },
-            ],
+            messages,
+            ...(usesLegacyMaxTokens
+                ? { max_tokens: 4096 }
+                : { max_completion_tokens: 4096 }),
         };
 
         // Reasoning models typically restrict temperature overrides to exactly 1.
         if (!model.startsWith("o1") && !model.startsWith("o3") && !model.includes("gpt-5")) {
             payloadBody.temperature = 0.3;
+        }
+
+        if (input.tools?.length) {
+            payloadBody.tools = input.tools.map((t) => ({
+                type: "function",
+                function: { name: t.name, description: t.description, parameters: t.parameters },
+            }));
+            payloadBody.tool_choice = input.tool_choice ?? "auto";
         }
 
         const response = await fetch(`${settings.baseUrl}/chat/completions`, {
@@ -772,21 +1132,106 @@ export class LlmProviderManager {
         }
 
         const payload = await response.json() as {
-            choices?: Array<{ message?: { content?: string } }>;
+            choices?: Array<{
+                message?: {
+                    content?: string | null;
+                    tool_calls?: Array<{
+                        id: string;
+                        type: string;
+                        function: { name: string; arguments: string };
+                    }>;
+                };
+                finish_reason?: string;
+            }>;
         };
 
-        const content = payload.choices?.[0]?.message?.content?.trim();
-        if (!content) {
+        const choice = payload.choices?.[0];
+        const content = choice?.message?.content?.trim() ?? "";
+        const rawToolCalls = choice?.message?.tool_calls;
+        const finishReason = choice?.finish_reason;
+
+        const toolCalls: LlmToolCall[] | undefined = rawToolCalls?.map((tc) => ({
+            id: tc.id,
+            name: tc.function.name,
+            arguments: safeJsonParse(tc.function.arguments),
+        }));
+
+        const stopReason = finishReason === "tool_calls" || finishReason === "function_call"
+            ? "tool_use" as const
+            : finishReason === "length" ? "max_tokens" as const
+                : finishReason === "stop" ? "end_turn" as const
+                    : "end_turn" as const;
+
+        if (!content && !toolCalls?.length) {
             throw new Error("Provider returned an empty response.");
         }
-        return content;
+
+        return { providerId: settings.id, model, content, toolCalls, stopReason };
     }
 
     private async generateWithAnthropic(
         settings: ProviderSettings,
         model: string,
         input: LlmGenerationInput,
-    ): Promise<string> {
+    ): Promise<LlmGenerationOutput> {
+        const messages: any[] = [];
+
+        for (const entry of input.conversation) {
+            if (entry.role === "tool") {
+                // Anthropic uses tool_result blocks as user messages
+                messages.push({
+                    role: "user",
+                    content: [{
+                        type: "tool_result",
+                        tool_use_id: entry.tool_call_id,
+                        content: typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content),
+                    }],
+                });
+            } else if (entry.role === "assistant" && entry.tool_calls?.length) {
+                const contentBlocks: any[] = [];
+                if (typeof entry.content === "string" && entry.content) {
+                    contentBlocks.push({ type: "text", text: entry.content });
+                }
+                for (const tc of entry.tool_calls) {
+                    contentBlocks.push({
+                        type: "tool_use",
+                        id: tc.id,
+                        name: tc.name,
+                        input: tc.arguments,
+                    });
+                }
+                messages.push({ role: "assistant", content: contentBlocks });
+            } else {
+                const role = entry.role === "assistant" ? "assistant" : "user";
+                messages.push({ role, content: entry.content });
+            }
+        }
+
+        messages.push({ role: "user", content: input.message });
+
+        const body: any = {
+            model,
+            max_tokens: 4096,
+            system: input.systemPrompt,
+            messages,
+        };
+
+        if (input.tools?.length) {
+            body.tools = input.tools.map((t) => ({
+                name: t.name,
+                description: t.description,
+                input_schema: t.parameters,
+            }));
+            if (input.tool_choice === "required") {
+                body.tool_choice = { type: "any" };
+            } else if (input.tool_choice === "none") {
+                // Omit tools list to prevent tool use
+                delete body.tools;
+            } else {
+                body.tool_choice = { type: "auto" };
+            }
+        }
+
         const response = await fetch(`${settings.baseUrl}/messages`, {
             method: "POST",
             headers: {
@@ -794,15 +1239,7 @@ export class LlmProviderManager {
                 "x-api-key": settings.apiKey ?? "",
                 "anthropic-version": "2023-06-01",
             },
-            body: JSON.stringify({
-                model,
-                max_tokens: 512,
-                system: input.systemPrompt,
-                messages: [
-                    ...input.conversation.map((entry) => ({ role: entry.role === "assistant" ? "assistant" : "user", content: entry.content })),
-                    { role: "user", content: input.message },
-                ],
-            }),
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -811,20 +1248,41 @@ export class LlmProviderManager {
         }
 
         const payload = await response.json() as {
-            content?: Array<{ type?: string; text?: string }>;
+            content?: Array<{ type?: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+            stop_reason?: string;
         };
 
-        const text = (payload.content ?? [])
-            .filter((entry) => entry.type === "text")
-            .map((entry) => entry.text?.trim() ?? "")
+        const blocks = payload.content ?? [];
+        const textContent = blocks
+            .filter((b) => b.type === "text")
+            .map((b) => b.text?.trim() ?? "")
             .join("\n")
             .trim();
 
-        if (!text) {
+        const toolCalls: LlmToolCall[] = blocks
+            .filter((b) => b.type === "tool_use")
+            .map((b) => ({
+                id: b.id ?? randomToolCallId(),
+                name: b.name ?? "",
+                arguments: (b.input ?? {}) as Record<string, unknown>,
+            }));
+
+        const stopReason = payload.stop_reason === "tool_use"
+            ? "tool_use" as const
+            : payload.stop_reason === "max_tokens" ? "max_tokens" as const
+                : "end_turn" as const;
+
+        if (!textContent && !toolCalls.length) {
             throw new Error("Provider returned an empty response.");
         }
 
-        return text;
+        return {
+            providerId: settings.id,
+            model,
+            content: textContent,
+            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+            stopReason,
+        };
     }
 
     private async generateWithOllama(
@@ -832,33 +1290,60 @@ export class LlmProviderManager {
         model: string,
         input: LlmGenerationInput,
         adaptiveParams?: AdaptivePromptParams,
-    ): Promise<string> {
-        const prompt = [
-            input.systemPrompt,
-            ...input.conversation.map((entry) => `${entry.role.toUpperCase()}: ${entry.content}`),
-            `USER: ${input.message}`,
-            "ASSISTANT:",
-        ].join("\n\n");
-
+    ): Promise<LlmGenerationOutput> {
         const numCtx = adaptiveParams?.numCtx ?? 4096;
         const numPredict = adaptiveParams?.numPredict ?? 512;
         const temperature = adaptiveParams?.temperature ?? 0.3;
 
-        const response = await fetch(`${settings.baseUrl}/api/generate`, {
+        const messages: any[] = [
+            { role: "system", content: input.systemPrompt },
+        ];
+
+        for (const entry of input.conversation) {
+            if (entry.role === "tool") {
+                messages.push({
+                    role: "tool",
+                    content: typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content),
+                });
+            } else if (entry.role === "assistant" && entry.tool_calls?.length) {
+                messages.push({
+                    role: "assistant",
+                    content: typeof entry.content === "string" ? entry.content : "",
+                    tool_calls: entry.tool_calls.map((tc) => ({
+                        function: { name: tc.name, arguments: tc.arguments },
+                    })),
+                });
+            } else {
+                messages.push({ role: entry.role === "system" ? "system" : entry.role, content: entry.content });
+            }
+        }
+
+        messages.push({ role: "user", content: input.message });
+
+        const body: any = {
+            model,
+            messages,
+            stream: false,
+            options: {
+                temperature,
+                num_ctx: numCtx,
+                num_predict: numPredict,
+            },
+        };
+
+        if (input.tools?.length) {
+            body.tools = input.tools.map((t) => ({
+                type: "function",
+                function: { name: t.name, description: t.description, parameters: t.parameters },
+            }));
+        }
+
+        const response = await fetch(`${settings.baseUrl}/api/chat`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                model,
-                prompt,
-                stream: false,
-                options: {
-                    temperature,
-                    num_ctx: numCtx,
-                    num_predict: numPredict,
-                },
-            }),
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -866,11 +1351,45 @@ export class LlmProviderManager {
             throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
-        const payload = await response.json() as { response?: string };
-        const content = payload.response?.trim();
-        if (!content) {
+        const payload = await response.json() as {
+            message?: {
+                content?: string;
+                tool_calls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
+            };
+        };
+
+        const content = payload.message?.content?.trim() ?? "";
+        const rawToolCalls = payload.message?.tool_calls;
+
+        const toolCalls: LlmToolCall[] | undefined = rawToolCalls?.map((tc, i) => ({
+            id: `ollama_tc_${i}`,
+            name: tc.function.name,
+            arguments: tc.function.arguments ?? {},
+        }));
+
+        if (!content && !toolCalls?.length) {
             throw new Error("Provider returned an empty response.");
         }
-        return content;
+
+        return {
+            providerId: settings.id,
+            model,
+            content,
+            toolCalls: toolCalls?.length ? toolCalls : undefined,
+            stopReason: toolCalls?.length ? "tool_use" : "end_turn",
+        };
     }
+}
+
+function safeJsonParse(raw: string): Record<string, unknown> {
+    try {
+        const parsed = JSON.parse(raw);
+        return typeof parsed === "object" && parsed !== null ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function randomToolCallId(): string {
+    return `tc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }

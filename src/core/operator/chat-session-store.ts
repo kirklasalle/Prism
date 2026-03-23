@@ -21,6 +21,20 @@ export interface ChatMessage {
     content: string;
     createdAt: string;
     metadata: Record<string, unknown>;
+    attachments?: ChatAttachment[];
+}
+
+export interface ChatAttachment {
+    attachmentId: string;
+    messageId: string;
+    sessionId: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    storagePath: string;
+    thumbnailPath?: string;
+    includeInContext: boolean;
+    createdAt: string;
 }
 
 export interface SessionConfigDraft {
@@ -154,6 +168,30 @@ export class ChatSessionStore {
 
         this.ensureColumn("chat_sessions", "llm_provider_id", "TEXT");
         this.ensureColumn("chat_sessions", "llm_model", "TEXT");
+
+        // Attachment storage table
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS chat_attachments (
+                attachment_id TEXT PRIMARY KEY,
+                message_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                storage_path TEXT NOT NULL,
+                thumbnail_path TEXT,
+                include_in_context INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(message_id) REFERENCES chat_messages(message_id) ON DELETE CASCADE,
+                FOREIGN KEY(session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_chat_attachments_message
+            ON chat_attachments (message_id);
+
+            CREATE INDEX IF NOT EXISTS idx_chat_attachments_session
+            ON chat_attachments (session_id);
+        `);
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {
@@ -602,6 +640,121 @@ export class ChatSessionStore {
         if (!row) {
             throw new Error(`Unknown chat session: ${sessionId}`);
         }
+    }
+
+    // ── Attachment methods ──────────────────────────────────────────────
+
+    saveAttachment(attachment: Omit<ChatAttachment, "attachmentId" | "createdAt">): ChatAttachment {
+        const attachmentId = randomUUID();
+        const createdAt = new Date().toISOString();
+        this.db.prepare(`
+            INSERT INTO chat_attachments (attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at)
+            VALUES (:attachmentId, :messageId, :sessionId, :fileName, :mimeType, :sizeBytes, :storagePath, :thumbnailPath, :includeInContext, :createdAt)
+        `).run({
+            attachmentId,
+            messageId: attachment.messageId,
+            sessionId: attachment.sessionId,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            sizeBytes: attachment.sizeBytes,
+            storagePath: attachment.storagePath,
+            thumbnailPath: attachment.thumbnailPath ?? null,
+            includeInContext: attachment.includeInContext ? 1 : 0,
+            createdAt,
+        });
+        return { ...attachment, attachmentId, createdAt };
+    }
+
+    getAttachments(messageId: string): ChatAttachment[] {
+        const rows = this.db.prepare(`
+            SELECT attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at
+            FROM chat_attachments
+            WHERE message_id = :messageId
+            ORDER BY created_at ASC
+        `).all({ messageId }) as Array<{
+            attachment_id: string; message_id: string; session_id: string;
+            file_name: string; mime_type: string; size_bytes: number;
+            storage_path: string; thumbnail_path: string | null;
+            include_in_context: number; created_at: string;
+        }>;
+
+        return rows.map((row) => ({
+            attachmentId: row.attachment_id,
+            messageId: row.message_id,
+            sessionId: row.session_id,
+            fileName: row.file_name,
+            mimeType: row.mime_type,
+            sizeBytes: row.size_bytes,
+            storagePath: row.storage_path,
+            thumbnailPath: row.thumbnail_path ?? undefined,
+            includeInContext: row.include_in_context === 1,
+            createdAt: row.created_at,
+        }));
+    }
+
+    getSessionAttachments(sessionId: string): ChatAttachment[] {
+        const rows = this.db.prepare(`
+            SELECT attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at
+            FROM chat_attachments
+            WHERE session_id = :sessionId
+            ORDER BY created_at ASC
+        `).all({ sessionId }) as Array<{
+            attachment_id: string; message_id: string; session_id: string;
+            file_name: string; mime_type: string; size_bytes: number;
+            storage_path: string; thumbnail_path: string | null;
+            include_in_context: number; created_at: string;
+        }>;
+
+        return rows.map((row) => ({
+            attachmentId: row.attachment_id,
+            messageId: row.message_id,
+            sessionId: row.session_id,
+            fileName: row.file_name,
+            mimeType: row.mime_type,
+            sizeBytes: row.size_bytes,
+            storagePath: row.storage_path,
+            thumbnailPath: row.thumbnail_path ?? undefined,
+            includeInContext: row.include_in_context === 1,
+            createdAt: row.created_at,
+        }));
+    }
+
+    getAttachmentById(attachmentId: string): ChatAttachment | undefined {
+        const row = this.db.prepare(`
+            SELECT attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at
+            FROM chat_attachments
+            WHERE attachment_id = :attachmentId
+            LIMIT 1
+        `).get({ attachmentId }) as {
+            attachment_id: string; message_id: string; session_id: string;
+            file_name: string; mime_type: string; size_bytes: number;
+            storage_path: string; thumbnail_path: string | null;
+            include_in_context: number; created_at: string;
+        } | undefined;
+
+        if (!row) {
+            return undefined;
+        }
+
+        return {
+            attachmentId: row.attachment_id,
+            messageId: row.message_id,
+            sessionId: row.session_id,
+            fileName: row.file_name,
+            mimeType: row.mime_type,
+            sizeBytes: row.size_bytes,
+            storagePath: row.storage_path,
+            thumbnailPath: row.thumbnail_path ?? undefined,
+            includeInContext: row.include_in_context === 1,
+            createdAt: row.created_at,
+        };
+    }
+
+    deleteAttachment(attachmentId: string): boolean {
+        const result = this.db.prepare(`
+            DELETE FROM chat_attachments WHERE attachment_id = :attachmentId
+        `).run({ attachmentId });
+        return (result as any).changes > 0;
     }
 }
 

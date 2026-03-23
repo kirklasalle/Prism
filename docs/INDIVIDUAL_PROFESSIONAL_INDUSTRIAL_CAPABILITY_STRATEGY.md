@@ -34,6 +34,7 @@ Built-in end-user capabilities focused on personal daily work:
 - Chronological tasks/reminders/event sequencing
 - Office-style admin operations (summaries, follow-ups, checklist generation)
 - Personal media workflows (organize, describe, transcode/derive metadata)
+- **Agent orchestration**: spawn task-specific agents, assign per-agent models, use swarm topologies for complex multi-step goals, and leverage intelligent telemetry for efficiency insights
 
 **Integration Philosophy: Human/AI Mutual Growth**
 *Return of Growth and Integrity:* Calendar and Project Management capabilities in this layer are not just automation tools—they are growth frameworks. The AI schedules and manages tasks with absolute integrity, ensuring that human operators are given space for deep work, recovery, and professional development, rather than just maximizing raw output. The system measures success by the long-term sustainable growth and well-being of both the individual and the orchestrating PRISM runtime.

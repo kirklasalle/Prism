@@ -30,8 +30,10 @@ export interface NoteExtraction {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+import { workspaceDataDir } from "../../core/config/workspace-resolver.js";
+
 function dataDir(): string {
-    return join(process.env.PRISM_DATA_DIR ?? "prism-data", "notes");
+    return join(process.env.PRISM_DATA_DIR ?? workspaceDataDir(), "notes");
 }
 
 function notePath(dir: string, noteId: string): string {
@@ -71,7 +73,7 @@ function extractFromContent(noteId: string, content: string): NoteExtraction {
 export class NotesExtractTool implements Tool {
     readonly name = "notes_extract";
 
-    constructor(private readonly _dataDir?: string) {}
+    constructor(private readonly _dataDir?: string) { }
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {

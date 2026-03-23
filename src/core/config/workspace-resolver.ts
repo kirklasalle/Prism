@@ -1,0 +1,300 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, platform } from "node:os";
+import { dirname, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Workspace Manifest
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface WorkspaceManifest {
+    version: string;
+    created: string;
+    lastAccessed: string;
+    profile: string;
+    platform: string;
+}
+
+const MANIFEST_VERSION = "1.0.0";
+const MANIFEST_FILE = "prism-workspace.json";
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Workspace subdirectory structure
+// ──────────────────────────────────────────────────────────────────────────────
+
+const WORKSPACE_SUBDIRS = [
+    "config",
+    "artifacts",
+    "artifacts/benchmarks",
+    "artifacts/releases",
+    "artifacts/self-review",
+    "artifacts/contracts",
+    "artifacts/ci-gates",
+    "artifacts/packages",
+    "data",
+    "data/tasks",
+    "data/notes",
+    "data/email",
+    "data/calendar",
+    "state",
+    "state/container-snapshots",
+    "state/framebuffer-screengrabs",
+    "characters",
+    "logs",
+    "workspace",
+] as const;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Path resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the default workspace root based on OS conventions.
+ *
+ * - Windows: %USERPROFILE%\Documents\Prism_Refraction
+ * - macOS:   ~/Documents/Prism_Refraction
+ * - Linux:   $XDG_DATA_HOME/Prism_Refraction (fallback: ~/.local/share/Prism_Refraction)
+ */
+function defaultWorkspaceRoot(): string {
+    const os = platform();
+    if (os === "win32") {
+        const userProfile = process.env.USERPROFILE?.trim();
+        const base = userProfile || homedir();
+        return join(base, "Documents", "Prism_Refraction");
+    }
+    if (os === "darwin") {
+        return join(homedir(), "Documents", "Prism_Refraction");
+    }
+    // Linux / other: XDG_DATA_HOME or ~/.local/share
+    const xdgData = process.env.XDG_DATA_HOME?.trim();
+    if (xdgData) {
+        return join(xdgData, "Prism_Refraction");
+    }
+    return join(homedir(), ".local", "share", "Prism_Refraction");
+}
+
+let _resolvedRoot: string | undefined;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Preferences persistence
+// ──────────────────────────────────────────────────────────────────────────────
+
+interface PrismPreferences {
+    workspaceRoot?: string;
+    lastModified: string;
+}
+
+const PREFERENCES_FILE = ".prism-preferences.json";
+
+function projectRoot(): string {
+    // Navigate from this module to the repo root: config/ -> core/ -> src/ -> repo
+    const thisDir = dirname(fileURLToPath(import.meta.url));
+    return join(thisDir, "..", "..", "..");
+}
+
+export function preferencesPath(): string {
+    return join(projectRoot(), PREFERENCES_FILE);
+}
+
+export function readPreferences(): PrismPreferences | null {
+    const p = preferencesPath();
+    if (!existsSync(p)) return null;
+    try {
+        return JSON.parse(readFileSync(p, "utf-8")) as PrismPreferences;
+    } catch {
+        return null;
+    }
+}
+
+export function writePreferences(prefs: Partial<PrismPreferences>): void {
+    const existing = readPreferences() || { lastModified: "" };
+    const merged = { ...existing, ...prefs, lastModified: new Date().toISOString() };
+    writeFileSync(preferencesPath(), JSON.stringify(merged, null, 2) + "\n", "utf-8");
+}
+
+/**
+ * Resolve the workspace root path.
+ * Priority: persisted preference (most recent user choice) > PRISM_WORKSPACE_ROOT env var > OS default.
+ * Result is cached for the process lifetime.
+ */
+export function resolveWorkspaceRoot(): string {
+    if (_resolvedRoot !== undefined) {
+        return _resolvedRoot;
+    }
+    // Check persisted preference first (most recent user choice in dashboard)
+    const prefs = readPreferences();
+    if (prefs?.workspaceRoot && isAbsolute(prefs.workspaceRoot) && existsSync(prefs.workspaceRoot)) {
+        _resolvedRoot = prefs.workspaceRoot;
+        return _resolvedRoot;
+    }
+    // Fall back to env var 
+    const envOverride = process.env.PRISM_WORKSPACE_ROOT?.trim();
+    if (envOverride) {
+        _resolvedRoot = envOverride;
+        return _resolvedRoot;
+    }
+    _resolvedRoot = defaultWorkspaceRoot();
+    return _resolvedRoot;
+}
+
+/**
+ * Join segments onto the workspace root to build a full path.
+ *
+ * @example workspacePath("state", "prism-activity.db")
+ */
+export function workspacePath(...segments: string[]): string {
+    return join(resolveWorkspaceRoot(), ...segments);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Convenience accessors for common resolved paths
+// ──────────────────────────────────────────────────────────────────────────────
+
+export function workspaceDbPath(): string {
+    return workspacePath("state", "prism-activity.db");
+}
+
+export function workspaceArtifactsDir(): string {
+    return workspacePath("artifacts");
+}
+
+export function workspaceDataDir(): string {
+    return workspacePath("data");
+}
+
+export function workspaceConfigDir(): string {
+    return workspacePath("config");
+}
+
+export function workspaceCharactersDir(): string {
+    return workspacePath("characters");
+}
+
+export function workspaceLogsDir(): string {
+    return workspacePath("logs");
+}
+
+export function workspaceStateDir(): string {
+    return workspacePath("state");
+}
+
+export function workspaceFramebufferDir(): string {
+    return workspacePath("state", "framebuffer-screengrabs");
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Structure initialization
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create the workspace directory tree if it doesn't exist.
+ * Writes (or updates) the workspace manifest.
+ * Safe to call multiple times — idempotent.
+ */
+export function ensureWorkspaceStructure(environmentProfile = "dev"): void {
+    const root = resolveWorkspaceRoot();
+
+    // Create root and all subdirectories
+    for (const subdir of WORKSPACE_SUBDIRS) {
+        const fullPath = join(root, subdir);
+        if (!existsSync(fullPath)) {
+            mkdirSync(fullPath, { recursive: true });
+        }
+    }
+
+    // Ensure root itself exists (handles the case of empty WORKSPACE_SUBDIRS)
+    if (!existsSync(root)) {
+        mkdirSync(root, { recursive: true });
+    }
+
+    // Write or update manifest
+    const manifestPath = join(root, MANIFEST_FILE);
+    const now = new Date().toISOString();
+    if (existsSync(manifestPath)) {
+        // Update lastAccessed
+        const existing = readWorkspaceManifest();
+        if (existing) {
+            existing.lastAccessed = now;
+            writeFileSync(manifestPath, JSON.stringify(existing, null, 2) + "\n", "utf-8");
+        }
+    } else {
+        const manifest: WorkspaceManifest = {
+            version: MANIFEST_VERSION,
+            created: now,
+            lastAccessed: now,
+            profile: environmentProfile,
+            platform: platform(),
+        };
+        writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Manifest I/O
+// ──────────────────────────────────────────────────────────────────────────────
+
+export function readWorkspaceManifest(): WorkspaceManifest | null {
+    const manifestPath = join(resolveWorkspaceRoot(), MANIFEST_FILE);
+    if (!existsSync(manifestPath)) {
+        return null;
+    }
+    try {
+        return JSON.parse(readFileSync(manifestPath, "utf-8")) as WorkspaceManifest;
+    } catch {
+        return null;
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Legacy detection (for migration notices)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface LegacyPathDetection {
+    found: boolean;
+    paths: string[];
+}
+
+/**
+ * Detect legacy CWD-relative persistence paths.
+ * Returns a list of paths that exist so callers can log a migration notice.
+ */
+export function detectLegacyPaths(): LegacyPathDetection {
+    const candidates = [
+        "prism-output",
+        "prism-data",
+        "prism-activity.db",
+        ".mcp/mcp-settings.json",
+    ];
+    const found = candidates.filter((p) => existsSync(p));
+    return { found: found.length > 0, paths: found };
+}
+
+/**
+ * Set the workspace root at runtime without requiring a restart.
+ * Updates both the in-process cache and the PRISM_WORKSPACE_ROOT env var.
+ * Throws if the path is not absolute.
+ */
+export function setWorkspaceRoot(newPath: string): void {
+    if (!newPath || !isAbsolute(newPath)) {
+        throw new Error("Workspace path must be an absolute path.");
+    }
+    _resolvedRoot = newPath;
+    process.env.PRISM_WORKSPACE_ROOT = newPath;
+    try {
+        writePreferences({ workspaceRoot: newPath });
+        // Verify the write was successful by reading back
+        const verified = readPreferences();
+        if (verified?.workspaceRoot !== newPath) {
+            console.warn(`[PRISM][workspace] Preference write verification failed — written path does not match.`);
+        }
+    } catch (err: unknown) {
+        console.warn(`[PRISM][workspace] Failed to persist workspace preference: ${String(err)}`);
+    }
+}
+
+/**
+ * Reset the cached workspace root. Only needed for testing.
+ */
+export function _resetWorkspaceRootCache(): void {
+    _resolvedRoot = undefined;
+}

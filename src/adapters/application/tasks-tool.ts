@@ -40,8 +40,10 @@ export interface TaskTimeline {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+import { workspaceDataDir } from "../../core/config/workspace-resolver.js";
+
 function dataDir(): string {
-    return join(process.env.PRISM_DATA_DIR ?? "prism-data", "tasks");
+    return join(process.env.PRISM_DATA_DIR ?? workspaceDataDir(), "tasks");
 }
 
 function timelinePath(dir: string, timelineId: string): string {
@@ -82,7 +84,7 @@ function sortTasks(tasks: Task[]): Task[] {
 export class TasksTimelineTool implements Tool {
     readonly name = "tasks_timeline";
 
-    constructor(private readonly _dataDir?: string) {}
+    constructor(private readonly _dataDir?: string) { }
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {

@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { AgentPool } from "../src/core/agents/agent-pool.js";
 import type { LlmDelegate, SubAgentRequest } from "../src/core/agents/agent-types.js";
-import type { ModelRouterSelection } from "../src/core/operator/model-capability-matrix.js";
+import type { ModelRouterSelection, ModelModality } from "../src/core/operator/model-capability-matrix.js";
 import { ActivityBus } from "../src/core/activity/bus.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
@@ -30,6 +30,7 @@ function mockDelegate(content = "mock response"): LlmDelegate {
                 adaptivePromptBudget: 800,
                 strengths: ["fast" as const],
                 locality: "local" as const,
+                modalities: ["text"] as ModelModality[],
             };
             const routing: ModelRouterSelection = {
                 providerId: "ollama",

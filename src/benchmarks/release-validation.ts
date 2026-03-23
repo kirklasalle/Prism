@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { workspacePath } from "../core/config/workspace-resolver.js";
 
 type GateStatus = "passed" | "failed" | "manual_required";
 
@@ -113,9 +114,9 @@ export function evaluateReleaseGates(input: ReleaseGateEvaluationInput): {
 
 async function main(): Promise<void> {
     const strictMode = process.argv.includes("--strict") || process.env.PRISM_RELEASE_STRICT === "1";
-    const outputPath = process.env.PRISM_RELEASE_VALIDATION_OUTPUT_PATH ?? "prism-output/release-validation.json";
-    const perfPath = process.env.PRISM_PERF_OUTPUT_PATH ?? "prism-output/perf-qualification.json";
-    const contractPath = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? "prism-output/tool-contract-snapshot.json";
+    const outputPath = process.env.PRISM_RELEASE_VALIDATION_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "release-validation.json");
+    const perfPath = process.env.PRISM_PERF_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "perf-qualification.json");
+    const contractPath = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-snapshot.json");
     const latestReleaseCandidate = resolveLatestReleaseCandidateDir();
     const releasePacketManifestPath = latestReleaseCandidate
         ? `${latestReleaseCandidate}/release-packet-manifest.md`
@@ -205,7 +206,7 @@ function resolveBooleanOverride(override: string | undefined, detected: boolean)
 }
 
 function resolveLatestReleaseCandidateDir(): string | null {
-    const releasesRoot = "prism-output/releases";
+    const releasesRoot = workspacePath("artifacts", "releases");
     if (!existsSync(releasesRoot)) {
         return null;
     }
@@ -252,8 +253,8 @@ function detectStagingValidated(
     contractPath: string,
     releasePacketManifestPath?: string,
 ): boolean {
-    const stage2Passed = readJsonFlag("prism-output/e-stage2-qualification-summary.json", "passed");
-    const ciGatePassed = readJsonFlag("prism-output/ci-gate-summary.json", "passed");
+    const stage2Passed = readJsonFlag(workspacePath("artifacts", "ci-gates", "e-stage2-qualification-summary.json"), "passed");
+    const ciGatePassed = readJsonFlag(workspacePath("artifacts", "ci-gates", "ci-gate-summary.json"), "passed");
     const packetComplete = fileIncludesAll(releasePacketManifestPath, ["packet complete", "yes"]);
 
     return (

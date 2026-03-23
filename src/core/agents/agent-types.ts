@@ -2,6 +2,95 @@ import type { TaskRole, ModelRouterSelection } from "../operator/model-capabilit
 import type { OperationRisk } from "../policy/types.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Agent lifecycle types
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** Lifecycle tier for an agent instance. */
+export type AgentLifecycleTier = "ephemeral" | "semi-permanent" | "permanent";
+
+/** Runtime state of an agent instance. */
+export type AgentState = "idle" | "busy" | "stopped";
+
+/** Model override for a specific agent. */
+export interface AgentModelOverride {
+    providerId: string;
+    model: string;
+}
+
+/** Full runtime agent instance (extends the static definition). */
+export interface AgentInstance extends SubAgentDefinition {
+    lifecycle: AgentLifecycleTier;
+    state: AgentState;
+    modelOverride?: AgentModelOverride;
+    spawnedAt: number;
+    lastActiveAt: number;
+    dispatchCount: number;
+}
+
+/** Options for spawning a new agent. */
+export interface SpawnAgentOptions {
+    agentId?: string;
+    role: TaskRole;
+    description?: string;
+    systemContext?: string;
+    lifecycle?: AgentLifecycleTier;
+    modelOverride?: AgentModelOverride;
+}
+
+/** Swarm topology type. */
+export type SwarmTopology = "mesh" | "star" | "pipeline" | "broadcast";
+
+/** Swarm state. */
+export type SwarmState = "pending" | "running" | "completed" | "failed" | "stopped";
+
+/** Swarm definition. */
+export interface SwarmDefinition {
+    swarmId: string;
+    topology: SwarmTopology;
+    goal: string;
+    agentIds: string[];
+    state: SwarmState;
+    createdAt: number;
+    completedAt?: number;
+    timeoutMs: number;
+    results: SubAgentResult[];
+}
+
+/** Telemetry record for a single dispatch. */
+export interface DispatchTelemetryRecord {
+    agentId: string;
+    role: TaskRole;
+    model: string;
+    providerId: string;
+    durationMs: number;
+    tokenEstimate?: number;
+    ok: boolean;
+    timestamp: number;
+}
+
+/** Telemetry summary for a single agent. */
+export interface AgentTelemetrySummary {
+    agentId: string;
+    role: TaskRole;
+    dispatchCount: number;
+    avgDurationMs: number;
+    p95DurationMs: number;
+    successRate: number;
+    lastModel: string;
+    lastActiveAt: number;
+}
+
+/** Promotion recommendation from telemetry analysis. */
+export interface PromotionRecommendation {
+    agentId: string;
+    currentTier: AgentLifecycleTier;
+    recommendedTier: AgentLifecycleTier;
+    reason: string;
+    dispatchCount: number;
+    successRate: number;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Sub-agent core types
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -64,6 +153,7 @@ export interface LlmDelegate {
             conversation: Array<{ role: "user" | "assistant" | "system"; content: string }>;
             systemPrompt: string;
         },
+        agentId?: string,
     ): Promise<{
         content: string;
         model: string;

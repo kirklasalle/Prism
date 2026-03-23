@@ -29,6 +29,14 @@ export class ToolRegistry {
         return tool;
     }
 
+    has(name: string): boolean {
+        return this.tools.has(name);
+    }
+
+    list(): Tool[] {
+        return [...this.tools.values()];
+    }
+
     validateRequest(request: ToolRequest): string[] {
         const tool = this.tools.get(request.operation);
         if (!tool || !tool.contract) {

@@ -81,13 +81,17 @@ The PRISM dashboard (`http://localhost:7070`) is the primary operator interface.
 
 ### 5.1 Tab system
 
-The dashboard provides five tabs across the top navigation bar:
+The dashboard provides nine tabs across the top navigation bar:
 
 | Tab | Description |
 | --- | --- |
 | **Chat Interface** | Conversational interface for interacting with the active LLM provider. Messages are scoped to the current chat session. |
 | **Provider & Settings** | Configure LLM providers, review model capabilities, adjust runtime settings, and audit provider switch history. |
 | **Tools & Plugins** | Browse all registered built-in tools, MCP plugins, and system utilities. |
+| **Agentic Control** | Manage agents, assign per-agent models, orchestrate swarms, and view intelligent telemetry. |
+| **Computer Control** | Local system info, shell execution, vision framebuffer, device management, and policy controls. |
+| **Workspace** | Workspace location management, file browser, import manager, workspace settings, and git integration. |
+| **Network** | Execute curated network commands, view interface data, and monitor network operations with tier-based governance. |
 | **Telemetry** | View runtime performance metrics, retrieval quality cohorts, and alert status. |
 | **Logs & Debug** | Inspect the live activity event stream, errors, and debug-level trace output. |
 
@@ -169,7 +173,106 @@ Each plugin entry shows:
 
 Each utility entry shows its name and a brief description of its function.
 
-## 6. Approval workflow (operator perspective)
+### 5.5 Network tab
+
+The Network tab provides dedicated network management capabilities organized into four collapsible panels:
+
+**Network Tools** — A curated catalog of ~50 network commands classified by security tier:
+
+- **Tier 1 — Diagnostics (Read-Only):** `ipconfig`/`ifconfig`, `ping`, `nslookup`/`dig`, `tracert`/`traceroute`, `netstat`/`ss`, `arp`, `hostname`, `nbtstat`, `pathping`, `getmac`, `net view`, `net statistics`, `curl`/`wget`, `ip addr`/`ip route`
+- **Tier 2 — Config Inspection (Conditional):** `route print`, `netsh interface show`, `netsh wlan show`, `netsh firewall show`, `net use`, `net share`, `net session`, `net user`, `net localgroup`, `net config`
+- **Tier 3 — Mutating Operations (Approval-Gated):** `netsh interface set`, `netsh interface ip set`, `netsh firewall set`, `netsh wlan connect/disconnect`, `route add/delete/change`, `net start/stop`, `ip addr add/del`, `ip route add/del`, `iptables`/`ufw`
+
+Each command shows its name, description, tier badge (green/amber/red), and platform badge (WIN/LINUX/CROSS).
+
+**Network Settings** — Displays live network interface data from the local host. Click "Refresh Interfaces" to query the system and display all adapter details (IP addresses, MAC addresses, DHCP status, DNS servers, etc.).
+
+**Network Telemetry** — Dashboard showing network operation metrics: total commands executed, per-tier counts (Tier 1/2/3), error count, and most recent command.
+
+**Network Console** — An interactive command console for executing network commands in real time. Type a network command and press Enter or click Run. Output is displayed in a monospace pre-formatted area. Only commands from the curated allowlist are permitted; blocked patterns are rejected.
+
+### 5.6 Agentic Control tab
+
+The Agentic Control tab is the operator interface for managing the PRISM agent fleet.
+
+**Agent Management** — View all registered agents (built-in and dynamically spawned). Each agent card shows:
+
+- Agent ID, role, and current lifecycle state (ephemeral / semi-permanent / permanent)
+- Assigned LLM provider and model (overridable per-agent)
+- Dispatch count, average response time, and last active timestamp
+- Controls: Stop, Promote (ephemeral → semi-permanent → permanent), Demote, Reassign Model
+
+Use the **Launch Agent** button to spawn a new agent instance with a selected role and model assignment.
+
+**Per-Agent Model Assignment** — Each agent can be assigned a different LLM provider and model. The assignment is applied at dispatch time and confirmed in telemetry. Models can be switched dynamically on the fly without restarting the agent. The system uses the model capability matrix to validate that the assigned model meets the minimum tier requirement for the agent's role.
+
+**Sub-Agent Control** — Displays the current task decomposition tree when the planner agent is active. Shows parent → child relationships, dependency links, and per-step status (pending / running / completed / failed).
+
+**Swarm Control** — Orchestrate multi-agent goal completion using four topologies:
+
+- **Mesh**: all agents communicate peer-to-peer
+- **Star**: one coordinator dispatches to N workers
+- **Pipeline**: sequential handoff from agent to agent
+- **Broadcast**: one message to all agents, aggregate results
+
+Create a swarm by selecting a topology, assigning agents, and defining the goal. The swarm coordinator manages lifecycle, timeout, and result aggregation.
+
+**Agent Telemetry** — Intelligent tracking dashboard that learns from agent dispatch patterns:
+
+- Dispatch frequency analysis per agent and role
+- Model performance comparison (latency, token usage, quality proxy)
+- Promotion recommendations (ephemeral agents that consistently perform well)
+- Efficiency patterns and bottleneck detection
+- Historical trends with configurable time windows
+
+## 6. Workspace & Persistence
+
+PRISM stores all runtime artifacts, databases, and configuration in a persistent workspace directory outside the source tree. This prevents data loss during project updates and keeps the repository clean.
+
+### 6.1 Default workspace location
+
+| Platform | Default Path |
+|----------|-------------|
+| Windows  | `%USERPROFILE%\Documents\Prism_Refraction` |
+| macOS    | `~/Documents/Prism_Refraction` |
+| Linux    | `$XDG_DATA_HOME/Prism_Refraction` (fallback: `~/.local/share/Prism_Refraction`) |
+
+Override the location by setting the `PRISM_WORKSPACE_ROOT` environment variable before starting PRISM.
+
+### 6.2 Workspace structure
+
+```
+Prism_Refraction/
+  prism-workspace.json        # manifest (version, creation date, profile, platform)
+  config/                     # MCP settings, runtime config
+  artifacts/
+    benchmarks/               # performance qualification results
+    releases/                 # release candidate packages
+    self-review/              # self-review scheduler output
+    contracts/                # tool contract snapshots and diffs
+    ci-gates/                 # CI gate summaries
+    packages/                 # session export packages
+  data/
+    tasks/                    # tasks tool data
+    notes/                    # notes tool data
+    email/                    # email tool data
+    calendar/                 # calendar tool data
+  state/
+    container-snapshots/      # container sandbox snapshots
+  characters/                 # agent character briefs (JSON)
+  logs/                       # runtime logs
+  workspace/                  # general workspace storage
+```
+
+### 6.3 Dashboard visibility
+
+The **Settings** panel on the Provider & Settings tab shows the active **Workspace Root** path so you can always confirm where data is being stored.
+
+### 6.4 Legacy path migration
+
+If PRISM detects data at old CWD-relative locations (`prism-output/`, `prism-data/`, `prism-activity.db`, `.mcp/`), a console notice will suggest moving them to the new workspace. Existing environment variable overrides (`PRISM_DATA_DIR`, `PRISM_PERF_OUTPUT_PATH`, etc.) continue to take precedence over workspace defaults.
+
+## 7. Approval workflow (operator perspective)
 
 When a Tier-3 action is triggered, PRISM emits:
 
@@ -190,7 +293,7 @@ Expected behavior:
 - denied/timed-out action is blocked,
 - workflow either fails or takes fallback route.
 
-## 7. Memory tools
+## 8. Memory tools
 
 ### 7.1 semantic_query
 
@@ -213,7 +316,7 @@ Typical use:
 - recover context,
 - inform next action selection.
 
-## 8. Workflow behavior in plain language
+## 9. Workflow behavior in plain language
 
 A workflow is a sequence of steps. Each step can be retried and can have a timeout.
 
@@ -225,7 +328,7 @@ If a step fails or times out:
 
 This is intentional and tested behavior.
 
-## 9. Operational troubleshooting
+## 10. Operational troubleshooting
 
 ### 9.1 High-risk step never executed
 
@@ -256,7 +359,7 @@ Check:
 - session size,
 - retrieval metrics and latency output.
 
-## 10. Best practices for operators
+## 11. Best practices for operators
 
 1. Keep rollback plans explicit for mutating actions.
 2. Use staged workflows for critical operations.
@@ -264,7 +367,7 @@ Check:
 4. Monitor retrieval quality and investigate drift.
 5. Review traces after incidents and update policy/tool rules.
 
-## 11. Security and trust expectations
+## 12. Security and trust expectations
 
 PRISM is designed to increase trust through:
 
@@ -273,14 +376,14 @@ PRISM is designed to increase trust through:
 - auditable event streams,
 - fail-safe timeout/denial handling.
 
-## 12. Where to learn more
+## 13. Where to learn more
 
 - Architecture and strategy: `README.md`
 - Product requirements and roadmap intent: `PRISM_PRD.md`
 - Engineering implementation standards: `DEVELOPER_GUIDE.md`
 - Milestone status: `ROADMAP.md`
 
-## 13. External references
+## 14. External references
 
 1. <https://www.anthropic.com/engineering/building-effective-agents>
 2. <https://arxiv.org/abs/2210.03629>

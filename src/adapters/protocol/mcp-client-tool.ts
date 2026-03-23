@@ -320,6 +320,7 @@ export class McpProxyTool implements Tool {
     private readonly connection: McpConnection;
     private readonly mcpToolName: string;
     readonly mcpDescription: string;
+    readonly mcpInputSchema: McpToolDescriptor["inputSchema"];
     readonly serverName: string;
 
     constructor(
@@ -331,6 +332,7 @@ export class McpProxyTool implements Tool {
         this.name = `mcp_${descriptor.name.replace(/[^a-zA-Z0-9_]/g, "_")}`;
         this.mcpToolName = descriptor.name;
         this.mcpDescription = descriptor.description ?? "";
+        this.mcpInputSchema = descriptor.inputSchema;
         this.serverName = serverName;
         this.connection = connection;
     }

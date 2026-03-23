@@ -95,23 +95,23 @@ Exit Criteria:
 Scope:
 
 - Establish two operating profiles with shared capability surface:
- 	- `PRISM Individual` (capability-first profile)
- 	- `PRISM Business` (governance-first profile)
+  - `PRISM Individual` (capability-first profile)
+  - `PRISM Business` (governance-first profile)
 - Add terminal virtualization subsystem:
- 	- persistent terminal session channels
- 	- controlled environment injection
- 	- session lifecycle controls (start/stop/revoke/timeout)
+  - persistent terminal session channels
+  - controlled environment injection
+  - session lifecycle controls (start/stop/revoke/timeout)
 - Add container orchestration adapter:
- 	- sandbox lifecycle (create/start/stop/destroy)
- 	- snapshot/revert support
- 	- resource quotas and guardrails
+  - sandbox lifecycle (create/start/stop/destroy)
+  - snapshot/revert support
+  - resource quotas and guardrails
 - Add dynamic tool staging pipeline:
- 	- transient tool generation in sandbox
- 	- contract extraction and risk classification
- 	- controlled registration via policy route
+  - transient tool generation in sandbox
+  - contract extraction and risk classification
+  - controlled registration via policy route
 - Add adapter/plugin pack framework:
- 	- manifest schema and compatibility checks
- 	- signed trust metadata for business profile install path
+  - manifest schema and compatibility checks
+  - signed trust metadata for business profile install path
 - Extend governance policy matrix for shell/container/plugin actions.
 
 Exit Criteria:
@@ -121,6 +121,28 @@ Exit Criteria:
 - Event lineage and reason-code telemetry validated for high-risk operations.
 - Profile-specific SLO qualification evidence attached.
 - Traceability matrix links parity claims to tests and artifacts.
+
+### Phase D3: Agent Control & Intelligent Orchestration
+
+Scope:
+
+- Agent lifecycle management with three tiers (ephemeral, semi-permanent, permanent)
+- Per-agent model assignment with dynamic runtime switching
+- Intelligent agent telemetry with dispatch pattern detection and promotion recommendations
+- Swarm coordinator with four topologies (mesh, star, pipeline, broadcast)
+- Chat-to-agent routing (classifier-first intent detection, majority of tasks through agents)
+- Workspace persistence reliability fix (error surfacing, write-then-verify, env var precedence)
+- Dashboard Agent Control tab wiring (replace mock handlers with real lifecycle/telemetry/swarm data)
+
+Exit Criteria:
+
+- Agent lifecycle tests pass for spawn, stop, promote, reap, persist, and restore
+- Per-agent model override confirmed via dispatch telemetry
+- Swarm execution verified for all four topologies (mesh, star, pipeline, broadcast)
+- Telemetry pattern detection operational and producing promotion recommendations
+- Chat messages routed through agents by default
+- Workspace location change persists across server reboot
+- Agent Control dashboard tab fully wired with real data (no mock handlers)
 
 ### Phase E: Novel Capability Activation
 
@@ -192,6 +214,16 @@ For every phase completion, the following must be attached:
 - Terminal/container/plugin governance-path test report (allow/deny/timeout/revoke)
 - Performance qualification report for execution modes (`fast`, `balanced`, `governed`)
 - Investor/licensing appendix alignment check signed off by product/governance
+
+1. Agent control & swarm intelligence evidence (required for Phase D3)
+
+- Agent lifecycle test report (spawn/stop/promote/reap/persist/restore)
+- Per-agent model assignment verification (override applied on dispatch, telemetry confirms model)
+- Swarm orchestration test report (all four topologies: mesh, star, pipeline, broadcast)
+- Intelligent telemetry pattern detection samples (dispatch frequency analysis, promotion recommendations)
+- Chat-to-agent routing verification (classifier-first intent detection, per-agent dispatch distribution)
+- Workspace persistence round-trip evidence (change location, restart, verify persistence)
+- Dashboard Agent Control tab wiring verification (real data, no mock handlers)
 
 ## Ownership by Function
 

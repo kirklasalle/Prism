@@ -46,8 +46,10 @@ export interface EmailThread {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+import { workspaceDataDir } from "../../core/config/workspace-resolver.js";
+
 function dataDir(): string {
-    return join(process.env.PRISM_DATA_DIR ?? "prism-data", "email");
+    return join(process.env.PRISM_DATA_DIR ?? workspaceDataDir(), "email");
 }
 
 function threadPath(dir: string, threadId: string): string {
@@ -75,7 +77,7 @@ export class EmailOpsTool implements Tool {
     readonly name = "email_ops";
 
     /** Construct with an optional data directory override (useful in tests). */
-    constructor(private readonly _dataDir?: string) {}
+    constructor(private readonly _dataDir?: string) { }
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {

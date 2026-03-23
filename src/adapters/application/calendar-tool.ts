@@ -38,8 +38,10 @@ export interface CalendarData {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+import { workspaceDataDir } from "../../core/config/workspace-resolver.js";
+
 function dataDir(): string {
-    return join(process.env.PRISM_DATA_DIR ?? "prism-data", "calendar");
+    return join(process.env.PRISM_DATA_DIR ?? workspaceDataDir(), "calendar");
 }
 
 function calendarPath(dir: string, calendarId: string): string {
@@ -66,7 +68,7 @@ function saveCalendar(dir: string, data: CalendarData): void {
 export class CalendarPlanTool implements Tool {
     readonly name = "calendar_plan";
 
-    constructor(private readonly _dataDir?: string) {}
+    constructor(private readonly _dataDir?: string) { }
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {

@@ -58,9 +58,11 @@ Proposed commercial packaging:
    - orchestrator, policy engine, memory framework, baseline adapters.
 2. Parity Capability Package
    - terminal virtualization, container orchestration, dynamic tool staging, adapter pack compatibility framework.
-3. Governance Assurance Package (Business mandatory)
+3. Agent Orchestration Package
+   - agent lifecycle management, per-agent model assignment, swarm coordination (4 topologies), intelligent telemetry, chat-to-agent routing.
+4. Governance Assurance Package (Business mandatory)
    - tier enforcement controls, approval workflows, governance telemetry, replay/export support.
-4. Operations & Compliance Package
+5. Operations & Compliance Package
    - incident/runbook tooling, policy diff/export, evidence bundle automation.
 
 ## 4. Policy and Compliance Positioning
@@ -95,8 +97,8 @@ Proposed adapter policy:
 
 Required message consistency:
 
-- PRISM Individual: “top-tier capability, fast operator experience.”
-- PRISM Business: “same capability with verifiable governance and audit control.”
+- PRISM Individual: "top-tier capability, fast operator experience with intelligent multi-agent orchestration."
+- PRISM Business: "same capability with verifiable governance, audit control, and governed swarm intelligence."
 
 Avoid statements implying:
 

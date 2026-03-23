@@ -28,6 +28,47 @@ export type ModelStrength =
     | "multimodal"
     | "agentic";
 
+/** Input/output modality a model supports. */
+export type ModelModality =
+    | "text"
+    | "code"
+    | "image-understanding"
+    | "image-generation"
+    | "video-understanding"
+    | "video-generation"
+    | "voice-input"
+    | "voice-output"
+    | "tts"
+    | "stt"
+    | "realtime"
+    | "embedding"
+    | "multimodal-reasoning";
+
+/** Metadata for a modality — label, icon, description. */
+export interface ModalityInfo {
+    id: ModelModality;
+    label: string;
+    icon: string;
+    description: string;
+}
+
+/** All known modalities with display metadata. */
+export const ALL_MODALITIES: readonly ModalityInfo[] = [
+    { id: "text",                  label: "Text",                  icon: "\u{1F4DD}", description: "Natural language text generation and understanding" },
+    { id: "code",                  label: "Code & Programming",    icon: "\u{1F4BB}", description: "Software development, code generation, debugging" },
+    { id: "image-understanding",   label: "Image Understanding",   icon: "\u{1F5BC}", description: "Visual image analysis and description" },
+    { id: "image-generation",      label: "Image Generation",      icon: "\u{1F3A8}", description: "Creating images from text prompts" },
+    { id: "video-understanding",   label: "Video Understanding",   icon: "\u{1F3AC}", description: "Video content analysis and description" },
+    { id: "video-generation",      label: "Video Generation",      icon: "\u{1F3A5}", description: "Creating video from text or image prompts" },
+    { id: "voice-input",           label: "Voice Input",           icon: "\u{1F3A4}", description: "Processing spoken audio input" },
+    { id: "voice-output",          label: "Voice Output",          icon: "\u{1F50A}", description: "Generating spoken audio output" },
+    { id: "tts",                   label: "Text-to-Speech",        icon: "\u{1F5E3}", description: "Converting text to natural speech" },
+    { id: "stt",                   label: "Speech-to-Text",        icon: "\u{1F4AC}", description: "Transcribing speech to text" },
+    { id: "realtime",              label: "Realtime",              icon: "\u26A1",     description: "Low-latency streaming and realtime interaction" },
+    { id: "embedding",             label: "Embedding",             icon: "\u{1F9E9}", description: "Vector embeddings for search and similarity" },
+    { id: "multimodal-reasoning",  label: "Multimodal Reasoning",  icon: "\u{1F9E0}", description: "Cross-modal reasoning across text, image, audio" },
+] as const;
+
 /** Where the model runs. */
 export type ModelLocality = "local" | "cloud";
 
@@ -61,6 +102,8 @@ export interface ModelCapabilityProfile {
     adaptivePromptBudget: number;
     /** Strengths tags. */
     strengths: ModelStrength[];
+    /** Supported input/output modalities. */
+    modalities: ModelModality[];
     /** local or cloud. */
     locality: ModelLocality;
 }
@@ -130,6 +173,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 2048, estimatedVramMb: 900, maxOutputTokens: 256,
         adaptivePromptBudget: 200,
         strengths: ["instruction-following", "fast"],
+        modalities: ["text"],
         locality: "local",
     },
     {
@@ -139,6 +183,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 2048, estimatedVramMb: 900, maxOutputTokens: 256,
         adaptivePromptBudget: 200,
         strengths: ["fast"],
+        modalities: ["text"],
         locality: "local",
     },
     {
@@ -148,6 +193,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 2048, estimatedVramMb: 900, maxOutputTokens: 256,
         adaptivePromptBudget: 200,
         strengths: ["instruction-following", "fast"],
+        modalities: ["text"],
         locality: "local",
     },
     {
@@ -157,6 +203,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 2048, estimatedVramMb: 1200, maxOutputTokens: 256,
         adaptivePromptBudget: 250,
         strengths: ["instruction-following", "tool-use", "fast"],
+        modalities: ["text"],
         locality: "local",
     },
     // ---- Local Ollama: Small (T2) ----
@@ -167,6 +214,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 4096, estimatedVramMb: 1600, maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "multimodal"],
+        modalities: ["text", "image-understanding"],
         locality: "local",
     },
     {
@@ -176,6 +224,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 4096, estimatedVramMb: 2200, maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning", "code"],
+        modalities: ["text", "code"],
         locality: "local",
     },
     {
@@ -185,6 +234,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 4096, estimatedVramMb: 2200, maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning"],
+        modalities: ["text"],
         locality: "local",
     },
     {
@@ -194,6 +244,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 4096, estimatedVramMb: 2800, maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning", "code"],
+        modalities: ["text", "code"],
         locality: "local",
     },
     // ---- Local Ollama: Medium (T3 — pushing hardware limits) ----
@@ -204,6 +255,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 8192, estimatedVramMb: 5500, maxOutputTokens: 1024,
         adaptivePromptBudget: 600,
         strengths: ["instruction-following", "reasoning", "code", "tool-use"],
+        modalities: ["text", "code"],
         locality: "local",
     },
     {
@@ -213,6 +265,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 4096, estimatedVramMb: 3000, maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning"],
+        modalities: ["text"],
         locality: "local",
     },
     // ---- Cloud: OpenAI ----
@@ -223,6 +276,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
+        modalities: ["text", "code", "image-understanding"],
         locality: "cloud",
     },
     {
@@ -232,6 +286,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
         locality: "cloud",
     },
     {
@@ -241,6 +296,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "multimodal"],
+        modalities: ["text", "code", "image-understanding", "voice-input", "voice-output", "realtime", "multimodal-reasoning"],
         locality: "cloud",
     },
     {
@@ -250,6 +306,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
         locality: "cloud",
     },
     {
@@ -259,6 +316,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "realtime", "multimodal-reasoning"],
         locality: "cloud",
     },
     // ---- Cloud: Anthropic ----
@@ -269,6 +327,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
+        modalities: ["text", "code", "image-understanding"],
         locality: "cloud",
     },
     {
@@ -278,6 +337,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
         locality: "cloud",
     },
     {
@@ -287,6 +347,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
         locality: "cloud",
     },
     {
@@ -296,6 +357,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
         locality: "cloud",
     },
     {
@@ -305,6 +367,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
         locality: "cloud",
     },
     // ---- Cloud: Google ----
@@ -315,6 +378,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context"],
+        modalities: ["text", "code", "image-understanding", "video-understanding"],
         locality: "cloud",
     },
     {
@@ -324,6 +388,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "multimodal"],
+        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "tts", "stt", "multimodal-reasoning"],
         locality: "cloud",
     },
     {
@@ -333,6 +398,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "long-context", "multimodal"],
+        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "multimodal-reasoning"],
         locality: "cloud",
     },
     // ---- Cloud: Groq (fast inference) ----
@@ -343,6 +409,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 32768, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
+        modalities: ["text", "code"],
         locality: "cloud",
     },
     {
@@ -352,6 +419,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 8192, estimatedVramMb: 0, maxOutputTokens: 2048,
         adaptivePromptBudget: 600,
         strengths: ["instruction-following", "fast"],
+        modalities: ["text"],
         locality: "cloud",
     },
     // ---- Cloud: DeepSeek ----
@@ -362,6 +430,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 64000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code"],
+        modalities: ["text", "code"],
         locality: "cloud",
     },
     {
@@ -371,6 +440,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 64000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "agentic"],
+        modalities: ["text", "code"],
         locality: "cloud",
     },
     // ---- Cloud: Mistral ----
@@ -381,6 +451,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "multilingual"],
+        modalities: ["text", "code"],
         locality: "cloud",
     },
     {
@@ -390,6 +461,7 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 32000, estimatedVramMb: 0, maxOutputTokens: 2048,
         adaptivePromptBudget: 1000,
         strengths: ["instruction-following", "fast", "multilingual"],
+        modalities: ["text"],
         locality: "cloud",
     },
 ];
@@ -418,16 +490,17 @@ const ROLE_REQUIREMENTS: RoleTierRequirements[] = [
  */
 export function resolveProfile(modelName: string): ModelCapabilityProfile {
     const lower = modelName.toLowerCase();
+    const allProfiles = [...runtimeProfiles, ...KNOWN_PROFILES];
 
-    // Exact match
-    for (const profile of KNOWN_PROFILES) {
+    // Exact match (runtime profiles checked first)
+    for (const profile of allProfiles) {
         if (lower === profile.pattern.toLowerCase()) {
             return profile;
         }
     }
 
     // Prefix / contains match
-    for (const profile of KNOWN_PROFILES) {
+    for (const profile of allProfiles) {
         if (lower.startsWith(profile.pattern.toLowerCase()) || lower.includes(profile.pattern.toLowerCase())) {
             return profile;
         }
@@ -482,6 +555,7 @@ function inferProfileFromName(modelName: string): ModelCapabilityProfile {
         maxOutputTokens,
         adaptivePromptBudget,
         strengths: ["instruction-following"],
+        modalities: ["text"],
         locality: estimatedVramMb > 0 ? "local" : "cloud",
     };
 }
@@ -763,5 +837,232 @@ export function tierLabel(tier: CapabilityTier): string {
  * Return all known profiles (for dashboard display).
  */
 export function getKnownProfiles(): readonly ModelCapabilityProfile[] {
-    return KNOWN_PROFILES;
+    return [...runtimeProfiles, ...KNOWN_PROFILES];
+}
+
+// ---------------------------------------------------------------------------
+// Runtime Profile Registry (Phase 5: Self-Evolution)
+// ---------------------------------------------------------------------------
+
+let runtimeProfiles: ModelCapabilityProfile[] = [];
+
+/** Register a new model profile at runtime (persisted via external store). */
+export function registerModelProfile(profile: ModelCapabilityProfile): void {
+    const idx = runtimeProfiles.findIndex((p) => p.pattern === profile.pattern);
+    if (idx >= 0) {
+        runtimeProfiles[idx] = { ...profile };
+    } else {
+        runtimeProfiles.push({ ...profile });
+    }
+}
+
+/** Update an existing runtime profile by pattern. Merges partial fields. */
+export function updateModelProfile(pattern: string, patch: Partial<ModelCapabilityProfile>): boolean {
+    const idx = runtimeProfiles.findIndex((p) => p.pattern === pattern);
+    if (idx < 0) return false;
+    runtimeProfiles[idx] = { ...runtimeProfiles[idx], ...patch, pattern };
+    return true;
+}
+
+/** Remove a runtime profile. Cannot remove built-in KNOWN_PROFILES. */
+export function removeModelProfile(pattern: string): boolean {
+    const idx = runtimeProfiles.findIndex((p) => p.pattern === pattern);
+    if (idx < 0) return false;
+    runtimeProfiles.splice(idx, 1);
+    return true;
+}
+
+/** Get all runtime (user-added) profiles. */
+export function getRuntimeProfiles(): readonly ModelCapabilityProfile[] {
+    return runtimeProfiles;
+}
+
+/** Load runtime profiles from persistence (called at startup). */
+export function loadRuntimeProfiles(profiles: ModelCapabilityProfile[]): void {
+    runtimeProfiles = profiles.map((p) => ({ ...p }));
+}
+
+// ---------------------------------------------------------------------------
+// Modality-Based Routing (Phase 1 + Enhancement A: Composite)
+// ---------------------------------------------------------------------------
+
+/**
+ * Filter available models to those supporting ALL requested modalities.
+ * Falls back to partial matches ranked by coverage if no full match exists.
+ */
+export function getModelsForModality(
+    modalities: ModelModality[],
+    available: AvailableModel[],
+): Array<AvailableModel & { profile: ModelCapabilityProfile; coverage: number }> {
+    if (modalities.length === 0) return [];
+
+    const scored = available.map((entry) => {
+        const profile = resolveProfile(entry.model);
+        const supported = profile.modalities ?? ["text"];
+        const matched = modalities.filter((m) => supported.includes(m)).length;
+        return { ...entry, profile, coverage: matched / modalities.length };
+    });
+
+    // Full matches first, then partial sorted by coverage desc, then tier desc
+    return scored
+        .filter((m) => m.coverage > 0)
+        .sort((a, b) => {
+            if (b.coverage !== a.coverage) return b.coverage - a.coverage;
+            return b.profile.tier - a.profile.tier;
+        });
+}
+
+/**
+ * Select the best model for a set of modalities (composite routing).
+ * Prefers full modality coverage at the highest tier.
+ * Falls back to best partial match if no model covers all modalities.
+ */
+export function selectModelForModality(
+    modalities: ModelModality[],
+    available: AvailableModel[],
+): ModelRouterSelection | null {
+    if (available.length === 0 || modalities.length === 0) return null;
+
+    const candidates = getModelsForModality(modalities, available);
+    if (candidates.length === 0) {
+        // No modality match — fall back to highest-tier model
+        const fallback = available
+            .map((e) => ({ ...e, profile: resolveProfile(e.model) }))
+            .sort((a, b) => b.profile.tier - a.profile.tier);
+        const best = fallback[0];
+        return {
+            providerId: best.providerId,
+            model: best.model,
+            profile: best.profile,
+            degraded: true,
+            reason: `No model supports ${modalities.join("+")}; using best available T${best.profile.tier}`,
+        };
+    }
+
+    const best = candidates[0];
+    const isFullCoverage = best.coverage === 1;
+
+    return {
+        providerId: best.providerId,
+        model: best.model,
+        profile: best.profile,
+        degraded: !isFullCoverage,
+        reason: isFullCoverage
+            ? `Full modality match for ${modalities.join("+")} at T${best.profile.tier}`
+            : `Partial modality match (${Math.round(best.coverage * 100)}%) for ${modalities.join("+")} at T${best.profile.tier}`,
+    };
+}
+
+/**
+ * Get available modality info with model count for each modality.
+ */
+export function getModalitySummary(
+    available: AvailableModel[],
+): Array<ModalityInfo & { modelCount: number }> {
+    return ALL_MODALITIES.map((info) => {
+        const count = available.filter((entry) => {
+            const profile = resolveProfile(entry.model);
+            return (profile.modalities ?? ["text"]).includes(info.id);
+        }).length;
+        return { ...info, modelCount: count };
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Request Modality Detection (Enhancement B: Heuristic + Explicit)
+// ---------------------------------------------------------------------------
+
+/** Content part structure matching LlmContentPart. */
+interface DetectionContentPart {
+    type: "text" | "image_url";
+    text?: string;
+    image_url?: { url: string };
+}
+
+/** Input structure for modality detection. */
+export interface ModalityDetectionInput {
+    message: string;
+    conversation?: Array<{ content: string | DetectionContentPart[] }>;
+    explicitModality?: ModelModality | ModelModality[];
+}
+
+/**
+ * Detect modalities from request content using heuristics.
+ * Supports explicit tagging (takes priority) + content analysis.
+ */
+export function detectRequestModality(input: ModalityDetectionInput): ModelModality[] {
+    const detected = new Set<ModelModality>();
+    detected.add("text"); // always present
+
+    // Explicit modality takes priority
+    if (input.explicitModality) {
+        const explicit = Array.isArray(input.explicitModality)
+            ? input.explicitModality
+            : [input.explicitModality];
+        for (const m of explicit) detected.add(m);
+        return [...detected];
+    }
+
+    const msg = input.message || "";
+    const msgLower = msg.toLowerCase();
+
+    // Check for image content parts in conversation
+    const allParts: DetectionContentPart[] = [];
+    if (input.conversation) {
+        for (const entry of input.conversation) {
+            if (Array.isArray(entry.content)) {
+                allParts.push(...entry.content);
+            }
+        }
+    }
+    const hasImageParts = allParts.some((p) => p.type === "image_url");
+    if (hasImageParts) {
+        detected.add("image-understanding");
+        detected.add("multimodal-reasoning");
+    }
+
+    // Code detection: fenced code blocks or programming keywords
+    const hasCodeFence = /```[\s\S]*?```/.test(msg);
+    const hasCodeKeywords = /\b(function|class|import|export|const|let|var|def |async |await |return |if \(|for \(|while \()/.test(msg);
+    if (hasCodeFence || hasCodeKeywords) {
+        detected.add("code");
+    }
+
+    // Image generation detection
+    if (/\b(generate|create|draw|make|design)\b.{0,20}\b(image|picture|photo|illustration|diagram|art|icon)\b/i.test(msg)) {
+        detected.add("image-generation");
+    }
+
+    // Video detection
+    if (/\b(video|clip|footage|movie|animation)\b/i.test(msg) && /\b(analy[sz]e|describe|watch|review|understand|summarize)\b/i.test(msg)) {
+        detected.add("video-understanding");
+    }
+    if (/\b(generate|create|make)\b.{0,20}\b(video|clip|animation)\b/i.test(msg)) {
+        detected.add("video-generation");
+    }
+
+    // Voice / audio detection
+    if (/\b(transcri(be|ption)|speech.to.text|stt|dictation)\b/i.test(msg)) {
+        detected.add("stt");
+        detected.add("voice-input");
+    }
+    if (/\b(text.to.speech|tts|read.aloud|speak|narrat)\b/i.test(msg)) {
+        detected.add("tts");
+        detected.add("voice-output");
+    }
+    if (/\b(voice|audio|spoken|microphone|recording)\b/i.test(msg)) {
+        detected.add("voice-input");
+    }
+
+    // Realtime detection
+    if (/\b(realtime|real-time|live|streaming|interactive)\b/i.test(msgLower)) {
+        detected.add("realtime");
+    }
+
+    // Embedding detection
+    if (/\b(embed(ding)?s?|vector|similarity|semantic.search)\b/i.test(msg)) {
+        detected.add("embedding");
+    }
+
+    return [...detected];
 }

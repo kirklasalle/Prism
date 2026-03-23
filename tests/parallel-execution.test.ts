@@ -10,7 +10,7 @@ import { ActivityBus } from "../src/core/activity/bus.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
 import type { LlmDelegate } from "../src/core/agents/agent-types.js";
-import type { ModelRouterSelection } from "../src/core/operator/model-capability-matrix.js";
+import type { ModelRouterSelection, ModelModality } from "../src/core/operator/model-capability-matrix.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -29,6 +29,7 @@ function mockProfile() {
         adaptivePromptBudget: 800,
         strengths: ["fast" as const],
         locality: "local" as const,
+        modalities: ["text"] as ModelModality[],
     };
 }
 

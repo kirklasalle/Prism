@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { AgentPool } from "../src/core/agents/agent-pool.js";
 import { TaskDecomposer } from "../src/core/agents/task-decomposer.js";
 import type { LlmDelegate } from "../src/core/agents/agent-types.js";
-import type { ModelRouterSelection } from "../src/core/operator/model-capability-matrix.js";
+import type { ModelRouterSelection, ModelModality } from "../src/core/operator/model-capability-matrix.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -26,6 +26,7 @@ function makeDelegate(response: string): LlmDelegate {
         adaptivePromptBudget: 2000,
         strengths: ["reasoning" as const],
         locality: "local" as const,
+        modalities: ["text"] as ModelModality[],
     };
     const routing: ModelRouterSelection = {
         providerId: "ollama",

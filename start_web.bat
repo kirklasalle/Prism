@@ -58,6 +58,22 @@ echo [BUILD] Building PRISM...
 call npm run build
 if errorlevel 1 goto :fail
 
+echo [WORKSPACE] Verifying Prism_Refraction workspace...
+if not defined PRISM_WORKSPACE_ROOT (
+  REM Check persisted preferences first
+  for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "try { $j = Get-Content '%~dp0.prism-preferences.json' -Raw -ErrorAction Stop | ConvertFrom-Json; if ($j.workspaceRoot -and (Test-Path $j.workspaceRoot)) { $j.workspaceRoot } } catch {}"`) do (
+    if not "%%P"=="" set "PRISM_WORKSPACE_ROOT=%%P"
+  )
+)
+if not defined PRISM_WORKSPACE_ROOT (
+  set "PRISM_WORKSPACE_ROOT=%USERPROFILE%\Documents\Prism_Refraction"
+)
+if not exist "%PRISM_WORKSPACE_ROOT%" (
+  echo [WORKSPACE] Creating workspace at %PRISM_WORKSPACE_ROOT%
+  mkdir "%PRISM_WORKSPACE_ROOT%"
+)
+echo [WORKSPACE] %PRISM_WORKSPACE_ROOT%
+
 if /I "%PRISM_PREFLIGHT_MODE%"=="build" goto :post_preflight
 if /I "%PRISM_PREFLIGHT_MODE%"=="test" goto :preflight_test
 if /I "%PRISM_PREFLIGHT_MODE%"=="release" goto :preflight_release
