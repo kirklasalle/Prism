@@ -81,6 +81,7 @@ let _resolvedRoot: string | undefined;
 
 interface PrismPreferences {
     workspaceRoot?: string;
+    runtimeSettings?: Record<string, unknown>;
     lastModified: string;
 }
 
@@ -281,14 +282,17 @@ export function setWorkspaceRoot(newPath: string): void {
     _resolvedRoot = newPath;
     process.env.PRISM_WORKSPACE_ROOT = newPath;
     try {
+        const filePath = preferencesPath();
         writePreferences({ workspaceRoot: newPath });
         // Verify the write was successful by reading back
         const verified = readPreferences();
         if (verified?.workspaceRoot !== newPath) {
             console.warn(`[PRISM][workspace] Preference write verification failed — written path does not match.`);
+        } else {
+            console.log(`[PRISM][workspace] Workspace preference persisted to ${filePath}: ${newPath}`);
         }
     } catch (err: unknown) {
-        console.warn(`[PRISM][workspace] Failed to persist workspace preference: ${String(err)}`);
+        console.warn(`[PRISM][workspace] Failed to persist workspace preference to ${preferencesPath()}: ${String(err)}`);
     }
 }
 

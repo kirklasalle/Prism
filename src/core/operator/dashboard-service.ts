@@ -38,7 +38,7 @@ import type { RetrievalMetricsCollector } from "../memory/retrieval-metrics.js";
 import type { RetrievalDashboardStore } from "../memory/retrieval-dashboard-store.js";
 import type { Tool } from "../tools/types.js";
 import type { ToolRegistry } from "../tools/registry.js";
-import { workspacePath, resolveWorkspaceRoot, setWorkspaceRoot, ensureWorkspaceStructure, workspaceFramebufferDir } from "../config/workspace-resolver.js";
+import { workspacePath, resolveWorkspaceRoot, setWorkspaceRoot, ensureWorkspaceStructure, workspaceFramebufferDir, readPreferences, writePreferences } from "../config/workspace-resolver.js";
 import { FramebufferCapture } from "./framebuffer-capture.js";
 import { AgenticChatExecutor, type AgenticTurnEvent, type AgenticResult } from "./agentic-chat-executor.js";
 
@@ -712,6 +712,20 @@ export class DashboardService {
       if (!this.toolStates[t.name]) {
         this.toolStates[t.name] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
       }
+    }
+    // Load persisted runtime settings from preferences file
+    try {
+      const prefs = readPreferences();
+      if (prefs?.runtimeSettings && typeof prefs.runtimeSettings === 'object') {
+        const persisted = prefs.runtimeSettings;
+        for (const [k, v] of Object.entries(persisted)) {
+          if (k in this.runtimeSettings) {
+            this.runtimeSettings[k] = v;
+          }
+        }
+      }
+    } catch {
+      // Preferences file missing or malformed — use defaults
     }
     this.loadSessionPackageStore();
     for (const action of actions) {
@@ -2507,6 +2521,12 @@ export class DashboardService {
           this.runtimeSettings[k] = v;
           changes[k] = v;
         }
+      }
+      // Persist settings to disk so they survive server restarts
+      try {
+        writePreferences({ runtimeSettings: this.runtimeSettings });
+      } catch (err: unknown) {
+        console.warn(`[PRISM][settings] Failed to persist settings: ${String(err)}`);
       }
       return this.json(res, 200, { updated: changes, settings: this.runtimeSettings });
     }
@@ -8542,7 +8562,7 @@ function dashboardHtml(port: number): string {
         if (state.readiness && state.readiness.requirements) {
           var reqs = state.readiness.requirements;
           for (var ri = 0; ri < reqs.length; ri++) {
-            var met = reqs[ri].met;
+            var met = reqs[ri].passed;
             html += '<div class="stg-req-row">';
             html += '<span class="' + (met ? 'stg-req-met' : 'stg-req-unmet') + '">' + (met ? '\u2713' : '\u2717') + '</span>';
             html += '<span>' + escapeHtml(reqs[ri].label || reqs[ri].id) + '</span>';
@@ -11254,6 +11274,10 @@ function dashboardHtml(port: number): string {
     window.clearMatrixDraft = clearMatrixDraft;
     window.saveMatrixEntry = saveMatrixEntry;
     window.deleteMatrixEntry = deleteMatrixEntry;
+    window.toggleSettingsSection = toggleSettingsSection;
+    window.saveSettings = saveSettings;
+    window.markSettingDirty = markSettingDirty;
+    window.recheckReadiness = recheckReadiness;
 
     // Only telemetry data refreshes automatically — everything else is event-driven.
     setInterval(async function() {
