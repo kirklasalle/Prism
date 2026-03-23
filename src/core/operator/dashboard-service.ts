@@ -6826,12 +6826,31 @@ function dashboardHtml(port: number): string {
         var ok = result && result.type === 'tool_result' && (result.ok !== false);
         var statusClass = ok ? 'ok' : 'fail';
         var statusText = ok ? '\\u2713' : '\\u2717';
+        
+        // Build command display from tool call input
+        var commandHtml = '';
+        if (call) {
+          var input = call.input || call.params || call.arguments || {};
+          if (typeof input === 'string') {
+            commandHtml = '<div style="white-space:pre-wrap;word-break:break-all;">' + escapeHtml(input) + '</div>';
+          } else if (typeof input === 'object') {
+            try {
+              commandHtml = '<div class="mono" style="white-space:pre-wrap;word-break:break-all;">' + escapeHtml(JSON.stringify(input, null, 2)) + '</div>';
+            } catch (e) {
+              commandHtml = '<div class="muted">Unable to display command</div>';
+            }
+          }
+        }
+        
         blocks.push(
           '<div class="tool-block" onclick="this.classList.toggle(&quot;expanded&quot;)">'
           + '<div class="tool-block-header">'
           + '<span class="tool-block-icon">\\u{1F527}</span>'
           + '<span class="tool-block-name">' + escapeHtml(name) + '</span>'
           + '<span class="tool-block-status ' + statusClass + '">' + statusText + '</span>'
+          + '</div>'
+          + '<div class="tool-block-body">'
+          + commandHtml
           + '</div>'
           + '</div>'
         );
