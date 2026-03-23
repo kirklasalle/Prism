@@ -7430,18 +7430,18 @@ function dashboardHtml(port: number): string {
         + (state.matrixEditingPattern ? 'Edit Matrix Entry' : 'Create Matrix Entry')
         + '</div>';
       html += '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 2fr auto auto;gap:6px;align-items:center;">';
-      html += '<input type="text" placeholder="pattern (example: gpt-4o* or llama3.1:8b)" value="' + escapeHtml(state.matrixDraftPattern || '') + '" oninput="setMatrixDraftField(\'pattern\', this.value)" style="' + filterStyle + 'width:100%;" />';
-      html += '<select onchange="setMatrixDraftField(\'tier\', this.value)" style="' + filterStyle + '">';
+      html += '<input type="text" placeholder="pattern (example: gpt-4o* or llama3.1:8b)" value="' + escapeHtml(state.matrixDraftPattern || '') + '" oninput="setMatrixDraftField(&#39;pattern&#39;, this.value)" style="' + filterStyle + 'width:100%;" />';
+      html += '<select onchange="setMatrixDraftField(&#39;tier&#39;, this.value)" style="' + filterStyle + '">';
       html += '<option value=""' + (!state.matrixDraftTier ? ' selected' : '') + '>Tier</option>';
       for (var mt = 1; mt <= 5; mt++) {
         html += '<option value="' + mt + '"' + (state.matrixDraftTier === String(mt) ? ' selected' : '') + '>T' + mt + '</option>';
       }
       html += '</select>';
-      html += '<select onchange="setMatrixDraftField(\'locality\', this.value)" style="' + filterStyle + '">';
+      html += '<select onchange="setMatrixDraftField(&#39;locality&#39;, this.value)" style="' + filterStyle + '">';
       html += '<option value="local"' + (state.matrixDraftLocality === 'local' ? ' selected' : '') + '>Local</option>';
       html += '<option value="remote"' + (state.matrixDraftLocality === 'remote' ? ' selected' : '') + '>Cloud</option>';
       html += '</select>';
-      html += '<input type="text" placeholder="strengths (comma-separated)" value="' + escapeHtml(state.matrixDraftStrengths || '') + '" oninput="setMatrixDraftField(\'strengths\', this.value)" style="' + filterStyle + 'width:100%;" />';
+      html += '<input type="text" placeholder="strengths (comma-separated)" value="' + escapeHtml(state.matrixDraftStrengths || '') + '" oninput="setMatrixDraftField(&#39;strengths&#39;, this.value)" style="' + filterStyle + 'width:100%;" />';
       html += '<button class="secondary-button" style="padding:5px 10px;font-size:11px;" onclick="saveMatrixEntry()">Save</button>';
       html += '<button class="secondary-button" style="padding:5px 10px;font-size:11px;" onclick="clearMatrixDraft()">Clear</button>';
       html += '</div>';
