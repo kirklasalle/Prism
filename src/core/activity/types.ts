@@ -12,6 +12,17 @@ export type ActivityLayer =
 
 export type AuthorityTier = "tier1_autonomous" | "tier2_conditional" | "tier3_approval";
 
+export interface AccountabilityChain {
+    assignmentId: string;
+    characterId: string;
+    prismUserId: string;
+    prismUserEmail: string;
+    operatorId: string;
+    operatorEmail: string;
+    clientId: string;
+    executionProfileSegment: "individual" | "business";
+}
+
 export interface ActivityEvent {
     id: string;
     timestamp: string;
@@ -33,6 +44,15 @@ export interface ActivityEvent {
         reversible?: boolean;
         rollbackPlan?: string;
     }>;
+    characterId?: string;
+    prismUserId?: string;
+    prismUserEmail?: string;
+    operatorId?: string;
+    operatorEmail?: string;
+    clientId?: string;
+    executionProfileSegment?: "individual" | "business";
+    assignmentId?: string;
+    accountabilityChain?: AccountabilityChain;
     rollbackPlan?: string;
     hash?: string;
 }

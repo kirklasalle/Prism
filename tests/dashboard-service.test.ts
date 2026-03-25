@@ -172,7 +172,7 @@ export async function testDashboardService(): Promise<void> {
         emitReadinessAudit: (source: string, snapshot: { ready: boolean }) => void;
     }).getReadinessSnapshot(unconfiguredSession.sessionId);
     assert.strictEqual(readinessAfter.ready, false);
-    const bindingRequirement = readinessAfter.requirements.find((requirement) => requirement.id === "provider-model-selected");
+    const bindingRequirement = readinessAfter.requirements.find((requirement) => requirement.id === "llm.provider-model-bound");
     assert.ok(bindingRequirement);
     assert.strictEqual(bindingRequirement!.passed, false);
 

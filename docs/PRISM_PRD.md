@@ -107,6 +107,7 @@ Implication for PRISM:
 3. Provide deterministic governance under risk and uncertainty.
 4. Continuously improve performance through measurable eval loops.
 5. Introduce novel technical mechanisms that improve reliability and adaptability.
+6. Enforce identity accountability: every agent action is attributable to a character, a Prism user, and an operator.
 
 ### 5.2 Non-goals (current horizon)
 
@@ -126,6 +127,12 @@ Implemented today:
 - memory query tools (`semantic_query`, `memory_query`)
 - workflow retries/timeouts/fallbacks
 - integration tests for approval success, denial, and timeout paths
+- **Character Accountability Control (CAC)**:
+  - character-to-operator identity binding with full accountability chain
+  - lifecycle management (assign, dispatch, suspend, resume, revoke)
+  - profile-aware email domain validation (business enforces matching domains; individual is permissive)
+  - execution profile segment normalization (`enterprise`/`corporate` → canonical `business`)
+  - accountability chain propagated into activity events and SHA-256 integrity hashes
 
 ## 7. Novelty Roadmap (PRISM-specific)
 
@@ -214,6 +221,40 @@ Acceptance criteria:
 
 - sampled sessions fully reconstructable end-to-end.
 
+### 8.4A Character Accountability Control (CAC)
+
+Every agent action must be linked to an immutable identity chain comprising a character, a Prism user, an operator, and a client/session context. This identity chain is propagated into activity events and included in SHA-256 integrity hashes.
+
+Required identity fields:
+
+- `characterId`: the character brief assigned to the agent.
+- `prismUserId` / `prismUserEmail`: the Prism platform user under which the agent operates.
+- `operatorId` / `operatorEmail`: the human operator responsible for the session.
+- `clientId` / `sessionId`: the client application and session context.
+- `executionProfileSegment`: the resolved profile segment (`individual` or `business`).
+
+Lifecycle states:
+
+- **assigned**: character bound to operator/session; ready for dispatch.
+- **active**: at least one dispatch has occurred.
+- **suspended**: temporarily paused (with reason code); no further dispatches until resumed.
+- **revoked**: permanently terminated; no resume possible.
+
+Profile-aware email validation:
+
+- **Business profile**: operator and Prism user email domains must match (configurable allowed-domains list). Mismatched domains are rejected at assignment time.
+- **Individual profile**: no domain constraints; any valid email address is accepted.
+- **Alias normalization**: `enterprise` and `corporate` profile inputs resolve to the canonical `business` segment.
+
+Acceptance criteria:
+
+- accountability chain present on all activity events emitted during governed operations,
+- lifecycle transitions (assign, dispatch, suspend, resume, revoke) each emit auditable activity events,
+- business-profile domain mismatch is rejected with structured error before assignment completes,
+- individual-profile allows mixed-domain assignments without constraint,
+- `enterprise` and `corporate` inputs resolve to `business` segment in all code paths,
+- query APIs support filtering by characterId, operatorEmail, prismUserEmail, and executionProfileSegment.
+
 ### 8.5 Individual-native MVP capabilities (Phase 1)
 
 The first productization track implements native individual productivity capabilities over existing governance/runtime foundations.
@@ -238,6 +279,7 @@ Functional requirements:
 - Support availability lookup, conflict detection, and recommendation generation.
 - Require explicit policy path for event creation/update.
 - Persist conflict and recommendation traces for operator review.
+- **Implemented**: Scheduler tab with full-year calendar (year/month/week/day views), category-coded events, project management, Kanban board, and Gantt timeline. SchedulerEngine provides cron-based recurring schedules with ActivityBus audit trail.
 
 1. Notes and extraction
 

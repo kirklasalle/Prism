@@ -122,6 +122,20 @@ Current implementation:
 12. Chat-to-agent routing -> classifier determines intent, correct agent dispatched
 13. Telemetry promotion recommendation -> ephemeral agent exceeding threshold flagged
 
+### Governance-critical CAC identity scenarios (Phase C)
+
+1. Individual profile assignment with mixed-domain emails -> accepted without constraint
+2. Business profile assignment with matching domains -> accepted
+3. Business profile assignment with mismatched domains -> rejected with structured error
+4. Business profile assignment with allowed-domains list -> only listed domains accepted
+5. Enterprise/corporate profile input -> resolved to business segment and business rules applied
+6. Character lifecycle: assign -> dispatch -> suspend (with reason) -> resume -> dispatch succeeds
+7. Character lifecycle: assign -> revoke -> resume attempt throws error
+8. Activity events emitted with full accountability chain on every lifecycle transition
+9. Accountability chain fields included in SHA-256 event integrity hash
+10. Query by characterId/operatorEmail/prismUserEmail/executionProfileSegment returns correct results
+11. Invalid email format rejected at assignment time regardless of profile
+
 ## Adapter Safety Regression Matrix (Phase D)
 
 ### System adapter: `shell_exec`
@@ -207,6 +221,21 @@ Additional minimum for agent control promotion (Phase D3):
 - Chat-to-agent routing tests pass (classifier-first intent detection)
 - Agent telemetry pattern detection samples generated
 - Dashboard Agent Control tab verified (real data, no mock handlers)
+
+Minimum for CAC identity validation (Phase C):
+
+- CAC lifecycle tests pass for assign, dispatch, suspend, resume, revoke
+- Business profile email domain validation enforced (matching domains required)
+- Individual profile accepts mixed-domain emails without constraint
+- Enterprise/corporate alias normalization resolves to business segment
+- Accountability chain present on all governed activity events
+- SHA-256 hash includes accountability fields
+
+CAC artifact additions:
+
+- Lifecycle state transition audit samples (per test run)
+- Domain validation accept/reject evidence (business vs individual)
+- Query filter result samples by identity field
 
 ## Short-Term Additions (Remaining)
 

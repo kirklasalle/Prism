@@ -9,6 +9,8 @@
  *   availability_lookup    — return events list (read-only)
  *   create_or_update_event — add or update a confirmed event
  *   propose                — add event flagged as proposed (not committed)
+ *   list_range             — return events within a date range
+ *   delete_event           — remove an event by id
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +21,8 @@ import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 // Data types
 // ──────────────────────────────────────────────────────────────────────────────
 
+export type CalendarCategory = "meeting" | "deadline" | "milestone" | "reminder" | "blocked" | "general";
+
 export interface CalendarEvent {
     id: string;
     title: string;
@@ -27,6 +31,11 @@ export interface CalendarEvent {
     proposed: boolean;
     attendees?: string[];
     description?: string;
+    recurrence?: string;
+    color?: string;
+    category?: CalendarCategory;
+    allDay?: boolean;
+    location?: string;
 }
 
 export interface CalendarData {
@@ -80,6 +89,13 @@ export class CalendarPlanTool implements Tool {
             end?: string;
             attendees?: string[];
             description?: string;
+            recurrence?: string;
+            color?: string;
+            category?: CalendarCategory;
+            allDay?: boolean;
+            location?: string;
+            rangeStart?: string;
+            rangeEnd?: string;
         };
 
         const action = args.action ?? "";
@@ -115,6 +131,11 @@ export class CalendarPlanTool implements Tool {
                     proposed: false,
                     ...(args.attendees ? { attendees: args.attendees } : {}),
                     ...(args.description ? { description: args.description } : {}),
+                    ...(args.recurrence ? { recurrence: args.recurrence } : {}),
+                    ...(args.color ? { color: args.color } : {}),
+                    ...(args.category ? { category: args.category } : {}),
+                    ...(args.allDay !== undefined ? { allDay: args.allDay } : {}),
+                    ...(args.location ? { location: args.location } : {}),
                 };
                 if (existing >= 0) {
                     data.events[existing] = event;
@@ -146,6 +167,36 @@ export class CalendarPlanTool implements Tool {
                     ok: true,
                     output: { calendarId, event },
                     sideEffects: [{ type: "file", description: `proposal saved: ${calendarPath(dir, calendarId)}` }],
+                };
+            }
+
+            case "list_range": {
+                const data = loadCalendar(dir, calendarId);
+                const rangeStart = args.rangeStart ? new Date(args.rangeStart).getTime() : 0;
+                const rangeEnd = args.rangeEnd ? new Date(args.rangeEnd).getTime() : Infinity;
+                const filtered = data.events.filter((e) => {
+                    const eStart = new Date(e.start).getTime();
+                    const eEnd = new Date(e.end).getTime();
+                    return eStart <= rangeEnd && eEnd >= rangeStart;
+                });
+                return {
+                    ok: true,
+                    output: { calendarId, eventCount: filtered.length, events: filtered },
+                };
+            }
+
+            case "delete_event": {
+                const data = loadCalendar(dir, calendarId);
+                const eventId = args.eventId;
+                if (!eventId) return { ok: false, output: { error: "eventId required" } };
+                const idx = data.events.findIndex((e) => e.id === eventId);
+                if (idx < 0) return { ok: false, output: { error: `Event not found: ${eventId}` } };
+                data.events.splice(idx, 1);
+                saveCalendar(dir, data);
+                return {
+                    ok: true,
+                    output: { calendarId, deleted: eventId },
+                    sideEffects: [{ type: "file", description: `event deleted from calendar: ${calendarPath(dir, calendarId)}` }],
                 };
             }
 

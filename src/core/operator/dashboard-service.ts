@@ -1,7 +1,8 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+﻿import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
@@ -40,7 +41,11 @@ import type { Tool } from "../tools/types.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import { workspacePath, resolveWorkspaceRoot, setWorkspaceRoot, ensureWorkspaceStructure, workspaceFramebufferDir, readPreferences, writePreferences } from "../config/workspace-resolver.js";
 import { FramebufferCapture } from "./framebuffer-capture.js";
+import { BrowserControlTool } from "../../adapters/system/browser-control-tool.js";
 import { AgenticChatExecutor, type AgenticTurnEvent, type AgenticResult } from "./agentic-chat-executor.js";
+import { CharacterAccountabilityStore, type CharacterAssignmentFilter } from "../accountability/character-accountability-store.js";
+import { CharacterAccountabilityManager } from "../accountability/character-accountability-manager.js";
+import { workspaceCharactersDir, workspaceDbPath } from "../config/workspace-resolver.js";
 
 export interface DashboardRuntimeStatus {
   sessionId: string;
@@ -636,6 +641,7 @@ function computeRuntimeExcellenceSnapshot(
 }
 
 export class DashboardService {
+  private static readonly publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
   private readonly server: Server;
   private readonly llmProviders: LlmProviderManager;
   private readonly providerSecretStore: ProviderSecretStore;
@@ -669,6 +675,8 @@ export class DashboardService {
   private agentPool: AgentPool | null = null;
   private agentRouter: AgentRouter | null = null;
   private importHistory: Array<{ id: string; timestamp: string; mode: string; fileName: string; targetDir: string; registeredType: string | null; status: string; message: string; size: number }> = [];
+  private readonly characterAccountabilityStore: CharacterAccountabilityStore;
+  private readonly characterAccountabilityManager: CharacterAccountabilityManager;
   private runtimeSettings: Record<string, unknown> = {
     approvalTimeoutMs: 30000,
     selfReviewDailyMs: 86400000,
@@ -700,6 +708,8 @@ export class DashboardService {
   ) {
     this.providerSecretStore = providerSecretStore ?? new WindowsProtectedFileProviderSecretStore();
     this.llmProviders = new LlmProviderManager(process.env, this.chatStore.listProviderSettings(), this.providerSecretStore);
+    this.characterAccountabilityStore = new CharacterAccountabilityStore(workspaceDbPath());
+    this.characterAccountabilityManager = new CharacterAccountabilityManager(this.characterAccountabilityStore, this.activityBus);
     this.sessionPackageStorePath = sessionPackageStorePath;
     this.sessionPackageExportDir = sessionPackageExportDir;
     this.traceExplorer = activityStore ? new SessionTraceExplorer(activityStore) : undefined;
@@ -1887,6 +1897,7 @@ export class DashboardService {
 
   stop(): Promise<void> {
     this.pkgStore?.close();
+    this.characterAccountabilityStore.close();
     for (const ws of this.wsClients) {
       ws.close();
     }
@@ -1916,6 +1927,22 @@ export class DashboardService {
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = req.url ?? "";
     const method = req.method?.toUpperCase() ?? "GET";
+
+    if (method === "GET" && url.startsWith("/public/") && (url.endsWith(".js") || url.endsWith(".css"))) {
+      const safeFile = url.slice("/public/".length).replace(/\.\./g, "");
+      if (!safeFile || safeFile.includes("/") || safeFile.includes("\\")) {
+        return this.json(res, 404, { error: "Not found" });
+      }
+      const filePath = join(DashboardService.publicDir, safeFile);
+      if (!existsSync(filePath)) { return this.json(res, 404, { error: "Not found" }); }
+      const content = readFileSync(filePath);
+      res.writeHead(200, {
+        "Content-Type": url.endsWith(".css") ? "text/css; charset=utf-8" : "application/javascript; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(content);
+      return;
+    }
 
     if (method === "GET" && (url === "/" || url === "/dashboard")) {
       res.writeHead(200, {
@@ -2379,9 +2406,11 @@ export class DashboardService {
       }
     }
 
-    if (method === "GET" && url === "/api/llm/routing/suggest") {
+    if (method === "GET" && url.startsWith("/api/llm/routing/suggest")) {
       try {
-        const suggestions = await this.llmProviders.suggestRoutingForAllRoles();
+        const parsedUrl = new URL(url, "http://localhost");
+        const providerId = parsedUrl.searchParams.get("providerId") || "";
+        const suggestions = await this.llmProviders.suggestRoutingForAllRoles(providerId);
         return this.json(res, 200, { suggestions });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
@@ -2751,7 +2780,35 @@ export class DashboardService {
     }
 
     if (method === "GET" && url === "/api/computer/screengrab/list") {
-      return this.json(res, 200, { files: this.framebufferCapture.listScreengrabs() });
+      return this.json(res, 200, {
+        galleryItems: this.framebufferCapture.listGalleryItems(),
+        files: this.framebufferCapture.listScreengrabs(),
+        directory: workspaceFramebufferDir(),
+      });
+    }
+
+    if (method === "POST" && url === "/api/computer/reveal-file") {
+      const body = await this.readJsonBody<{ filename?: string }>(req);
+      const fname = body?.filename ? String(body.filename).replace(/[/\\:*?"<>|]/g, "") : "";
+      const revealPath = fname ? join(workspaceFramebufferDir(), fname) : workspaceFramebufferDir();
+      const { exec } = await import("node:child_process");
+      exec(`explorer.exe /select,"${revealPath}"`);
+      return this.json(res, 200, { ok: true });
+    }
+
+    if (method === "GET" && url === "/api/computer/screengrab/diagnostics") {
+      const fbDir = workspaceFramebufferDir();
+      const checks: { name: string; ok: boolean; detail: string }[] = [];
+      checks.push({ name: "Platform", ok: process.platform === "win32", detail: process.platform === "win32" ? "Windows \u2713" : `Non-Windows (${process.platform}) \u2014 PowerShell capture may not work` });
+      const dirExists = existsSync(fbDir);
+      checks.push({ name: "Capture directory", ok: dirExists, detail: dirExists ? fbDir : `Missing: ${fbDir}` });
+      if (dirExists) {
+        const allFiles = readdirSync(fbDir).filter(f => f.endsWith(".png") && f !== "latest.png");
+        const latestExists = existsSync(join(fbDir, "latest.png"));
+        checks.push({ name: "Stored frames", ok: allFiles.length > 0, detail: `${allFiles.length} PNG file(s) in framebuffer directory` });
+        checks.push({ name: "Latest frame", ok: latestExists, detail: latestExists ? "latest.png present" : "No latest.png \u2014 capture has not run yet" });
+      }
+      return this.json(res, 200, { ok: checks.every(c => c.ok), checks });
     }
 
     if (method === "GET" && url?.startsWith("/api/computer/screengrab/file/")) {
@@ -2794,6 +2851,158 @@ export class DashboardService {
       };
       return this.json(res, 200, { devices });
     }
+
+    // ── Browser Control API ──────────────────────────────────────────────
+    {
+      const browserTool = this.tools.find(t => t.name === "browser_control") as BrowserControlTool | undefined;
+      const mgr = browserTool?.getManager();
+      const profMgr = browserTool?.getProfileManager();
+
+      if (method === "GET" && url === "/api/browser/sessions") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const sessions = mgr.listSessions();
+        return this.json(res, 200, { sessions: sessions.map(s => ({ ...s, sessionId: s.id } as Record<string, unknown>)) });
+      }
+
+      if (method === "GET" && url === "/api/browser/profiles") {
+        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
+        return this.json(res, 200, { profiles: profMgr.listProfiles() });
+      }
+
+      if (method === "GET" && url === "/api/browser/diagnostics") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const diag = await mgr.diagnostics();
+        return this.json(res, 200, diag);
+      }
+
+      if (method === "POST" && url === "/api/browser/launch") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ headless?: boolean; profileId?: string; sessionId?: string }>(req);
+          const session = await mgr.launch(body);
+          return this.json(res, 200, { session: { ...session, sessionId: session.id } });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const sessionsDeleteMatch = /^\/api\/browser\/sessions\/([^/]+)$/.exec(url);
+      if (sessionsDeleteMatch && method === "DELETE") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const sessionId = decodeURIComponent(sessionsDeleteMatch[1]!);
+          await mgr.closeSession(sessionId);
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/navigate") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; url: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.url) return this.json(res, 400, { error: "url required." });
+          const result = await mgr.navigate(body.sessionId, body.url);
+          return this.json(res, 200, result);
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const screenshotMatch = /^\/api\/browser\/screenshot\/([^/]+)$/.exec(url);
+      if (screenshotMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const sessionId = decodeURIComponent(screenshotMatch[1]!);
+          const buf = await mgr.screenshot(sessionId);
+          res.writeHead(200, { "Content-Type": "image/png", "Content-Length": buf.length });
+          res.end(buf);
+          return;
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/click") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; selector: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.selector) return this.json(res, 400, { error: "selector required." });
+          await mgr.click(body.sessionId, body.selector);
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/type") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; selector: string; text: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.selector) return this.json(res, 400, { error: "selector required." });
+          await mgr.type(body.sessionId, body.selector, body.text ?? "");
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/evaluate") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; expression: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.expression) return this.json(res, 400, { error: "expression required." });
+          const value = await mgr.evaluate(body.sessionId, body.expression);
+          return this.json(res, 200, { result: value });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const consoleMatch = /^\/api\/browser\/console-logs\/([^/]+)$/.exec(url);
+      if (consoleMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const sessionId = decodeURIComponent(consoleMatch[1]!);
+        return this.json(res, 200, { logs: mgr.getConsoleLogs(sessionId) });
+      }
+
+      const networkMatch = /^\/api\/browser\/network-log\/([^/]+)$/.exec(url);
+      if (networkMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const sessionId = decodeURIComponent(networkMatch[1]!);
+        return this.json(res, 200, { log: mgr.getNetworkLog(sessionId) });
+      }
+
+      const domMatch = /^\/api\/browser\/dom-snapshot\/([^/]+)$/.exec(url);
+      if (domMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const sessionId = decodeURIComponent(domMatch[1]!);
+          const html = await mgr.domSnapshot(sessionId);
+          return this.json(res, 200, { dom: html });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const profilesDeleteMatch = /^\/api\/browser\/profiles\/([^/]+)$/.exec(url);
+      if (profilesDeleteMatch && method === "DELETE") {
+        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
+        try {
+          const profileId = decodeURIComponent(profilesDeleteMatch[1]!);
+          profMgr.deleteProfile(profileId);
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+    }
+    // ── End Browser Control API ──────────────────────────────────────────
 
     if (method === "POST" && url === "/api/chat/sessions") {
       try {
@@ -3205,6 +3414,169 @@ export class DashboardService {
       });
     }
 
+    if (method === "GET" && url.startsWith("/api/workspace/characters")) {
+      const characters = this.listWorkspaceCharacters();
+      return this.json(res, 200, { characters, total: characters.length });
+    }
+
+    if (method === "GET" && url.startsWith("/api/workspace/character-assignments")) {
+      const parsed = new URL(`http://localhost${url}`);
+      const filter: CharacterAssignmentFilter = {};
+      const characterId = parsed.searchParams.get("characterId")?.trim();
+      const prismUserId = parsed.searchParams.get("prismUserId")?.trim();
+      const prismUserEmail = parsed.searchParams.get("prismUserEmail")?.trim();
+      const operatorId = parsed.searchParams.get("operatorId")?.trim();
+      const operatorEmail = parsed.searchParams.get("operatorEmail")?.trim();
+      const clientId = parsed.searchParams.get("clientId")?.trim();
+      const sessionId = parsed.searchParams.get("sessionId")?.trim();
+      const executionProfileSegment = parsed.searchParams.get("executionProfileSegment")?.trim();
+      const state = parsed.searchParams.get("state")?.trim();
+      if (characterId) filter.characterId = characterId;
+      if (prismUserId) filter.prismUserId = prismUserId;
+      if (prismUserEmail) filter.prismUserEmail = prismUserEmail;
+      if (operatorId) filter.operatorId = operatorId;
+      if (operatorEmail) filter.operatorEmail = operatorEmail;
+      if (clientId) filter.clientId = clientId;
+      if (sessionId) filter.sessionId = sessionId;
+      if (executionProfileSegment === "individual" || executionProfileSegment === "business") {
+        filter.executionProfileSegment = executionProfileSegment;
+      }
+      if (state === "active" || state === "suspended" || state === "revoked") {
+        filter.state = state;
+      }
+      const assignments = this.characterAccountabilityManager.list(filter);
+      const characterIndex = new Map(this.listWorkspaceCharacters().map((character) => [character.id, character]));
+      return this.json(res, 200, {
+        assignments: assignments.map((assignment) => ({
+          ...assignment,
+          character: characterIndex.get(assignment.characterId) ?? null,
+        })),
+        total: assignments.length,
+      });
+    }
+
+    if (method === "GET" && url.startsWith("/api/workspace/character-audit")) {
+      const parsed = new URL(`http://localhost${url}`);
+      const characterId = parsed.searchParams.get("characterId")?.trim() ?? "";
+      const assignmentId = parsed.searchParams.get("assignmentId")?.trim() ?? "";
+      const operatorEmail = parsed.searchParams.get("operatorEmail")?.trim().toLowerCase() ?? "";
+      const limitRaw = Number(parsed.searchParams.get("limit") ?? "20");
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.trunc(limitRaw))) : 20;
+      const events = this.activityBus
+        .listEvents()
+        .filter((event) => event.operation.startsWith("character_accountability."))
+        .filter((event) => !characterId || event.characterId === characterId)
+        .filter((event) => !assignmentId || event.assignmentId === assignmentId)
+        .filter((event) => !operatorEmail || (event.operatorEmail ?? "").toLowerCase() === operatorEmail)
+        .slice()
+        .sort((left, right) => String(right.timestamp).localeCompare(String(left.timestamp)))
+        .slice(0, limit);
+      return this.json(res, 200, { events, total: events.length });
+    }
+
+    if (method === "POST" && url === "/api/workspace/character-assign") {
+      try {
+        const body = await this.readJsonBody<{
+          characterId?: string;
+          prismUserId?: string;
+          prismUserEmail?: string;
+          operatorId?: string;
+          operatorEmail?: string;
+          clientId?: string;
+          sessionId?: string;
+          executionProfile?: string;
+        }>(req);
+        const assignment = this.characterAccountabilityManager.assign({
+          characterId: String(body.characterId ?? "").trim(),
+          prismUserId: String(body.prismUserId ?? "").trim(),
+          prismUserEmail: String(body.prismUserEmail ?? "").trim(),
+          operatorId: String(body.operatorId ?? "").trim(),
+          operatorEmail: String(body.operatorEmail ?? "").trim(),
+          clientId: String(body.clientId ?? "dashboard").trim() || "dashboard",
+          sessionId: String(body.sessionId ?? this.status.sessionId).trim() || this.status.sessionId,
+          executionProfile: String(body.executionProfile ?? this.status.executionProfileSegment).trim() || this.status.executionProfileSegment,
+        });
+        return this.json(res, 200, { ok: true, assignment });
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        return this.json(res, 400, { error: e.message ?? "Character assignment failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/workspace/character-dispatch") {
+      try {
+        const body = await this.readJsonBody<{ assignmentId?: string }>(req);
+        const assignmentId = String(body.assignmentId ?? "").trim();
+        if (!assignmentId) {
+          return this.json(res, 400, { error: "assignmentId is required." });
+        }
+        const assignment = this.characterAccountabilityManager.recordDispatch(assignmentId);
+        if (!assignment) {
+          return this.json(res, 404, { error: "Active assignment not found." });
+        }
+        return this.json(res, 200, { ok: true, assignment });
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        return this.json(res, 400, { error: e.message ?? "Dispatch failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/workspace/character-suspend") {
+      try {
+        const body = await this.readJsonBody<{ assignmentId?: string; reason?: string }>(req);
+        const assignmentId = String(body.assignmentId ?? "").trim();
+        const reason = String(body.reason ?? "dashboard suspend").trim() || "dashboard suspend";
+        if (!assignmentId) {
+          return this.json(res, 400, { error: "assignmentId is required." });
+        }
+        const assignment = this.characterAccountabilityManager.suspend(assignmentId, reason);
+        if (!assignment) {
+          return this.json(res, 404, { error: "Active assignment not found." });
+        }
+        return this.json(res, 200, { ok: true, assignment });
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        return this.json(res, 400, { error: e.message ?? "Suspend failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/workspace/character-resume") {
+      try {
+        const body = await this.readJsonBody<{ assignmentId?: string }>(req);
+        const assignmentId = String(body.assignmentId ?? "").trim();
+        if (!assignmentId) {
+          return this.json(res, 400, { error: "assignmentId is required." });
+        }
+        const assignment = this.characterAccountabilityManager.resume(assignmentId);
+        if (!assignment) {
+          return this.json(res, 404, { error: "Suspended assignment not found." });
+        }
+        return this.json(res, 200, { ok: true, assignment });
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        return this.json(res, 400, { error: e.message ?? "Resume failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/workspace/character-revoke") {
+      try {
+        const body = await this.readJsonBody<{ assignmentId?: string; reason?: string }>(req);
+        const assignmentId = String(body.assignmentId ?? "").trim();
+        const reason = String(body.reason ?? "dashboard revoke").trim() || "dashboard revoke";
+        if (!assignmentId) {
+          return this.json(res, 400, { error: "assignmentId is required." });
+        }
+        const assignment = this.characterAccountabilityManager.revoke(assignmentId, reason);
+        if (!assignment) {
+          return this.json(res, 404, { error: "Assignment not found." });
+        }
+        return this.json(res, 200, { ok: true, assignment });
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        return this.json(res, 400, { error: e.message ?? "Revoke failed" });
+      }
+    }
+
     if (method === "GET" && url === "/api/workspace/files") {
       const root = resolveWorkspaceRoot();
       if (!existsSync(root)) {
@@ -3544,6 +3916,70 @@ export class DashboardService {
     return JSON.parse(raw) as T;
   }
 
+  private listWorkspaceCharacters(): Array<{
+    id: string;
+    name: string;
+    displayName: string;
+    executionProfile: string | null;
+    persona: string | null;
+    greeting: string | null;
+    systemPrompt: string | null;
+    tags: string[];
+    maxRiskTier: number | null;
+    allowedTools: string[];
+    deniedTools: string[];
+    sourcePath: string;
+  }> {
+    const dir = workspaceCharactersDir();
+    if (!existsSync(dir)) {
+      return [];
+    }
+    const files = readdirSync(dir)
+      .filter((entry) => entry.toLowerCase().endsWith(".json"))
+      .sort((left, right) => left.localeCompare(right));
+    const characters: Array<{
+      id: string;
+      name: string;
+      displayName: string;
+      executionProfile: string | null;
+      persona: string | null;
+      greeting: string | null;
+      systemPrompt: string | null;
+      tags: string[];
+      maxRiskTier: number | null;
+      allowedTools: string[];
+      deniedTools: string[];
+      sourcePath: string;
+    }> = [];
+    for (const fileName of files) {
+      const fullPath = join(dir, fileName);
+      try {
+        const parsed = JSON.parse(readFileSync(fullPath, "utf-8")) as Record<string, unknown>;
+        const toolPermissions = (parsed.toolPermissions ?? {}) as Record<string, unknown>;
+        const allow = Array.isArray(toolPermissions.allow) ? toolPermissions.allow.map((entry) => String(entry)) : [];
+        const deny = Array.isArray(toolPermissions.deny) ? toolPermissions.deny.map((entry) => String(entry)) : [];
+        const name = String(parsed.name ?? fileName.replace(/\.json$/i, "")).trim();
+        characters.push({
+          id: name,
+          name,
+          displayName: String(parsed.displayName ?? name).trim() || name,
+          executionProfile: parsed.executionProfile != null ? String(parsed.executionProfile) : null,
+          persona: parsed.persona != null ? String(parsed.persona) : null,
+          greeting: parsed.greeting != null ? String(parsed.greeting) : null,
+          systemPrompt: parsed.systemPrompt != null ? String(parsed.systemPrompt) : null,
+          tags: Array.isArray(parsed.tags) ? parsed.tags.map((entry) => String(entry)) : [],
+          maxRiskTier: Number.isFinite(Number(parsed.maxRiskTier)) ? Number(parsed.maxRiskTier) : null,
+          allowedTools: allow,
+          deniedTools: deny,
+          sourcePath: fullPath,
+        });
+      } catch {
+        // Ignore malformed character documents in the panel list.
+      }
+    }
+    return characters;
+  }
+
   private async generateAssistantReply(sessionId: string, content: string, conversation: ChatMessage[]): Promise<{
     content: string;
     metadata: Record<string, unknown>;
@@ -3718,6 +4154,10 @@ export class DashboardService {
                 .map((e) => ({
                   type: e.type,
                   tool: e.toolCall?.name ?? e.toolResult?.name,
+                  arguments: e.toolCall?.arguments,
+                  output: e.toolResult?.output
+                    ? (typeof e.toolResult.output === "string" ? e.toolResult.output.slice(0, 4000) : JSON.stringify(e.toolResult.output).slice(0, 4000))
+                    : undefined,
                   ok: e.toolResult?.ok,
                 })),
             },
@@ -5068,10 +5508,34 @@ function dashboardHtml(port: number): string {
     .framebuffer-controls button { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 12px; transition: background 0.15s, border-color 0.15s; }
     .framebuffer-controls button:hover { background: rgba(124,241,200,0.08); border-color: var(--accent); }
     .framebuffer-controls .fb-toggle-active { background: rgba(124,241,200,0.15); border-color: #7cf1c8; color: #7cf1c8; }
-    .framebuffer-gallery { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; }
+    .framebuffer-gallery { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 4px; }
+    .framebuffer-gallery-path { font-family: monospace; font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 460px; }
+    .framebuffer-selection-summary { font-size: 11px; color: var(--muted); padding: 4px 0 2px; min-height: 18px; }
+    .framebuffer-gallery-controls { display: flex; gap: 6px; padding: 6px 0 2px; flex-wrap: wrap; }
+    .framebuffer-gallery-controls button { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 12px; transition: background 0.15s, border-color 0.15s; }
+    .framebuffer-gallery-controls button:hover { background: rgba(124,241,200,0.08); border-color: var(--accent); }
+    .framebuffer-media-bar { display: none; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(10,14,23,0.85); border: 1px solid var(--border); border-top: none; border-radius: 0 0 6px 6px; flex-wrap: wrap; }
+    .framebuffer-media-bar button { padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 11px; transition: background 0.15s, border-color 0.15s; }
+    .framebuffer-media-bar button:hover { background: rgba(124,241,200,0.08); border-color: var(--accent); }
+    .framebuffer-media-bar button.active { background: rgba(124,241,200,0.15); border-color: #7cf1c8; color: #7cf1c8; }
+    .framebuffer-media-bar .fb-media-spacer { flex: 1; }
+    .framebuffer-media-bar .fb-media-label { font-size: 10px; color: var(--muted); }
+    .framebuffer-viewer video { max-width: 100%; max-height: 480px; object-fit: contain; display: none; cursor: pointer; background: #000; }
     .framebuffer-thumb { width: 80px; height: 50px; object-fit: cover; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; opacity: 0.7; transition: opacity 0.15s, border-color 0.15s; flex-shrink: 0; }
     .framebuffer-thumb:hover { opacity: 1; border-color: var(--accent); }
     .framebuffer-meta { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .framebuffer-item { display: flex; flex-direction: column; width: 120px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; cursor: pointer; background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; }
+    .framebuffer-item:hover { border-color: var(--accent); box-shadow: 0 0 8px rgba(124,241,200,0.12); }
+    .framebuffer-item.selected { border-color: #7cf1c8; box-shadow: 0 0 12px rgba(124,241,200,0.25); }
+    .framebuffer-item-poster { position: relative; width: 100%; height: 70px; background: #0a0e17; overflow: hidden; }
+    .framebuffer-item-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .framebuffer-item-badge { position: absolute; top: 3px; right: 3px; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: rgba(0,0,0,0.7); color: #94a3b8; letter-spacing: 0.04em; }
+    .framebuffer-item-badge.burst { background: rgba(124,241,200,0.2); color: #7cf1c8; }
+    .framebuffer-item-body { padding: 4px 6px 5px; }
+    .framebuffer-item-kind { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .framebuffer-item-kind.burst { color: #7cf1c8; }
+    .framebuffer-item-title { font-size: 10px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; margin-top: 1px; }
+    .framebuffer-item-subtitle { font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
   </style>
 </head>
 <body>
@@ -5099,10 +5563,12 @@ function dashboardHtml(port: number): string {
         <button id="tab-button-tools" type="button" class="tab-button" data-tab-id="tools" role="tab" aria-selected="false" aria-controls="tab-tools" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Tools &amp; Plugins</button>
         <button id="tab-button-agentic" type="button" class="tab-button" data-tab-id="agentic" role="tab" aria-selected="false" aria-controls="tab-agentic" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Agentic Control</button>
         <button id="tab-button-computer" type="button" class="tab-button" data-tab-id="computer" role="tab" aria-selected="false" aria-controls="tab-computer" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Computer Control</button>
+        <button id="tab-button-browser" type="button" class="tab-button" data-tab-id="browser" role="tab" aria-selected="false" aria-controls="tab-browser" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Browser Control</button>
         <button id="tab-button-workspace" type="button" class="tab-button" data-tab-id="workspace" role="tab" aria-selected="false" aria-controls="tab-workspace" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Workspace</button>
         <button id="tab-button-network" type="button" class="tab-button" data-tab-id="network" role="tab" aria-selected="false" aria-controls="tab-network" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Network</button>
         <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Telemetry</button>
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Logs &amp; Debug</button>
+        <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Scheduler</button>
       </section>
 
       <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat" aria-hidden="false">
@@ -5154,8 +5620,8 @@ function dashboardHtml(port: number): string {
             </div>
           </section>
 
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
-            <section class="rail-section panel" style="flex:1;">
+          <div id="provider-matrix-row" style="display: flex; align-items: stretch; gap: 0; min-width: 0;">
+            <section id="provider-config-panel" class="rail-section panel" style="flex: 0 0 50%; min-width: 200px; overflow: hidden; box-sizing: border-box;">
               <div class="collapsible-header" onclick="togglePanelCollapse('providerConfig')">
                 <h3>Provider Configuration</h3>
                 <span class="collapse-chevron" id="chevron-providerConfig">\u25B6</span>
@@ -5166,7 +5632,10 @@ function dashboardHtml(port: number): string {
               </div>
               <div id="providerConfig-summary" style="padding:8px 12px;"></div>
             </section>
-            <section class="rail-section panel" style="flex:1;">
+            <div id="provider-matrix-divider" title="Drag to resize" style="width:8px;cursor:col-resize;flex-shrink:0;position:relative;user-select:none;z-index:1;">
+              <div style="position:absolute;top:8%;bottom:8%;left:50%;transform:translateX(-50%);width:2px;background:rgba(148,163,184,0.15);border-radius:2px;pointer-events:none;"></div>
+            </div>
+            <section id="model-matrix-panel" class="rail-section panel" style="flex: 1 1 0; min-width: 200px; overflow: hidden; box-sizing: border-box;">
               <div class="collapsible-header" onclick="togglePanelCollapse('modelMatrix')">
                 <h3>Model Capability Matrix</h3>
                 <span class="collapse-chevron" id="chevron-modelMatrix">\u25BC</span>
@@ -5359,13 +5828,33 @@ function dashboardHtml(port: number): string {
                 <button onclick="burstCapture()" title="Burst capture 8 FPS for 2 seconds">\u{1F4F9} Burst (8 FPS)</button>
                 <button onclick="refreshFramebufferViewer()" title="Refresh the viewer with the latest image">\u{1F504} Refresh</button>
                 <button id="fb-auto-toggle" onclick="toggleFramebufferAutoRefresh()" title="Auto-refresh the viewer every 2 seconds">Auto-Refresh: OFF</button>
+                <button onclick="runFramebufferDiagnostics()" title="Run capture diagnostics">🔧 Diagnostics</button>
                 <span class="framebuffer-meta" id="fb-meta"></span>
               </div>
               <div class="framebuffer-viewer" id="framebuffer-viewer">
                 <div class="fb-placeholder" id="fb-placeholder">No screengrab captured yet.<br/>Use <strong>Capture</strong> or trigger an agentic action to begin.</div>
                 <img id="framebuffer-preview" style="display:none;" alt="Latest screengrab" onclick="window.open(this.src, \\'_blank\\')" title="Click to open full size" />
+                <video id="framebuffer-preview-video" style="display:none;" autoplay loop muted playsinline title="Burst video — click to open" onclick="window.open(this.src, \\'_blank\\')"></video>
+              </div>
+              <div class="framebuffer-media-bar" id="framebuffer-media-bar">
+                <button id="fb-mc-playpause" onclick="toggleBurstPlayPause()" title="Play / Pause burst animation">⏸ Pause</button>
+                <button onclick="stopBurstFromUI()" title="Stop animation and show first frame">⏹ Stop</button>
+                <span class="fb-media-spacer"></span>
+                <span class="fb-media-label">Speed:</span>
+                <button id="fb-mc-speed-half" onclick="setBurstSpeed(0.5)" title="Half speed">0.5×</button>
+                <button id="fb-mc-speed-1x" onclick="setBurstSpeed(1)" title="Normal speed" class="active">1×</button>
+                <button id="fb-mc-speed-2x" onclick="setBurstSpeed(2)" title="Double speed">2×</button>
+              </div>
+              <div class="framebuffer-selection-summary" id="framebuffer-selection-summary"></div>
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px;flex-wrap:wrap;">
+                <span class="muted" style="font-size:10px;">📁</span>
+                <span class="framebuffer-gallery-path" id="framebuffer-path">Loading…</span>
+                <span style="flex:1;"></span>
+                <span id="framebuffer-gallery-summary" class="muted" style="font-size:11px;"></span>
               </div>
               <div class="framebuffer-gallery" id="framebuffer-gallery"></div>
+              <div class="framebuffer-gallery-controls" id="framebuffer-gallery-controls"></div>
+              <div id="fb-diagnostics" style="display:none;margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;background:rgba(0,0,0,0.3);"></div>
             </div>
           </section>
 
@@ -5402,34 +5891,6 @@ function dashboardHtml(port: number): string {
                   <button class="primary-button" onclick="refreshPolicyStatus()" style="font-size:12px;">\u{1F504} Refresh Policy Status</button>
                 </div>
                 <div id="policy-status-output" class="muted" style="margin-top:10px;font-size:12px;">Policy status not yet loaded.</div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Browser Control Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('browserControl')">
-              <h3>\u{1F310} Browser Control</h3>
-              <span id="browserControl-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="browserControl-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Browser settings, preview control, and launch options.</div>
-              <div id="browser-control-container" class="stack">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-                  <div class="panel" style="padding:12px;">
-                    <div class="muted" style="font-size:11px;">Default Browser</div>
-                    <div id="browser-default" style="font-size:13px;font-weight:600;">Detecting...</div>
-                  </div>
-                  <div class="panel" style="padding:12px;">
-                    <div class="muted" style="font-size:11px;">Preview Mode</div>
-                    <div id="browser-preview-mode" style="font-size:13px;font-weight:600;">Embedded</div>
-                  </div>
-                </div>
-                <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-                  <button class="primary-button" onclick="launchBrowserPreview()" style="font-size:12px;">\u{1F680} Launch Preview</button>
-                  <button class="primary-button" onclick="openBrowserDevTools()" style="font-size:12px;">\u{1F527} Dev Tools</button>
-                  <button class="primary-button" onclick="refreshBrowserInfo()" style="font-size:12px;">\u{1F504} Refresh</button>
-                </div>
               </div>
             </div>
           </section>
@@ -5493,9 +5954,197 @@ function dashboardHtml(port: number): string {
         </div>
       </section>
 
+      <!-- ═══════════════ BROWSER CONTROL TAB ═══════════════ -->
+      <section id="tab-browser" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-browser" aria-hidden="true">
+        <div class="tab-grid">
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <div class="rail-header">
+              <h3>\u{1F310} Browser Control</h3>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span id="browser-default" class="muted" style="font-size:12px;">Detecting...</span>
+                <span id="browser-preview-mode" class="muted" style="font-size:12px;display:none;"></span>
+                <button id="browser-f12-btn" class="secondary-button" onclick="toggleBrowserDevTools()" style="font-size:12px;padding:4px 10px;">F12 Dev Tools</button>
+                <button class="secondary-button" onclick="browserRunDiagnostics()" style="font-size:12px;padding:4px 10px;">\u{1F50D} Diagnostics</button>
+              </div>
+            </div>
+            <div id="browser-diagnostics-result" style="display:none;padding:10px;background:rgba(255,255,255,0.04);border-radius:8px;margin:8px 0;font-size:12px;"></div>
+            <div class="tabs panel" style="margin:10px 0;padding:6px;">
+              <button id="bv-sessions" class="tab-button active" onclick="setBrowserView('sessions')" style="font-size:12px;">Sessions</button>
+              <button id="bv-viewport" class="tab-button" onclick="setBrowserView('viewport')" style="font-size:12px;">Viewport</button>
+              <button id="bv-network" class="tab-button" onclick="setBrowserView('network')" style="font-size:12px;">Network</button>
+              <button id="bv-console" class="tab-button" onclick="setBrowserView('console')" style="font-size:12px;">Console</button>
+              <button id="bv-dom" class="tab-button" onclick="setBrowserView('dom')" style="font-size:12px;">DOM</button>
+              <button id="bv-storage" class="tab-button" onclick="setBrowserView('storage')" style="font-size:12px;">Storage</button>
+              <button id="bv-profiles" class="tab-button" onclick="setBrowserView('profiles')" style="font-size:12px;">Profiles</button>
+            </div>
+            <!-- Sessions Panel -->
+            <div id="browser-sessions-panel">
+              <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+                <select id="browser-launch-profile" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option value="">No profile (ephemeral)</option></select>
+                <button class="primary-button" onclick="browserLaunchSession(false)" style="font-size:12px;">\u{1F680} Launch Headed</button>
+                <button class="primary-button" onclick="browserLaunchSession(true)" style="font-size:12px;">\u{1F916} Launch Headless</button>
+                <button class="secondary-button" onclick="refreshSessionsList()" style="font-size:12px;">\u{1F504} Refresh</button>
+              </div>
+              <div id="browser-sessions-list" class="stack"><span class="muted">No active sessions. Click Launch to start one.</span></div>
+            </div>
+            <!-- Viewport Panel -->
+            <div id="browser-viewport-panel" style="display:none;">
+              <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+                <select id="browser-active-session" onchange="browserSessionChanged()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;min-width:180px;"><option value="">Select session...</option></select>
+                <input id="browser-url-input" type="text" placeholder="https://example.com" style="flex:1;min-width:180px;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;" onkeydown="if(event.key==='Enter')browserNavigate()" />
+                <button class="primary-button" onclick="browserNavigate()" style="font-size:12px;">Go</button>
+                <button class="secondary-button" onclick="browserTakeScreenshot()" style="font-size:12px;">\u{1F4F7} Screenshot</button>
+              </div>
+              <div id="browser-page-info" class="muted" style="font-size:12px;margin-bottom:8px;"></div>
+              <div id="browser-viewport-container" class="panel" style="min-height:200px;display:flex;align-items:center;justify-content:center;"><span class="muted">No screenshot yet. Navigate to a URL.</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+                <div class="panel" style="padding:12px;">
+                  <div class="muted" style="font-size:11px;margin-bottom:6px;">Click Element</div>
+                  <div style="display:flex;gap:6px;">
+                    <input id="browser-click-selector" type="text" placeholder="CSS selector" style="flex:1;padding:5px 8px;border-radius:5px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;" />
+                    <button class="primary-button" onclick="browserClickElement()" style="font-size:12px;">Click</button>
+                  </div>
+                </div>
+                <div class="panel" style="padding:12px;">
+                  <div class="muted" style="font-size:11px;margin-bottom:6px;">Type Text</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <input id="browser-type-selector" type="text" placeholder="CSS selector" style="flex:1;min-width:100px;padding:5px 8px;border-radius:5px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;" />
+                    <input id="browser-type-text" type="text" placeholder="Text to type" style="flex:1;min-width:100px;padding:5px 8px;border-radius:5px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;" />
+                    <button class="primary-button" onclick="browserTypeText()" style="font-size:12px;">Type</button>
+                  </div>
+                </div>
+              </div>
+              <div class="panel" style="padding:12px;margin-top:12px;">
+                <div class="muted" style="font-size:11px;margin-bottom:6px;">Evaluate JS</div>
+                <div style="display:flex;gap:6px;">
+                  <input id="browser-eval-input" type="text" placeholder="document.title" style="flex:1;padding:5px 8px;border-radius:5px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;" onkeydown="if(event.key==='Enter')browserEvaluate()" />
+                  <button class="primary-button" onclick="browserEvaluate()" style="font-size:12px;">Eval</button>
+                </div>
+                <div id="browser-eval-result" style="display:none;margin-top:6px;padding:6px;background:rgba(0,0,0,0.2);border-radius:5px;font-size:12px;"></div>
+              </div>
+            </div>
+            <!-- Network Panel -->
+            <div id="browser-network-panel" style="display:none;">
+              <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+                <select id="browser-network-session" onchange="browserRefreshNetwork()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;min-width:180px;"><option value="">Select session...</option></select>
+                <button class="secondary-button" onclick="browserRefreshNetwork()" style="font-size:12px;">\u{1F504} Refresh</button>
+              </div>
+              <table class="events-table" style="width:100%;"><thead><tr><th>Method</th><th>URL</th><th>Status</th><th>Type</th><th>Time</th></tr></thead><tbody id="browser-network-body"><tr><td colspan="5" class="muted" style="padding:10px;">Select a session first.</td></tr></tbody></table>
+            </div>
+            <!-- Console Panel -->
+            <div id="browser-console-panel" style="display:none;">
+              <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+                <select id="browser-console-session" onchange="browserRefreshConsole()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;min-width:180px;"><option value="">Select session...</option></select>
+                <button class="secondary-button" onclick="browserRefreshConsole()" style="font-size:12px;">\u{1F504} Refresh</button>
+              </div>
+              <div id="browser-console-entries" class="panel" style="max-height:400px;overflow-y:auto;padding:8px;"><span class="muted">Select a session first.</span></div>
+            </div>
+            <!-- DOM Panel -->
+            <div id="browser-dom-panel" style="display:none;">
+              <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+                <select id="browser-dom-session" onchange="browserRefreshDom()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;min-width:180px;"><option value="">Select session...</option></select>
+                <button class="secondary-button" onclick="browserRefreshDom()" style="font-size:12px;">\u{1F504} Refresh</button>
+              </div>
+              <pre id="browser-dom-content" style="max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-all;font-size:11px;background:rgba(0,0,0,0.2);padding:10px;border-radius:6px;">Select a session first.</pre>
+            </div>
+            <!-- Storage Panel -->
+            <div id="browser-storage-panel" style="display:none;">
+              <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+                <select id="browser-storage-session" onchange="browserRefreshStorage()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;min-width:180px;"><option value="">Select session...</option></select>
+                <button class="secondary-button" onclick="browserRefreshStorage()" style="font-size:12px;">\u{1F504} Refresh</button>
+              </div>
+              <div style="display:flex;gap:4px;margin-bottom:8px;">
+                <button id="storage-tab-cookies" class="tab-button active" onclick="setStorageSubView('cookies')" style="font-size:11px;padding:4px 10px;">Cookies</button>
+                <button id="storage-tab-local" class="tab-button" onclick="setStorageSubView('local')" style="font-size:11px;padding:4px 10px;">localStorage</button>
+                <button id="storage-tab-session" class="tab-button" onclick="setStorageSubView('session')" style="font-size:11px;padding:4px 10px;">sessionStorage</button>
+              </div>
+              <div id="browser-storage-content" class="panel" style="padding:8px;"><span class="muted">Select a session first.</span></div>
+            </div>
+            <!-- Profiles Panel -->
+            <div id="browser-profiles-panel" style="display:none;">
+              <div class="panel" style="padding:12px;margin-bottom:12px;">
+                <div class="muted" style="font-size:11px;margin-bottom:8px;">Create New Profile</div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <input id="browser-profile-email" type="email" placeholder="user@example.com" style="flex:1;min-width:160px;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;" />
+                  <select id="browser-profile-segment" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;">
+                    <option value="individual">Individual</option>
+                    <option value="enterprise">Enterprise</option>
+                    <option value="operator">Operator</option>
+                  </select>
+                  <button class="primary-button" onclick="browserCreateProfile()" style="font-size:12px;">Create</button>
+                  <button class="secondary-button" onclick="browserRefreshProfiles()" style="font-size:12px;">\u{1F504} Refresh</button>
+                </div>
+              </div>
+              <div id="browser-profiles-list" class="stack"><span class="muted">Loading profiles...</span></div>
+            </div>
+            <!-- Action Log -->
+            <div class="panel" style="margin-top:16px;padding:10px;">
+              <div class="muted" style="font-size:11px;font-weight:600;margin-bottom:6px;">Action Log</div>
+              <div id="browser-action-history" style="max-height:150px;overflow-y:auto;"><span class="muted" style="font-size:12px;">No actions yet.</span></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <!-- ═══════════════ WORKSPACE TAB ═══════════════ -->
       <section id="tab-workspace" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-workspace" aria-hidden="true">
         <div class="tab-grid">
+          <!-- Character Panel -->
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('characterPanel')">
+              <h3>Character Panel</h3>
+              <span id="characterPanel-collapse-icon" class="collapse-icon">\u25BC</span>
+            </div>
+            <div id="characterPanel-collapsible" class="collapsible-body">
+              <div class="muted" style="margin-bottom:8px;">Manage CAC assignments, inspect the full identity chain, and review lifecycle/audit activity directly in the Workspace tab.</div>
+              <div id="character-panel-status" style="display:none;margin-bottom:10px;padding:10px;border-radius:6px;font-size:12px;"></div>
+              <div id="character-summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;"></div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr);gap:12px;align-items:start;">
+                <div class="stack">
+                  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                    <input id="character-filter-input" type="text" placeholder="Filter by character, email, profile, or assignment..." style="flex:1;min-width:220px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:13px;" oninput="filterCharacterAssignments(this.value)" />
+                    <button class="primary-button" onclick="refreshCharacterPanel()" style="font-size:12px;">\u{1F504} Refresh</button>
+                  </div>
+                  <div id="character-roster" class="stack">
+                    <div class="muted" style="padding:16px;text-align:center;">Loading CAC assignments...</div>
+                  </div>
+                </div>
+                <div class="stack">
+                  <div class="panel" style="padding:12px;">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">New Assignment</div>
+                    <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+                      <select id="character-assign-character" onchange="onCharacterDefinitionChanged()" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
+                        <option value="">Loading characters...</option>
+                      </select>
+                      <input id="character-assign-prism-user-id" type="text" placeholder="Prism user ID" value="prism-dashboard-user" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      <input id="character-assign-prism-user-email" type="email" placeholder="Prism user email" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      <input id="character-assign-operator-id" type="text" placeholder="Operator ID" value="workspace-operator" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      <input id="character-assign-operator-email" type="email" placeholder="Operator email" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      <input id="character-assign-client-id" type="text" placeholder="Client ID" value="workspace-tab" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      <select id="character-assign-profile" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
+                        <option value="individual">individual</option>
+                        <option value="business">business</option>
+                      </select>
+                      <button class="primary-button" onclick="submitCharacterAssignment()" style="font-size:12px;">Assign Character</button>
+                    </div>
+                  </div>
+                  <div class="panel" style="padding:12px;">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Character Profile Inspector</div>
+                    <div id="character-definition-preview">
+                      <div class="muted" style="font-size:12px;">Select a character to inspect its CAC profile, tool permissions, and persona.</div>
+                    </div>
+                  </div>
+                  <div class="panel" style="padding:12px;">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Accountability Audit Log</div>
+                    <div id="character-audit-log" style="max-height:420px;overflow:auto;">
+                      <div class="muted" style="font-size:12px;">Loading accountability activity...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <!-- Workspace Location Panel -->
           <section class="rail-section panel" style="grid-column:1/-1;">
             <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('workspaceLocation')">
@@ -5729,5573 +6378,107 @@ function dashboardHtml(port: number): string {
             <h3>Recent Events</h3>
             <div id="events"></div>
           </section>
+          <section class="rail-section panel">
+            <h3>Tool Call Log</h3>
+            <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
+              <span class="muted" style="font-size:11px;">Live tool calls from agentic sessions.</span>
+              <div style="flex:1;"></div>
+              <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="state.toolCallLog=[];safeRenderStep('toolCallLog',renderToolCallLog);">Clear</button>
+            </div>
+            <div id="tool-call-log"></div>
+          </section>
         </div>
       </section>
+
+      <!-- ═══════════════ SCHEDULER TAB ═══════════════ -->
+      <section id="tab-scheduler" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-scheduler" aria-hidden="true">
+        <div class="tab-grid">
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <div class="rail-header">
+              <h3>\u{1F4C5} Scheduler</h3>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('event')">+ Event</button>
+                <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('task')">+ Task</button>
+                <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('project')">+ Project</button>
+                <button class="secondary-button" style="font-size:12px;" onclick="refreshSchedulerData()">\u{1F504} Refresh</button>
+              </div>
+            </div>
+            <!-- Sub-view nav -->
+            <div class="tabs panel" style="margin:10px 0;padding:6px;">
+              <button class="tab-button sched-subnav-btn active" data-sched-view="calendar" onclick="switchSchedulerView('calendar')" style="font-size:12px;">\u{1F4C5} Calendar</button>
+              <button class="tab-button sched-subnav-btn" data-sched-view="projects" onclick="switchSchedulerView('projects')" style="font-size:12px;">\u{1F4CB} Projects</button>
+              <button class="tab-button sched-subnav-btn" data-sched-view="board" onclick="switchSchedulerView('board')" style="font-size:12px;">\u{1F4CC} Board</button>
+              <button class="tab-button sched-subnav-btn" data-sched-view="timeline" onclick="switchSchedulerView('timeline')" style="font-size:12px;">\u{1F4CA} Timeline</button>
+            </div>
+            <!-- Calendar view -->
+            <div id="sched-view-calendar">
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+                <button class="secondary-button" onclick="schedCalNav(-1)" style="font-size:12px;padding:4px 10px;">&lsaquo;</button>
+                <span id="sched-cal-title" style="font-size:14px;font-weight:600;min-width:120px;text-align:center;"></span>
+                <button class="secondary-button" onclick="schedCalNav(1)" style="font-size:12px;padding:4px 10px;">&rsaquo;</button>
+                <button class="tab-button sched-mode-btn" data-cal-mode="year" onclick="setCalMode('year')" style="font-size:11px;padding:4px 10px;">Year</button>
+                <button class="tab-button sched-mode-btn active" data-cal-mode="month" onclick="setCalMode('month')" style="font-size:11px;padding:4px 10px;">Month</button>
+                <button class="tab-button sched-mode-btn" data-cal-mode="week" onclick="setCalMode('week')" style="font-size:11px;padding:4px 10px;">Week</button>
+                <button class="tab-button sched-mode-btn" data-cal-mode="day" onclick="setCalMode('day')" style="font-size:11px;padding:4px 10px;">Day</button>
+              </div>
+              <div id="sched-cal-body" style="min-height:200px;"></div>
+            </div>
+            <!-- Projects view -->
+            <div id="sched-view-projects" style="display:none;">
+              <div id="sched-projects-list" class="stack"><span class="muted" style="font-size:12px;">No projects. Click + Project to create one.</span></div>
+            </div>
+            <!-- Board (Kanban) view -->
+            <div id="sched-view-board" style="display:none;">
+              <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;min-height:300px;">
+                <div data-status="backlog">
+                  <div style="font-weight:600;font-size:12px;margin-bottom:8px;">Backlog</div>
+                  <div id="sched-lane-backlog" class="sched-lane-body" style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+                </div>
+                <div data-status="todo">
+                  <div style="font-weight:600;font-size:12px;margin-bottom:8px;">To Do</div>
+                  <div id="sched-lane-todo" class="sched-lane-body" style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+                </div>
+                <div data-status="in-progress">
+                  <div style="font-weight:600;font-size:12px;margin-bottom:8px;">In Progress</div>
+                  <div id="sched-lane-in-progress" class="sched-lane-body" style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+                </div>
+                <div data-status="review">
+                  <div style="font-weight:600;font-size:12px;margin-bottom:8px;">Review</div>
+                  <div id="sched-lane-review" class="sched-lane-body" style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+                </div>
+                <div data-status="done">
+                  <div style="font-weight:600;font-size:12px;margin-bottom:8px;">Done</div>
+                  <div id="sched-lane-done" class="sched-lane-body" style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Timeline (Gantt) view -->
+            <div id="sched-view-timeline" style="display:none;">
+              <div id="sched-gantt-header" style="position:relative;height:24px;"></div>
+              <div id="sched-gantt-rows" style="min-height:100px;"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Scheduler Modal -->
+      <div id="sched-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:520px;width:90%;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 id="sched-modal-title" style="margin:0;font-size:16px;"></h3>
+            <button class="secondary-button" onclick="closeSchedulerModal()" style="font-size:18px;padding:2px 8px;line-height:1;">&times;</button>
+          </div>
+          <div id="sched-modal-body"></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+            <button class="secondary-button" onclick="closeSchedulerModal()">Cancel</button>
+            <button id="sched-modal-save" class="primary-button" onclick="saveSchedulerModal()">Save</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
-  <script>
-    const state = {
-      activeTab: 'chat',
-      sessions: [],
-      selectedSessionId: null,
-      messages: [],
-      status: null,
-      readiness: null,
-      llmCatalog: null,
-      llmConfig: null,
-      llmAuditEvents: [],
-      actions: [],
-      pending: [],
-      actionHistory: [],
-      selfReviewLatest: null,
-      selfReviewHistory: [],
-      retrievalAlerts: [],
-      prioritizedAlerts: null,
-      telemetrySummary: null,
-      telemetryWindow: '1d',
-      runtimeExcellence: null,
-      releaseValidation: null,
-      releaseDecision: null,
-      traceData: null,
-      selectedTraceId: null,
-      events: [],
-      busy: false,
-      notice: null,
-      providerSettingsCache: {},
-      expandedProviderId: null,
-      providerTestResults: {},
-      providerApiKeyVisible: {},
-      localLlmSelectionBySession: {},
-      sessionPackages: [],
-      sessionPackageHistory: [],
-      packageReleaseSnapshot: null,
-      expandedSessionPackages: {},
-      matrixSortCol: 'tier',
-      matrixSortAsc: false,
-      matrixFilterProvider: '',
-      matrixFilterTier: '',
-      matrixFilterLocality: '',
-      matrixFilterText: '',
-      matrixDraftPattern: '',
-      matrixDraftTier: '',
-      matrixDraftLocality: 'local',
-      matrixDraftStrengths: '',
-      matrixEditingPattern: null,
-      sessionProviderCollapsed: false,
-      providerConfigCollapsed: true,
-      modelMatrixCollapsed: false,
-      modelRoutingCollapsed: true,
-      routingStrategy: 'single',
-      routingRoleOverrides: {},
-      routingAgentOverrides: {},
-      routingModalityOverrides: {},
-      routingPreferredModality: null,
-      routingSuggestions: null,
-      routingModalitySuggestions: null,
-      availableModalities: [],
-      selectedModalityFilter: null,
-      modalityFilterEnabled: false,
-      sessionRoutingStrategy: 'direct',
-      modelProfiles: null,
-      settingsPanelCollapsed: false,
-      llmAuditCollapsed: false,
-      toolsPanelCollapsed: false,
-      pluginsPanelCollapsed: false,
-      utilitiesPanelCollapsed: false,
-      networkToolsCollapsed: false,
-      networkSettingsCollapsed: false,
-      networkTelemetryCollapsed: false,
-      networkConsoleCollapsed: false,
-      networkCommandHistory: [],
-      networkTelemetryData: { totalCommands: 0, tier1Count: 0, tier2Count: 0, tier3Count: 0, lastCommand: null, errorCount: 0 },
-      agentMgmtCollapsed: false,
-      subAgentCollapsed: false,
-      swarmControlCollapsed: false,
-      agentTelemetryCollapsed: false,
-      localControlCollapsed: false,
-      consoleViewCollapsed: false,
-      computerConfigCollapsed: false,
-      policyControlCollapsed: false,
-      browserControlCollapsed: false,
-      deviceManagerCollapsed: false,
-      workspaceLocationCollapsed: false,
-      workspaceFilesCollapsed: false,
-      importManagerCollapsed: false,
-      workspaceSettingsCollapsed: false,
-      expandedToolId: null,
-      expandedPluginId: null,
-      expandedUtilityId: null,
-      toolStates: {},
-      toolCatalog: [],
-      pluginStates: {},
-      utilityStates: {},
-      llmModalitySummary: null,
-      modelMatrixEntries: [],
-      toolReviews: {},
-      pluginReviews: {},
-      utilityReviews: {},
-      toolsFilterText: '',
-      runtimeSettings: null,
-      settingsSaving: false,
-      settingsSections: { runtime: true, llm: false, approval: true, selfReview: true, retrieval: false, timeouts: true, prefs: true, paths: false, readiness: true },
-      agentData: null,
-      computerSystemInfo: null,
-      computerConsoleHistory: [],
-      computerEnvVars: null,
-      computerDevices: null,
-      ramHistory: [],
-      vramHistory: [],
-      computerPollInterval: null,
-      importHistory: [],
-      framebufferAutoRefresh: false,
-      framebufferPollInterval: null,
-      agenticStream: [],
-      chatTelemetry: []
-    };
+  <script type="module" src="/public/dashboard-app.js"></script>
 
-    const tabs = [
-      { id: 'chat', label: 'Chat Interface' },
-      { id: 'settings', label: 'Provider & Settings' },
-      { id: 'tools', label: 'Tools & Plugins' },
-      { id: 'agentic', label: 'Agentic Control' },
-      { id: 'computer', label: 'Computer Control' },
-      { id: 'workspace', label: 'Workspace' },
-      { id: 'network', label: 'Network' },
-      { id: 'telemetry', label: 'Telemetry' },
-      { id: 'logs', label: 'Logs & Debug' }
-    ];
-
-    async function request(url, options) {
-      const response = await fetch(url, options);
-      const text = await response.text();
-      const payload = text ? JSON.parse(text) : {};
-      if (!response.ok) {
-        throw new Error(payload.error || ('Request failed with status ' + response.status));
-      }
-      return payload;
-    }
-
-    function escapeHtml(value) {
-      return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    function renderMarkdown(text) {
-      if (!text) return '';
-      var s = String(text);
-      // Fenced code blocks
-      s = s.replace(/\`\`\`(\\w*?)\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
-        return '<pre><code class="lang-' + escapeHtml(lang || 'text') + '">' + escapeHtml(code) + '</code></pre>';
-      });
-      // Inline code
-      s = s.replace(/\`([^\`]+?)\`/g, function(_, code) {
-        return '<code>' + escapeHtml(code) + '</code>';
-      });
-      // Blockquotes
-      s = s.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-      // Headers (process after escaping so # still works in source)
-      s = s.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
-      s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-      s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-      s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-      // Bold & italic
-      s = s.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
-      s = s.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
-      s = s.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
-      // Links
-      s = s.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(_, label, href) {
-        var safeHref = escapeHtml(href);
-        if (!/^https?:\\/\\//i.test(href)) return escapeHtml(label);
-        return '<a href="' + safeHref + '" target="_blank" rel="noopener">' + escapeHtml(label) + '</a>';
-      });
-      // Unordered lists
-      s = s.replace(/(^|\\n)([-*] .+(?:\\n[-*] .+)*)/g, function(_, pre, block) {
-        var items = block.split('\\n').map(function(line) {
-          return '<li>' + line.replace(/^[-*] /, '') + '</li>';
-        }).join('');
-        return pre + '<ul>' + items + '</ul>';
-      });
-      // Ordered lists
-      s = s.replace(/(^|\\n)(\\d+\\. .+(?:\\n\\d+\\. .+)*)/g, function(_, pre, block) {
-        var items = block.split('\\n').map(function(line) {
-          return '<li>' + line.replace(/^\\d+\\.\\s/, '') + '</li>';
-        }).join('');
-        return pre + '<ol>' + items + '</ol>';
-      });
-      // Paragraphs: double newlines
-      s = s.replace(/\\n\\n+/g, '</p><p>');
-      // Single newlines to <br>
-      s = s.replace(/\\n/g, '<br>');
-      return '<p>' + s + '</p>';
-    }
-
-    function formatRelativeTime(value) {
-      if (!value) {
-        return '-';
-      }
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) {
-        return value;
-      }
-      return date.toLocaleString();
-    }
-
-    function safeIso(value) {
-      const date = new Date(value || 0);
-      if (Number.isNaN(date.getTime())) {
-        return new Date(0).toISOString();
-      }
-      return date.toISOString();
-    }
-
-    function reconcileExpandedSessionPackages() {
-      const validPackageIds = new Set((state.sessionPackages || []).map(pkg => pkg.packageId));
-      for (const packageId of Object.keys(state.expandedSessionPackages || {})) {
-        if (!validPackageIds.has(packageId)) {
-          delete state.expandedSessionPackages[packageId];
-        }
-      }
-    }
-
-    async function loadSessionPackages() {
-      const payload = await request('/api/session-packages');
-      state.sessionPackages = Array.isArray(payload.packages) ? payload.packages : [];
-      state.packageReleaseSnapshot = payload.releaseSnapshot || null;
-      reconcileExpandedSessionPackages();
-    }
-
-    async function loadSessionPackageHistory() {
-      const payload = await request('/api/session-packages/history?limit=12').catch(() => ({ history: [] }));
-      state.sessionPackageHistory = Array.isArray(payload.history) ? payload.history : [];
-    }
-
-    async function mutateSessionPackage(packageId, patch, noticeText) {
-      await request('/api/session-packages/' + encodeURIComponent(packageId), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch || {})
-      });
-      await Promise.all([loadSessionPackages(), loadSessionPackageHistory()]);
-      if (noticeText) {
-        state.notice = noticeText;
-      }
-    }
-
-    function getPackagedSessionIdSet() {
-      const packaged = new Set();
-      for (const pkg of state.sessionPackages || []) {
-        for (const sessionId of pkg.sessionIds || []) {
-          packaged.add(sessionId);
-        }
-      }
-      return packaged;
-    }
-
-    function buildSessionTimeline() {
-      const bySessionId = new Map(state.sessions.map(session => [session.sessionId, session]));
-      const packagedSessionIds = getPackagedSessionIdSet();
-      const timeline = [];
-
-      for (const session of state.sessions) {
-        if (!packagedSessionIds.has(session.sessionId)) {
-          timeline.push({ type: 'session', timestamp: safeIso(session.updatedAt), session });
-        }
-      }
-
-      for (const pkg of state.sessionPackages || []) {
-        const sessions = (pkg.sessionIds || [])
-          .map(sessionId => bySessionId.get(sessionId))
-          .filter(Boolean)
-          .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
-        if (!sessions.length) {
-          continue;
-        }
-        const latestTimestamp = sessions.reduce((latest, session) => {
-          const updated = safeIso(session.updatedAt);
-          return updated > latest ? updated : latest;
-        }, safeIso(pkg.updatedAt || pkg.createdAt));
-        timeline.push({
-          type: 'package',
-          timestamp: latestTimestamp,
-          pkg,
-          sessions,
-        });
-      }
-
-      return timeline.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
-    }
-
-    async function exportSession() {
-      if (!state.selectedSessionId) {
-        state.notice = { type: 'error', message: 'No session selected to export.' };
-        render();
-        return;
-      }
-      try {
-        var messages = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages');
-        var session = state.sessions.find(function(s) { return s.sessionId === state.selectedSessionId; });
-        var exportData = {
-          format: 'prism-session-v1',
-          exportedAt: new Date().toISOString(),
-          session: {
-            title: session ? session.title : 'Untitled',
-            messageCount: messages.length,
-            createdAt: session ? session.createdAt : null,
-          },
-          messages: messages
-        };
-        var blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'prism-session-' + (session ? session.title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40) : 'export') + '.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        state.notice = 'Session exported successfully.';
-        render();
-      } catch (err) {
-        state.notice = { type: 'error', message: 'Export failed: ' + String(err) };
-        render();
-      }
-    }
-
-    function importSession() {
-      var input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
-      input.onchange = async function(e) {
-        var file = e.target.files[0];
-        if (!file) return;
-        try {
-          var text = await file.text();
-          var data = JSON.parse(text);
-          if (!data.format || data.format !== 'prism-session-v1' || !Array.isArray(data.messages)) {
-            state.notice = { type: 'error', message: 'Invalid session file. Expected prism-session-v1 format.' };
-            render();
-            return;
-          }
-          var title = (data.session && data.session.title) ? data.session.title + ' (imported)' : 'Imported Session';
-          var result = await request('/api/chat/sessions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: title })
-          });
-          var newSessionId = result.session.sessionId;
-          for (var i = 0; i < data.messages.length; i++) {
-            var msg = data.messages[i];
-            await request('/api/chat/sessions/' + encodeURIComponent(newSessionId) + '/messages', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ role: msg.role, content: msg.content })
-            });
-          }
-          await loadSessions();
-          state.selectedSessionId = newSessionId;
-          await loadMessages();
-          state.notice = 'Imported ' + data.messages.length + ' messages into \"' + title + '\".';
-          render();
-        } catch (err) {
-          state.notice = { type: 'error', message: 'Import failed: ' + String(err) };
-          render();
-        }
-      };
-      input.click();
-    }
-
-    async function packageSessions() {
-      const packagedSessionIds = getPackagedSessionIdSet();
-      const candidates = state.sessions
-        .filter(session => !packagedSessionIds.has(session.sessionId))
-        .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
-
-      if (candidates.length === 0) {
-        state.notice = 'No un-packaged sessions available.';
-        render();
-        return;
-      }
-
-      const packageId = 'pkg-' + Date.now();
-      const createdAt = new Date().toISOString();
-      const suggestedTitle = 'Session Package • ' + formatRelativeTime(createdAt);
-      const packageTitleInput = prompt('Package title:', suggestedTitle);
-      if (packageTitleInput === null) {
-        return;
-      }
-      const areaOfInterestInput = prompt('Area of interest (optional):', '');
-      if (areaOfInterestInput === null) {
-        return;
-      }
-      const objectiveInput = prompt('Package objective (optional):', '');
-      if (objectiveInput === null) {
-        return;
-      }
-      const successCriteriaInput = prompt('Success criteria (optional):', '');
-      if (successCriteriaInput === null) {
-        return;
-      }
-      const dependenciesInput = prompt('Dependencies (comma separated, optional):', '');
-      if (dependenciesInput === null) {
-        return;
-      }
-      const dependencies = dependenciesInput
-        .split(',')
-        .map(item => item.trim())
-        .filter(Boolean);
-
-      await request('/api/session-packages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: (packageTitleInput || '').trim() || suggestedTitle,
-          areaOfInterest: (areaOfInterestInput || '').trim() || null,
-          objective: (objectiveInput || '').trim() || null,
-          successCriteria: (successCriteriaInput || '').trim() || null,
-          dependencies,
-          status: 'planned',
-          sessionIds: candidates.map(session => session.sessionId)
-        })
-      });
-      await Promise.all([loadSessionPackages(), loadSessionPackageHistory()]);
-      if (state.sessionPackages[0]) {
-        state.expandedSessionPackages[state.sessionPackages[0].packageId] = true;
-      }
-      state.notice = 'Packaged ' + candidates.length + ' sessions into a binder.';
-      render();
-    }
-
-    function toggleSessionPackage(packageId) {
-      const current = Boolean(state.expandedSessionPackages[packageId]);
-      state.expandedSessionPackages[packageId] = !current;
-      render();
-    }
-
-    function getSessionsForPackage(pkg) {
-      const bySessionId = new Map(state.sessions.map(session => [session.sessionId, session]));
-      return (pkg.sessionIds || [])
-        .map(sessionId => bySessionId.get(sessionId))
-        .filter(Boolean)
-        .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
-    }
-
-    async function runPackageWorkflow(event, packageId) {
-      event.stopPropagation();
-      const pkg = (state.sessionPackages || []).find(item => item.packageId === packageId);
-      if (!pkg) {
-        return;
-      }
-
-      const sessions = getSessionsForPackage(pkg);
-      if (!sessions.length) {
-        state.notice = 'Package has no active session chapters.';
-        render();
-        return;
-      }
-
-      const targetSession = sessions[0];
-      state.selectedSessionId = targetSession.sessionId;
-
-      if (!state.readiness || !state.readiness.ready) {
-        state.notice = 'Complete provider readiness before running package workflow.';
-        state.activeTab = 'settings';
-        render();
-        return;
-      }
-
-      const orchestrationPrompt = [
-        'Execute multi-session package workflow orchestration for this binder.',
-        'Package title: ' + (pkg.title || 'Session Package'),
-        'Area of interest: ' + (pkg.areaOfInterest || 'unspecified'),
-        'Objective: ' + (pkg.objective || 'unspecified'),
-        'Success criteria: ' + (pkg.successCriteria || 'unspecified'),
-        'Dependencies: ' + ((pkg.dependencies || []).length ? pkg.dependencies.join(', ') : 'none'),
-        'Session chapters in scope: ' + sessions.map(session => session.title).join(' | '),
-        'Produce an execution plan with ordered phases, required approvals, and data orchestration checkpoints.'
-      ].join('\\n');
-
-      const previousStatus = pkg.status || 'planned';
-      state.busy = true;
-      state.notice = null;
-      render();
-      try {
-        await mutateSessionPackage(packageId, {
-          status: 'running',
-          lastRunAt: new Date().toISOString(),
-          historyAction: 'workflow_started',
-          message: 'Workflow launched from package controls.',
-          targetSessionId: targetSession.sessionId
-        });
-        await request('/api/chat/sessions/' + encodeURIComponent(targetSession.sessionId) + '/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: orchestrationPrompt })
-        });
-        await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
-        state.notice = 'Package workflow started in chapter session "' + targetSession.title + '".';
-      } catch (error) {
-        await mutateSessionPackage(packageId, {
-          status: previousStatus,
-          historyAction: 'status_changed',
-          message: 'Workflow launch failed; restored previous status.',
-          targetSessionId: targetSession.sessionId
-        }).catch(() => null);
-        state.notice = String(error);
-      } finally {
-        state.busy = false;
-        render();
-      }
-    }
-
-    async function setPackageStatus(event, packageId, nextStatus, actionLabel) {
-      event.stopPropagation();
-      const pkg = (state.sessionPackages || []).find(p => p.packageId === packageId);
-      if (!pkg) {
-        return;
-      }
-      const actionMap = {
-        planned: 'workflow_paused',
-        running: 'workflow_started',
-        blocked: 'workflow_blocked',
-        complete: 'workflow_completed'
-      };
-      await mutateSessionPackage(packageId, {
-        status: nextStatus,
-        historyAction: actionMap[nextStatus] || 'status_changed',
-        message: actionLabel || ('Package status set to ' + nextStatus + '.')
-      }, 'Package marked ' + nextStatus + '.');
-      render();
-    }
-
-    async function cyclePackageStatus(event, packageId) {
-      event.stopPropagation();
-      const pkg = (state.sessionPackages || []).find(p => p.packageId === packageId);
-      if (!pkg) {
-        return;
-      }
-      const cycle = ['planned', 'running', 'blocked', 'complete'];
-      const idx = cycle.indexOf(pkg.status || 'planned');
-      await setPackageStatus(event, packageId, cycle[(idx + 1) % cycle.length], 'Status advanced from package badge.');
-    }
-
-    async function exportPackageTrace(event, packageId) {
-      event.stopPropagation();
-      state.busy = true;
-      state.notice = null;
-      render();
-      try {
-        const payload = await request('/api/session-packages/' + encodeURIComponent(packageId) + '/export', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = packageId + '-trace-export.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
-        state.notice = 'Package trace export generated.';
-      } catch (error) {
-        state.notice = String(error);
-      } finally {
-        state.busy = false;
-        render();
-      }
-    }
-
-    async function unpackageSessionPackage(event, packageId) {
-      event.stopPropagation();
-      const existing = (state.sessionPackages || []).find(pkg => pkg.packageId === packageId);
-      if (!existing) {
-        return;
-      }
-
-      const confirmed = confirm('Unpackage "' + existing.title + '" and restore all chapters to top-level history?');
-      if (!confirmed) {
-        return;
-      }
-
-      await request('/api/session-packages/' + encodeURIComponent(packageId), {
-        method: 'DELETE'
-      });
-      state.sessionPackages = state.sessionPackages.filter(pkg => pkg.packageId !== packageId);
-      if (state.expandedSessionPackages[packageId]) {
-        delete state.expandedSessionPackages[packageId];
-      }
-      await loadSessionPackageHistory();
-      state.notice = 'Unpackaged "' + existing.title + '".';
-      render();
-    }
-
-    function statusBadge(action) {
-      const badgeClass = action.status === 'running'
-        ? 'badge badge-running'
-        : action.status === 'succeeded'
-          ? 'badge badge-succeeded'
-          : action.status === 'failed'
-            ? 'badge badge-failed'
-            : 'badge';
-      return '<span class="' + badgeClass + '">' + escapeHtml(action.status) + '</span>';
-    }
-
-    function getLocalLlmSelection(sessionId) {
-      if (!sessionId) {
-        return null;
-      }
-      return state.localLlmSelectionBySession[sessionId] || null;
-    }
-
-    function setLocalLlmSelection(sessionId, providerId, model) {
-      if (!sessionId || !providerId) {
-        return;
-      }
-      state.localLlmSelectionBySession[sessionId] = {
-        providerId,
-        model: model || ''
-      };
-    }
-
-    function clearLocalLlmSelection(sessionId) {
-      if (!sessionId) {
-        return;
-      }
-      if (state.localLlmSelectionBySession[sessionId]) {
-        delete state.localLlmSelectionBySession[sessionId];
-      }
-    }
-
-    async function loadSessions() {
-      const payload = await request('/api/chat/sessions');
-      state.sessions = payload;
-      const validSessionIds = new Set(state.sessions.map(session => session.sessionId));
-      for (const sessionId of Object.keys(state.localLlmSelectionBySession)) {
-        if (!validSessionIds.has(sessionId)) {
-          delete state.localLlmSelectionBySession[sessionId];
-        }
-      }
-      if (!state.selectedSessionId && state.sessions.length > 0) {
-        state.selectedSessionId = state.sessions[0].sessionId;
-      }
-      if (state.selectedSessionId && !state.sessions.some(session => session.sessionId === state.selectedSessionId)) {
-        state.selectedSessionId = state.sessions[0] ? state.sessions[0].sessionId : null;
-      }
-    }
-
-    async function createSession() {
-      const payload = await request('/api/chat/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
-      state.selectedSessionId = payload.session.sessionId;
-      await loadSessions();
-      await loadMessages();
-      await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
-      render();
-    }
-
-    async function loadMessages() {
-      if (!state.selectedSessionId) {
-        state.messages = [];
-        return;
-      }
-      const payload = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages');
-      state.messages = payload.messages;
-    }
-
-    async function refreshChrome() {
-      const llmUrl = state.selectedSessionId
-        ? '/api/llm/providers?sessionId=' + encodeURIComponent(state.selectedSessionId)
-        : null;
-      const llmConfigUrl = state.selectedSessionId
-        ? '/api/llm/config?sessionId=' + encodeURIComponent(state.selectedSessionId)
-        : null;
-      const readinessUrl = '/api/readiness'
-        + (state.selectedSessionId ? '?sessionId=' + encodeURIComponent(state.selectedSessionId) : '');
-      const llmAuditUrl = '/api/events?limit=10&operation=dashboard.llm_selection'
-        + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '');
-      const tracesUrl = '/api/traces?limit=10'
-        + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '')
-        + (state.selectedTraceId ? '&correlationId=' + encodeURIComponent(state.selectedTraceId) : '');
-      const chatTelemetryUrl = '/api/events?limit=25'
-        + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '');
-      const [status, readiness, llmCatalog, llmConfig, llmAuditEvents, chatTelemetryPayload, pending, actions, actionHistory, traceData, events, retrievalData, prioritizedAlertsData, telemetrySummaryData, runtimeExcellenceData, releaseValidationData, releaseDecisionData, selfReviewLatest, selfReviewHistory, packagePayload, packageHistoryPayload, settingsPayload, agentDataPayload, computerSystemInfoPayload, toolsStatusPayload, pluginsStatusPayload, llmModalitiesPayload, modelMatrixPayload] = await Promise.all([
-        request('/api/status'),
-        request(readinessUrl).catch(() => null),
-        llmUrl ? request(llmUrl) : Promise.resolve(null),
-        llmConfigUrl ? request(llmConfigUrl).catch(() => null) : Promise.resolve(null),
-        request(llmAuditUrl),
-        request(chatTelemetryUrl).catch(function() { return []; }),
-        request('/api/pending'),
-        request('/api/actions'),
-        request('/api/action-history'),
-        request(tracesUrl).catch(() => ({ traces: [], selectedTraceEvents: [] })),
-        request('/api/events?limit=8'),
-        request('/api/retrieval/alerts').catch(() => ({ alerts: [] })),
-        request('/api/retrieval/prioritized-alerts').catch(() => null),
-        request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
-        request('/api/runtime/excellence?window=' + state.telemetryWindow).catch(() => null),
-        request('/api/release/validation/latest').catch(() => ({ report: null })),
-        request('/api/release/decision/latest').catch(() => ({ report: null })),
-        request('/api/self-review/latest').catch(() => ({ report: null })),
-        request('/api/self-review/history?limit=5').catch(() => ({ reports: [] })),
-        request('/api/session-packages').catch(() => ({ packages: [], releaseSnapshot: null })),
-        request('/api/session-packages/history?limit=12').catch(() => ({ history: [] })),
-        request('/api/settings').catch(() => ({ settings: null })),
-        request('/api/agents').catch(() => ({ agents: [], swarms: [], telemetry: null })),
-        request('/api/computer/system-info').catch(() => null),
-        request('/api/tools/status').catch(function() { return { tools: {} }; }),
-        request('/api/plugins/status').catch(function() { return { plugins: {} }; }),
-        request('/api/llm/modalities').catch(function() { return { modalities: [] }; }),
-        request('/api/models/matrix').catch(function() { return { models: [] }; })
-      ]);
-      state.agentData = agentDataPayload || null;
-      state.computerSystemInfo = computerSystemInfoPayload || null;
-      var serverTools = (toolsStatusPayload && toolsStatusPayload.tools) || {};
-      state.toolCatalog = Array.isArray(toolsStatusPayload && toolsStatusPayload.catalog)
-        ? toolsStatusPayload.catalog
-        : [];
-      for (var tk in serverTools) {
-        if (!state.toolStates[tk]) state.toolStates[tk] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
-        var st = serverTools[tk];
-        state.toolStates[tk].invocations = st.invocations || 0;
-        state.toolStates[tk].successes = st.successes || 0;
-        state.toolStates[tk].failures = st.failures || 0;
-        state.toolStates[tk].avgLatencyMs = st.avgLatencyMs || 0;
-        state.toolStates[tk].lastInvoked = st.lastInvoked || null;
-        state.toolStates[tk].lastError = st.lastError || null;
-        if (typeof st.enabled === 'boolean') state.toolStates[tk].enabled = st.enabled;
-      }
-      var serverPlugins = (pluginsStatusPayload && pluginsStatusPayload.plugins) || {};
-      for (var pk in serverPlugins) {
-        if (!state.pluginStates[pk]) state.pluginStates[pk] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, uptime: 100, lastChecked: null };
-        var sp = serverPlugins[pk];
-        state.pluginStates[pk].requests = sp.requests || 0;
-        state.pluginStates[pk].errors = sp.errors || 0;
-        state.pluginStates[pk].avgResponseMs = sp.avgResponseMs || 0;
-        state.pluginStates[pk].lastChecked = sp.lastChecked || null;
-        if (typeof sp.enabled === 'boolean') state.pluginStates[pk].enabled = sp.enabled;
-        if (typeof sp.healthy === 'boolean') state.pluginStates[pk].healthy = sp.healthy;
-      }
-      var modalitySummary = llmModalitiesPayload || null;
-      state.llmModalitySummary = modalitySummary;
-      if (modalitySummary && Array.isArray(modalitySummary.modalities) && modalitySummary.modalities.length > 0) {
-        state.availableModalities = modalitySummary.modalities;
-      }
-      state.modelMatrixEntries = Array.isArray(modelMatrixPayload && modelMatrixPayload.models)
-        ? modelMatrixPayload.models
-        : [];
-      state.status = status;
-      state.readiness = readiness;
-      state.llmCatalog = llmCatalog;
-      state.llmConfig = llmConfig;
-      state.llmAuditEvents = llmAuditEvents;
-      state.chatTelemetry = (Array.isArray(chatTelemetryPayload) ? chatTelemetryPayload : []).filter(function(e) { return e.operation && (e.operation.startsWith('chat.') || e.operation.startsWith('llm.')); });
-      state.pending = pending;
-      state.actions = actions;
-      state.actionHistory = actionHistory;
-      state.traceData = traceData;
-      state.events = events;
-      state.selfReviewLatest = selfReviewLatest.report || null;
-      state.selfReviewHistory = selfReviewHistory.reports || [];
-      state.retrievalAlerts = retrievalData.alerts || [];
-      state.prioritizedAlerts = prioritizedAlertsData || null;
-      state.telemetrySummary = telemetrySummaryData || null;
-      state.runtimeExcellence = runtimeExcellenceData || null;
-      state.releaseValidation = releaseValidationData ? (releaseValidationData.report || null) : null;
-      state.releaseDecision = releaseDecisionData ? (releaseDecisionData.report || null) : null;
-      state.sessionPackages = Array.isArray(packagePayload.packages) ? packagePayload.packages : [];
-      state.packageReleaseSnapshot = packagePayload.releaseSnapshot || null;
-      state.sessionPackageHistory = Array.isArray(packageHistoryPayload.history) ? packageHistoryPayload.history : [];
-      state.runtimeSettings = settingsPayload.settings || null;
-      reconcileExpandedSessionPackages();
-      if (state.selectedTraceId && (!traceData || !traceData.traces || !traceData.traces.some(trace => trace.correlationId === state.selectedTraceId))) {
-        state.selectedTraceId = null;
-      }
-    }
-
-    async function bootstrap() {
-      try {
-        await loadSessions();
-        if (state.sessions.length === 0) {
-          await createSession();
-        } else {
-          await Promise.all([refreshChrome(), loadMessages()]);
-        }
-        // Load model profiles and routing config in background
-        fetchModelProfiles();
-        fetchRoutingState();
-      } catch (error) {
-        state.notice = String(error);
-      } finally {
-        render();
-      }
-    }
-
-    function renderSessions() {
-      const container = document.getElementById('session-list');
-      if (!state.sessions.length) {
-        container.innerHTML = '<div class="empty-state">No saved sessions yet.</div>';
-        return;
-      }
-
-      const renderSessionCard = function(session, extraClass) {
-        const preview = session.lastMessagePreview || 'Start a new conversation.';
-        const activeClass = state.selectedSessionId === session.sessionId ? ' active' : '';
-        const className = (extraClass ? ' ' + extraClass : '');
-        const onClick = extraClass === 'session-chapter'
-          ? 'event.stopPropagation(); selectSession(this.dataset.sessionId)'
-          : 'selectSession(this.dataset.sessionId)';
-        return '<div class="session-card' + activeClass + className + '" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="' + onClick + '">'
-          + '<div class="session-title">' + escapeHtml(session.title) + '</div>'
-          + '<div class="session-preview">' + escapeHtml(preview) + '</div>'
-          + '<div class="session-meta"><span>' + escapeHtml(String(session.messageCount)) + ' msgs</span><span>' + escapeHtml(formatRelativeTime(session.updatedAt)) + '</span></div>'
-          + '<div class="action-buttons">'
-          + '<button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button>'
-          + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="renameSession(event, this.dataset.sessionId)">Rename</button>'
-          + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="copySession(event, this.dataset.sessionId)">Copy Session</button>'
-          + '</div>'
-          + '</div>';
-      };
-
-      const timeline = buildSessionTimeline();
-      container.innerHTML = timeline.map(entry => {
-        if (entry.type === 'session') {
-          return renderSessionCard(entry.session);
-        }
-
-        const expanded = Boolean(state.expandedSessionPackages[entry.pkg.packageId]);
-        const childHtml = expanded
-          ? '<div class="session-package-children">'
-            + entry.sessions.map(session => renderSessionCard(session, 'session-chapter')).join('')
-            + '</div>'
-          : '';
-
-        const pkgStatus = entry.pkg.status || 'planned';
-        const summary = entry.pkg.summary || {};
-        const canPause = pkgStatus === 'running';
-        const canResume = pkgStatus === 'planned' || pkgStatus === 'blocked';
-        return '<div class="session-card session-package-card" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="toggleSessionPackage(this.dataset.packageId)">'
-          + '<div class="session-package-head">'
-          + '<div class="session-title">' + escapeHtml(entry.pkg.title) + '</div>'
-          + '<div style="display:flex;align-items:center;gap:8px;">'
-          + '<button class="pkg-status-badge ' + escapeHtml(pkgStatus) + '" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="cyclePackageStatus(event, this.dataset.packageId)" title="Click to advance status">' + escapeHtml(pkgStatus.toUpperCase()) + '</button>'
-          + '<div class="session-package-badge">' + (expanded ? 'Collapse' : 'Expand') + '</div>'
-          + '</div>'
-          + '</div>'
-          + (entry.pkg.areaOfInterest
-            ? '<div class="session-preview">Area: ' + escapeHtml(entry.pkg.areaOfInterest) + '</div>'
-            : '')
-          + (entry.pkg.objective
-            ? '<div class="session-preview">Objective: ' + escapeHtml(entry.pkg.objective) + '</div>'
-            : '')
-          + (entry.pkg.successCriteria
-            ? '<div class="session-preview">Success: ' + escapeHtml(entry.pkg.successCriteria) + '</div>'
-            : '')
-          + ((entry.pkg.dependencies || []).length
-            ? '<div class="session-preview">Dependencies: ' + escapeHtml(entry.pkg.dependencies.join(', ')) + '</div>'
-            : '')
-          + '<div class="session-preview">Session chapters: ' + escapeHtml(String(entry.sessions.length)) + '</div>'
-          + (summary.lastActiveSessionTitle
-            ? '<div class="session-preview">Last active: ' + escapeHtml(summary.lastActiveSessionTitle) + ' · ' + escapeHtml(formatRelativeTime(summary.lastActiveAt)) + '</div>'
-            : '')
-          + '<div class="session-preview">Progress: ' + escapeHtml(String(summary.completedChapterCount || 0)) + '/' + escapeHtml(String(summary.chapterCount || entry.sessions.length)) + ' chapters active (' + escapeHtml(String(summary.completionPct || 0)) + '%)</div>'
-          + '<div class="session-preview">Policy: ' + escapeHtml(summary.latestPolicyDecision || 'none') + ' · Pending approvals: ' + escapeHtml(String(summary.pendingApprovalCount || 0)) + '</div>'
-          + '<div class="session-meta"><span>Package</span><span>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</span></div>'
-          + '<div class="session-package-actions">'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="runPackageWorkflow(event, this.dataset.packageId)">Run Package Workflow</button>'
-          + (canResume
-            ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;running&quot;, &quot;Package resumed from controls.&quot;)">Resume</button>'
-            : '')
-          + (canPause
-            ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;planned&quot;, &quot;Package paused from controls.&quot;)">Pause</button>'
-            : '')
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;blocked&quot;, &quot;Package marked blocked from controls.&quot;)">Mark Blocked</button>'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;complete&quot;, &quot;Package marked complete from controls.&quot;)">Complete</button>'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="exportPackageTrace(event, this.dataset.packageId)">Export Trace</button>'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="unpackageSessionPackage(event, this.dataset.packageId)">Unpackage</button>'
-          + '</div>'
-          + childHtml
-          + '</div>';
-      }).join('');
-    }
-
-    function renderTabs() {
-      const tabsContainer = document.getElementById('tabs');
-      if (!tabsContainer) {
-        return;
-      }
-
-      const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-id]'));
-      if (buttons.length !== tabs.length) {
-        console.error('[dashboard-render] tabs', 'expected ' + tabs.length + ' buttons, found ' + buttons.length);
-        state.notice = state.notice || 'Dashboard navigation is incomplete. Refresh the page or restart Prism.';
-        return;
-      }
-
-      const missingPanels = [];
-      tabs.forEach(tab => {
-        if (!document.getElementById('tab-' + tab.id)) {
-          missingPanels.push(tab.id);
-        }
-      });
-      if (missingPanels.length > 0) {
-        console.error('[dashboard-render] tabs', 'missing panels', missingPanels.join(','));
-        state.notice = state.notice || 'Dashboard content panels failed to initialize. Refresh the page or restart Prism.';
-        return;
-      }
-
-      buttons.forEach(button => {
-        const tabId = button.dataset.tabId;
-        const isActive = state.activeTab === tabId;
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-        button.setAttribute('tabindex', isActive ? '0' : '-1');
-      });
-
-      tabs.forEach(tab => {
-        const panel = document.getElementById('tab-' + tab.id);
-        if (!panel) {
-          return;
-        }
-        const isActive = state.activeTab === tab.id;
-        panel.classList.toggle('active', isActive);
-        panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-      });
-
-      if (document.body) {
-        document.body.classList.add('js-ready');
-      }
-    }
-
-    async function fetchReadinessAndRefresh() {
-      try {
-        const readiness = await request('/api/readiness/recheck', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId || '' })
-        });
-        state.readiness = readiness;
-        safeRenderStep('onboarding', renderOnboarding);
-        safeRenderStep('header', renderHeader);
-      } catch (err) {
-        state.notice = { type: 'error', message: String(err) };
-        safeRenderStep('notice', renderNotice);
-      }
-    }
-
-    async function onHeaderProviderChanged(providerId) {
-      if (!providerId || !state.selectedSessionId || !state.llmCatalog) return;
-      const provider = state.llmCatalog.providers.find(entry => entry.id === providerId);
-      const model = provider?.defaultModel || provider?.models[0] || '';
-      try {
-        state.llmCatalog = await request('/api/llm/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: providerId, model })
-        });
-        clearLocalLlmSelection(state.selectedSessionId);
-        safeRenderStep('header', renderHeader);
-        safeRenderStep('llm', renderLlm);
-        await fetchReadinessAndRefresh();
-        state.notice = 'Provider switched to ' + providerId + ' / ' + (model || 'default') + '.';
-        safeRenderStep('notice', renderNotice);
-      } catch (err) {
-        console.error(err);
-        state.notice = { type: 'error', message: 'Failed to switch provider: ' + String(err) };
-        safeRenderStep('notice', renderNotice);
-      }
-    }
-
-    async function onHeaderModelChanged(model) {
-      if (!model || !state.selectedSessionId || !state.llmCatalog) return;
-      try {
-        state.llmCatalog = await request('/api/llm/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: state.llmCatalog.activeProviderId, model })
-        });
-        clearLocalLlmSelection(state.selectedSessionId);
-        safeRenderStep('header', renderHeader);
-        safeRenderStep('llm', renderLlm);
-        await fetchReadinessAndRefresh();
-        state.notice = 'Model switched to ' + model + '.';
-        safeRenderStep('notice', renderNotice);
-      } catch (err) {
-        console.error(err);
-        state.notice = { type: 'error', message: 'Failed to switch model: ' + String(err) };
-        safeRenderStep('notice', renderNotice);
-      }
-    }
-
-    function renderHeader() {
-      const activeSession = state.sessions.find(session => session.sessionId === state.selectedSessionId);
-      document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Chat';
-      document.getElementById('active-session-meta').textContent = activeSession
-        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' • ' + activeSession.messageCount + ' messages'
-        : 'Persistent runtime session';
-
-      const chips = [];
-      if (state.status) {
-        chips.push('<span class="chip">Mode: ' + escapeHtml(state.status.mode) + '</span>');
-        chips.push('<span class="chip">Environment: ' + escapeHtml(state.status.environmentProfile) + '</span>');
-        chips.push('<span class="chip">Pending approvals: ' + escapeHtml(String(state.status.pendingApprovals)) + '</span>');
-        chips.push('<span class="chip">Sessions: ' + escapeHtml(String(state.status.chatSessionCount)) + '</span>');
-      }
-      if (state.llmCatalog && state.llmCatalog.activeProviderId) {
-        let isError = false;
-        let isReady = state.readiness && state.readiness.ready;
-        const messagesArr = state.messages || [];
-        const lastError = messagesArr.slice().reverse().find(m => m.metadata && m.metadata.intent === 'llm_error');
-        if (lastError && (Date.now() - new Date(lastError.createdAt).getTime() < 300000)) {
-           isError = true;
-        }
-
-        let hueStyle = '';
-        if (isError) {
-          hueStyle = 'color: #ff8d8d; border-color: rgba(255, 141, 141, 0.4); background: rgba(255, 141, 141, 0.1);';
-        } else if (isReady) {
-          hueStyle = 'color: #7cf1c8; border-color: rgba(124, 241, 200, 0.4); background: rgba(124, 241, 200, 0.1);';
-        } else {
-          hueStyle = 'color: #f5cf6c; border-color: rgba(245, 207, 108, 0.4); background: rgba(245, 207, 108, 0.1);';
-        }
-
-        const selectBaseStyle = 'appearance: none; -moz-appearance: none; -webkit-appearance: none; outline: none; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all 0.2s ease; border-style: solid; border-width: 1px;';
-        const optionStyle = ' style="background: #1e293b; color: #edf3ff;"';
-
-        const providers = state.llmCatalog.providers || [];
-        if (providers.length > 0) {
-          let pSelect = '<select style="' + selectBaseStyle + hueStyle + '" onchange="onHeaderProviderChanged(this.value)" title="Fast switch provider">';
-          providers.forEach(p => {
-            const sel = p.id === state.llmCatalog.activeProviderId ? ' selected' : '';
-            pSelect += '<option value="' + escapeHtml(p.id) + '"' + sel + optionStyle + '>Provider: ' + escapeHtml(p.id) + '</option>';
-          });
-          pSelect += '</select>';
-          chips.push(pSelect);
-          
-          const activeP = providers.find(p => p.id === state.llmCatalog.activeProviderId);
-          if (activeP && activeP.models && activeP.models.length > 0) {
-            let mSelect = '<select style="' + selectBaseStyle + hueStyle + '" onchange="onHeaderModelChanged(this.value)" title="Fast switch model">';
-            activeP.models.forEach(m => {
-              const sel = m === state.llmCatalog.activeModel ? ' selected' : '';
-              mSelect += '<option value="' + escapeHtml(m) + '"' + sel + optionStyle + '>Model: ' + escapeHtml(m) + '</option>';
-            });
-            mSelect += '</select>';
-            chips.push(mSelect);
-          }
-        } else {
-           chips.push('<span class="chip" style="' + hueStyle + '">Provider: ' + escapeHtml(state.llmCatalog.activeProviderId) + '</span>');
-           chips.push('<span class="chip" style="' + hueStyle + '">Model: ' + escapeHtml(state.llmCatalog.activeModel || '-') + '</span>');
-        }
-      }
-      document.getElementById('header-chips').innerHTML = chips.join('');
-    }
-
-    function renderOnboarding() {
-      const container = document.getElementById('onboarding');
-      if (!state.readiness) {
-        container.innerHTML = '<div class="muted">Checking readiness...</div>';
-        return;
-      }
-
-      const checklist = state.readiness.requirements || [];
-      if (state.readiness.ready) {
-        container.innerHTML = '<div class="onboarding-title">System ready</div>'
-          + '<div class="muted">Provider and model are configured for this session.</div>';
-        return;
-      }
-
-      const recommendations = (state.readiness.recommendations || []).map(item =>
-        '<li>' + escapeHtml(String(item)) + '</li>'
-      ).join('');
-
-      container.innerHTML = '<div class="onboarding-title">First-run checklist</div>'
-        + '<div class="onboarding-list">'
-        + checklist.map(item =>
-          '<div class="' + (item.passed ? 'passed' : 'failed') + '">'
-          + (item.passed ? '✓ ' : '✗ ')
-          + escapeHtml(item.label)
-          + ' — ' + escapeHtml(item.detail || '')
-          + '</div>'
-        ).join('')
-        + '</div>'
-        + '<div class="action-buttons" style="margin-top:10px;">'
-        + '<button class="secondary-button" onclick="setActiveTab(&quot;settings&quot;)">Open Provider & Settings</button>'
-        + '</div>'
-        + (recommendations ? '<ul class="muted" style="margin:10px 0 0 18px; padding:0;">' + recommendations + '</ul>' : '');
-    }
-
-    function renderToolBlocks(metadata) {
-      if (!metadata || !metadata.events || !metadata.events.length) return '';
-      var toolEvents = metadata.events.filter(function(e) { return e.type === 'tool_call' || e.type === 'tool_result'; });
-      if (!toolEvents.length) return '';
-      var blocks = [];
-      for (var i = 0; i < toolEvents.length; i += 2) {
-        var call = toolEvents[i];
-        var result = toolEvents[i + 1];
-        var name = call ? (call.tool || call.name || 'tool') : 'tool';
-        var ok = result && result.type === 'tool_result' && (result.ok !== false);
-        var statusClass = ok ? 'ok' : 'fail';
-        var statusText = ok ? '\\u2713' : '\\u2717';
-        
-        // Build command display from tool call input
-        var commandHtml = '';
-        if (call) {
-          var input = call.input || call.params || call.arguments || {};
-          if (typeof input === 'string') {
-            commandHtml = '<div style="white-space:pre-wrap;word-break:break-all;">' + escapeHtml(input) + '</div>';
-          } else if (typeof input === 'object') {
-            try {
-              commandHtml = '<div class="mono" style="white-space:pre-wrap;word-break:break-all;">' + escapeHtml(JSON.stringify(input, null, 2)) + '</div>';
-            } catch (e) {
-              commandHtml = '<div class="muted">Unable to display command</div>';
-            }
-          }
-        }
-        
-        blocks.push(
-          '<div class="tool-block" onclick="this.classList.toggle(&quot;expanded&quot;)">'
-          + '<div class="tool-block-header">'
-          + '<span class="tool-block-icon">\\u{1F527}</span>'
-          + '<span class="tool-block-name">' + escapeHtml(name) + '</span>'
-          + '<span class="tool-block-status ' + statusClass + '">' + statusText + '</span>'
-          + '</div>'
-          + '<div class="tool-block-body">'
-          + commandHtml
-          + '</div>'
-          + '</div>'
-        );
-      }
-      return blocks.join('');
-    }
-
-    function renderMessages() {
-      const container = document.getElementById('messages');
-      if (!state.messages.length) {
-        container.innerHTML = '<div class="empty-state"><strong>Persistent operator chat is ready.</strong><br><br>Ask for status, approvals, history, or trigger actions like <span class="mono">run workflow demo</span>.</div>';
-        return;
-      }
-
-      const rows = state.messages.map(message => {
-        const roleLabel = message.role === 'user' ? 'Operator' : message.role === 'assistant' ? 'PRISM' : 'System';
-        let extraHtml = '';
-        if (message.metadata && message.metadata.intent === 'llm_error') {
-            extraHtml = '<div style="margin-top: 14px;"><button class="secondary-button" style="font-size:12px; padding:8px 12px; display:inline-flex; align-items:center; gap:6px;" onclick="setActiveTab(&quot;logs&quot;)">&#x1F50D; Open Logs</button></div>';
-        }
-        // Tool execution blocks for agentic replies
-        if (message.metadata && message.metadata.intent === 'llm_agentic') {
-          extraHtml += renderToolBlocks(message.metadata);
-          if (message.metadata.toolCallsExecuted) {
-            extraHtml += '<div class="muted" style="font-size:11px;margin-top:6px;">\\u{1F527} '
-              + message.metadata.toolCallsExecuted + ' tool call(s) in '
-              + (message.metadata.iterations || '?') + ' iteration(s)</div>';
-          }
-        }
-
-        const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : escapeHtml(message.content);
-
-        return '<div class="message ' + escapeHtml(message.role) + '">'
-          + '<div class="message-label">' + escapeHtml(roleLabel) + '</div>'
-          + '<div>' + contentHtml + '</div>'
-          + extraHtml
-          + '<div class="message-time">' + escapeHtml(formatRelativeTime(message.createdAt)) + '</div>'
-          + '</div>';
-      }).join('');
-
-      const streamBlock = state.agenticStream && state.agenticStream.length
-        ? '<div class="message assistant"><div class="message-label">PRISM</div>'
-          + state.agenticStream.map(function(ev) {
-            if (ev.type === 'text') return '<div>' + renderMarkdown(ev.text || '') + '</div>';
-            if (ev.type === 'tool_call') { var tn = (ev.toolCall && ev.toolCall.name) || ''; return '<div class="tool-block"><div class="tool-block-header"><span class="tool-block-icon">\\u{1F527}</span><span class="tool-block-name">' + escapeHtml(tn) + '</span><span class="streaming-dot"></span></div></div>'; }
-            if (ev.type === 'tool_result') { var rn = (ev.toolResult && ev.toolResult.name) || 'tool'; return '<div class="muted" style="font-size:11px;">\\u2713 ' + escapeHtml(rn) + ' done</div>'; }
-            return '';
-          }).join('')
-          + '</div>'
-        : '';
-
-      const typing = state.busy && !state.agenticStream.length ? '<div class="message assistant"><div class="message-label">PRISM</div><div>Working...<span class="streaming-dot"></span></div></div>' : '';
-      container.innerHTML = rows + streamBlock + typing;
-      container.scrollTop = container.scrollHeight;
-    }
-
-    function renderOverview() {
-      const container = document.getElementById('runtime-overview');
-      if (!state.status) {
-        container.innerHTML = '<div class="muted">Loading runtime status...</div>';
-        return;
-      }
-      const lastEvent = state.status.lastEvent;
-      container.innerHTML = [
-        metricRow('Session', state.status.sessionId),
-        metricRow('Started', formatRelativeTime(state.status.startedAt)),
-        metricRow('Uptime', String(state.status.uptimeSeconds) + 's'),
-        metricRow('Events', String(state.status.eventCount)),
-        metricRow('Last event', lastEvent ? lastEvent.operation + ' (' + lastEvent.status + ')' : 'none')
-      ].join('');
-    }
-
-    function renderRoutingStrategyControls(providers, currentModel) {
-      var html = '';
-      var strategy = state.sessionRoutingStrategy || 'direct';
-
-      // ── Routing Strategy Section ──
-      html += '<div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(148,163,184,0.12);border-radius:8px;">';
-      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">';
-      html += '<span style="font-size:13px;font-weight:600;color:var(--fg);">\\u{1F9ED} Routing Strategy</span>';
-      html += '</div>';
-
-      // Strategy radio buttons
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">';
-      var strategies = [
-        { id: 'direct', label: '\\u{1F3AF} Direct', desc: 'Use selected model' },
-        { id: 'role', label: '\\u{1F465} Role-Based', desc: 'Route by task role' },
-        { id: 'modality', label: '\\u{1F9E0} Modality-Based', desc: 'Route by content type' }
-      ];
-      strategies.forEach(function(s) {
-        var selected = strategy === s.id;
-        html += '<button onclick="setSessionRoutingStrategy(&#39;' + s.id + '&#39;)" style="'
-          + 'padding:6px 12px;border-radius:8px;font-size:11px;cursor:pointer;border:1px solid '
-          + (selected ? 'rgba(99,179,237,0.5)' : 'rgba(148,163,184,0.15)') + ';'
-          + 'background:' + (selected ? 'rgba(99,179,237,0.12)' : 'rgba(255,255,255,0.03)') + ';'
-          + 'color:' + (selected ? '#63b3ed' : 'var(--fg-muted)') + ';'
-          + 'font-weight:' + (selected ? '600' : '400') + ';'
-          + 'transition:all 0.15s ease;">'
-          + s.label
-          + '</button>';
-      });
-      html += '</div>';
-
-      // Strategy description
-      if (strategy === 'direct') {
-        html += '<div class="muted" style="font-size:11px;padding:4px 0;">Requests go directly to the selected provider and model above.</div>';
-      } else if (strategy === 'role') {
-        html += '<div class="muted" style="font-size:11px;padding:4px 0;">Requests are routed by task role (chat, code, classification, etc.). Configure in the <strong>Model Routing</strong> panel below.</div>';
-      } else if (strategy === 'modality') {
-        // ── Modality Pills ──
-        html += '<div class="muted" style="font-size:11px;padding:4px 0;margin-bottom:6px;">Select a content modality to auto-route to the best matching model.</div>';
-        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">';
-
-        var modalities = state.availableModalities || [];
-        if (modalities.length === 0) {
-          // Fallback if modality data hasn't loaded yet
-          modalities = [
-            { id: 'text', label: 'Text', icon: '\\u{1F4DD}', modelCount: 0 },
-            { id: 'code', label: 'Code & Programming', icon: '\\u{1F4BB}', modelCount: 0 },
-            { id: 'image-understanding', label: 'Image Understanding', icon: '\\u{1F5BC}', modelCount: 0 },
-            { id: 'image-generation', label: 'Image Generation', icon: '\\u{1F3A8}', modelCount: 0 },
-            { id: 'video-understanding', label: 'Video Understanding', icon: '\\u{1F3AC}', modelCount: 0 },
-            { id: 'video-generation', label: 'Video Generation', icon: '\\u{1F3A5}', modelCount: 0 },
-            { id: 'voice-input', label: 'Voice Input', icon: '\\u{1F3A4}', modelCount: 0 },
-            { id: 'voice-output', label: 'Voice Output', icon: '\\u{1F50A}', modelCount: 0 },
-            { id: 'tts', label: 'Text-to-Speech', icon: '\\u{1F5E3}', modelCount: 0 },
-            { id: 'stt', label: 'Speech-to-Text', icon: '\\u{1F4AC}', modelCount: 0 },
-            { id: 'realtime', label: 'Realtime', icon: '\\u26A1', modelCount: 0 },
-            { id: 'embedding', label: 'Embedding', icon: '\\u{1F9E9}', modelCount: 0 },
-            { id: 'multimodal-reasoning', label: 'Multimodal Reasoning', icon: '\\u{1F9E0}', modelCount: 0 }
-          ];
-        }
-
-        modalities.forEach(function(m) {
-          var isSelected = state.selectedModalityFilter === m.id;
-          var hasModels = m.modelCount > 0;
-          html += '<button onclick="onModalitySelected(&#39;' + escapeHtml(m.id) + '&#39;)" '
-            + 'title="' + escapeHtml(m.label + (m.description ? ': ' + m.description : '') + ' (' + m.modelCount + ' models)') + '" '
-            + 'style="'
-            + 'display:inline-flex;align-items:center;gap:4px;'
-            + 'padding:4px 10px;border-radius:16px;font-size:10px;cursor:pointer;'
-            + 'border:1px solid ' + (isSelected ? 'rgba(99,179,237,0.6)' : hasModels ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.08)') + ';'
-            + 'background:' + (isSelected ? 'rgba(99,179,237,0.15)' : 'rgba(255,255,255,0.02)') + ';'
-            + 'color:' + (isSelected ? '#63b3ed' : hasModels ? 'var(--fg-muted)' : 'rgba(148,163,184,0.4)') + ';'
-            + 'font-weight:' + (isSelected ? '600' : '400') + ';'
-            + 'transition:all 0.15s ease;">'
-            + '<span style="font-size:13px;">' + m.icon + '</span>'
-            + '<span>' + escapeHtml(m.label) + '</span>'
-            + (m.modelCount > 0 ? '<span style="font-size:9px;opacity:0.6;">(' + m.modelCount + ')</span>' : '')
-            + '</button>';
-        });
-        html += '</div>';
-
-        // ── Selected modality details ──
-        if (state.selectedModalityFilter) {
-          var selectedMod = modalities.find(function(m) { return m.id === state.selectedModalityFilter; });
-          var suggestion = (state.routingModalitySuggestions || {})[state.selectedModalityFilter];
-          var override = (state.routingModalityOverrides || {})[state.selectedModalityFilter];
-
-          html += '<div style="padding:8px;background:rgba(99,179,237,0.05);border:1px solid rgba(99,179,237,0.15);border-radius:8px;margin-bottom:8px;">';
-          html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">';
-          html += '<span style="font-size:15px;">' + (selectedMod ? selectedMod.icon : '') + '</span>';
-          html += '<span style="font-size:12px;font-weight:600;color:#63b3ed;">' + escapeHtml(selectedMod ? selectedMod.label : state.selectedModalityFilter) + '</span>';
-          html += '</div>';
-
-          if (suggestion) {
-            var tierColors = { 1: '#ff6b6b', 2: '#ffa94d', 3: '#ffd43b', 4: '#69db7c', 5: '#4dabf7' };
-            var sColor = tierColors[suggestion.tier] || '#aaa';
-            html += '<div style="font-size:11px;margin-bottom:6px;">';
-            html += '<span class="muted">AI Suggested: </span>';
-            html += '<span class="mono" style="font-size:11px;">' + escapeHtml(suggestion.providerId + '/' + suggestion.model) + '</span>';
-            html += ' <span style="color:' + sColor + ';font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:' + sColor + '18;">T' + suggestion.tier + '</span>';
-            if (suggestion.degraded) html += ' <span style="color:#ffd43b;font-size:10px;">\\u26A0 Partial</span>';
-            html += '</div>';
-          }
-
-          // Modality override dropdown
-          var filteredModels = getModelsForModalityFilter(state.selectedModalityFilter, providers) || [];
-          if (filteredModels.length > 0) {
-            var overrideVal = override ? (override.providerId + '/' + override.model) : 'auto';
-            html += '<div style="display:flex;align-items:center;gap:6px;">';
-            html += '<span class="muted" style="font-size:11px;">Override:</span>';
-            html += '<select onchange="setModalityOverride(&#39;' + escapeHtml(state.selectedModalityFilter) + '&#39;, this.value)" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);flex:1;max-width:280px;">';
-            html += '<option value="auto"' + (!override ? ' selected' : '') + '>Auto (AI Suggested)</option>';
-            filteredModels.forEach(function(fm) {
-              var val = fm.providerId + '/' + fm.model;
-              html += '<option value="' + escapeHtml(val) + '"' + (overrideVal === val ? ' selected' : '') + '>' + escapeHtml(fm.label) + '</option>';
-            });
-            html += '</select>';
-            html += '</div>';
-          } else {
-            html += '<div class="muted" style="font-size:11px;color:#ffa94d;">No models available for this modality.</div>';
-          }
-
-          html += '</div>';
-
-          // Filter toggle
-          html += '<div style="display:flex;align-items:center;gap:6px;">';
-          html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--fg-muted);">';
-          html += '<input type="checkbox" ' + (state.modalityFilterEnabled ? 'checked' : '') + ' onchange="onModalityFilterToggle()" />';
-          html += 'Filter Model dropdown to ' + escapeHtml(selectedMod ? selectedMod.label : '') + ' models only';
-          html += '</label>';
-          html += '</div>';
-        }
-      }
-
-      html += '</div>';
-      return html;
-    }
-
-    function renderLlm() {
-      const container = document.getElementById('llm-provider');
-      if (!state.llmCatalog) {
-        container.innerHTML = '<div class="muted">Loading providers...</div>';
-        return;
-      }
-
-      const providers = state.llmCatalog.providers || [];
-      if (!providers.length) {
-        container.innerHTML = '<div class="muted">No providers configured.</div>';
-        return;
-      }
-
-      const activeProviderId = state.llmCatalog.activeProviderId || '';
-      const activeProvider = providers.find(provider => provider.id === activeProviderId) || null;
-      const activeModel = state.llmCatalog.activeModel || '';
-      const draft = state.llmConfig ? state.llmConfig.draft : null;
-      const draftProviderId = draft && draft.providerId ? draft.providerId : activeProviderId;
-      const draftProvider = providers.find(provider => provider.id === draftProviderId) || activeProvider;
-      const currentModel = (state.llmConfig && state.llmConfig.current ? state.llmConfig.current.model : activeModel) || '';
-      const draftModel = draft && draft.model ? draft.model : currentModel;
-      const localSelection = getLocalLlmSelection(state.selectedSessionId);
-      const displayProviderId = localSelection && localSelection.providerId ? localSelection.providerId : draftProviderId;
-      const displayProvider = providers.find(provider => provider.id === displayProviderId) || draftProvider;
-      const displayModels = displayProvider ? (displayProvider.models || []) : [];
-      let displayModel = localSelection && localSelection.model ? localSelection.model : draftModel;
-      if ((!displayModel || !displayModels.includes(displayModel)) && displayModels.length > 0) {
-        displayModel = (displayProvider && displayProvider.defaultModel && displayModels.includes(displayProvider.defaultModel))
-          ? displayProvider.defaultModel
-          : displayModels[0];
-      }
-
-      const hasUnsavedLocalSelection = Boolean(localSelection)
-        && (localSelection.providerId !== draftProviderId || (localSelection.model || '') !== (draftModel || ''));
-
-      const providerOptions = providers.map(provider =>
-        '<option value="' + escapeHtml(provider.id) + '" ' + (provider.id === displayProviderId ? 'selected' : '') + '>'
-        + escapeHtml(provider.label + (provider.enabled ? '' : ' (unavailable)'))
-        + '</option>'
-      ).join('');
-
-      const modelOptions = displayModels.length > 0
-        ? displayModels.map(model =>
-          '<option value="' + escapeHtml(model) + '" ' + (model === displayModel ? 'selected' : '') + '>' + escapeHtml(model) + '</option>'
-        ).join('')
-        : '<option value="">No models available</option>';
-
-      const reason = displayProvider && !displayProvider.enabled && displayProvider.reason
-        ? '<div class="muted" style="margin-top:8px;color:#ffc1c1;">' + escapeHtml(displayProvider.reason) + '</div>'
-        : '';
-
-      const localSelectionBanner = hasUnsavedLocalSelection
-        ? '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="muted">You changed provider/model locally. Click <strong>Save Draft</strong> then <strong>Apply Draft</strong> to persist for this session.</div>'
-          + '<div class="mono" style="margin-top:6px;">Pending: '
-          + escapeHtml((displayProviderId || '-') + ' / ' + (displayModel || '-'))
-          + '</div>'
-          + '</div>'
-        : '';
-
-      const diff = state.llmConfig && state.llmConfig.diff
-        ? state.llmConfig.diff
-        : null;
-      const diffHtml = diff && diff.changedFields && diff.changedFields.length > 0
-        ? '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="muted">Draft changes: ' + escapeHtml(diff.changedFields.join(', ')) + '</div>'
-          + '<div class="mono" style="margin-top:6px;">Current: ' + escapeHtml((diff.before.providerId || '-') + ' / ' + (diff.before.model || '-')) + '</div>'
-          + '<div class="mono">Draft: ' + escapeHtml((diff.after.providerId || '-') + ' / ' + (diff.after.model || '-')) + '</div>'
-          + '</div>'
-        : '<div class="muted" style="margin-top:8px;">No pending draft changes.</div>';
-
-      const history = state.llmConfig && state.llmConfig.history ? state.llmConfig.history : [];
-      const historyHtml = history.length > 0
-        ? '<div class="muted" style="margin-top:10px;">Recent applied config</div>'
-          + '<table class="events-table"><thead><tr><th>Time</th><th>Change</th><th>Source</th></tr></thead><tbody>'
-          + history.slice(0, 5).map(entry => '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(entry.appliedAt)) + '</td>'
-            + '<td><div class="mono">'
-            + escapeHtml((entry.previousProviderId || '-') + ' / ' + (entry.previousModel || '-'))
-            + ' → '
-            + escapeHtml((entry.nextProviderId || '-') + ' / ' + (entry.nextModel || '-'))
-            + '</div></td>'
-            + '<td>' + escapeHtml(entry.source || '-') + '</td>'
-            + '</tr>').join('')
-          + '</tbody></table>'
-        : '<div class="muted" style="margin-top:10px;">No config history yet.</div>';
-
-      const isLocal = displayProvider && displayProvider.kind === 'local';
-      const sessionNeedsBind = state.readiness && state.readiness.requirements
-        ? !state.readiness.requirements.find(function(r) { return r.id === 'provider-model-selected'; }).passed
-        : false;
-      const needsApply = hasUnsavedLocalSelection || (sessionNeedsBind && Boolean(displayProviderId));
-
-      // When rendering dynamically from onLlmProviderChanged we shouldn't block 
-      // rendering just because a select is focused, otherwise the model dropdown
-      // won't update when you pick a new provider.
-
-      container.innerHTML = ''
-        + '<label class="muted" for="provider-select">Provider</label>'
-        + '<select id="provider-select" class="control-select" onchange="onLlmProviderChanged()">' + providerOptions + '</select>'
-        + '<label class="muted" for="model-select" style="margin-top:8px;display:block;">Model</label>'
-        + '<select id="model-select" class="control-select" onchange="onLlmModelChanged()">' + modelOptions + '</select>'
-        + renderRoutingStrategyControls(providers, displayModel)
-        + '<div class="action-buttons" style="margin-top:10px;">'
-        + '<button class="primary-button" ' + (!needsApply ? 'disabled' : '') + ' onclick="quickApplyLlm()">Apply</button>'
-        + (isLocal ? '<button class="secondary-button" onclick="refreshOllamaModels()">Refresh Models</button>' : '')
-        + '<button class="secondary-button" ' + (!history.length ? 'disabled' : '') + ' onclick="rollbackLlmConfig()">Rollback</button>'
-        + '</div>'
-        + (needsApply
-          ? '<div class="action-card" style="margin-top:10px;"><div class="muted">Pending: <span class="mono">' + escapeHtml((displayProviderId || '-') + ' / ' + (displayModel || '-')) + '</span> — click <strong>Apply</strong> to save.</div></div>'
-          : '<div class="muted" style="margin-top:8px;">Active: <span class="mono">' + escapeHtml((draftProviderId || '-') + ' / ' + (draftModel || '-')) + '</span></div>')
-        + historyHtml
-        + reason;
-    }
-
-    function togglePanelCollapse(panelKey) {
-      var stateKey = panelKey + 'Collapsed';
-      state[stateKey] = !state[stateKey];
-      var chevron = document.getElementById('chevron-' + panelKey);
-      var body = document.getElementById('body-' + panelKey);
-      if (chevron) { chevron.textContent = state[stateKey] ? '\u25B6' : '\u25BC'; }
-      if (body) {
-        if (state[stateKey]) { body.classList.add('collapsed'); }
-        else { body.classList.remove('collapsed'); }
-      }
-      var summary = document.getElementById(panelKey + '-summary');
-      if (summary) {
-        summary.style.display = state[stateKey] ? '' : 'none';
-      }
-    }
-
-    function toggleCapabilityMatrix() {
-      state.capabilityMatrixExpanded = !state.capabilityMatrixExpanded;
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    function setMatrixSort(col) {
-      if (state.matrixSortCol === col) {
-        state.matrixSortAsc = !state.matrixSortAsc;
-      } else {
-        state.matrixSortCol = col;
-        state.matrixSortAsc = col === 'model' || col === 'provider';
-      }
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    function setMatrixFilter(field, value) {
-      state['matrixFilter' + field.charAt(0).toUpperCase() + field.slice(1)] = value;
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    function setMatrixDraftField(field, value) {
-      state['matrixDraft' + field.charAt(0).toUpperCase() + field.slice(1)] = value;
-    }
-
-    function clearMatrixDraft() {
-      state.matrixDraftPattern = '';
-      state.matrixDraftTier = '';
-      state.matrixDraftLocality = 'local';
-      state.matrixDraftStrengths = '';
-      state.matrixEditingPattern = null;
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    function startMatrixEdit(pattern) {
-      var entries = Array.isArray(state.modelMatrixEntries) ? state.modelMatrixEntries : [];
-      var found = null;
-      for (var i = 0; i < entries.length; i++) {
-        if (entries[i] && entries[i].pattern === pattern) {
-          found = entries[i];
-          break;
-        }
-      }
-      if (!found) return;
-      state.matrixDraftPattern = found.pattern || '';
-      state.matrixDraftTier = found.tier != null ? String(found.tier) : '';
-      state.matrixDraftLocality = found.locality || 'local';
-      state.matrixDraftStrengths = Array.isArray(found.strengths) ? found.strengths.join(', ') : '';
-      state.matrixEditingPattern = found.pattern || null;
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    async function saveMatrixEntry() {
-      var pattern = String(state.matrixDraftPattern || '').trim();
-      if (!pattern) {
-        state.notice = { type: 'error', message: 'Model matrix pattern is required.' };
-        render();
-        return;
-      }
-      var tierValue = Number(state.matrixDraftTier);
-      var locality = String(state.matrixDraftLocality || '').trim();
-      var strengths = String(state.matrixDraftStrengths || '')
-        .split(',')
-        .map(function(part) { return part.trim(); })
-        .filter(function(part) { return !!part; });
-      var payload = { pattern: pattern };
-      if (!Number.isNaN(tierValue) && tierValue >= 1 && tierValue <= 5) {
-        payload.tier = tierValue;
-      }
-      if (locality === 'local' || locality === 'remote') {
-        payload.locality = locality;
-      }
-      if (strengths.length > 0) {
-        payload.strengths = strengths;
-      }
-      try {
-        await request('/api/models/matrix', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        await refreshChrome();
-        state.notice = 'Model matrix entry saved: ' + pattern;
-        clearMatrixDraft();
-        render();
-      } catch (error) {
-        state.notice = { type: 'error', message: 'Failed to save model matrix entry: ' + String(error) };
-        render();
-      }
-    }
-
-    async function deleteMatrixEntry(pattern) {
-      if (!pattern) return;
-      if (!confirm('Delete model matrix entry "' + pattern + '"?')) return;
-      try {
-        await request('/api/models/matrix/' + encodeURIComponent(pattern), { method: 'DELETE' });
-        await refreshChrome();
-        if (state.matrixEditingPattern === pattern) {
-          clearMatrixDraft();
-        }
-        state.notice = 'Model matrix entry deleted: ' + pattern;
-        render();
-      } catch (error) {
-        state.notice = { type: 'error', message: 'Failed to delete model matrix entry: ' + String(error) };
-        render();
-      }
-    }
-
-    function renderCapabilityMatrix() {
-      const container = document.getElementById('capability-matrix');
-      if (!container) return;
-      if (!state.llmCatalog || !state.llmCatalog.providers) {
-        container.innerHTML = '<div class="muted">Waiting for provider catalog...</div>';
-        return;
-      }
-
-      if (state.capabilityMatrixExpanded === undefined) {
-        state.capabilityMatrixExpanded = false;
-      }
-
-      const isExpanded = state.capabilityMatrixExpanded;
-
-      const tierColors = { 1: '#ff6b6b', 2: '#ffa94d', 3: '#ffd43b', 4: '#69db7c', 5: '#4dabf7' };
-      const tierLabels = { 1: 'T1 Minimal', 2: 'T2 Basic', 3: 'T3 Standard', 4: 'T4 Advanced', 5: 'T5 Frontier' };
-      const roleRequirements = {
-        classification:  { min: 1, ideal: 2 },
-        chat:            { min: 2, ideal: 3 },
-        summarization:   { min: 2, ideal: 3 },
-        'tool-selection':  { min: 3, ideal: 4 },
-        'code-generation': { min: 3, ideal: 4 },
-        'memory-indexing':  { min: 1, ideal: 2 },
-      };
-
-      function guessTier(model, kind) {
-        var m = model.match(/:?(\\d+(?:\\.\\d+)?)\\s*[bB]/);
-        var b = m ? parseFloat(m[1]) : 0;
-        if (kind === 'local') {
-          if (b > 0 && b <= 2) return 1;
-          if (b > 2 && b <= 5) return 2;
-          if (b > 5 && b <= 15) return 3;
-          return 2;
-        }
-        if (/mini|flash|small|instant|haiku/i.test(model)) return 3;
-        if (/opus|5\\b|frontier/i.test(model)) return 5;
-        return 4;
-      }
-
-      var allRows = [];
-      var matrixEntries = Array.isArray(state.modelMatrixEntries) ? state.modelMatrixEntries : [];
-      function resolveMatrixEntry(modelName) {
-        var exact = null;
-        var wildcard = null;
-        for (var i = 0; i < matrixEntries.length; i++) {
-          var e = matrixEntries[i] || {};
-          var pattern = e.pattern || '';
-          if (!pattern) continue;
-          if (pattern === modelName) {
-            exact = e;
-            break;
-          }
-          if (pattern.endsWith('*')) {
-            var prefix = pattern.slice(0, -1);
-            if (prefix && modelName.indexOf(prefix) === 0) {
-              if (!wildcard || prefix.length > String(wildcard.pattern || '').length) {
-                wildcard = e;
-              }
-            }
-          }
-        }
-        return exact || wildcard;
-      }
-      var providerSet = {};
-      state.llmCatalog.providers.forEach(function(provider) {
-        if (!provider.models || !provider.models.length) return;
-        providerSet[provider.id] = provider.label;
-        provider.models.forEach(function(model) {
-          var matrixEntry = resolveMatrixEntry(model);
-          var tier = matrixEntry && typeof matrixEntry.tier === 'number' ? matrixEntry.tier : guessTier(model, provider.kind);
-          var locality = matrixEntry && matrixEntry.locality ? matrixEntry.locality : provider.kind;
-          var strengths = matrixEntry && Array.isArray(matrixEntry.strengths) ? matrixEntry.strengths : null;
-          allRows.push({ provider: provider.label, providerId: provider.id, model: model, tier: tier, kind: locality, enabled: provider.enabled, strengths: strengths });
-        });
-      });
-
-      var rows = allRows.filter(function(row) {
-        if (state.matrixFilterProvider && row.providerId !== state.matrixFilterProvider) return false;
-        if (state.matrixFilterTier && row.tier !== Number(state.matrixFilterTier)) return false;
-        if (state.matrixFilterLocality && row.kind !== state.matrixFilterLocality) return false;
-        if (state.matrixFilterText) {
-          var q = state.matrixFilterText.toLowerCase();
-          if (row.model.toLowerCase().indexOf(q) === -1 && row.provider.toLowerCase().indexOf(q) === -1) return false;
-        }
-        return true;
-      });
-
-      var sortCol = state.matrixSortCol || 'tier';
-      var sortAsc = state.matrixSortAsc;
-      rows.sort(function(a, b) {
-        var va, vb;
-        if (sortCol === 'model') { va = a.model.toLowerCase(); vb = b.model.toLowerCase(); }
-        else if (sortCol === 'provider') { va = a.provider.toLowerCase(); vb = b.provider.toLowerCase(); }
-        else if (sortCol === 'tier') { va = a.tier; vb = b.tier; }
-        else if (sortCol === 'locality') { va = a.kind; vb = b.kind; }
-        else { va = a.tier; vb = b.tier; }
-        if (va < vb) return sortAsc ? -1 : 1;
-        if (va > vb) return sortAsc ? 1 : -1;
-        if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
-        return 0;
-      });
-
-      function sortArrow(col) {
-        if (state.matrixSortCol !== col) return '';
-        return state.matrixSortAsc ? ' \u25B2' : ' \u25BC';
-      }
-
-      let html = '<div class="action-card" style="cursor:pointer;" onclick="toggleCapabilityMatrix()">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;">'
-        +   '<span class="muted" style="margin:0;">Model Capability Matrix</span>'
-        +   '<span class="muted" style="font-size:11px;">' + escapeHtml(rows.length + ' / ' + allRows.length + ' models') + '  ' + (isExpanded ? '&#x25B2;' : '&#x25BC;') + '</span>'
-        + '</div></div>';
-
-      if (!allRows.length) {
-        container.innerHTML = html + '<div class="muted" style="margin-top:10px;">No models found. Configure and test a provider to populate the matrix.</div>';
-        return;
-      }
-
-      html += '<div>';
-
-      var filterStyle = 'padding:5px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:11px;';
-      var providerIds = Object.keys(providerSet);
-      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">';
-      html += '<input type="text" placeholder="Search models\u2026" value="' + escapeHtml(state.matrixFilterText || '') + '" oninput="setMatrixFilter(&#39;text&#39;, this.value)" style="' + filterStyle + 'flex:1;min-width:120px;" />';
-      html += '<select onchange="setMatrixFilter(&#39;provider&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value="">All Providers</option>';
-      providerIds.forEach(function(id) {
-        var sel = state.matrixFilterProvider === id ? ' selected' : '';
-        html += '<option value="' + escapeHtml(id) + '"' + sel + '>' + escapeHtml(providerSet[id]) + '</option>';
-      });
-      html += '</select>';
-      html += '<select onchange="setMatrixFilter(&#39;tier&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value="">All Tiers</option>';
-      for (var t = 5; t >= 1; t--) {
-        var sel = state.matrixFilterTier === String(t) ? ' selected' : '';
-        html += '<option value="' + t + '"' + sel + '>' + tierLabels[t] + '</option>';
-      }
-      html += '</select>';
-      html += '<select onchange="setMatrixFilter(&#39;locality&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value=""' + (!state.matrixFilterLocality ? ' selected' : '') + '>All</option>';
-      html += '<option value="local"' + (state.matrixFilterLocality === 'local' ? ' selected' : '') + '>Local</option>';
-      html += '<option value="remote"' + (state.matrixFilterLocality === 'remote' ? ' selected' : '') + '>Cloud</option>';
-      html += '</select>';
-      html += '</div>';
-
-      html += '<div class="panel" style="padding:10px;margin-top:8px;">';
-      html += '<div class="muted" style="font-size:12px;font-weight:600;margin-bottom:8px;">'
-        + (state.matrixEditingPattern ? 'Edit Matrix Entry' : 'Create Matrix Entry')
-        + '</div>';
-      html += '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 2fr auto auto;gap:6px;align-items:center;">';
-      html += '<input type="text" placeholder="pattern (example: gpt-4o* or llama3.1:8b)" value="' + escapeHtml(state.matrixDraftPattern || '') + '" oninput="setMatrixDraftField(&#39;pattern&#39;, this.value)" style="' + filterStyle + 'width:100%;" />';
-      html += '<select onchange="setMatrixDraftField(&#39;tier&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value=""' + (!state.matrixDraftTier ? ' selected' : '') + '>Tier</option>';
-      for (var mt = 1; mt <= 5; mt++) {
-        html += '<option value="' + mt + '"' + (state.matrixDraftTier === String(mt) ? ' selected' : '') + '>T' + mt + '</option>';
-      }
-      html += '</select>';
-      html += '<select onchange="setMatrixDraftField(&#39;locality&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value="local"' + (state.matrixDraftLocality === 'local' ? ' selected' : '') + '>Local</option>';
-      html += '<option value="remote"' + (state.matrixDraftLocality === 'remote' ? ' selected' : '') + '>Cloud</option>';
-      html += '</select>';
-      html += '<input type="text" placeholder="strengths (comma-separated)" value="' + escapeHtml(state.matrixDraftStrengths || '') + '" oninput="setMatrixDraftField(&#39;strengths&#39;, this.value)" style="' + filterStyle + 'width:100%;" />';
-      html += '<button class="secondary-button" style="padding:5px 10px;font-size:11px;" onclick="saveMatrixEntry()">Save</button>';
-      html += '<button class="secondary-button" style="padding:5px 10px;font-size:11px;" onclick="clearMatrixDraft()">Clear</button>';
-      html += '</div>';
-      html += '</div>';
-
-      var matrixRows = matrixEntries.slice().sort(function(a, b) {
-        var pa = String((a && a.pattern) || '').toLowerCase();
-        var pb = String((b && b.pattern) || '').toLowerCase();
-        if (pa < pb) return -1;
-        if (pa > pb) return 1;
-        return 0;
-      });
-
-      html += '<div class="panel" style="padding:10px;margin-top:8px;">';
-      html += '<div class="muted" style="font-size:12px;font-weight:600;margin-bottom:8px;">Registered Matrix Entries (' + matrixRows.length + ')</div>';
-      if (!matrixRows.length) {
-        html += '<div class="muted" style="font-size:12px;">No registered model matrix entries.</div>';
-      } else {
-        html += '<table class="events-table"><thead><tr><th>Pattern</th><th>Tier</th><th>Locality</th><th>Strengths</th><th>Actions</th></tr></thead><tbody>';
-        matrixRows.forEach(function(entry) {
-          var pattern = entry.pattern || '';
-          var strengthsText = Array.isArray(entry.strengths) ? entry.strengths.join(', ') : '';
-          html += '<tr>'
-            + '<td class="mono">' + escapeHtml(pattern) + '</td>'
-            + '<td>' + escapeHtml(entry.tier != null ? 'T' + entry.tier : '-') + '</td>'
-            + '<td>' + escapeHtml(entry.locality || '-') + '</td>'
-            + '<td>' + escapeHtml(strengthsText || '-') + '</td>'
-            + '<td style="white-space:nowrap;">'
-              + '<button class="secondary-button" style="padding:3px 8px;font-size:11px;margin-right:6px;" data-pattern="' + escapeHtml(pattern) + '" onclick="startMatrixEdit(this.dataset.pattern)">Edit</button>'
-              + '<button class="danger-button" style="padding:3px 8px;font-size:11px;" data-pattern="' + escapeHtml(pattern) + '" onclick="deleteMatrixEntry(this.dataset.pattern)">Delete</button>'
-            + '</td>'
-          + '</tr>';
-        });
-        html += '</tbody></table>';
-      }
-      html += '</div>';
-
-      var thStyle = 'cursor:pointer;user-select:none;';
-      html += '<table class="events-table" style="margin-top:8px;"><thead><tr>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;model&#39;)">Model' + sortArrow('model') + '</th>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;provider&#39;)">Provider' + sortArrow('provider') + '</th>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;tier&#39;)">Tier' + sortArrow('tier') + '</th>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;locality&#39;)">Locality' + sortArrow('locality') + '</th>'
-        + '<th>Proficiencies</th>'
-        + '</tr></thead><tbody>';
-
-      var displayRows = isExpanded ? rows : rows.slice(0, 5);
-      if (!displayRows.length) {
-        html += '<tr><td colspan="5" class="muted" style="text-align:center;">No models match the current filters.</td></tr>';
-      }
-      displayRows.forEach(function(row) {
-        var color = tierColors[row.tier] || '#aaa';
-        var dimStyle = row.enabled ? '' : ' style="opacity:0.5;"';
-        html += '<tr' + dimStyle + '>'
-          + '<td class="mono">' + escapeHtml(row.model) + '</td>'
-          + '<td>' + escapeHtml(row.provider) + (row.enabled ? '' : ' <span style="font-size:10px;color:var(--muted);">(unconfigured)</span>') + '</td>'
-          + '<td><span style="color:' + color + ';font-weight:600;">' + escapeHtml(tierLabels[row.tier] || 'T?') + '</span></td>'
-          + '<td>' + (row.kind === 'local' ? '🖥 Local' : '☁ Cloud') + '</td>'
-            + '<td>' + getModelProficiencyBadges(row.model, row.strengths) + '</td>'
-          + '</tr>';
-      });
-      html += '</tbody></table>';
-
-      if (!isExpanded && rows.length > 5) {
-         html += '<div class="muted" style="text-align:center;margin-top:8px;font-size:12px;cursor:pointer;" onclick="toggleCapabilityMatrix()">' 
-               + '... and ' + (rows.length - 5) + ' more models (Click to expand) ...</div>';
-      }
-
-      if (isExpanded) {
-        html += '<div class="muted" style="margin-top:12px;">Role Coverage</div>';
-        html += '<table class="events-table"><thead><tr><th>Task Role</th><th>Min Tier</th><th>Ideal</th><th>Status</th></tr></thead><tbody>';
-        Object.keys(roleRequirements).forEach(function(role) {
-          var req = roleRequirements[role];
-          var bestTier = 0;
-          rows.forEach(function(row) { if (row.enabled && row.tier > bestTier) bestTier = row.tier; });
-          var met = bestTier >= req.ideal;
-          var partial = !met && bestTier >= req.min;
-          var statusHtml = met
-            ? '<span style="color:#69db7c;">✓ Met</span>'
-            : partial
-              ? '<span style="color:#ffd43b;">⚠ Degraded</span>'
-              : '<span style="color:#ff6b6b;">✗ Unmet</span>';
-          html += '<tr><td>' + escapeHtml(role) + '</td><td>T' + req.min + '</td><td>T' + req.ideal + '</td><td>' + statusHtml + '</td></tr>';
-        });
-        html += '</tbody></table>';
-      }
-
-      html += '</div>';
-
-      container.innerHTML = html;
-    }
-
-    var STRENGTH_COLORS = {
-      'instruction-following': '#94a3b8',
-      'code': '#60a5fa',
-      'reasoning': '#c084fc',
-      'tool-use': '#4ade80',
-      'long-context': '#fb923c',
-      'fast': '#fbbf24',
-      'multilingual': '#2dd4bf',
-      'multimodal': '#f472b6',
-      'agentic': '#f87171'
-    };
-
-    function getModelProficiencyBadges(modelName, explicitStrengths) {
-      var strengths = explicitStrengths;
-      if (!strengths || !strengths.length) {
-        var profiles = state.modelProfiles || {};
-        var profile = profiles[modelName];
-        strengths = profile && profile.strengths ? profile.strengths : [];
-      }
-      if (!strengths || !strengths.length) {
-        return '<span class="muted" style="font-size:10px;">-</span>';
-      }
-      return strengths.map(function(s) {
-        var c = STRENGTH_COLORS[s] || '#94a3b8';
-        return '<span style="display:inline-block;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:600;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44;margin:1px 2px;">' + escapeHtml(s) + '</span>';
-      }).join('');
-    }
-
-    async function fetchModelProfiles() {
-      try {
-        var data = await request('/api/llm/model-profiles');
-        state.modelProfiles = data.profiles || {};
-        safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-      } catch (_) {}
-    }
-
-    async function fetchRoutingState() {
-      try {
-        var data = await request('/api/llm/routing');
-        state.routingStrategy = data.config.strategy || 'single';
-        state.routingRoleOverrides = data.config.roleOverrides || {};
-        state.routingAgentOverrides = data.config.agentOverrides || {};
-        state.routingModalityOverrides = data.config.modalityOverrides || {};
-        state.routingPreferredModality = data.config.preferredModality || null;
-        state.routingSuggestions = data.suggestions || {};
-        state.routingModalitySuggestions = data.modalitySuggestions || {};
-        state.availableModalities = data.modalities || [];
-        safeRenderStep('modelRouting', renderModelRouting);
-      } catch (_) {}
-    }
-
-    async function saveRoutingConfig() {
-      try {
-        await request('/api/llm/routing', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            strategy: state.routingStrategy,
-            roleOverrides: state.routingRoleOverrides,
-            agentOverrides: state.routingAgentOverrides,
-            modalityOverrides: state.routingModalityOverrides,
-            preferredModality: state.routingPreferredModality
-          })
-        });
-        state.notice = 'Routing configuration saved.';
-        render();
-      } catch (err) {
-        state.notice = { type: 'error', message: 'Failed to save routing: ' + String(err) };
-        render();
-      }
-    }
-
-    async function suggestOptimalRouting() {
-      try {
-        var data = await request('/api/llm/routing/suggest');
-        state.routingSuggestions = data.suggestions || {};
-        safeRenderStep('modelRouting', renderModelRouting);
-      } catch (err) {
-        state.notice = { type: 'error', message: 'Failed to get routing suggestions: ' + String(err) };
-        render();
-      }
-    }
-
-    function setRoutingStrategy(strategy) {
-      state.routingStrategy = strategy;
-      safeRenderStep('modelRouting', renderModelRouting);
-    }
-
-    function setSessionRoutingStrategy(strategy) {
-      state.sessionRoutingStrategy = strategy;
-      if (strategy !== 'modality') {
-        state.selectedModalityFilter = null;
-        state.modalityFilterEnabled = false;
-      }
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function onModalitySelected(modalityId) {
-      if (state.selectedModalityFilter === modalityId) {
-        state.selectedModalityFilter = null;
-      } else {
-        state.selectedModalityFilter = modalityId;
-      }
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function onModalityFilterToggle() {
-      state.modalityFilterEnabled = !state.modalityFilterEnabled;
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function setModalityOverride(modalityId, value) {
-      if (!value || value === 'auto') {
-        delete state.routingModalityOverrides[modalityId];
-      } else {
-        var parts = value.split('/', 2);
-        state.routingModalityOverrides[modalityId] = { providerId: parts[0], model: parts[1] || '' };
-      }
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function getModelsForModalityFilter(modalityId, providers) {
-      if (!modalityId || !state.modelProfiles) return null;
-      var filtered = [];
-      providers.forEach(function(provider) {
-        if (!provider.enabled) return;
-        (provider.models || []).forEach(function(model) {
-          var profile = state.modelProfiles[model];
-          if (profile && profile.modalities && profile.modalities.indexOf(modalityId) >= 0) {
-            filtered.push({ providerId: provider.id, model: model, label: provider.label + ' / ' + model });
-          }
-        });
-      });
-      return filtered;
-    }
-
-    function setRoleOverride(role, value) {
-      if (!value || value === 'auto') {
-        delete state.routingRoleOverrides[role];
-      } else {
-        var parts = value.split('/', 2);
-        state.routingRoleOverrides[role] = { providerId: parts[0], model: parts[1] || '' };
-      }
-      safeRenderStep('modelRouting', renderModelRouting);
-    }
-
-    function renderModelRouting() {
-      var container = document.getElementById('model-routing-container');
-      if (!container) return;
-
-      var roles = ['classification', 'chat', 'summarization', 'tool-selection', 'code-generation', 'memory-indexing'];
-      var roleLabels = {
-        'classification': '\\u{1F3F7} Classification',
-        'chat': '\\u{1F4AC} Chat',
-        'summarization': '\\u{1F4DD} Summarization',
-        'tool-selection': '\\u{1F527} Tool Selection',
-        'code-generation': '\\u{1F4BB} Code Generation',
-        'memory-indexing': '\\u{1F4DA} Memory Indexing'
-      };
-      var roleRequirements = {
-        classification:    { min: 1, ideal: 2 },
-        chat:              { min: 2, ideal: 3 },
-        summarization:     { min: 2, ideal: 3 },
-        'tool-selection':  { min: 3, ideal: 4 },
-        'code-generation': { min: 3, ideal: 4 },
-        'memory-indexing':  { min: 1, ideal: 2 }
-      };
-      var tierColors = { 1: '#ff6b6b', 2: '#ffa94d', 3: '#ffd43b', 4: '#69db7c', 5: '#4dabf7' };
-
-      var html = '';
-
-      // Strategy toggle
-      html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">';
-      html += '<span class="muted" style="font-size:12px;font-weight:600;">Strategy:</span>';
-      html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">';
-      html += '<input type="radio" name="routing-strategy" value="single"' + (state.routingStrategy !== 'multi' ? ' checked' : '') + ' onchange="setRoutingStrategy(&#39;single&#39;)" /> Single Provider</label>';
-      html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">';
-      html += '<input type="radio" name="routing-strategy" value="multi"' + (state.routingStrategy === 'multi' ? ' checked' : '') + ' onchange="setRoutingStrategy(&#39;multi&#39;)" /> Multi-Provider</label>';
-      html += '<div style="flex:1;"></div>';
-      html += '<button class="secondary-button" onclick="suggestOptimalRouting()" style="font-size:11px;padding:4px 10px;">\\u{2728} Suggest Optimal</button>';
-      html += '<button class="secondary-button" onclick="saveRoutingConfig()" style="font-size:11px;padding:4px 10px;">\\u{1F4BE} Save</button>';
-      html += '</div>';
-
-      if (state.routingStrategy !== 'multi') {
-        html += '<div class="muted" style="padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;">';
-        html += 'All task roles use the <strong>active session provider</strong>';
-        if (state.llmCatalog && state.llmCatalog.activeProviderId) {
-          html += ' (' + escapeHtml(state.llmCatalog.activeProviderId);
-          if (state.llmCatalog.activeModel) html += ' / ' + escapeHtml(state.llmCatalog.activeModel);
-          html += ')';
-        }
-        html += '. Switch to <strong>Multi-Provider</strong> to assign models per task role and agent.</div>';
-        container.innerHTML = html;
-        return;
-      }
-
-      // Build available models list for dropdowns
-      var availableModels = [];
-      if (state.llmCatalog && state.llmCatalog.providers) {
-        state.llmCatalog.providers.forEach(function(p) {
-          if (!p.enabled) return;
-          (p.models || []).forEach(function(m) {
-            availableModels.push({ providerId: p.id, model: m, label: p.label + ' / ' + m });
-          });
-        });
-      }
-
-      // Role routing table
-      html += '<table class="events-table" style="margin-top:4px;"><thead><tr>';
-      html += '<th>Role</th><th>Tier Req</th><th>AI Suggested</th><th>Assignment</th><th>Status</th>';
-      html += '</tr></thead><tbody>';
-
-      roles.forEach(function(role) {
-        var req = roleRequirements[role] || { min: 2, ideal: 3 };
-        var suggestion = (state.routingSuggestions || {})[role];
-        var override = state.routingRoleOverrides[role] || null;
-
-        // Determine effective model
-        var effectiveProviderId = override ? override.providerId : (suggestion ? suggestion.providerId : null);
-        var effectiveModel = override ? override.model : (suggestion ? suggestion.model : null);
-        var effectiveTier = 0;
-        if (override && state.modelProfiles && state.modelProfiles[override.model]) {
-          effectiveTier = state.modelProfiles[override.model].tier;
-        } else if (suggestion) {
-          effectiveTier = suggestion.tier || 0;
-        }
-
-        var met = effectiveTier >= req.ideal;
-        var partial = !met && effectiveTier >= req.min;
-        var statusHtml = effectiveTier === 0
-          ? '<span class="muted">-</span>'
-          : met
-            ? '<span style="color:#69db7c;">\\u2713 Met</span>'
-            : partial
-              ? '<span style="color:#ffd43b;">\\u26A0 Degraded</span>'
-              : '<span style="color:#ff6b6b;">\\u2717 Unmet</span>';
-
-        var suggestionHtml = '-';
-        if (suggestion) {
-          var sColor = tierColors[suggestion.tier] || '#aaa';
-          suggestionHtml = '<span class="mono" style="font-size:11px;">' + escapeHtml(suggestion.providerId + '/' + suggestion.model) + '</span>';
-          suggestionHtml += ' <span style="color:' + sColor + ';font-size:10px;font-weight:600;">T' + suggestion.tier + '</span>';
-          if (suggestion.degraded) suggestionHtml += ' <span style="color:#ffd43b;font-size:10px;">\\u26A0</span>';
-        }
-
-        // Build dropdown
-        var selectVal = override ? (override.providerId + '/' + override.model) : 'auto';
-        var dropdownHtml = '<select onchange="setRoleOverride(&#39;' + escapeHtml(role) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);max-width:200px;">';
-        dropdownHtml += '<option value="auto"' + (!override ? ' selected' : '') + '>Auto (AI)</option>';
-        availableModels.forEach(function(am) {
-          var val = am.providerId + '/' + am.model;
-          dropdownHtml += '<option value="' + escapeHtml(val) + '"' + (selectVal === val ? ' selected' : '') + '>' + escapeHtml(am.label) + '</option>';
-        });
-        dropdownHtml += '</select>';
-
-        html += '<tr>';
-        html += '<td style="white-space:nowrap;font-size:12px;">' + (roleLabels[role] || escapeHtml(role)) + '</td>';
-        html += '<td style="font-size:11px;"><span style="color:' + (tierColors[req.min] || '#aaa') + ';">T' + req.min + '</span> / <span style="color:' + (tierColors[req.ideal] || '#aaa') + ';">T' + req.ideal + '</span></td>';
-        html += '<td style="font-size:11px;">' + suggestionHtml + '</td>';
-        html += '<td>' + dropdownHtml + '</td>';
-        html += '<td>' + statusHtml + '</td>';
-        html += '</tr>';
-      });
-
-      html += '</tbody></table>';
-
-      // Agents section
-      var agents = [
-        { id: 'classifier', role: 'classification', desc: 'Classifies inputs' },
-        { id: 'chat', role: 'chat', desc: 'General conversation' },
-        { id: 'summarizer', role: 'summarization', desc: 'Condenses content' },
-        { id: 'planner', role: 'tool-selection', desc: 'Plans tool use' },
-        { id: 'coder', role: 'code-generation', desc: 'Generates code' },
-        { id: 'indexer', role: 'memory-indexing', desc: 'Extracts knowledge' }
-      ];
-
-      html += '<div class="muted" style="margin-top:12px;margin-bottom:4px;font-size:12px;font-weight:600;">Agent Overrides</div>';
-      html += '<div class="muted" style="margin-bottom:8px;font-size:11px;">Override the model for specific agents. Defaults to the role assignment above.</div>';
-      html += '<table class="events-table"><thead><tr><th>Agent</th><th>Default Role</th><th>Override</th></tr></thead><tbody>';
-
-      agents.forEach(function(agent) {
-        var agentOverride = (state.routingAgentOverrides || {})[agent.id] || null;
-        var selectVal = agentOverride ? (agentOverride.providerId + '/' + agentOverride.model) : 'role-default';
-
-        var dropdownHtml = '<select onchange="setAgentOverride(&#39;' + escapeHtml(agent.id) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);max-width:200px;">';
-        dropdownHtml += '<option value="role-default"' + (!agentOverride ? ' selected' : '') + '>Use Role Default</option>';
-        availableModels.forEach(function(am) {
-          var val = am.providerId + '/' + am.model;
-          dropdownHtml += '<option value="' + escapeHtml(val) + '"' + (selectVal === val ? ' selected' : '') + '>' + escapeHtml(am.label) + '</option>';
-        });
-        dropdownHtml += '</select>';
-
-        html += '<tr>';
-        html += '<td style="font-size:12px;"><strong>' + escapeHtml(agent.id) + '</strong> <span class="muted" style="font-size:10px;">' + escapeHtml(agent.desc) + '</span></td>';
-        html += '<td style="font-size:11px;">' + escapeHtml(agent.role) + '</td>';
-        html += '<td>' + dropdownHtml + '</td>';
-        html += '</tr>';
-      });
-
-      html += '</tbody></table>';
-
-      container.innerHTML = html;
-    }
-
-    function setAgentOverride(agentId, value) {
-      if (!value || value === 'role-default') {
-        delete state.routingAgentOverrides[agentId];
-      } else {
-        var parts = value.split('/', 2);
-        state.routingAgentOverrides[agentId] = { providerId: parts[0], model: parts[1] || '' };
-      }
-      safeRenderStep('modelRouting', renderModelRouting);
-    }
-
-    function onLlmProviderChanged() {
-      const providerSelect = document.getElementById('provider-select');
-      const providerId = providerSelect ? providerSelect.value : '';
-      if (!providerId || !state.selectedSessionId || !state.llmCatalog || !state.llmCatalog.providers) {
-        return;
-      }
-
-      const provider = state.llmCatalog.providers.find(entry => entry.id === providerId) || null;
-      const providerModels = provider ? (provider.models || []) : [];
-      const model = provider && provider.defaultModel && providerModels.includes(provider.defaultModel)
-        ? provider.defaultModel
-        : (providerModels[0] || '');
-
-      setLocalLlmSelection(state.selectedSessionId, providerId, model);
-      
-      // Explicitly trigger a re-render of just the LLM panel so the newly selected 
-      // provider's correct models populate into the second dropdown immediately.
-      safeRenderStep('llm', renderLlm); 
-    }
-
-    function onLlmModelChanged() {
-      const providerSelect = document.getElementById('provider-select');
-      const modelSelect = document.getElementById('model-select');
-      const providerId = providerSelect ? providerSelect.value : '';
-      const model = modelSelect ? modelSelect.value : '';
-      if (!providerId || !state.selectedSessionId) {
-        return;
-      }
-
-      setLocalLlmSelection(state.selectedSessionId, providerId, model);
-      safeRenderStep('llm', renderLlm); 
-    }
-
-    const PROVIDER_META = {
-      openai: { icon: '\\u{1F7E2}', desc: 'OpenAI GPT models' },
-      anthropic: { icon: '\\u{1F7E0}', desc: 'Claude models' },
-      google: { icon: '\\u{1F535}', desc: 'Gemini models' },
-      mistral: { icon: '\\u{1F7E3}', desc: 'Mistral AI models' },
-      cohere: { icon: '\\u{1F7E4}', desc: 'Cohere Command models' },
-      groq: { icon: '\\u{26A1}', desc: 'Ultra-fast inference' },
-      together: { icon: '\\u{1F91D}', desc: 'Open-source model hosting' },
-      deepseek: { icon: '\\u{1F50D}', desc: 'DeepSeek models' },
-      perplexity: { icon: '\\u{1F310}', desc: 'Search-augmented models' },
-      fireworks: { icon: '\\u{1F386}', desc: 'Fast open-source inference' },
-      openrouter: { icon: '\\u{1F500}', desc: 'Multi-provider router' },
-      ollama: { icon: '\\u{1F999}', desc: 'Local Ollama server' },
-      lmstudio: { icon: '\\u{1F4BB}', desc: 'Local LM Studio server' },
-      custom: { icon: '\\u{1F527}', desc: 'Custom OpenAI-compatible endpoint' }
-    };
-
-    function renderProviderCards() {
-      const container = document.getElementById('provider-cards-container');
-      if (!container) return;
-      if (!state.llmCatalog || !state.llmCatalog.providers) {
-        container.innerHTML = '<div class="muted">Loading providers...</div>';
-        return;
-      }
-
-      const providers = state.llmCatalog.providers;
-      let html = '';
-      for (const provider of providers) {
-        const meta = PROVIDER_META[provider.id] || { icon: '', desc: '' };
-        const isExpanded = state.expandedProviderId === provider.id;
-        const statusBadge = provider.enabled
-          ? '<span class="ps-badge ps-badge-ok">enabled</span>'
-          : '<span class="ps-badge ps-badge-off">disabled</span>';
-        const kindBadge = provider.kind === 'local'
-          ? '<span class="ps-badge ps-badge-local">local</span>'
-          : '<span class="ps-badge ps-badge-remote">remote</span>';
-        const keyBadge = provider.requiresApiKey
-          ? (provider.hasApiKey
-            ? '<span class="ps-badge ps-badge-ok">key set</span>'
-            : '<span class="ps-badge ps-badge-warn">no key</span>')
-          : '';
-
-        html += '<div class="ps-card">';
-        html += '<div class="ps-card-header" onclick="toggleProviderCard(\\'' + escapeHtml(provider.id) + '\\')">';
-        html += '<span class="ps-card-title">' + meta.icon + ' ' + escapeHtml(provider.label) + '</span>';
-        html += '<div class="ps-card-badges">' + statusBadge + kindBadge + keyBadge + '<span class="muted" style="font-size:16px;">' + (isExpanded ? '\\u25B2' : '\\u25BC') + '</span></div>';
-        html += '</div>';
-
-        if (isExpanded) {
-          const testResult = state.providerTestResults[provider.id] || null;
-          const isKeyVisible = state.providerApiKeyVisible[provider.id] || false;
-          html += '<div class="ps-card-body">';
-          html += '<div class="muted" style="margin-bottom:8px;">' + escapeHtml(meta.desc) + '</div>';
-
-          if (provider.reason) {
-            html += '<div class="muted" style="color:#ffc1c1;margin-bottom:8px;">' + escapeHtml(provider.reason) + '</div>';
-          }
-
-          html += '<div class="ps-field"><label>Base URL</label>';
-          html += '<input type="text" id="ps-url-' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.baseUrl || '') + '" placeholder="https://..." /></div>';
-
-          if (provider.requiresApiKey) {
-            html += '<div class="ps-field"><label>API Key</label>';
-            html += '<div class="ps-key-row">';
-            html += '<input type="' + (isKeyVisible ? 'text' : 'password') + '" id="ps-key-' + escapeHtml(provider.id) + '" placeholder="' + (provider.hasApiKey ? 'Key is set (enter new to replace)' : 'Enter API key') + '" />';
-            html += '<button class="secondary-button" onclick="toggleApiKeyVisibility(\\'' + escapeHtml(provider.id) + '\\')" style="white-space:nowrap;">' + (isKeyVisible ? 'Hide' : 'Show') + '</button>';
-            html += '</div></div>';
-          }
-
-          html += '<div class="ps-field"><label>Models (comma-separated)</label>';
-          html += '<textarea id="ps-models-' + escapeHtml(provider.id) + '" rows="2" placeholder="model-1, model-2">' + escapeHtml((provider.models || []).join(', ')) + '</textarea></div>';
-
-          html += '<div class="ps-field"><label>Default Model</label>';
-          html += '<input type="text" id="ps-default-' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.defaultModel || '') + '" placeholder="Default model name" /></div>';
-
-          html += '<div class="action-buttons" style="flex-wrap:wrap;">';
-          html += '<button class="secondary-button" onclick="saveProviderCardSettings(\\'' + escapeHtml(provider.id) + '\\')">Save Settings</button>';
-
-          if (provider.requiresApiKey) {
-            html += '<button class="secondary-button" onclick="saveProviderCardApiKey(\\'' + escapeHtml(provider.id) + '\\')">Save API Key</button>';
-            if (provider.hasApiKey) {
-              html += '<button class="danger-button" onclick="removeProviderCardApiKey(\\'' + escapeHtml(provider.id) + '\\')">Remove Key</button>';
-            }
-          }
-
-          html += '<button class="secondary-button" onclick="testProviderConnection(\\'' + escapeHtml(provider.id) + '\\')">Test Connection</button>';
-          html += '<button class="secondary-button" onclick="discoverModels(\\'' + escapeHtml(provider.id) + '\\')">\uD83D\uDD0D Discover Models</button>';
-          html += '</div>';
-
-          if (testResult) {
-            const cls = testResult.ok ? 'ps-test-result ps-test-ok' : 'ps-test-result ps-test-fail';
-            html += '<div class="' + cls + '">' + escapeHtml(testResult.message) + '</div>';
-          }
-
-          html += '<div class="muted" style="margin-top:8px;font-size:11px;">Source: ' + escapeHtml(provider.settingsSource || 'environment') + '</div>';
-          html += '</div>';
-        }
-
-        html += '</div>';
-      }
-
-      // Preserve any unsaved form state for the currently expanded card before rebuilding
-      if (state.expandedProviderId) {
-        const eid = state.expandedProviderId;
-        const urlEl = document.getElementById('ps-url-' + eid);
-        const keyEl = document.getElementById('ps-key-' + eid);
-        const modelsEl = document.getElementById('ps-models-' + eid);
-        const defaultEl = document.getElementById('ps-default-' + eid);
-        if (urlEl || keyEl || modelsEl || defaultEl) {
-          state.providerSettingsCache[eid] = {
-            url: urlEl ? urlEl.value : null,
-            key: keyEl ? keyEl.value : null,
-            models: modelsEl ? modelsEl.value : null,
-            default: defaultEl ? defaultEl.value : null
-          };
-        }
-      }
-
-      // If the user is actively typing in any input inside this panel, skip the DOM
-      // rebuild entirely — destroying and recreating elements always kills focus even
-      // if values are restored afterwards.  We will pick up fresh server state on the
-      // next poll cycle once they move focus away.
-      const _activeEl = document.activeElement;
-      if (_activeEl && container.contains(_activeEl) &&
-          (_activeEl.tagName === 'INPUT' || _activeEl.tagName === 'TEXTAREA' || _activeEl.tagName === 'SELECT')) {
-        return;
-      }
-
-      container.innerHTML = html;
-
-      // Render collapsed summary showing top providers
-      var summaryEl = document.getElementById('providerConfig-summary');
-      if (summaryEl) {
-        summaryEl.style.display = state.providerConfigCollapsed ? '' : 'none';
-        var summaryHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">';
-        var topN = providers.slice(0, 5);
-        for (var si = 0; si < topN.length; si++) {
-          var sp = topN[si];
-          var sm = PROVIDER_META[sp.id] || { icon: '', desc: '' };
-          var sBadge = sp.enabled
-            ? '<span class="ps-badge ps-badge-ok" style="font-size:10px;">on</span>'
-            : '<span class="ps-badge ps-badge-off" style="font-size:10px;">off</span>';
-          summaryHtml += '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(148,163,184,0.15);border-radius:8px;padding:4px 10px;font-size:12px;">' + sm.icon + ' ' + escapeHtml(sp.label) + ' ' + sBadge + '</span>';
-        }
-        if (providers.length > 5) {
-          summaryHtml += '<span class="muted" style="font-size:11px;">+' + (providers.length - 5) + ' more</span>';
-        }
-        summaryHtml += '</div>';
-        summaryEl.innerHTML = summaryHtml;
-      }
-
-      // Restore preserved form state after innerHTML rebuild
-      if (state.expandedProviderId && state.providerSettingsCache[state.expandedProviderId]) {
-        const eid = state.expandedProviderId;
-        const cached = state.providerSettingsCache[eid];
-        const urlEl = document.getElementById('ps-url-' + eid);
-        const keyEl = document.getElementById('ps-key-' + eid);
-        const modelsEl = document.getElementById('ps-models-' + eid);
-        const defaultEl = document.getElementById('ps-default-' + eid);
-        if (urlEl && cached.url !== null) urlEl.value = cached.url;
-        if (keyEl && cached.key !== null) keyEl.value = cached.key;
-        if (modelsEl && cached.models !== null) modelsEl.value = cached.models;
-        if (defaultEl && cached.default !== null) defaultEl.value = cached.default;
-      }
-    }
-
-    function toggleProviderCard(providerId) {
-      state.expandedProviderId = state.expandedProviderId === providerId ? null : providerId;
-      render();
-    }
-
-    function toggleApiKeyVisibility(providerId) {
-      state.providerApiKeyVisible[providerId] = !state.providerApiKeyVisible[providerId];
-      render();
-    }
-
-    async function saveProviderCardSettings(providerId) {
-      const urlInput = document.getElementById('ps-url-' + providerId);
-      const modelsInput = document.getElementById('ps-models-' + providerId);
-      const defaultInput = document.getElementById('ps-default-' + providerId);
-      const baseUrl = urlInput ? urlInput.value.trim() : '';
-      const modelsRaw = modelsInput ? modelsInput.value : '';
-      const models = modelsRaw.split(',').map(function(m) { return m.trim(); }).filter(Boolean);
-      const defaultModel = defaultInput ? defaultInput.value.trim() : '';
-
-      state.notice = null;
-      try {
-        await request('/api/llm/provider-settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId: providerId, baseUrl: baseUrl, models: models, defaultModel: defaultModel })
-        });
-        delete state.providerSettingsCache[providerId];
-        await refreshChrome();
-        safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-        state.notice = 'Settings saved for ' + providerId + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function saveProviderCardApiKey(providerId) {
-      const keyInput = document.getElementById('ps-key-' + providerId);
-      const apiKey = keyInput ? keyInput.value.trim() : '';
-      if (!apiKey) {
-        state.notice = 'Enter an API key before saving.';
-        render();
-        return;
-      }
-      state.notice = null;
-      try {
-        await request('/api/llm/provider-secret', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId: providerId, apiKey: apiKey })
-        });
-        if (state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId].key = null;
-        await refreshChrome();
-        state.notice = 'API key saved for ' + providerId + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function removeProviderCardApiKey(providerId) {
-      if (!confirm('Remove API key for ' + providerId + '?')) return;
-      state.notice = null;
-      try {
-        await request('/api/llm/provider-secret?providerId=' + encodeURIComponent(providerId), { method: 'DELETE' });
-        await refreshChrome();
-        state.notice = 'API key removed for ' + providerId + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function testProviderConnection(providerId) {
-      state.providerTestResults[providerId] = { ok: false, message: 'Testing...' };
-      render();
-      try {
-        const keyInput = document.getElementById('ps-key-' + providerId);
-        const apiKey = keyInput ? keyInput.value.trim() : '';
-        const result = await request('/api/llm/provider-test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(apiKey ? { providerId: providerId, apiKey: apiKey } : { providerId: providerId })
-        });
-        state.providerTestResults[providerId] = result;
-        if (result.ok && result.models && result.models.length > 0) {
-          // Update the models textarea in-place and persist in cache so it survives the next poll
-          const modelsInput = document.getElementById('ps-models-' + providerId);
-          const modelsText = result.models.join(', ');
-          if (modelsInput) modelsInput.value = modelsText;
-          if (!state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId] = {};
-          state.providerSettingsCache[providerId].models = modelsText;
-          // Clear the API key input from cache now that it has been saved server-side
-          if (apiKey) {
-            if (keyInput) keyInput.value = '';
-            if (state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId].key = null;
-          }
-          await refreshChrome();
-        }
-      } catch (error) {
-        state.providerTestResults[providerId] = { ok: false, message: String(error) };
-      }
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-      render();
-    }
-
-    async function discoverModels(providerId) {
-      state.providerTestResults[providerId] = { ok: false, message: 'Discovering models...' };
-      render();
-      try {
-        const result = await request('/api/models/discover/' + encodeURIComponent(providerId));
-        if (result && result.models && result.models.length > 0) {
-          const modelsInput = document.getElementById('ps-models-' + providerId);
-          const modelsText = result.models.join(', ');
-          if (modelsInput) modelsInput.value = modelsText;
-          if (!state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId] = {};
-          state.providerSettingsCache[providerId].models = modelsText;
-        }
-        const count = (result && result.models) ? result.models.length : 0;
-        state.providerTestResults[providerId] = {
-          ok: true,
-          message: 'Discovered ' + count + ' model' + (count === 1 ? '' : 's') + '.'
-        };
-      } catch (error) {
-        state.providerTestResults[providerId] = { ok: false, message: 'Discovery failed: ' + String(error) };
-      }
-      render();
-    }
-
-    function renderLlmAudit() {
-      const container = document.getElementById('llm-audit');
-      const events = state.llmAuditEvents || [];
-      if (!events.length) {
-        container.innerHTML = '<div class="muted">No provider switch events for this scope.</div>'
-          + '<div class="action-buttons">'
-          + '<button class="secondary-button" disabled>Export JSON</button>'
-          + '<button class="secondary-button" disabled>Copy JSON</button>'
-          + '<button class="secondary-button" disabled>Export CSV</button>'
-          + '</div>';
-        return;
-      }
-
-      const successCount = events.filter(event => event.status === 'succeeded').length;
-      const failedCount = events.filter(event => event.status === 'failed').length;
-
-      container.innerHTML = ''
-        + '<div class="metric"><span class="muted">Succeeded</span><span class="mono">' + escapeHtml(String(successCount)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Failed</span><span class="mono">' + escapeHtml(String(failedCount)) + '</span></div>'
-        + '<div class="action-buttons">'
-        + '<button class="secondary-button" onclick="exportLlmAuditJson()">Export JSON</button>'
-        + '<button class="secondary-button" onclick="copyLlmAuditJson()">Copy JSON</button>'
-        + '<button class="secondary-button" onclick="exportLlmAuditCsv()">Export CSV</button>'
-        + '</div>'
-        + '<table class="events-table"><thead><tr><th>Time</th><th>Selection</th><th>Status</th></tr></thead><tbody>'
-        + events.map(event => {
-          const details = event.details || {};
-          const requestedProviderId = details.requestedProviderId || '-';
-          const requestedModel = details.requestedModel || '-';
-          const selectedProviderId = details.selectedProviderId || '-';
-          const selectedModel = details.selectedModel || '-';
-          const reason = details.reason
-            ? ('<div class="muted">Reason: ' + escapeHtml(String(details.reason)) + '</div>')
-            : '';
-          return '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(event.timestamp)) + '</td>'
-            + '<td><div class="mono">req ' + escapeHtml(String(requestedProviderId)) + ' / ' + escapeHtml(String(requestedModel)) + '</div>'
-            + '<div class="mono">sel ' + escapeHtml(String(selectedProviderId)) + ' / ' + escapeHtml(String(selectedModel)) + '</div>'
-            + reason + '</td>'
-            + '<td>' + escapeHtml(event.status) + '</td>'
-            + '</tr>';
-        }).join('')
-        + '</tbody></table>';
-    }
-
-    function exportLlmAuditJson() {
-      const payload = buildLlmAuditPayload();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const safeSession = (state.selectedSessionId || 'all').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'prism-llm-audit-' + safeSession + '-' + timestamp + '.json';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }
-
-    async function copyLlmAuditJson() {
-      const payload = buildLlmAuditPayload();
-      const text = JSON.stringify(payload, null, 2);
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(text);
-          state.notice = 'LLM audit JSON copied to clipboard.';
-          render();
-          return;
-        }
-      } catch {
-      }
-
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      textarea.style.pointerEvents = 'none';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      try {
-        const copied = document.execCommand('copy');
-        state.notice = copied
-          ? 'LLM audit JSON copied to clipboard.'
-          : 'Clipboard permission denied. Use Export JSON instead.';
-      } catch {
-        state.notice = 'Clipboard copy failed. Use Export JSON instead.';
-      } finally {
-        document.body.removeChild(textarea);
-        render();
-      }
-    }
-
-    function buildLlmAuditPayload() {
-      const payload = {
-        exportedAt: new Date().toISOString(),
-        scope: {
-          sessionId: state.selectedSessionId || null,
-          operation: 'dashboard.llm_selection'
-        },
-        counts: {
-          total: state.llmAuditEvents.length,
-          succeeded: state.llmAuditEvents.filter(event => event.status === 'succeeded').length,
-          failed: state.llmAuditEvents.filter(event => event.status === 'failed').length
-        },
-        events: state.llmAuditEvents
-      };
-      return payload;
-    }
-
-    function exportLlmAuditCsv() {
-      const rows = [];
-      rows.push([
-        'timestamp',
-        'status',
-        'chatSessionId',
-        'source',
-        'requestedProviderId',
-        'requestedModel',
-        'previousProviderId',
-        'previousModel',
-        'selectedProviderId',
-        'selectedModel',
-        'reason'
-      ]);
-
-      for (const event of state.llmAuditEvents) {
-        const details = event.details || {};
-        rows.push([
-          event.timestamp || '',
-          event.status || '',
-          details.chatSessionId || '',
-          details.source || '',
-          details.requestedProviderId || '',
-          details.requestedModel || '',
-          details.previousProviderId || '',
-          details.previousModel || '',
-          details.selectedProviderId || '',
-          details.selectedModel || '',
-          details.reason || ''
-        ]);
-      }
-
-      const csv = rows.map(cols => cols.map(toCsvValue).join(',')).join('\\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const safeSession = (state.selectedSessionId || 'all').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'prism-llm-audit-' + safeSession + '-' + timestamp + '.csv';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }
-
-    function toCsvValue(value) {
-      const text = String(value ?? '');
-      if (/[",\\n]/.test(text)) {
-        return '"' + text.replace(/"/g, '""') + '"';
-      }
-      return text;
-    }
-
-    function metricRow(label, value) {
-      return '<div class="metric"><span class="muted">' + escapeHtml(label) + '</span><span class="mono">' + escapeHtml(value) + '</span></div>';
-    }
-
-    function renderSettingsPanel() {
-      var container = document.getElementById('settings-panel');
-      if (!container) return;
-      var s = state.status;
-      var rs = state.runtimeSettings;
-      var html = '';
-
-      /* ── helper: section wrapper ── */
-      function sec(id, title, contentFn) {
-        var open = state.settingsSections[id] !== false;
-        html += '<div class="stg-section">';
-        html += '<div class="stg-section-header" onclick="toggleSettingsSection(\\'' + id + '\\')">';
-        html += '<span>' + escapeHtml(title) + '</span>';
-        html += '<span>' + (open ? '\u25BC' : '\u25B6') + '</span>';
-        html += '</div>';
-        html += '<div class="stg-section-body' + (open ? '' : ' stg-collapsed') + '">';
-        contentFn();
-        html += '</div></div>';
-      }
-
-      function readonlyRow(label, value, hint) {
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label);
-        if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-        html += '</span>';
-        html += '<span class="stg-value">' + escapeHtml(String(value || '\u2014')) + '</span>';
-        html += '</div>';
-      }
-
-      function badgeRow(label, value, cls) {
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label) + '</span>';
-        html += '<span class="stg-badge ' + cls + '">' + escapeHtml(String(value)) + '</span>';
-        html += '</div>';
-      }
-
-      function numberRow(label, key, hint, suffix) {
-        var val = rs ? (rs[key] != null ? rs[key] : '') : '';
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label);
-        if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-        html += '</span>';
-        html += '<span style="display:flex;align-items:center;gap:4px;">';
-        html += '<input class="stg-input" type="number" id="stg-' + key + '" value="' + escapeHtml(String(val)) + '" onchange="markSettingDirty(\\'' + key + '\\')" />';
-        if (suffix) html += '<span class="muted" style="font-size:11px;">' + escapeHtml(suffix) + '</span>';
-        html += '</span>';
-        html += '</div>';
-      }
-
-      function selectRow(label, key, options, hint) {
-        var val = rs ? String(rs[key] || '') : '';
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label);
-        if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-        html += '</span>';
-        html += '<select class="stg-select" id="stg-' + key + '" onchange="markSettingDirty(\\'' + key + '\\')">';
-        for (var oi = 0; oi < options.length; oi++) {
-          var opt = options[oi];
-          html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === val ? ' selected' : '') + '>' + escapeHtml(opt.label) + '</option>';
-        }
-        html += '</select>';
-        html += '</div>';
-      }
-
-      /* ── Section 1: Runtime & Identity ── */
-      sec('runtime', 'Runtime & Identity', function() {
-        if (s) {
-          var segment = (s.executionProfileSegment || 'individual').toLowerCase();
-          var isDemo = s.mode === 'demo';
-          var segBadge = isDemo ? 'demo' : segment;
-          var segLabel = isDemo ? 'DEMO' : segment.toUpperCase();
-          var segClass = isDemo ? 'stg-badge-amber' : (segment === 'business' ? 'stg-badge-blue' : 'stg-badge-green');
-          badgeRow('Execution Profile', segLabel, segClass);
-          var envClass = s.environmentProfile === 'prod' ? 'stg-badge-green' : (s.environmentProfile === 'staging' ? 'stg-badge-amber' : 'stg-badge-blue');
-          badgeRow('Environment', s.environmentProfile || 'dev', envClass);
-          badgeRow('Mode', s.mode || 'server', s.mode === 'demo' ? 'stg-badge-amber' : 'stg-badge-green');
-          readonlyRow('Dashboard Port', location.port || '7070');
-          readonlyRow('Session ID', s.sessionId);
-          readonlyRow('Uptime', formatUptime(s.uptimeSeconds));
-          readonlyRow('Version', 'v0.2.0');
-          readonlyRow('Node', (s.nodeVersion || '\u2014'));
-          readonlyRow('Platform', (s.platform || '\u2014'));
-        } else {
-          html += '<div class="muted">Loading runtime information...</div>';
-        }
-      });
-
-      /* ── Section 2: LLM Summary ── */
-      sec('llm', 'LLM Configuration (Summary)', function() {
-        var provider = state.llmCatalog ? (state.llmCatalog.activeProviderId || 'none') : 'unknown';
-        var model = state.llmCatalog ? (state.llmCatalog.activeModel || 'none') : 'unknown';
-        readonlyRow('Active Provider', provider);
-        readonlyRow('Active Model', model);
-        readonlyRow('Routing Strategy', state.routingStrategy || 'single');
-        readonlyRow('Sessions', String((state.sessions || []).length));
-        html += '<div style="margin-top:8px;"><span class="muted" style="font-size:11px;">Configure providers, models, and routing in the sections above. \u2191</span></div>';
-      });
-
-      /* ── Section 3: Approval & Orchestration ── */
-      sec('approval', 'Approval & Orchestration', function() {
-        numberRow('Approval Timeout', 'approvalTimeoutMs', 'PRISM_APPROVAL_TIMEOUT_MS', 'ms');
-        if (s && s.pendingApprovals > 0) {
-          html += '<div class="stg-row"><span class="stg-label">Pending Approvals</span>';
-          html += '<span class="stg-badge stg-badge-amber">' + s.pendingApprovals + '</span></div>';
-        }
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'approvalTimeoutMs' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 4: Self-Review Intervals ── */
-      sec('selfReview', 'Self-Review Intervals', function() {
-        selectRow('Daily Cadence', 'selfReviewDailyMs', [
-          { value: '43200000', label: '12 hours' },
-          { value: '86400000', label: '24 hours' },
-          { value: '172800000', label: '48 hours' }
-        ], 'PRISM_SELF_REVIEW_DAILY_MS');
-        selectRow('Weekly Cadence', 'selfReviewWeeklyMs', [
-          { value: '302400000', label: '3.5 days' },
-          { value: '604800000', label: '7 days' },
-          { value: '1209600000', label: '14 days' }
-        ], 'PRISM_SELF_REVIEW_WEEKLY_MS');
-        selectRow('Monthly Cadence', 'selfReviewMonthlyMs', [
-          { value: '1296000000', label: '15 days' },
-          { value: '2592000000', label: '30 days' },
-          { value: '5184000000', label: '60 days' }
-        ], 'PRISM_SELF_REVIEW_MONTHLY_MS');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'selfReviewDailyMs' + '\\', \\'' + 'selfReviewWeeklyMs' + '\\', \\'' + 'selfReviewMonthlyMs' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 5: Retrieval & Memory ── */
-      sec('retrieval', 'Retrieval & Memory', function() {
-        numberRow('Max Episodic Events', 'maxEpisodicEvents', '', 'events');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'maxEpisodicEvents' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 6: Tool & Network Timeouts ── */
-      sec('timeouts', 'Tool & Network Timeouts', function() {
-        numberRow('Shell Command Timeout', 'shellTimeoutMs', '', 'ms');
-        numberRow('HTTP Request Timeout', 'httpTimeoutMs', '', 'ms');
-        numberRow('MCP Server Timeout', 'mcpTimeoutMs', '', 'ms');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'shellTimeoutMs' + '\\', \\'' + 'httpTimeoutMs' + '\\', \\'' + 'mcpTimeoutMs' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 7: Dashboard Preferences ── */
-      sec('prefs', 'Dashboard Preferences', function() {
-        selectRow('Telemetry Window', 'telemetryWindow', [
-          { value: '1h', label: '1 Hour' },
-          { value: '1d', label: '1 Day' },
-          { value: '7d', label: '7 Days' }
-        ]);
-        numberRow('Action History Limit', 'actionHistoryLimit', '', 'entries');
-        numberRow('Package History Limit', 'sessionPackageHistoryLimit', '', 'entries');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'telemetryWindow' + '\\', \\'' + 'actionHistoryLimit' + '\\', \\'' + 'sessionPackageHistoryLimit' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 8: Data & Paths ── */
-      sec('paths', 'Data & Paths', function() {
-        if (s) {
-          readonlyRow('Workspace Root', s.workspaceRoot, 'PRISM_WORKSPACE_ROOT');
-        }
-        readonlyRow('Dashboard URL', 'http://localhost:' + (location.port || '7070'));
-      });
-
-      /* ── Section 9: Readiness Requirements ── */
-      sec('readiness', 'Readiness Requirements', function() {
-        if (state.readiness && state.readiness.requirements) {
-          var reqs = state.readiness.requirements;
-          for (var ri = 0; ri < reqs.length; ri++) {
-            var met = reqs[ri].passed;
-            html += '<div class="stg-req-row">';
-            html += '<span class="' + (met ? 'stg-req-met' : 'stg-req-unmet') + '">' + (met ? '\u2713' : '\u2717') + '</span>';
-            html += '<span>' + escapeHtml(reqs[ri].label || reqs[ri].id) + '</span>';
-            html += '</div>';
-          }
-        } else {
-          html += '<div class="muted">No readiness data loaded yet.</div>';
-        }
-        html += '<div style="margin-top:10px;">';
-        html += '<button class="stg-recheck-btn" onclick="recheckReadiness()">Re-check Readiness</button>';
-        html += '</div>';
-      });
-
-      container.innerHTML = html;
-    }
-
-    function toggleSettingsSection(id) {
-      state.settingsSections[id] = !state.settingsSections[id];
-      render();
-    }
-
-    function markSettingDirty(key) {
-      /* visual feedback could go here; for now we just let the user click Save */
-    }
-
-    async function saveSettings(keys) {
-      var payload = {};
-      for (var i = 0; i < keys.length; i++) {
-        var el = document.getElementById('stg-' + keys[i]);
-        if (el) {
-          var val = el.tagName === 'SELECT' ? el.value : el.value;
-          if (el.type === 'number') val = Number(val);
-          payload[keys[i]] = val;
-        }
-      }
-      state.settingsSaving = true;
-      render();
-      try {
-        await request('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        await refreshChrome();
-      } catch (e) {
-        console.error('[settings] save failed', e);
-      }
-      state.settingsSaving = false;
-      render();
-    }
-
-    async function recheckReadiness() {
-      try {
-        var sessionId = state.selectedSessionId || '';
-        await request('/api/readiness/recheck', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sessionId, source: 'dashboard_settings_panel' }) });
-        await refreshChrome();
-        render();
-      } catch (e) {
-        console.error('[settings] readiness recheck failed', e);
-      }
-    }
-
-    /* ═══ Tools & Plugins — shared helpers ═══ */
-    function getToolState(name) {
-      if (!state.toolStates[name]) state.toolStates[name] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
-      return state.toolStates[name];
-    }
-    function getPluginState(name) {
-      if (!state.pluginStates[name]) state.pluginStates[name] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, uptime: 100, lastChecked: null };
-      return state.pluginStates[name];
-    }
-    function getUtilityState(name) {
-      if (!state.utilityStates[name]) state.utilityStates[name] = { lastRun: null, lastDurationMs: 0, lastResult: null, runCount: 0 };
-      return state.utilityStates[name];
-    }
-    function getReview(store, name) {
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      return store[name];
-    }
-    function renderStars(store, name, kind) {
-      var r = getReview(store, name);
-      var html = '<div class="tp-review-stars">';
-      for (var s = 1; s <= 5; s++) {
-        html += '<span class="tp-star' + (s <= r.rating ? ' active' : '') + '" onclick="setItemRating(\\'' + kind + '\\', \\'' + escapeHtml(name) + '\\', ' + s + ')">\u2605</span>';
-      }
-      html += '</div>';
-      return html;
-    }
-    function approvalBadge(status) {
-      var cls = { approved: 'tp-approval-approved', review: 'tp-approval-review', flagged: 'tp-approval-flagged', blocked: 'tp-approval-blocked' };
-      return '<span class="tp-approval-badge ' + (cls[status] || 'tp-approval-review') + '">' + escapeHtml(status) + '</span>';
-    }
-    function healthDot(ok) {
-      return '<span class="tp-status-dot ' + (ok ? 'green' : 'red') + '"></span>';
-    }
-    function timeAgo(ts) {
-      if (!ts) return 'never';
-      var diff = Date.now() - new Date(ts).getTime();
-      if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
-      if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-      if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-      return Math.floor(diff / 86400000) + 'd ago';
-    }
-
-    function setItemRating(kind, name, rating) {
-      var store = kind === 'tool' ? state.toolReviews : kind === 'plugin' ? state.pluginReviews : state.utilityReviews;
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      store[name].rating = rating;
-      store[name].lastReviewed = new Date().toISOString();
-      render();
-    }
-    function setItemApproval(kind, name, approval) {
-      var store = kind === 'tool' ? state.toolReviews : kind === 'plugin' ? state.pluginReviews : state.utilityReviews;
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      store[name].approval = approval;
-      store[name].lastReviewed = new Date().toISOString();
-      render();
-    }
-    function saveItemNotes(kind, name) {
-      var el = document.getElementById('review-notes-' + kind + '-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
-      if (!el) return;
-      var store = kind === 'tool' ? state.toolReviews : kind === 'plugin' ? state.pluginReviews : state.utilityReviews;
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      store[name].notes = el.value;
-      store[name].lastReviewed = new Date().toISOString();
-    }
-    function toggleItemExpand(kind, name) {
-      var field = kind === 'tool' ? 'expandedToolId' : kind === 'plugin' ? 'expandedPluginId' : 'expandedUtilityId';
-      state[field] = state[field] === name ? null : name;
-      render();
-    }
-    function toggleItemEnabled(kind, name) {
-      var stateStore = kind === 'tool' ? state.toolStates : kind === 'plugin' ? state.pluginStates : state.utilityStates;
-      if (!stateStore[name]) {
-        if (kind === 'tool') getToolState(name);
-        else if (kind === 'plugin') getPluginState(name);
-        else getUtilityState(name);
-      }
-      stateStore[name].enabled = !stateStore[name].enabled;
-      fetch('/api/tools/' + encodeURIComponent(name) + '/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: stateStore[name].enabled }) }).catch(function() {});
-      render();
-    }
-    async function testTool(name) {
-      var resultEl = document.getElementById('test-result-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
-      if (resultEl) resultEl.innerHTML = '<span class="muted">Testing...</span>';
-      try {
-        var res = await request('/api/tools/' + encodeURIComponent(name) + '/test', { method: 'POST' });
-        if (resultEl) resultEl.innerHTML = '<span style="color:#7ecf7e;">\u2713 ' + escapeHtml(res.message || 'OK') + '</span>';
-      } catch (e) {
-        if (resultEl) resultEl.innerHTML = '<span style="color:#ffc1c1;">\u2717 ' + escapeHtml(e.message) + '</span>';
-      }
-    }
-    async function checkPluginHealth(name) {
-      var resultEl = document.getElementById('health-result-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
-      if (resultEl) resultEl.innerHTML = '<span class="muted">Checking...</span>';
-      try {
-        var res = await request('/api/plugins/' + encodeURIComponent(name) + '/health', { method: 'POST' });
-        var ps = getPluginState(name);
-        ps.healthy = res.healthy !== false;
-        ps.lastChecked = new Date().toISOString();
-        if (resultEl) resultEl.innerHTML = '<span style="color:' + (ps.healthy ? '#7ecf7e' : '#ffc1c1') + ';">' + (ps.healthy ? '\u2713 Healthy' : '\u2717 Unhealthy') + '</span>';
-        render();
-      } catch (e) {
-        if (resultEl) resultEl.innerHTML = '<span style="color:#ffc1c1;">\u2717 ' + escapeHtml(e.message) + '</span>';
-      }
-    }
-    function updateToolsFilter(val) {
-      state.toolsFilterText = val.toLowerCase();
-      render();
-    }
-
-    /* ═══ Brand Panel ═══ */
-    function formatUptime(seconds) {
-      if (!seconds || seconds < 0) return '0s';
-      var d = Math.floor(seconds / 86400);
-      var h = Math.floor((seconds % 86400) / 3600);
-      var m = Math.floor((seconds % 3600) / 60);
-      if (d > 0) return d + 'd ' + h + 'h';
-      if (h > 0) return h + 'h ' + m + 'm';
-      return m + 'm';
-    }
-
-    function renderBrandPanel() {
-      var panel = document.getElementById('brand-panel');
-      if (!panel) return;
-      var s = state.status;
-      if (!s) return;
-
-      var segment = (s.executionProfileSegment || 'individual').toLowerCase();
-      var isDemo = s.mode === 'demo';
-      var badgeClass = isDemo ? 'demo' : segment;
-      var badgeLabel = isDemo ? 'DEMO' : segment.toUpperCase();
-      var envProfile = s.environmentProfile || 'dev';
-      var envDotClass = envProfile === 'prod' ? 'prod' : (envProfile === 'staging' ? 'staging' : 'dev');
-
-      var html = '<div class="eyebrow">Frontier Operator Console</div>'
-        + '<h1>PRISM Chat</h1>'
-        + '<div class="brand-profile-badge ' + badgeClass + '">' + badgeLabel + '</div>'
-        + '<div class="brand-info-grid">'
-        + '<div class="brand-info-item"><span class="brand-info-label">Env</span><br><span class="brand-info-value"><span class="brand-env-dot ' + envDotClass + '"></span>' + escapeHtml(envProfile) + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Mode</span><br><span class="brand-info-value">' + escapeHtml(s.mode || 'server') + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Uptime</span><br><span class="brand-info-value">' + formatUptime(s.uptimeSeconds) + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Version</span><br><span class="brand-info-value">v0.2.0</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Sessions</span><br><span class="brand-info-value">' + (s.chatSessionCount || 0) + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Events</span><br><span class="brand-info-value">' + (s.eventCount || 0) + '</span></div>'
-        + '</div>'
-        + '<div class="muted" style="margin-top:8px;">http://localhost:' + (location.port || '7070') + '</div>';
-
-      if (s.pendingApprovals && s.pendingApprovals > 0) {
-        html += '<div class="brand-approvals-badge">' + s.pendingApprovals + ' pending approval' + (s.pendingApprovals > 1 ? 's' : '') + '</div>';
-      }
-
-      panel.innerHTML = html;
-    }
-
-    /* ═══ Overview Bar ═══ */
-    function renderToolsOverviewBar() {
-      var bar = document.getElementById('tools-overview-bar');
-      if (!bar) return;
-      var totalTools = Math.max(19, Object.keys(state.toolStates || {}).length);
-      var totalPlugins = Math.max(7, Object.keys(state.pluginStates || {}).length);
-      var enabledTools = 0;
-      var healthyPlugins = 0;
-      var totalUtils = 30;
-      enabledTools = totalTools - Object.keys(state.toolStates || {}).filter(function(k) { return !state.toolStates[k].enabled; }).length;
-      healthyPlugins = totalPlugins - Object.keys(state.pluginStates || {}).filter(function(k) { return !state.pluginStates[k].healthy; }).length;
-
-      var html = '<div class="tp-overview-bar">';
-      html += '<span class="tp-status-dot green"></span>';
-      html += '<span class="tp-overview-stat">' + enabledTools + '/' + totalTools + ' tools <span class="muted">enabled</span></span>';
-      html += '<span style="color:var(--muted);">\u2502</span>';
-      html += '<span class="tp-overview-stat">' + healthyPlugins + '/' + totalPlugins + ' plugins <span class="muted">healthy</span></span>';
-      html += '<span style="color:var(--muted);">\u2502</span>';
-      html += '<span class="tp-overview-stat">' + totalUtils + ' <span class="muted">utilities</span></span>';
-      html += '<span style="flex:1;"></span>';
-      html += '<input class="tp-filter-input" type="text" placeholder="\uD83D\uDD0D Filter by name..." value="' + escapeHtml(state.toolsFilterText) + '" oninput="updateToolsFilter(this.value)">';
-      html += '</div>';
-      bar.innerHTML = html;
-    }
-
-    function renderToolsPanel() {
-      var container = document.getElementById('tools-panel');
-      if (!container) return;
-      renderToolsOverviewBar();
-
-      var fallbackTools = [
-        { name: 'file_read', cat: 'System', desc: 'Read file contents with encoding support', risk: 'low', mut: false },
-        { name: 'file_write', cat: 'System', desc: 'Write or append content to files', risk: 'medium', mut: true },
-        { name: 'file_delete', cat: 'System', desc: 'Delete files and directories', risk: 'high', mut: true },
-        { name: 'file_list', cat: 'System', desc: 'List directory contents with file type detection', risk: 'low', mut: false },
-        { name: 'shell_exec', cat: 'System', desc: 'Execute shell commands with blocked-pattern protection', risk: 'high', mut: true },
-        { name: 'terminal_session', cat: 'System', desc: 'Manage interactive terminal sessions with lifecycle control', risk: 'medium', mut: true },
-        { name: 'container_sandbox', cat: 'System', desc: 'Create and manage containerized sandbox environments', risk: 'medium', mut: true },
-        { name: 'http_request', cat: 'Integration', desc: 'Execute HTTP requests (GET/POST/PUT/PATCH/DELETE)', risk: 'medium', mut: true },
-        { name: 'email_ops', cat: 'Application', desc: 'Email operations \u2014 summarize, reply, and send', risk: 'medium', mut: true },
-        { name: 'calendar_plan', cat: 'Application', desc: 'Calendar management \u2014 availability and scheduling', risk: 'medium', mut: true },
-        { name: 'notes_extract', cat: 'Application', desc: 'Notes management \u2014 capture, extract, and persist', risk: 'medium', mut: true },
-        { name: 'tasks_timeline', cat: 'Application', desc: 'Task timeline planning and commitment', risk: 'medium', mut: true },
-        { name: 'neo4j_query', cat: 'Knowledge', desc: 'Execute Cypher queries against Neo4j graph database', risk: 'medium', mut: false },
-        { name: 'memory_query', cat: 'Knowledge', desc: 'Query episodic, semantic, or session memory stores', risk: 'low', mut: false },
-        { name: 'semantic_query', cat: 'Knowledge', desc: 'Semantic memory index with multiple retrieval modes', risk: 'low', mut: false },
-        { name: 'nexus_check_hotline', cat: 'Integration', desc: 'Read broadcast messages from Nexus hotline', risk: 'low', mut: false },
-        { name: 'nexus_read_memory', cat: 'Integration', desc: 'Read Nexus primary memory store', risk: 'low', mut: false },
-        { name: 'nexus_log_insight', cat: 'Integration', desc: 'Append insights to Nexus daily memory log', risk: 'medium', mut: true },
-        { name: 'nexus_broadcast', cat: 'Integration', desc: 'Send STP messages to Nexus thread or hotline', risk: 'medium', mut: true }
-      ];
-
-      var tools = (Array.isArray(state.toolCatalog) && state.toolCatalog.length > 0)
-        ? state.toolCatalog.slice()
-        : fallbackTools.slice();
-
-      var knownTools = {};
-      for (var k = 0; k < tools.length; k++) {
-        knownTools[tools[k].name] = true;
-      }
-      var observedToolNames = Object.keys(state.toolStates || {}).filter(function(name) {
-        return !knownTools[name];
-      }).sort();
-      for (var oi = 0; oi < observedToolNames.length; oi++) {
-        var observedName = observedToolNames[oi];
-        tools.push({
-          name: observedName,
-          cat: 'Observed',
-          desc: 'Observed from backend telemetry stream',
-          risk: 'medium',
-          mut: false
-        });
-      }
-
-      var riskColor = { low: '#7ecf7e', medium: '#ffd17a', high: '#ffc1c1' };
-      var riskBg = { low: 'rgba(126,207,126,0.15)', medium: 'rgba(255,200,80,0.12)', high: 'rgba(255,141,141,0.12)' };
-      var catIcon = { System: '\uD83D\uDDA5\uFE0F', Application: '\uD83D\uDCCB', Knowledge: '\uD83E\uDDE0', Integration: '\uD83D\uDD17', Observed: '\uD83D\uDCE1' };
-      var filter = state.toolsFilterText || '';
-
-      var categories = ['System', 'Application', 'Knowledge', 'Integration'];
-      var seenCategories = {};
-      for (var ci = 0; ci < categories.length; ci++) seenCategories[categories[ci]] = true;
-      for (var ti = 0; ti < tools.length; ti++) {
-        var candidateCategory = tools[ti].cat || 'System';
-        if (!seenCategories[candidateCategory]) {
-          categories.push(candidateCategory);
-          seenCategories[candidateCategory] = true;
-        }
-      }
-      if (observedToolNames.length > 0 && !seenCategories.Observed) {
-        categories.push('Observed');
-      }
-      var html = '<div class="muted" style="margin-bottom:8px;">'
-        + tools.length + ' tools registered across ' + categories.length + ' categories.</div>';
-
-      for (var c = 0; c < categories.length; c++) {
-        var cat = categories[c];
-        var catTools = tools.filter(function(t) { return t.cat === cat && (!filter || t.name.toLowerCase().indexOf(filter) !== -1 || t.desc.toLowerCase().indexOf(filter) !== -1); });
-        if (!catTools.length) continue;
-        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (catIcon[cat] || '') + ' ' + escapeHtml(cat) + ' <span class="muted">(' + catTools.length + ')</span></div>';
-        for (var i = 0; i < catTools.length; i++) {
-          var t = catTools[i];
-          var ts = getToolState(t.name);
-          var rv = getReview(state.toolReviews, t.name);
-          var isExpanded = state.expandedToolId === t.name;
-          var safeId = t.name.replace(/[^a-zA-Z0-9]/g, '_');
-
-          html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + '">';
-
-          /* ── collapsed header ── */
-          html += '<div class="tp-card-head" onclick="toggleItemExpand(\\'tool\\', \\'' + escapeHtml(t.name) + '\\')" data-tooltip="Category: ' + escapeHtml(t.cat) + ' | Risk: ' + escapeHtml(t.risk) + ' | ' + (t.mut ? 'Mutating' : 'Read-only') + '\\n' + escapeHtml(t.desc) + '">';
-          html += '<div style="flex:1;min-width:0;">';
-          html += '<div style="display:flex;align-items:center;gap:8px;">';
-          html += '<span class="tp-card-name">' + escapeHtml(t.name) + '</span>';
-          html += healthDot(ts.enabled);
-          html += '</div>';
-          html += '<div class="tp-card-desc">' + escapeHtml(t.desc) + '</div>';
-          html += '<div class="tp-card-meta">';
-          if (ts.invocations > 0) html += '<span class="tp-meta-tag">\uD83D\uDCCA ' + ts.invocations + ' calls</span>';
-          if (ts.lastInvoked) html += '<span class="tp-meta-tag">\uD83D\uDD52 ' + timeAgo(ts.lastInvoked) + '</span>';
-          html += '</div>';
-          html += '</div>';
-          html += '<div class="tp-card-badges">';
-          html += '<span class="ps-badge" style="background:' + riskBg[t.risk] + ';color:' + riskColor[t.risk] + ';">' + escapeHtml(t.risk) + '</span>';
-          html += '<span class="ps-badge" style="background:' + (t.mut ? 'rgba(255,200,80,0.12);color:#ffd17a' : 'rgba(126,207,126,0.15);color:#7ecf7e') + ';">' + (t.mut ? 'mutating' : 'read-only') + '</span>';
-          html += approvalBadge(rv.approval);
-          html += '</div></div>';
-
-          /* ── expanded body ── */
-          html += '<div class="tp-card-body">';
-
-          /* Controls */
-          html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Controls</div>';
-          html += '<div class="tp-controls">';
-          html += '<label class="tp-toggle"><input type="checkbox" ' + (ts.enabled ? 'checked' : '') + ' onchange="toggleItemEnabled(\\'tool\\', \\'' + escapeHtml(t.name) + '\\')"><span class="tp-toggle-track"></span>' + (ts.enabled ? 'Enabled' : 'Disabled') + '</label>';
-          html += '<button class="secondary-button" style="font-size:11px;padding:4px 12px;" onclick="testTool(\\'' + escapeHtml(t.name) + '\\')">\u{1F9EA} Test Tool</button>';
-          html += '</div>';
-          html += '<div id="test-result-' + safeId + '" style="margin-top:6px;font-size:12px;"></div>';
-          html += '</div>';
-
-          /* Telemetry */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Telemetry</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Invocations</span><span class="tp-stat-value">' + ts.invocations + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Success</span><span class="tp-stat-value" style="color:#7ecf7e;">' + ts.successes + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Failures</span><span class="tp-stat-value" style="color:#ffc1c1;">' + ts.failures + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Avg Latency</span><span class="tp-stat-value">' + (ts.avgLatencyMs ? ts.avgLatencyMs.toFixed(0) + 'ms' : '\u2014') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Used</span><span class="tp-stat-value">' + timeAgo(ts.lastInvoked) + '</span></div>';
-          html += '</div>';
-          if (ts.lastError) html += '<div style="margin-top:6px;font-size:11px;color:#ffc1c1;">Last error: ' + escapeHtml(ts.lastError) + '</div>';
-          html += '</div>';
-
-          /* Governance */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDEE1\uFE0F Governance</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Risk Level</span><span class="tp-stat-value" style="color:' + riskColor[t.risk] + ';">' + t.risk.toUpperCase() + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Mutating</span><span class="tp-stat-value">' + (t.mut ? 'Yes' : 'No') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Category</span><span class="tp-stat-value">' + escapeHtml(t.cat) + '</span></div>';
-          html += '</div></div>';
-
-          /* Review */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCDD Review & Evaluation</div>';
-          html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-          html += renderStars(state.toolReviews, t.name, 'tool');
-          html += approvalBadge(rv.approval);
-          html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\\'tool\\', \\'' + escapeHtml(t.name) + '\\', this.value)">';
-          var approvals = ['review', 'approved', 'flagged', 'blocked'];
-          for (var a = 0; a < approvals.length; a++) {
-            html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
-          }
-          html += '</select>';
-          if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
-          html += '</div>';
-          html += '<div style="margin-top:8px;"><textarea id="review-notes-tool-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\\'tool\\', \\'' + escapeHtml(t.name) + '\\')">' + escapeHtml(rv.notes) + '</textarea></div>';
-          html += '</div>';
-
-          html += '</div></div>';
-        }
-      }
-      html += '<div style="margin-top:16px;text-align:center;">';
-      html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showRegisterToolForm()">➕ Register Custom Tool</button>';
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function showRegisterToolForm() {
-      var existing = document.getElementById('register-tool-form');
-      if (existing) { existing.remove(); return; }
-      var container = document.getElementById('tools-panel');
-      if (!container) return;
-      var form = document.createElement('div');
-      form.id = 'register-tool-form';
-      form.style.cssText = 'margin-top:12px;padding:14px;border:1px solid var(--accent);border-radius:12px;background:rgba(0,0,0,0.2);';
-      form.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">➕ Register Custom Tool</div>'
-        + '<div class="ps-field"><label>Name</label><input id="reg-tool-name" placeholder="my_custom_tool"></div>'
-        + '<div class="ps-field"><label>Description</label><input id="reg-tool-desc" placeholder="What does this tool do?"></div>'
-        + '<div class="ps-field"><label>Category</label><select id="reg-tool-cat" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>System</option><option>Application</option><option>Knowledge</option><option>Integration</option></select></div>'
-        + '<div class="ps-field"><label>Risk Level</label><select id="reg-tool-risk" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>low</option><option>medium</option><option>high</option></select></div>'
-        + '<div class="ps-field"><label>Endpoint / Command</label><input id="reg-tool-endpoint" placeholder="http://localhost:9000/tool or /usr/bin/mytool"></div>'
-        + '<div style="display:flex;gap:8px;margin-top:12px;">'
-        + '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="submitRegisterTool()">Register</button>'
-        + '<button class="secondary-button" style="font-size:12px;padding:6px 16px;" onclick="cancelRegisterTool()">Cancel</button>'
-        + '</div>';
-      container.appendChild(form);
-    }
-    function cancelRegisterTool() {
-      var form = document.getElementById('register-tool-form');
-      if (form) form.remove();
-    }
-    function submitRegisterTool() {
-      var name = document.getElementById('reg-tool-name');
-      var desc = document.getElementById('reg-tool-desc');
-      var cat = document.getElementById('reg-tool-cat');
-      var risk = document.getElementById('reg-tool-risk');
-      var endpoint = document.getElementById('reg-tool-endpoint');
-      if (!name || !name.value.trim()) { alert('Tool name is required'); return; }
-      fetch('/api/tools/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.value.trim(), description: desc ? desc.value : '', category: cat ? cat.value : 'System', risk: risk ? risk.value : 'medium', endpoint: endpoint ? endpoint.value : '' })
-      }).then(function() {
-        var form = document.getElementById('register-tool-form');
-        if (form) form.remove();
-      }).catch(function(e) { alert('Registration failed: ' + e.message); });
-    }
-
-    function renderPluginsPanel() {
-      var container = document.getElementById('plugins-panel');
-      if (!container) return;
-
-      var plugins = [
-        { name: 'ids-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'IDS identity services \u2014 authentication, token lifecycle, and credential management', status: 'Active', trust: 'high', port: 8100 },
-        { name: 'impressioncore-eds', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Enterprise Data Services \u2014 structured data ingestion, transformation, and schema enforcement', status: 'Active', trust: 'high', port: 8200 },
-        { name: 'impressioncore-ipa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Intelligent Process Automation \u2014 task queuing, workflow dispatch, and RPA bridge', status: 'Active', trust: 'high', port: 8201 },
-        { name: 'impressioncore-goliath', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Large-scale data pipeline orchestration \u2014 batch ETL, partitioned processing, and backpressure control', status: 'Active', trust: 'high', port: 8202 },
-        { name: 'impressioncore-vrgc', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Visual Rendering & Graphics Compute \u2014 image generation, chart rendering, and GPU-accelerated transforms', status: 'Active', trust: 'high', port: 8203 },
-        { name: 'impressioncore-dpa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Document Processing & Analytics \u2014 PDF extraction, OCR, and document classification', status: 'Active', trust: 'high', port: 8204 },
-        { name: 'web-search-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'Web search provider \u2014 query routing, result aggregation, and safe content filtering', status: 'Active', trust: 'medium', port: 8300 }
-      ];
-
-      var groupIcon = { 'In-Repo': '\uD83D\uDCC1', 'ImpressionCore Suite': '\uD83E\uDDE9' };
-      var groups = ['In-Repo', 'ImpressionCore Suite'];
-      var trustColor = { high: '#7ecf7e', medium: '#ffd17a', low: '#ffc1c1' };
-      var filter = state.toolsFilterText || '';
-
-      var html = '<div class="muted" style="margin-bottom:8px;">'
-        + plugins.length + ' MCP plugins registered across ' + groups.length + ' sources.</div>';
-
-      for (var g = 0; g < groups.length; g++) {
-        var grp = groups[g];
-        var grpPlugins = plugins.filter(function(p) { return p.group === grp && (!filter || p.name.toLowerCase().indexOf(filter) !== -1 || p.desc.toLowerCase().indexOf(filter) !== -1); });
-        if (!grpPlugins.length) continue;
-        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (groupIcon[grp] || '') + ' ' + escapeHtml(grp) + ' <span class="muted">(' + grpPlugins.length + ')</span></div>';
-        for (var i = 0; i < grpPlugins.length; i++) {
-          var p = grpPlugins[i];
-          var ps = getPluginState(p.name);
-          var rv = getReview(state.pluginReviews, p.name);
-          var isExpanded = state.expandedPluginId === p.name;
-          var safeId = p.name.replace(/[^a-zA-Z0-9]/g, '_');
-
-          html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + '">';
-
-          /* ── collapsed header ── */
-          html += '<div class="tp-card-head" onclick="toggleItemExpand(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\')" data-tooltip="Group: ' + escapeHtml(p.group) + ' | Type: ' + escapeHtml(p.type) + '\\nStatus: ' + escapeHtml(p.status) + ' | Trust: ' + escapeHtml(p.trust) + '\\nPort: ' + p.port + '">';
-          html += '<div style="flex:1;min-width:0;">';
-          html += '<div style="display:flex;align-items:center;gap:8px;">';
-          html += '<span class="tp-card-name">' + escapeHtml(p.name) + '</span>';
-          html += healthDot(ps.healthy);
-          html += '<span class="ps-badge" style="background:rgba(130,170,255,0.12);color:#82aaff;font-size:10px;">' + escapeHtml(p.type) + '</span>';
-          html += '</div>';
-          html += '<div class="tp-card-desc">' + escapeHtml(p.desc) + '</div>';
-          html += '<div class="tp-card-meta">';
-          if (ps.requests > 0) html += '<span class="tp-meta-tag">\uD83D\uDCCA ' + ps.requests + ' reqs</span>';
-          if (ps.lastChecked) html += '<span class="tp-meta-tag">\u2713 checked ' + timeAgo(ps.lastChecked) + '</span>';
-          html += '</div>';
-          html += '</div>';
-          html += '<div class="tp-card-badges">';
-          html += '<span class="ps-badge" style="background:rgba(126,207,126,0.15);color:#7ecf7e;">' + escapeHtml(p.status) + '</span>';
-          html += approvalBadge(rv.approval);
-          html += '</div></div>';
-
-          /* ── expanded body ── */
-          html += '<div class="tp-card-body">';
-
-          /* Connection Info */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDD17 Connection</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Type</span><span class="tp-stat-value">' + escapeHtml(p.type) + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Port</span><span class="tp-stat-value">' + p.port + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Trust</span><span class="tp-stat-value" style="color:' + (trustColor[p.trust] || 'var(--fg)') + ';">' + escapeHtml(p.trust).toUpperCase() + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Group</span><span class="tp-stat-value">' + escapeHtml(p.group) + '</span></div>';
-          html += '</div></div>';
-
-          /* Controls */
-          html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Controls</div>';
-          html += '<div class="tp-controls">';
-          html += '<label class="tp-toggle"><input type="checkbox" ' + (ps.enabled ? 'checked' : '') + ' onchange="toggleItemEnabled(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\')"><span class="tp-toggle-track"></span>' + (ps.enabled ? 'Enabled' : 'Disabled') + '</label>';
-          html += '<button class="secondary-button" style="font-size:11px;padding:4px 12px;" onclick="checkPluginHealth(\\'' + escapeHtml(p.name) + '\\')">\uD83C\uDFE5 Check Health</button>';
-          html += '</div>';
-          html += '<div id="health-result-' + safeId + '" style="margin-top:6px;font-size:12px;"></div>';
-          html += '</div>';
-
-          /* Telemetry */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Telemetry</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Requests</span><span class="tp-stat-value">' + ps.requests + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Errors</span><span class="tp-stat-value" style="color:#ffc1c1;">' + ps.errors + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Avg Response</span><span class="tp-stat-value">' + (ps.avgResponseMs ? ps.avgResponseMs.toFixed(0) + 'ms' : '\u2014') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Uptime</span><span class="tp-stat-value">' + ps.uptime + '%</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Checked</span><span class="tp-stat-value">' + timeAgo(ps.lastChecked) + '</span></div>';
-          html += '</div></div>';
-
-          /* Review */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCDD Review & Evaluation</div>';
-          html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-          html += renderStars(state.pluginReviews, p.name, 'plugin');
-          html += approvalBadge(rv.approval);
-          html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\', this.value)">';
-          var approvals = ['review', 'approved', 'flagged', 'blocked'];
-          for (var a = 0; a < approvals.length; a++) {
-            html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
-          }
-          html += '</select>';
-          if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
-          html += '</div>';
-          html += '<div style="margin-top:8px;"><textarea id="review-notes-plugin-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\')">' + escapeHtml(rv.notes) + '</textarea></div>';
-          html += '</div>';
-
-          html += '</div></div>';
-        }
-      }
-      html += '<div style="margin-top:16px;text-align:center;">';
-      html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showInstallPluginForm()">➕ Install Plugin</button>';
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function showInstallPluginForm() {
-      var existing = document.getElementById('install-plugin-form');
-      if (existing) { existing.remove(); return; }
-      var container = document.getElementById('plugins-panel');
-      if (!container) return;
-      var form = document.createElement('div');
-      form.id = 'install-plugin-form';
-      form.style.cssText = 'margin-top:12px;padding:14px;border:1px solid var(--accent);border-radius:12px;background:rgba(0,0,0,0.2);';
-      form.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">➕ Install Plugin</div>'
-        + '<div class="ps-field"><label>Plugin Name</label><input id="reg-plugin-name" placeholder="my-plugin-mcp"></div>'
-        + '<div class="ps-field"><label>Type</label><select id="reg-plugin-type" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>Python MCP Server</option><option>Node.js MCP Server</option><option>REST Adapter</option></select></div>'
-        + '<div class="ps-field"><label>Server URL / Path</label><input id="reg-plugin-url" placeholder="http://localhost:8400 or ./plugins/my-plugin"></div>'
-        + '<div class="ps-field"><label>Port</label><input id="reg-plugin-port" type="number" placeholder="8400"></div>'
-        + '<div class="ps-field"><label>Description</label><textarea id="reg-plugin-desc" rows="2" placeholder="What does this plugin provide?" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea></div>'
-        + '<div style="display:flex;gap:8px;margin-top:12px;">'
-        + '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="submitInstallPlugin()">Install</button>'
-        + '<button class="secondary-button" style="font-size:12px;padding:6px 16px;" onclick="cancelInstallPlugin()">Cancel</button>'
-        + '</div>';
-      container.appendChild(form);
-    }
-    function cancelInstallPlugin() {
-      var form = document.getElementById('install-plugin-form');
-      if (form) form.remove();
-    }
-    function submitInstallPlugin() {
-      var name = document.getElementById('reg-plugin-name');
-      var type = document.getElementById('reg-plugin-type');
-      var url = document.getElementById('reg-plugin-url');
-      var port = document.getElementById('reg-plugin-port');
-      var desc = document.getElementById('reg-plugin-desc');
-      if (!name || !name.value.trim()) { alert('Plugin name is required'); return; }
-      fetch('/api/plugins/install', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.value.trim(), type: type ? type.value : 'Python MCP Server', url: url ? url.value : '', port: port ? parseInt(port.value) || 0 : 0, description: desc ? desc.value : '' })
-      }).then(function() {
-        var form = document.getElementById('install-plugin-form');
-        if (form) form.remove();
-      }).catch(function(e) { alert('Installation failed: ' + e.message); });
-    }
-
-    function renderUtilitiesPanel() {
-      var container = document.getElementById('utilities-panel');
-      if (!container) return;
-
-      var utils = [
-        { name: 'tool-contract-snapshot', cat: 'Benchmarks & Qualification', desc: 'Generate versioned tool contract snapshots for release evidence' },
-        { name: 'release-validation', cat: 'Benchmarks & Qualification', desc: 'Run release gate checks \u2014 test/build/perf/contract/policy validation' },
-        { name: 'ci-gate-check', cat: 'Benchmarks & Qualification', desc: 'CI quality gate \u2014 test pass, perf qualification, artifact upload' },
-        { name: 'perf-qualification', cat: 'Benchmarks & Qualification', desc: 'Performance SLO harness \u2014 p50/p95/p99 latency gates with contention scenarios' },
-        { name: 'e1-individual-qualification', cat: 'Benchmarks & Qualification', desc: 'Individual profile qualification \u2014 tool invocation, workflow, and terminal tests' },
-        { name: 'e2-business-qualification', cat: 'Benchmarks & Qualification', desc: 'Business profile qualification \u2014 governance paths, approval flows, and audit checks' },
-        { name: 'e3-policy-stress', cat: 'Benchmarks & Qualification', desc: 'Policy engine stress test \u2014 rapid tier routing under concurrency load' },
-        { name: 'e4-profile-switch-qualification', cat: 'Benchmarks & Qualification', desc: 'Profile hot-switch qualification \u2014 runtime transition fidelity and state preservation' },
-        { name: 'd1-workflow-template-qualification', cat: 'Benchmarks & Qualification', desc: 'Workflow template qualification \u2014 retry/timeout/fallback path completion' },
-        { name: 'e-stage2-qualification-summary', cat: 'Benchmarks & Qualification', desc: 'Aggregate stage-2 qualification summary across all E-series suites' },
-        { name: 'j-event-lineage-bundle', cat: 'Benchmarks & Qualification', desc: 'Event lineage bundle \u2014 full causal chain export for audit and replay' },
-
-        { name: 'SelfReviewScheduler', cat: 'Operator Services', desc: 'Automated self-review scheduling \u2014 daily, weekly, and monthly audit cycles' },
-        { name: 'SessionTraceExplorer', cat: 'Operator Services', desc: 'Session trace browser \u2014 search, filter, and inspect activity event chains' },
-        { name: 'PolicyAuditExporter', cat: 'Operator Services', desc: 'Export policy audit logs \u2014 JSON/CSV/NDJSON with reason-code annotations' },
-        { name: 'SessionPackageSqliteStore', cat: 'Operator Services', desc: 'SQLite-backed session package persistence and migration management' },
-        { name: 'DashboardService', cat: 'Operator Services', desc: 'Dashboard HTTP server \u2014 38 API routes, WebSocket, and static UI serving' },
-
-        { name: 'SemanticMemoryIndex', cat: 'Memory & Retrieval', desc: 'Semantic memory index with configurable embedding and multi-mode retrieval' },
-        { name: 'EpisodicMemory', cat: 'Memory & Retrieval', desc: 'Episodic memory buffer with rolling window and recency-weighted recall' },
-        { name: 'SessionMemoryStore', cat: 'Memory & Retrieval', desc: 'Per-session memory persistence with summary extraction and compaction' },
-        { name: 'RetrievalMetricsCollector', cat: 'Memory & Retrieval', desc: 'Retrieval quality instrumentation \u2014 hit-rate, coverage, novelty, utility scoring' },
-        { name: 'RetrievalDashboardStore', cat: 'Memory & Retrieval', desc: 'SQLite-backed retrieval cohort dashboard snapshots and trend persistence' },
-
-        { name: 'ActivityBus', cat: 'Activity & Audit', desc: 'Central event bus with SHA-256 hash chain and typed subscriber dispatch' },
-        { name: 'SqliteActivityStore', cat: 'Activity & Audit', desc: 'SQLite subscriber for durable activity event persistence and querying' },
-        { name: 'ConsoleActivitySubscriber', cat: 'Activity & Audit', desc: 'Console subscriber for development-mode real-time event logging' },
-
-        { name: 'normalizeReplayEvent', cat: 'Replay & Verification', desc: 'Normalize recorded events into deterministic replay format' },
-        { name: 'buildReplaySignature', cat: 'Replay & Verification', desc: 'Generate cryptographic replay signatures for trace parity verification' },
-        { name: 'compareReplayParity', cat: 'Replay & Verification', desc: 'Compare replay runs and report divergence with diff annotations' },
-
-        { name: 'resolveExecutionProfileFromEnv', cat: 'Configuration', desc: 'Resolve execution profile from environment variables (fast/balanced/governed)' },
-        { name: 'resolveEnvironmentProfile', cat: 'Configuration', desc: 'Resolve environment profile (dev/staging/prod) with SLO preset selection' },
-        { name: 'getPerformanceSloProfile', cat: 'Configuration', desc: 'Return performance SLO thresholds for the active environment profile' }
-      ];
-
-      var catIcon = {
-        'Benchmarks & Qualification': '\uD83C\uDFAF',
-        'Operator Services': '\u2699\uFE0F',
-        'Memory & Retrieval': '\uD83E\uDDE0',
-        'Activity & Audit': '\uD83D\uDCCA',
-        'Replay & Verification': '\uD83D\uDD01',
-        'Configuration': '\uD83D\uDD27'
-      };
-      var categories = ['Benchmarks & Qualification', 'Operator Services', 'Memory & Retrieval', 'Activity & Audit', 'Replay & Verification', 'Configuration'];
-      var filter = state.toolsFilterText || '';
-
-      var html = '<div class="muted" style="margin-bottom:8px;">'
-        + utils.length + ' utilities registered across ' + categories.length + ' categories.</div>';
-
-      for (var c = 0; c < categories.length; c++) {
-        var cat = categories[c];
-        var catUtils = utils.filter(function(u) { return u.cat === cat && (!filter || u.name.toLowerCase().indexOf(filter) !== -1 || u.desc.toLowerCase().indexOf(filter) !== -1); });
-        if (!catUtils.length) continue;
-        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (catIcon[cat] || '') + ' ' + escapeHtml(cat) + ' <span class="muted">(' + catUtils.length + ')</span></div>';
-        for (var i = 0; i < catUtils.length; i++) {
-          var u = catUtils[i];
-          var us = getUtilityState(u.name);
-          var rv = getReview(state.utilityReviews, u.name);
-          var isExpanded = state.expandedUtilityId === u.name;
-          var safeId = u.name.replace(/[^a-zA-Z0-9]/g, '_');
-
-          html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + '">';
-
-          /* ── collapsed header ── */
-          html += '<div class="tp-card-head" onclick="toggleItemExpand(\\'utility\\', \\'' + escapeHtml(u.name) + '\\')" data-tooltip="Category: ' + escapeHtml(u.cat) + '\\n' + escapeHtml(u.desc) + (us.lastRun ? '\\nLast run: ' + timeAgo(us.lastRun) : '') + '">';
-          html += '<div style="flex:1;min-width:0;">';
-          html += '<span class="tp-card-name">' + escapeHtml(u.name) + '</span>';
-          html += '<div class="tp-card-desc">' + escapeHtml(u.desc) + '</div>';
-          html += '<div class="tp-card-meta">';
-          if (us.runCount > 0) html += '<span class="tp-meta-tag">\uD83D\uDD01 ' + us.runCount + ' runs</span>';
-          if (us.lastRun) html += '<span class="tp-meta-tag">\uD83D\uDD52 ' + timeAgo(us.lastRun) + '</span>';
-          if (us.lastResult) html += '<span class="tp-meta-tag" style="color:' + (us.lastResult === 'pass' ? '#7ecf7e' : '#ffc1c1') + ';">' + (us.lastResult === 'pass' ? '\u2713' : '\u2717') + ' ' + us.lastResult + '</span>';
-          html += '</div>';
-          html += '</div>';
-          html += '<div class="tp-card-badges">';
-          html += approvalBadge(rv.approval);
-          html += '</div></div>';
-
-          /* ── expanded body ── */
-          html += '<div class="tp-card-body">';
-
-          /* Telemetry */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Telemetry</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Run Count</span><span class="tp-stat-value">' + us.runCount + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Run</span><span class="tp-stat-value">' + timeAgo(us.lastRun) + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (us.lastDurationMs ? us.lastDurationMs.toFixed(0) + 'ms' : '\u2014') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Result</span><span class="tp-stat-value" style="color:' + (us.lastResult === 'pass' ? '#7ecf7e' : us.lastResult === 'fail' ? '#ffc1c1' : 'var(--fg)') + ';">' + (us.lastResult || '\u2014') + '</span></div>';
-          html += '</div></div>';
-
-          /* Review */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCDD Review & Evaluation</div>';
-          html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-          html += renderStars(state.utilityReviews, u.name, 'utility');
-          html += approvalBadge(rv.approval);
-          html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\\'utility\\', \\'' + escapeHtml(u.name) + '\\', this.value)">';
-          var approvals = ['review', 'approved', 'flagged', 'blocked'];
-          for (var a = 0; a < approvals.length; a++) {
-            html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
-          }
-          html += '</select>';
-          if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
-          html += '</div>';
-          html += '<div style="margin-top:8px;"><textarea id="review-notes-utility-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\\'utility\\', \\'' + escapeHtml(u.name) + '\\')">' + escapeHtml(rv.notes) + '</textarea></div>';
-          html += '</div>';
-
-          html += '</div></div>';
-        }
-      }
-      container.innerHTML = html;
-    }
-
-    function renderActions() {
-      const container = document.getElementById('actions');
-      let html = '';
-      if (state.notice) {
-        html += '<div class="notice">' + escapeHtml(state.notice) + '</div>';
-      }
-      if (!state.actions.length) {
-        container.innerHTML = html + '<div class="muted">No dashboard actions available.</div>';
-        return;
-      }
-
-      html += state.actions.map(action =>
-        '<div class="action-card">'
-        + '<div class="action-card-head"><strong>' + escapeHtml(action.label) + '</strong>' + statusBadge(action) + '</div>'
-        + '<div class="muted">' + escapeHtml(action.description) + '</div>'
-        + (action.lastMessage ? '<div class="muted" style="margin-top:8px;">Last result: ' + escapeHtml(action.lastMessage) + '</div>' : '')
-        + (action.lastError ? '<div style="margin-top:8px;color:#ffc1c1;">Last error: ' + escapeHtml(action.lastError) + '</div>' : '')
-        + '<div class="action-buttons"><button class="secondary-button" ' + (action.status === 'running' ? 'disabled' : '') + ' data-action="' + escapeHtml(action.name) + '" onclick="runAction(this.dataset.action)">Run</button></div>'
-        + '</div>'
-      ).join('');
-      container.innerHTML = html;
-    }
-
-    function renderApprovals() {
-      const container = document.getElementById('pending');
-      if (!state.pending.length) {
-        container.innerHTML = '<div class="muted">No pending approvals.</div>';
-        return;
-      }
-      container.innerHTML = state.pending.map(item =>
-        '<div class="approval-card">'
-        + '<div><strong>' + escapeHtml(item.operation) + '</strong></div>'
-        + '<div class="muted mono" style="margin-top:6px;">' + escapeHtml(item.id) + '</div>'
-        + '<div class="action-buttons"><button class="secondary-button" data-approval-id="' + escapeHtml(item.id) + '" onclick="approve(this.dataset.approvalId)">Approve</button><button class="danger-button" data-approval-id="' + escapeHtml(item.id) + '" onclick="deny(this.dataset.approvalId)">Deny</button></div>'
-        + '</div>'
-      ).join('');
-    }
-
-    function renderActionHistory() {
-      const container = document.getElementById('action-history');
-      if (!state.actionHistory.length) {
-        container.innerHTML = '<div class="muted">No action runs recorded yet.</div>';
-        return;
-      }
-      container.innerHTML = '<table class="history-table"><thead><tr><th>Action</th><th>Status</th><th>Outcome</th></tr></thead><tbody>'
-        + state.actionHistory.slice(0, 8).map(entry => '<tr>'
-          + '<td>' + escapeHtml(entry.label) + '<div class="muted">' + escapeHtml(formatRelativeTime(entry.startedAt)) + '</div></td>'
-          + '<td>' + escapeHtml(entry.status) + '</td>'
-          + '<td>' + escapeHtml(entry.message || entry.error || '-') + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-    }
-
-    function renderSelfReview() {
-      const container = document.getElementById('self-review');
-      if (!state.selfReviewLatest) {
-        container.innerHTML = '<div class="muted">No self-review report generated yet.</div>';
-        return;
-      }
-
-      const report = state.selfReviewLatest;
-      const history = state.selfReviewHistory || [];
-      let html = ''
-        + '<div class="metric"><span class="muted">Cadence</span><span class="mono">' + escapeHtml(report.cadence || '-') + '</span></div>'
-        + '<div class="metric"><span class="muted">Generated</span><span class="mono">' + escapeHtml(formatRelativeTime(report.generatedAt)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Events</span><span class="mono">' + escapeHtml(String((report.metrics && report.metrics.eventsTotal) || 0)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Failures</span><span class="mono">' + escapeHtml(String((report.metrics && report.metrics.failures) || 0)) + '</span></div>';
-
-      if (report.recommendations && report.recommendations.length) {
-        html += '<div class="muted" style="margin-top:8px;">Top recommendation</div>'
-          + '<div class="action-card" style="margin-top:6px;">' + escapeHtml(String(report.recommendations[0])) + '</div>';
-      }
-
-      if (history.length > 0) {
-        html += '<div class="muted" style="margin-top:10px;">Recent review runs</div>'
-          + '<table class="events-table"><thead><tr><th>When</th><th>Cadence</th><th>Failures</th></tr></thead><tbody>'
-          + history.map(item => '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(item.generatedAt)) + '</td>'
-            + '<td>' + escapeHtml(item.cadence || '-') + '</td>'
-            + '<td>' + escapeHtml(String((item.metrics && item.metrics.failures) || 0)) + '</td>'
-            + '</tr>').join('')
-          + '</tbody></table>';
-      }
-
-      container.innerHTML = html;
-    }
-
-    function renderRetrievalObservability() {
-      const container = document.getElementById('retrieval-alerts');
-      const data = state.prioritizedAlerts;
-      if (!data || !data.alerts || !data.alerts.length) {
-        const hasLegacy = state.retrievalAlerts && state.retrievalAlerts.length > 0;
-        if (!hasLegacy) {
-          container.innerHTML = '<div class="muted">No alerts.</div>';
-          return;
-        }
-        let html = '<div class="stack">';
-        for (const alert of state.retrievalAlerts.slice(0, 5)) {
-          html += '<div class="action-card" style="background:rgba(255,141,141,0.06);border-color:rgba(255,141,141,0.18)">'
-            + '<div style="font-size:12px;color:var(--muted)">' + escapeHtml(alert) + '</div>'
-            + '</div>';
-        }
-        if (state.retrievalAlerts.length > 5) {
-          html += '<div class="muted">+ ' + (state.retrievalAlerts.length - 5) + ' more alerts</div>';
-        }
-        html += '</div>';
-        container.innerHTML = html;
-        return;
-      }
-
-      const severityStyle = { critical: 'rgba(255,80,80,0.12)', warning: 'rgba(255,200,80,0.10)', info: 'rgba(80,160,255,0.08)' };
-      const severityBorderStyle = { critical: 'rgba(255,80,80,0.35)', warning: 'rgba(255,200,80,0.30)', info: 'rgba(80,160,255,0.20)' };
-      const severityLabel = { critical: '🔴 Critical', warning: '🟡 Warning', info: '🔵 Info' };
-
-      let html = '';
-      if (data.criticalCount > 0 || data.warningCount > 0) {
-        html += '<div class="metric" style="margin-bottom:8px;">'
-          + '<span class="muted">Summary</span>'
-          + '<span class="mono">'
-          + (data.criticalCount > 0 ? data.criticalCount + ' critical  ' : '')
-          + (data.warningCount > 0 ? data.warningCount + ' warning  ' : '')
-          + data.infoCount + ' info'
-          + '</span></div>';
-      }
-
-      html += '<div class="stack">';
-      for (const alert of data.alerts.slice(0, 8)) {
-        const bg = severityStyle[alert.severity] || severityStyle.info;
-        const border = severityBorderStyle[alert.severity] || severityBorderStyle.info;
-        const badge = severityLabel[alert.severity] || alert.severity;
-        html += '<div class="action-card" style="background:' + bg + ';border-color:' + border + ';">'
-          + '<div style="font-size:11px;font-weight:600;margin-bottom:4px;opacity:0.85;">' + escapeHtml(badge) + '</div>'
-          + '<div style="font-size:12px;color:var(--muted)">' + escapeHtml(alert.message) + '</div>'
-          + '</div>';
-      }
-      if (data.alerts.length > 8) {
-        html += '<div class="muted">+ ' + (data.alerts.length - 8) + ' more alerts</div>';
-      }
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    async function setTelemetryWindow(window) {
-      state.telemetryWindow = window;
-      try {
-        const [summary, runtimeExcellence] = await Promise.all([
-          request('/api/telemetry/summary?window=' + encodeURIComponent(window)).catch(() => null),
-          request('/api/runtime/excellence?window=' + encodeURIComponent(window)).catch(() => null)
-        ]);
-        state.telemetrySummary = summary;
-        state.runtimeExcellence = runtimeExcellence;
-      } catch {
-        state.telemetrySummary = null;
-        state.runtimeExcellence = null;
-      }
-      render();
-    }
-
-    function renderRuntimeExcellence() {
-      const container = document.getElementById('runtime-excellence');
-      const data = state.runtimeExcellence;
-      if (!data) {
-        container.innerHTML = '<div class="muted">Runtime excellence snapshot unavailable.</div>';
-        return;
-      }
-
-      const priorityTone = data.planner && data.planner.priority === 'high'
-        ? 'color:#ff8d8d;'
-        : data.planner && data.planner.priority === 'medium'
-          ? 'color:#ffd17a;'
-          : 'color:#7ecf7e;';
-
-      let html = ''
-        + '<div class="metric"><span class="muted">Runtime health</span><span class="mono">' + escapeHtml(String(data.scores.runtimeHealth)) + '/100</span></div>'
-        + '<div class="metric"><span class="muted">Memory confidence</span><span class="mono">' + escapeHtml(String(data.scores.memoryConfidence)) + '/100</span></div>'
-        + '<div class="metric"><span class="muted">Planner priority</span><span class="mono" style="' + priorityTone + '">' + escapeHtml(data.planner.priority) + '</span></div>'
-        + '<div class="action-card" style="margin-top:8px;">'
-        + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Next action</div>'
-        + '<div style="margin-top:6px;">' + escapeHtml(data.planner.nextAction || '-') + '</div>'
-        + '<div class="muted" style="margin-top:6px;">' + escapeHtml(data.planner.rationale || '-') + '</div>'
-        + '</div>';
-
-      if (data.selfHealingSuggestions && data.selfHealingSuggestions.length > 0) {
-        html += '<div class="muted" style="margin-top:10px;">Self-healing candidates</div>';
-        for (const item of data.selfHealingSuggestions.slice(0, 3)) {
-          html += '<div class="action-card" style="margin-top:6px;">'
-            + '<div><strong>' + escapeHtml(item.title || '-') + '</strong></div>'
-            + '<div class="muted" style="margin-top:4px;">Trigger: ' + escapeHtml(item.trigger || '-') + '</div>'
-            + '<div style="margin-top:4px;">' + escapeHtml(item.action || '-') + '</div>'
-            + '</div>';
-        }
-      }
-
-      container.innerHTML = html;
-    }
-
-    function renderReleaseReadiness() {
-      const container = document.getElementById('release-readiness');
-      const report = state.releaseValidation;
-      const decision = state.releaseDecision;
-      const packageSnapshot = state.packageReleaseSnapshot;
-      if (!report) {
-        let html = '<div class="muted">No release validation artifact found yet.</div>'
-          + '<div class="muted" style="margin-top:8px;">Run <span class="mono">npm run release:validate</span> to generate one.</div>';
-        if (packageSnapshot && packageSnapshot.totalPackages > 0) {
-          html += '<div class="action-card" style="margin-top:10px;">'
-            + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Package Evidence</div>'
-            + '<div class="metric"><span class="muted">Packages</span><span class="mono">' + escapeHtml(String(packageSnapshot.totalPackages)) + '</span></div>'
-            + '<div class="metric"><span class="muted">Exports</span><span class="mono">' + escapeHtml(String(packageSnapshot.exportedCount || 0)) + '</span></div>'
-            + '<div class="metric"><span class="muted">Complete without export</span><span class="mono">' + escapeHtml(String(packageSnapshot.completeWithoutExportCount || 0)) + '</span></div>'
-            + (packageSnapshot.latestExportArtifactPath
-              ? '<div class="muted" style="margin-top:8px;word-break:break-all;">Latest export: ' + escapeHtml(packageSnapshot.latestExportArtifactPath) + '</div>'
-              : '')
-            + '</div>';
-        }
-        container.innerHTML = html;
-        return;
-      }
-
-      const gates = Array.isArray(report.gates) ? report.gates : [];
-      const passed = gates.filter(g => g.status === 'passed').length;
-      const failed = gates.filter(g => g.status === 'failed').length;
-      const manual = gates.filter(g => g.status === 'manual_required').length;
-      const overallTone = report.passed ? 'color:#7ecf7e;' : 'color:#ff8d8d;';
-
-      let html = ''
-        + '<div class="metric"><span class="muted">Generated</span><span class="mono">' + escapeHtml(formatRelativeTime(report.generatedAt || null)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Overall</span><span class="mono" style="' + overallTone + '">' + escapeHtml(report.passed ? 'ready' : 'not ready') + '</span></div>'
-        + '<div class="metric"><span class="muted">Strict mode</span><span class="mono">' + escapeHtml(report.strictMode ? 'on' : 'off') + '</span></div>'
-        + '<div class="metric"><span class="muted">Gate counts</span><span class="mono">' + escapeHtml(String(passed)) + ' pass / '
-        + '<span style="color:#ff8d8d;">' + escapeHtml(String(failed)) + ' fail</span> / '
-        + '<span style="color:#ffd17a;">' + escapeHtml(String(manual)) + ' manual</span></span></div>';
-
-      if (decision) {
-        const recommendationTone = decision.recommendation === 'GO' ? 'color:#7ecf7e;' : 'color:#ff8d8d;';
-        html += '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="metric"><span class="muted">Recommendation</span><span class="mono" style="' + recommendationTone + '">' + escapeHtml(decision.recommendation || '-') + '</span></div>'
-          + '<div class="metric"><span class="muted">Risk level</span><span class="mono">' + escapeHtml(decision.riskLevel || '-') + '</span></div>'
-          + '</div>';
-      }
-
-      if (packageSnapshot && packageSnapshot.totalPackages > 0) {
-        html += '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Package Evidence</div>'
-          + '<div class="metric"><span class="muted">By status</span><span class="mono">planned ' + escapeHtml(String(packageSnapshot.byStatus.planned || 0)) + ' / running ' + escapeHtml(String(packageSnapshot.byStatus.running || 0)) + ' / blocked ' + escapeHtml(String(packageSnapshot.byStatus.blocked || 0)) + ' / complete ' + escapeHtml(String(packageSnapshot.byStatus.complete || 0)) + '</span></div>'
-          + '<div class="metric"><span class="muted">Exports</span><span class="mono">' + escapeHtml(String(packageSnapshot.exportedCount || 0)) + '</span></div>'
-          + '<div class="metric"><span class="muted">Complete without export</span><span class="mono">' + escapeHtml(String(packageSnapshot.completeWithoutExportCount || 0)) + '</span></div>'
-          + (packageSnapshot.latestExportArtifactPath
-            ? '<div class="muted" style="margin-top:8px;word-break:break-all;">Latest export: ' + escapeHtml(packageSnapshot.latestExportArtifactPath) + '</div>'
-            : '')
-          + '</div>';
-      }
-
-      if (gates.length > 0) {
-        html += '<table class="events-table" style="margin-top:10px;"><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody>'
-          + gates.slice(0, 8).map(gate => {
-            const statusText = gate.status || '-';
-            const tone = statusText === 'passed'
-              ? 'color:#7ecf7e;'
-              : statusText === 'failed'
-                ? 'color:#ff8d8d;'
-                : 'color:#ffd17a;';
-            return '<tr>'
-              + '<td>' + escapeHtml(gate.label || gate.id || '-') + '</td>'
-              + '<td><span class="mono" style="' + tone + '">' + escapeHtml(statusText) + '</span></td>'
-              + '</tr>';
-          }).join('')
-          + '</tbody></table>';
-      }
-
-      container.innerHTML = html;
-    }
-
-    function renderWhatChanged() {
-      const container = document.getElementById('telemetry-what-changed');
-      if (!container) return;
-
-      const windows = ['1h', '1d', '7d'];
-      const btns = windows.map(w =>
-        '<button class="tab-button' + (state.telemetryWindow === w ? ' active' : '') + '" id="tw-' + w + '" onclick="setTelemetryWindow(&quot;' + w + '&quot;)">' + (w === '1h' ? '1 hour' : w === '1d' ? '1 day' : '7 days') + '</button>'
-      ).join(' ');
-
-      const summary = state.telemetrySummary;
-      if (!summary) {
-        container.innerHTML = '<div class="muted">No telemetry data available for this window.</div>';
-        return;
-      }
-
-      const win = summary.window;
-      const delta = summary.delta;
-
-      function deltaLabel(val, higherIsBad) {
-        if (val === 0) return '<span class="muted">±0</span>';
-        const positive = val > 0;
-        const bad = higherIsBad ? positive : !positive;
-        const color = bad ? '#ff8d8d' : '#7ecf7e';
-        return '<span style="color:' + color + ';">' + (positive ? '+' : '') + val + '</span>';
-      }
-
-      function pct(val) {
-        return (val * 100).toFixed(1) + '%';
-      }
-
-      let html = '<div class="stack">';
-
-      // Window summary card
-      html += '<div class="action-card" style="background:rgba(80,120,255,0.06);border-color:rgba(80,120,255,0.18);">'
-        + '<div style="font-size:11px;font-weight:600;opacity:0.7;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Last ' + escapeHtml(win.windowLabel === '1h' ? '1 hour' : win.windowLabel === '1d' ? '24 hours' : '7 days') + '</div>'
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;">'
-        + '<div class="metric"><span class="muted">Events</span><span class="mono">' + escapeHtml(String(win.eventsTotal)) + ' ' + deltaLabel(delta.eventsTotal, false) + '</span></div>'
-        + '<div class="metric"><span class="muted">Failures</span><span class="mono">' + escapeHtml(String(win.failures)) + ' ' + deltaLabel(delta.failures, true) + '</span></div>'
-        + '<div class="metric"><span class="muted">Approvals</span><span class="mono">' + escapeHtml(String(win.approvals)) + ' ' + deltaLabel(delta.approvals, false) + '</span></div>'
-        + '<div class="metric"><span class="muted">Fail rate</span><span class="mono">' + escapeHtml(pct(win.failureRate)) + ' ' + deltaLabel(parseFloat((delta.failureRate * 100).toFixed(1)), true) + '</span></div>'
-        + '</div>'
-        + (summary.newSinceLastWindow ? '<div style="margin-top:8px;font-size:11px;color:#7ecf7e;font-weight:600;">✓ New activity since last window</div>' : '')
-        + '</div>';
-
-      // Top operations
-      if (summary.topOperations && summary.topOperations.length > 0) {
-        html += '<div class="action-card" style="margin-top:6px;">'
-          + '<div class="muted" style="font-size:11px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Top Operations</div>'
-          + '<table class="events-table"><thead><tr><th>Operation</th><th>Count</th><th>Failures</th></tr></thead><tbody>'
-          + summary.topOperations.map(op => '<tr>'
-            + '<td class="mono" style="font-size:11px;">' + escapeHtml(op.operation) + '</td>'
-            + '<td>' + escapeHtml(String(op.count)) + '</td>'
-            + '<td>' + (op.failures > 0 ? '<span style="color:#ff8d8d;">' + escapeHtml(String(op.failures)) + '</span>' : '0') + '</td>'
-            + '</tr>').join('')
-          + '</tbody></table>'
-          + '</div>';
-      }
-
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function renderPackageHistory() {
-      const container = document.getElementById('package-history');
-      const history = state.sessionPackageHistory || [];
-      if (!container) {
-        return;
-      }
-      if (!history.length) {
-        container.innerHTML = '<div class="muted">No package history yet.</div>';
-        return;
-      }
-      container.innerHTML = '<table class="events-table"><thead><tr><th>Time</th><th>Package</th><th>Action</th><th>Status</th></tr></thead><tbody>'
-        + history.map(entry => '<tr>'
-          + '<td>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</td>'
-          + '<td><div>' + escapeHtml(entry.title || entry.packageId) + '</div>'
-          + (entry.message ? '<div class="muted" style="margin-top:4px;">' + escapeHtml(entry.message) + '</div>' : '') + '</td>'
-          + '<td>' + escapeHtml(entry.action) + '</td>'
-          + '<td>' + escapeHtml(entry.status || '-') + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-    }
-
-    function renderChatTelemetry() {
-      var container = document.getElementById('chat-telemetry');
-      if (!container) return;
-      var items = state.chatTelemetry || [];
-      if (!items.length) {
-        container.innerHTML = '<div class="muted">No chat telemetry events yet. Send a message to generate telemetry.</div>';
-        return;
-      }
-      var html = '<table class="events-table"><thead><tr><th>Time</th><th>Operation</th><th>Status</th><th>Details</th></tr></thead><tbody>'
-        + items.map(function(ev) {
-          var detail = '';
-          var d = ev.details || {};
-          if (d.model) detail += escapeHtml(d.model);
-          if (d.provider) detail += (detail ? ' / ' : '') + escapeHtml(d.provider);
-          if (d.toolName) detail += (detail ? ' \u2014 ' : '') + escapeHtml(d.toolName);
-          if (d.intent) detail += (detail ? ' \u2014 ' : '') + escapeHtml(d.intent);
-          if (d.error) detail += '<div class="muted" style="font-size:10px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(String(d.error)) + '">' + escapeHtml(String(d.error).substring(0, 80)) + '</div>';
-          if (d.correlationId) detail += '<div class="mono muted" style="font-size:9px;">' + escapeHtml(String(d.correlationId).substring(0, 24)) + '&hellip;</div>';
-          return '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(ev.timestamp)) + '</td>'
-            + '<td class="mono" style="font-size:11px;">' + escapeHtml(ev.operation) + '</td>'
-            + '<td>' + escapeHtml(ev.status) + '</td>'
-            + '<td>' + (detail || '-') + '</td>'
-            + '</tr>';
-        }).join('')
-        + '</tbody></table>';
-      container.innerHTML = html;
-    }
-
-    function renderEvents() {
-      const container = document.getElementById('events');
-      if (!state.events.length) {
-        container.innerHTML = '<div class="muted">No recent events.</div>';
-        return;
-      }
-      container.innerHTML = '<table class="events-table"><thead><tr><th>Time</th><th>Operation</th><th>Status</th></tr></thead><tbody>'
-        + state.events.map(event => '<tr>'
-          + '<td>' + escapeHtml(formatRelativeTime(event.timestamp)) + '</td>'
-          + '<td>' + escapeHtml(event.operation) + '</td>'
-          + '<td>' + escapeHtml(event.status) + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-    }
-
-    function renderTraceView() {
-      const container = document.getElementById('trace-view');
-      const traceData = state.traceData;
-      if (!traceData || !traceData.traces || !traceData.traces.length) {
-        container.innerHTML = '<div class="muted">No correlated traces yet.</div>';
-        return;
-      }
-
-      const traces = traceData.traces;
-      let html = '<table class="events-table"><thead><tr><th>Trace</th><th>Events</th><th>Status</th><th>Last Seen</th></tr></thead><tbody>'
-        + traces.map(trace => '<tr>'
-          + '<td>'
-          + '<button class="secondary-button" style="padding:4px 8px;" onclick="loadTrace(&quot;' + escapeHtml(trace.correlationId) + '&quot;)">'
-          + (state.selectedTraceId === trace.correlationId ? 'Viewing' : 'View')
-          + '</button>'
-          + '<div class="mono" style="margin-top:6px;font-size:10px;word-break:break-all;">' + escapeHtml(trace.correlationId) + '</div>'
-          + '</td>'
-          + '<td>' + escapeHtml(String(trace.eventCount)) + '</td>'
-          + '<td>' + escapeHtml(trace.status) + (trace.failures > 0 ? ' (' + escapeHtml(String(trace.failures)) + ' failed)' : '') + '</td>'
-          + '<td>' + escapeHtml(formatRelativeTime(trace.lastAt)) + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-
-      const selected = traceData.selectedTraceEvents || [];
-      if (state.selectedTraceId) {
-        html += '<div class="muted" style="margin-top:10px;">Trace timeline</div>';
-        if (!selected.length) {
-          html += '<div class="muted">No events found for selected correlation ID.</div>';
-        } else {
-          html += '<table class="events-table"><thead><tr><th>Time</th><th>Operation</th><th>Status</th></tr></thead><tbody>'
-            + selected.map(event => '<tr>'
-              + '<td>' + escapeHtml(formatRelativeTime(event.timestamp)) + '</td>'
-              + '<td class="mono" style="font-size:11px;">' + escapeHtml(event.operation) + '</td>'
-              + '<td>' + escapeHtml(event.status) + '</td>'
-              + '</tr>').join('')
-            + '</tbody></table>';
-        }
-      }
-
-      container.innerHTML = html;
-    }
-
-    async function loadTrace(correlationId) {
-      state.selectedTraceId = correlationId;
-      try {
-        const url = '/api/traces?limit=10'
-          + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '')
-          + '&correlationId=' + encodeURIComponent(correlationId);
-        state.traceData = await request(url);
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    // ── Agentic Control Tab Renderers ──────────────────────────────────
-
-    function renderAgentList() {
-      var container = document.getElementById('agent-list-container');
-      if (!container) return;
-      var d = state.agentData;
-      if (!d || !d.agents || d.agents.length === 0) {
-        container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">No agents running. Launch an agent to get started.</div>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < d.agents.length; i++) {
-        var a = d.agents[i];
-        var statusColor = a.status === 'running' ? '#7ecf7e' : (a.status === 'error' ? '#ff8d8d' : '#ffd17a');
-        html += '<div class="panel" style="padding:12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">';
-        html += '<div><span style="color:' + statusColor + ';font-weight:700;margin-right:8px;">\u25CF</span>';
-        html += '<strong>' + escapeHtml(a.name || a.id) + '</strong>';
-        html += ' <span class="muted" style="font-size:11px;">' + escapeHtml(a.role || 'general') + '</span></div>';
-        html += '<div style="display:flex;gap:6px;align-items:center;">';
-        html += '<span class="muted" style="font-size:11px;">' + (a.tasksCompleted || 0) + ' tasks</span>';
-        html += '<button class="primary-button" style="font-size:11px;padding:3px 10px;" onclick="stopAgent(\\'' + escapeHtml(a.id) + '\\')">\u23F9 Stop</button>';
-        html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="promoteAgent(\\'' + escapeHtml(a.id) + '\\')">\u2B06 Promote</button>';
-        html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="demoteAgent(\\'' + escapeHtml(a.id) + '\\')">\u2B07 Demote</button>';
-        html += '</div></div>';
-      }
-      container.innerHTML = html;
-    }
-
-    function renderSubAgentTree() {
-      var container = document.getElementById('sub-agent-tree-container');
-      if (!container) return;
-      var d = state.agentData;
-      if (!d || !d.agents || d.agents.length === 0) {
-        container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">Agent hierarchy will appear here when agents are active.</div>';
-        return;
-      }
-      var html = '<div style="font-family:monospace;font-size:12px;line-height:1.8;">';
-      html += '<div style="font-weight:700;color:var(--accent);">\u{1F3E0} Orchestrator (root)</div>';
-      for (var i = 0; i < d.agents.length; i++) {
-        var a = d.agents[i];
-        var last = i === d.agents.length - 1;
-        html += '<div style="padding-left:20px;">' + (last ? '\u2514' : '\u251C') + '\u2500 ';
-        html += '<span style="color:var(--fg);">' + escapeHtml(a.name || a.id) + '</span>';
-        html += ' <span class="muted">(' + escapeHtml(a.role || 'general') + ')</span></div>';
-      }
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function renderSwarmTopology() {
-      var container = document.getElementById('swarm-topology-container');
-      if (!container) return;
-      var d = state.agentData;
-      if (!d || !d.swarms || d.swarms.length === 0) {
-        container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">No swarms configured. Create a swarm to begin orchestration.</div>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < d.swarms.length; i++) {
-        var sw = d.swarms[i];
-        html += '<div class="panel" style="padding:12px;margin-bottom:6px;">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-        html += '<strong>' + escapeHtml(sw.name || sw.id) + '</strong>';
-        html += '<span class="muted" style="font-size:11px;">' + escapeHtml(sw.topology || 'mesh') + ' \u00B7 ' + (sw.agentCount || 0) + ' agents</span>';
-        html += '</div>';
-        html += '<div class="muted" style="font-size:11px;margin-top:4px;">Status: ' + escapeHtml(sw.status || 'unknown') + '</div>';
-        html += '</div>';
-      }
-      container.innerHTML = html;
-    }
-
-    function renderAgentTelemetry() {
-      var container = document.getElementById('agent-telemetry-container');
-      if (!container) return;
-      var d = state.agentData;
-      var t = d ? d.telemetry : null;
-      var active = t ? t.activeAgents : 0;
-      var completed = t ? t.tasksCompleted : 0;
-      var failed = t ? t.tasksFailed : 0;
-      var errorRate = (completed + failed) > 0 ? Math.round(failed / (completed + failed) * 100) : 0;
-      var avgResp = t && t.avgResponseMs > 0 ? t.avgResponseMs + 'ms' : '\u2014';
-      var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Active Agents</div><div style="font-size:24px;font-weight:700;color:var(--accent);">' + active + '</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Tasks Completed</div><div style="font-size:24px;font-weight:700;color:#7ecf7e;">' + completed + '</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Error Rate</div><div style="font-size:24px;font-weight:700;color:' + (errorRate > 10 ? '#ff8d8d' : 'var(--accent)') + ';">' + errorRate + '%</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Avg Response</div><div style="font-size:24px;font-weight:700;color:var(--accent);">' + escapeHtml(avgResp) + '</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Total Dispatches</div><div style="font-size:24px;font-weight:700;color:var(--accent);">' + (t ? t.totalDispatches : 0) + '</div></div>';
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    async function refreshAgentList() {
-      try {
-        state.agentData = await request('/api/agents');
-        render();
-      } catch (e) { console.error('[agentic] refresh failed', e); }
-    }
-
-    async function launchNewAgent() {
-      var name = prompt('Agent name (optional):');
-      var role = prompt('Agent role (e.g. general, researcher, coder):');
-      try {
-        await request('/api/agents/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || undefined, role: role || undefined }) });
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] launch failed', e); }
-    }
-
-    async function stopAgent(agentId) {
-      try {
-        await request('/api/agents/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agentId: agentId }) });
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] stop failed', e); }
-    }
-
-    async function promoteAgent(agentId) {
-      try {
-        const result = await request('/api/agents/' + encodeURIComponent(agentId) + '/promote', { method: 'POST' });
-        state.agentData = result || state.agentData;
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] promote failed', e); }
-    }
-
-    async function demoteAgent(agentId) {
-      try {
-        const result = await request('/api/agents/' + encodeURIComponent(agentId) + '/demote', { method: 'POST' });
-        state.agentData = result || state.agentData;
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] demote failed', e); }
-    }
-
-    async function createSwarm() {
-      var name = prompt('Swarm name (optional):');
-      var topology = prompt('Topology (mesh / star / pipeline):') || 'mesh';
-      var count = parseInt(prompt('Number of agents:') || '3', 10);
-      try {
-        await request('/api/swarms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || undefined, topology: topology, agentCount: count }) });
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] swarm create failed', e); }
-    }
-
-    async function refreshSwarmStatus() {
-      await refreshAgentList();
-    }
-
-    // ── Computer Control Tab Renderers ──────────────────────────────────
-
-    function renderLocalSystemInfo() {
-      var container = document.getElementById('local-system-info');
-      if (!container) return;
-      var info = state.computerSystemInfo;
-      if (!info) return;
-      var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Operating System</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.os || '\u2014') + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Hostname</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.hostname || '\u2014') + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Platform</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.platform || '\u2014') + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Uptime</div><div style="font-size:14px;font-weight:600;">' + formatUptime(info.uptime) + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">CPUs</div><div style="font-size:14px;font-weight:600;">' + (info.cpus || '\u2014') + ' cores</div></div>';
-      var totalMb = info.totalMemory ? Math.round(info.totalMemory / 1048576) : 0;
-      var freeMb = info.freeMemory ? Math.round(info.freeMemory / 1048576) : 0;
-      var usedPct = totalMb > 0 ? Math.round((totalMb - freeMb) / totalMb * 100) : 0;
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Memory</div><div style="font-size:14px;font-weight:600;">' + usedPct + '% used (' + Math.round(freeMb / 1024) + ' GB free / ' + Math.round(totalMb / 1024) + ' GB)</div></div>';
-      if (info.gpu) {
-        html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">GPU</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.gpu.name || '\u2014') + '</div></div>';
-        html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">VRAM</div><div style="font-size:14px;font-weight:600;">' + (info.gpu.vramTotalMb ? (info.gpu.vramTotalMb >= 1024 ? (Math.round(info.gpu.vramTotalMb / 1024 * 10) / 10) + ' GB' : info.gpu.vramTotalMb + ' MB') : '\u2014') + '</div></div>';
-        if (info.gpu.cudaVersion) {
-          html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">CUDA</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.gpu.cudaVersion) + '<span class="gpu-badge">CUDA</span></div></div>';
-        }
-        if (info.gpu.driverVersion) {
-          html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Driver</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.gpu.driverVersion) + '</div></div>';
-        }
-      }
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function renderUsageMetrics(data) {
-      var container = document.getElementById('usage-metrics');
-      if (!container) return;
-      if (!data) { container.innerHTML = ''; return; }
-      var ramTotal = data.ramTotal || 1;
-      var ramUsed = ramTotal - (data.ramFree || 0);
-      var ramPct = Math.round(ramUsed / ramTotal * 100);
-      state.ramHistory.push(ramPct);
-      if (state.ramHistory.length > 60) state.ramHistory.shift();
-      var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">';
-      html += '<div class="panel" style="padding:14px;">';
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span class="muted" style="font-size:11px;">RAM Usage</span><span style="font-size:12px;font-weight:600;">' + ramPct + '% (' + Math.round(ramUsed / 1073741824 * 10) / 10 + ' / ' + Math.round(ramTotal / 1073741824 * 10) / 10 + ' GB)</span></div>';
-      html += '<div class="usage-bar"><div class="usage-bar-fill ram" style="width:' + ramPct + '%"></div><div class="usage-bar-label">' + ramPct + '%</div></div>';
-      html += '<div style="margin-top:8px;"><canvas id="sparkline-ram" width="320" height="40" style="width:100%;height:40px;"></canvas></div>';
-      html += '</div>';
-      if (data.gpu) {
-        var vramPct = data.gpu.vramTotalMb > 0 ? Math.round(data.gpu.vramUsedMb / data.gpu.vramTotalMb * 100) : 0;
-        state.vramHistory.push(vramPct);
-        if (state.vramHistory.length > 60) state.vramHistory.shift();
-        html += '<div class="panel" style="padding:14px;">';
-        html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span class="muted" style="font-size:11px;">VRAM Usage</span><span style="font-size:12px;font-weight:600;">' + vramPct + '% (' + data.gpu.vramUsedMb + ' / ' + data.gpu.vramTotalMb + ' MB)';
-        if (data.gpu.tempC) html += ' \u2022 ' + data.gpu.tempC + '\u00B0C';
-        html += '</span></div>';
-        html += '<div class="usage-bar"><div class="usage-bar-fill vram" style="width:' + vramPct + '%"></div><div class="usage-bar-label">' + vramPct + '%</div></div>';
-        html += '<div style="margin-top:8px;"><canvas id="sparkline-vram" width="320" height="40" style="width:100%;height:40px;"></canvas></div>';
-        html += '</div>';
-      } else {
-        html += '<div class="panel" style="padding:14px;"><div class="muted" style="font-size:11px;">VRAM Usage</div><div style="font-size:13px;color:var(--muted);margin-top:6px;">No GPU detected</div></div>';
-      }
-      html += '</div>';
-      container.innerHTML = html;
-      drawSparkline('sparkline-ram', state.ramHistory, '#69d2ff');
-      if (data.gpu) drawSparkline('sparkline-vram', state.vramHistory, '#7cf1c8');
-    }
-
-    function drawSparkline(canvasId, history, color) {
-      var canvas = document.getElementById(canvasId);
-      if (!canvas || !canvas.getContext) return;
-      var ctx = canvas.getContext('2d');
-      var w = canvas.width;
-      var h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-      if (history.length < 2) return;
-      var max = 100;
-      var step = w / 59;
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
-      for (var i = 0; i < history.length; i++) {
-        var x = (history.length - 1 === 0) ? 0 : (i / (history.length - 1)) * w;
-        var y = h - (history[i] / max) * (h - 4) - 2;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.lineTo(w, h);
-      ctx.lineTo(0, h);
-      ctx.closePath();
-      ctx.fillStyle = color.replace(')', ',0.08)').replace('rgb', 'rgba');
-      ctx.fill();
-    }
-
-    async function runLocalCommand() {
-      var input = document.getElementById('computer-console-input');
-      var output = document.getElementById('computer-console-output');
-      if (!input || !output) return;
-      var cmd = input.value.trim();
-      if (!cmd) return;
-      output.textContent = 'Running: ' + cmd + '\\n';
-      state.computerConsoleHistory.push({ command: cmd, timestamp: new Date().toISOString() });
-      try {
-        var result = await request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd }) });
-        var out = '';
-        if (result.stdout) out += result.stdout;
-        if (result.stderr) out += (out ? '\\n' : '') + result.stderr;
-        output.textContent = out || '(no output)';
-      } catch (e) {
-        output.textContent = 'Error: ' + e.message;
-      }
-      input.value = '';
-    }
-
-    async function refreshEnvVars() {
-      try {
-        state.computerEnvVars = await request('/api/computer/env-vars');
-        renderEnvVarsList();
-      } catch (e) { console.error('[computer] env vars failed', e); }
-    }
-
-    function renderEnvVarsList() {
-      var container = document.getElementById('env-vars-list');
-      if (!container || !state.computerEnvVars) return;
-      var data = state.computerEnvVars;
-      var html = '';
-      if (data.prismVars && data.prismVars.length > 0) {
-        html += '<div style="margin-bottom:8px;font-weight:700;color:var(--accent);font-size:12px;">PRISM Variables (' + data.prismVars.length + ')</div>';
-        for (var i = 0; i < data.prismVars.length; i++) {
-          html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.06);"><span style="color:var(--accent-2);font-weight:600;">' + escapeHtml(data.prismVars[i].key) + '</span>=<span>' + escapeHtml(data.prismVars[i].value) + '</span></div>';
-        }
-      }
-      if (data.systemVars && data.systemVars.length > 0) {
-        html += '<div style="margin:10px 0 6px;font-weight:700;color:var(--muted);font-size:12px;">System Variables (' + data.systemVars.length + ')</div>';
-        for (var j = 0; j < Math.min(data.systemVars.length, 50); j++) {
-          html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.06);"><span style="color:var(--fg);font-weight:600;">' + escapeHtml(data.systemVars[j].key) + '</span>=<span class="muted">' + escapeHtml(data.systemVars[j].value.substring(0, 120)) + '</span></div>';
-        }
-        if (data.systemVars.length > 50) {
-          html += '<div class="muted" style="margin-top:6px;">... and ' + (data.systemVars.length - 50) + ' more</div>';
-        }
-      }
-      container.innerHTML = html || '<div class="muted">No environment variables found.</div>';
-    }
-
-    async function openPolicyEditor(tool) {
-      try {
-        await request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: tool + '.msc' }) });
-        var output = document.getElementById('policy-status-output');
-        if (output) output.textContent = 'Launched ' + tool + '.msc at ' + new Date().toLocaleTimeString();
-      } catch (e) {
-        var output2 = document.getElementById('policy-status-output');
-        if (output2) output2.textContent = 'Failed: ' + e.message;
-      }
-    }
-
-    async function refreshPolicyStatus() {
-      var output = document.getElementById('policy-status-output');
-      if (!output) return;
-      output.textContent = 'Querying policy status...';
-      try {
-        var result = await request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'gpresult /Scope User /v' }) });
-        output.textContent = result.stdout || result.stderr || 'No policy data returned.';
-      } catch (e) {
-        output.textContent = 'Policy query failed: ' + e.message;
-      }
-    }
-
-    function launchBrowserPreview() {
-      window.open(location.href, '_blank');
-      var el = document.getElementById('browser-preview-mode');
-      if (el) el.textContent = 'External';
-    }
-
-    function openBrowserDevTools() {
-      var el = document.getElementById('browser-preview-mode');
-      if (el) el.textContent = 'Press F12 in this browser window';
-    }
-
-    async function refreshBrowserInfo() {
-      var el = document.getElementById('browser-default');
-      if (el) {
-        var ua = navigator.userAgent;
-        if (ua.indexOf('Chrome') !== -1) el.textContent = 'Chrome';
-        else if (ua.indexOf('Firefox') !== -1) el.textContent = 'Firefox';
-        else if (ua.indexOf('Edge') !== -1) el.textContent = 'Edge';
-        else if (ua.indexOf('Safari') !== -1) el.textContent = 'Safari';
-        else el.textContent = 'Unknown';
-      }
-    }
-
-    async function refreshDeviceManager() {
-      try {
-        state.computerDevices = await request('/api/computer/devices');
-        renderDeviceTree();
-      } catch (e) { console.error('[computer] device scan failed', e); }
-    }
-
-    function renderDeviceTree() {
-      var container = document.getElementById('device-tree-container');
-      if (!container || !state.computerDevices) return;
-      var devs = state.computerDevices.devices || {};
-      var html = '';
-      var icons = { 'Display Adapters': '\u{1F4BB}', 'Network Adapters': '\u{1F4F6}', 'Disk Drives': '\u{1F4BE}', 'Processors': '\u2699\uFE0F' };
-      for (var cat in devs) {
-        var items = devs[cat] || [];
-        var icon = icons[cat] || '\u{1F50C}';
-        html += '<details class="panel" style="padding:8px 12px;margin-bottom:4px;" open>';
-        html += '<summary style="cursor:pointer;font-weight:600;">' + icon + ' ' + escapeHtml(cat) + ' (' + items.length + ')</summary>';
-        if (items.length === 0) {
-          html += '<div class="muted" style="padding:6px 0 0 18px;font-size:12px;">No devices detected.</div>';
-        } else {
-          for (var i = 0; i < items.length; i++) {
-            html += '<div style="padding:4px 0 0 18px;font-size:12px;">\u2514 ' + escapeHtml(items[i]) + '</div>';
-          }
-        }
-        html += '</details>';
-      }
-      container.innerHTML = html || '<div class="muted">No device data. Click Scan Devices.</div>';
-    }
-
-    function openSystemDeviceManager() {
-      request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'devmgmt.msc' }) }).catch(function() {});
-    }
-
-    async function initAgenticTab() {
-      if (!state.agentData) await refreshAgentList();
-    }
-
-    // ── Vision Framebuffer JS ────────────────────────────────────────────
-
-    async function captureScreengrab() {
-      var meta = document.getElementById('fb-meta');
-      if (meta) meta.textContent = 'Capturing...';
-      try {
-        var result = await request('/api/computer/screengrab/capture', { method: 'POST' });
-        if (meta) meta.textContent = result.filename + ' (' + Math.round(result.sizeBytes / 1024) + ' KB)';
-        refreshFramebufferViewer();
-        refreshFramebufferGallery();
-      } catch (e) {
-        if (meta) meta.textContent = 'Capture failed: ' + e.message;
-      }
-    }
-
-    async function burstCapture() {
-      var meta = document.getElementById('fb-meta');
-      if (meta) meta.textContent = 'Burst capturing (8 FPS, 2s)...';
-      try {
-        var result = await request('/api/computer/screengrab/burst', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fps: 8, duration: 2 }) });
-        if (meta) meta.textContent = 'Burst complete: ' + result.frames + ' frames captured';
-        refreshFramebufferViewer();
-        refreshFramebufferGallery();
-      } catch (e) {
-        if (meta) meta.textContent = 'Burst failed: ' + e.message;
-      }
-    }
-
-    function refreshFramebufferViewer() {
-      var img = document.getElementById('framebuffer-preview');
-      var placeholder = document.getElementById('fb-placeholder');
-      if (!img) return;
-      var ts = Date.now();
-      var testImg = new Image();
-      testImg.onload = function() {
-        img.src = '/api/computer/screengrab/latest?t=' + ts;
-        img.style.display = 'block';
-        if (placeholder) placeholder.style.display = 'none';
-      };
-      testImg.onerror = function() {
-        img.style.display = 'none';
-        if (placeholder) placeholder.style.display = 'block';
-      };
-      testImg.src = '/api/computer/screengrab/latest?t=' + ts;
-    }
-
-    async function refreshFramebufferGallery() {
-      var gallery = document.getElementById('framebuffer-gallery');
-      if (!gallery) return;
-      try {
-        var data = await request('/api/computer/screengrab/list');
-        var files = data.files || [];
-        var html = '';
-        for (var i = 0; i < Math.min(files.length, 20); i++) {
-          html += '<img class="framebuffer-thumb" src="/api/computer/screengrab/file/' + encodeURIComponent(files[i].name) + '" alt="' + escapeHtml(files[i].name) + '" title="' + escapeHtml(files[i].name) + '\\n' + Math.round(files[i].size / 1024) + ' KB" onclick="window.open(this.src, \\'_blank\\')" />';
-        }
-        gallery.innerHTML = html || '<span class="muted" style="font-size:12px;">No screengrabs in gallery.</span>';
-      } catch (e) {
-        gallery.innerHTML = '<span class="muted" style="font-size:12px;">Gallery load failed.</span>';
-      }
-    }
-
-    function toggleFramebufferAutoRefresh() {
-      state.framebufferAutoRefresh = !state.framebufferAutoRefresh;
-      var btn = document.getElementById('fb-auto-toggle');
-      if (btn) {
-        btn.textContent = 'Auto-Refresh: ' + (state.framebufferAutoRefresh ? 'ON' : 'OFF');
-        if (state.framebufferAutoRefresh) btn.classList.add('fb-toggle-active');
-        else btn.classList.remove('fb-toggle-active');
-      }
-      if (state.framebufferAutoRefresh) {
-        if (state.framebufferPollInterval) clearInterval(state.framebufferPollInterval);
-        state.framebufferPollInterval = setInterval(refreshFramebufferViewer, 2000);
-      } else {
-        if (state.framebufferPollInterval) { clearInterval(state.framebufferPollInterval); state.framebufferPollInterval = null; }
-      }
-    }
-
-    async function initComputerTab() {
-      if (!state.computerSystemInfo) {
-        try {
-          state.computerSystemInfo = await request('/api/computer/system-info');
-          renderLocalSystemInfo();
-        } catch (e) { console.error('[computer] system info failed', e); }
-      }
-      refreshBrowserInfo();
-      if (state.computerPollInterval) { clearInterval(state.computerPollInterval); state.computerPollInterval = null; }
-      async function pollUsage() {
-        try {
-          var data = await request('/api/computer/usage');
-          renderUsageMetrics(data);
-        } catch (e) { console.error('[computer] usage poll failed', e); }
-      }
-      pollUsage();
-      state.computerPollInterval = setInterval(pollUsage, 5000);
-      refreshFramebufferViewer();
-      if (state.framebufferAutoRefresh && !state.framebufferPollInterval) {
-        state.framebufferPollInterval = setInterval(refreshFramebufferViewer, 2000);
-      }
-    }
-
-    // ── Network Tab Panel Renderers ──────────────────────────────────────
-
-    function renderNetworkToolsPanel() {
-      const container = document.getElementById('network-tools-panel');
-      if (!container) return;
-
-      const commands = [
-        { tier: 'tier1', category: 'Diagnostics (Read-Only)', items: [
-          { name: 'ipconfig / ifconfig', desc: 'Display network interface configuration', platform: 'cross' },
-          { name: 'ping', desc: 'Test host reachability and measure round-trip time', platform: 'cross' },
-          { name: 'nslookup / dig', desc: 'DNS resolution lookup', platform: 'cross' },
-          { name: 'tracert / traceroute', desc: 'Trace route to destination host', platform: 'cross' },
-          { name: 'netstat / ss', desc: 'Display active connections and listening ports', platform: 'cross' },
-          { name: 'arp', desc: 'Display and manage the ARP cache', platform: 'cross' },
-          { name: 'hostname', desc: 'Display system hostname', platform: 'cross' },
-          { name: 'nbtstat', desc: 'NetBIOS over TCP/IP statistics', platform: 'win' },
-          { name: 'pathping', desc: 'Combined ping and tracert analysis', platform: 'win' },
-          { name: 'getmac', desc: 'Display MAC addresses for all interfaces', platform: 'win' },
-          { name: 'net view', desc: 'List shared resources visible on the network', platform: 'win' },
-          { name: 'net statistics', desc: 'Display network workstation/server statistics', platform: 'win' },
-          { name: 'curl / wget', desc: 'HTTP data transfer / file download', platform: 'cross' },
-          { name: 'ip addr / ip route', desc: 'IP address and routing (iproute2)', platform: 'linux' },
-        ]},
-        { tier: 'tier2', category: 'Config Inspection (Conditional)', items: [
-          { name: 'route print', desc: 'Display the IP routing table', platform: 'win' },
-          { name: 'netsh interface show', desc: 'Show network interface details', platform: 'win' },
-          { name: 'netsh wlan show', desc: 'Show wireless network profiles and info', platform: 'win' },
-          { name: 'netsh firewall show', desc: 'Show firewall configuration', platform: 'win' },
-          { name: 'netsh advfirewall show', desc: 'Show advanced firewall configuration', platform: 'win' },
-          { name: 'net use', desc: 'Map or manage network drives', platform: 'win' },
-          { name: 'net share', desc: 'View or manage shared folders', platform: 'win' },
-          { name: 'net session', desc: 'Display active network sessions', platform: 'win' },
-          { name: 'net user', desc: 'View user accounts', platform: 'win' },
-          { name: 'net localgroup', desc: 'View local group memberships', platform: 'win' },
-          { name: 'net config', desc: 'Display workstation or server configuration', platform: 'win' },
-        ]},
-        { tier: 'tier3', category: 'Mutating Operations (Approval-Gated)', items: [
-          { name: 'netsh interface set', desc: 'Modify network interface settings', platform: 'win' },
-          { name: 'netsh interface ip set', desc: 'Set IP/DHCP/DNS configuration', platform: 'win' },
-          { name: 'netsh firewall set', desc: 'Modify firewall rules', platform: 'win' },
-          { name: 'netsh wlan connect/disconnect', desc: 'Wi-Fi connection management', platform: 'win' },
-          { name: 'route add / delete / change', desc: 'Modify the routing table', platform: 'cross' },
-          { name: 'net start / stop', desc: 'Start or stop network services', platform: 'win' },
-          { name: 'ip addr add/del', desc: 'Add or remove IP addresses', platform: 'linux' },
-          { name: 'ip route add/del', desc: 'Add or remove routes', platform: 'linux' },
-          { name: 'iptables / ufw', desc: 'Linux firewall management', platform: 'linux' },
-        ]}
-      ];
-
-      const tierColors = { tier1: '#2ecc71', tier2: '#f39c12', tier3: '#e74c3c' };
-      const tierLabels = { tier1: 'Tier 1', tier2: 'Tier 2', tier3: 'Tier 3' };
-      const platformBadge = function(p) {
-        if (p === 'win') return '<span style="background:#0078d4;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;">WIN</span>';
-        if (p === 'linux') return '<span style="background:#e95420;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;">LINUX</span>';
-        return '<span style="background:#6c757d;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;">CROSS</span>';
-      };
-
-      var html = '<p class="muted" style="margin:0 0 10px 0;font-size:12px;">Curated network command allowlist with tier-based governance. Commands are validated against an allowlist before execution.</p>';
-
-      commands.forEach(function(group) {
-        html += '<div style="margin-bottom:12px;">'
-          + '<h4 style="margin:0 0 6px 0;font-size:13px;">'
-          + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + tierColors[group.tier] + ';margin-right:6px;"></span>'
-          + tierLabels[group.tier] + ' \u2014 ' + escapeHtml(group.category)
-          + ' <span class="muted">(' + group.items.length + ')</span></h4>'
-          + '<table style="width:100%;border-collapse:collapse;font-size:12px;"><tbody>';
-        group.items.forEach(function(item) {
-          html += '<tr style="border-bottom:1px solid var(--border);">'
-            + '<td style="padding:3px 8px 3px 0;white-space:nowrap;"><code>' + escapeHtml(item.name) + '</code>' + platformBadge(item.platform) + '</td>'
-            + '<td class="muted" style="padding:3px 0;">' + escapeHtml(item.desc) + '</td></tr>';
-        });
-        html += '</tbody></table></div>';
-      });
-
-      container.innerHTML = html;
-    }
-
-    function renderNetworkSettingsPanel() {
-      const container = document.getElementById('network-settings-panel');
-      if (!container) return;
-
-      container.innerHTML = '<p class="muted" style="font-size:12px;margin:0 0 8px 0;">Live interface data from the local host. Click Refresh to update.</p>'
-        + '<button onclick="refreshNetworkInterfaces()" style="padding:4px 12px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;margin-bottom:8px;">\u{1F504} Refresh Interfaces</button>'
-        + '<div id="network-interfaces-data" style="font-size:12px;"><span class="muted">Click Refresh to load interface data.</span></div>';
-    }
-
-    function renderNetworkTelemetryPanel() {
-      const container = document.getElementById('network-telemetry-panel');
-      if (!container) return;
-
-      const t = state.networkTelemetryData;
-      const total = t.totalCommands;
-      const pct = function(n) { return total > 0 ? ((n / total) * 100).toFixed(1) : '0.0'; };
-
-      container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:10px;">'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;">' + total + '</div><div class="muted" style="font-size:11px;">Total Commands</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#2ecc71;">' + t.tier1Count + '</div><div class="muted" style="font-size:11px;">Tier 1 (' + pct(t.tier1Count) + '%)</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#f39c12;">' + t.tier2Count + '</div><div class="muted" style="font-size:11px;">Tier 2 (' + pct(t.tier2Count) + '%)</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#e74c3c;">' + t.tier3Count + '</div><div class="muted" style="font-size:11px;">Tier 3 (' + pct(t.tier3Count) + '%)</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#e74c3c;">' + t.errorCount + '</div><div class="muted" style="font-size:11px;">Errors</div></div>'
-        + '</div>'
-        + (t.lastCommand ? '<p class="muted" style="font-size:11px;margin:0;">Last command: <code>' + escapeHtml(t.lastCommand) + '</code></p>' : '');
-    }
-
-    function renderNetworkConsolePanel() {
-      const hist = document.getElementById('network-history-list');
-      if (!hist) return;
-      const cmds = state.networkCommandHistory;
-      if (cmds.length === 0) {
-        hist.innerHTML = '';
-        return;
-      }
-      var html = '<div class="muted" style="font-size:11px;font-weight:600;margin-bottom:4px;">Recent Commands (' + cmds.length + ')</div>';
-      html += '<div style="font-family:monospace;font-size:11px;">';
-      var recent = cmds.slice(-10).reverse();
-      for (var i = 0; i < recent.length; i++) {
-        var c = recent[i];
-        var color = c.ok ? '#7ecf7e' : '#ff8d8d';
-        var ts = new Date(c.timestamp).toLocaleTimeString();
-        html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;gap:8px;align-items:baseline;">';
-        html += '<span style="color:' + color + ';font-size:9px;">\u25CF</span>';
-        html += '<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(c.command) + '</span>';
-        html += '<span class="muted" style="font-size:10px;white-space:nowrap;">' + ts + '</span>';
-        html += '</div>';
-      }
-      html += '</div>';
-      hist.innerHTML = html;
-    }
-
-    async function runNetworkCommand() {
-      const input = document.getElementById('network-console-input');
-      const output = document.getElementById('network-console-output');
-      if (!input || !output) return;
-
-      const command = input.value.trim();
-      if (!command) return;
-
-      output.textContent = '\u23F3 Running: ' + command + '\\n';
-
-      try {
-        const result = await request('/api/network/exec', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: command })
-        });
-
-        var text = '';
-        if (result.tier) text += '[' + result.tier + '] ';
-        text += '$ ' + command + '\\n';
-        if (result.stdout) text += result.stdout + '\\n';
-        if (result.stderr) text += '\\nSTDERR:\\n' + result.stderr + '\\n';
-        text += '\\nExit code: ' + (result.exitCode != null ? result.exitCode : 'N/A');
-
-        output.textContent = text;
-
-        // Update telemetry counters
-        state.networkTelemetryData.totalCommands++;
-        if (result.tier === 'tier1') state.networkTelemetryData.tier1Count++;
-        else if (result.tier === 'tier2') state.networkTelemetryData.tier2Count++;
-        else if (result.tier === 'tier3') state.networkTelemetryData.tier3Count++;
-        state.networkTelemetryData.lastCommand = command;
-
-        state.networkCommandHistory.push({ command: command, timestamp: new Date().toISOString(), ok: true });
-        await refreshNetworkTelemetry();
-      } catch (error) {
-        output.textContent = '\u274C Error: ' + String(error);
-        state.networkTelemetryData.errorCount++;
-        state.networkTelemetryData.totalCommands++;
-        state.networkTelemetryData.lastCommand = command;
-        state.networkCommandHistory.push({ command: command, timestamp: new Date().toISOString(), ok: false });
-        await refreshNetworkTelemetry();
-      }
-
-      renderNetworkTelemetryPanel();
-      input.value = '';
-    }
-
-    async function refreshNetworkInterfaces() {
-      const container = document.getElementById('network-interfaces-data');
-      if (!container) return;
-      container.innerHTML = '<span class="muted">\u23F3 Loading interface data...</span>';
-      try {
-        const data = await request('/api/network/interfaces');
-        if (!data.interfaces || data.interfaces.length === 0) {
-          container.innerHTML = '<span class="muted">No interface data available.</span>';
-          return;
-        }
-        var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:2px solid var(--border);">'
-          + '<th style="text-align:left;padding:4px 8px;">Interface</th>'
-          + '<th style="text-align:left;padding:4px 8px;">Details</th>'
-          + '</tr></thead><tbody>';
-        data.interfaces.forEach(function(iface) {
-          html += '<tr style="border-bottom:1px solid var(--border);">'
-            + '<td style="padding:4px 8px;font-weight:bold;white-space:nowrap;">' + escapeHtml(iface.name) + '</td>'
-            + '<td style="padding:4px 8px;"><pre style="margin:0;white-space:pre-wrap;font-size:11px;">' + escapeHtml(iface.details) + '</pre></td>'
-            + '</tr>';
-        });
-        html += '</tbody></table>';
-        container.innerHTML = html;
-      } catch (error) {
-        container.innerHTML = '<span style="color:#e74c3c;">\u274C Failed to load: ' + escapeHtml(String(error)) + '</span>';
-      }
-    }
-
-    async function refreshNetworkTelemetry() {
-      try {
-        const telemetry = await request('/api/network/telemetry');
-        state.networkTelemetryData = {
-          totalCommands: telemetry.totalCommands || 0,
-          tier1Count: telemetry.tier1Count || 0,
-          tier2Count: telemetry.tier2Count || 0,
-          tier3Count: telemetry.tier3Count || 0,
-          errorCount: telemetry.errorCount || 0,
-          lastCommand: telemetry.lastCommand || null
-        };
-        safeRenderStep('networkTelemetryPanel', renderNetworkTelemetryPanel);
-      } catch (error) {
-        console.error('[network] telemetry refresh failed', error);
-      }
-    }
-
-    function safeRenderStep(name, fn) {
-      try {
-        fn();
-      } catch (error) {
-        console.error('[dashboard-render]', name, error);
-      }
-    }
-
-    function render() {
-      safeRenderStep('brandPanel', renderBrandPanel);
-      safeRenderStep('tabs', renderTabs);
-      safeRenderStep('sessions', renderSessions);
-      safeRenderStep('header', renderHeader);
-      safeRenderStep('onboarding', renderOnboarding);
-      safeRenderStep('messages', renderMessages);
-      safeRenderStep('overview', renderOverview);
-      safeRenderStep('runtimeExcellence', renderRuntimeExcellence);
-      safeRenderStep('releaseReadiness', renderReleaseReadiness);
-      safeRenderStep('packageHistory', renderPackageHistory);
-      safeRenderStep('whatChanged', renderWhatChanged);
-      safeRenderStep('llm', renderLlm);
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-      safeRenderStep('modelRouting', renderModelRouting);
-      safeRenderStep('providerCards', renderProviderCards);
-      safeRenderStep('llmAudit', renderLlmAudit);
-      safeRenderStep('settingsPanel', renderSettingsPanel);
-      safeRenderStep('toolsOverviewBar', renderToolsOverviewBar);
-      safeRenderStep('toolsPanel', renderToolsPanel);
-      safeRenderStep('pluginsPanel', renderPluginsPanel);
-      safeRenderStep('utilitiesPanel', renderUtilitiesPanel);
-      safeRenderStep('agentList', renderAgentList);
-      safeRenderStep('subAgentTree', renderSubAgentTree);
-      safeRenderStep('swarmTopology', renderSwarmTopology);
-      safeRenderStep('agentTelemetry', renderAgentTelemetry);
-      safeRenderStep('localSystemInfo', renderLocalSystemInfo);
-      safeRenderStep('envVarsList', renderEnvVarsList);
-      safeRenderStep('deviceTree', renderDeviceTree);
-      safeRenderStep('importHistory', renderImportHistory);
-      safeRenderStep('networkToolsPanel', renderNetworkToolsPanel);
-      safeRenderStep('networkSettingsPanel', renderNetworkSettingsPanel);
-      safeRenderStep('networkTelemetryPanel', renderNetworkTelemetryPanel);
-      safeRenderStep('networkConsolePanel', renderNetworkConsolePanel);
-      safeRenderStep('actions', renderActions);
-      safeRenderStep('approvals', renderApprovals);
-      safeRenderStep('actionHistory', renderActionHistory);
-      safeRenderStep('chatTelemetry', renderChatTelemetry);
-      safeRenderStep('traceView', renderTraceView);
-      safeRenderStep('selfReview', renderSelfReview);
-      safeRenderStep('retrievalObservability', renderRetrievalObservability);
-      safeRenderStep('events', renderEvents);
-      const sendButton = document.getElementById('send-button');
-      if (sendButton) {
-        sendButton.disabled = state.busy;
-      }
-    }
-
-    function setActiveTab(tabId) {
-      if (!tabs.some(tab => tab.id === tabId)) {
-        return;
-      }
-      if (state.computerPollInterval && tabId !== 'computer') {
-        clearInterval(state.computerPollInterval);
-        state.computerPollInterval = null;
-      }
-      if (state.framebufferPollInterval && tabId !== 'computer') {
-        clearInterval(state.framebufferPollInterval);
-        state.framebufferPollInterval = null;
-      }
-      state.activeTab = tabId;
-      if (tabId === 'settings') {
-        refreshChrome().then(function() { render(); });
-      }
-      if (tabId === 'agentic') {
-        initAgenticTab();
-      }
-      if (tabId === 'workspace') {
-        initWorkspaceTab();
-      }
-      if (tabId === 'computer') {
-        initComputerTab();
-      }
-      if (tabId === 'network') {
-        refreshNetworkInterfaces();
-        refreshNetworkTelemetry();
-      }
-      if (tabId === 'telemetry') {
-        setTelemetryWindow(state.telemetryWindow);
-        return; // setTelemetryWindow calls render() — skip double render
-      }
-      render();
-    }
-
-    async function selectSession(sessionId) {
-      state.selectedSessionId = sessionId;
-      await Promise.all([loadMessages(), refreshChrome()]);
-      render();
-    }
-
-    async function deleteSession(event, sessionId) {
-      event.stopPropagation();
-      const existing = state.sessions.find(session => session.sessionId === sessionId);
-      if (!existing) {
-        return;
-      }
-      const confirmed = confirm('Delete session "' + existing.title + '"? This will remove all messages in this session.');
-      if (!confirmed) {
-        return;
-      }
-
-      state.notice = null;
-      try {
-        await request('/api/chat/sessions/' + encodeURIComponent(sessionId), { method: 'DELETE' });
-        await loadSessions();
-
-        if (!state.selectedSessionId && state.sessions.length > 0) {
-          state.selectedSessionId = state.sessions[0].sessionId;
-        }
-
-        if (state.selectedSessionId) {
-          await Promise.all([loadMessages(), refreshChrome()]);
-        } else {
-          state.messages = [];
-          await refreshChrome();
-        }
-      } catch (error) {
-        state.notice = String(error);
-      }
-
-      render();
-    }
-
-    async function renameSession(event, sessionId) {
-      event.stopPropagation();
-      var session = state.sessions.find(function(s) { return s.sessionId === sessionId; });
-      if (!session) return;
-      var newTitle = prompt('Rename session:', session.title);
-      if (!newTitle || !newTitle.trim() || newTitle.trim() === session.title) return;
-      try {
-        await request('/api/chat/sessions/' + encodeURIComponent(sessionId), {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newTitle.trim() })
-        });
-        await loadSessions();
-        safeRenderStep('sessionList', renderSessionList);
-        safeRenderStep('header', renderHeader);
-        state.notice = 'Session renamed.';
-      } catch (err) {
-        state.notice = { type: 'error', message: String(err) };
-      }
-      render();
-    }
-
-    async function copySession(event, sessionId) {
-      event.stopPropagation();
-      const existing = state.sessions.find(session => session.sessionId === sessionId);
-      if (!existing) {
-        return;
-      }
-      
-      const button = event.currentTarget;
-      const originalText = button.textContent;
-      button.textContent = "Copying...";
-
-      try {
-        const payload = await request('/api/chat/sessions/' + encodeURIComponent(sessionId) + '/messages');
-        const messages = payload.messages || [];
-        
-        let textToCopy = "Session: " + existing.title + "\\n";
-        textToCopy += "Date: " + new Date().toLocaleString() + "\\n\\n";
-        
-        for (const msg of messages) {
-          textToCopy += "[" + msg.role.toUpperCase() + "]\\n";
-          textToCopy += msg.content + "\\n\\n";
-        }
-        
-        await navigator.clipboard.writeText(textToCopy.trim());
-        button.textContent = "Copied!";
-        button.style.backgroundColor = "#10b981";
-        button.style.color = "white";
-        button.style.borderColor = "#10b981";
-      } catch (err) {
-        console.error('Copy failed:', err);
-        button.textContent = "Failed";
-      }
-      
-      setTimeout(() => {
-        button.textContent = originalText;
-        button.style.backgroundColor = "";
-        button.style.color = "";
-        button.style.borderColor = "";
-      }, 2000);
-    }
-
-    // --- Attachment handling ---
-    var pendingAttachments = [];
-
-    function handleFileSelect(input) {
-      if (!input.files || !input.files.length) return;
-      Array.from(input.files).forEach(function(file) {
-        if (file.size > 10 * 1024 * 1024) {
-          state.notice = 'File too large (max 10MB): ' + file.name;
-          render();
-          return;
-        }
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          pendingAttachments.push({ file: file, dataUrl: e.target.result, name: file.name, type: file.type, size: file.size });
-          renderAttachmentPreview();
-        };
-        reader.readAsDataURL(file);
-      });
-      input.value = '';
-    }
-
-    async function pasteFromClipboard() {
-      try {
-        var items = await navigator.clipboard.read();
-        for (var i = 0; i < items.length; i++) {
-          var types = items[i].types;
-          var imgType = types.find(function(t) { return t.startsWith('image/'); });
-          if (imgType) {
-            var blob = await items[i].getType(imgType);
-            var file = new File([blob], 'clipboard-' + Date.now() + '.' + imgType.split('/')[1], { type: imgType });
-            var reader = new FileReader();
-            reader.onload = function(e) {
-              pendingAttachments.push({ file: file, dataUrl: e.target.result, name: file.name, type: file.type, size: file.size });
-              renderAttachmentPreview();
-            };
-            reader.readAsDataURL(file);
-          }
-        }
-      } catch (err) {
-        state.notice = 'Clipboard access denied or empty.';
-        render();
-      }
-    }
-
-    function removeAttachment(index) {
-      pendingAttachments.splice(index, 1);
-      renderAttachmentPreview();
-    }
-
-    function renderAttachmentPreview() {
-      var container = document.getElementById('attachment-preview');
-      if (!container) return;
-      container.innerHTML = pendingAttachments.map(function(att, i) {
-        var preview = att.type && att.type.startsWith('image/')
-          ? '<img src="' + att.dataUrl + '" style="height:24px;border-radius:4px;" />'
-          : '\\u{1F4C4}';
-        return '<span class="attachment-chip">'
-          + preview
-          + ' <span>' + escapeHtml(att.name) + '</span>'
-          + ' <span class="remove-btn" onclick="removeAttachment(' + i + ')">\\u2715</span>'
-          + '</span>';
-      }).join('');
-    }
-
-    // Drag & drop
-    (function() {
-      var composer = document.querySelector('.composer');
-      if (!composer) return;
-      composer.addEventListener('dragover', function(e) { e.preventDefault(); composer.style.outline = '2px dashed var(--accent)'; });
-      composer.addEventListener('dragleave', function() { composer.style.outline = ''; });
-      composer.addEventListener('drop', function(e) {
-        e.preventDefault();
-        composer.style.outline = '';
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-          handleFileSelect({ files: e.dataTransfer.files, value: '' });
-        }
-      });
-    })();
-
-    async function uploadAttachments(sessionId, messageId) {
-      for (var i = 0; i < pendingAttachments.length; i++) {
-        var att = pendingAttachments[i];
-        try {
-          var formData = new FormData();
-          formData.append('file', att.file, att.name);
-          await fetch('/api/chat/sessions/' + encodeURIComponent(sessionId) + '/messages/' + encodeURIComponent(messageId) + '/attachments', {
-            method: 'POST',
-            body: formData
-          });
-        } catch (err) {
-          console.warn('Attachment upload failed:', att.name, err);
-        }
-      }
-      pendingAttachments = [];
-      renderAttachmentPreview();
-    }
-
-    async function sendMessage() {
-      const composer = document.getElementById('composer');
-      const content = composer.value.trim();
-      if (!content || state.busy) {
-        return;
-      }
-      if (!state.selectedSessionId) {
-        await createSession();
-      }
-      if (!state.readiness || !state.readiness.ready) {
-        state.notice = 'Complete the first-run checklist in Provider & Settings before sending messages.';
-        state.activeTab = 'settings';
-        render();
-        return;
-      }
-      state.busy = true;
-      state.notice = null;
-      state.agenticStream = [];
-      composer.value = '';
-      render();
-      try {
-        var response = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
-        });
-        // Upload pending attachments to the user message if any
-        if (pendingAttachments.length && response && response.userMessage && response.userMessage.messageId) {
-          await uploadAttachments(state.selectedSessionId, response.userMessage.messageId);
-        }
-        state.agenticStream = [];
-        await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
-      } catch (error) {
-        state.notice = String(error);
-      } finally {
-        state.busy = false;
-        render();
-      }
-    }
-
-    async function runAction(name) {
-      state.notice = null;
-      try {
-        await request('/api/actions/' + name, { method: 'POST' });
-        await refreshChrome();
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function quickApplyLlm() {
-      const localSelection = getLocalLlmSelection(state.selectedSessionId);
-      const providerSelect = document.getElementById('provider-select');
-      const modelSelect = document.getElementById('model-select');
-      const providerId = localSelection && localSelection.providerId
-        ? localSelection.providerId
-        : (providerSelect ? providerSelect.value : '');
-      const model = localSelection
-        ? (localSelection.model || '')
-        : (modelSelect ? modelSelect.value : '');
-      if (!providerId || !state.selectedSessionId) {
-        return;
-      }
-      state.notice = null;
-      try {
-        state.llmCatalog = await request('/api/llm/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: providerId, model: model })
-        });
-        clearLocalLlmSelection(state.selectedSessionId);
-        const readiness = await request('/api/readiness/recheck', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, source: 'llm_quick_apply' })
-        }).catch(function() { return null; });
-        await refreshChrome();
-        if (readiness) {
-          state.readiness = readiness;
-        }
-        state.notice = 'Provider applied: ' + providerId + ' / ' + (model || 'default') + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function refreshOllamaModels() {
-      state.notice = null;
-      try {
-        await refreshChrome();
-        state.notice = 'Model list refreshed from local server.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function rollbackLlmConfig() {
-      if (!state.selectedSessionId) {
-        return;
-      }
-      state.notice = null;
-      try {
-        clearLocalLlmSelection(state.selectedSessionId);
-        const payload = await request('/api/llm/config/rollback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId })
-        });
-        state.llmCatalog = payload.catalog;
-        state.llmConfig = payload.config;
-        await refreshChrome();
-        state.notice = 'Rolled back to previous applied configuration.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function approve(id) {
-      await request('/api/approve/' + id, { method: 'POST' });
-      await refreshChrome();
-      render();
-    }
-
-    async function deny(id) {
-      await request('/api/deny/' + id, { method: 'POST' });
-      await refreshChrome();
-      render();
-    }
-
-    // ── Workspace Tab Functions ─────────────────────────────────────────
-    async function refreshWorkspaceInfo() {
-      var pathEl = document.getElementById('workspace-path');
-      if (!pathEl) return;
-      pathEl.textContent = 'Loading...';
-      try {
-        var info = await request('/api/workspace/info');
-        pathEl.textContent = info.workspaceRoot || 'Unknown';
-        var profileEl = document.getElementById('ws-active-profile');
-        if (profileEl && info.manifest && info.manifest.profile) {
-          profileEl.textContent = info.manifest.profile;
-        }
-        var autoSaveEl = document.getElementById('ws-auto-save');
-        if (autoSaveEl) autoSaveEl.textContent = 'Enabled';
-      } catch (err) {
-        pathEl.textContent = '\\u274C Error: ' + String(err);
-      }
-      refreshGitStatus();
-    }
-
-    async function refreshGitStatus() {
-      var gitEl = document.getElementById('ws-git-status');
-      if (!gitEl) return;
-      gitEl.textContent = 'Checking...';
-      try {
-        var data = await request('/api/workspace/git-status');
-        if (data.isGitRepo) {
-          gitEl.textContent = data.branch + ' (' + data.changedFiles + ' changed)';
-        } else {
-          gitEl.textContent = 'Not a git repo';
-        }
-      } catch (e) {
-        gitEl.textContent = 'Unknown';
-      }
-    }
-
-    async function refreshWorkspaceFiles() {
-      var container = document.getElementById('workspace-file-tree');
-      if (!container) return;
-      container.innerHTML = '<span class="muted">\\u23F3 Loading workspace files...</span>';
-      try {
-        var data = await request('/api/workspace/files');
-        if (!data.entries || data.entries.length === 0) {
-          container.innerHTML = '<span class="muted">Workspace is empty.</span>';
-          return;
-        }
-        state._workspaceFiles = data.entries;
-        renderWorkspaceFileTree(data.entries, container);
-      } catch (err) {
-        container.innerHTML = '<span style="color:#e74c3c;">\\u274C ' + escapeHtml(String(err)) + '</span>';
-      }
-    }
-
-    function renderWorkspaceFileTree(entries, container) {
-      var dirs = {};
-      entries.forEach(function(e) {
-        var parts = e.path.split('/');
-        if (parts.length === 1) {
-          if (!dirs['_root']) dirs['_root'] = [];
-          dirs['_root'].push(e);
-        } else {
-          var top = parts[0];
-          if (!dirs[top]) dirs[top] = [];
-          dirs[top].push(e);
-        }
-      });
-      var html = '';
-      var topDirs = Object.keys(dirs).filter(function(k) { return k !== '_root'; }).sort();
-      topDirs.forEach(function(dirName) {
-        var children = dirs[dirName];
-        var fileCount = children.filter(function(c) { return c.type === 'file'; }).length;
-        html += '<details class="panel" style="padding:6px 10px;margin-bottom:3px;">';
-        html += '<summary style="cursor:pointer;font-weight:600;">\\u{1F4C1} ' + escapeHtml(dirName);
-        html += ' <span class="muted" style="font-weight:normal;font-size:11px;">(' + fileCount + ' files)</span></summary>';
-        html += '<div style="padding:4px 0 0 16px;">';
-        children.forEach(function(child) {
-          if (child.path === dirName) return;
-          var displayName = child.path.substring(dirName.length + 1);
-          var icon = child.type === 'dir' ? '\\u{1F4C1}' : '\\u{1F4C4}';
-          var sizeStr = child.type === 'file' ? ' <span class="muted" style="font-size:10px;">(' + formatFileSize(child.size) + ')</span>' : '';
-          html += '<div style="padding:2px 0;font-size:12px;">' + icon + ' ' + escapeHtml(displayName) + sizeStr + '</div>';
-        });
-        html += '</div></details>';
-      });
-      if (dirs['_root']) {
-        dirs['_root'].forEach(function(e) {
-          var icon = e.type === 'dir' ? '\\u{1F4C1}' : '\\u{1F4C4}';
-          var sizeStr = e.type === 'file' ? ' <span class="muted" style="font-size:10px;">(' + formatFileSize(e.size) + ')</span>' : '';
-          html += '<div style="padding:3px 0;font-size:12px;">' + icon + ' ' + escapeHtml(e.name) + sizeStr + '</div>';
-        });
-      }
-      container.innerHTML = html || '<span class="muted">No files found.</span>';
-    }
-
-    function formatFileSize(bytes) {
-      if (bytes === 0) return '0 B';
-      var units = ['B', 'KB', 'MB', 'GB'];
-      var i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-      var size = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1);
-      return size + ' ' + units[i];
-    }
-
-    function filterWorkspaceFiles(query) {
-      var container = document.getElementById('workspace-file-tree');
-      if (!container || !state._workspaceFiles) return;
-      if (!query || !query.trim()) {
-        renderWorkspaceFileTree(state._workspaceFiles, container);
-        return;
-      }
-      var lower = query.toLowerCase();
-      var filtered = state._workspaceFiles.filter(function(e) {
-        return e.path.toLowerCase().indexOf(lower) !== -1;
-      });
-      renderWorkspaceFileTree(filtered, container);
-    }
-
-    async function openWorkspaceInExplorer() {
-      try {
-        await request('/api/workspace/open-explorer', { method: 'POST' });
-      } catch (err) {
-        alert('Failed to open explorer: ' + String(err));
-      }
-    }
-
-    async function changeWorkspaceLocation() {
-      var currentPath = (document.getElementById('workspace-path') || {}).textContent || '';
-      var newPath = prompt('Enter the new workspace path (absolute):', currentPath.trim());
-      if (!newPath || newPath.trim() === '' || newPath.trim() === currentPath.trim()) return;
-      try {
-        var result = await request('/api/workspace/relocate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: newPath.trim() })
-        });
-        if (result.error) { alert('Relocation failed: ' + result.error); return; }
-        await refreshWorkspaceInfo();
-        await refreshWorkspaceFiles();
-      } catch (e) {
-        alert('Failed to change workspace location: ' + e.message);
-      }
-    }
-
-    var IMPORT_TARGET_DIRS = ['config','artifacts','data','data/tasks','data/notes','data/email','data/calendar','characters','logs','workspace','state'];
-    var IMPORT_REGISTERED_TYPES = [
-      { value: 'character', label: 'Character (JSON)' },
-      { value: 'mcp-config', label: 'MCP Config (JSON)' },
-      { value: 'session-package', label: 'Session Package (JSON)' },
-      { value: 'tool-contract', label: 'Tool Contract (JSON)' },
-      { value: 'self-review', label: 'Self-Review Report (JSON)' },
-      { value: 'task-timeline', label: 'Task Timeline (JSON)' },
-      { value: 'note', label: 'Note (Markdown)' }
-    ];
-
-    function showImportStatus(msg, isError) {
-      var el = document.getElementById('import-status');
-      if (!el) return;
-      el.style.display = 'block';
-      el.style.background = isError ? 'rgba(231,76,60,0.15)' : 'rgba(126,207,126,0.15)';
-      el.style.color = isError ? '#ff8d8d' : '#7ecf7e';
-      el.textContent = msg;
-      setTimeout(function() { el.style.display = 'none'; }, 6000);
-    }
-
-    function triggerWorkspaceImport() {
-      triggerGeneralImport();
-    }
-
-    function triggerGeneralImport() {
-      var targetDir = prompt('Target workspace directory:\\n\\n' + IMPORT_TARGET_DIRS.join('\\n') + '\\n\\nEnter directory name:', 'workspace');
-      if (!targetDir || !targetDir.trim()) return;
-      targetDir = targetDir.trim();
-      if (IMPORT_TARGET_DIRS.indexOf(targetDir) === -1) {
-        alert('Invalid target directory. Must be one of:\\n' + IMPORT_TARGET_DIRS.join(', '));
-        return;
-      }
-      var input = document.getElementById('import-file-input');
-      if (!input) return;
-      input._importTargetDir = targetDir;
-      input.value = '';
-      input.click();
-    }
-
-    function triggerRegisteredImport() {
-      var typeMsg = 'Select registered item type:\\n\\n';
-      for (var i = 0; i < IMPORT_REGISTERED_TYPES.length; i++) {
-        typeMsg += (i + 1) + '. ' + IMPORT_REGISTERED_TYPES[i].label + '\\n';
-      }
-      typeMsg += '\\nEnter number (1-' + IMPORT_REGISTERED_TYPES.length + '):';
-      var choice = prompt(typeMsg);
-      if (!choice) return;
-      var idx = parseInt(choice, 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= IMPORT_REGISTERED_TYPES.length) {
-        alert('Invalid selection.');
-        return;
-      }
-      var input = document.getElementById('import-registered-input');
-      if (!input) return;
-      input._importRegisteredType = IMPORT_REGISTERED_TYPES[idx].value;
-      input.value = '';
-      input.click();
-    }
-
-    function triggerFolderImport() {
-      var targetDir = prompt('Target workspace directory for folder contents:\\n\\n' + IMPORT_TARGET_DIRS.join('\\n') + '\\n\\nEnter directory name:', 'workspace');
-      if (!targetDir || !targetDir.trim()) return;
-      targetDir = targetDir.trim();
-      if (IMPORT_TARGET_DIRS.indexOf(targetDir) === -1) {
-        alert('Invalid target directory. Must be one of:\\n' + IMPORT_TARGET_DIRS.join(', '));
-        return;
-      }
-      var input = document.getElementById('import-folder-input');
-      if (!input) return;
-      input._importTargetDir = targetDir;
-      input.value = '';
-      input.click();
-    }
-
-    function readFileAsBase64(file) {
-      return new Promise(function(resolve, reject) {
-        var reader = new FileReader();
-        reader.onload = function() {
-          var result = reader.result;
-          var base64 = result.split(',')[1] || '';
-          resolve(base64);
-        };
-        reader.onerror = function() { reject(new Error('Failed to read file')); };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    // --- SSE streaming connection for agentic progress ---
-    function connectAgenticStream() {
-      var evtSource;
-      try {
-        evtSource = new EventSource('/api/chat/stream');
-      } catch (err) {
-        console.warn('[stream] SSE unavailable:', err);
-        return;
-      }
-      evtSource.onmessage = function(event) {
-        try {
-          var data = JSON.parse(event.data);
-          if (data.type === 'agentic_event') {
-            var ev = data.event || data;
-            if (ev.type === 'done') {
-              state.agenticStream = [];
-            } else {
-              state.agenticStream.push(ev);
-            }
-            safeRenderStep('messages', renderMessages);
-          }
-        } catch (e) { /* ignore parse errors */ }
-      };
-      evtSource.onerror = function() {
-        evtSource.close();
-        setTimeout(connectAgenticStream, 5000);
-      };
-    }
-    connectAgenticStream();
-
-    // General file import handler
-    document.addEventListener('DOMContentLoaded', function() {
-      var fileInput = document.getElementById('import-file-input');
-      if (fileInput) fileInput.addEventListener('change', async function() {
-        var file = this.files[0];
-        if (!file) return;
-        var targetDir = this._importTargetDir || 'workspace';
-        showImportStatus('Importing ' + file.name + '...', false);
-        try {
-          var base64 = await readFileAsBase64(file);
-          var result = await request('/api/workspace/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'general', fileName: file.name, content: base64, targetDir: targetDir })
-          });
-          if (result.error) { showImportStatus('Import failed: ' + result.error, true); return; }
-          showImportStatus('Imported ' + file.name + ' to ' + targetDir + '/', false);
-          await refreshImportHistory();
-          await refreshWorkspaceFiles();
-        } catch (e) { showImportStatus('Import error: ' + e.message, true); }
-      });
-
-      // Registered file import handler
-      var regInput = document.getElementById('import-registered-input');
-      if (regInput) regInput.addEventListener('change', async function() {
-        var file = this.files[0];
-        if (!file) return;
-        var registeredType = this._importRegisteredType || 'character';
-        showImportStatus('Importing ' + file.name + ' as ' + registeredType + '...', false);
-        try {
-          var base64 = await readFileAsBase64(file);
-          var result = await request('/api/workspace/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'registered', fileName: file.name, content: base64, registeredType: registeredType })
-          });
-          if (result.error) { showImportStatus('Import failed: ' + result.error, true); return; }
-          showImportStatus('Registered import: ' + result.entry.message, false);
-          await refreshImportHistory();
-          await refreshWorkspaceFiles();
-        } catch (e) { showImportStatus('Import error: ' + e.message, true); }
-      });
-
-      // Folder import handler
-      var folderInput = document.getElementById('import-folder-input');
-      if (folderInput) folderInput.addEventListener('change', async function() {
-        var files = this.files;
-        if (!files || files.length === 0) return;
-        var targetDir = this._importTargetDir || 'workspace';
-        showImportStatus('Importing ' + files.length + ' files...', false);
-        try {
-          var payload = [];
-          for (var i = 0; i < files.length; i++) {
-            var f = files[i];
-            var base64 = await readFileAsBase64(f);
-            payload.push({ name: f.name, content: base64, relativePath: f.webkitRelativePath || f.name });
-          }
-          var result = await request('/api/workspace/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'folder', files: payload, targetDir: targetDir })
-          });
-          if (result.error) { showImportStatus('Folder import failed: ' + result.error, true); return; }
-          showImportStatus('Folder import: ' + result.summary.message, false);
-          await refreshImportHistory();
-          await refreshWorkspaceFiles();
-        } catch (e) { showImportStatus('Folder import error: ' + e.message, true); }
-      });
-    });
-
-    async function refreshImportHistory() {
-      try {
-        var data = await request('/api/workspace/import/history');
-        state.importHistory = data.history || [];
-        renderImportHistory();
-      } catch (e) { console.error('[import] history refresh failed', e); }
-    }
-
-    function renderImportHistory() {
-      var container = document.getElementById('import-history-list');
-      if (!container) return;
-      var hist = state.importHistory;
-      if (!hist || hist.length === 0) {
-        container.innerHTML = '<span class="muted">No imports yet.</span>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < Math.min(hist.length, 25); i++) {
-        var h = hist[i];
-        var statusColor = h.status === 'success' ? '#7ecf7e' : (h.status === 'partial' ? '#ffd17a' : '#ff8d8d');
-        var modeIcon = h.mode === 'folder' ? '\u{1F4C1}' : (h.mode === 'registered' ? '\u{1F9E9}' : '\u{1F4C4}');
-        var ts = new Date(h.timestamp);
-        var timeStr = ts.toLocaleTimeString();
-        html += '<div style="padding:6px 0;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;align-items:center;gap:8px;">';
-        html += '<span>' + modeIcon + '</span>';
-        html += '<div style="flex:1;min-width:0;">';
-        html += '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(h.fileName) + '</div>';
-        html += '<div class="muted" style="font-size:11px;">' + escapeHtml(h.message) + '</div>';
-        html += '</div>';
-        html += '<span style="color:' + statusColor + ';font-size:11px;font-weight:700;white-space:nowrap;">' + escapeHtml(h.status) + '</span>';
-        html += '<span class="muted" style="font-size:10px;white-space:nowrap;">' + timeStr + '</span>';
-        html += '</div>';
-      }
-      if (hist.length > 25) {
-        html += '<div class="muted" style="margin-top:6px;font-size:11px;">... and ' + (hist.length - 25) + ' more</div>';
-      }
-      container.innerHTML = html;
-    }
-
-    function initWorkspaceTab() {
-      refreshWorkspaceInfo();
-      refreshWorkspaceFiles();
-      refreshImportHistory();
-    }
-    document.getElementById('composer').addEventListener('keydown', function(event) {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        void sendMessage();
-      }
-    });
-
-    bootstrap();
-
-    window.packageSessions = packageSessions;
-    window.toggleSessionPackage = toggleSessionPackage;
-    window.runPackageWorkflow = runPackageWorkflow;
-    window.unpackageSessionPackage = unpackageSessionPackage;
-    window.cyclePackageStatus = cyclePackageStatus;
-    window.setPackageStatus = setPackageStatus;
-    window.exportPackageTrace = exportPackageTrace;
-    window.refreshWorkspaceInfo = refreshWorkspaceInfo;
-    window.refreshWorkspaceFiles = refreshWorkspaceFiles;
-    window.filterWorkspaceFiles = filterWorkspaceFiles;
-    window.openWorkspaceInExplorer = openWorkspaceInExplorer;
-    window.changeWorkspaceLocation = changeWorkspaceLocation;
-    window.triggerWorkspaceImport = triggerWorkspaceImport;
-    window.triggerGeneralImport = triggerGeneralImport;
-    window.triggerRegisteredImport = triggerRegisteredImport;
-    window.triggerFolderImport = triggerFolderImport;
-    window.refreshImportHistory = refreshImportHistory;
-    window.initWorkspaceTab = initWorkspaceTab;
-    window.setRoutingStrategy = setRoutingStrategy;
-    window.setRoleOverride = setRoleOverride;
-    window.setAgentOverride = setAgentOverride;
-    window.saveRoutingConfig = saveRoutingConfig;
-    window.suggestOptimalRouting = suggestOptimalRouting;
-    window.setSessionRoutingStrategy = setSessionRoutingStrategy;
-    window.discoverModels = discoverModels;
-    window.onModalitySelected = onModalitySelected;
-    window.onModalityFilterToggle = onModalityFilterToggle;
-    window.setModalityOverride = setModalityOverride;
-    window.exportSession = exportSession;
-    window.importSession = importSession;
-    window.promoteAgent = promoteAgent;
-    window.demoteAgent = demoteAgent;
-    window.refreshAgentList = refreshAgentList;
-    window.launchNewAgent = launchNewAgent;
-    window.stopAgent = stopAgent;
-    window.createSwarm = createSwarm;
-    window.refreshSwarmStatus = refreshSwarmStatus;
-    window.setTelemetryWindow = setTelemetryWindow;
-    window.refreshNetworkInterfaces = refreshNetworkInterfaces;
-    window.runNetworkCommand = runNetworkCommand;
-    window.toggleCapabilityMatrix = toggleCapabilityMatrix;
-    window.setMatrixSort = setMatrixSort;
-    window.setMatrixFilter = setMatrixFilter;
-    window.setMatrixDraftField = setMatrixDraftField;
-    window.startMatrixEdit = startMatrixEdit;
-    window.clearMatrixDraft = clearMatrixDraft;
-    window.saveMatrixEntry = saveMatrixEntry;
-    window.deleteMatrixEntry = deleteMatrixEntry;
-    window.toggleSettingsSection = toggleSettingsSection;
-    window.saveSettings = saveSettings;
-    window.markSettingDirty = markSettingDirty;
-    window.recheckReadiness = recheckReadiness;
-
-    // Only telemetry data refreshes automatically — everything else is event-driven.
-    setInterval(async function() {
-      try {
-        // Never touch the DOM while the user has a dropdown open — it forces it closed.
-        if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
-        const [telemetrySummaryData, runtimeExcellenceData] = await Promise.all([
-          request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
-          request('/api/runtime/excellence?window=' + state.telemetryWindow).catch(() => null)
-        ]);
-        // Re-check focus after the async fetch — user may have opened a dropdown while waiting.
-        if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
-        state.telemetrySummary = telemetrySummaryData || null;
-        state.runtimeExcellence = runtimeExcellenceData || null;
-        safeRenderStep('runtimeExcellence', renderRuntimeExcellence);
-      } catch (_) { /* silent — telemetry is best-effort */ }
-    }, 30000);
-  </script>
   <script>
   (function() {
     var handle = document.getElementById('resize-handle');

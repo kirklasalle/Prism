@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { PersistedProviderSettings, PrismLlmProviderId } from "./llm-provider-manager.js";
+import type { PersistedProviderSettings, PrismLlmProviderId, RoutingConfig } from "./llm-provider-manager.js";
 
 export interface ChatSessionSummary {
     sessionId: string;
@@ -191,6 +191,19 @@ export class ChatSessionStore {
 
             CREATE INDEX IF NOT EXISTS idx_chat_attachments_session
             ON chat_attachments (session_id);
+        `);
+
+        // Routing configuration persistence (single-row table)
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS routing_config (
+                config_key TEXT PRIMARY KEY DEFAULT 'default',
+                strategy TEXT NOT NULL DEFAULT 'single',
+                role_overrides_json TEXT NOT NULL DEFAULT '{}',
+                agent_overrides_json TEXT NOT NULL DEFAULT '{}',
+                modality_overrides_json TEXT NOT NULL DEFAULT '{}',
+                preferred_modality TEXT,
+                updated_at TEXT NOT NULL DEFAULT ''
+            );
         `);
     }
 
@@ -626,6 +639,63 @@ export class ChatSessionStore {
         return this.getProviderSettings(providerId)!;
     }
 
+    // ── Routing config persistence ────────────────────────────────────
+
+    saveRoutingConfig(config: RoutingConfig): void {
+        const updatedAt = new Date().toISOString();
+        this.db.prepare(`
+            INSERT INTO routing_config (
+                config_key, strategy,
+                role_overrides_json, agent_overrides_json,
+                modality_overrides_json, preferred_modality, updated_at
+            ) VALUES (
+                'default', :strategy,
+                :roleOverridesJson, :agentOverridesJson,
+                :modalityOverridesJson, :preferredModality, :updatedAt
+            )
+            ON CONFLICT(config_key) DO UPDATE SET
+                strategy = excluded.strategy,
+                role_overrides_json = excluded.role_overrides_json,
+                agent_overrides_json = excluded.agent_overrides_json,
+                modality_overrides_json = excluded.modality_overrides_json,
+                preferred_modality = excluded.preferred_modality,
+                updated_at = excluded.updated_at
+        `).run({
+            strategy: config.strategy || "single",
+            roleOverridesJson: JSON.stringify(config.roleOverrides ?? {}),
+            agentOverridesJson: JSON.stringify(config.agentOverrides ?? {}),
+            modalityOverridesJson: JSON.stringify(config.modalityOverrides ?? {}),
+            preferredModality: config.preferredModality ?? null,
+            updatedAt,
+        });
+    }
+
+    loadRoutingConfig(): RoutingConfig | null {
+        const row = this.db.prepare(`
+            SELECT strategy, role_overrides_json, agent_overrides_json,
+                   modality_overrides_json, preferred_modality
+            FROM routing_config
+            WHERE config_key = 'default'
+            LIMIT 1
+        `).get() as {
+            strategy: string;
+            role_overrides_json: string;
+            agent_overrides_json: string;
+            modality_overrides_json: string;
+            preferred_modality: string | null;
+        } | undefined;
+
+        if (!row) return null;
+
+        return {
+            strategy: (row.strategy === "multi" || row.strategy === "modality") ? row.strategy : "single",
+            roleOverrides: safeJsonParse(row.role_overrides_json),
+            agentOverrides: safeJsonParse(row.agent_overrides_json),
+            modalityOverrides: safeJsonParse(row.modality_overrides_json),
+            preferredModality: row.preferred_modality ?? null,
+        };
+    }
+
     close(): void {
         this.db.close();
     }
@@ -829,4 +899,13 @@ function normalizeProviderModels(models: string[]): string[] {
 function normalizeOptionalText(value: string | null | undefined): string | null {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
+}
+
+function safeJsonParse(raw: string): Record<string, any> {
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
 }

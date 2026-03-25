@@ -670,11 +670,12 @@ export class LlmProviderManager {
         return this.routingConfig.agentOverrides[agentId] ?? null;
     }
 
-    async suggestRoutingForAllRoles(): Promise<Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>> {
+    async suggestRoutingForAllRoles(providerId: string = ""): Promise<Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>> {
         const catalog = await this.getCatalog();
         const availableModels: AvailableModel[] = [];
         for (const provider of catalog.providers) {
             if (!provider.enabled) continue;
+            if (providerId && providerId !== "" && provider.id !== providerId) continue;
             for (const model of provider.models) {
                 availableModels.push({
                     providerId: provider.id,
@@ -838,6 +839,11 @@ export class LlmProviderManager {
                     modalities: profile.modalities ?? ["text"],
                 });
             }
+        }
+
+        // Auto-register suggested profiles so they appear in the matrix
+        for (const profile of suggested) {
+            registerModelProfile(profile);
         }
 
         return { known, unknown, suggested };

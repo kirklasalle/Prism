@@ -166,3 +166,30 @@ This gap is considered closed when:
 2. Business profile governance tests pass for allow/deny/timeout/revoke paths.
 3. Release evidence includes performance, safety, and traceability artifacts.
 4. Investor/licensing materials reflect validated implementation status, not aspirational claims.
+
+## 8. Character Accountability Control (CAC) — Identity Gap (Closed)
+
+### Gap Description
+
+Prior to CAC, agent actions were attributable only to sessions and tools. There was no formal binding between an agent's character persona, the Prism platform user, the human operator, and the client/session context. This created an identity gap where audit traces could not definitively answer "who authorized this action?" at the operator level.
+
+### Resolution (Implemented)
+
+The following capabilities close this gap:
+
+- **Identity chain binding**: every agent action links to `characterId`, `prismUserId`, `prismUserEmail`, `operatorId`, `operatorEmail`, `clientId`, `sessionId`, and `assignmentId`.
+- **Lifecycle management**: assignments progress through `assigned → active → suspended → revoked`, with auditable events at each transition.
+- **Profile-aware email validation**: business profile enforces domain-matching constraints between Prism user and operator emails; individual profile is permissive.
+- **Execution profile normalization**: `enterprise` and `corporate` inputs resolve to the canonical `business` segment.
+- **Activity event enrichment**: accountability chain fields propagated into all governed activity events and included in SHA-256 integrity hashes.
+- **Query and filtering**: store supports filtering by identity fields for audit and compliance queries.
+
+### Remaining Strategic Gaps (Roadmap Items)
+
+| Gap | Description | Target Phase |
+| --- | --- | --- |
+| Browser identity binding | Link headless/user browser sessions to accountability chain with client fingerprint | Post-D3 |
+| Email OAuth verification | Validate operator email ownership via OAuth flow before CAC assignment | Post-D3 |
+| Assignment expiry | Auto-revoke assignments after configurable TTL with audit event | Post-D3 |
+| Per-character permission scopes | Restrict which tools/operations a character assignment can access | Post-D3 |
+| Dashboard CAC panel | Visual accountability chain inspector and identity audit export | Post-D3 |

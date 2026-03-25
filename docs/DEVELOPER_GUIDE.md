@@ -37,6 +37,7 @@ Design principle:
 
 - `src/core/activity`: event types, bus, subscribers, persistence
 - `src/core/policy`: authority tiering and decision logic
+- `src/core/accountability`: character accountability store & manager (CAC identity chain, lifecycle, profile-aware email validation)
 - `src/core/runtime`: orchestrator and workflow execution
 - `src/core/approval`: approval queue/service
 - `src/core/memory`: episodic/session/semantic retrieval and metrics
@@ -169,9 +170,14 @@ Current tabs:
 { id: 'chat', label: 'Chat Interface' }
 { id: 'provider', label: 'Provider & Settings' }
 { id: 'tools', label: 'Tools & Plugins' }
+{ id: 'agentic', label: 'Agentic Control' }
+{ id: 'computer', label: 'Computer Control' }
+{ id: 'browser', label: 'Browser Control' }
+{ id: 'workspace', label: 'Workspace' }
 { id: 'network', label: 'Network' }
 { id: 'telemetry', label: 'Telemetry' }
 { id: 'logs', label: 'Logs & Debug' }
+{ id: 'scheduler', label: 'Scheduler' }
 ```
 
 The `setActiveTab(tabId)` function updates `state.activeTab`, toggles CSS visibility on `tab-content-*` containers, and persists the selection within the session.
@@ -327,7 +333,168 @@ Key module: `src/core/agents/agent-telemetry-collector.ts` (`AgentTelemetryColle
 | `/api/swarms` | GET | List active swarms with status |
 | `/api/swarms/:id/stop` | POST | Stop a running swarm |
 
+## 7B. Character Accountability Control (CAC) Architecture
+
+The CAC subsystem binds every agent action to an immutable identity chain: character → Prism user → operator → client/session. It lives in `src/core/accountability/`.
+
+### 7B.1 Modules
+
+| File | Purpose |
+| --- | --- |
+| `character-accountability-store.ts` | SQLite-backed persistence for character assignments. Stores identity fields, lifecycle state, dispatch counts, and timestamps. Uses `ensureColumn()` migration for backward compatibility. |
+| `character-accountability-manager.ts` | Business logic for assignment lifecycle (assign, dispatch, suspend, resume, revoke). Integrates with `ActivityBus` to emit events. Enforces profile-aware email validation. |
+
+### 7B.2 Identity fields
+
+| Field | Description |
+| --- | --- |
+| `characterId` | Character brief identifier (from `characters/*.json`) |
+| `prismUserId` / `prismUserEmail` | Prism platform user identity |
+| `operatorId` / `operatorEmail` | Human operator identity |
+| `clientId` | Client application identifier |
+| `sessionId` | Session context identifier |
+| `executionProfileSegment` | Resolved profile segment: `individual` or `business` |
+| `assignmentId` | UUID generated at assignment time |
+
+These fields are also present on `ActivityEvent` (optional) and included in the SHA-256 event hash when populated.
+
+### 7B.3 Lifecycle state machine
+
+```
+assigned → active (on first dispatch)
+         → suspended (operator/policy pause, with reason)
+         → revoked (terminal, no resume)
+
+active   → suspended
+         → revoked
+
+suspended → active (resume)
+          → revoked
+```
+
+State `revoked` is terminal. Calling `resume()` on a revoked assignment throws.
+
+### 7B.4 Profile-aware email validation
+
+The manager uses `BusinessEmailValidationPolicy` to enforce constraints when `executionProfileSegment === 'business'`:
+
+- **`requireMatchingDomains`** (default `true`): Prism user and operator emails must share the same domain.
+- **`allowedDomains`** (optional): if set, both emails must belong to a domain in this list.
+
+For individual profile, no domain constraints are applied.
+
+### 7B.5 Alias normalization
+
+`resolveExecutionProfileSegment()` maps input strings to the canonical two-segment model:
+
+| Input | Resolved segment |
+| --- | --- |
+| `individual` | `individual` |
+| `business` | `business` |
+| `enterprise` | `business` |
+| `corporate` | `business` |
+
+### 7B.6 Activity event enrichment
+
+When an accountability chain is active, the following fields are set on emitted `ActivityEvent` objects:
+
+- `characterId`, `prismUserId`, `prismUserEmail`, `operatorId`, `operatorEmail`, `clientId`, `assignmentId`, `executionProfileSegment`
+- `accountabilityChain`: serialized JSON of the full `AccountabilityChain` interface
+
+These fields are included in the SHA-256 hash computed by `hashEvent()` in `src/core/activity/bus.ts`.
+
+### 7B.7 Query and filtering
+
+`CharacterAccountabilityStore.list(filter)` supports filtering by:
+
+- `characterId`, `operatorId`, `prismUserId`, `clientId`, `sessionId`
+- `operatorEmail`, `prismUserEmail`
+- `executionProfileSegment`
+- `state` (assigned, active, suspended, revoked)
+
+### 7B.8 Test coverage
+
+`tests/character-accountability.test.ts` covers:
+
+- Individual profile assignment with mixed-domain emails
+- Business profile domain-matching enforcement
+- Enterprise/corporate alias normalization
+- Full lifecycle (dispatch, suspend, resume, revoke)
+- Query filtering by identity fields
+- Activity event emission verification
+- Invalid email rejection
+
 ## 8. Safety and Governance Standards
+
+### 7C. Browser Control Architecture
+
+Browser Control provides Playwright-powered browser automation integrated with Prism's governance, identity, and audit systems.
+
+#### 7C.1 Components
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| `BrowserSessionManager` | `src/core/operator/browser-session-manager.ts` | Session lifecycle, Playwright context isolation, network/console capture |
+| `BrowserControlTool` | `src/adapters/system/browser-control-tool.ts` | Tool interface adapter with governance schema (implements `Tool`) |
+| Browser API routes | `src/core/operator/dashboard-service.ts` | 12 HTTP endpoints under `/api/browser/*` |
+| Browser Control tab UI | `src/core/operator/dashboard-service.ts` | 5 sub-views: Sessions, Viewport, Network, Console, DOM |
+
+#### 7C.2 Session lifecycle
+
+```
+IDLE → LAUNCHING → ACTIVE ⇄ NAVIGATING → TERMINATED
+                     ↓
+                  SUSPENDED
+```
+
+Each session maps to one Playwright `BrowserContext` (isolation boundary). Sessions auto-terminate after 10 minutes of idle time.
+
+#### 7C.3 Governance tiers
+
+| Action | Risk | Mutating | Rollback Required |
+| --- | --- | --- | --- |
+| `screenshot`, `get_console_logs`, `get_network_log`, `get_dom_snapshot`, `diagnostics`, `list_sessions` | low | no | no |
+| `launch_session`, `navigate`, `click`, `type` | medium | yes | no |
+| `evaluate` | **high** | yes | **yes** |
+
+#### 7C.4 API endpoints
+
+All browser API endpoints follow the `/api/browser/{action}` convention:
+
+- `GET /api/browser/diagnostics` — Playwright availability check
+- `GET /api/browser/sessions` — List active sessions
+- `POST /api/browser/launch` — Create a new session (`{ headless: boolean }`)
+- `POST /api/browser/navigate` — Navigate to URL (`{ sessionId, url }`)
+- `POST /api/browser/click` — Click element (`{ sessionId, selector }`)
+- `POST /api/browser/type` — Type text (`{ sessionId, selector, text }`)
+- `POST /api/browser/evaluate` — Execute JS in page (`{ sessionId, expression }`)
+- `GET /api/browser/screenshot/{sessionId}` — PNG viewport capture
+- `GET /api/browser/dom-snapshot/{sessionId}` — Full DOM HTML
+- `GET /api/browser/console-logs/{sessionId}` — Console log entries
+- `GET /api/browser/network-log/{sessionId}` — Network request waterfall
+- `DELETE /api/browser/sessions/{sessionId}` — Close session
+
+#### 7C.5 ActivityBus events
+
+All browser operations emit audit events:
+
+- `browser.session.started` — Session created
+- `browser.session.terminated` — Session closed
+- `browser.navigate.completed` — Page navigation
+- `browser.click.completed` — Element clicked
+- `browser.type.completed` — Text entered
+- `browser.screenshot.captured` — Viewport captured
+- `browser.evaluate.completed` — JS evaluated
+
+#### 7C.6 Dashboard UI
+
+The Browser Control tab has 5 sub-navigation views:
+
+1. **Sessions**: Launch/close sessions, diagnostics check
+2. **Viewport**: URL bar, live screenshot viewer, click/type action inputs
+3. **Network**: Request/response waterfall table with method, URL, status, type, time
+4. **Console**: Live console log stream color-coded by level, JS evaluate input
+5. **DOM**: Full DOM snapshot viewer
 
 ### 8.1 Tier definitions
 

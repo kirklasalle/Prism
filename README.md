@@ -1,7 +1,5 @@
 # PRISM
 
-*Note: PRISM is an original, new, and novel State-of-the-Art (SOTA) agent framework developed by Kirk LaSalle (03/16/2026).*
-
 PRISM is a policy-governed, full-computer-use agent runtime designed to evolve into a world-class, state-of-the-art (SOTA), and novel agent platform for high-trust autonomous operations.
 
 Current named release: **Prism v0.2.0 — D2 Parity**.
@@ -59,6 +57,11 @@ It is a next-generation agent operating system focused on five differentiators:
    - Structured activity events are hashed and persisted.
    - Quality gates are measurable, not anecdotal.
 
+7. **Character Accountability Control (CAC)**
+   - Every agent action is linked to a character identity, a Prism user, and an operator via an immutable accountability chain.
+   - Profile-aware email validation enforces domain-matching constraints in business mode while remaining permissive in individual mode.
+   - Full lifecycle tracking: assign → dispatch → suspend → resume → revoke, with audit events at every transition.
+
 ## Current Capabilities
 
 - Activity bus with SHA-256 event hashing
@@ -72,6 +75,12 @@ It is a next-generation agent operating system focused on five differentiators:
   - protocol: HTTP requests
   - application: Neo4j adapter (optional) and memory query adapters
 - SQLite persistence for activity traces and session summaries
+- **Character Accountability Control (CAC):**
+  - Character-to-operator identity binding with accountability chain (characterId, prismUserEmail, operatorEmail, clientId, sessionId)
+  - Lifecycle management: assign, dispatch, suspend, resume, revoke
+  - Profile-aware email domain validation: business profile enforces matching domains; individual profile is permissive
+  - Execution profile segment normalization: `enterprise` and `corporate` resolve to canonical `business` segment
+  - Full accountability chain propagated into activity events and SHA-256 integrity hashes
 - Memory subsystems:
   - episodic buffer
   - session summary store
@@ -180,6 +189,7 @@ PRISM is intentionally built to remove those failure modes from the start.
 - `src/core/runtime`: orchestrator and workflow executor
 - `src/core/approval`: approval queue and HTTP service
 - `src/core/memory`: episodic/session/semantic memory + retrieval metrics
+- `src/core/accountability`: character accountability store and manager (CAC identity chain, lifecycle, profile-aware validation)
 - `src/core/agents`: agent pool, lifecycle manager, telemetry collector, swarm coordinator, agent router, task decomposer
 - `src/core/config`: workspace resolver, execution profiles, environment config
 - `src/adapters/system`: shell/filesystem tools

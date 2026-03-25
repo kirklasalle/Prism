@@ -1,6 +1,7 @@
 import { testActivityBus } from "./activity-bus.test.js";
 import { testAdapterSafetyRegression } from "./adapter-safety.test.js";
 import { testDashboardService } from "./dashboard-service.test.js";
+import { testCharacterAccountability } from "./character-accountability.test.js";
 import { testD2SystemTools } from "./d2-system-tools.test.js";
 import { testD2GovernancePaths } from "./d2-governance-paths.test.js";
 import { testDomainWorkflowTemplates } from "./domain-workflow-templates.test.js";
@@ -18,6 +19,7 @@ import { testSqliteMigrations } from "./sqlite-migrations.test.js";
 import { testToolContracts } from "./tool-contracts.test.js";
 import { testToolContractSnapshots } from "./tool-contract-snapshot.test.js";
 import { testWorkflowOrchestrator } from "./workflow.test.js";
+import { testBrowserProfileManager } from "./browser-profile-manager.test.js";
 
 async function runTests(): Promise<void> {
     const tests = [
@@ -27,6 +29,7 @@ async function runTests(): Promise<void> {
         { name: "ActivityBus", fn: testActivityBus },
         { name: "AdapterSafetyRegression", fn: testAdapterSafetyRegression },
         { name: "DashboardService", fn: testDashboardService },
+        { name: "CharacterAccountability", fn: testCharacterAccountability },
         { name: "D2SystemTools", fn: testD2SystemTools },
         { name: "LlmProviderManager", fn: testLlmProviderManager },
         { name: "SessionTraceExplorer", fn: testSessionTraceExplorer },
@@ -44,6 +47,7 @@ async function runTests(): Promise<void> {
         { name: "ToolContractSnapshots", fn: testToolContractSnapshots },
         { name: "DomainWorkflowTemplates", fn: testDomainWorkflowTemplates },
         { name: "WorkflowOrchestrator", fn: testWorkflowOrchestrator },
+        { name: "BrowserProfileManager", fn: testBrowserProfileManager },
     ];
 
     let passed = 0;

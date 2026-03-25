@@ -52,6 +52,12 @@ Exit Criteria:
 - Full governance-path integration tests green
 - Retrieval observability pipeline operational
 - Documentation synchronized to implementation state
+- Character Accountability Control (CAC) implemented and tested:
+  - Identity binding (character, Prism user, operator, client, session)
+  - Lifecycle management (assign, dispatch, suspend, resume, revoke)
+  - Profile-aware email domain validation (business enforces matching; individual permissive)
+  - Accountability chain propagated into activity events and SHA-256 hashes
+  - Segment alias normalization (enterprise/corporate → business)
 
 ### Phase D: Production Qualification (Next)
 
@@ -190,6 +196,8 @@ For every phase completion, the following must be attached:
 
 - Governance decision correctness samples
 - Approval path and denial path traces
+- CAC identity validation evidence (domain enforcement in business, permissive in individual)
+- CAC lifecycle transition audit samples (assign, active, suspend, resume, revoke)
 
 1. Documentation evidence
 

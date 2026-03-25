@@ -24,6 +24,8 @@ It is designed for high-trust operation:
 - execute multi-step workflows with retries, timeout, and fallback
 - query memory of prior operations (`semantic_query`, `memory_query`)
 - inspect persisted traces in SQLite
+- bind character identities to operators with full accountability chains
+- enforce profile-aware email domain validation (business vs individual)
 
 ## 3. Safety model you should understand
 
@@ -94,6 +96,8 @@ The dashboard provides nine tabs across the top navigation bar:
 | **Network** | Execute curated network commands, view interface data, and monitor network operations with tier-based governance. |
 | **Telemetry** | View runtime performance metrics, retrieval quality cohorts, and alert status. |
 | **Logs & Debug** | Inspect the live activity event stream, errors, and debug-level trace output. |
+| **Browser Control** | Playwright-powered browser automation with session management, viewport capture, network/console monitoring, DOM inspection, and governance-gated operations. |
+| **Scheduler** | Full-year calendar, project management, kanban board, and Gantt timeline for scheduling and tracking work. |
 
 Click any tab label to switch views. The active tab is visually highlighted and persists across data refreshes within your session.
 
@@ -224,6 +228,40 @@ Create a swarm by selecting a topology, assigning agents, and defining the goal.
 - Promotion recommendations (ephemeral agents that consistently perform well)
 - Efficiency patterns and bottleneck detection
 - Historical trends with configurable time windows
+
+### 5.7 Scheduler tab
+
+The Scheduler tab provides integrated project management and scheduling capabilities with four sub-views:
+
+**Calendar** — A Google-like full calendar with year, month, week, and day views. Events are color-coded by category (meeting, deadline, milestone, reminder, blocked, general). Click any date to drill down; dots on mini-calendar cells indicate days with events. Create events via the **+ Event** button with title, date/time, category, location, and all-day support.
+
+**Projects** — Card-based project overview showing all projects with progress bars, task counts, milestone counts, and completion percentages. Click a project card to see its milestones and tasks in a detail modal. Create projects via the **+ Project** button.
+
+**Board** — A Kanban board with five columns: Backlog, To Do, In Progress, Review, and Done. Tasks are shown as draggable cards with priority indicators (colored left border), labels, assignees, and progress bars. Drag cards between columns to update task status. Create tasks via the **+ Task** button.
+
+**Timeline** — A Gantt chart showing all tasks with start/end dates plotted on a time axis. Bars are color-coded by status. A vertical line marks today. The timeline auto-ranges to cover the current quarter.
+
+**Scheduling engine** — The backend `SchedulerEngine` supports both one-time and recurring schedules using standard cron expressions. Scheduled actions are audited through the ActivityBus. Schedules are managed via the `/api/scheduler/schedules` API endpoint.
+
+**Data persistence** — Calendar events are stored in `{workspace}/calendar/`, projects in `{workspace}/projects/`, and tasks within their respective project files. All data is JSON-backed and survives restarts.
+
+### 5.8 Browser Control tab
+
+The Browser Control tab provides Playwright-powered browser automation with full governance integration. It contains five sub-views:
+
+**Sessions** — Manage browser sessions. Launch new sessions (headless or headed), view active session states, and close sessions. Each session runs in an isolated Playwright BrowserContext for security.
+
+**Viewport** — Live browser interaction. Enter a URL in the address bar and navigate. Take screenshots of the current page (rendered as inline images). Use the click and type inputs to interact with page elements via CSS selectors.
+
+**Network** — Network waterfall log showing all HTTP requests/responses captured during the session, including URL, method, status code, content type, and response size.
+
+**Console** — Browser console output captured from the page, showing log level (log, warn, error, info, debug) and message text.
+
+**DOM** — Full DOM snapshot of the current page rendered as syntax-highlighted HTML source.
+
+**Governance** — Browser actions are gated by governance tiers. Navigation, click, and type are medium-risk. JavaScript evaluation is high-risk with rollback required. Screenshots and read-only operations are low-risk. All actions emit ActivityBus events for audit.
+
+**Session lifecycle** — Sessions progress through states: `idle → launching → active ⇄ navigating → terminated`. Sessions auto-close after 10 minutes of inactivity.
 
 ## 6. Workspace & Persistence
 
@@ -367,7 +405,53 @@ Check:
 4. Monitor retrieval quality and investigate drift.
 5. Review traces after incidents and update policy/tool rules.
 
-## 12. Security and trust expectations
+## 12. Character Accountability & Identity
+
+PRISM enforces a Character Accountability Control (CAC) model that links every agent action to a verifiable identity chain.
+
+### 12.1 Identity fields you provide
+
+When assigning a character to an agent session, the following identity fields are required:
+
+| Field | Description |
+| --- | --- |
+| `characterId` | The character brief (from `characters/*.json`) defining the agent's persona and constraints. |
+| `prismUserEmail` | The email of the Prism platform user under which the agent operates. |
+| `operatorEmail` | The email of the human operator responsible for this session. |
+| `clientId` | An identifier for the client application (e.g., dashboard, CLI, API caller). |
+| `sessionId` | The current session identifier. |
+| `executionProfile` | The target profile: `individual`, `business`, `enterprise`, or `corporate`. |
+
+### 12.2 Profile behavior differences
+
+- **Individual profile**: any valid email is accepted for both Prism user and operator. No domain constraints.
+- **Business profile**: the Prism user and operator email domains must match. If an `allowedDomains` list is configured, both emails must belong to a listed domain.
+- **Enterprise / Corporate**: these are aliases that resolve to the `business` profile and follow its rules.
+
+### 12.3 Lifecycle states
+
+Each character assignment progresses through these states:
+
+1. **Assigned** — character is bound to operator/session; ready for dispatch.
+2. **Active** — at least one dispatch has occurred.
+3. **Suspended** — temporarily paused by operator or policy (with a reason code). No further dispatches until resumed.
+4. **Revoked** — permanently terminated. Cannot be resumed.
+
+### 12.4 Inspecting accountability traces
+
+All activity events emitted during a governed session carry the full accountability chain:
+
+- `characterId`, `prismUserEmail`, `operatorEmail`, `clientId`, `assignmentId`, `executionProfileSegment`
+
+These fields are included in the SHA-256 integrity hash, so any post-hoc modification is detectable. Use the **Logs & Debug** tab or the `/api/events` endpoint to query events filtered by operator email, character ID, or profile segment.
+
+### 12.5 Troubleshooting
+
+- **"Domain mismatch" error on assignment**: In business profile, the Prism user and operator emails must share the same domain (e.g., both `@acme.com`). Switch to individual profile or ensure matching domains.
+- **"Invalid email" error**: The email format is validated at assignment time. Ensure a valid `user@domain.tld` format.
+- **Cannot resume a revoked assignment**: Revocation is terminal by design. Create a new assignment to continue.
+
+## 13. Security and trust expectations
 
 PRISM is designed to increase trust through:
 
@@ -376,14 +460,14 @@ PRISM is designed to increase trust through:
 - auditable event streams,
 - fail-safe timeout/denial handling.
 
-## 13. Where to learn more
+## 14. Where to learn more
 
 - Architecture and strategy: `README.md`
 - Product requirements and roadmap intent: `PRISM_PRD.md`
 - Engineering implementation standards: `DEVELOPER_GUIDE.md`
 - Milestone status: `ROADMAP.md`
 
-## 14. External references
+## 15. External references
 
 1. <https://www.anthropic.com/engineering/building-effective-agents>
 2. <https://arxiv.org/abs/2210.03629>

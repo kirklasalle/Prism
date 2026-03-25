@@ -74,6 +74,26 @@ For `PRISM Individual`, trust validation runs in **advisory mode**:
 - Warnings are emitted when business-grade requirements are not met
 - No hard deny from trust/provenance checks in individual mode
 
+## Identity and Domain Validation (CAC Integration)
+
+When Character Accountability Control (CAC) is active, the following identity validation rules extend the trust posture:
+
+### Business Profile
+
+- Prism user and operator email domains must match (configurable via `BusinessEmailValidationPolicy.requireMatchingDomains`).
+- An optional `allowedDomains` list can further restrict acceptable email domains.
+- Domain mismatch at character assignment time produces a structured rejection before any tool dispatch occurs.
+- Expected reason codes for identity-related denials:
+  - `IDENTITY_DOMAIN_MISMATCH` — Prism user and operator emails have different domains in business profile.
+  - `IDENTITY_DOMAIN_NOT_ALLOWED` — email domain is not in the configured allowed-domains list.
+  - `IDENTITY_EMAIL_INVALID` — email address fails format validation.
+
+### Individual Profile
+
+- No domain constraints are enforced.
+- Any valid email address is accepted for both Prism user and operator.
+- Identity validation runs in permissive mode (warnings only, no hard deny).
+
 ## Enforcement Target
 
 - Install-time validation for plugin packs

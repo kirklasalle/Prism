@@ -175,6 +175,16 @@ const ALLOWED_ROLES: Set<string> = new Set([
     "tool-selection",
     "code-generation",
     "memory-indexing",
+    "speech-synthesis",
+    "speech-recognition",
+    "realtime-voice",
+    "image-analysis",
+    "image-creation",
+    "video-analysis",
+    "video-creation",
+    "audio-production",
+    "document-writing",
+    "research",
 ]);
 
 const ALLOWED_RISKS: Set<string> = new Set(["low", "medium", "high"]);

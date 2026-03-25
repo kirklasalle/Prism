@@ -122,3 +122,15 @@ No Phase D2 Go decision is valid if any high-risk requirement (`D2-R2`, `D2-R3`,
 | D3-R6 | `DEVELOPER_GUIDE.md` §7A | Dashboard Agent Control tab wired with real data (no mock handlers) | UI integration tests + manual verification | Dashboard screenshot evidence, API response samples | Engineering + QA | Phase D3 |
 | D3-R7 | `PHASE_EXECUTION_PLAN.md` D3 | Workspace persistence survives server reboot | Restart round-trip test | Persistence verification report | Engineering | Phase D3 |
 | D3-R8 | `PRISM_PRD.md` §8.8 | Agent state restored on boot (permanent lifecycle agents) | Boot restore integration test | Restore verification report | Engineering | Phase D3 |
+
+## 8. Character Accountability Control (CAC) Requirements
+
+| Requirement ID | Source | Requirement | Verification Method | Evidence Artifact(s) | Owner | Gate |
+| --- | --- | --- | --- | --- | --- | --- |
+| CAC-R1 | `PRISM_PRD.md` §8.4A | Accountability chain present on all governed activity events | Activity event inspection tests | Event samples with accountability chain fields | Engineering | Phase C |
+| CAC-R2 | `PRISM_PRD.md` §8.4A | Lifecycle transitions emit auditable activity events (assign, dispatch, suspend, resume, revoke) | Lifecycle integration tests | Lifecycle test report, event samples per state | Engineering | Phase C |
+| CAC-R3 | `PRISM_PRD.md` §8.4A | Business profile rejects domain-mismatched emails at assignment time | Domain validation unit tests | Test report showing rejection for mismatched domains | Engineering | Phase C |
+| CAC-R4 | `PRISM_PRD.md` §8.4A | Individual profile accepts mixed-domain email assignments | Permissive validation unit tests | Test report showing acceptance for any valid emails | Engineering | Phase C |
+| CAC-R5 | `PRISM_PRD.md` §8.4A | Enterprise/corporate inputs resolve to business segment | Alias normalization unit tests | Test report showing alias resolution | Engineering | Phase C |
+| CAC-R6 | `PRISM_PRD.md` §8.4A | Query APIs support filtering by characterId, operatorEmail, prismUserEmail, executionProfileSegment | Query filter integration tests | Query result samples filtered by each field | Engineering | Phase C |
+| CAC-R7 | `DEVELOPER_GUIDE.md` §7B | Accountability chain included in SHA-256 event hash | Hash integrity tests | Hash comparison evidence with/without accountability fields | Engineering | Phase C |

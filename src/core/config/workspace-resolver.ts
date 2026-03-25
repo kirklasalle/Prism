@@ -39,6 +39,7 @@ const WORKSPACE_SUBDIRS = [
     "state",
     "state/container-snapshots",
     "state/framebuffer-screengrabs",
+    "state/browser-profiles",
     "characters",
     "logs",
     "workspace",
@@ -88,9 +89,16 @@ interface PrismPreferences {
 const PREFERENCES_FILE = ".prism-preferences.json";
 
 function projectRoot(): string {
-    // Navigate from this module to the repo root: config/ -> core/ -> src/ -> repo
-    const thisDir = dirname(fileURLToPath(import.meta.url));
-    return join(thisDir, "..", "..", "..");
+    // Walk up from this module until we find package.json (works from both src/ and dist/)
+    let dir = dirname(fileURLToPath(import.meta.url));
+    for (let i = 0; i < 10; i++) {
+        if (existsSync(join(dir, "package.json"))) return dir;
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    // Fallback: 3 levels up from config/ -> core/ -> src/ -> repo
+    return join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 }
 
 export function preferencesPath(): string {
@@ -181,6 +189,10 @@ export function workspaceStateDir(): string {
 
 export function workspaceFramebufferDir(): string {
     return workspacePath("state", "framebuffer-screengrabs");
+}
+
+export function workspaceBrowserProfilesDir(): string {
+    return workspacePath("state", "browser-profiles");
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

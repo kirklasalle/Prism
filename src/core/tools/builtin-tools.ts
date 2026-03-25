@@ -12,6 +12,7 @@ import {
 } from "../../adapters/application/individual-capability-tools.js";
 import { NetworkTool } from "../../adapters/network/network-tool.js";
 import { VisionCaptureTool } from "../../adapters/system/vision-capture-tool.js";
+import { BrowserControlTool } from "../../adapters/system/browser-control-tool.js";
 import type { Tool } from "./types.js";
 
 export function builtinTools(): Tool[] {
@@ -36,5 +37,7 @@ export function builtinTools(): Tool[] {
         new TasksTimelineTool(),
         // Vision adapters
         new VisionCaptureTool(),
+        // Browser adapters
+        new BrowserControlTool(),
     ];
 }

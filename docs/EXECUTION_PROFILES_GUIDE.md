@@ -18,6 +18,8 @@ Optimized for personal agents and lightweight workflows:
 
 **Use Case**: Personal productivity agents, local deployments, development environments
 
+**CAC Identity Constraints**: No email domain restrictions. Any valid email address is accepted for both Prism user and operator identities during character assignment.
+
 ### BUSINESS_PROFILE
 
 Optimized for enterprise governance and compliance:
@@ -29,6 +31,21 @@ Optimized for enterprise governance and compliance:
 - **Audit**: Full audit trail for all operations
 
 **Use Case**: Enterprise deployments, compliance-sensitive workflows, production systems
+
+**CAC Identity Constraints**: Prism user and operator email domains must match by default (`requireMatchingDomains: true`). An optional `allowedDomains` list can further restrict acceptable domains. Mismatched domains are rejected at character assignment time with a structured error.
+
+## Segment Alias Normalization
+
+PRISM uses a canonical two-segment model (`individual` | `business`). Alternative segment names are resolved as follows:
+
+| Input | Canonical Segment |
+| --- | --- |
+| `individual` | `individual` |
+| `business` | `business` |
+| `enterprise` | `business` |
+| `corporate` | `business` |
+
+This normalization is applied by `resolveExecutionProfileSegment()` in the CAC manager and by `resolveExecutionProfile()` in the policy module. All downstream code operates on the canonical segment only.
 
 ## Usage
 

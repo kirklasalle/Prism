@@ -79,7 +79,17 @@ export type TaskRole =
     | "summarization"
     | "tool-selection"
     | "code-generation"
-    | "memory-indexing";
+    | "memory-indexing"
+    | "speech-synthesis"
+    | "speech-recognition"
+    | "realtime-voice"
+    | "image-analysis"
+    | "image-creation"
+    | "video-analysis"
+    | "video-creation"
+    | "audio-production"
+    | "document-writing"
+    | "research";
 
 export interface ModelCapabilityProfile {
     /** Pattern that matches model names (exact or prefix). */
@@ -268,7 +278,28 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         modalities: ["text"],
         locality: "local",
     },
-    // ---- Cloud: OpenAI ----
+    // ---- Cloud: OpenAI — Legacy ----
+    {
+        pattern: "gpt-3.5-turbo",
+        label: "GPT-3.5 Turbo",
+        tier: 2, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 16385, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 1000,
+        strengths: ["instruction-following", "code", "fast"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-4-turbo",
+        label: "GPT-4 Turbo",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 3000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
+    // ---- Cloud: OpenAI — Current ----
     {
         pattern: "gpt-4o-mini",
         label: "GPT-4o Mini",
@@ -280,13 +311,23 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         locality: "cloud",
     },
     {
-        pattern: "gpt-5-mini",
-        label: "GPT-5 Mini",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
+        pattern: "gpt-4o-audio",
+        label: "GPT-4o Audio",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
-        adaptivePromptBudget: 2000,
-        strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
-        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "multimodal"],
+        modalities: ["text", "code", "image-understanding", "voice-input", "voice-output"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-4o-realtime",
+        label: "GPT-4o Realtime",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
+        modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
         locality: "cloud",
     },
     {
@@ -300,12 +341,92 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         locality: "cloud",
     },
     {
+        pattern: "gpt-4.1-nano",
+        label: "GPT-4.1 Nano",
+        tier: 2, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 1500,
+        strengths: ["instruction-following", "code", "fast", "long-context"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-4.1-mini",
+        label: "GPT-4.1 Mini",
+        tier: 3, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 2000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
+    {
         pattern: "gpt-4.1",
         label: "GPT-4.1",
         tier: 4, parameterSize: "frontier", parametersBillions: 0,
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-4",
+        label: "GPT-4 (Legacy)",
+        tier: 3, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 8192, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 1500,
+        strengths: ["instruction-following", "reasoning", "code"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-5-mini",
+        label: "GPT-5 Mini",
+        tier: 3, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 2000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-5-nano",
+        label: "GPT-5 Nano",
+        tier: 2, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 1500,
+        strengths: ["instruction-following", "code", "fast", "long-context"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-5-codex",
+        label: "GPT-5 Codex",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        adaptivePromptBudget: 6000,
+        strengths: ["code", "reasoning", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-5-pro",
+        label: "GPT-5 Pro",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        adaptivePromptBudget: 6000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-5-chat",
+        label: "GPT-5 Chat",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        adaptivePromptBudget: 6000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
         locality: "cloud",
     },
@@ -317,6 +438,67 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "realtime", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-realtime",
+        label: "GPT Realtime",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
+        modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
+        locality: "cloud",
+    },
+    // ---- Cloud: OpenAI — Reasoning (o-series) ----
+    {
+        pattern: "o1",
+        label: "OpenAI o1",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        adaptivePromptBudget: 6000,
+        strengths: ["reasoning", "code", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
+    {
+        pattern: "o1-mini",
+        label: "OpenAI o1 Mini",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 65536,
+        adaptivePromptBudget: 4000,
+        strengths: ["reasoning", "code", "fast"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "o3",
+        label: "OpenAI o3",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        adaptivePromptBudget: 6000,
+        strengths: ["reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
+    {
+        pattern: "o3-mini",
+        label: "OpenAI o3 Mini",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 65536,
+        adaptivePromptBudget: 4000,
+        strengths: ["reasoning", "code", "tool-use", "fast"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "o4-mini",
+        label: "OpenAI o4 Mini",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        adaptivePromptBudget: 4000,
+        strengths: ["reasoning", "code", "tool-use", "fast", "agentic"],
+        modalities: ["text", "code", "image-understanding"],
         locality: "cloud",
     },
     // ---- Cloud: Anthropic ----
@@ -471,12 +653,22 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
 // ---------------------------------------------------------------------------
 
 const ROLE_REQUIREMENTS: RoleTierRequirements[] = [
-    { role: "classification",   minimumTier: 1, idealTier: 2 },
-    { role: "chat",             minimumTier: 2, idealTier: 3 },
-    { role: "summarization",    minimumTier: 2, idealTier: 3 },
-    { role: "tool-selection",   minimumTier: 3, idealTier: 4 },
-    { role: "code-generation",  minimumTier: 3, idealTier: 4 },
-    { role: "memory-indexing",  minimumTier: 1, idealTier: 2 },
+    { role: "classification",      minimumTier: 1, idealTier: 2 },
+    { role: "chat",                minimumTier: 2, idealTier: 3 },
+    { role: "summarization",       minimumTier: 2, idealTier: 3 },
+    { role: "tool-selection",      minimumTier: 3, idealTier: 4 },
+    { role: "code-generation",     minimumTier: 3, idealTier: 4 },
+    { role: "memory-indexing",     minimumTier: 1, idealTier: 2 },
+    { role: "speech-synthesis",    minimumTier: 2, idealTier: 3 },
+    { role: "speech-recognition",  minimumTier: 2, idealTier: 3 },
+    { role: "realtime-voice",      minimumTier: 3, idealTier: 4 },
+    { role: "image-analysis",      minimumTier: 2, idealTier: 3 },
+    { role: "image-creation",      minimumTier: 3, idealTier: 4 },
+    { role: "video-analysis",      minimumTier: 3, idealTier: 4 },
+    { role: "video-creation",      minimumTier: 3, idealTier: 4 },
+    { role: "audio-production",    minimumTier: 3, idealTier: 4 },
+    { role: "document-writing",    minimumTier: 2, idealTier: 3 },
+    { role: "research",            minimumTier: 2, idealTier: 3 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -818,6 +1010,10 @@ export async function fetchHardwareSnapshot(ollamaBaseUrl: string, totalVramMb: 
 export const ALL_TASK_ROLES: TaskRole[] = [
     "classification", "chat", "summarization",
     "tool-selection", "code-generation", "memory-indexing",
+    "speech-synthesis", "speech-recognition", "realtime-voice",
+    "image-analysis", "image-creation",
+    "video-analysis", "video-creation",
+    "audio-production", "document-writing", "research",
 ];
 
 /**

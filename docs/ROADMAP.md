@@ -73,6 +73,14 @@ Date: 2026-03-11
   - Character briefs directory with JSON schema and example agent definitions
   - `start_web.bat` workspace verification on startup
   - Dashboard Settings panel shows active workspace root
+- **Character Accountability Control (CAC) (complete):**
+  - Character-to-operator identity binding with full accountability chain (characterId, prismUserId, prismUserEmail, operatorId, operatorEmail, clientId, sessionId)
+  - Assignment lifecycle management: assign, dispatch, suspend, resume, revoke
+  - Profile-aware email domain validation: business profile enforces matching domains; individual profile is permissive
+  - Execution profile segment normalization: `enterprise`/`corporate` resolve to canonical `business`
+  - Accountability chain propagated into activity events and included in SHA-256 integrity hashes
+  - SQLite-backed persistence with `ensureColumn()` backward-compatible migrations
+  - Full test coverage: lifecycle, identity validation, profile enforcement, query filtering
 
 ## Next Steps
 
@@ -125,9 +133,9 @@ Date: 2026-03-11
 
 - Build workflow templates for:
   - email triage + draft
-  - calendar conflict + day planning
+  - calendar conflict + day planning (✅ Scheduler tab — calendar, board, timeline, projects)
   - notes capture + extraction
-  - chronological tasks/events planning
+  - chronological tasks/events planning (✅ Scheduler tab — integrated project management)
 - Add policy-path integration tests for mutating operations (allow/deny/timeout)
 - Publish release evidence bundle:
   - tool contract snapshots
@@ -168,6 +176,18 @@ Date: 2026-03-11
 - Tool risk-level editing and custom policy override from the UI
 - Session trace explorer integrated into Logs & Debug tab
 - Real-time performance SLO gauge panels in Telemetry tab
+
+1. CAC Identity Expansion (planned)
+
+- Browser automation identity binding: link browser sessions (headless and user-visible) to the accountability chain (✅ BrowserSessionManager emits session events to ActivityBus with session ID binding)
+- Email provider OAuth integration: validate operator email ownership via OAuth flow before assignment
+- CAC policy expansion: configurable per-character permission scopes, assignment expiry, and auto-revocation rules
+- Dashboard CAC panel: visual accountability chain inspector, assignment lifecycle timeline, and identity audit export
+- Exit criteria:
+  - Browser session bound to accountability chain with client fingerprint
+  - OAuth email verification passing for at least one provider (Google, Microsoft)
+  - Assignment expiry triggers automatic revocation with audit event
+  - Dashboard displays live accountability chain for active sessions
 
 ## Target Quality Gates
 

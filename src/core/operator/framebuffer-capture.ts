@@ -8,7 +8,7 @@
  */
 
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { workspaceFramebufferDir } from "../config/workspace-resolver.js";
@@ -42,6 +42,7 @@ function captureScript(outputDir: string, burstCount: number, intervalMs: number
     // Escape backslashes for C# string literal
     const safeDir = outputDir.replace(/\\/g, "\\\\");
     return `
+$ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -TypeDefinition @"
@@ -57,12 +58,12 @@ public class DpiHelper {
 function Capture-AllScreens {
     param([string]$OutPath)
     $screens = [System.Windows.Forms.Screen]::AllScreens | Sort-Object { $_.Bounds.X }
-    $minX = ($screens | Measure-Object -Property { $_.Bounds.X } -Minimum).Minimum
-    $minY = ($screens | Measure-Object -Property { $_.Bounds.Y } -Minimum).Minimum
-    $maxRight = ($screens | ForEach-Object { $_.Bounds.X + $_.Bounds.Width } | Measure-Object -Maximum).Maximum
-    $maxBottom = ($screens | ForEach-Object { $_.Bounds.Y + $_.Bounds.Height } | Measure-Object -Maximum).Maximum
-    $totalW = $maxRight - $minX
-    $totalH = $maxBottom - $minY
+    $minX = [int](($screens | ForEach-Object { $_.Bounds.X } | Measure-Object -Minimum).Minimum)
+    $minY = [int](($screens | ForEach-Object { $_.Bounds.Y } | Measure-Object -Minimum).Minimum)
+    $maxRight = [int](($screens | ForEach-Object { $_.Bounds.X + $_.Bounds.Width } | Measure-Object -Maximum).Maximum)
+    $maxBottom = [int](($screens | ForEach-Object { $_.Bounds.Y + $_.Bounds.Height } | Measure-Object -Maximum).Maximum)
+    $totalW = [int]($maxRight - $minX)
+    $totalH = [int]($maxBottom - $minY)
     $bmp = New-Object System.Drawing.Bitmap($totalW, $totalH)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.Clear([System.Drawing.Color]::Black)
@@ -118,6 +119,73 @@ export interface ScreengrabFile {
     name: string;
     size: number;
     mtime: string;
+    kind: "single" | "burst_frame";
+    burstId: string | null;
+    burstFrameIndex: number | null;
+}
+
+export interface ScreengrabGalleryItem {
+    kind: "single" | "burst";
+    name: string;
+    previewName: string;
+    size: number;
+    mtime: string;
+    burstId: string | null;
+    frameCount: number;
+    sourceFiles: string[];
+    playbackFps: number;
+    durationSec: number;
+}
+
+interface BurstCaptureMetadata {
+    burstId: string;
+    fps: number;
+    durationSec: number;
+    files: string[];
+    createdAt: string;
+}
+
+function classifyScreengrab(name: string): Pick<ScreengrabFile, "kind" | "burstId" | "burstFrameIndex"> {
+    const burstMatch = /^burst-(\d{8}-\d{6})-(\d{4})\.png$/i.exec(name);
+    if (burstMatch) {
+        return {
+            kind: "burst_frame",
+            burstId: burstMatch[1],
+            burstFrameIndex: Number.parseInt(burstMatch[2], 10),
+        };
+    }
+
+    return {
+        kind: "single",
+        burstId: null,
+        burstFrameIndex: null,
+    };
+}
+
+function burstMetadataFileName(burstId: string): string {
+    return `burst-${burstId}.json`;
+}
+
+function readBurstMetadata(dir: string): Map<string, BurstCaptureMetadata> {
+    const metadata = new Map<string, BurstCaptureMetadata>();
+    const files = readdirSync(dir).filter(name => /^burst-\d{8}-\d{6}\.json$/i.test(name));
+    for (const fileName of files) {
+        try {
+            const fullPath = join(dir, fileName);
+            const parsed = JSON.parse(readFileSync(fullPath, "utf-8")) as Partial<BurstCaptureMetadata>;
+            if (!parsed || typeof parsed.burstId !== "string" || !Array.isArray(parsed.files)) continue;
+            metadata.set(parsed.burstId, {
+                burstId: parsed.burstId,
+                fps: typeof parsed.fps === "number" && parsed.fps > 0 ? parsed.fps : 8,
+                durationSec: typeof parsed.durationSec === "number" && parsed.durationSec > 0 ? parsed.durationSec : Math.max(1, parsed.files.length / 8),
+                files: parsed.files.filter((entry): entry is string => typeof entry === "string"),
+                createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : new Date().toISOString(),
+            });
+        } catch {
+            // Ignore malformed sidecar metadata and fall back to filename-derived grouping.
+        }
+    }
+    return metadata;
 }
 
 // ── FramebufferCapture class ─────────────────────────────────────────────────
@@ -138,15 +206,47 @@ export class FramebufferCapture {
     }
 
     /**
+     * Get the framebuffer directory path.
+     */
+    getFramebufferDirectory(): string {
+        return workspaceFramebufferDir();
+    }
+
+    /**
+     * Read screengrab files with burst classification metadata.
+     */
+    private scanScreengrabs(): ScreengrabFile[] {
+        const dir = workspaceFramebufferDir();
+        if (!existsSync(dir)) return [];
+
+        return readdirSync(dir)
+            .filter(f => f.endsWith(".png") && f !== "latest.png")
+            .map(name => {
+                const st = statSync(join(dir, name));
+                return {
+                    name,
+                    size: st.size,
+                    mtime: st.mtime.toISOString(),
+                    ...classifyScreengrab(name),
+                };
+            })
+            .sort((a, b) => b.mtime.localeCompare(a.mtime));
+    }
+
+    /**
      * Capture all monitors into a single PNG buffer.
      */
     async captureAllMonitors(): Promise<Buffer> {
         const dir = this.ensureDir();
         const script = captureScript(dir, 1, 0);
-        const { stdout } = await execFileAsync("powershell.exe", [
+        const { stdout, stderr } = await execFileAsync("powershell.exe", [
             "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script,
         ], { timeout: 15_000, maxBuffer: 50 * 1024 * 1024 });
         const base64 = stdout.trim();
+        if (!base64) {
+            const detail = stderr.trim();
+            throw new Error(detail ? `PowerShell returned no image data: ${detail}` : "PowerShell returned no image data");
+        }
         return Buffer.from(base64, "base64");
     }
 
@@ -211,11 +311,27 @@ export class FramebufferCapture {
         const script = captureScript(dir, frameCount, intervalMs);
 
         this.lastBurstTime = Date.now();
-        const { stdout } = await execFileAsync("powershell.exe", [
+        const { stdout, stderr } = await execFileAsync("powershell.exe", [
             "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script,
         ], { timeout: (durationSec + 10) * 1000, maxBuffer: 10 * 1024 * 1024 });
 
         const files = stdout.trim().split(/\r?\n/).filter(Boolean);
+        if (files.length === 0) {
+            const detail = stderr.trim();
+            throw new Error(detail ? `PowerShell returned no burst frames: ${detail}` : "PowerShell returned no burst frames");
+        }
+
+        const firstBurst = classifyScreengrab(files[0]);
+        if (firstBurst.burstId) {
+            const metadata: BurstCaptureMetadata = {
+                burstId: firstBurst.burstId,
+                fps,
+                durationSec,
+                files,
+                createdAt: new Date().toISOString(),
+            };
+            writeFileSync(join(dir, burstMetadataFileName(firstBurst.burstId)), JSON.stringify(metadata, null, 2) + "\n", "utf-8");
+        }
 
         // Update latest.png with the last burst frame
         if (files.length > 0) {
@@ -243,16 +359,80 @@ export class FramebufferCapture {
      * List screengrabs sorted by mtime descending.
      */
     listScreengrabs(limit = 60): ScreengrabFile[] {
+        return this.scanScreengrabs().slice(0, limit);
+    }
+
+    /**
+     * List gallery-ready items, collapsing burst frames into a single representative tile.
+     */
+    listGalleryItems(limit = 20): ScreengrabGalleryItem[] {
+        const files = this.scanScreengrabs();
         const dir = workspaceFramebufferDir();
-        if (!existsSync(dir)) return [];
-        const entries = readdirSync(dir)
-            .filter(f => f.endsWith(".png") && f !== "latest.png")
-            .map(name => {
-                const st = statSync(join(dir, name));
-                return { name, size: st.size, mtime: st.mtime.toISOString() };
-            })
-            .sort((a, b) => b.mtime.localeCompare(a.mtime));
-        return entries.slice(0, limit);
+        const burstMetadata = existsSync(dir) ? readBurstMetadata(dir) : new Map<string, BurstCaptureMetadata>();
+        const items: ScreengrabGalleryItem[] = [];
+        const burstItems = new Map<string, ScreengrabGalleryItem>();
+
+        for (const file of files) {
+            if (file.kind === "single" || !file.burstId) {
+                items.push({
+                    kind: "single",
+                    name: file.name,
+                    previewName: file.name,
+                    size: file.size,
+                    mtime: file.mtime,
+                    burstId: null,
+                    frameCount: 1,
+                    sourceFiles: [file.name],
+                    playbackFps: 1,
+                    durationSec: 0,
+                });
+                continue;
+            }
+
+            let burstItem = burstItems.get(file.burstId);
+            if (!burstItem) {
+                const metadata = burstMetadata.get(file.burstId);
+                burstItem = {
+                    kind: "burst",
+                    name: file.name,
+                    previewName: file.name,
+                    size: file.size,
+                    mtime: file.mtime,
+                    burstId: file.burstId,
+                    frameCount: 0,
+                    sourceFiles: metadata?.files ? [...metadata.files] : [],
+                    playbackFps: metadata?.fps ?? 8,
+                    durationSec: metadata?.durationSec ?? 0,
+                };
+                burstItems.set(file.burstId, burstItem);
+                items.push(burstItem);
+            }
+
+            burstItem.frameCount += 1;
+            if ((file.burstFrameIndex ?? 0) > (classifyScreengrab(burstItem.previewName).burstFrameIndex ?? 0)) {
+                burstItem.name = file.name;
+                burstItem.previewName = file.name;
+                burstItem.size = file.size;
+                burstItem.mtime = file.mtime;
+            }
+            if (!burstMetadata.has(file.burstId) && !burstItem.sourceFiles.includes(file.name)) {
+                burstItem.sourceFiles.push(file.name);
+            }
+        }
+
+        for (const burstItem of burstItems.values()) {
+            if (burstItem.burstId && (!burstMetadata.has(burstItem.burstId) || burstItem.sourceFiles.length === 0)) {
+                burstItem.sourceFiles = files
+                    .filter(file => file.burstId === burstItem.burstId)
+                    .sort((a, b) => (a.burstFrameIndex ?? 0) - (b.burstFrameIndex ?? 0))
+                    .map(file => file.name);
+            }
+            if (burstItem.durationSec <= 0) {
+                burstItem.durationSec = burstItem.frameCount / Math.max(1, burstItem.playbackFps);
+            }
+        }
+
+        return items.slice(0, limit);
     }
 
     /**
@@ -282,6 +462,19 @@ export class FramebufferCapture {
             const oldest = files.shift()!;
             totalBytes -= oldest.size;
             try { unlinkSync(join(dir, oldest.name)); } catch { /* ignore */ }
+        }
+
+        const remainingBurstIds = new Set(
+            readdirSync(dir)
+                .filter(f => f.endsWith(".png") && f !== "latest.png")
+                .map(name => classifyScreengrab(name).burstId)
+                .filter((burstId): burstId is string => !!burstId),
+        );
+        const metadataFiles = readdirSync(dir).filter(name => /^burst-\d{8}-\d{6}\.json$/i.test(name));
+        for (const metadataFile of metadataFiles) {
+            const match = /^burst-(\d{8}-\d{6})\.json$/i.exec(metadataFile);
+            if (!match || remainingBurstIds.has(match[1])) continue;
+            try { unlinkSync(join(dir, metadataFile)); } catch { /* ignore */ }
         }
     }
 }

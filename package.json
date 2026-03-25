@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "tsc -p tsconfig.json",
+        "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/core/operator/public','dist/src/core/operator/public',{recursive:true})\"",
         "start": "node dist/src/index.js",
         "start:server": "set PRISM_MODE=server&& node dist/src/index.js",
         "dev": "tsx src/index.ts",
@@ -27,6 +27,7 @@
         "release:validate:strict": "npm run build && node dist/src/benchmarks/release-validation.js --strict"
     },
     "dependencies": {
+        "playwright": "^1.58.2",
         "sharp": "^0.34.5",
         "sqlite3": "^6.0.1",
         "uuid": "^13.0.0",
