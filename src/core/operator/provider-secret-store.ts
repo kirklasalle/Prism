@@ -1,37 +1,55 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { PrismLlmProviderId } from "./llm-provider-manager.js";
 
 export interface ProviderSecretStore {
-    hasApiKey(providerId: PrismLlmProviderId): boolean;
-    getApiKey(providerId: PrismLlmProviderId): string | null;
-    setApiKey(providerId: PrismLlmProviderId, apiKey: string): void;
-    clearApiKey(providerId: PrismLlmProviderId): void;
+    hasApiKey(providerId: PrismLlmProviderId, slot?: string): boolean;
+    getApiKey(providerId: PrismLlmProviderId, slot?: string): string | null;
+    setApiKey(providerId: PrismLlmProviderId, apiKey: string, slot?: string): void;
+    clearApiKey(providerId: PrismLlmProviderId, slot?: string): void;
+    /** List all slot names configured for a provider (default slot not included). */
+    listSlots(providerId: PrismLlmProviderId): string[];
+}
+
+/** Compose a storage key from providerId + optional slot. */
+function slotKey(providerId: PrismLlmProviderId, slot?: string): string {
+    return slot ? `${providerId}:${slot}` : providerId;
 }
 
 export class InMemoryProviderSecretStore implements ProviderSecretStore {
-    private readonly apiKeys = new Map<PrismLlmProviderId, string>();
+    private readonly apiKeys = new Map<string, string>();
 
-    hasApiKey(providerId: PrismLlmProviderId): boolean {
-        return this.apiKeys.has(providerId);
+    hasApiKey(providerId: PrismLlmProviderId, slot?: string): boolean {
+        return this.apiKeys.has(slotKey(providerId, slot));
     }
 
-    getApiKey(providerId: PrismLlmProviderId): string | null {
-        return this.apiKeys.get(providerId) ?? null;
+    getApiKey(providerId: PrismLlmProviderId, slot?: string): string | null {
+        return this.apiKeys.get(slotKey(providerId, slot)) ?? null;
     }
 
-    setApiKey(providerId: PrismLlmProviderId, apiKey: string): void {
+    setApiKey(providerId: PrismLlmProviderId, apiKey: string, slot?: string): void {
         const trimmed = apiKey.trim();
         if (!trimmed) {
             throw new Error("API key cannot be empty.");
         }
-        this.apiKeys.set(providerId, trimmed);
+        this.apiKeys.set(slotKey(providerId, slot), trimmed);
     }
 
-    clearApiKey(providerId: PrismLlmProviderId): void {
-        this.apiKeys.delete(providerId);
+    clearApiKey(providerId: PrismLlmProviderId, slot?: string): void {
+        this.apiKeys.delete(slotKey(providerId, slot));
+    }
+
+    listSlots(providerId: PrismLlmProviderId): string[] {
+        const prefix = `${providerId}:`;
+        const slots: string[] = [];
+        for (const key of this.apiKeys.keys()) {
+            if (key.startsWith(prefix)) {
+                slots.push(key.slice(prefix.length));
+            }
+        }
+        return slots;
     }
 }
 
@@ -43,17 +61,17 @@ export class WindowsProtectedFileProviderSecretStore implements ProviderSecretSt
         mkdirSync(this.rootDir, { recursive: true });
     }
 
-    hasApiKey(providerId: PrismLlmProviderId): boolean {
-        return existsSync(this.filePath(providerId));
+    hasApiKey(providerId: PrismLlmProviderId, slot?: string): boolean {
+        return existsSync(this.filePath(providerId, slot));
     }
 
-    getApiKey(providerId: PrismLlmProviderId): string | null {
-        if (!this.hasApiKey(providerId)) {
+    getApiKey(providerId: PrismLlmProviderId, slot?: string): string | null {
+        if (!this.hasApiKey(providerId, slot)) {
             return null;
         }
 
         const script = [
-            `$path = '${escapePowerShell(this.filePath(providerId))}'`,
+            `$path = '${escapePowerShell(this.filePath(providerId, slot))}'`,
             "if (-not (Test-Path -LiteralPath $path)) { exit 0 }",
             "$encrypted = Get-Content -LiteralPath $path -Raw",
             "if ([string]::IsNullOrWhiteSpace($encrypted)) { exit 0 }",
@@ -66,7 +84,7 @@ export class WindowsProtectedFileProviderSecretStore implements ProviderSecretSt
         return this.runPowerShell(script) || null;
     }
 
-    setApiKey(providerId: PrismLlmProviderId, apiKey: string): void {
+    setApiKey(providerId: PrismLlmProviderId, apiKey: string, slot?: string): void {
         const trimmed = apiKey.trim();
         if (!trimmed) {
             throw new Error("API key cannot be empty.");
@@ -74,7 +92,7 @@ export class WindowsProtectedFileProviderSecretStore implements ProviderSecretSt
 
         const encoded = Buffer.from(trimmed, "utf8").toString("base64");
         const script = [
-            `$path = '${escapePowerShell(this.filePath(providerId))}'`,
+            `$path = '${escapePowerShell(this.filePath(providerId, slot))}'`,
             `$plain = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'))`,
             "$secure = ConvertTo-SecureString $plain -AsPlainText -Force",
             "$encrypted = ConvertFrom-SecureString $secure",
@@ -84,14 +102,34 @@ export class WindowsProtectedFileProviderSecretStore implements ProviderSecretSt
         this.runPowerShell(script);
     }
 
-    clearApiKey(providerId: PrismLlmProviderId): void {
-        const path = this.filePath(providerId);
+    clearApiKey(providerId: PrismLlmProviderId, slot?: string): void {
+        const path = this.filePath(providerId, slot);
         if (existsSync(path)) {
             rmSync(path, { force: true });
         }
     }
 
-    private filePath(providerId: PrismLlmProviderId): string {
+    listSlots(providerId: PrismLlmProviderId): string[] {
+        const prefix = `${providerId}-`;
+        const suffix = ".secret";
+        const slots: string[] = [];
+        try {
+            for (const name of readdirSync(this.rootDir)) {
+                if (name.startsWith(prefix) && name.endsWith(suffix)) {
+                    const slot = name.slice(prefix.length, -suffix.length);
+                    if (slot) slots.push(slot);
+                }
+            }
+        } catch {
+            // directory not yet created or not readable — return empty
+        }
+        return slots;
+    }
+
+    private filePath(providerId: PrismLlmProviderId, slot?: string): string {
+        if (slot) {
+            return join(this.rootDir, `${providerId}-${slot}.secret`);
+        }
         return join(this.rootDir, `${providerId}.secret`);
     }
 

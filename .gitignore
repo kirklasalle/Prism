@@ -5,3 +5,8 @@ prism-output/
 tmp/
 .venv/
 .prism-preferences.json
+models/
+*.gguf
+screengrab/
+*.db.sq
+*.db.sq2

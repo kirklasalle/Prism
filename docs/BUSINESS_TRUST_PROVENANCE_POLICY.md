@@ -99,3 +99,17 @@ When Character Accountability Control (CAC) is active, the following identity va
 - Install-time validation for plugin packs
 - Staging-time validation before contract activation
 - Release evidence capture for trust decision outcomes
+
+## Computer-Use Enterprise Alignment Addendum (2026-03-25)
+
+Business trust/provenance controls also apply to computer-use-adjacent enablement and release messaging:
+
+1. No Business computer-use readiness claim without trust/provenance evidence alignment.
+2. High-risk computer-use pathways must remain tied to governance and accountability artifacts.
+3. External benchmark claims must remain labeled `vendor-reported` unless reproduced internally.
+
+Cross-doc gate references:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md` (`CU-BG-*`)
+- `PRODUCTION_RELEASE_RUNBOOK.md`

@@ -1,0 +1,38 @@
+{
+    "schemaVersion": "1.0.0",
+    "generatedAt": "2026-03-25T00:00:00.000Z",
+    "candidateId": "YYYYMMDD-candidate-id-d2",
+    "strict": true,
+    "requirements": [
+        {
+            "id": "CU-BG-1",
+            "status": "pass",
+            "evidenceLink": "releases/<candidate-id>/governance-path-report.md",
+            "reviewer": "Engineering"
+        },
+        {
+            "id": "CU-BG-2",
+            "status": "pass",
+            "evidenceLink": "releases/<candidate-id>/plugin-compat-trust-report.md",
+            "reviewer": "Operations"
+        },
+        {
+            "id": "CU-BG-3",
+            "status": "pass",
+            "evidenceLink": "releases/<candidate-id>/terminal-container-lifecycle-report.md",
+            "reviewer": "QA/Validation"
+        },
+        {
+            "id": "CU-BG-4",
+            "status": "pass",
+            "evidenceLink": "releases/<candidate-id>/claim-alignment-checklist.md",
+            "reviewer": "Product/Governance"
+        },
+        {
+            "id": "CU-BG-5",
+            "status": "pass",
+            "evidenceLink": "releases/<candidate-id>/reason-code-telemetry-sample.json",
+            "reviewer": "Engineering"
+        }
+    ]
+}

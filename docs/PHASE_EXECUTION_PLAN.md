@@ -37,7 +37,7 @@ Exit Criteria:
 - Retrieval traceability verified
 - Session summary persistence validated
 
-### Phase C: Reliability and Observability (Active)
+### Phase C: Reliability and Observability (Complete)
 
 Scope:
 
@@ -59,7 +59,7 @@ Exit Criteria:
   - Accountability chain propagated into activity events and SHA-256 hashes
   - Segment alias normalization (enterprise/corporate → business)
 
-### Phase D: Production Qualification (Next)
+### Phase D: Production Qualification (Active)
 
 Scope:
 
@@ -78,7 +78,7 @@ Exit Criteria:
 - Performance and reliability gates met
 - Incident, rollback, and operator runbooks validated
 
-### Phase D1: Individual-native MVP (Parallel Track)
+### Phase D1: Individual-native MVP (Complete)
 
 Scope:
 
@@ -96,7 +96,7 @@ Exit Criteria:
 - Retrieval attribution present in sampled outputs and dashboard traces
 - Tool contract snapshots updated and validated in release artifacts
 
-### Phase D2: Capability Parity Program (Parallel Track)
+### Phase D2: Capability Parity Program (Complete)
 
 Scope:
 
@@ -128,7 +128,7 @@ Exit Criteria:
 - Profile-specific SLO qualification evidence attached.
 - Traceability matrix links parity claims to tests and artifacts.
 
-### Phase D3: Agent Control & Intelligent Orchestration
+### Phase D3: Agent Control & Intelligent Orchestration (Complete)
 
 Scope:
 
@@ -222,6 +222,7 @@ For every phase completion, the following must be attached:
 - Terminal/container/plugin governance-path test report (allow/deny/timeout/revoke)
 - Performance qualification report for execution modes (`fast`, `balanced`, `governed`)
 - Investor/licensing appendix alignment check signed off by product/governance
+- Business Security Alignment Gate evidence for computer-use critical pathways (`CU-BG-*` pass status)
 
 1. Agent control & swarm intelligence evidence (required for Phase D3)
 
@@ -232,6 +233,39 @@ For every phase completion, the following must be attached:
 - Chat-to-agent routing verification (classifier-first intent detection, per-agent dispatch distribution)
 - Workspace persistence round-trip evidence (change location, restart, verify persistence)
 - Dashboard Agent Control tab wiring verification (real data, no mock handlers)
+
+1. Spectrum Refraction advanced evidence (required for Phase D4)
+
+- SR advanced test report: `tests/spectrum-refraction-advanced.test.ts` — 20/20 passing (zero failures)
+- Per-hemisphere timeout and partial-result fallback verification
+- Circuit breaker open/reset evidence (consecutive failure threshold, success reset)
+- Signed audit trail: four SR activity events emitted per invocation
+- Parallel timing verification: elapsed ≈ max(hemispheres)
+- Cost estimation shape and expansion-accounting evidence (`SRCostEstimate`)
+- Multi-key slot isolation evidence (default slot, named slots, clearApiKey)
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md` §9 D4-R1..D4-R10 all `status: pass`
+- `docs/D4_COVERAGE_VALIDATION.md` with test listing and CI output
+
+## Phase D4 — Spectrum Refraction Advanced (Completed 2026-04-20)
+
+### D4c Task Breakdown
+
+| Task ID | Description | Status |
+| --- | --- | --- |
+| D4c-1 | Per-hemisphere independent timeouts with partial-result fallback | complete |
+| D4c-2 | Circuit breaker: threshold-based open/close, `circuitBreakerEnabled` bypass | complete |
+| D4c-3 | Signed audit trail: `sr.fanout_start`, `sr.fanout_complete`, `sr.generation_complete`, `sr.circuit_breaker_triggered` | complete |
+| D4c-4 | Parallel fan-out timing verification (elapsed ≈ max, not sum) | complete |
+| D4c-5 | `SRCostEstimate` — per-hemisphere + aggregate cost, 3× output-token expansion for aggregation | complete |
+| D4c-6 | Multi-key slot assignment: default slot, named slots, `listSlots`, `clearApiKey`, isolation | complete |
+| D4c-7 | 20/20 test coverage in `tests/spectrum-refraction-advanced.test.ts` | complete |
+
+### Phase D4 Go/No-Go Criteria
+
+- All 20 D4c tests passing (`node --test dist/tests/spectrum-refraction-advanced.test.js` → 0 failures)
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md` §9 all D4-R1..D4-R10 `pass`
+- `docs/D4_COVERAGE_VALIDATION.md` present and current
+- No regressions in prior test suites (D2, D3, C1-C5)
 
 ## Ownership by Function
 

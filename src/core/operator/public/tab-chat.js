@@ -1,4 +1,4 @@
-﻿import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime } from './dashboard-core.js';
+import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector } from './dashboard-core.js';
 import { renderToolCallLog } from './tab-logs.js';
 
 export
@@ -724,7 +724,7 @@ export
       + '</div>'
       + '</div>'
       : '')
-    + '<button class="onboarding-toggle" id="onboarding-expand-btn" onclick="toggleOnboardingExpand()">Show all ' + checklist.length + ' checks</button>'
+    + '<button class="secondary-button" id="onboarding-expand-btn" onclick="toggleOnboardingExpand()">Show all ' + checklist.length + ' checks</button>'
     + '<div class="onboarding-list" id="onboarding-full-list" style="display:none;margin-top:8px;">'
     + checklist.map(function (item) {
       return '<div class="' + (item.passed ? 'passed' : 'failed') + '">'
@@ -800,7 +800,7 @@ export
   function renderMessages() {
   const container = document.getElementById('messages');
   if (!state.messages.length) {
-    container.innerHTML = '<div class="empty-state"><strong>Persistent operator chat is ready.</strong><br><br>Ask for status, approvals, history, or trigger actions like <span class="mono">run workflow demo</span>.</div>';
+    container.innerHTML = '<div class="empty-state"><strong>How can I help you today?</strong>Ask for status, approvals, history, or trigger actions like <span class="mono">run workflow demo</span>.</div>';
     return;
   }
 
@@ -818,6 +818,33 @@ export
           + message.metadata.toolCallsExecuted + ' tool call(s) in '
           + (message.metadata.iterations || '?') + ' iteration(s)</div>';
       }
+    }
+
+    // Spectrum Refraction (SR) response badge and timing
+    if (message.metadata && message.metadata.intent === 'llm_sr') {
+      extraHtml += '<div style="margin-top:8px;padding:8px 12px;border-radius:6px;background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(59,130,246,0.08));border:1px solid rgba(139,92,246,0.25);">';
+      extraHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
+      extraHtml += '<span style="font-size:14px;">\u{1F308}</span>';
+      extraHtml += '<span style="font-size:11px;font-weight:600;color:#a78bfa;">Spectrum Refraction</span>';
+      // Isolation level badge
+      if (message.metadata.isolationLevel) {
+        var isoLvl = message.metadata.isolationLevel;
+        var isoC = isoLvl === 'full' ? '#7cf1c8' : isoLvl === 'model' ? '#4dabf7' : '#ff8787';
+        var isoL = isoLvl === 'full' ? '\u{1F512} Full' : isoLvl === 'model' ? '\u{1F50F} Model' : '\u26D4 None';
+        extraHtml += '<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:' + isoC + '20;color:' + isoC + ';border:1px solid ' + isoC + '40;">' + isoL + '</span>';
+      }
+      if (message.metadata.timing) {
+        extraHtml += '<span class="muted" style="font-size:10px;">Fan-out: ' + message.metadata.timing.fanOutMs + 'ms | Aggregation: ' + message.metadata.timing.aggregationMs + 'ms | Total: ' + message.metadata.timing.totalMs + 'ms</span>';
+      }
+      extraHtml += '</div>';
+      var hemi = message.metadata.hemispheres || {};
+      if (hemi.left) extraHtml += '<span style="font-size:10px;color:#4dabf7;margin-right:8px;">\u{1F9E0} ' + escapeHtml(hemi.left.model || '') + '</span>';
+      if (hemi.right) extraHtml += '<span style="font-size:10px;color:#f06595;margin-right:8px;">\u{1F3A8} ' + escapeHtml(hemi.right.model || '') + '</span>';
+      if (hemi.main) extraHtml += '<span style="font-size:10px;color:#7cf1c8;">\u{1F4E1} ' + escapeHtml(hemi.main.model || '') + '</span>';
+      if (message.metadata.mediaArtifactCount > 0) {
+        extraHtml += '<div class="muted" style="font-size:10px;margin-top:4px;">\u{1F4CE} ' + message.metadata.mediaArtifactCount + ' media artifact(s) from Creative hemisphere</div>';
+      }
+      extraHtml += '</div>';
     }
 
     const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : escapeHtml(message.content);
@@ -841,7 +868,12 @@ export
     + '</div>'
     : '';
 
-  const typing = state.busy && !state.agenticStream.length ? '<div class="message assistant"><div class="message-label">PRISM</div><div>Working...<span class="streaming-dot"></span></div></div>' : '';
+  const typing = state.busy && !state.agenticStream.length
+    ? '<div class="message assistant thinking-indicator">'
+    + '<div class="message-label">PRISM <span class="thinking-badge">thinking</span></div>'
+    + '<div class="thinking-dots"><span></span><span></span><span></span></div>'
+    + '</div>'
+    : '';
   container.innerHTML = rows + streamBlock + typing;
   container.scrollTop = container.scrollHeight;
 }
@@ -1088,6 +1120,31 @@ export
 }
 
 export
+  function showCapModal(capType, remainingUsd) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.id = 'cap-modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    const over = Math.abs(remainingUsd || 0).toFixed(4);
+    const capLabel = ({ session: 'session', daily: 'daily', monthly: 'monthly' })[capType] || (capType || 'spending');
+    overlay.innerHTML =
+      '<div style="background:#1e1e2e;border:1px solid #f38ba8;border-radius:12px;padding:24px;max-width:420px;width:90%;color:#cdd6f4;font-family:inherit;">' +
+      '<h3 style="margin:0 0 12px;color:#f38ba8;">&#x1F4B0; Spending Cap Reached</h3>' +
+      '<p style="margin:0 0 16px;line-height:1.5;">Your <strong>' + capLabel + '</strong> spending cap has been reached. You are <strong>$' + over + '</strong> over budget.</p>' +
+      '<p style="margin:0 0 20px;color:#a6adc8;font-size:0.9em;">Proceed anyway to continue, or cancel and adjust your caps in the Telemetry tab.</p>' +
+      '<div style="display:flex;gap:12px;justify-content:flex-end;">' +
+      '<button id="cap-modal-cancel" style="padding:8px 16px;border:1px solid #585b70;background:transparent;color:#cdd6f4;border-radius:6px;cursor:pointer;">Cancel</button>' +
+      '<button id="cap-modal-proceed" style="padding:8px 16px;border:none;background:#f38ba8;color:#1e1e2e;border-radius:6px;cursor:pointer;font-weight:bold;">Proceed anyway</button>' +
+      '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('cap-modal-proceed').onclick = () => { overlay.remove(); resolve(true); };
+    document.getElementById('cap-modal-cancel').onclick = () => { overlay.remove(); resolve(false); };
+    overlay.onclick = (e) => { if (e.target === overlay) { overlay.remove(); resolve(false); } };
+  });
+}
+
+export
   async function sendMessage() {
   const composer = document.getElementById('composer');
   const content = composer.value.trim();
@@ -1108,13 +1165,39 @@ export
   state.notice = null;
   state.agenticStream = [];
   composer.value = '';
-  render();
+  composer.style.height = 'auto';
+  // ── Optimistic display: show the user's message immediately ──
+  state.messages.push({
+    role: 'user',
+    content: content,
+    createdAt: new Date().toISOString(),
+    _optimistic: true
+  });
+  safeRenderStep('messages', renderMessages);
   try {
     var response = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
     });
+    // Soft-block: spending cap reached — show modal and optionally re-send with override
+    if (response && response.softBlock === true) {
+      composer.value = content;
+      state.busy = false;
+      render();
+      const shouldProceed = await showCapModal(response.capType, response.remainingUsd);
+      if (!shouldProceed) return;
+      state.busy = true;
+      state.agenticStream = [];
+      composer.value = '';
+      composer.style.height = 'auto';
+      render();
+      response = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, override: true })
+      });
+    }
     // Upload pending attachments to the user message if any
     if (pendingAttachments.length && response && response.userMessage && response.userMessage.messageId) {
       await uploadAttachments(state.selectedSessionId, response.userMessage.messageId);
@@ -1123,6 +1206,9 @@ export
     await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
   } catch (error) {
     state.notice = String(error);
+    // Reload messages even on error — partial tool results or error-as-assistant-message may be stored
+    state.agenticStream = [];
+    try { await loadMessages(); } catch (_e) { /* best effort */ }
   } finally {
     state.busy = false;
     render();
@@ -1230,14 +1316,23 @@ export
 
 export
   // --- SSE streaming connection for agentic progress ---
+  var _sseReconnector = createReconnector(connectAgenticStream, { label: 'sse', baseDelay: 1000, maxDelay: 30000, maxRetries: 50 });
+
+export
   function connectAgenticStream() {
   var evtSource;
   try {
-    evtSource = new EventSource('/api/chat/stream');
+    var tokenMeta = document.querySelector('meta[name="prism-auth-token"]');
+    var sseToken = tokenMeta ? tokenMeta.getAttribute('content') || '' : '';
+    var sseUrl = sseToken ? '/api/chat/stream?token=' + encodeURIComponent(sseToken) : '/api/chat/stream';
+    evtSource = new EventSource(sseUrl);
   } catch (err) {
     console.warn('[stream] SSE unavailable:', err);
     return;
   }
+  evtSource.onopen = function () {
+    _sseReconnector.reset();
+  };
   evtSource.onmessage = function (event) {
     try {
       var data = JSON.parse(event.data);
@@ -1245,6 +1340,12 @@ export
         var ev = data.event || data;
         if (ev.type === 'done') {
           state.agenticStream = [];
+          loadMessages().then(() => safeRenderStep('messages', renderMessages));
+        } else if (ev.type === 'error') {
+          // LLM provider or executor error — show notice so user knows the turn failed
+          state.agenticStream.push(ev);
+          state.notice = ev.error || 'An error occurred during the agentic turn.';
+          safeRenderStep('notice', render);
         } else {
           state.agenticStream.push(ev);
           if (ev.type === 'tool_call' && ev.toolCall) {
@@ -1271,7 +1372,8 @@ export
     } catch (e) { /* ignore parse errors */ }
   };
   evtSource.onerror = function () {
+    console.warn('[stream] SSE connection lost, reconnecting with backoff...');
     evtSource.close();
-    setTimeout(connectAgenticStream, 5000);
+    _sseReconnector.schedule();
   };
 }

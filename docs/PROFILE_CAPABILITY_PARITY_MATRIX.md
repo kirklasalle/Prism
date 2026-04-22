@@ -200,3 +200,22 @@ Governance enforcement differs (business stricter), but the set of operations av
 - This matrix validates **static parity** (capability availability)
 - Full **runtime parity** tests will execute in Phase D3 (integration tests with running system)
 - **SLO differences** between profiles will be validated in Phase E4
+
+---
+
+## Computer-Use Business Security Alignment Gate Addendum (2026-03-25)
+
+This matrix now also supports Business computer-use gate verification.
+
+Required assertions before enterprise-ready claims:
+
+1. Capability parity remains intact across browser, terminal, and container surfaces.
+2. Governance strictness differences do not reduce Business capability surface.
+3. High-risk computer-use pathways are evidenced through allow/deny/timeout/revoke checks.
+4. CAC accountability requirements remain explicit in governed computer-use narratives.
+
+Evidence linkage:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- `TEST_STRATEGY.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md` (`CU-BG-*`)

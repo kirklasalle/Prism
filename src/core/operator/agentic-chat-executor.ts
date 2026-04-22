@@ -93,6 +93,7 @@ export class AgenticChatExecutor {
         generateFn: LlmGenerateFn,
         selection?: { providerId?: string; model?: string },
         onEvent?: AgenticEventCallback,
+        options?: { modelTier?: number; allowedTools?: string[] },
     ): Promise<AgenticResult> {
         const events: AgenticTurnEvent[] = [];
         const emit = (event: AgenticTurnEvent) => {
@@ -105,17 +106,34 @@ export class AgenticChatExecutor {
         let writeCount = 0;
         let finalContent = "";
 
+        const modelTier = options?.modelTier ?? 3;
+        let activeTools = this.toolDefinitions;
+        if (options?.allowedTools) {
+            activeTools = this.toolDefinitions.filter(t => options.allowedTools?.includes(t.name));
+        } else if (modelTier <= 2) {
+            // T1/T2 models only get minimal core tools by default
+            const coreTools = ["shell_exec", "file_read", "file_write", "prism_dashboard_control", "ask_reasoning_model"];
+            activeTools = this.toolDefinitions.filter(t => coreTools.includes(t.name));
+        }
+
         for (let iteration = 0; iteration < this.config.maxIterations; iteration++) {
-            const result = await generateFn(
-                {
-                    message: iteration === 0 ? userMessage : "",
-                    conversation,
-                    systemPrompt,
-                    tools: this.toolDefinitions.length > 0 ? this.toolDefinitions : undefined,
-                    tool_choice: this.toolDefinitions.length > 0 ? "auto" : undefined,
-                },
-                selection,
-            );
+            let result;
+            try {
+                result = await generateFn(
+                    {
+                        message: iteration === 0 ? userMessage : "",
+                        conversation,
+                        systemPrompt,
+                        tools: activeTools.length > 0 ? activeTools : undefined,
+                        tool_choice: activeTools.length > 0 ? "auto" : undefined,
+                    },
+                    selection,
+                );
+            } catch (llmError) {
+                emit({ type: "error", error: `LLM provider error: ${String(llmError)}`, iteration });
+                emit({ type: "done", iteration });
+                return { finalContent: finalContent || `LLM provider error: ${String(llmError)}`, toolCallsExecuted: totalToolCalls, iterations: iteration + 1, events };
+            }
 
             if (!result) {
                 emit({ type: "error", error: "LLM returned no response.", iteration });
@@ -153,9 +171,13 @@ export class AgenticChatExecutor {
 
                 if (toolResult.isWrite) writeCount++;
 
-                const outputStr = typeof toolResult.output === "string"
+                let outputStr = typeof toolResult.output === "string"
                     ? toolResult.output
                     : JSON.stringify(toolResult.output, null, 2);
+
+                if (!toolResult.ok && modelTier <= 2 && outputStr.length > 500) {
+                    outputStr = outputStr.substring(0, 500) + "\n...[truncated]. Look at the first error line and try a different command or ask the reasoning model for help.";
+                }
 
                 emit({
                     type: "tool_result",

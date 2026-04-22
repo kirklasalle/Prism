@@ -554,6 +554,120 @@ Acceptance criteria:
 - write failure produces visible error in dashboard,
 - preferences file verified after write.
 
+### 8.9 Spectrum Refraction (SR): Compounded Tri-Model Orchestration (Phase D4)
+
+PRISM must deliver a novel multi-model parallel generation system where three distinct model instances (Left/Logic, Right/Creative, Main/Coordination) generate simultaneously and their outputs are fused via structured aggregation into a compound response that exceeds any single model's capability.
+
+**Concept:** Spectrum Refraction (SR), conceived by Kirk LaSalle, applies the metaphor of light through a prism — a single prompt is refracted into multiple cognitive perspectives that are then recomposed.
+
+#### 8.9.1 Tri-model fan-out architecture
+
+- Three hemispheres generate in parallel on the same user prompt:
+  - **Left (Logic)**: analytical reasoning, structured analysis, factual precision
+  - **Right (Creative)**: creative synthesis, lateral thinking, multimedia generation
+  - **Main (Coordination)**: coordination, aggregation, and unified response synthesis
+- Fan-out must be truly parallel (concurrent API calls), not sequential.
+- Each hemisphere receives a role-specific system prompt from `SR_SYSTEM_PROMPTS`.
+
+Acceptance criteria:
+
+- Left and Right generate concurrently (measured fan-out timing),
+- Main receives both hemisphere outputs for aggregation,
+- total SR generation time ≈ max(Left, Right) + aggregation, not sum.
+
+#### 8.9.2 Instance isolation enforcement
+
+- Left and Right MUST be distinct instances. Validation at three mandatory gates:
+  1. **Configuration gate**: `/api/sr/configure` rejects Left===Right (same provider + same model).
+  2. **Activation gate**: `/api/sr/activate` re-validates before enabling SR mode.
+  3. **Runtime gate**: `generateSR()` pre-flight guard before fan-out.
+- Three isolation quality levels:
+  - `full`: different providers (strongest — separate API keys, infrastructure, rate limits)
+  - `model`: same provider, different models (separate capabilities, shared key)
+  - `insufficient`: same provider + same model (REJECTED)
+- Main is permitted to overlap Left or Right (it serves a distinct coordinator role).
+
+Acceptance criteria:
+
+- identical Left/Right rejected at configure, activate, and runtime,
+- isolation level correctly classified at all gates,
+- UI reflects isolation badge (🔒 Full / 🔏 Model / ⛔ Insufficient).
+
+#### 8.9.3 Structured XML-tagged aggregation
+
+- The aggregation prompt uses XML-tagged sections for deterministic hemisphere attribution:
+
+  ```
+  <logic_analysis>[Left hemisphere output]</logic_analysis>
+  <creative_synthesis>[Right hemisphere output]</creative_synthesis>
+  ```
+
+- Main model produces a unified compound response that preserves analytical rigor and creative breadth.
+- Aggregation is not concatenation — it is deliberate synthesis by the Main model.
+
+Acceptance criteria:
+
+- aggregation prompt contains both tagged sections,
+- final response is a coherent synthesis (not concatenation),
+- hemisphere attribution preserved in metadata.
+
+#### 8.9.4 Model capability validation
+
+- `validateSRLeftModel()`: Left must meet logic-oriented capability requirements (reasoning strength, function calling).
+- `validateSRRightModel()`: Right must meet creative-oriented capability requirements (vision, multimedia modality).
+- `filterSRLogicModels()` and `filterSRCreativeModels()`: filter available models by hemisphere role suitability.
+- Validation results include advisory text explaining why a model qualifies or does not.
+
+Acceptance criteria:
+
+- unqualified models produce clear advisory text,
+- filter functions return only role-appropriate models,
+- validation integrated into SR panel model dropdowns.
+
+#### 8.9.5 Media artifact extraction
+
+- The Creative (Right) hemisphere may produce media outputs (images, audio, video).
+- `extractMediaArtifacts()` extracts structured media artifacts from output content.
+- Artifacts are typed: `{ type: "image" | "audio" | "video"; data: string; mimeType?: string }`.
+
+Acceptance criteria:
+
+- media artifacts extracted from Creative hemisphere output,
+- artifacts accessible in `SRGenerationOutput.mediaArtifacts`.
+
+#### 8.9.6 SR API endpoints
+
+| Route | Method | Purpose |
+| --- | --- | --- |
+| `/api/sr/status` | GET | Return current SR configuration, active state, and isolation level |
+| `/api/sr/configure` | POST | Set Left/Right/Main model assignments with isolation validation |
+| `/api/sr/activate` | POST | Enable SR mode for the session (re-validates isolation) |
+| `/api/sr/deactivate` | POST | Disable SR mode and revert to single-model generation |
+
+Acceptance criteria:
+
+- all four endpoints functional and returning correct state,
+- configure and activate reject insufficient isolation,
+- status reflects real-time SR state.
+
+#### 8.9.7 SR dashboard integration
+
+- SR panel in Provider & Settings tab:
+  - Model selection dropdowns for Left (Logic), Right (Creative), Main
+  - Isolation badge reflecting current level
+  - Cost advisory based on model pricing
+  - Activate/Deactivate controls (Activate disabled when isolation insufficient)
+- SR response badge in Chat Interface tab:
+  - Visual indicator that response was SR-generated
+  - Isolation level pill
+  - Hemisphere attribution metadata
+
+Acceptance criteria:
+
+- SR panel renders correctly in Provider & Settings tab,
+- isolation badge updates in real-time,
+- chat messages show SR attribution.
+
 ## 9-continued. Quality Gates (SLO/SLA Targets)
 
 | Domain | Metric | Target |
@@ -576,6 +690,8 @@ Parity-program gate requirements:
 ## 10. Evaluation Strategy
 
 ### 10.1 Evaluation dimensions
+
+lly added to the docuemtnation.
 
 - correctness
 - safety
@@ -691,3 +807,106 @@ All release candidates must keep documentation synchronized with runtime behavio
 4. HuggingGPT paper, arXiv:2303.17580: <https://arxiv.org/abs/2303.17580>
 5. Model Context Protocol introduction: <https://modelcontextprotocol.io/introduction>
 6. NIST AI Risk Management Framework: <https://www.nist.gov/itl/ai-risk-management-framework>
+
+## 15. Business Security Alignment Gate (Computer Use Core)
+
+This gate is mandatory for any release candidate claiming enterprise readiness for computer-use capabilities.
+
+### 15.1 Scope
+
+Applies to:
+
+- browser automation,
+- terminal virtualization,
+- container sandbox orchestration,
+- and any cross-tool orchestration workflow combining these surfaces.
+
+### 15.2 Mandatory controls
+
+1. Governance integrity
+
+- Tiered policy model remains intact and explicit (`tier1_autonomous`, `tier2_conditional`, `tier3_approval`).
+- Critical operations retain deterministic allow/deny/timeout/revoke pathways.
+
+1. Accountability integrity (CAC)
+
+- Identity chain fields remain mandatory in governed activity narratives.
+- Lifecycle state transitions remain auditable and evidence-linked.
+
+1. Enterprise security controls
+
+- Sandboxed execution and least privilege are required for Business computer-use operations.
+- Prompt-injection risk handling and sensitive-action human confirmation remain mandatory.
+
+1. Claim-evidence discipline
+
+- No enterprise security/reliability claim without first-party evidence artifacts.
+- External benchmark claims are labeled `vendor-reported` unless reproduced in Prism qualification harnesses.
+
+### 15.3 Gate coupling
+
+The gate is considered complete only when aligned checks are present in:
+
+- `TEST_STRATEGY.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md`
+- `PRODUCTION_RELEASE_RUNBOOK.md`
+
+and all computer-use critical acceptance checks pass.
+
+## 16. Security Requirements
+
+### 16.1 Session-gated access control
+
+PRISM must not accept any operator command, tool execution, or agent dispatch until a chat session is established. Sessions serve as the primary containment boundary for all runtime actions.
+
+- **Individual profile**: A session is auto-created on first boot when none exist.
+- **Business profile**: Session creation requires explicit operator action.
+
+### 16.2 Authentication
+
+- All API endpoints (except public page routes) require token-based authentication.
+- Tokens are 64-character hex strings generated via `crypto.randomBytes(32)`.
+- Token comparison uses `crypto.timingSafeEqual()` to prevent timing side-channel attacks.
+- Token files are persisted with `0o600` file permissions (owner-only read/write).
+- WebSocket connections authenticate via `?token=` query parameter.
+
+### 16.3 Rate limiting
+
+- Per-IP rate limiting at 200 requests per 60-second fixed window.
+- `X-Forwarded-For` headers are trusted only from loopback addresses.
+- Exceeding the limit returns `429 Too Many Requests` with `Retry-After` header.
+
+### 16.4 Input validation
+
+- All API request bodies are validated against expected schemas before processing.
+- Tool contracts enforce strict argument shapes, mutability classification, and risk metadata.
+- The governance normalizer auto-promotes under-reported risk classifications.
+
+### 16.5 Secret management
+
+- LLM API keys are stored locally in the workspace, never transmitted to external services beyond the target provider.
+- Provider secrets are managed via `/api/llm/provider-secret` with secure storage.
+- No secrets are logged in activity events or debug output.
+
+### 16.6 Audit integrity
+
+- Every activity event includes a SHA-256 hash computed over its content fields.
+- The audit trail is append-only in SQLite with queryable session, operation, and identity dimensions.
+- Permanent Active Directives are integrity-checked via hardcoded SHA-256 hash on every policy evaluation.
+
+### 16.7 Localhost binding
+
+- PRISM binds exclusively to `localhost:7070` by default.
+- No external network exposure is configured or recommended without an explicit TLS reverse proxy.
+
+### 16.8 Acceptance criteria
+
+| Requirement | Verification |
+| --- | --- |
+| Unauthenticated requests return 401 | Auth Gate unit tests + CI regression |
+| Missing session returns 400 | Session Guard unit tests |
+| Rate limit exceeds return 429 | Rate Limiter unit tests |
+| Approval timeout auto-denies | Approval Queue timeout tests |
+| PAD tampering detected | Directive Integrity verification tests |
+| Tool contract violations rejected | Contract validation tests |
+| Cross-session data isolation | Session-scoped query tests |

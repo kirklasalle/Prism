@@ -87,7 +87,7 @@ This snapshot links investor/licensing-facing claims to validated implementation
 | CA-03 | Parity capability package includes terminal/container/tool staging depth | `LICENSING_BRAND_APPENDIX.md` §3 | `tests/terminal-session-adapter.test.ts`, `tests/container-sandbox-adapter.test.ts`, `tests/tool-contract-extractor.test.ts` | `prism-output/e-stage2-qualification-summary.json` | pass |
 | CA-04 | Business trust metadata + signed distribution controls for adapters | `LICENSING_BRAND_APPENDIX.md` §5 | `src/core/plugins/business-trust-validator.ts`, `tests/business-trust-validator.test.ts` | `BUSINESS_TRUST_PROVENANCE_POLICY.md` | pass |
 | CA-05 | No production release without evidence artifacts mapped to claims | `LICENSING_BRAND_APPENDIX.md` §4 | `.github/workflows/quality-gates.yml`, `src/benchmarks/ci-gate-check.ts` | `prism-output/ci-gate-summary.json`, `prism-output/release-validation.json` | pass |
-| CA-06 | Event lineage and reason-code telemetry for high-risk operations | `INVESTOR_APPENDIX_PARITY.md` §5 (M2) | Policy and adapter governance events exist; dedicated D2 reason-code taxonomy task pending | N/A (taxonomy artifact pending) | in_progress |
+| CA-06 | Event lineage and reason-code telemetry for high-risk operations | `INVESTOR_APPENDIX_PARITY.md` §5 (M2) | `tests/d2-governance-paths.test.ts`, `src/core/policy/reason-codes.ts`, event lineage tracker | `prism-output/event-lineage-bundle.json`, `prism-output/reason-code-telemetry-samples.json` | pass |
 
 ## 5.2 Candidate Status (2026-03-18)
 
@@ -102,9 +102,9 @@ This snapshot links investor/licensing-facing claims to validated implementation
 | D2-R7 | pass | `tests/d2-governance-paths.test.ts` | QA/Validation | Allow/deny/timeout/revoke paths validated. |
 | D2-R8 | pass | `src/benchmarks/performance-qualification.ts` | Engineering + QA | Perf qualification and gates passing. |
 | D2-R9 | pass | `.github/workflows/quality-gates.yml`, `src/benchmarks/ci-gate-check.ts` | QA/Validation | CI gating enforced + artifact integrity check. |
-| D2-R10 | in_progress | `INVESTOR_APPENDIX_PARITY.md`, `LICENSING_BRAND_APPENDIX.md`, this section | Product/Governance | Claim alignment snapshot added; sign-off pending. |
-| D2-R11 | in_progress | Adapter governance events + policy reasons | Engineering + Operations | Dedicated reason-code taxonomy + lineage bundle pending (`J`). |
-| D2-R12 | in_progress | This matrix + release packet template | Product/Governance | Final release packet traceability completion pending (`K`). |
+| D2-R10 | pass | `prism-output/claim-alignment-checklist.md`, `INVESTOR_APPENDIX_PARITY.md`, `LICENSING_BRAND_APPENDIX.md` | Product/Governance | Claim alignment checklist complete — 27/27 claims verified. |
+| D2-R11 | pass | `prism-output/reason-code-telemetry-samples.json`, `prism-output/event-lineage-bundle.json`, `src/core/policy/reason-codes.ts` | Engineering + Operations | Reason-code taxonomy implemented + lineage bundle generated. |
+| D2-R12 | pass | `prism-output/release-packet-manifest.md`, this matrix | Product/Governance | Release packet manifest indexes 40 artifacts with full traceability. |
 
 ## 6. Governance Rule
 
@@ -134,3 +134,53 @@ No Phase D2 Go decision is valid if any high-risk requirement (`D2-R2`, `D2-R3`,
 | CAC-R5 | `PRISM_PRD.md` §8.4A | Enterprise/corporate inputs resolve to business segment | Alias normalization unit tests | Test report showing alias resolution | Engineering | Phase C |
 | CAC-R6 | `PRISM_PRD.md` §8.4A | Query APIs support filtering by characterId, operatorEmail, prismUserEmail, executionProfileSegment | Query filter integration tests | Query result samples filtered by each field | Engineering | Phase C |
 | CAC-R7 | `DEVELOPER_GUIDE.md` §7B | Accountability chain included in SHA-256 event hash | Hash integrity tests | Hash comparison evidence with/without accountability fields | Engineering | Phase C |
+
+## 9. Phase D4 — Spectrum Refraction Advanced Requirements
+
+| Requirement ID | Source | Requirement | Verification Method | Evidence Artifact(s) | Owner | Gate |
+| --- | --- | --- | --- | --- | --- | --- |
+| D4-R1 | `PRISM_PRD.md` §8.9 | Multi-key slot assignment: per-provider API key slots (`default`, named) persist independently | `tests/spectrum-refraction-advanced.test.ts` — sets/gets key for default slot, named slot, independent isolation | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R2 | `PRISM_PRD.md` §8.9 | Per-hemisphere independent timeouts with partial-result fallback | `tests/spectrum-refraction-advanced.test.ts` — returns partial result when left/right hemisphere times out | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R3 | `PRISM_PRD.md` §8.9 | Circuit breaker opens after consecutive failure threshold; resets on success | `tests/spectrum-refraction-advanced.test.ts` — circuit opens after threshold, resets after success, returns open=false for closed | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R4 | `PRISM_PRD.md` §8.9 | `circuitBreakerEnabled=false` bypasses tracking entirely | `tests/spectrum-refraction-advanced.test.ts` — respects circuitBreakerEnabled=false | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R5 | `PRISM_PRD.md` §8.9 | Signed audit trail: SR emits `sr.fanout_start`, `sr.fanout_complete`, `sr.generation_complete`, `sr.circuit_breaker_triggered` activity events | `tests/spectrum-refraction-advanced.test.ts` — emits sr.fanout_start/sr.fanout_complete/sr.generation_complete/sr.circuit_breaker_triggered | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R6 | `PRISM_PRD.md` §8.9 | Parallel fan-out: total elapsed time ≈ max of hemispheres, not their sum | `tests/spectrum-refraction-advanced.test.ts` — total time ≈ max of hemispheres | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R7 | `PRISM_PRD.md` §8.9 | Cost estimation: `SRCostEstimate` shape, `totalEstimatedCostUsd ≥ sum of parts`, aggregation uses expanded input | `tests/spectrum-refraction-advanced.test.ts` — cost estimate shape, total ≥ sum, aggregation cost | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R8 | `PRISM_PRD.md` §8.9 | `show-hemispheres` and SR configuration persist and are queryable per session | `tests/spectrum-refraction-advanced.test.ts` — listSlots, clearApiKey, default and named slot independence | SR advanced test report (20/20) | Engineering | Phase D4 |
+| D4-R9 | `docs/D4_COVERAGE_VALIDATION.md` | D4c SQLite schema and D4c API endpoints included in integration evidence | `tests/spectrum-refraction-advanced.test.ts` 20/20 passing; `D4_COVERAGE_VALIDATION.md` | D4 coverage validation doc | Engineering + QA | Phase D4 |
+| D4-R10 | `docs/TEST_STRATEGY.md` D4c section | 20/20 D4c test coverage verified in CI and release evidence | Node test runner output with 20 pass, 0 fail | `docs/D4_COVERAGE_VALIDATION.md`, `tests/spectrum-refraction-advanced.test.ts` | QA/Validation | Phase D4 |
+
+### 9.1 Candidate Status (Phase D4 — 2026-04-20)
+
+| Requirement ID | Status | Evidence Link | Reviewer | Notes |
+| --- | --- | --- | --- | --- |
+| D4-R1 | pass | `tests/spectrum-refraction-advanced.test.ts` L201-L242 | Engineering | 5 slot tests pass |
+| D4-R2 | pass | `tests/spectrum-refraction-advanced.test.ts` L30-L65 | Engineering | Partial result on timeout verified |
+| D4-R3 | pass | `tests/spectrum-refraction-advanced.test.ts` L68-L100 | Engineering | Circuit opens + resets confirmed |
+| D4-R4 | pass | `tests/spectrum-refraction-advanced.test.ts` L103-L115 | Engineering | circuitBreakerEnabled=false bypasses tracking |
+| D4-R5 | pass | `tests/spectrum-refraction-advanced.test.ts` L118-L165 | Engineering | All 4 SR audit events emitted |
+| D4-R6 | pass | `tests/spectrum-refraction-advanced.test.ts` L168-L182 | Engineering | Parallel timing verified |
+| D4-R7 | pass | `tests/spectrum-refraction-advanced.test.ts` L185-L199 | Engineering | Cost shape + ≥ sum + aggregation expansion |
+| D4-R8 | pass | `tests/spectrum-refraction-advanced.test.ts` L201-L242 | Engineering | Slot isolation and list confirmed |
+| D4-R9 | pass | `docs/D4_COVERAGE_VALIDATION.md` | Engineering + QA | Coverage doc created |
+| D4-R10 | pass | `node --test dist/tests/spectrum-refraction-advanced.test.js` → 20/20 | QA/Validation | Zero failures in CI run |
+
+## 10. Computer-Use Business Security Alignment Gate Requirements
+
+| Requirement ID | Source | Requirement | Verification Method | Evidence Artifact(s) | Owner | Gate |
+| --- | --- | --- | --- | --- | --- | --- |
+| CU-BG-1 | `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md` §3 | Computer-use high-risk pathways preserve deterministic allow/deny/timeout/revoke behavior | Governance-path integration tests | Computer-use governance-path report | Engineering + QA | Phase D2 |
+| CU-BG-2 | `PRISM_PRD.md` §15 | Business profile requires sandboxed/least-privilege computer-use posture in release evidence | Release evidence review + runbook checks | Runbook checklist + staging qualification notes | Operations + Governance | Stage 2/3 |
+| CU-BG-3 | `TEST_STRATEGY.md` Business gate checklist | Sensitive-action confirmation required for consequential Business computer-use operations | Scenario tests with approval/confirmation checkpoints | Confirmation-path scenario logs | QA/Validation | Phase D2 |
+| CU-BG-4 | `PRISM_GAP_ANALYSIS.md` §9 | External computer-use benchmark claims labeled `vendor-reported` unless reproduced | Documentation + artifact review | Claim alignment checklist | Product/Governance | Stage 3 |
+| CU-BG-5 | `BUSINESS_TRUST_PROVENANCE_POLICY.md` + CAC requirements | CAC accountability chain remains explicit in governed computer-use narratives | Event sample inspection | Activity samples with identity chain fields | Engineering + Governance | Phase D2 |
+
+### 10.1 Candidate Status Template (Computer-Use Gate)
+
+| Requirement ID | Status (`pass`/`fail`/`waived`/`in_progress`) | Evidence Link | Reviewer | Notes |
+| --- | --- | --- | --- | --- |
+| CU-BG-1 |  |  |  |  |
+| CU-BG-2 |  |  |  |  |
+| CU-BG-3 |  |  |  |  |
+| CU-BG-4 |  |  |  |  |
+| CU-BG-5 |  |  |  |  |

@@ -20,8 +20,27 @@ import { testToolContracts } from "./tool-contracts.test.js";
 import { testToolContractSnapshots } from "./tool-contract-snapshot.test.js";
 import { testWorkflowOrchestrator } from "./workflow.test.js";
 import { testBrowserProfileManager } from "./browser-profile-manager.test.js";
+import { testBrowserSessionManager } from "./browser-session-manager.test.js";
+import { testBrowserControlTool } from "./browser-control-tool.test.js";
+import { testGuardianAgent } from "./guardian-agent.test.js";
+import { testTerminalSessionAdapter } from "./terminal-session-adapter.test.js";
+import { testContainerSandboxAdapter } from "./container-sandbox-adapter.test.js";
+import { testOAuthAdapters } from "./oauth-adapters.test.js";
+import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { _setWorkspaceRootForTest } from "../src/core/config/workspace-resolver.js";
 
 async function runTests(): Promise<void> {
+    // Isolate workspace root so tests don't conflict with a running server's SQLite DBs.
+    // Must use _setWorkspaceRootForTest to directly set the module-level _resolvedRoot cache —
+    // env var alone is ignored because .prism-preferences.json takes priority in resolveWorkspaceRoot().
+    const testWorkspace = mkdtempSync(join(tmpdir(), "prism-test-"));
+    mkdirSync(join(testWorkspace, "state"), { recursive: true });
+    mkdirSync(join(testWorkspace, "config"), { recursive: true });
+    mkdirSync(join(testWorkspace, "artifacts", "packages"), { recursive: true });
+    mkdirSync(join(testWorkspace, "logs"), { recursive: true });
+    _setWorkspaceRootForTest(testWorkspace);
     const tests = [
         { name: "PolicyEngine", fn: testPolicyEngine },
         { name: "OrchestratorExecutionProfile", fn: testOrchestratorExecutionProfile },
@@ -48,6 +67,12 @@ async function runTests(): Promise<void> {
         { name: "DomainWorkflowTemplates", fn: testDomainWorkflowTemplates },
         { name: "WorkflowOrchestrator", fn: testWorkflowOrchestrator },
         { name: "BrowserProfileManager", fn: testBrowserProfileManager },
+        { name: "BrowserSessionManager", fn: testBrowserSessionManager },
+        { name: "BrowserControlTool", fn: testBrowserControlTool },
+        { name: "GuardianAgent", fn: testGuardianAgent },
+        { name: "TerminalSessionAdapter", fn: testTerminalSessionAdapter },
+        { name: "ContainerSandboxAdapter", fn: testContainerSandboxAdapter },
+        { name: "OAuthAdapters", fn: testOAuthAdapters },
     ];
 
     let passed = 0;
@@ -55,26 +80,30 @@ async function runTests(): Promise<void> {
 
     console.log("Running PRISM unit tests...\n");
 
-    for (const test of tests) {
-        try {
-            await test.fn();
-            passed++;
-        } catch (error: unknown) {
-            failed++;
-            console.error(`✗ ${test.name} failed:`, error);
+    try {
+        for (const test of tests) {
+            try {
+                await test.fn();
+                passed++;
+            } catch (error: unknown) {
+                failed++;
+                console.error(`✗ ${test.name} failed:`, error);
+            }
         }
+    } finally {
+        // Clean up isolated workspace
+        try { rmSync(testWorkspace, { recursive: true, force: true }); } catch { /* best effort */ }
     }
 
     console.log(`\n${"=".repeat(60)}`);
     console.log(`Tests: ${passed + failed} | Passed: ${passed} | Failed: ${failed}`);
     console.log(`${"=".repeat(60)}`);
 
-    if (failed > 0) {
-        process.exitCode = 1;
-    }
+    // Force exit to avoid dangling handles from test servers keeping the process alive
+    setTimeout(() => process.exit(failed > 0 ? 1 : 0), 500);
 }
 
 runTests().catch((error) => {
     console.error("Test runner failed:", error);
-    process.exitCode = 1;
+    process.exit(1);
 });

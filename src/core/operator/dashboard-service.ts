@@ -1,9 +1,12 @@
-﻿import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
+import { homedir } from "node:os";
+import { get as httpGet } from "node:http";
+import https from "node:https";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
 import { SqliteActivityStore } from "../activity/sqlite-store.js";
@@ -14,6 +17,7 @@ import type { AgentTelemetryCollector } from "../agents/agent-telemetry-collecto
 import type { SwarmCoordinator } from "../agents/swarm-coordinator.js";
 import type { AgentPool } from "../agents/agent-pool.js";
 import type { AgentRouter } from "../agents/agent-router.js";
+import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
 import {
   ChatSessionStore,
   type ProviderSettingsInput,
@@ -28,6 +32,7 @@ import {
   type PrismLlmProviderId,
   type RoutingConfig,
 } from "./llm-provider-manager.js";
+import { resolveProfile } from "./model-capability-matrix.js";
 import {
   WindowsProtectedFileProviderSecretStore,
   type ProviderSecretStore,
@@ -39,13 +44,32 @@ import type { RetrievalMetricsCollector } from "../memory/retrieval-metrics.js";
 import type { RetrievalDashboardStore } from "../memory/retrieval-dashboard-store.js";
 import type { Tool } from "../tools/types.js";
 import type { ToolRegistry } from "../tools/registry.js";
-import { workspacePath, resolveWorkspaceRoot, setWorkspaceRoot, ensureWorkspaceStructure, workspaceFramebufferDir, readPreferences, writePreferences } from "../config/workspace-resolver.js";
+import { workspacePath, resolveWorkspaceRoot, setWorkspaceRoot, ensureWorkspaceStructure, workspaceFramebufferDir, readPreferences, writePreferences, getWorkspaceHub, setWorkspaceHub, seedDefaultCharacters } from "../config/workspace-resolver.js";
 import { FramebufferCapture } from "./framebuffer-capture.js";
 import { BrowserControlTool } from "../../adapters/system/browser-control-tool.js";
 import { AgenticChatExecutor, type AgenticTurnEvent, type AgenticResult } from "./agentic-chat-executor.js";
 import { CharacterAccountabilityStore, type CharacterAssignmentFilter } from "../accountability/character-accountability-store.js";
 import { CharacterAccountabilityManager } from "../accountability/character-accountability-manager.js";
 import { workspaceCharactersDir, workspaceDbPath } from "../config/workspace-resolver.js";
+import { UsageMeteringService, type UsageWindow } from "./usage-metering-service.js";
+import { LlamaCppSupervisor } from "./llama-cpp-supervisor.js";
+import { GuardianAgent } from "../agents/guardian-agent.js";
+import { DashboardControlTool } from "../tools/dashboard-control-tool.js";
+import { SchedulerEngine, parseCronExpression, getNextNCronOccurrences } from "./scheduler-engine.js";
+import { AuthGate } from "../security/auth.js";
+import { RateLimiter } from "../security/rate-limiter.js";
+import { loadPluginPack } from "../plugins/plugin-pack-loader.js";
+import type { PluginPackManifest } from "../plugins/plugin-pack-validator.js";
+import sqlite3 from "sqlite3";
+import { ToolContractExtractor, type ExtractionRequest } from "../tools/tool-contract-extractor.js";
+import { PolicyEngine } from "../policy/engine.js";
+import { A2ATaskAdapter } from "../../adapters/application/a2a-task-adapter.js";
+import { GovernanceHooksAdapter } from "../../adapters/application/governance-hooks-adapter.js";
+import { MetricsStore, HistogramSnapshot } from "../activity/metrics-store.js";
+import { OtelExporter } from "../activity/otel-exporter.js";
+import { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
+import { OutlookOAuthAdapter } from "../../adapters/application/outlook-oauth-adapter.js";
+import { createOAuthTokenStore } from "../operator/oauth-token-store.js";
 
 export interface DashboardRuntimeStatus {
   sessionId: string;
@@ -411,6 +435,97 @@ function computeTelemetrySummary(
   };
 }
 
+// ── SLO Types & Computation ───────────────────────────────────────────────────
+
+export type SloStatus = "green" | "yellow" | "red" | "no_data";
+
+export interface SloMetric {
+  name: string;
+  label: string;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  p99Ms: number | null;
+  targetP95Ms: number;
+  targetP99Ms: number;
+  status: SloStatus;
+}
+
+export interface SloSummary {
+  generatedAt: string;
+  metrics: SloMetric[];
+}
+
+const SLO_TARGETS: ReadonlyArray<{ histName: string; label: string; targetP95Ms: number; targetP99Ms: number }> = [
+  { histName: "prism_operation_duration_ms", label: "Operation Latency", targetP95Ms: 500, targetP99Ms: 1000 },
+  { histName: "prism_policy_latency_ms", label: "Policy Check Latency", targetP95Ms: 250, targetP99Ms: 500 },
+  { histName: "prism_llm_latency_ms", label: "LLM Latency", targetP95Ms: 5000, targetP99Ms: 10000 },
+];
+
+/**
+ * Compute a percentile value from a histogram snapshot using linear interpolation.
+ * Returns null if no observations are present.
+ */
+function histogramPercentile(snap: HistogramSnapshot, p: number): number | null {
+  if (snap.totalObservations === 0) return null;
+  const target = p * snap.totalObservations;
+  for (let i = 0; i < snap.buckets.length; i++) {
+    if (snap.counts[i] >= target) {
+      // Linear interpolation between lower and upper bound
+      const lower = i === 0 ? 0 : snap.buckets[i - 1];
+      const upper = snap.buckets[i];
+      const lowerCount = i === 0 ? 0 : snap.counts[i - 1];
+      const upperCount = snap.counts[i];
+      if (upperCount === lowerCount) return upper;
+      return lower + (upper - lower) * ((target - lowerCount) / (upperCount - lowerCount));
+    }
+  }
+  // All observations in +Inf bucket
+  return snap.buckets[snap.buckets.length - 1] ?? null;
+}
+
+function computeSloSummary(store: MetricsStore): SloSummary {
+  const snapshots = store.getHistogramSnapshot();
+  const metrics: SloMetric[] = SLO_TARGETS.map(({ histName, label, targetP95Ms, targetP99Ms }) => {
+    // Aggregate all label combinations for this histogram
+    const matching = snapshots.filter(s => s.name === histName);
+    let totalObs = 0;
+    let totalSum = 0;
+    // Merge bucket counts (they share the same bucket boundaries)
+    let mergedCounts: number[] | null = null;
+    let buckets: number[] = [];
+    for (const snap of matching) {
+      totalObs += snap.totalObservations;
+      totalSum += snap.sum;
+      if (mergedCounts === null) {
+        mergedCounts = [...snap.counts];
+        buckets = snap.buckets;
+      } else {
+        for (let i = 0; i < mergedCounts.length && i < snap.counts.length; i++) {
+          mergedCounts[i] += snap.counts[i];
+        }
+      }
+    }
+    if (mergedCounts === null || totalObs === 0) {
+      return { name: histName, label, p50Ms: null, p95Ms: null, p99Ms: null, targetP95Ms, targetP99Ms, status: "no_data" };
+    }
+    const merged: HistogramSnapshot = { name: histName, labels: {}, buckets, counts: mergedCounts, sum: totalSum, totalObservations: totalObs };
+    const p50Ms = histogramPercentile(merged, 0.50);
+    const p95Ms = histogramPercentile(merged, 0.95);
+    const p99Ms = histogramPercentile(merged, 0.99);
+
+    let status: SloStatus = "green";
+    if (p95Ms !== null) {
+      const ratio = p95Ms / targetP95Ms;
+      if (ratio >= 1.0) status = "red";
+      else if (ratio >= 0.75) status = "yellow";
+    }
+
+    return { name: histName, label, p50Ms, p95Ms, p99Ms, targetP95Ms, targetP99Ms, status };
+  });
+
+  return { generatedAt: new Date().toISOString(), metrics };
+}
+
 function classifyAlertSeverity(message: string): AlertSeverity {
   const lower = message.toLowerCase();
   if (
@@ -640,11 +755,26 @@ function computeRuntimeExcellenceSnapshot(
   };
 }
 
+export interface DownloadProgress {
+  id: string;
+  url: string;
+  fileName: string;
+  status: "pending" | "downloading" | "completed" | "error";
+  progress: number;
+  downloadedBytes: number;
+  totalBytes: number;
+  error?: string;
+  startTime: string;
+}
+
 export class DashboardService {
   private static readonly publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
   private readonly server: Server;
   private readonly llmProviders: LlmProviderManager;
   private readonly providerSecretStore: ProviderSecretStore;
+  private readonly authGate: AuthGate;
+  private readonly rateLimiter: RateLimiter;
+  private tlsEnabled = false;
   private readonly actionsByName = new Map<string, DashboardAction>();
   private readonly actionStates = new Map<string, DashboardActionState>();
   private readonly actionHistory: DashboardActionHistoryEntry[] = [];
@@ -658,7 +788,12 @@ export class DashboardService {
   private readonly traceExplorer?: SessionTraceExplorer;
   private readonly policyAuditExporter?: PolicyAuditExporter;
   private readonly toolRegistry: ToolRegistry | null;
+  private toolContractExtractor: ToolContractExtractor | null = null;
+  private readonly llamaSupervisor: LlamaCppSupervisor;
+  private readonly bitnetSupervisor: LlamaCppSupervisor;
+  private readonly guardianAgent: GuardianAgent;
   private readonly agenticExecutor: AgenticChatExecutor | null;
+  private readonly dashboardControlTool: DashboardControlTool;
   private readonly tools: Tool[];
   private readonly framebufferCapture = new FramebufferCapture();
   private readonly wsServer: WebSocketServer;
@@ -675,8 +810,29 @@ export class DashboardService {
   private agentPool: AgentPool | null = null;
   private agentRouter: AgentRouter | null = null;
   private importHistory: Array<{ id: string; timestamp: string; mode: string; fileName: string; targetDir: string; registeredType: string | null; status: string; message: string; size: number }> = [];
+  private diagnosticsRunning = false;
+  private diagnosticsLastRunAt: string | null = null;
+  private agentDiagnosticsRunning = false;
+  private agentDiagnosticsLastRunAt: string | null = null;
+  private computerDiagnosticsRunning = false;
+  private computerDiagnosticsLastRunAt: string | null = null;
+  private knowledgeGraphDiagnosticsRunning = false;
+  private knowledgeGraphDiagnosticsLastRunAt: string | null = null;
+  private workspaceDiagnosticsRunning = false;
+  private workspaceDiagnosticsLastRunAt: string | null = null;
+  private networkDiagnosticsRunning = false;
+  private networkDiagnosticsLastRunAt: string | null = null;
+  private telemetryDiagnosticsRunning = false;
+  private telemetryDiagnosticsLastRunAt: string | null = null;
+  private logsDiagnosticsRunning = false;
+  private logsDiagnosticsLastRunAt: string | null = null;
+  private schedulerDiagnosticsRunning = false;
+  private schedulerDiagnosticsLastRunAt: string | null = null;
+  private demoDiagnosticsRunning = false;
+  private demoDiagnosticsLastRunAt: string | null = null;
   private readonly characterAccountabilityStore: CharacterAccountabilityStore;
   private readonly characterAccountabilityManager: CharacterAccountabilityManager;
+  private usageMetering?: UsageMeteringService;
   private runtimeSettings: Record<string, unknown> = {
     approvalTimeoutMs: 30000,
     selfReviewDailyMs: 86400000,
@@ -690,6 +846,25 @@ export class DashboardService {
     mcpTimeoutMs: 30000,
     telemetryWindow: "1d",
   };
+  private readonly downloadStatus = new Map<string, DownloadProgress>();
+  private customRecommendedModels: Array<{ name: string; fileName: string; size: string; path: string; source: string; addedAt: string }> = [];
+
+  /* ── A2A Protocol adapters (Phase F) ───────────────────────────────── */
+  private a2aTaskAdapter: A2ATaskAdapter | null = null;
+  private governanceHooksAdapter: GovernanceHooksAdapter | null = null;
+
+  /* ── Observability (Phase E6) ───────────────────────────────────────── */
+  private readonly metricsStore: MetricsStore;
+  private readonly otelExporter: OtelExporter;
+
+  /* ── OAuth adapters (Phase E2) ──────────────────────────────────────── */
+  private readonly gmailOAuth: GmailOAuthAdapter;
+  private readonly outlookOAuth: OutlookOAuthAdapter;
+
+  /* ── Scheduler in-memory stores ────────────────────────────────────── */
+  private readonly schedulerEvents = new Map<string, { id: string; title: string; start: string; end?: string; description?: string; createdAt: string }>();
+  private readonly schedulerProjects = new Map<string, { id: string; name: string; description?: string; tasks: Array<{ id: string; title: string; status: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string; createdAt: string }>; milestones: Array<{ title: string; dueDate?: string }>; createdAt: string }>();
+  private readonly schedulerEngine: SchedulerEngine;
 
   constructor(
     private readonly queue: ApprovalQueue,
@@ -705,9 +880,64 @@ export class DashboardService {
     sessionPackageStorePath: string = workspacePath("state", "dashboard-session-packages.json"),
     sessionPackageExportDir: string = workspacePath("artifacts", "packages"),
     toolRegistry?: ToolRegistry,
+    usageMetering?: UsageMeteringService,
+    gmailOAuth?: GmailOAuthAdapter,
+    outlookOAuth?: OutlookOAuthAdapter,
   ) {
     this.providerSecretStore = providerSecretStore ?? new WindowsProtectedFileProviderSecretStore();
-    this.llmProviders = new LlmProviderManager(process.env, this.chatStore.listProviderSettings(), this.providerSecretStore);
+
+    // ── Security: Auth gate & rate limiter ──────────────────────────────
+    const authDisabled = process.env.PRISM_AUTH_DISABLED === "true";
+    if (authDisabled && process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[SECURITY] PRISM_AUTH_DISABLED=true is not permitted when NODE_ENV=production. " +
+        "Remove this environment variable before deploying."
+      );
+    }
+    this.authGate = new AuthGate({
+      tokenFilePath: workspacePath("state", "admin-token"),
+      disabled: authDisabled,
+      publicRoutes: ["/health", "/api/health", "/favicon.ico", "/.well-known/agent.json", "/metrics"],
+      publicPrefixes: ["/public/", "/setup", "/api/auth/"],
+    });
+    this.rateLimiter = new RateLimiter({
+      maxRequests: Number(process.env.PRISM_RATE_LIMIT ?? 200),
+      windowMs: 60_000,
+    });
+
+    // ── Observability (Phase E6) — initialize early so all events are counted ─
+    this.metricsStore = new MetricsStore();
+    this.otelExporter = new OtelExporter(this.activityBus, this.metricsStore, {
+      serviceName: "prism",
+      serviceVersion: "0.2.0",
+      endpoint: process.env.PRISM_OTEL_ENDPOINT,
+      consoleExport: process.env.PRISM_OTEL_CONSOLE === "true",
+    });
+    this.otelExporter.start();
+
+    // ── OAuth adapters (Phase E2) ─────────────────────────────────────────────
+    const oauthTokenStore = createOAuthTokenStore();
+    this.gmailOAuth = gmailOAuth ?? new GmailOAuthAdapter(oauthTokenStore);
+    this.outlookOAuth = outlookOAuth ?? new OutlookOAuthAdapter(oauthTokenStore);
+
+    this.llamaSupervisor = new LlamaCppSupervisor({
+      binaryPath: process.env.PRISM_LLAMACPP_BIN || "llama-server",
+      basePort: 8081,
+      maxSlots: 5,
+      defaultContext: 4096,
+      modelsDir: join(process.cwd(), "models"),
+    });
+
+    this.bitnetSupervisor = new LlamaCppSupervisor({
+      binaryPath: process.env.PRISM_BITNET_BIN || "bitnet-server",
+      basePort: 8082,
+      maxSlots: 2,
+      defaultContext: 4096,
+      modelsDir: join(process.cwd(), "models"),
+    });
+
+    this.llmProviders = new LlmProviderManager(process.env, this.chatStore.listProviderSettings(), this.providerSecretStore, this.llamaSupervisor, this.bitnetSupervisor, this.activityBus);
+    this.llmProviders.loadPersistedProfiles(this.chatStore.listModelProfiles());
     this.characterAccountabilityStore = new CharacterAccountabilityStore(workspaceDbPath());
     this.characterAccountabilityManager = new CharacterAccountabilityManager(this.characterAccountabilityStore, this.activityBus);
     this.sessionPackageStorePath = sessionPackageStorePath;
@@ -716,8 +946,84 @@ export class DashboardService {
     this.policyAuditExporter = activityStore ? new PolicyAuditExporter(activityStore) : undefined;
     this.pkgStore = activityStore ? new SessionPackageSqliteStore(activityStore.dbPath) : undefined;
     this.toolRegistry = toolRegistry ?? null;
-    this.agenticExecutor = toolRegistry ? new AgenticChatExecutor(toolRegistry) : null;
+    if (this.toolRegistry) {
+      this.toolRegistry.register({
+        name: "ask_reasoning_model",
+        contract: {
+          version: "1.0.0",
+          args: {
+            prompt: { type: "string", required: true }
+          }
+        },
+        execute: async (request: any) => {
+          const prompt = request.args.prompt as string;
+          if (!prompt) return { ok: false, output: { error: "Missing prompt." } };
+          const result = await this.llmProviders.generateForRole("reasoning", {
+            message: prompt,
+            conversation: [],
+            systemPrompt: "You are the primary reasoning model for PRISM. A smaller agent has delegated a complex task to you. Provide the best possible answer or analysis based on the prompt."
+          });
+          if (!result) return { ok: false, output: { error: "Reasoning model failed to produce a response." } };
+          return { ok: true, output: { response: result.content } };
+        }
+      });
+    }
+    this.agenticExecutor = this.toolRegistry ? new AgenticChatExecutor(this.toolRegistry) : null;
     this.tools = toolRegistry ? toolRegistry.list() : [];
+    if (usageMetering) this.usageMetering = usageMetering;
+
+    // Guardian Agent — permanent autonomous agent powered by llama.cpp
+    this.guardianAgent = new GuardianAgent(this.activityBus, this.llamaSupervisor, this.tools, {
+      modelAlias: process.env.PRISM_GUARDIAN_MODEL_ALIAS || "guardian",
+      modelPath: process.env.PRISM_GUARDIAN_MODEL_PATH || "",
+      authorityTier: (process.env.PRISM_GUARDIAN_AUTHORITY as "tier1_autonomous" | "tier2_conditional") || "tier2_conditional",
+      autoStart: process.env.PRISM_GUARDIAN_AUTOSTART !== "false",
+      contextSize: parseInt(process.env.PRISM_GUARDIAN_CTX_SIZE || "4096", 10),
+      draftModelPath: process.env.PRISM_GUARDIAN_DRAFT_MODEL || undefined,
+      gpuLayers: process.env.PRISM_GUARDIAN_GPU_LAYERS ? parseInt(process.env.PRISM_GUARDIAN_GPU_LAYERS, 10) : undefined,
+      flashAttn: process.env.PRISM_GUARDIAN_FLASH_ATTN !== "false",
+      dashboardBaseUrl: `http://127.0.0.1:${this.port}`,
+    });
+
+    this.dashboardControlTool = new DashboardControlTool(this.activityBus);
+    if (this.toolRegistry) {
+      this.toolRegistry.register(this.dashboardControlTool);
+    }
+    this.tools.push(this.dashboardControlTool);
+
+    // Forward Guardian events and UI actions to WebSocket clients
+    this.guardianAgent.on("guardian_event", (evt: { operation: string; detail: string }) => {
+      for (const ws of this.wsClients) {
+        try {
+          ws.send(JSON.stringify({ type: "guardian_event", ...evt, timestamp: new Date().toISOString() }));
+        } catch { /* client may have disconnected */ }
+      }
+    });
+
+    this.activityBus.subscribe({
+      onEvent: (event) => {
+        if (event.operation.startsWith("ui.")) {
+          for (const ws of this.wsClients) {
+            try {
+              ws.send(JSON.stringify({ type: "ui_action", ...event.details, timestamp: new Date().toISOString() }));
+            } catch { /* client may have disconnected */ }
+          }
+        }
+      }
+    });
+    // Auto-start Guardian if configured and model path is set
+    if (this.guardianAgent.getConfig().autoStart && this.guardianAgent.getConfig().modelPath) {
+      void this.guardianAgent.start();
+    }
+    // Inject agent-list resolver so guardian tasks can inspect agent state
+    if (this.agentLifecycle) {
+      const lifecycle = this.agentLifecycle;
+      this.guardianAgent.setAgentListFn(() => {
+        const agents = lifecycle.list().map(a => ({ id: a.agentId, state: a.state, role: a.role, lifecycle: a.lifecycle }));
+        return { agents };
+      });
+    }
+
     for (const t of this.tools) {
       if (!this.toolStates[t.name]) {
         this.toolStates[t.name] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
@@ -738,6 +1044,33 @@ export class DashboardService {
       // Preferences file missing or malformed — use defaults
     }
     this.loadSessionPackageStore();
+    this.loadCustomRecommendedModels();
+
+    // ── A2A Protocol adapters (Phase F) ──────────────────────────────────
+    // Use the workspace's persistent SQLite DB so A2A tasks survive restarts.
+    try {
+      const a2aDb = new sqlite3.Database(workspaceDbPath());
+      this.a2aTaskAdapter = new A2ATaskAdapter(a2aDb, this.activityBus);
+      this.governanceHooksAdapter = new GovernanceHooksAdapter(this.activityBus);
+    } catch {
+      // Graceful degradation — A2A endpoints will return 503 if adapter failed to init.
+    }
+
+    this.schedulerEngine = new SchedulerEngine({
+      activityBus: this.activityBus,
+      sessionId: this.status.sessionId,
+      onAction: (entry) => {
+        this.broadcastEvent({
+          type: "scheduler:action-fired",
+          id: entry.id,
+          label: entry.label,
+          action: entry.action,
+          entryType: entry.type,
+          payload: entry.payload,
+          firedAt: new Date().toISOString(),
+        });
+      },
+    });
     for (const action of actions) {
       this.actionsByName.set(action.name, action);
       this.actionStates.set(action.name, {
@@ -751,12 +1084,31 @@ export class DashboardService {
         lastError: null,
       });
     }
-    this.server = createServer((req, res) => {
-      void this.handle(req, res);
-    });
+    // ── Server creation (HTTPS when cert/key provided, else HTTP) ─────
+    const tlsCert = process.env.PRISM_TLS_CERT;
+    const tlsKey = process.env.PRISM_TLS_KEY;
+    if (tlsCert && tlsKey && existsSync(tlsCert) && existsSync(tlsKey)) {
+      this.server = https.createServer(
+        { cert: readFileSync(tlsCert), key: readFileSync(tlsKey) },
+        (req, res) => { void this.handle(req, res); },
+      );
+      this.tlsEnabled = true;
+    } else {
+      this.server = createServer((req, res) => {
+        void this.handle(req, res);
+      });
+      this.tlsEnabled = false;
+    }
     this.wsServer = new WebSocketServer({ noServer: true });
     this.server.on("upgrade", (req, socket, head) => {
-      if (req.url === "/ws" || req.url === "/ws/chat") {
+      // Authenticate WebSocket upgrade (token via query param or Authorization header)
+      const authResult = this.authGate.check(req);
+      if (!authResult.authenticated) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      if (req.url?.startsWith("/ws") || req.url?.startsWith("/ws/chat")) {
         this.wsServer.handleUpgrade(req, socket, head, (ws) => {
           this.wsClients.add(ws);
           ws.on("close", () => this.wsClients.delete(ws));
@@ -1192,6 +1544,19 @@ export class DashboardService {
       ...payload,
       package: this.getSessionPackage(packageId),
     };
+  }
+
+  private getOrCreateToolContractExtractor(): ToolContractExtractor {
+    if (!this.toolContractExtractor) {
+      const db = new sqlite3.Database(":memory:");
+      const policyEngine = new PolicyEngine();
+      this.toolContractExtractor = new ToolContractExtractor(db, policyEngine, this.activityBus);
+      if (this.toolRegistry) {
+        this.toolContractExtractor.setToolRegistry(this.toolRegistry);
+      }
+      this.toolContractExtractor.addManifestPath(join(process.cwd(), "prism-output"));
+    }
+    return this.toolContractExtractor;
   }
 
   private loadSessionPackageStore(): void {
@@ -1758,7 +2123,7 @@ export class DashboardService {
     };
   }
 
-  triggerAction(actionName: string): { accepted: true; action: string } {
+  triggerAction(actionName: string, chatSessionId?: string): { accepted: true; action: string } {
     const action = this.actionsByName.get(actionName);
     if (!action) {
       throw new Error(`Unknown action: ${actionName}`);
@@ -1836,7 +2201,7 @@ export class DashboardService {
           layer: "causal",
           operation: `dashboard.action.${action.name}`,
           status: "failed",
-          details: { correlationId, error: errorMessage },
+          details: { correlationId, chatSessionId, error: errorMessage },
         });
       });
 
@@ -1874,8 +2239,77 @@ export class DashboardService {
   }
 
   start(): void {
+    if (this.chatStore.listSessions().length === 0) {
+      const segment = (this.status.executionProfileSegment || "individual").toLowerCase();
+      if (segment === "individual") {
+        const newSession = this.chatStore.createSession();
+        this.chatStore.updateSessionTitle(newSession.sessionId, "New Session");
+        this.activityBus.emit({
+          sessionId: this.status.sessionId,
+          layer: "causal",
+          operation: "prism.accountability.init",
+          status: "started",
+          details: { message: "Auto-created initial session for individual segment." }
+        });
+      } else {
+        this.activityBus.emit({
+          sessionId: this.status.sessionId,
+          layer: "causal",
+          operation: "prism.accountability.init",
+          status: "started",
+          details: { message: "Accountability systems initiated for enterprise segment." }
+        });
+      }
+    }
+
+    // ── Permanent Active Directives Integrity Verification ──────────────
+    const padResult = verifyDirectiveIntegrity();
+    if (padResult.valid) {
+      console.log(`[SECURITY] Directive integrity verified (SHA-256: ${padResult.currentHash.slice(0, 12)}…)`);
+      this.activityBus.emit({
+        sessionId: this.status.sessionId,
+        layer: "causal",
+        operation: "directive.integrity_check",
+        status: "succeeded",
+        details: {
+          currentHash: padResult.currentHash,
+          expectedHash: padResult.expectedHash,
+          filePath: padResult.filePath,
+          verifiedAt: padResult.verifiedAt,
+        },
+      });
+    } else {
+      console.error(`[SECURITY] ⚠ DIRECTIVE INTEGRITY VIOLATION — PAD hash mismatch or file missing.`);
+      console.error(`[SECURITY]   Expected: ${padResult.expectedHash}`);
+      console.error(`[SECURITY]   Got:      ${padResult.currentHash || "(unreadable)"}`);
+      if (padResult.error) console.error(`[SECURITY]   Error: ${padResult.error}`);
+      this.activityBus.emit({
+        sessionId: this.status.sessionId,
+        layer: "causal",
+        operation: "directive.integrity_check",
+        status: "failed",
+        details: {
+          currentHash: padResult.currentHash,
+          expectedHash: padResult.expectedHash,
+          filePath: padResult.filePath,
+          verifiedAt: padResult.verifiedAt,
+          error: padResult.error,
+          severity: "critical",
+          reasonCode: "DIRECTIVE_INTEGRITY_VIOLATION",
+        },
+      });
+    }
+
     this.server.listen(this.port, "127.0.0.1", () => {
-      console.log(`[DASHBOARD] Listening at http://localhost:${this.port}`);
+      const proto = this.tlsEnabled ? "https" : "http";
+      console.log(`[DASHBOARD] Listening at ${proto}://localhost:${this.port}`);
+      if (this.tlsEnabled) console.log(`[SECURITY] TLS enabled`);
+      if (!this.authGate.check({ headers: {}, url: "/" } as any).authenticated) {
+        const token = this.authGate.getToken();
+        console.log(`[AUTH] Admin token: ${token}`);
+        console.log(`[AUTH] Access: ${proto}://localhost:${this.port}/dashboard?token=${token}`);
+        console.log(`[AUTH] Set PRISM_AUTH_DISABLED=true to bypass auth (dev only).`);
+      }
       void this.getReadinessSnapshot()
         .then((snapshot) => this.emitReadinessAudit("startup", snapshot))
         .catch((error) => {
@@ -1924,9 +2358,188 @@ export class DashboardService {
     }
   }
 
+  private async fetchOllamaTags(): Promise<Array<{ name: string; source: string }>> {
+    return new Promise((resolve) => {
+      const req = httpGet("http://localhost:11434/api/tags", (res) => {
+        let body = "";
+        res.on("data", chunk => body += chunk);
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(body);
+            resolve((data.models || []).map((m: any) => ({ name: m.name, source: "ollama" })));
+          } catch { resolve([]); }
+        });
+      });
+      req.on("error", () => resolve([]));
+      req.setTimeout(2000, () => { req.destroy(); resolve([]); });
+    });
+  }
+
+  private async downloadFile(id: string, url: string, targetPath: string): Promise<void> {
+    const status = this.downloadStatus.get(id);
+    if (!status) return;
+
+    return new Promise((resolve, reject) => {
+      const parsed = new URL(url);
+      const isHttps = parsed.protocol === "https:";
+      const options = {
+        hostname: parsed.hostname,
+        port: parsed.port || (isHttps ? 443 : 80),
+        path: parsed.pathname + parsed.search,
+        headers: {
+          "User-Agent": "prism/1.0",
+          "Accept": "*/*",
+        },
+      };
+      const client = isHttps ? https : { get: httpGet };
+      client.get(options, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          return this.downloadFile(id, res.headers.location!, targetPath).then(resolve).catch(reject);
+        }
+        if (res.statusCode !== 200) {
+          status.status = "error";
+          status.error = `HTTP ${res.statusCode}`;
+          return reject(new Error(status.error));
+        }
+
+        const total = parseInt(res.headers["content-length"] || "0", 10);
+        status.totalBytes = total;
+        status.status = "downloading";
+
+        const file = createWriteStream(targetPath);
+        res.pipe(file);
+
+        let dl = 0;
+        res.on("data", (chunk) => {
+          dl += chunk.length;
+          status.downloadedBytes = dl;
+          status.progress = total > 0 ? (dl / total) * 100 : 0;
+        });
+
+        file.on("finish", () => {
+          file.close();
+          status.status = "completed";
+          status.progress = 100;
+          resolve();
+        });
+
+        file.on("error", (err) => {
+          status.status = "error";
+          status.error = err.message;
+          reject(err);
+        });
+      }).on("error", (err) => {
+        status.status = "error";
+        status.error = err.message;
+        reject(err);
+      });
+    });
+  }
+
+  private async readBody(req: IncomingMessage): Promise<string> {
+    const MAX_BODY_SIZE = parseInt(process.env.PRISM_MAX_BODY_SIZE ?? "10485760", 10); // 10 MB default
+    return new Promise((resolve, reject) => {
+      let body = "";
+      let size = 0;
+      req.on("data", (chunk: Buffer | string) => {
+        const bytes = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk as string);
+        size += bytes;
+        if (size > MAX_BODY_SIZE) {
+          req.destroy();
+          reject(Object.assign(new Error("Request body too large"), { statusCode: 413 }));
+          return;
+        }
+        body += chunk.toString();
+      });
+      req.on("end", () => resolve(body));
+      req.on("error", () => resolve(""));
+    });
+  }
+
+  private scanForGgufs(dir: string, source: string, models: Array<{ name: string; path: string; source: string }>): void {
+    if (!existsSync(dir)) return;
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          // Avoid deep recursion, just one level for models/ or similar
+          if (entry.name !== "node_modules" && entry.name !== ".git") {
+            this.scanForGgufs(fullPath, source, models);
+          }
+        } else if (entry.name.endsWith(".gguf")) {
+          models.push({
+            name: entry.name,
+            path: fullPath,
+            source,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`[dashboard] failed to scan ${dir}`, err);
+    }
+  }
+
+  private loadCustomRecommendedModels(): void {
+    try {
+      const filePath = join(process.cwd(), "prism-output", "custom-recommended-models.json");
+      if (existsSync(filePath)) {
+        const data = JSON.parse(readFileSync(filePath, "utf8"));
+        if (Array.isArray(data)) this.customRecommendedModels = data;
+      }
+    } catch { /* best-effort — use empty list */ }
+  }
+
+  private saveCustomRecommendedModels(): void {
+    try {
+      const dir = join(process.cwd(), "prism-output");
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "custom-recommended-models.json"), JSON.stringify(this.customRecommendedModels, null, 2));
+    } catch (err) {
+      console.error("[dashboard] failed to save custom recommended models", err);
+    }
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = req.url ?? "";
     const method = req.method?.toUpperCase() ?? "GET";
+
+    // ── Security headers (applied to every response) ──────────────────
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+    // ── Request body size guard (Content-Length fast-path) ───────────
+    const contentLengthHeader = req.headers["content-length"];
+    if (contentLengthHeader) {
+      const MAX_BODY_SIZE = parseInt(process.env.PRISM_MAX_BODY_SIZE ?? "10485760", 10);
+      const declaredSize = parseInt(contentLengthHeader, 10);
+      if (!isNaN(declaredSize) && declaredSize > MAX_BODY_SIZE) {
+        return this.json(res, 413, { error: "Request body too large", maxBytes: MAX_BODY_SIZE });
+      }
+    }
+
+    // ── Rate limiting ─────────────────────────────────────────────────
+    const rateResult = this.rateLimiter.check(req);
+    res.setHeader("X-RateLimit-Remaining", String(rateResult.remaining));
+    if (!rateResult.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rateResult.retryAfterMs ?? 60000) / 1000)));
+      return this.json(res, 429, { error: "Too many requests", retryAfterMs: rateResult.retryAfterMs });
+    }
+
+    // ── Authentication ────────────────────────────────────────────────
+    const authResult = this.authGate.check(req);
+    if (!authResult.authenticated) {
+      res.setHeader("WWW-Authenticate", 'Bearer realm="PRISM Dashboard"');
+      return this.json(res, 401, { error: "Unauthorized", reason: authResult.reason });
+    }
+
+    // ── Favicon (suppress 404 / browser probe) ────────────────────────
+    if (method === "GET" && (url === "/favicon.ico" || url.startsWith("/favicon.ico?"))) {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
 
     if (method === "GET" && url.startsWith("/public/") && (url.endsWith(".js") || url.endsWith(".css"))) {
       const safeFile = url.slice("/public/".length).replace(/\.\./g, "");
@@ -1944,19 +2557,114 @@ export class DashboardService {
       return;
     }
 
-    if (method === "GET" && (url === "/" || url === "/dashboard")) {
+    if (method === "GET" && (url === "/" || url === "/dashboard" || url.startsWith("/?") || url.startsWith("/dashboard?"))) {
+      const prefs = readPreferences();
+      if (!prefs?.setupComplete && !url.startsWith("/dashboard")) {
+        res.writeHead(302, { Location: "/setup" });
+        res.end();
+        return;
+      }
+      // Extract token from query string (or header) for client-side injection
+      const qIdx = url.indexOf("?");
+      const params = qIdx >= 0 ? new URLSearchParams(url.slice(qIdx + 1)) : null;
+      const clientToken = params?.get("token") ?? this.extractBearerToken(req) ?? "";
+
+      // Allow explicit ?mode=advanced to save the pref and serve the full dashboard
+      if (params?.get("mode") === "advanced") {
+        writePreferences({ uiMode: "advanced" });
+        res.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        });
+        res.end(dashboardHtml(this.port, clientToken));
+        return;
+      }
+
+      // /dashboard always serves the full operator UI (explicit intent)
+      const isExplicitDashboard = url.startsWith("/dashboard");
+
+      // Simple Mode: active when pref is "simple", or when the user has never
+      // explicitly chosen a mode AND has no sessions yet (first-time UX).
+      const sessionCount = this.chatStore.listSessions().length;
+      const useSimple = !isExplicitDashboard
+        && (prefs?.uiMode === "simple" || (!prefs?.uiMode && sessionCount === 0));
+
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
         Pragma: "no-cache",
         Expires: "0",
       });
-      res.end(dashboardHtml(this.port));
+      res.end(useSimple ? simpleModeHtml(this.port, clientToken) : dashboardHtml(this.port, clientToken));
+      return;
+    }
+
+    // Explicit simple mode URL — always serves Simple Mode regardless of prefs
+    if (method === "GET" && (url === "/simple" || url.startsWith("/simple?"))) {
+      const qIdx = url.indexOf("?");
+      const params = qIdx >= 0 ? new URLSearchParams(url.slice(qIdx + 1)) : null;
+      const clientToken = params?.get("token") ?? this.extractBearerToken(req) ?? "";
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      res.end(simpleModeHtml(this.port, clientToken));
+      return;
+    }
+
+    if (method === "GET" && (url === "/setup" || url.startsWith("/setup?"))) {
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      res.end(setupWizardHtml(this.port));
+      return;
+    }
+
+    if (method === "GET" && (url === "/setup/advanced" || url.startsWith("/setup/advanced?"))) {
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      res.end(setupWizardAdvancedHtml(this.port));
       return;
     }
 
     if (method === "GET" && (url === "/health" || url === "/api/health")) {
-      return this.json(res, 200, { status: "ok" });
+      // Check DB readability
+      let dbOk = false;
+      try {
+        this.chatStore.listSessions();
+        dbOk = true;
+      } catch { /* db not available */ }
+
+      const providerCount = this.chatStore.listProviderSettings().length;
+      const srEnabled = true; // SR is always available — configured per-session
+      const guardianState = this.guardianAgent?.getStatus?.() ?? "unknown";
+      const pendingApprovals = this.queue.list().length;
+
+      return this.json(res, 200, {
+        status: "ok",
+        version: "0.2.0",
+        uptime: Math.floor(process.uptime()),
+        sessionId: this.status.sessionId,
+        mode: this.status.mode,
+        dependencies: {
+          db: dbOk ? "ok" : "unavailable",
+          providers: providerCount,
+          sr_enabled: srEnabled,
+          guardian: guardianState,
+          pending_approvals: pendingApprovals,
+        },
+      });
     }
 
     if (method === "GET" && url.startsWith("/api/chat/stream")) {
@@ -1975,8 +2683,165 @@ export class DashboardService {
       return;
     }
 
-    if (method === "GET" && (url === "/pending" || url === "/api/pending")) {
+    if (method === "GET" && (url === "/pending" || url === "/api/pending" || url === "/api/approval/pending")) {
       return this.json(res, 200, this.queue.list());
+    }
+
+    if (method === "GET" && url === "/api/models/gguf") {
+      try {
+        const models: Array<{ name: string; path: string; source: string }> = [];
+        const searchPaths = [
+          { path: process.cwd(), source: "workspace" },
+          { path: join(process.cwd(), "models"), source: "workspace-models" },
+          { path: join(homedir(), ".ollama", "models"), source: "ollama" },
+        ];
+
+        for (const entry of searchPaths) {
+          this.scanForGgufs(entry.path, entry.source, models);
+        }
+
+        // Add Ollama API results
+        const ollamaModels = await this.fetchOllamaTags();
+        for (const om of ollamaModels) {
+          models.push({ name: om.name, path: om.name, source: om.source });
+        }
+
+        return this.json(res, 200, { models });
+      } catch (err: any) {
+        return this.json(res, 500, { error: err.message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/models/download/status") {
+      return this.json(res, 200, { downloads: Array.from(this.downloadStatus.values()) });
+    }
+
+    if (method === "POST" && url === "/api/models/download") {
+      const body = await this.readBody(req);
+      const { url: dlUrl, name, mmprojUrl, mmprojName } = JSON.parse(body);
+      if (!dlUrl || !name) return this.json(res, 400, { error: "Missing url or name" });
+
+      const modelsDir = join(process.cwd(), "models");
+      if (!existsSync(modelsDir)) mkdirSync(modelsDir, { recursive: true });
+
+      const modelId = randomUUID();
+      this.downloadStatus.set(modelId, {
+        id: modelId,
+        url: dlUrl,
+        fileName: name,
+        status: "pending",
+        progress: 0,
+        downloadedBytes: 0,
+        totalBytes: 0,
+        startTime: new Date().toISOString()
+      });
+
+      // Start model download
+      this.downloadFile(modelId, dlUrl, join(modelsDir, name)).catch(() => { });
+
+      // Optional mmproj download
+      if (mmprojUrl && mmprojName) {
+        const mmId = randomUUID();
+        this.downloadStatus.set(mmId, {
+          id: mmId,
+          url: mmprojUrl,
+          fileName: mmprojName,
+          status: "pending",
+          progress: 0,
+          downloadedBytes: 0,
+          totalBytes: 0,
+          startTime: new Date().toISOString()
+        });
+        this.downloadFile(mmId, mmprojUrl, join(modelsDir, mmprojName)).catch(() => { });
+      }
+
+      return this.json(res, 200, { message: "Downloads initiated", modelId });
+    }
+
+    if (method === "POST" && url === "/api/models/pull") {
+      try {
+        const body = await this.readJsonBody<{ tag: string }>(req);
+        const tag = body?.tag;
+        if (!tag || typeof tag !== "string" || !/^[\w.:\/-]+$/.test(tag)) {
+          return this.json(res, 400, { error: "Invalid or missing Ollama tag" });
+        }
+        const pullId = randomUUID();
+        this.downloadStatus.set(pullId, {
+          id: pullId,
+          url: `ollama://${tag}`,
+          fileName: tag,
+          status: "downloading",
+          progress: 0,
+          downloadedBytes: 0,
+          totalBytes: 0,
+          startTime: new Date().toISOString(),
+        });
+        const { exec: execCb } = await import("node:child_process");
+        execCb(`ollama pull ${tag}`, { timeout: 600000 }, (err, stdout, stderr) => {
+          const status = this.downloadStatus.get(pullId);
+          if (!status) return;
+          if (err) {
+            status.status = "error";
+            status.error = stderr?.trim() || err.message;
+          } else {
+            status.status = "completed";
+            status.progress = 100;
+          }
+        });
+        return this.json(res, 200, { message: "Ollama pull initiated", pullId });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Custom Recommended Models API ────────────────────────────────────
+
+    if (method === "GET" && url === "/api/models/recommended") {
+      return this.json(res, 200, { custom: this.customRecommendedModels });
+    }
+
+    if (method === "POST" && url === "/api/models/recommended") {
+      try {
+        const body = await this.readJsonBody<{ name: string; fileName: string; path: string; source: string }>(req);
+        if (!body?.fileName || !body?.path) {
+          return this.json(res, 400, { error: "Missing fileName or path" });
+        }
+        // Dedupe by fileName
+        if (this.customRecommendedModels.some(m => m.fileName === body.fileName)) {
+          return this.json(res, 409, { error: "Model already in recommended list" });
+        }
+        // Compute file size
+        let sizeStr = "unknown";
+        try {
+          const st = statSync(body.path);
+          const gb = st.size / (1024 * 1024 * 1024);
+          sizeStr = gb >= 1 ? gb.toFixed(1) + " GB" : (st.size / (1024 * 1024)).toFixed(0) + " MB";
+        } catch { /* file may be remote/ollama */ }
+        this.customRecommendedModels.push({
+          name: body.name || body.fileName.replace(/\.gguf$/i, ""),
+          fileName: body.fileName,
+          size: sizeStr,
+          path: body.path,
+          source: body.source || "workspace",
+          addedAt: new Date().toISOString(),
+        });
+        this.saveCustomRecommendedModels();
+        return this.json(res, 200, { custom: this.customRecommendedModels });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "DELETE" && url === "/api/models/recommended") {
+      try {
+        const body = await this.readJsonBody<{ fileName: string }>(req);
+        if (!body?.fileName) return this.json(res, 400, { error: "Missing fileName" });
+        this.customRecommendedModels = this.customRecommendedModels.filter(m => m.fileName !== body.fileName);
+        this.saveCustomRecommendedModels();
+        return this.json(res, 200, { custom: this.customRecommendedModels });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
     }
 
     if (method === "GET" && url.startsWith("/api/events")) {
@@ -2053,12 +2918,281 @@ export class DashboardService {
       }
     }
 
+    // ── Setup Wizard API ─────────────────────────────────────────────────
+    if (method === "GET" && url === "/api/setup/status") {
+      const prefs = readPreferences();
+      return this.json(res, 200, {
+        setupComplete: prefs?.setupComplete ?? false,
+        executionProfileSegment: prefs?.executionProfileSegment ?? this.status.executionProfileSegment ?? "individual",
+        workspaceRoot: resolveWorkspaceRoot(),
+      });
+    }
+
+    if (method === "GET" && url === "/api/setup/prerequisites") {
+      const nodeVersion = process.version;
+      const nodeMajor = parseInt(nodeVersion.slice(1), 10);
+      const checks = [
+        {
+          id: "node-version",
+          label: "Node.js 22+",
+          passed: nodeMajor >= 22,
+          detail: nodeMajor >= 22 ? `Node.js ${nodeVersion} detected.` : `Node.js ${nodeVersion} detected — version 22+ is required.`,
+        },
+        {
+          id: "workspace-exists",
+          label: "Workspace directory exists",
+          passed: existsSync(resolveWorkspaceRoot()),
+          detail: existsSync(resolveWorkspaceRoot()) ? `Workspace at ${resolveWorkspaceRoot()}` : `Workspace directory does not yet exist at ${resolveWorkspaceRoot()}`,
+        },
+      ];
+      return this.json(res, 200, { checks });
+    }
+
+    if (method === "POST" && url === "/api/setup/profile") {
+      try {
+        const body = await this.readJsonBody<{ executionProfileSegment?: string }>(req);
+        const segment = body.executionProfileSegment?.trim().toLowerCase();
+        if (segment !== "individual" && segment !== "business") {
+          return this.json(res, 400, { error: "executionProfileSegment must be 'individual' or 'business'." });
+        }
+        writePreferences({ executionProfileSegment: segment });
+        this.status.executionProfileSegment = segment;
+        return this.json(res, 200, { executionProfileSegment: segment });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/setup/workspace") {
+      try {
+        const body = await this.readJsonBody<{ workspaceRoot?: string }>(req);
+        const root = body.workspaceRoot?.trim();
+        if (!root) {
+          return this.json(res, 400, { error: "workspaceRoot is required." });
+        }
+        if (!join(root, "").startsWith(root)) {
+          return this.json(res, 400, { error: "Invalid workspace path." });
+        }
+        setWorkspaceRoot(root);
+        ensureWorkspaceStructure();
+        return this.json(res, 200, { workspaceRoot: resolveWorkspaceRoot() });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/setup/complete") {
+      try {
+        writePreferences({ setupComplete: true });
+        const snapshot = await this.getReadinessSnapshot();
+        this.emitReadinessAudit("setup_wizard_complete", snapshot);
+        this.activityBus.emit({
+          sessionId: this.status.sessionId,
+          layer: "causal",
+          operation: "prism.setup_wizard.complete",
+          status: "succeeded",
+          details: {
+            executionProfileSegment: this.status.executionProfileSegment,
+            workspaceRoot: resolveWorkspaceRoot(),
+            ready: snapshot.ready,
+          },
+        });
+        return this.json(res, 200, { setupComplete: true, readiness: snapshot });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // ── Advanced Setup Wizard API ──────────────────────────────────────────
+    if (method === "GET" && url === "/api/setup/advanced/status") {
+      try {
+        const prefs = readPreferences();
+        const wsRoot = resolveWorkspaceRoot();
+
+        // Gather routing config
+        let routingConfig = null;
+        try {
+          const routingPath = join(wsRoot, "state", "routing-config.json");
+          if (existsSync(routingPath)) {
+            routingConfig = JSON.parse(readFileSync(routingPath, "utf-8"));
+          }
+        } catch { /* ignore */ }
+
+        // Gather guardian status
+        let guardianStatus = null;
+        try {
+          guardianStatus = (this as any).guardianAgent?.getStatus?.() ?? null;
+        } catch { /* ignore */ }
+
+        // Gather character assignments
+        let characterAssignments: unknown[] = [];
+        try {
+          characterAssignments = (this as any).characterAssignments ?? [];
+        } catch { /* ignore */ }
+
+        // Gather browser profiles
+        let browserProfiles: unknown[] = [];
+        try {
+          browserProfiles = (this as any).browserProfiles ?? [];
+        } catch { /* ignore */ }
+
+        // Gather scheduled jobs
+        let scheduledJobs: unknown[] = [];
+        try {
+          scheduledJobs = (this as any).schedulerEngine?.listSchedules?.() ?? [];
+        } catch { /* ignore */ }
+
+        // Gather available characters
+        let characters: unknown[] = [];
+        try {
+          characters = (this as any).getAvailableCharacters?.() ?? [];
+        } catch { /* ignore */ }
+
+        // Gather GGUF models
+        let ggufModels: Array<{ name: string; path: string; source: string }> = [];
+        try {
+          const modelsDir = join(process.cwd(), "models");
+          if (existsSync(modelsDir)) {
+            const files = readdirSync(modelsDir).filter((f: string) => f.endsWith(".gguf"));
+            ggufModels = files.map((f: string) => ({
+              name: f.replace(/\.gguf$/, ""),
+              path: join(modelsDir, f),
+              source: "workspace-models",
+            }));
+          }
+        } catch { /* ignore */ }
+
+        return this.json(res, 200, {
+          setupComplete: prefs?.setupComplete ?? false,
+          executionProfileSegment: prefs?.executionProfileSegment ?? this.status.executionProfileSegment ?? "individual",
+          workspaceRoot: wsRoot,
+          routingConfig,
+          guardianStatus,
+          characterAssignments,
+          browserProfiles,
+          scheduledJobs,
+          characters,
+          ggufModels,
+        });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/setup/initialization-session") {
+      try {
+        const body = await this.readJsonBody<{ certificate: Record<string, unknown> }>(req);
+        const cert = body.certificate ?? {};
+        const timestamp = new Date().toISOString();
+
+        // 1. Create a dedicated chat session
+        const session = this.createChatSession("PRISM Initialization Certificate \u2014 " + timestamp);
+
+        // 2. Build certificate content
+        const certLines: string[] = [
+          "# PRISM Initialization Certificate",
+          "**Generated:** " + timestamp,
+          "**Session:** " + session.sessionId,
+          "",
+          "## Configuration Summary",
+        ];
+
+        const sections: Array<[string, unknown]> = [
+          ["Execution Profile", cert.profile],
+          ["Workspace", cert.workspace],
+          ["Primary LLM Provider", cert.provider],
+          ["Model Routing", cert.routing],
+          ["Guardian Agent", cert.guardian],
+          ["Agentic Control", cert.agents],
+          ["Character Accountability (CAC)", cert.cac],
+          ["Browser Profile", cert.browserProfile],
+          ["Scheduler", cert.scheduler],
+          ["Readiness", cert.readiness],
+        ];
+
+        for (const [title, data] of sections) {
+          certLines.push("");
+          certLines.push("### " + title);
+          if (data && typeof data === "object") {
+            for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+              const val = typeof v === "object" ? JSON.stringify(v) : String(v ?? "N/A");
+              certLines.push("- **" + k + ":** " + val);
+            }
+          } else {
+            certLines.push("- " + String(data ?? "Not configured"));
+          }
+        }
+
+        certLines.push("");
+        certLines.push("---");
+        certLines.push("*This certificate is an immutable provenance record of the initial PRISM system configuration.*");
+
+        const certContent = certLines.join("\n");
+
+        // 3. Add certificate as a system message to the session
+        this.chatStore.appendMessage(
+          session.sessionId,
+          "assistant",
+          certContent,
+          { source: "initialization_certificate", type: "certificate" },
+        );
+
+        // 4. Package the session as a complete initialization certificate
+        const pkg = this.createSessionPackage({
+          title: "Initialization Certificate v1.0 \u2014 " + timestamp,
+          areaOfInterest: "System Initialization",
+          objective: "Immutable provenance record of initial PRISM system configuration",
+          successCriteria: "All configuration steps completed and validated",
+          sessionIds: [session.sessionId],
+          status: "complete" as SessionPackageStatus,
+          source: "setup_wizard_advanced",
+        });
+
+        // 5. Emit activity event
+        this.activityBus.emit({
+          sessionId: session.sessionId,
+          layer: "causal",
+          operation: "prism.initialization_certificate.created",
+          status: "succeeded",
+          details: {
+            packageId: pkg.packageId,
+            sessionId: session.sessionId,
+            timestamp,
+          },
+        });
+
+        return this.json(res, 201, {
+          sessionId: session.sessionId,
+          packageId: pkg.packageId,
+          title: session.title,
+          timestamp,
+        });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
     if (method === "GET" && url === "/api/actions") {
       return this.json(res, 200, this.listActions());
     }
 
     if (method === "GET" && url === "/api/action-history") {
       return this.json(res, 200, this.listActionHistory());
+    }
+
+    if (method === "GET" && url.startsWith("/api/logs")) {
+      const filters = parseEventFilters(url, 500);
+      const limit = Math.max(1, Math.min(2000, filters.limit));
+      const events = this.activityBus.listEvents();
+      const logs = events.slice(-limit).reverse().map((e) => ({
+        type: "log_entry",
+        timestamp: e.timestamp,
+        source: e.layer || "system",
+        operation: e.operation,
+        severity: e.status === "failed" ? "error" : "info",
+        summary: typeof e.details?.summary === "string" ? e.details.summary : e.operation,
+      }));
+      return this.json(res, 200, logs);
     }
 
     if (method === "GET" && url === "/api/chat/sessions") {
@@ -2267,6 +3401,15 @@ export class DashboardService {
       }
     }
 
+    if (method === "GET" && url === "/api/llm/provider-health") {
+      try {
+        const results = await this.llmProviders.testAllProviders();
+        return this.json(res, 200, { providers: results, timestamp: new Date().toISOString() });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
     if (method === "GET" && url.startsWith("/api/llm/providers")) {
       try {
         const parsed = new URL(`http://localhost${url}`);
@@ -2426,6 +3569,421 @@ export class DashboardService {
       }
     }
 
+    // ── Spectrum Refraction (Prism SR) API ───────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/sr/status")) {
+      try {
+        const parsedUrl = new URL(url, "http://localhost");
+        const sessionId = parsedUrl.searchParams.get("sessionId") || "";
+        if (!sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const config = this.chatStore.getSRConfig(sessionId);
+        const candidates = await this.llmProviders.getSRModelCandidates();
+        const validation = config
+          ? this.llmProviders.validateSRModels(config.leftModel, config.rightModel)
+          : { left: null, right: null };
+
+        // Compute isolation level when both hemispheres are configured
+        const triad = (config?.leftProviderId && config?.leftModel && config?.rightProviderId && config?.rightModel)
+          ? this.llmProviders.validateSRTriadConfig(config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel)
+          : null;
+
+        return this.json(res, 200, {
+          config: config ?? { enabled: false, leftProviderId: null, leftModel: null, rightProviderId: null, rightModel: null },
+          candidates,
+          validation,
+          isolationLevel: triad?.isolationLevel ?? null,
+          isolationAdvisory: triad?.advisory ?? null,
+          circuitBreakerState: this.llmProviders.getSRCircuitBreakerState(),
+        });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/configure") {
+      try {
+        const body = await this.readJsonBody<{
+          sessionId: string;
+          leftProviderId: string | null;
+          leftModel: string | null;
+          rightProviderId: string | null;
+          rightModel: string | null;
+          leftSlot?: string | null;
+          rightSlot?: string | null;
+          leftTimeoutMs?: number | null;
+          rightTimeoutMs?: number | null;
+          circuitBreakerEnabled?: boolean;
+          showHemispheres?: boolean;
+        }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+
+        // Validate selections against capability matrix (advisory only — non-qualified models are allowed)
+        const validation = this.llmProviders.validateSRModels(body.leftModel, body.rightModel);
+
+        // Instance isolation enforcement: Left ≠ Right (mandatory)
+        let isolationLevel: string | null = null;
+        if (body.leftProviderId && body.leftModel && body.rightProviderId && body.rightModel) {
+          const triad = this.llmProviders.validateSRTriadConfig(body.leftProviderId, body.leftModel, body.rightProviderId, body.rightModel);
+          if (!triad.valid) {
+            return this.json(res, 400, { error: triad.advisory, validation, isolationLevel: triad.isolationLevel });
+          }
+          isolationLevel = triad.isolationLevel;
+        }
+
+        const existingConfig = this.chatStore.getSRConfig(body.sessionId);
+        const enabled = existingConfig?.enabled ?? false;
+        this.chatStore.saveSRConfig(body.sessionId, enabled, body.leftProviderId, body.leftModel, body.rightProviderId, body.rightModel, {
+          leftSlot: body.leftSlot ?? existingConfig?.leftSlot,
+          rightSlot: body.rightSlot ?? existingConfig?.rightSlot,
+          leftTimeoutMs: body.leftTimeoutMs ?? existingConfig?.leftTimeoutMs,
+          rightTimeoutMs: body.rightTimeoutMs ?? existingConfig?.rightTimeoutMs,
+          circuitBreakerEnabled: body.circuitBreakerEnabled ?? existingConfig?.circuitBreakerEnabled,
+          showHemispheres: body.showHemispheres ?? existingConfig?.showHemispheres,
+        });
+        const updated = this.chatStore.getSRConfig(body.sessionId);
+
+        return this.json(res, 200, { config: updated, validation, isolationLevel });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/activate") {
+      try {
+        const body = await this.readJsonBody<{ sessionId: string }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const config = this.chatStore.getSRConfig(body.sessionId);
+        if (!config || !config.leftModel || !config.rightModel) {
+          return this.json(res, 400, { error: "Configure Left and Right models before activating SR." });
+        }
+
+        // Instance isolation enforcement on activation
+        const triad = this.llmProviders.validateSRTriadConfig(config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel);
+        if (!triad.valid) {
+          return this.json(res, 400, { error: triad.advisory, isolationLevel: triad.isolationLevel });
+        }
+
+        // Auto-start local models that aren't running yet
+        const autoStartPromises: Promise<unknown>[] = [];
+        for (const side of [{ pid: config.leftProviderId, model: config.leftModel }, { pid: config.rightProviderId, model: config.rightModel }] as const) {
+          const supervisor = side.pid === "llamacpp" ? this.llamaSupervisor : side.pid === "bitnetcpp" ? this.bitnetSupervisor : null;
+          if (supervisor && side.model) {
+            const running = supervisor.getSnapshot().find(s => s.modelAlias === side.model && s.status === "ready");
+            if (!running) {
+              const modelPath = supervisor.getModelPath(side.model);
+              if (modelPath) {
+                autoStartPromises.push(supervisor.loadModel(modelPath, side.model));
+              }
+            }
+          }
+        }
+        if (autoStartPromises.length > 0) {
+          await Promise.all(autoStartPromises);
+        }
+
+        this.chatStore.saveSRConfig(body.sessionId, true, config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel, {
+          leftSlot: config.leftSlot,
+          rightSlot: config.rightSlot,
+          leftTimeoutMs: config.leftTimeoutMs,
+          rightTimeoutMs: config.rightTimeoutMs,
+          circuitBreakerEnabled: config.circuitBreakerEnabled,
+          showHemispheres: config.showHemispheres,
+        });
+        return this.json(res, 200, { activated: true, config: this.chatStore.getSRConfig(body.sessionId), isolationLevel: triad.isolationLevel });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/deactivate") {
+      try {
+        const body = await this.readJsonBody<{ sessionId: string }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const config = this.chatStore.getSRConfig(body.sessionId);
+        if (config) {
+          this.chatStore.saveSRConfig(body.sessionId, false, config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel, {
+            leftSlot: config.leftSlot,
+            rightSlot: config.rightSlot,
+            leftTimeoutMs: config.leftTimeoutMs,
+            rightTimeoutMs: config.rightTimeoutMs,
+            circuitBreakerEnabled: config.circuitBreakerEnabled,
+            showHemispheres: config.showHemispheres,
+          });
+        }
+        return this.json(res, 200, { activated: false, config: this.chatStore.getSRConfig(body.sessionId) });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // ── SR Presets API ────────────────────────────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/sr/presets")) {
+      try {
+        const parsedUrl = new URL(url, "http://localhost");
+        const scope = (parsedUrl.searchParams.get("scope") || "global") as "global" | "session";
+        const scopeId = parsedUrl.searchParams.get("sessionId") || undefined;
+        const presets = this.chatStore.listSRPresets(scope, scopeId);
+        return this.json(res, 200, { presets });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/presets") {
+      try {
+        const body = await this.readJsonBody<{
+          name: string;
+          scope?: "global" | "session";
+          sessionId?: string;
+          leftProviderId: string | null;
+          leftModel: string | null;
+          rightProviderId: string | null;
+          rightModel: string | null;
+        }>(req);
+        if (!body.name?.trim()) return this.json(res, 400, { error: "Missing preset name" });
+        const id = randomUUID();
+        const scope = body.scope || "global";
+        const scopeId = scope === "session" ? (body.sessionId || null) : null;
+        this.chatStore.saveSRPreset(id, body.name, scope, scopeId, body.leftProviderId, body.leftModel, body.rightProviderId, body.rightModel);
+        const preset = this.chatStore.getSRPreset(id);
+        return this.json(res, 201, { preset });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "DELETE" && url.startsWith("/api/sr/presets/")) {
+      try {
+        const presetId = url.slice("/api/sr/presets/".length).split("?")[0];
+        if (!presetId) return this.json(res, 400, { error: "Missing preset ID" });
+        const deleted = this.chatStore.deleteSRPreset(presetId);
+        return this.json(res, deleted ? 200 : 404, deleted ? { deleted: true } : { error: "Preset not found" });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url.startsWith("/api/sr/presets/") && url.endsWith("/load")) {
+      try {
+        const presetId = url.slice("/api/sr/presets/".length).replace(/\/load$/, "");
+        if (!presetId) return this.json(res, 400, { error: "Missing preset ID" });
+        const body = await this.readJsonBody<{ sessionId: string }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const preset = this.chatStore.getSRPreset(presetId);
+        if (!preset) return this.json(res, 404, { error: "Preset not found" });
+        const existingConfig = this.chatStore.getSRConfig(body.sessionId);
+        const enabled = existingConfig?.enabled ?? false;
+        // Preserve advanced config opts when loading a preset (presets only store model selection)
+        this.chatStore.saveSRConfig(body.sessionId, enabled, preset.leftProviderId, preset.leftModel, preset.rightProviderId, preset.rightModel, {
+          leftSlot: existingConfig?.leftSlot,
+          rightSlot: existingConfig?.rightSlot,
+          leftTimeoutMs: existingConfig?.leftTimeoutMs,
+          rightTimeoutMs: existingConfig?.rightTimeoutMs,
+          circuitBreakerEnabled: existingConfig?.circuitBreakerEnabled,
+          showHemispheres: existingConfig?.showHemispheres,
+        });
+        const config = this.chatStore.getSRConfig(body.sessionId);
+        const validation = this.llmProviders.validateSRModels(preset.leftModel, preset.rightModel);
+        const triad = (preset.leftProviderId && preset.leftModel && preset.rightProviderId && preset.rightModel)
+          ? this.llmProviders.validateSRTriadConfig(preset.leftProviderId, preset.leftModel, preset.rightProviderId, preset.rightModel)
+          : null;
+        return this.json(res, 200, { config, validation, isolationLevel: triad?.isolationLevel ?? null, isolationAdvisory: triad?.advisory ?? null });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // ── SR Suggest (heuristic model selection) ────────────────────────
+
+    if (method === "GET" && url === "/api/sr/suggest") {
+      try {
+        const candidates = await this.llmProviders.getSRModelCandidates();
+        if (candidates.left.length === 0 && candidates.right.length === 0) {
+          return this.json(res, 200, { left: null, right: null, reasoning: "No qualified SR models available. Configure providers with API keys and ensure models meet SR tier requirements." });
+        }
+        const bestLeft = candidates.left.length > 0 ? candidates.left[0] : null;
+        let bestRight = candidates.right.length > 0 ? candidates.right[0] : null;
+        // Enforce isolation: if top left and right are same provider+model, pick next-best right
+        if (bestLeft && bestRight && bestLeft.providerId === bestRight.providerId && bestLeft.model === bestRight.model) {
+          bestRight = candidates.right.length > 1 ? candidates.right[1] : null;
+        }
+        const parts: string[] = [];
+        if (bestLeft) parts.push(`Left: ${bestLeft.providerId}/${bestLeft.model} (T${bestLeft.tier} ${bestLeft.level})`);
+        else parts.push("Left: no qualified logic models available");
+        if (bestRight) parts.push(`Right: ${bestRight.providerId}/${bestRight.model} (T${bestRight.tier} ${bestRight.level})`);
+        else parts.push("Right: no qualified creative models available");
+        if (bestLeft && bestRight) {
+          const iso = bestLeft.providerId !== bestRight.providerId ? "full" : "model";
+          parts.push(`Isolation: ${iso}`);
+        }
+        return this.json(res, 200, { left: bestLeft, right: bestRight, reasoning: parts.join(" · ") });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── SR Cost Estimation ────────────────────────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/sr/cost-estimate")) {
+      try {
+        const parsedUrl = new URL(url, "http://localhost");
+        const sessionId = parsedUrl.searchParams.get("sessionId") || "";
+        if (!sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const inputTokens = parseInt(parsedUrl.searchParams.get("inputTokens") ?? "2000", 10);
+        const outputTokens = parseInt(parsedUrl.searchParams.get("outputTokens") ?? "1000", 10);
+        const config = this.chatStore.getSRConfig(sessionId);
+        if (!config || !config.leftModel || !config.rightModel) {
+          return this.json(res, 400, { error: "SR not configured for this session." });
+        }
+        const estimate = this.llmProviders.estimateSRCost(
+          {
+            enabled: true,
+            leftModel: { providerId: config.leftProviderId!, model: config.leftModel },
+            rightModel: { providerId: config.rightProviderId!, model: config.rightModel },
+          },
+          isNaN(inputTokens) ? 2_000 : inputTokens,
+          isNaN(outputTokens) ? 1_000 : outputTokens,
+        );
+        return this.json(res, 200, estimate);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── SR Catalog (all providers + models with qualification) ────────
+
+    if (method === "GET" && url === "/api/sr/catalog") {
+      try {
+        const catalog = await this.llmProviders.getCatalog();
+        const providers = catalog.providers
+          .filter(p => p.enabled)
+          .map(p => ({
+            id: p.id,
+            label: p.label,
+            kind: p.kind,
+            hasApiKey: p.hasApiKey,
+            models: p.models,
+          }));
+        return this.json(res, 200, { providers });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Local Hardware Swarm API ───────────────────────────────────────
+
+    if (method === "GET" && url === "/api/hardware/swarm") {
+      try {
+        if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        return this.json(res, 200, this.llamaSupervisor.getSnapshot());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/hardware/swarm/load") {
+      try {
+        if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        const body = await this.readJsonBody<{ modelPath: string; modelAlias: string; ctxSize?: number }>(req);
+        if (!body.modelPath || !body.modelAlias) return this.json(res, 400, { error: "Missing required fields." });
+        const slot = await this.llamaSupervisor.loadModel(body.modelPath, body.modelAlias, body.ctxSize);
+        return this.json(res, 200, slot);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/hardware/swarm/unload") {
+      try {
+        if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        const body = await this.readJsonBody<{ modelAlias: string }>(req);
+        if (!body.modelAlias) return this.json(res, 400, { error: "Missing modelAlias." });
+        await this.llamaSupervisor.unloadModel(body.modelAlias);
+        return this.json(res, 200, { unloaded: true });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Guardian Agent API ─────────────────────────────────────────────
+
+    if (method === "GET" && url === "/api/guardian/status") {
+      try {
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/guardian/start") {
+      try {
+        const status = this.guardianAgent.getStatus();
+        if (!status.modelPath) {
+          return this.json(res, 400, {
+            error: "No local model path configured for Guardian Agent.",
+            suggestion: "Please select a GGUF model from the dropdown in the Guardian panel before starting."
+          });
+        }
+        await this.guardianAgent.start();
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/guardian/stop") {
+      try {
+        this.guardianAgent.stop();
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/guardian/configure") {
+      try {
+        const body = await this.readJsonBody<Record<string, unknown>>(req);
+        this.guardianAgent.configure(body as any);
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Guardian Task API ──────────────────────────────────────────────
+
+    if (method === "GET" && url === "/api/guardian/tasks") {
+      return this.json(res, 200, { tasks: this.guardianAgent.getTaskStatus() });
+    }
+
+    if (method === "POST" && url?.startsWith("/api/guardian/tasks/") && url?.endsWith("/run")) {
+      const taskId = url.replace("/api/guardian/tasks/", "").replace("/run", "");
+      try {
+        const result = await this.guardianAgent.runTask(taskId);
+        if (!result) return this.json(res, 404, { error: `Task not found: ${taskId}` });
+        return this.json(res, 200, result);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url?.startsWith("/api/guardian/tasks/") && url?.endsWith("/toggle")) {
+      const taskId = url.replace("/api/guardian/tasks/", "").replace("/toggle", "");
+      const result = this.guardianAgent.toggleTask(taskId);
+      if (!result) return this.json(res, 404, { error: `Task not found: ${taskId}` });
+      return this.json(res, 200, result);
+    }
+
+    if (method === "POST" && url === "/api/guardian/tasks/run-all") {
+      try {
+        await this.guardianAgent.runAllTasks();
+        return this.json(res, 200, { tasks: this.guardianAgent.getTaskStatus() });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
     // ── Modality Routing API ───────────────────────────────────────────
 
     if (method === "GET" && url === "/api/llm/modalities") {
@@ -2451,14 +4009,38 @@ export class DashboardService {
 
     if (method === "PUT" && url === "/api/models/matrix") {
       try {
-        const body = await this.readJsonBody<{ pattern: string; label?: string; tier?: number; modalities?: string[]; strengths?: string[]; locality?: string; contextWindow?: number; parametersBillions?: number; parameterSize?: string; estimatedVramMb?: number; maxOutputTokens?: number; adaptivePromptBudget?: number }>(req);
+        const body = await this.readJsonBody<{ pattern: string; label?: string; tier?: number; modalities?: string[]; strengths?: string[]; locality?: string; contextWindow?: number; parametersBillions?: number; parameterSize?: string; estimatedVramMb?: number; maxOutputTokens?: number; adaptivePromptBudget?: number; deprecated?: boolean; deprecatedAt?: string; sunsetDate?: string; successor?: string; deprecationReason?: string }>(req);
         if (!body.pattern?.trim()) {
           return this.json(res, 400, { error: "pattern is required." });
         }
         this.llmProviders.registerModel(body as any);
+        this.chatStore.upsertModelProfile(body as any);
         return this.json(res, 200, { registered: body.pattern });
       } catch (error) {
         return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/models/matrix/refresh") {
+      try {
+        const catalog = await this.llmProviders.getCatalog();
+        const enabledProviders = catalog.providers.filter((p) => p.enabled);
+        const results: Array<{ providerId: string; known: string[]; unknown: string[]; suggested: number }> = [];
+        for (const provider of enabledProviders) {
+          try {
+            const disc = await this.llmProviders.discoverProviderModels(provider.id);
+            for (const profile of disc.suggested) {
+              this.chatStore.upsertModelProfile(profile);
+            }
+            results.push({ providerId: provider.id, known: disc.known, unknown: disc.unknown, suggested: disc.suggested.length });
+          } catch {
+            results.push({ providerId: provider.id, known: [], unknown: [], suggested: 0 });
+          }
+        }
+        const matrix = this.llmProviders.getFullModelMatrix();
+        return this.json(res, 200, { refreshed: true, providers: results, matrix });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
       }
     }
 
@@ -2466,6 +4048,7 @@ export class DashboardService {
       try {
         const pattern = decodeURIComponent(url.slice("/api/models/matrix/".length));
         const removed = this.llmProviders.removeModel(pattern);
+        this.chatStore.removeModelProfile(pattern);
         return this.json(res, 200, { removed, pattern });
       } catch (error) {
         return this.json(res, 400, { error: String(error) });
@@ -2477,6 +4060,24 @@ export class DashboardService {
         const providerId = decodeURIComponent(url.slice("/api/models/discover/".length));
         const result = await this.llmProviders.discoverProviderModels(providerId);
         return this.json(res, 200, result);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "GET" && url === "/api/models/deprecated") {
+      try {
+        const matrix = this.llmProviders.getFullModelMatrix();
+        return this.json(res, 200, { deprecated: matrix.deprecated });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "GET" && url === "/api/models/prompt-strategies") {
+      try {
+        const matrix = this.llmProviders.getFullModelMatrix();
+        return this.json(res, 200, { strategies: matrix.promptStrategies });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
       }
@@ -2506,18 +4107,21 @@ export class DashboardService {
       return this.json(res, 200, { plugins: this.pluginStates || {} });
     }
 
-    const pluginToggleMatch = /^\/api\/plugins\/([^/]+)\/toggle$/.exec(url);
+    const pluginToggleMatch = /^\/api\/(v1\/)?plugins\/([^/]+)\/toggle$/.exec(url);
     if (pluginToggleMatch && method === "POST") {
-      const pluginName = decodeURIComponent(pluginToggleMatch[1]!);
-      const body = await this.readJsonBody<{ enabled: boolean }>(req);
+      const pluginName = decodeURIComponent(pluginToggleMatch[2]!);
       if (!this.pluginStates[pluginName]) this.pluginStates[pluginName] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, lastChecked: null };
-      this.pluginStates[pluginName].enabled = body.enabled;
-      return this.json(res, 200, { plugin: pluginName, enabled: body.enabled });
+      // If body contains explicit enabled value use it; otherwise flip current state
+      let body: { enabled?: boolean } = {};
+      try { body = await this.readJsonBody<{ enabled?: boolean }>(req); } catch { /* no body — flip */ }
+      const newEnabled = typeof body.enabled === "boolean" ? body.enabled : !this.pluginStates[pluginName].enabled;
+      this.pluginStates[pluginName].enabled = newEnabled;
+      return this.json(res, 200, { plugin: pluginName, enabled: newEnabled });
     }
 
-    const pluginHealthMatch = /^\/api\/plugins\/([^/]+)\/health$/.exec(url);
+    const pluginHealthMatch = /^\/api\/(v1\/)?plugins\/([^/]+)\/health$/.exec(url);
     if (pluginHealthMatch && method === "POST") {
-      const pluginName = decodeURIComponent(pluginHealthMatch[1]!);
+      const pluginName = decodeURIComponent(pluginHealthMatch[2]!);
       return this.json(res, 200, { plugin: pluginName, healthy: true, message: "Health check passed" });
     }
 
@@ -2531,9 +4135,115 @@ export class DashboardService {
       return this.json(res, 201, { tool: body.name, registered: true });
     }
 
+    if (method === "POST" && url === "/api/tools/stage") {
+      try {
+        const body = await this.readJsonBody<{
+          sources: Array<"manifest" | "decorator" | "dynamic">;
+          tool_ids?: string[];
+          baseline_comparison?: boolean;
+          risk_assessment?: boolean;
+          approval_routing?: boolean;
+        }>(req);
+        if (!body.sources || !Array.isArray(body.sources) || body.sources.length === 0) {
+          return this.json(res, 400, { error: "sources array is required and must not be empty" });
+        }
+        const validSources = ["manifest", "decorator", "dynamic"];
+        for (const s of body.sources) {
+          if (!validSources.includes(s)) {
+            return this.json(res, 400, { error: `Invalid source: ${s}. Must be one of: ${validSources.join(", ")}` });
+          }
+        }
+        const extractor = this.getOrCreateToolContractExtractor();
+        const request: ExtractionRequest = {
+          request_id: randomUUID(),
+          sources: body.sources,
+          tool_ids: body.tool_ids,
+          baseline_comparison: body.baseline_comparison ?? true,
+          risk_assessment: body.risk_assessment ?? true,
+          approval_routing: body.approval_routing ?? false,
+          created_at: new Date().toISOString(),
+        };
+        const result = await extractor.extractContracts(request);
+
+        // Wire approval_routing: enqueue Tier 3 contracts into the approval queue
+        const approvalIds: string[] = [];
+        if (body.approval_routing && result.extracted_contracts) {
+          for (const contract of result.extracted_contracts) {
+            if (contract.risk_tier === "tier3") {
+              // Fire-and-forget: enqueue for operator review, do not block response
+              void this.queue.request(
+                "system",
+                `tool.stage.${contract.tool_id}`,
+                { tool_name: contract.tool_name, version: contract.version, risk_tier: contract.risk_tier },
+                300_000, // 5-minute approval window
+              ).then((approved) => {
+                this.activityBus.emit({
+                  operation: "tool.stage.approval_resolved",
+                  status: approved ? "succeeded" : "failed",
+                  sessionId: "system",
+                  layer: "governance",
+                  details: { tool_id: contract.tool_id, approved },
+                });
+              });
+              approvalIds.push(contract.tool_id);
+            }
+          }
+        }
+
+        return this.json(res, 200, { ...result, approval_pending_ids: approvalIds });
+      } catch (error) {
+        return this.json(res, 500, { error: `Tool staging failed: ${String(error)}` });
+      }
+    }
+
+    if (method === "POST" && url === "/api/tools/stage/resolve") {
+      try {
+        const body = await this.readJsonBody<{ request_id: string; approved: boolean }>(req);
+        if (!body.request_id) {
+          return this.json(res, 400, { error: "request_id is required" });
+        }
+        if (typeof body.approved !== "boolean") {
+          return this.json(res, 400, { error: "approved must be a boolean" });
+        }
+        const extractor = this.getOrCreateToolContractExtractor();
+        const result = await extractor.resolveApproval(body.request_id, body.approved);
+        return this.json(res, 200, result);
+      } catch (error) {
+        return this.json(res, 500, { error: `Approval resolution failed: ${String(error)}` });
+      }
+    }
+
     if (method === "POST" && url === "/api/plugins/install") {
-      const body = await this.readJsonBody<{ name: string; type?: string; url?: string; port?: number; description?: string }>(req);
+      const body = await this.readJsonBody<{ name: string; type?: string; url?: string; port?: number; description?: string; manifest?: PluginPackManifest; packPath?: string }>(req);
       if (!body.name) return this.json(res, 400, { error: "Plugin name is required" });
+
+      // If a full manifest is provided, run load-time validation pipeline
+      if (body.manifest) {
+        const prefs = readPreferences();
+        const profile = (prefs?.executionProfileSegment === "business" ? "business" : "individual") as "individual" | "business";
+        const result = loadPluginPack(
+          body.manifest,
+          body.packPath ?? ".",
+          this.activityBus,
+          { executionProfile: profile },
+        );
+        if (!result.accepted) {
+          return this.json(res, 422, {
+            plugin: body.name,
+            installed: false,
+            reason: result.summary,
+            errors: result.manifestValidation.errors,
+            trustValidation: result.trustValidation,
+          });
+        }
+        return this.json(res, 201, {
+          plugin: body.name,
+          installed: true,
+          summary: result.summary,
+          warnings: result.manifestValidation.warnings,
+        });
+      }
+
       return this.json(res, 201, { plugin: body.name, installed: true });
     }
 
@@ -2840,16 +4550,131 @@ export class DashboardService {
     }
 
     if (method === "GET" && url === "/api/computer/devices") {
-      const osModule = await import("node:os");
-      const cpus = osModule.cpus();
-      const nets = osModule.networkInterfaces();
-      const devices: Record<string, string[]> = {
-        "Display Adapters": [],
-        "Network Adapters": Object.keys(nets),
-        "Disk Drives": [],
-        "Processors": cpus.length > 0 ? [cpus[0]!.model + " (" + cpus.length + " cores)"] : [],
+      const { exec: execCb } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execAsync = promisify(execCb);
+      // Single PowerShell script queries all 11 WMI classes via Get-CimInstance
+      const ps = `
+$ErrorActionPreference='SilentlyContinue'
+$r=@{}
+function q($cls,$cat,$fmt){
+  $items=@()
+  try{
+    Get-CimInstance -ClassName $cls | ForEach-Object {
+      $props=@{}
+      $_.CimInstanceProperties | Where-Object { $_.Value -ne $null } | ForEach-Object { $props[$_.Name]=[string]$_.Value }
+      $items+=@{name=(&$fmt $_);status=if($props['Status']){$props['Status']}else{'OK'};props=$props}
+    }
+  }catch{ $items+=@{name="Detection failed: $_";status='Error';props=@{}} }
+  $r[$cat]=$items
+}
+q 'Win32_Processor' 'Processors' { param($p) "$($p.Name.Trim()) ($($p.NumberOfCores) cores, $($p.NumberOfLogicalProcessors) threads)" }
+q 'Win32_BaseBoard' 'Motherboard' { param($b) "$($b.Manufacturer) $($b.Product)".Trim() }
+q 'Win32_PhysicalMemory' 'Memory' { param($m) "$($m.Manufacturer) $([math]::Round([long]$m.Capacity/1GB,2))GB $($m.Speed)MHz".Trim() }
+q 'Win32_VideoController' 'Display Adapters' { param($d) if($d.AdapterRAM){("$($d.Name.Trim()) ($([math]::Round($d.AdapterRAM/1GB,2))GB)")}else{$d.Name.Trim()} }
+q 'Win32_DiskDrive' 'Disk Drives' { param($d) "$($d.Caption.Trim()) ($([math]::Round([long]$d.Size/1GB,2))GB $($d.InterfaceType))" }
+q 'Win32_NetworkAdapter' 'Network Adapters' { param($n) "$($n.Name.Trim()) ($($n.AdapterType))" }
+$r['Network Adapters']=$r['Network Adapters'] | Where-Object { $_.props['PhysicalAdapter'] -eq 'True' }
+if(-not $r['Network Adapters']){$r['Network Adapters']=@()}
+q 'Win32_SoundDevice' 'Sound Devices' { param($s) $s.Name.Trim() }
+q 'Win32_USBController' 'USB Controllers' { param($u) $u.Name.Trim() }
+q 'Win32_USBHub' 'USB Devices' { param($u) $u.Name.Trim() }
+q 'Win32_BIOS' 'BIOS' { param($b) "$($b.Manufacturer) $($b.Name)".Trim() }
+q 'Win32_CDROMDrive' 'Optical Drives' { param($c) $c.Name.Trim() }
+$r | ConvertTo-Json -Depth 4 -Compress
+`;
+      try {
+        const result = await execAsync(`powershell -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"').replace(/\n/g, " ")}"`, { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+        const parsed = JSON.parse(result.stdout.trim());
+        // Normalize: PowerShell may return single-item arrays as objects
+        const devices: Record<string, Array<{ name: string; status: string; props: Record<string, string> }>> = {};
+        for (const [cat, items] of Object.entries(parsed)) {
+          devices[cat] = Array.isArray(items) ? items as Array<{ name: string; status: string; props: Record<string, string> }> : items ? [items as { name: string; status: string; props: Record<string, string> }] : [];
+        }
+        return this.json(res, 200, { devices });
+      } catch (e: unknown) {
+        // Fallback to Node.js os module if PowerShell fails
+        const osModule = await import("node:os");
+        const cpus = osModule.cpus();
+        const nets = osModule.networkInterfaces();
+        const devices: Record<string, Array<{ name: string; status: string; props: Record<string, string> }>> = {
+          "Processors": cpus.length > 0 ? [{ name: cpus[0]!.model + " (" + cpus.length + " cores)", status: "OK", props: { model: cpus[0]!.model, cores: String(cpus.length), speed: cpus[0]!.speed + " MHz" } }] : [],
+          "Network Adapters": Object.entries(nets).map(([name, addrs]) => ({ name, status: "OK", props: { addresses: (addrs || []).map(a => a.address).join(", ") } })),
+          "Display Adapters": [],
+          "Disk Drives": [],
+        };
+        return this.json(res, 200, { devices, fallback: true, error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url.startsWith("/api/computer/devices/properties/")) {
+      const parts = url.replace("/api/computer/devices/properties/", "").split("/");
+      const category = decodeURIComponent(parts[0] || "");
+      const index = parseInt(parts[1] || "0", 10);
+      const wmiMapping: Record<string, string> = {
+        "Processors": "Win32_Processor",
+        "Motherboard": "Win32_BaseBoard",
+        "Memory": "Win32_PhysicalMemory",
+        "Display Adapters": "Win32_VideoController",
+        "Disk Drives": "Win32_DiskDrive",
+        "Network Adapters": "Win32_NetworkAdapter",
+        "Sound Devices": "Win32_SoundDevice",
+        "USB Controllers": "Win32_USBController",
+        "USB Devices": "Win32_USBHub",
+        "BIOS": "Win32_BIOS",
+        "Optical Drives": "Win32_CDROMDrive",
       };
-      return this.json(res, 200, { devices });
+      const wmiClass = wmiMapping[category];
+      if (!wmiClass) return this.json(res, 400, { error: "Unknown category" });
+      try {
+        const { exec: execCb2 } = await import("node:child_process");
+        const { promisify: promisify2 } = await import("node:util");
+        const execAsync2 = promisify2(execCb2);
+        const ps2 = `Get-CimInstance -ClassName ${wmiClass} | Select-Object -Index ${index} | ForEach-Object { $h=@{}; $_.CimInstanceProperties | Where-Object { $_.Value -ne $null } | ForEach-Object { $h[$_.Name]=[string]$_.Value }; $h } | ConvertTo-Json -Compress`;
+        const r2 = await execAsync2(`powershell -NoProfile -NonInteractive -Command "${ps2}"`, { timeout: 15000, maxBuffer: 512 * 1024 });
+        const props = JSON.parse(r2.stdout.trim() || "{}");
+        return this.json(res, 200, { category, index, properties: props });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "POST" && url === "/api/computer/devices/report") {
+      const body = await this.readJsonBody<{ categories?: string[] }>(req);
+      const cats = body.categories || [];
+      const wmiMapping: Record<string, string> = {
+        "Processors": "Win32_Processor", "Motherboard": "Win32_BaseBoard", "Memory": "Win32_PhysicalMemory",
+        "Display Adapters": "Win32_VideoController", "Disk Drives": "Win32_DiskDrive", "Network Adapters": "Win32_NetworkAdapter",
+        "Sound Devices": "Win32_SoundDevice", "USB Controllers": "Win32_USBController", "USB Devices": "Win32_USBHub",
+        "BIOS": "Win32_BIOS", "Optical Drives": "Win32_CDROMDrive",
+      };
+      const lines: string[] = ["PRISM Device Manager — Hardware Report", "Generated: " + new Date().toISOString(), "═".repeat(60), ""];
+      try {
+        const { exec: execCb3 } = await import("node:child_process");
+        const { promisify: promisify3 } = await import("node:util");
+        const execAsync3 = promisify3(execCb3);
+        for (const cat of cats) {
+          const cls = wmiMapping[cat];
+          if (!cls) continue;
+          lines.push("── " + cat + " ──");
+          try {
+            const ps3 = `Get-CimInstance -ClassName ${cls} | ForEach-Object { $h=@{}; $_.CimInstanceProperties | Where-Object { $_.Value -ne $null } | ForEach-Object { $h[$_.Name]=[string]$_.Value }; $h } | ConvertTo-Json -Depth 3 -Compress`;
+            const r3 = await execAsync3(`powershell -NoProfile -NonInteractive -Command "${ps3}"`, { timeout: 15000, maxBuffer: 1024 * 1024 });
+            const items = JSON.parse("[" + r3.stdout.trim().replace(/}\s*{/g, "},{") + "]");
+            const arr = Array.isArray(items) ? items : [items];
+            for (let i = 0; i < arr.length; i++) {
+              lines.push("  Device " + (i + 1) + ":");
+              for (const [k, v] of Object.entries(arr[i] as Record<string, string>)) {
+                lines.push("    " + k + ": " + v);
+              }
+              lines.push("");
+            }
+          } catch { lines.push("  (query failed)"); lines.push(""); }
+        }
+        return this.json(res, 200, { report: lines.join("\\n") });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
     }
 
     // ── Browser Control API ──────────────────────────────────────────────
@@ -2867,6 +4692,35 @@ export class DashboardService {
       if (method === "GET" && url === "/api/browser/profiles") {
         if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
         return this.json(res, 200, { profiles: profMgr.listProfiles() });
+      }
+
+      if (method === "POST" && url === "/api/browser/profiles") {
+        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
+        try {
+          const body = await this.readJsonBody<{
+            email?: string;
+            prismUserEmail?: string;
+            segment?: string;
+            executionProfileSegment?: string;
+            displayName?: string;
+            assignmentId?: string;
+          }>(req);
+          const email = (body.email || body.prismUserEmail || "").trim();
+          const segment = (body.segment || body.executionProfileSegment || "individual").trim();
+          if (!email) return this.json(res, 400, { error: "email is required." });
+          if (segment !== "individual" && segment !== "business") {
+            return this.json(res, 400, { error: "segment must be 'individual' or 'business'." });
+          }
+          const profile = profMgr.createProfile({
+            prismUserEmail: email,
+            executionProfileSegment: segment as "individual" | "business",
+            displayName: body.displayName || undefined,
+            assignmentId: body.assignmentId || undefined,
+          });
+          return this.json(res, 201, { ok: true, profile });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
       }
 
       if (method === "GET" && url === "/api/browser/diagnostics") {
@@ -3004,6 +4858,1017 @@ export class DashboardService {
     }
     // ── End Browser Control API ──────────────────────────────────────────
 
+    // ── Diagnostics API ──────────────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/browser/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "browser-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/browser/status") {
+      return this.json(res, 200, {
+        running: this.diagnosticsRunning,
+        lastRunAt: this.diagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/browser/run") {
+      if (this.diagnosticsRunning) {
+        return this.json(res, 409, { error: "Diagnostics already running." });
+      }
+      this.diagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-browser-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try {
+                  ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
+                } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.diagnosticsRunning = false;
+          this.diagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.diagnosticsRunning = false;
+      });
+
+      return; // response already sent
+    }
+    // ── End Diagnostics API ──────────────────────────────────────────────
+
+    // ── Agent Diagnostics API ────────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/agent/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "agent-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/agent/status") {
+      return this.json(res, 200, {
+        running: this.agentDiagnosticsRunning,
+        lastRunAt: this.agentDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/agent/run") {
+      if (this.agentDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Agent diagnostics already running." });
+      }
+      this.agentDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-agent-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "agent_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "agent_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.agentDiagnosticsRunning = false;
+          this.agentDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "agent_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.agentDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Agent Diagnostics API ────────────────────────────────────────
+
+    // ── Computer Diagnostics API ─────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/computer/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "computer-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/computer/status") {
+      return this.json(res, 200, {
+        running: this.computerDiagnosticsRunning,
+        lastRunAt: this.computerDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/computer/run") {
+      if (this.computerDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Computer diagnostics already running." });
+      }
+      this.computerDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-computer-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "computer_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "computer_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.computerDiagnosticsRunning = false;
+          this.computerDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "computer_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.computerDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Computer Diagnostics API ──────────────────────────────────────
+
+    // ── Knowledge Graph Diagnostics API ──────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/knowledge-graph/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "knowledge-graph-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/knowledge-graph/status") {
+      return this.json(res, 200, {
+        running: this.knowledgeGraphDiagnosticsRunning,
+        lastRunAt: this.knowledgeGraphDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/knowledge-graph/run") {
+      if (this.knowledgeGraphDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Knowledge Graph diagnostics already running." });
+      }
+      this.knowledgeGraphDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-knowledge-graph-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "knowledge_graph_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "knowledge_graph_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.knowledgeGraphDiagnosticsRunning = false;
+          this.knowledgeGraphDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "knowledge_graph_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.knowledgeGraphDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Knowledge Graph Diagnostics API ───────────────────────────────
+
+    // ── Workspace Diagnostics API ─────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/workspace/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "workspace-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/workspace/status") {
+      return this.json(res, 200, {
+        running: this.workspaceDiagnosticsRunning,
+        lastRunAt: this.workspaceDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/workspace/run") {
+      if (this.workspaceDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Workspace diagnostics already running." });
+      }
+      this.workspaceDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-workspace-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "workspace_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "workspace_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.workspaceDiagnosticsRunning = false;
+          this.workspaceDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "workspace_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.workspaceDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Workspace Diagnostics API ──────────────────────────────────────
+
+    // ── Network Diagnostics API ───────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/network/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "network-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/network/status") {
+      return this.json(res, 200, {
+        running: this.networkDiagnosticsRunning,
+        lastRunAt: this.networkDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/network/run") {
+      if (this.networkDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Network diagnostics already running." });
+      }
+      this.networkDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-network-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "network_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "network_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON \u2014 ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.networkDiagnosticsRunning = false;
+          this.networkDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "network_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.networkDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+
+    // ── VRGC Network Intelligence API ──────────────────────────────────────
+    if (method === "GET" && url === "/api/network/vrgc/status") {
+      try {
+        const { checkVrgcAvailability } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const available = await checkVrgcAvailability();
+        return this.json(res, 200, { available });
+      } catch {
+        return this.json(res, 200, { available: false });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/research") {
+      try {
+        const body = await this.readJsonBody<{ topic?: string; depth?: string; sourceTypes?: string[] }>(req);
+        if (!body.topic) return this.json(res, 400, { error: "Missing 'topic' field." });
+        const { fetchNetworkResearch } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await fetchNetworkResearch(body.topic, {
+          depth: (body.depth as "quick" | "standard" | "comprehensive") ?? "standard",
+          sourceTypes: body.sourceTypes,
+        });
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC research failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/security-scan") {
+      try {
+        const body = await this.readJsonBody<{ target?: string; scanType?: string }>(req);
+        if (!body.target) return this.json(res, 400, { error: "Missing 'target' field." });
+        const { runSecurityScan } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await runSecurityScan(body.target, (body.scanType as any) ?? "comprehensive");
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC security scan failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/performance") {
+      try {
+        const body = await this.readJsonBody<{ url?: string; testType?: string; device?: string }>(req);
+        if (!body.url) return this.json(res, 400, { error: "Missing 'url' field." });
+        const { testPerformance } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await testPerformance(body.url, {
+          testType: body.testType,
+          device: (body.device as "desktop" | "mobile" | "tablet") ?? "desktop",
+        });
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC performance test failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/ftp") {
+      try {
+        const body = await this.readJsonBody<{ server?: string; path?: string; passiveMode?: boolean }>(req);
+        if (!body.server) return this.json(res, 400, { error: "Missing 'server' field." });
+        const { fetchFtpListing } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await fetchFtpListing(body.server, body.path ?? "/", body.passiveMode ?? true);
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC FTP access failed" });
+      }
+    }
+    // ── End Network Diagnostics API ────────────────────────────────────────
+
+    // ── Telemetry Diagnostics API ──────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/telemetry/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "telemetry-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/telemetry/status") {
+      return this.json(res, 200, {
+        running: this.telemetryDiagnosticsRunning,
+        lastRunAt: this.telemetryDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/telemetry/run") {
+      if (this.telemetryDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Telemetry diagnostics already running." });
+      }
+      this.telemetryDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-telemetry-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "telemetry_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "telemetry_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON \u2014 ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.telemetryDiagnosticsRunning = false;
+          this.telemetryDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "telemetry_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.telemetryDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Telemetry Diagnostics API ──────────────────────────────────────
+
+    // ── Logs & Debug Diagnostics API ──────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/logs/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "logs-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/logs/status") {
+      return this.json(res, 200, {
+        running: this.logsDiagnosticsRunning,
+        lastRunAt: this.logsDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/logs/run") {
+      if (this.logsDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Logs diagnostics already running." });
+      }
+      this.logsDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-logs-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "logs_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "logs_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON \u2014 ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.logsDiagnosticsRunning = false;
+          this.logsDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "logs_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.logsDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Logs Diagnostics API ──────────────────────────────────────
+
+    // ── Scheduler Diagnostics API ────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/scheduler/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "scheduler-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/scheduler/status") {
+      return this.json(res, 200, {
+        running: this.schedulerDiagnosticsRunning,
+        lastRunAt: this.schedulerDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/scheduler/run") {
+      if (this.schedulerDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Scheduler diagnostics already running." });
+      }
+      this.schedulerDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-scheduler-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "scheduler_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "scheduler_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try {
+                  ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
+                } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.schedulerDiagnosticsRunning = false;
+          this.schedulerDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "scheduler_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.schedulerDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Scheduler Diagnostics API ────────────────────────────────────
+
+    // ── Demo Scenarios Diagnostics API ───────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/demo/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "demo-scenario-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/demo/status") {
+      return this.json(res, 200, {
+        running: this.demoDiagnosticsRunning,
+        lastRunAt: this.demoDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/demo/run") {
+      if (this.demoDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Demo diagnostics already running." });
+      }
+      this.demoDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-demo-scenarios.cjs", "--no-build", "--profile=all"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "demo_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "demo_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try {
+                  ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
+                } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.demoDiagnosticsRunning = false;
+          this.demoDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "demo_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.demoDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Demo Scenarios Diagnostics API ───────────────────────────────
+
     if (method === "POST" && url === "/api/chat/sessions") {
       try {
         const body = await this.readJsonBody<{ title?: string }>(req);
@@ -3026,7 +5891,21 @@ export class DashboardService {
     if (chatMessagesMatch && method === "POST") {
       try {
         const sessionId = decodeURIComponent(chatMessagesMatch[1]!);
-        const body = await this.readJsonBody<{ content?: string }>(req);
+        const body = await this.readJsonBody<{ content?: string; override?: boolean }>(req);
+
+        // Soft-block cap check — skip when client explicitly confirms override
+        if (!body.override && this.usageMetering) {
+          const capCheck = this.usageMetering.checkCap();
+          if (!capCheck.allowed) {
+            return this.json(res, 200, {
+              softBlock: true,
+              capType: capCheck.capType,
+              remainingUsd: capCheck.remainingUsd,
+              message: `You have reached your ${capCheck.capType} spending cap. Send with override to proceed anyway.`,
+            });
+          }
+        }
+
         const turn = await this.submitChatMessage(sessionId, body.content ?? "");
         return this.json(res, 201, turn);
       } catch (error) {
@@ -3168,6 +6047,70 @@ export class DashboardService {
       }
     }
 
+    // ── SLO Gauge API ─────────────────────────────────────────────────────────
+    if (method === "GET" && url === "/api/v1/telemetry/slo-summary") {
+      return this.json(res, 200, computeSloSummary(this.metricsStore));
+    }
+
+    // ── CAC Identity Chain API ────────────────────────────────────────────────
+    if (method === "GET" && url.startsWith("/api/v1/cac/chain")) {
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const sessionId = parsed.searchParams.get("sessionId") || this.status.sessionId;
+        const assignments = this.characterAccountabilityManager.queryBySession(sessionId);
+        
+        // Include events for the assignments
+        const chains = assignments.map(assignment => {
+            const events = this.activityBus.listEvents().filter(e => e.details?.assignmentId === assignment.assignmentId || e.assignmentId === assignment.assignmentId);
+            return {
+                assignment,
+                events: events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            };
+        });
+
+        return this.json(res, 200, { chains });
+      } catch (err) {
+        return this.json(res, 400, { error: String(err) });
+      }
+    }
+
+    // ── Usage / Cost API ──────────────────────────────────────────────────────
+    if (method === "GET" && url.startsWith("/api/usage/summary")) {
+      if (!this.usageMetering) return this.json(res, 200, { byModel: [], totalCostUsd: 0, totalRequests: 0, totalInputTokens: 0, totalOutputTokens: 0, caps: { sessionCap: null, dailyCap: null, monthlyCap: null }, sessionCostUsd: 0, dailyCostUsd: 0, monthlyCostUsd: 0, window: "1d" });
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const win = (parsed.searchParams.get("window") ?? "1d") as UsageWindow;
+        return this.json(res, 200, this.usageMetering.getSummary(win));
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "GET" && url === "/api/usage/caps") {
+      if (!this.usageMetering) return this.json(res, 200, { sessionCap: null, dailyCap: null, monthlyCap: null });
+      return this.json(res, 200, this.usageMetering.getCaps());
+    }
+
+    if (method === "POST" && url === "/api/usage/caps") {
+      if (!this.usageMetering) return this.json(res, 501, { error: "Usage metering not initialized." });
+      try {
+        const body = await this.readJsonBody<{ sessionCap?: number | null; dailyCap?: number | null; monthlyCap?: number | null }>(req);
+        const toNum = (v: unknown): number | null => {
+          if (v === null || v === undefined || v === "") return null;
+          const n = parseFloat(String(v));
+          return isFinite(n) && n > 0 ? n : null;
+        };
+        this.usageMetering.setCaps({
+          sessionCap: toNum(body.sessionCap),
+          dailyCap: toNum(body.dailyCap),
+          monthlyCap: toNum(body.monthlyCap),
+        });
+        return this.json(res, 200, { saved: true, caps: this.usageMetering.getCaps() });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
     if (method === "GET" && url.startsWith("/api/runtime/excellence")) {
       try {
         const parsed = new URL(`http://localhost${url}`);
@@ -3300,18 +6243,27 @@ export class DashboardService {
       if (currentState?.status === "running") {
         return this.json(res, 409, { error: `Action already running: ${actionName}` });
       }
-      return this.json(res, 202, this.triggerAction(actionName));
+      try {
+        const payload = await this.readJsonBody<{ sessionId?: string }>(req).catch(() => ({ sessionId: undefined }));
+        return this.json(res, 202, this.triggerAction(actionName, payload.sessionId));
+      } catch (error) {
+        return this.json(res, 202, this.triggerAction(actionName));
+      }
     }
 
     const approveMatch = /^\/(approve|api\/approve)\/([^/]+)$/.exec(url);
-    if (method === "POST" && approveMatch) {
-      const ok = this.queue.approve(approveMatch[2]!);
+    const approveMatchRest = /^\/api\/approval\/([^/]+)\/approve$/.exec(url);
+    if (method === "POST" && (approveMatch || approveMatchRest)) {
+      const id = approveMatch ? approveMatch[2]! : approveMatchRest![1]!;
+      const ok = this.queue.approve(id);
       return this.json(res, ok ? 200 : 404, { approved: ok });
     }
 
     const denyMatch = /^\/(deny|api\/deny)\/([^/]+)$/.exec(url);
-    if (method === "POST" && denyMatch) {
-      const ok = this.queue.deny(denyMatch[2]!);
+    const denyMatchRest = /^\/api\/approval\/([^/]+)\/deny$/.exec(url);
+    if (method === "POST" && (denyMatch || denyMatchRest)) {
+      const id = denyMatch ? denyMatch[2]! : denyMatchRest![1]!;
+      const ok = this.queue.deny(id);
       return this.json(res, ok ? 200 : 404, { denied: ok });
     }
 
@@ -3414,6 +6366,22 @@ export class DashboardService {
       });
     }
 
+    if (method === "GET" && url === "/api/workspace/hub") {
+      return this.json(res, 200, { workspaceHub: getWorkspaceHub() });
+    }
+
+    if (method === "POST" && url === "/api/workspace/hub") {
+      try {
+        const body = await this.readJsonBody<{ workspaceHub?: string }>(req);
+        const hub = String(body.workspaceHub ?? "").trim();
+        setWorkspaceHub(hub);
+        return this.json(res, 200, { ok: true, workspaceHub: hub });
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        return this.json(res, 400, { error: e.message ?? "Failed to set workspace hub" });
+      }
+    }
+
     if (method === "GET" && url.startsWith("/api/workspace/characters")) {
       const characters = this.listWorkspaceCharacters();
       return this.json(res, 200, { characters, total: characters.length });
@@ -3485,6 +6453,7 @@ export class DashboardService {
           clientId?: string;
           sessionId?: string;
           executionProfile?: string;
+          workspaceHub?: string;
         }>(req);
         const assignment = this.characterAccountabilityManager.assign({
           characterId: String(body.characterId ?? "").trim(),
@@ -3495,6 +6464,7 @@ export class DashboardService {
           clientId: String(body.clientId ?? "dashboard").trim() || "dashboard",
           sessionId: String(body.sessionId ?? this.status.sessionId).trim() || this.status.sessionId,
           executionProfile: String(body.executionProfile ?? this.status.executionProfileSegment).trim() || this.status.executionProfileSegment,
+          workspaceHub: String(body.workspaceHub ?? getWorkspaceHub()).trim(),
         });
         return this.json(res, 200, { ok: true, assignment });
       } catch (err: unknown) {
@@ -3633,6 +6603,7 @@ export class DashboardService {
         }
         setWorkspaceRoot(newPath);
         ensureWorkspaceStructure();
+        seedDefaultCharacters();
         return this.json(res, 200, { ok: true, workspaceRoot: resolveWorkspaceRoot() });
       } catch (err: unknown) {
         const e = err as { message?: string };
@@ -3894,12 +6865,573 @@ export class DashboardService {
       }
     }
 
+    // ── Scheduler API endpoints ──────────────────────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/scheduler/events")) {
+      const qs = new URL(url, "http://localhost").searchParams;
+      const startFilter = qs.get("start") || "";
+      const endFilter = qs.get("end") || "";
+      let events = [...this.schedulerEvents.values()];
+      if (startFilter) events = events.filter((e) => (e.end || e.start) >= startFilter);
+      if (endFilter) events = events.filter((e) => e.start <= endFilter);
+      return this.json(res, 200, { events });
+    }
+
+    if (method === "POST" && url === "/api/scheduler/events") {
+      const body = await this.readJsonBody<{ eventId?: string; title?: string; start?: string; end?: string; description?: string }>(req);
+      if (!body.title || !body.start) return this.json(res, 400, { error: "title and start are required" });
+      const id = body.eventId || randomUUID();
+      const evt = { id, title: body.title, start: body.start, end: body.end, description: body.description, createdAt: new Date().toISOString() };
+      this.schedulerEvents.set(id, evt);
+      return this.json(res, 200, { event: evt });
+    }
+
+    if (method === "GET" && url === "/api/scheduler/projects") {
+      const projects = [...this.schedulerProjects.values()];
+      return this.json(res, 200, { projects });
+    }
+
+    const projectDetailMatch = /^\/api\/scheduler\/projects\/([^/?]+)$/.exec(url);
+    if (method === "GET" && projectDetailMatch) {
+      const pid = decodeURIComponent(projectDetailMatch[1]!);
+      const project = this.schedulerProjects.get(pid);
+      if (!project) return this.json(res, 404, { error: "Project not found" });
+      return this.json(res, 200, { project });
+    }
+
+    if (method === "POST" && url === "/api/scheduler/projects") {
+      const body = await this.readJsonBody<{ name?: string; description?: string }>(req);
+      if (!body.name) return this.json(res, 400, { error: "name is required" });
+      const id = randomUUID();
+      const project = { id, name: body.name, description: body.description, tasks: [] as Array<{ id: string; title: string; status: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string; createdAt: string }>, milestones: [] as Array<{ title: string; dueDate?: string }>, createdAt: new Date().toISOString() };
+      this.schedulerProjects.set(id, project);
+      return this.json(res, 200, { project });
+    }
+
+    if (method === "GET" && url === "/api/scheduler/tasks") {
+      const tasks: Array<Record<string, unknown>> = [];
+      for (const p of this.schedulerProjects.values()) {
+        for (const t of p.tasks) tasks.push({ ...t, projectId: p.id, projectName: p.name });
+      }
+      return this.json(res, 200, { tasks });
+    }
+
+    if (method === "POST" && url === "/api/scheduler/tasks") {
+      const body = await this.readJsonBody<{ title?: string; projectId?: string; status?: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string }>(req);
+      if (!body.title) return this.json(res, 400, { error: "title is required" });
+      const task = { id: randomUUID(), title: body.title, status: body.status || "backlog", assignee: body.assignee, startDate: body.startDate, endDate: body.endDate, dueDate: body.dueDate, createdAt: new Date().toISOString() };
+      if (body.projectId) {
+        const project = this.schedulerProjects.get(body.projectId);
+        if (project) { project.tasks.push(task); }
+        else { return this.json(res, 404, { error: "Project not found" }); }
+      }
+      return this.json(res, 200, { task });
+    }
+
+    const taskUpdateMatch = /^\/api\/scheduler\/tasks\/([^/?]+)/.exec(url);
+    if (method === "PUT" && taskUpdateMatch) {
+      const taskId = decodeURIComponent(taskUpdateMatch[1]!);
+      const qs = new URL(url, "http://localhost").searchParams;
+      const projectId = qs.get("projectId") || "";
+      const body = await this.readJsonBody<{ status?: string; title?: string; assignee?: string }>(req);
+      let found = false;
+      for (const p of this.schedulerProjects.values()) {
+        if (projectId && p.id !== projectId) continue;
+        const task = p.tasks.find((t) => t.id === taskId);
+        if (task) {
+          if (body.status) task.status = body.status;
+          if (body.title) task.title = body.title;
+          if (body.assignee !== undefined) task.assignee = body.assignee;
+          found = true;
+          break;
+        }
+      }
+      if (!found) return this.json(res, 404, { error: "Task not found" });
+      return this.json(res, 200, { ok: true });
+    }
+
+    // ── Cron Jobs API endpoints ───────────────────────────────────────
+    if (method === "GET" && url === "/api/scheduler/cron") {
+      const jobs = this.schedulerEngine.list().map((e) => ({
+        ...e,
+        nextOccurrences: e.cronExpression
+          ? getNextNCronOccurrences(e.cronExpression, 3).map((d) => d.toISOString())
+          : [],
+      }));
+      return this.json(res, 200, jobs);
+    }
+
+    if (method === "POST" && url === "/api/scheduler/cron") {
+      const body = await this.readJsonBody<{
+        label?: string;
+        type?: string;
+        cronExpression?: string;
+        runAt?: string;
+        action?: string;
+        payload?: Record<string, unknown>;
+      }>(req);
+      if (!body.label || !body.action) {
+        return this.json(res, 400, { error: "label and action are required" });
+      }
+      try {
+        let entry;
+        if (body.type === "once") {
+          if (!body.runAt) {
+            return this.json(res, 400, { error: "runAt is required for one-time jobs" });
+          }
+          entry = this.schedulerEngine.scheduleOnce(body.label, body.runAt, body.action, body.payload);
+        } else {
+          if (!body.cronExpression) {
+            return this.json(res, 400, { error: "cronExpression is required for recurring jobs" });
+          }
+          // Validate cron expression before scheduling
+          parseCronExpression(body.cronExpression);
+          entry = this.schedulerEngine.scheduleRecurring(body.label, body.cronExpression, body.action, body.payload);
+        }
+        this.broadcastEvent({ type: "scheduler:cron-created", id: entry.id, label: entry.label });
+        return this.json(res, 201, { job: entry });
+      } catch (err: any) {
+        return this.json(res, 400, { error: "Invalid cron expression: " + (err?.message || String(err)) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/scheduler/cron/validate") {
+      const body = await this.readJsonBody<{ cronExpression?: string }>(req);
+      if (!body.cronExpression) {
+        return this.json(res, 400, { valid: false, error: "cronExpression is required" });
+      }
+      try {
+        const fields = parseCronExpression(body.cronExpression);
+        const nextDates = getNextNCronOccurrences(body.cronExpression, 5).map((d) => d.toISOString());
+        return this.json(res, 200, { valid: true, fields, nextDates });
+      } catch (err: any) {
+        return this.json(res, 200, { valid: false, error: err?.message || String(err) });
+      }
+    }
+
+    // /api/scheduler/cron/:id and /api/scheduler/cron/:id/preview
+    const cronIdMatch = /^\/api\/scheduler\/cron\/([^/?]+)(\/preview)?$/.exec(url);
+    if (cronIdMatch) {
+      const cronId = decodeURIComponent(cronIdMatch[1]!);
+      const isPreview = !!cronIdMatch[2];
+
+      if (isPreview && method === "GET") {
+        const entry = this.schedulerEngine.get(cronId);
+        if (!entry) return this.json(res, 404, { error: "Cron job not found" });
+        const nextOccurrences = this.schedulerEngine.getNextOccurrences(cronId, 10).map((d) => d.toISOString());
+        return this.json(res, 200, { ...entry, nextOccurrences });
+      }
+
+      if (!isPreview && method === "DELETE") {
+        const removed = this.schedulerEngine.cancel(cronId);
+        if (!removed) return this.json(res, 404, { error: "Cron job not found" });
+        this.broadcastEvent({ type: "scheduler:cron-cancelled", id: cronId });
+        return this.json(res, 200, { ok: true });
+      }
+    }
+
+    // ── A2A Protocol routes (Phase F) ─────────────────────────────────────
+    // GET /.well-known/agent.json — Agent Card (publicly accessible)
+    if (method === "GET" && url === "/.well-known/agent.json") {
+      const characters = [
+        "aria-individual", "aria-business",
+        "phoenix-individual", "phoenix-business",
+        "sentinel-individual", "sentinel-business",
+      ];
+      return this.json(res, 200, {
+        name: "PRISM",
+        description:
+          "PRISM governed agent platform — constitutional AI with SHA-256 audit trails, " +
+          "3-tier policy enforcement, and immutable activity logs. " +
+          "Characters: " + characters.join(", "),
+        url: `http://localhost:${this.port}/a2a`,
+        version: "0.2.0",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: true,
+        },
+        authentication: { schemes: ["Bearer"] },
+        defaultInputModes: ["text/plain", "application/json"],
+        defaultOutputModes: ["text/plain", "application/json"],
+        skills: characters.map((id) => ({
+          id,
+          name: id,
+          description: `PRISM character agent: ${id}`,
+          tags: ["governance", "audit", "prism"],
+          examples: [`Ask ${id} to analyze a task with governance enforced`],
+        })),
+      });
+    }
+
+    // POST /a2a/tasks/send — Submit a task to a PRISM character agent
+    if (method === "POST" && url === "/a2a/tasks/send") {
+      if (!this.a2aTaskAdapter) return this.json(res, 503, { error: "A2A adapter not initialized" });
+      let body: string;
+      try { body = await this.readBody(req); } catch { return this.json(res, 413, { error: "Request body too large" }); }
+      let request: Record<string, unknown>;
+      try { request = JSON.parse(body); } catch { return this.json(res, 400, { error: "Invalid JSON" }); }
+      if (!request.message || typeof request.message !== "object") {
+        return this.json(res, 400, { error: "Missing required field: message" });
+      }
+      const msg = request.message as Record<string, unknown>;
+      if (!Array.isArray(msg.parts) || msg.parts.length === 0) {
+        return this.json(res, 400, { error: "message.parts must be a non-empty array" });
+      }
+      try {
+        const task = await this.a2aTaskAdapter.submitTask(request as any);
+        return this.json(res, 200, {
+          id: task.task_id,
+          sessionId: task.session_id,
+          status: {
+            state: task.status,
+            message: task.status === "submitted"
+              ? { role: "agent", parts: [{ text: "Task submitted for governance approval." }] }
+              : { role: "agent", parts: [{ text: "Task received and queued for processing." }] },
+          },
+          metadata: { policy_tier: task.policy_tier, character_id: task.character_id },
+        });
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to submit task", detail: msg2 });
+      }
+    }
+
+    // GET /a2a/tasks/:taskId — Poll task status
+    const a2aTaskGetMatch = /^\/a2a\/tasks\/([^/]+)$/.exec(url);
+    if (method === "GET" && a2aTaskGetMatch) {
+      if (!this.a2aTaskAdapter) return this.json(res, 503, { error: "A2A adapter not initialized" });
+      const taskId = decodeURIComponent(a2aTaskGetMatch[1]);
+      try {
+        const task = await this.a2aTaskAdapter.getTask(taskId);
+        if (!task) return this.json(res, 404, { error: "Task not found" });
+        return this.json(res, 200, {
+          id: task.task_id,
+          sessionId: task.session_id,
+          status: {
+            state: task.status,
+            message: task.output_text
+              ? { role: "agent", parts: [{ text: task.output_text }] }
+              : undefined,
+          },
+          metadata: { policy_tier: task.policy_tier, character_id: task.character_id },
+          created_at: task.created_at,
+          completed_at: task.completed_at,
+        });
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to retrieve task", detail: msg2 });
+      }
+    }
+
+    // DELETE /a2a/tasks/:taskId — Cancel task
+    const a2aTaskDeleteMatch = /^\/a2a\/tasks\/([^/]+)$/.exec(url);
+    if (method === "DELETE" && a2aTaskDeleteMatch) {
+      if (!this.a2aTaskAdapter) return this.json(res, 503, { error: "A2A adapter not initialized" });
+      const taskId = decodeURIComponent(a2aTaskDeleteMatch[1]);
+      try {
+        const task = await this.a2aTaskAdapter.cancelTask(taskId);
+        if (!task) return this.json(res, 404, { error: "Task not found" });
+        return this.json(res, 200, {
+          id: task.task_id,
+          status: { state: task.status },
+        });
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to cancel task", detail: msg2 });
+      }
+    }
+
+    // ── Governance Hook routes (Phase F — Docker Agent sidecar) ──────────
+    // POST /governance/hooks/pre-tool-use
+    if (method === "POST" && url === "/governance/hooks/pre-tool-use") {
+      if (!this.governanceHooksAdapter) return this.json(res, 503, { error: "Governance hooks adapter not initialized" });
+      let body: string;
+      try { body = await this.readBody(req); } catch { return this.json(res, 413, { error: "Request body too large" }); }
+      let request: Record<string, unknown>;
+      try { request = JSON.parse(body); } catch { return this.json(res, 400, { error: "Invalid JSON" }); }
+      if (!request.tool_name || typeof request.tool_name !== "string") {
+        return this.json(res, 400, { error: "Missing required field: tool_name" });
+      }
+      try {
+        const result = await this.governanceHooksAdapter.handlePreToolUse({
+          tool_name: request.tool_name as string,
+          tool_input: (request.tool_input as Record<string, unknown>) ?? {},
+          agent_name: request.agent_name as string | undefined,
+        });
+        return this.json(res, 200, result);
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Governance evaluation failed", detail: msg2 });
+      }
+    }
+
+    // POST /governance/hooks/post-tool-use
+    if (method === "POST" && url === "/governance/hooks/post-tool-use") {
+      if (!this.governanceHooksAdapter) return this.json(res, 503, { error: "Governance hooks adapter not initialized" });
+      let body: string;
+      try { body = await this.readBody(req); } catch { return this.json(res, 413, { error: "Request body too large" }); }
+      let request: Record<string, unknown>;
+      try { request = JSON.parse(body); } catch { return this.json(res, 400, { error: "Invalid JSON" }); }
+      if (!request.tool_name || typeof request.tool_name !== "string") {
+        return this.json(res, 400, { error: "Missing required field: tool_name" });
+      }
+      try {
+        const result = await this.governanceHooksAdapter.handlePostToolUse({
+          tool_name: request.tool_name as string,
+          tool_input: request.tool_input as Record<string, unknown> | undefined,
+          tool_output: request.tool_output as Record<string, unknown> | undefined,
+          agent_name: request.agent_name as string | undefined,
+        });
+        return this.json(res, 200, result);
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to record tool use", detail: msg2 });
+      }
+    }
+
+    // ── Observability: Prometheus /metrics endpoint (Phase E6) ────────────
+    // Standard Prometheus scrape endpoint — returns text/plain exposition format.
+    // Add to publicRoutes so scraping agents don't need Bearer token (standard practice).
+    if (method === "GET" && url === "/metrics") {
+      // Inject live gauges that change over time (can't be tracked via events alone)
+      const sessionCount = this.chatStore.listSessions().length;
+      const pendingApprovals = this.queue.list().length;
+      this.metricsStore.set("prism_active_sessions", sessionCount);
+      this.metricsStore.set("prism_approval_queue_depth", pendingApprovals);
+      this.metricsStore.set("prism_uptime_seconds", Math.floor(process.uptime()));
+
+      const body = this.metricsStore.render();
+      res.writeHead(200, {
+        "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+      });
+      res.end(body);
+      return;
+    }
+
+    // ── UI mode preference ────────────────────────────────────────────────────
+    if (method === "POST" && url === "/api/preferences/ui-mode") {
+      const body = await this.readJsonBody<{ mode?: string }>(req);
+      const mode = body.mode;
+      if (mode !== "simple" && mode !== "advanced") {
+        this.json(res, 400, { error: "mode must be 'simple' or 'advanced'" });
+        return;
+      }
+      writePreferences({ uiMode: mode as "simple" | "advanced" });
+      this.json(res, 200, { updated: true, mode });
+      return;
+    }
+
+    // ── E3e-3/E3e-4: GET /api/v1/openapi.json — OpenAPI 3.0 spec ────────────
+    if (method === "GET" && url === "/api/v1/openapi.json") {
+      const spec = {
+        openapi: "3.0.3",
+        info: {
+          title: "PRISM Operator API",
+          version: "1.0.0",
+          description: "PRISM Agents as a Service — Operator Dashboard API",
+        },
+        servers: [{ url: "/api/v1", description: "Current version" }],
+        paths: {
+          "/telemetry/slo-summary": {
+            get: {
+              summary: "SLO summary for all tracked histograms",
+              operationId: "getSloSummary",
+              responses: { "200": { description: "SLO summary object" } },
+            },
+          },
+          "/plugins/{name}/toggle": {
+            post: {
+              summary: "Toggle a plugin enabled/disabled",
+              operationId: "togglePlugin",
+              parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
+              responses: { "200": { description: "Plugin toggle result with enabled field" } },
+            },
+          },
+          "/plugins/{name}/health": {
+            post: {
+              summary: "Check plugin health",
+              operationId: "checkPluginHealth",
+              parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
+              responses: { "200": { description: "Plugin health result" } },
+            },
+          },
+          "/preferences/ui-mode": {
+            post: {
+              summary: "Set UI mode (simple or advanced)",
+              operationId: "setUiMode",
+              requestBody: { content: { "application/json": { schema: { type: "object", properties: { mode: { type: "string", enum: ["simple", "advanced"] } } } } } },
+              responses: { "200": { description: "Mode updated" }, "400": { description: "Invalid mode" } },
+            },
+          },
+        },
+      };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(spec, null, 2));
+      return;
+    }
+
+    // ── E2: Incident Triage Bundle ────────────────────────────────────────────
+    // POST /api/incidents/bundle  → returns a JSON evidence bundle with:
+    //   - last 500 activity events (with integrity hashes)
+    //   - all active sessions (id, createdAt, characterId, model)
+    //   - current health snapshot
+    //   - system metadata (version, uptime, OS, Node)
+    // Callers can pipe to a ZIP with standard tools; we return JSON directly.
+    if (method === "POST" && url === "/api/incidents/bundle") {
+      const allEvents = this.activityBus.listEvents();
+      const last500 = allEvents.slice(-500);
+      const sessions = this.chatStore.listSessions().map((s) => ({
+        sessionId: s.sessionId,
+        title: s.title,
+        createdAt: s.createdAt,
+        llmProviderId: s.llmProviderId ?? null,
+        llmModel: s.llmModel ?? null,
+        messageCount: s.messageCount,
+      }));
+      const health = {
+        status: "ok",
+        uptime: process.uptime(),
+        memoryUsageMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        activeSessionCount: sessions.length,
+        approvalQueueDepth: this.queue.list().length,
+        sloSummary: computeSloSummary(this.metricsStore),
+      };
+      const bundle = {
+        bundleId: randomUUID(),
+        generatedAt: new Date().toISOString(),
+        prismVersion: "0.2.0",
+        nodeVersion: process.version,
+        platform: process.platform,
+        events: { count: last500.length, items: last500 },
+        sessions: { count: sessions.length, items: sessions },
+        health,
+        readinessSnapshot: null,
+      };
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="prism-incident-bundle-${Date.now()}.json"`,
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify(bundle, null, 2));
+      return;
+    }
+
+    // ── E2: Gmail OAuth routes ────────────────────────────────────────────────
+    // GET  /api/auth/gmail/authorize  → returns { authUrl }
+    // GET  /api/auth/gmail/callback   → exchanges code, redirects to /settings
+    // GET  /api/auth/gmail/status     → returns GmailAdapterStatus
+    // DELETE /api/auth/gmail/disconnect → clears stored tokens
+
+    if (method === "GET" && url === "/api/auth/gmail/authorize") {
+      try {
+        const authUrl = await this.gmailOAuth.getAuthorizationUrl();
+        this.json(res, 200, { authUrl });
+      } catch (err: unknown) {
+        this.json(res, 503, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    if (method === "GET" && url.startsWith("/api/auth/gmail/callback")) {
+      const parsed = new URL(url, "http://localhost");
+      const code = parsed.searchParams.get("code");
+      if (!code) {
+        this.json(res, 400, { error: "Missing code parameter" });
+        return;
+      }
+      const result = await this.gmailOAuth.exchangeCode(code);
+      // Redirect browser back to settings OAuth tab
+      res.writeHead(302, { Location: "/settings?tab=oauth&provider=gmail&connected=" + result.connected });
+      res.end();
+      return;
+    }
+
+    if (method === "GET" && url === "/api/auth/gmail/status") {
+      const status = await this.gmailOAuth.getStatus();
+      this.json(res, 200, status);
+      return;
+    }
+
+    if (method === "DELETE" && url === "/api/auth/gmail/disconnect") {
+      await this.gmailOAuth.disconnect();
+      this.json(res, 200, { disconnected: true });
+      return;
+    }
+
+    // ── E2: Outlook OAuth routes ──────────────────────────────────────────────
+    // GET    /api/auth/outlook/authorize  → returns { authUrl }
+    // GET    /api/auth/outlook/callback   → exchanges code, redirects to /settings
+    // GET    /api/auth/outlook/status     → returns OutlookAdapterStatus
+    // DELETE /api/auth/outlook/disconnect → clears stored tokens
+
+    if (method === "GET" && url === "/api/auth/outlook/authorize") {
+      try {
+        const authUrl = await this.outlookOAuth.getAuthorizationUrl();
+        this.json(res, 200, { authUrl });
+      } catch (err: unknown) {
+        this.json(res, 503, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    if (method === "GET" && url.startsWith("/api/auth/outlook/callback")) {
+      const parsed = new URL(url, "http://localhost");
+      const code = parsed.searchParams.get("code");
+      if (!code) {
+        this.json(res, 400, { error: "Missing code parameter" });
+        return;
+      }
+      const result = await this.outlookOAuth.exchangeCode(code);
+      res.writeHead(302, { Location: "/settings?tab=oauth&provider=outlook&connected=" + result.connected });
+      res.end();
+      return;
+    }
+
+    if (method === "GET" && url === "/api/auth/outlook/status") {
+      const status = await this.outlookOAuth.getStatus();
+      this.json(res, 200, status);
+      return;
+    }
+
+    if (method === "DELETE" && url === "/api/auth/outlook/disconnect") {
+      await this.outlookOAuth.disconnect();
+      this.json(res, 200, { disconnected: true });
+      return;
+    }
+
+    // ── E2: Backward-compat redirect /api/<path> → /api/v1/<path> ─────────
+    // Any unversioned /api/ route that hasn't already been handled gets a 301.
+    // Excludes routes that are intentionally unversioned (health, metrics, setup, etc.)
+    // Only redirects GET requests to avoid confusing non-idempotent operations.
+    if (method === "GET" && url.startsWith("/api/") && !url.startsWith("/api/v1/")) {
+      const remainder = url.slice("/api/".length);
+      const redirectTarget = "/api/v1/" + remainder;
+      res.writeHead(301, { Location: redirectTarget });
+      res.end();
+      return;
+    }
+
     this.json(res, 404, { error: "Not found" });
   }
 
+  private extractBearerToken(req: IncomingMessage): string | null {
+    const authHeader = req.headers["authorization"];
+    if (!authHeader) return null;
+    const parts = authHeader.split(" ");
+    if (parts.length === 2 && parts[0].toLowerCase() === "bearer") return parts[1];
+    return null;
+  }
+
   private json(res: ServerResponse, status: number, body: unknown): void {
+    // Inject a requestId into all error responses (4xx / 5xx) so callers can
+    // correlate failures in logs and support tickets.
+    const responseBody = (status >= 400 && body !== null && typeof body === "object")
+      ? { ...body as object, requestId: randomUUID() }
+      : body;
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify(body, null, 2));
+    res.end(JSON.stringify(responseBody, null, 2));
   }
 
   private async readJsonBody<T extends object>(req: IncomingMessage): Promise<T> {
@@ -3928,6 +7460,7 @@ export class DashboardService {
     maxRiskTier: number | null;
     allowedTools: string[];
     deniedTools: string[];
+    defaultEmail: string | null;
     sourcePath: string;
   }> {
     const dir = workspaceCharactersDir();
@@ -3949,6 +7482,7 @@ export class DashboardService {
       maxRiskTier: number | null;
       allowedTools: string[];
       deniedTools: string[];
+      defaultEmail: string | null;
       sourcePath: string;
     }> = [];
     for (const fileName of files) {
@@ -3971,6 +7505,7 @@ export class DashboardService {
           maxRiskTier: Number.isFinite(Number(parsed.maxRiskTier)) ? Number(parsed.maxRiskTier) : null,
           allowedTools: allow,
           deniedTools: deny,
+          defaultEmail: parsed.defaultEmail != null ? String(parsed.defaultEmail) : null,
           sourcePath: fullPath,
         });
       } catch {
@@ -4030,7 +7565,7 @@ export class DashboardService {
     const actionName = this.resolveActionIntent(normalized);
     if (actionName) {
       try {
-        this.triggerAction(actionName);
+        this.triggerAction(actionName, sessionId);
         const action = this.actionStates.get(actionName)!;
         return {
           content: `Started ${action.label}. Track progress in Quick Actions and Recent Action History.`,
@@ -4057,7 +7592,77 @@ export class DashboardService {
         ? { providerId: session.llmProviderId ?? undefined, model: session.llmModel ?? undefined }
         : undefined;
 
+      // Figure out the active model and its tier to constrain the orchestrator
+      const catalogInfo = await this.llmProviders.getCatalog(selection);
+      const activeModelName = catalogInfo.activeModel;
+      let modelTier = 3;
+      if (activeModelName) {
+        const profile = resolveProfile(activeModelName);
+        modelTier = profile.tier;
+      }
+
+      // If we are using a local agent (often T1/T2), explicitly prefer "orchestrator" for agentic loops, else "chat"
+      const agentRole = (hasSessionOverride && selection?.providerId === "local") ? "orchestrator" : "chat";
+
       const systemPrompt = this.buildAgenticSystemPrompt();
+
+      // ── Spectrum Refraction (Prism SR) — check if SR is active for this session ──
+      const srConfig = this.chatStore.getSRConfig(sessionId);
+      if (srConfig?.enabled && srConfig.leftProviderId && srConfig.leftModel && srConfig.rightProviderId && srConfig.rightModel) {
+        const srResult = await this.llmProviders.generateSR(
+          {
+            message: content,
+            conversation: conversationHistory,
+            systemPrompt,
+          },
+          {
+            enabled: true,
+            leftModel: { providerId: srConfig.leftProviderId, model: srConfig.leftModel },
+            rightModel: { providerId: srConfig.rightProviderId, model: srConfig.rightModel },
+            leftSlot: srConfig.leftSlot ?? undefined,
+            rightSlot: srConfig.rightSlot ?? undefined,
+            leftTimeoutMs: srConfig.leftTimeoutMs ?? undefined,
+            rightTimeoutMs: srConfig.rightTimeoutMs ?? undefined,
+            circuitBreakerEnabled: srConfig.circuitBreakerEnabled,
+            showHemispheres: srConfig.showHemispheres,
+          },
+          selection,
+        );
+        if (srResult?.content?.trim()) {
+          return {
+            content: srResult.content,
+            metadata: {
+              intent: "llm_sr",
+              srEnabled: true,
+              leftModel: srConfig.leftModel,
+              rightModel: srConfig.rightModel,
+              leftProvider: srConfig.leftProviderId,
+              rightProvider: srConfig.rightProviderId,
+              timing: srResult.timing,
+              isolationLevel: srResult.isolationLevel,
+              mediaArtifactCount: srResult.mediaArtifacts.length,
+              showHemispheres: srConfig.showHemispheres,
+              hemispheres: {
+                left: srResult.hemispheres.left ? {
+                  provider: srResult.hemispheres.left.providerId,
+                  model: srResult.hemispheres.left.model,
+                  content: srConfig.showHemispheres ? srResult.hemispheres.left.content : undefined,
+                } : null,
+                right: srResult.hemispheres.right ? {
+                  provider: srResult.hemispheres.right.providerId,
+                  model: srResult.hemispheres.right.model,
+                  content: srConfig.showHemispheres ? srResult.hemispheres.right.content : undefined,
+                } : null,
+                main: srResult.hemispheres.main ? {
+                  provider: srResult.hemispheres.main.providerId,
+                  model: srResult.hemispheres.main.model,
+                  content: srConfig.showHemispheres ? srResult.hemispheres.main.content : undefined,
+                } : null,
+              },
+            },
+          };
+        }
+      }
 
       // Use agentic executor if available — enables tool calling loop
       if (this.agenticExecutor) {
@@ -4068,7 +7673,7 @@ export class DashboardService {
           async (input, sel) => {
             const result = hasSessionOverride
               ? await this.llmProviders.generate(input, sel)
-              : await this.llmProviders.generateForRole("chat", input);
+              : await this.llmProviders.generateForRole(agentRole, input);
             if (!result) return null;
             return {
               content: result.content,
@@ -4201,6 +7806,18 @@ export class DashboardService {
           message: content,
           conversation: conversationHistory,
           systemPrompt: "", // adaptive prompt builder will replace this
+        });
+      }
+
+      // Record token usage for cost tracking
+      if (generated?.tokensUsed && this.usageMetering) {
+        this.usageMetering.record({
+          provider: generated.providerId,
+          model: generated.model,
+          sessionId,
+          inputTokens: generated.tokensUsed.input,
+          outputTokens: generated.tokensUsed.output,
+          costUsd: generated.tokensUsed.costUsd,
         });
       }
 
@@ -4664,7 +8281,7 @@ export class DashboardService {
         passed: Boolean(activeSessionId),
         detail: activeSessionId
           ? "Session context is active."
-          : "Create a chat session before sending messages.",
+          : "There is no session. Auto-create enabled for individual profile, else initiate Prism's accountability systems.",
       },
       {
         id: "provider-model-selected",
@@ -4744,13 +8361,253 @@ function parseLimit(url: string, fallback: number): number {
   }
 }
 
-function dashboardHtml(port: number): string {
+// ── Simple Mode HTML template ─────────────────────────────────────────────────
+
+/**
+ * Minimal, non-technical user interface.
+ * Phase E3a — additive alongside existing full operator dashboard.
+ */
+function simpleModeHtml(port: number, authToken?: string): string {
+  void port; // port reserved for future WebSocket override
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="prism-auth-token" content="${authToken ?? ""}" />
+  <title>PRISM</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: rgba(7,19,36,0.88);
+      --border: rgba(148,163,184,0.16);
+      --text: #edf3ff;
+      --muted: #98a6bc;
+      --accent: #69d2ff;
+      --radius: 16px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(105,210,255,0.14), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124,241,200,0.10), transparent 24%),
+        linear-gradient(180deg,#06101d 0%,#091728 44%,#07111f 100%);
+      color: var(--text);
+      font-family: Aptos,"Segoe UI Variable Text","Segoe UI",sans-serif;
+      font-size: 15px;
+    }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ── */
+    .sm-app { display: flex; flex-direction: column; height: 100vh; }
+    .sm-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(6,16,29,0.72);
+      backdrop-filter: blur(12px);
+      flex-shrink: 0;
+    }
+    .sm-logo {
+      font-size: 1.15rem; font-weight: 700; letter-spacing: 0.06em;
+      background: linear-gradient(90deg, var(--accent) 0%, #7cf1c8 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .sm-header-actions { display: flex; gap: 10px; align-items: center; }
+    .sm-btn-ghost {
+      padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; cursor: pointer; font-size: 0.85rem; color: var(--muted);
+      transition: border-color .15s, color .15s;
+    }
+    .sm-btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    .sm-body { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sm-sidebar {
+      width: 240px; flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background: rgba(6,16,29,0.55);
+      display: flex; flex-direction: column;
+      padding: 14px 10px;
+      gap: 8px;
+      overflow-y: auto;
+    }
+    .sm-sidebar-title {
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted); padding: 0 6px 4px;
+    }
+    .sm-btn-new-chat {
+      width: 100%; padding: 8px 12px; border-radius: var(--radius);
+      border: 1px dashed rgba(105,210,255,0.35); background: transparent;
+      cursor: pointer; font-size: 0.85rem; color: var(--accent);
+      text-align: left; transition: background .15s, border-color .15s;
+    }
+    .sm-btn-new-chat:hover { background: rgba(105,210,255,0.08); border-color: var(--accent); }
+    #sm-session-list { display: flex; flex-direction: column; gap: 4px; }
+    .sm-session-item {
+      width: 100%; padding: 8px 10px; border-radius: 10px; border: none;
+      background: transparent; cursor: pointer; text-align: left;
+      display: flex; flex-direction: column; gap: 2px;
+      transition: background .15s;
+    }
+    .sm-session-item:hover { background: rgba(255,255,255,0.05); }
+    .sm-session-item--active { background: rgba(105,210,255,0.1) !important; }
+    .sm-session-title { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sm-session-date { font-size: 0.72rem; color: var(--muted); }
+    .sm-empty { font-size: 0.8rem; color: var(--muted); padding: 6px; }
+
+    /* ── Main ── */
+    .sm-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Character picker ── */
+    #sm-character-picker {
+      display: flex; gap: 10px; padding: 16px 20px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .sm-char-card {
+      flex: 1; min-width: 120px; max-width: 200px;
+      padding: 12px 14px; border-radius: 14px;
+      border: 1px solid var(--border); background: var(--panel);
+      cursor: pointer; text-align: left;
+      display: flex; flex-direction: column; gap: 4px;
+      transition: border-color .15s, background .15s, transform .1s;
+    }
+    .sm-char-card:hover { background: rgba(255,255,255,0.04); transform: translateY(-1px); }
+    .sm-char-card--selected {
+      background: rgba(105,210,255,0.08);
+      box-shadow: 0 0 0 2px rgba(105,210,255,0.25);
+    }
+    .sm-char-emoji { font-size: 1.5rem; line-height: 1; }
+    .sm-char-name { font-weight: 700; font-size: 0.95rem; letter-spacing: 0.04em; }
+    .sm-char-badge {
+      font-size: 0.7rem; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+      border: 1px solid rgba(148,163,184,0.2); color: var(--muted);
+      align-self: flex-start;
+    }
+    .sm-char-persona { font-size: 0.75rem; color: var(--muted); line-height: 1.4; }
+
+    /* ── Messages ── */
+    #sm-messages {
+      flex: 1; overflow-y: auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .sm-greeting {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 12px; padding: 40px 20px; color: var(--muted); text-align: center;
+    }
+    .sm-greeting-emoji { font-size: 2.5rem; }
+    .sm-greeting p { font-size: 1.05rem; max-width: 480px; line-height: 1.6; color: var(--text); }
+    .sm-msg { display: flex; flex-direction: column; gap: 4px; max-width: 720px; }
+    .sm-msg--user { align-self: flex-end; align-items: flex-end; }
+    .sm-msg--assistant { align-self: flex-start; align-items: flex-start; }
+    .sm-msg-label { font-size: 0.72rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .sm-msg-content {
+      padding: 10px 14px; border-radius: 14px; line-height: 1.6;
+      font-size: 0.92rem; max-width: 100%;
+    }
+    .sm-msg--user .sm-msg-content {
+      background: rgba(105,210,255,0.12); border: 1px solid rgba(105,210,255,0.22);
+    }
+    .sm-msg--assistant .sm-msg-content {
+      background: var(--panel); border: 1px solid var(--border);
+    }
+
+    /* ── Input area ── */
+    .sm-input-area {
+      border-top: 1px solid var(--border); padding: 14px 20px;
+      display: flex; gap: 10px; flex-shrink: 0;
+      background: rgba(6,16,29,0.55);
+    }
+    #sm-input {
+      flex: 1; padding: 10px 14px; border-radius: 12px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      color: var(--text); resize: none; min-height: 44px; max-height: 160px;
+      line-height: 1.5; outline: none;
+      transition: border-color .15s;
+    }
+    #sm-input:focus { border-color: rgba(105,210,255,0.5); }
+    #sm-input::placeholder { color: var(--muted); }
+    #sm-send-btn {
+      padding: 10px 22px; border-radius: 12px;
+      border: none; background: var(--accent); color: #07111f;
+      font-weight: 700; cursor: pointer; align-self: flex-end;
+      transition: opacity .15s, transform .1s;
+    }
+    #sm-send-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    #sm-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Error toast ── */
+    #sm-error {
+      display: none; position: fixed; bottom: 20px; right: 20px;
+      background: rgba(255,100,100,0.18); border: 1px solid rgba(255,100,100,0.4);
+      color: #ff9d9d; padding: 10px 16px; border-radius: 10px;
+      font-size: 0.85rem; max-width: 360px; z-index: 9999;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .sm-sidebar { display: none; }
+      #sm-character-picker { padding: 10px 12px; }
+      .sm-char-card { min-width: 90px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sm-app">
+    <header class="sm-header">
+      <span class="sm-logo">⬡ PRISM</span>
+      <div class="sm-header-actions">
+        <button id="sm-advanced-btn" class="sm-btn-ghost" title="Switch to the full operator dashboard">
+          Advanced Mode →
+        </button>
+      </div>
+    </header>
+
+    <div class="sm-body">
+      <aside class="sm-sidebar">
+        <span class="sm-sidebar-title">Conversations</span>
+        <button id="sm-new-chat-btn" class="sm-btn-new-chat">+ New Chat</button>
+        <div id="sm-session-list"></div>
+      </aside>
+
+      <main class="sm-main">
+        <div id="sm-character-picker"></div>
+        <div id="sm-messages"></div>
+        <div class="sm-input-area">
+          <textarea
+            id="sm-input"
+            placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+            rows="1"
+            autocomplete="off"
+          ></textarea>
+          <button id="sm-send-btn">Send</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="sm-error"></div>
+
+  <script type="module" src="/public/simple-mode.js"></script>
+</body>
+</html>`;
+}
+
+function dashboardHtml(port: number, authToken?: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="prism-auth-token" content="${authToken ?? ""}" />
   <title>PRISM Frontier Console</title>
+  <link rel="icon" href="data:,">
   <style>
     :root {
       --bg: #07111f;
@@ -5017,7 +8874,7 @@ function dashboardHtml(port: number): string {
       color: var(--muted);
     }
     .messages {
-      padding: 22px 24px 200px 24px;
+      padding: 22px 24px 24px 24px;
       overflow-y: auto;
       flex-grow: 1;
       display: flex;
@@ -5055,10 +8912,7 @@ function dashboardHtml(port: number): string {
       background: rgba(255,255,255,0.02);
     }
     .composer {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      flex-shrink: 0;
       padding: 18px 24px 24px;
       border-top: 1px solid var(--border);
       background: rgba(10, 24, 45, 0.95);
@@ -5068,33 +8922,77 @@ function dashboardHtml(port: number): string {
       z-index: 10;
       backdrop-filter: blur(12px);
     }
-    .composer-shell {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 12px;
-      align-items: end;
-    }
-    .composer-toolbar {
+    .composer-container {
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      padding-bottom: 8px;
+      border-radius: 24px;
+      border: 1px solid rgba(148,163,184,0.2);
+      background: rgba(2, 8, 18, 0.7);
+      padding: 0;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      overflow: hidden;
     }
-    .toolbar-btn {
-      background: rgba(148,163,184,0.08);
-      border: 1px solid rgba(148,163,184,0.16);
-      color: var(--text);
-      border-radius: 8px;
-      width: 34px;
-      height: 34px;
-      cursor: pointer;
-      font-size: 16px;
+    .composer-container:focus-within {
+      border-color: rgba(105, 210, 255, 0.45);
+      box-shadow: 0 0 0 3px rgba(105, 210, 255, 0.08), 0 4px 24px rgba(0,0,0,0.3);
+    }
+    .composer-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px 10px;
+      border-top: 1px solid rgba(148,163,184,0.06);
+    }
+    .composer-left-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .composer-icon-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.15s;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
     }
-    .toolbar-btn:hover { background: rgba(105,210,255,0.15); }
+    .composer-icon-btn:hover {
+      background: rgba(105,210,255,0.1);
+      color: var(--accent);
+    }
+    .composer-send-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #69d2ff 0%, #4fb8e8 50%, #7cf1c8 100%);
+      color: #07111f;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+      box-shadow: 0 2px 12px rgba(105,210,255,0.3);
+      flex-shrink: 0;
+    }
+    .composer-send-btn:hover {
+      transform: scale(1.08);
+      box-shadow: 0 4px 20px rgba(105,210,255,0.45);
+    }
+    .composer-send-btn:active {
+      transform: scale(0.95);
+    }
+    .composer-send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
     .attachment-preview-strip {
       display: flex;
       gap: 8px;
@@ -5200,6 +9098,42 @@ function dashboardHtml(port: number): string {
       animation: pulse 1s infinite;
       margin-left: 6px;
     }
+    .thinking-badge {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(105,210,255,0.12);
+      color: var(--accent);
+      animation: thinking-fade 1.4s ease-in-out infinite;
+      vertical-align: middle;
+    }
+    .thinking-dots {
+      display: flex;
+      gap: 6px;
+      padding: 6px 0 2px;
+      align-items: center;
+    }
+    .thinking-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.3;
+      animation: dot-bounce 1.4s ease-in-out infinite;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dot-bounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+    @keyframes thinking-fade {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 1; }
+    }
     @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
     .message .attachment-inline {
       margin: 6px 0;
@@ -5225,16 +9159,22 @@ function dashboardHtml(port: number): string {
     }
     textarea {
       width: 100%;
-      min-height: 92px;
-      max-height: 60vh;
-      resize: vertical;
-      border-radius: 18px;
-      padding: 14px 16px;
-      border: 1px solid rgba(148,163,184,0.16);
-      background: rgba(2, 8, 18, 0.66);
+      min-height: 48px;
+      max-height: 240px;
+      resize: none;
+      border-radius: 0;
+      padding: 16px 18px 8px;
+      border: none;
+      background: transparent;
       color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
+      outline: none;
     }
-    textarea:focus { outline: 1px solid rgba(105, 210, 255, 0.42); }
+    textarea::placeholder {
+      color: rgba(148,163,184,0.5);
+    }
+    textarea:focus { outline: none; }
     .control-select {
       width: 100%;
       text-align: left;
@@ -5258,7 +9198,23 @@ function dashboardHtml(port: number): string {
       color: var(--text);
     }
     select option, select optgroup { background: #0b1728; color: var(--text); }
-    .composer-hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
+    .composer-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      opacity: 0.7;
+    }
+    .composer-hint kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(148,163,184,0.2);
+      background: rgba(148,163,184,0.06);
+      font-family: inherit;
+      font-size: 11px;
+      color: var(--muted);
+    }
     .rail-section {
       border: 1px solid rgba(148,163,184,0.12);
       border-radius: 18px;
@@ -5306,11 +9262,15 @@ function dashboardHtml(port: number): string {
       font-size: 12px;
     }
     .onboarding {
-      margin: 12px 24px 0;
+      margin: 0 0 12px;
       padding: 14px;
       border-radius: 14px;
       border: 1px solid rgba(148,163,184,0.16);
       background: rgba(255,255,255,0.03);
+      flex-shrink: 0;
+    }
+    .onboarding:empty {
+      display: none;
     }
     .onboarding-title {
       font-size: 13px;
@@ -5536,6 +9496,34 @@ function dashboardHtml(port: number): string {
     .framebuffer-item-kind.burst { color: #7cf1c8; }
     .framebuffer-item-title { font-size: 10px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; margin-top: 1px; }
     .framebuffer-item-subtitle { font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+    /* ── Activity Log ── */
+    .log-line { display: flex; align-items: baseline; gap: 8px; padding: 3px 8px; font-size: 11px; font-family: "Cascadia Code", Consolas, monospace; border-bottom: 1px solid rgba(148,163,184,0.06); }
+    .log-line:hover { background: rgba(255,255,255,0.02); }
+    .log-ts { color: var(--muted); font-size: 10px; flex-shrink: 0; min-width: 72px; }
+    .log-src { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
+    .log-src-diagnostics { background: rgba(105,210,255,0.12); color: #69d2ff; }
+    .log-src-agent-diagnostics { background: rgba(168,130,255,0.12); color: #a882ff; }
+    .log-src-computer-diagnostics { background: rgba(124,241,200,0.12); color: #7cf1c8; }
+    .log-src-tools { background: rgba(255,209,122,0.12); color: #ffd17a; }
+    .log-src-browser { background: rgba(105,210,255,0.12); color: #69d2ff; }
+    .log-src-chat { background: rgba(148,163,184,0.12); color: #94a3b8; }
+    .log-src-agentic { background: rgba(168,130,255,0.12); color: #a882ff; }
+    .log-src-settings { background: rgba(148,163,184,0.1); color: #94a3b8; }
+    .log-src-computer { background: rgba(124,241,200,0.12); color: #7cf1c8; }
+    .log-src-workspace { background: rgba(255,209,122,0.1); color: #ffd17a; }
+    .log-src-scheduler { background: rgba(255,157,122,0.12); color: #ff9d7a; }
+    .log-src-hardware { background: rgba(255,141,141,0.12); color: #ff8d8d; }
+    .log-src-system { background: rgba(148,163,184,0.1); color: #94a3b8; }
+    .log-sev { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
+    .log-sev-info { background: rgba(148,163,184,0.1); color: #94a3b8; }
+    .log-sev-warn { background: rgba(255,209,122,0.15); color: #ffd17a; }
+    .log-sev-error { background: rgba(255,141,141,0.15); color: #ff8d8d; }
+    .log-msg { color: var(--fg); word-break: break-word; flex: 1; min-width: 0; }
+    .log-empty { text-align: center; padding: 24px; color: var(--muted); font-size: 12px; }
+    .log-filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .log-filter-bar select { background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-family: inherit; cursor: pointer; }
+    .log-filter-bar select:focus { outline: none; border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -5552,6 +9540,7 @@ function dashboardHtml(port: number): string {
       </div>
       <button class="secondary-button" onclick="packageSessions()">Package Sessions</button>
       <button class="primary-button" onclick="createSession()">New Session</button>
+      <button class="secondary-button" onclick="window.location.href='/setup?rerun=true'" style="font-size:11px;opacity:0.75;margin-top:2px;" title="Re-run the guided setup wizard">\u2728 Setup Wizard</button>
       <div id="session-list" class="session-list"></div>
     </aside>
     <div class="resize-handle" id="resize-handle"></div>
@@ -5569,36 +9558,63 @@ function dashboardHtml(port: number): string {
         <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Telemetry</button>
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Logs &amp; Debug</button>
         <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Scheduler</button>
+        <span id="prism-ws-status" title="WebSocket connected" style="width:10px;height:10px;border-radius:50%;background:#22c55e;align-self:center;margin-left:auto;flex:0 0 10px;box-shadow:0 0 6px rgba(34,197,94,0.5);transition:background 0.3s;"></span>
       </section>
 
       <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat" aria-hidden="false">
         <div class="chat panel">
           <div class="chat-header">
-            <div class="eyebrow">Persistent Runtime Session</div>
             <h2 id="active-session-title">Loading...</h2>
             <div id="active-session-meta" class="muted"></div>
             <div id="header-chips" class="header-chips" style="margin-top:12px;"></div>
           </div>
-          <div id="onboarding" class="onboarding"></div>
           <section id="messages" class="messages"></section>
           <div class="composer">
+            <div id="onboarding" class="onboarding"></div>
             <div id="attachment-preview" class="attachment-preview-strip"></div>
-            <div class="composer-shell">
-              <div class="composer-toolbar">
-                <button type="button" class="toolbar-btn" onclick="document.getElementById('file-attach-input').click()" title="Attach file">&#x1F4CE;</button>
-                <input type="file" id="file-attach-input" multiple accept="image/*,audio/*,video/*,text/*,application/pdf,.md,.json,.csv,.xml,.yaml,.yml,.ts,.js,.py,.html,.css" style="display:none" onchange="handleFileSelect(this)" />
-                <button type="button" class="toolbar-btn" onclick="pasteFromClipboard()" title="Paste from clipboard">&#x1F4CB;</button>
+            <div class="composer-container">
+              <textarea id="composer" placeholder="Ask PRISM anything..." rows="1" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,240)+'px'"></textarea>
+              <div class="composer-actions">
+                <div class="composer-left-actions">
+                  <button type="button" class="composer-icon-btn" onclick="document.getElementById('file-attach-input').click()" title="Attach file">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                  </button>
+                  <input type="file" id="file-attach-input" multiple accept="image/*,audio/*,video/*,text/*,application/pdf,.md,.json,.csv,.xml,.yaml,.yml,.ts,.js,.py,.html,.css" style="display:none" onchange="handleFileSelect(this)" />
+                  <button type="button" class="composer-icon-btn" onclick="pasteFromClipboard()" title="Paste from clipboard">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                </div>
+                <button id="send-button" class="composer-send-btn" onclick="sendMessage()" title="Send message (Enter)">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                </button>
               </div>
-              <textarea id="composer" placeholder="Ask PRISM to create files, run commands, or answer questions. Tools will be executed automatically."></textarea>
-              <button id="send-button" class="primary-button" onclick="sendMessage()">Send</button>
             </div>
-            <div class="composer-hint">Enter sends. Shift+Enter inserts a newline. Attach files with \u{1F4CE} or drag &amp; drop. Sessions persist in SQLite.</div>
+            <div class="composer-hint"><kbd>Enter</kbd> to send &middot; <kbd>Shift+Enter</kbd> for new line &middot; Drag &amp; drop files to attach</div>
           </div>
         </div>
       </section>
 
       <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true">
         <div class="tab-grid" style="grid-template-columns:1fr;">
+
+          <section class="rail-section panel" id="sr-section" style="border:1px solid rgba(139,92,246,0.25);background:linear-gradient(135deg,rgba(139,92,246,0.06),rgba(59,130,246,0.04));">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 8px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:18px;">\u{1F308}</span>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:#a78bfa;">Prism SR:</div>
+                  <div style="font-size:11px;color:var(--fg-muted);">Compounding model orchestration \u2014 Logic + Creative + Main model synthesis</div>
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="toggleSRPanel()" style="background:linear-gradient(135deg,#8b5cf6,#3b82f6);border:none;font-weight:600;font-size:12px;padding:6px 16px;border-radius:6px;cursor:pointer;color:#fff;">
+                Spectrum Refraction
+              </button>
+            </div>
+            <div id="sr-panel" style="display:none;">
+              <div id="sr-panel-content" class="stack"></div>
+            </div>
+          </section>
+
           <section class="rail-section panel">
             <div class="collapsible-header" onclick="togglePanelCollapse('sessionProvider')">
               <h3>Session Provider Assignment</h3>
@@ -5670,33 +9686,139 @@ function dashboardHtml(port: number): string {
       </section>
 
       <section id="tab-tools" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-tools" aria-hidden="true">
-        <div class="tab-grid" style="grid-template-columns:1fr;">
+        <div style="display:flex;flex-direction:column;gap:12px;">
           <div id="tools-overview-bar"></div>
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('toolsPanel')">
-              <h3>Tools</h3>
-              <span class="collapse-chevron" id="chevron-toolsPanel">\u25BC</span>
-            </div>
-            <div class="collapsible-body" id="body-toolsPanel">
-              <div id="tools-panel" class="stack"></div>
-            </div>
-          </section>
+          <!-- Plugins \u2014 full width on top -->
           <section class="rail-section panel">
             <div class="collapsible-header" onclick="togglePanelCollapse('pluginsPanel')">
-              <h3>Plugins</h3>
-              <span class="collapse-chevron" id="chevron-pluginsPanel">\u25BC</span>
+              <h3>\uD83E\uDDE9 Plugins</h3>
+              <span class="tp-panel-summary" id="pluginsPanel-summary" style="display:none;"></span>
+              <span class="collapse-chevron" id="chevron-pluginsPanel">\u25B6</span>
             </div>
-            <div class="collapsible-body" id="body-pluginsPanel">
+            <div class="collapsible-body collapsed" id="body-pluginsPanel">
               <div id="plugins-panel" class="stack"></div>
             </div>
           </section>
+          <!-- Tools + Utilities \u2014 side by side -->
+          <div class="tp-split-row">
+            <section class="rail-section panel tp-split-col">
+              <div class="collapsible-header" onclick="togglePanelCollapse('toolsPanel')">
+                <h3>\uD83D\uDEE0\uFE0F Tools</h3>
+                <span class="tp-panel-summary" id="toolsPanel-summary" style="display:none;"></span>
+                <span class="collapse-chevron" id="chevron-toolsPanel">\u25B6</span>
+              </div>
+              <div class="collapsible-body collapsed" id="body-toolsPanel">
+                <div id="tools-panel" class="stack"></div>
+              </div>
+            </section>
+            <section class="rail-section panel tp-split-col">
+              <div class="collapsible-header" onclick="togglePanelCollapse('utilitiesPanel')">
+                <h3>\u2699\uFE0F Utilities</h3>
+                <span class="tp-panel-summary" id="utilitiesPanel-summary" style="display:none;"></span>
+                <span class="collapse-chevron" id="chevron-utilitiesPanel">\u25B6</span>
+              </div>
+              <div class="collapsible-body collapsed" id="body-utilitiesPanel">
+                <div id="utilities-panel" class="stack"></div>
+              </div>
+            </section>
+          </div>
+          <!-- Diagnostics — consolidated parent panel -->
           <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('utilitiesPanel')">
-              <h3>Utilities</h3>
-              <span class="collapse-chevron" id="chevron-utilitiesPanel">\u25BC</span>
+            <div class="collapsible-header" onclick="togglePanelCollapse('diagnosticsPanel')">
+              <h3>\u{1F9EA} Diagnostics</h3>
+              <span class="tp-panel-summary" id="diagnosticsPanel-summary" style="display:none;"></span>
+              <span class="collapse-chevron" id="chevron-diagnosticsPanel">\u25B6</span>
             </div>
-            <div class="collapsible-body" id="body-utilitiesPanel">
-              <div id="utilities-panel" class="stack"></div>
+            <div class="collapsible-body collapsed" id="body-diagnosticsPanel">
+              <div id="diagnostics-panel" class="stack"></div>
+              <!-- Agent Diagnostics sub-panel -->
+              <section class="rail-section panel" style="margin-top:8px;">
+                <div class="collapsible-header" onclick="togglePanelCollapse('agentDiagnosticsPanel')">
+                  <h3>\u{1F916} Agent Diagnostics</h3>
+                  <span class="tp-panel-summary" id="agentDiagnosticsPanel-summary" style="display:none;"></span>
+                  <span class="collapse-chevron" id="chevron-agentDiagnosticsPanel">\u25B6</span>
+                </div>
+                <div class="collapsible-body collapsed" id="body-agentDiagnosticsPanel">
+                  <div id="agent-diagnostics-panel" class="stack"></div>
+                </div>
+              </section>
+              <!-- Computer Diagnostics sub-panel -->
+              <section class="rail-section panel" style="margin-top:8px;">
+                <div class="collapsible-header" onclick="togglePanelCollapse('computerDiagnosticsPanel')">
+                  <h3>\u{1F5A5}\uFE0F Computer Diagnostics</h3>
+                  <span class="tp-panel-summary" id="computerDiagnosticsPanel-summary" style="display:none;"></span>
+                  <span class="collapse-chevron" id="chevron-computerDiagnosticsPanel">\u25B6</span>
+                </div>
+                <div class="collapsible-body collapsed" id="body-computerDiagnosticsPanel">
+                  <div id="computer-diagnostics-panel" class="stack"></div>
+                </div>
+              </section>
+              <!-- Workspace Diagnostics sub-panel -->
+              <section class="rail-section panel" style="margin-top:8px;">
+                <div class="collapsible-header" onclick="togglePanelCollapse('workspaceDiagnosticsPanel')">
+                  <h3>\u{1F4C2} Workspace Diagnostics</h3>
+                  <span class="tp-panel-summary" id="workspaceDiagnosticsPanel-summary" style="display:none;"></span>
+                  <span class="collapse-chevron" id="chevron-workspaceDiagnosticsPanel">\u25B6</span>
+                </div>
+                <div class="collapsible-body collapsed" id="body-workspaceDiagnosticsPanel">
+                  <div id="workspace-diagnostics-panel" class="stack"></div>
+                </div>
+              </section>
+              <!-- Network Diagnostics sub-panel -->
+              <section class="rail-section panel" style="margin-top:8px;">
+                <div class="collapsible-header" onclick="togglePanelCollapse('networkDiagnosticsPanel')">
+                  <h3>\u{1F310} Network Diagnostics</h3>
+                  <span class="tp-panel-summary" id="networkDiagnosticsPanel-summary" style="display:none;"></span>
+                  <span class="collapse-chevron" id="chevron-networkDiagnosticsPanel">\u25B6</span>
+                </div>
+                <div class="collapsible-body collapsed" id="body-networkDiagnosticsPanel">
+                  <div id="network-diagnostics-panel" class="stack"></div>
+                </div>
+              </section>
+              <!-- Telemetry Diagnostics sub-panel -->
+              <section class="rail-section panel" style="margin-top:8px;">
+                <div class="collapsible-header" onclick="togglePanelCollapse('telemetryDiagnosticsPanel')">
+                  <h3>\u{1F4CA} Telemetry Diagnostics</h3>
+                  <span class="tp-panel-summary" id="telemetryDiagnosticsPanel-summary" style="display:none;"></span>
+                  <span class="collapse-chevron" id="chevron-telemetryDiagnosticsPanel">\u25B6</span>
+                </div>
+                <div class="collapsible-body collapsed" id="body-telemetryDiagnosticsPanel">
+                  <div id="telemetry-diagnostics-panel" class="stack"></div>
+                </div>
+              </section>
+              <!-- Logs & Debug Diagnostics sub-panel -->
+              <section class="rail-section panel" style="margin-top:8px;">
+                <div class="collapsible-header" onclick="togglePanelCollapse('logsDiagnosticsPanel')">
+                  <h3>\u{1F4DD} Logs & Debug Diagnostics</h3>
+                  <span class="tp-panel-summary" id="logsDiagnosticsPanel-summary" style="display:none;"></span>
+                  <span class="collapse-chevron" id="chevron-logsDiagnosticsPanel">\u25B6</span>
+                </div>
+                <div class="collapsible-body collapsed" id="body-logsDiagnosticsPanel">
+                  <div id="logs-diagnostics-panel" class="stack"></div>
+                </div>
+              </section>
+              <!-- Scheduler Diagnostics sub-panel -->
+              <section class="rail-section panel" style="margin-top:8px;">
+                <div class="collapsible-header" onclick="togglePanelCollapse('schedulerDiagnosticsPanel')">
+                  <h3>\u{1F4C5} Scheduler Diagnostics</h3>
+                  <span class="tp-panel-summary" id="schedulerDiagnosticsPanel-summary" style="display:none;"></span>
+                  <span class="collapse-chevron" id="chevron-schedulerDiagnosticsPanel">\u25B6</span>
+                </div>
+                <div class="collapsible-body collapsed" id="body-schedulerDiagnosticsPanel">
+                  <div id="scheduler-diagnostics-panel" class="stack"></div>
+                </div>
+              </section>
+            </div>
+          </section>
+          <!-- Demo Scenarios Diagnostics — full width below -->
+          <section class="rail-section panel">
+            <div class="collapsible-header" onclick="togglePanelCollapse('demoDiagnosticsPanel')">
+              <h3>\u{1F3AC} Demo Scenarios</h3>
+              <span class="tp-panel-summary" id="demoDiagnosticsPanel-summary" style="display:none;"></span>
+              <span class="collapse-chevron" id="chevron-demoDiagnosticsPanel">\u25B6</span>
+            </div>
+            <div class="collapsible-body collapsed" id="body-demoDiagnosticsPanel">
+              <div id="demo-diagnostics-panel" class="stack"></div>
             </div>
           </section>
         </div>
@@ -5705,6 +9827,19 @@ function dashboardHtml(port: number): string {
       <!-- ═══════════════ AGENTIC CONTROL TAB ═══════════════ -->
       <section id="tab-agentic" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-agentic" aria-hidden="true">
         <div class="tab-grid">
+          <!-- Guardian Agent Panel (llama.cpp) — always first -->
+          <section class="rail-section panel" style="grid-column:1/-1;border:1px solid var(--accent);border-radius:8px;">
+            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('guardianAgent')">
+              <h3>\u{1F9EC} Guardian Agent (llama.cpp)</h3>
+              <span id="guardianAgent-collapse-icon" class="collapse-icon">\u25BC</span>
+            </div>
+            <div id="guardianAgent-collapsible" class="collapsible-body">
+              <div id="guardian-panel-container" class="stack">
+                <div class="muted" style="text-align:center;padding:24px;">Loading Guardian status\u2026</div>
+              </div>
+            </div>
+          </section>
+
           <!-- Agent Management Panel -->
           <section class="rail-section panel" style="grid-column:1/-1;">
             <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('agentMgmt')">
@@ -5751,6 +9886,22 @@ function dashboardHtml(port: number): string {
               </div>
               <div id="swarm-topology-container" class="stack">
                 <div class="muted" style="text-align:center;padding:24px;">No swarms configured. Create a swarm to begin orchestration.</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Local Hardware Swarm (Consolidated) -->
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('hardwareSwarm')">
+              <h3>⚡ Local Hardware Swarm</h3>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button class="secondary-button" style="font-size:12px;" onclick="if(window.refreshHardwareSwarm) window.refreshHardwareSwarm()">🔄 Refresh</button>
+                <span id="hardwareSwarm-collapse-icon" class="collapse-icon">\u25BC</span>
+              </div>
+            </div>
+            <div id="hardwareSwarm-collapsible" class="collapsible-body">
+              <div id="hardware-swarm-panel" class="stack" style="margin-top:10px;">
+                <div class="muted" style="text-align:center;padding:24px;">Loading swarm status...</div>
               </div>
             </div>
           </section>
@@ -5898,56 +10049,19 @@ function dashboardHtml(port: number): string {
           <!-- Device Manager Panel -->
           <section class="rail-section panel" style="grid-column:1/-1;">
             <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('deviceManager')">
-              <h3>\u{1F527} Device Manager</h3>
+              <h3>\u{1F527} Device Manager <span id="dm-total-badge" class="dm-total-badge"></span></h3>
               <span id="deviceManager-collapse-icon" class="collapse-icon">\u25BC</span>
             </div>
             <div id="deviceManager-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Quick-access view of local hardware devices (mirrors Windows Device Manager).</div>
-              <div style="margin-bottom:10px;">
+              <div class="muted" style="margin-bottom:8px;">Comprehensive WMI hardware inventory \u2014 click any device to inspect all properties.</div>
+              <input id="dm-search-input" class="dm-search-input" type="text" placeholder="\u{1F50D} Filter devices\u2026" oninput="filterDeviceTree()" />
+              <div class="dm-toolbar">
                 <button class="primary-button" onclick="refreshDeviceManager()" style="font-size:12px;">\u{1F504} Scan Devices</button>
-                <button class="primary-button" onclick="openSystemDeviceManager()" style="font-size:12px;margin-left:6px;">\u{1F5A5}\uFE0F Open System Device Manager</button>
+                <button class="primary-button" onclick="generateDeviceReport()" style="font-size:12px;">\u{1F4CB} Generate Report</button>
+                <button class="primary-button" onclick="openSystemDeviceManager()" style="font-size:12px;">\u{1F5A5}\uFE0F Open System Device Manager</button>
               </div>
               <div id="device-tree-container" class="stack" style="font-size:13px;">
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4BB} Display Adapters</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F50A} Sound, Video &amp; Game Controllers</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4F6} Network Adapters</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4BE} Disk Drives</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F50C} USB Controllers</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u2328\uFE0F Keyboards</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F5B1}\uFE0F Mice &amp; Pointing Devices</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F50B} Batteries</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4F7} Imaging Devices</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4E1} Bluetooth</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
+                <div class="muted" style="text-align:center;padding:18px;">Click <strong>Scan Devices</strong> to enumerate hardware via WMI.</div>
               </div>
             </div>
           </section>
@@ -6113,18 +10227,40 @@ function dashboardHtml(port: number): string {
                   <div class="panel" style="padding:12px;">
                     <div style="font-size:13px;font-weight:700;margin-bottom:8px;">New Assignment</div>
                     <div style="display:grid;grid-template-columns:1fr;gap:8px;">
-                      <select id="character-assign-character" onchange="onCharacterDefinitionChanged()" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
-                        <option value="">Loading characters...</option>
-                      </select>
-                      <input id="character-assign-prism-user-id" type="text" placeholder="Prism user ID" value="prism-dashboard-user" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
-                      <input id="character-assign-prism-user-email" type="email" placeholder="Prism user email" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
-                      <input id="character-assign-operator-id" type="text" placeholder="Operator ID" value="workspace-operator" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
-                      <input id="character-assign-operator-email" type="email" placeholder="Operator email" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
-                      <input id="character-assign-client-id" type="text" placeholder="Client ID" value="workspace-tab" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
-                      <select id="character-assign-profile" style="padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
-                        <option value="individual">individual</option>
-                        <option value="business">business</option>
-                      </select>
+                      <div>
+                        <div id="label-workspace-hub" class="muted" style="font-size:11px;margin-bottom:3px;">Workspace Label (optional)</div>
+                        <input id="character-assign-workspace-hub" type="text" placeholder="e.g., My Projects, Home Lab (optional)" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" onblur="onWorkspaceHubBlur()" />
+                      </div>
+                      <div>
+                        <div class="muted" style="font-size:11px;margin-bottom:3px;">Type Selection *</div>
+                        <select id="character-assign-profile" onchange="onProfileChanged()" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
+                          <option value="individual">Individual</option>
+                          <option value="business">Business</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div class="muted" style="font-size:11px;margin-bottom:3px;">Character *</div>
+                        <select id="character-assign-character" onchange="onCharacterDefinitionChanged()" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
+                          <option value="">Loading characters...</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div class="muted" style="font-size:11px;margin-bottom:3px;">Prism User Name</div>
+                        <input id="character-assign-prism-user-id" type="text" placeholder="Prism user name" value="prism-dashboard-user" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      </div>
+                      <div>
+                        <div id="label-prism-user-email" class="muted" style="font-size:11px;margin-bottom:3px;">Assistant Email *</div>
+                        <input id="character-assign-prism-user-email" type="email" placeholder="Character email (e.g., aria@prism.local)" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      </div>
+                      <div>
+                        <div class="muted" style="font-size:11px;margin-bottom:3px;">Operator ID</div>
+                        <input id="character-assign-operator-id" type="text" placeholder="Operator ID" value="workspace-operator" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      </div>
+                      <div>
+                        <div id="label-operator-email" class="muted" style="font-size:11px;margin-bottom:3px;">Personal Email *</div>
+                        <input id="character-assign-operator-email" type="email" placeholder="Operator email" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;" />
+                      </div>
+                      <input id="character-assign-client-id" type="hidden" value="workspace-tab" />
                       <button class="primary-button" onclick="submitCharacterAssignment()" style="font-size:12px;">Assign Character</button>
                     </div>
                   </div>
@@ -6308,11 +10444,35 @@ function dashboardHtml(port: number): string {
               <div id="network-history-list" style="margin-top:8px;"></div>
             </div>
           </section>
+
+          <!-- Network Intelligence (VRGC) -->
+          <section class="rail-section panel" style="grid-column:1/-1;border:1px solid var(--accent);border-radius:8px;">
+            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkIntelligence')">
+              <h3>\u{1F9E0} Network Intelligence (VRGC)</h3>
+              <span id="networkIntelligence-collapse-icon" class="collapse-icon">\u25BC</span>
+            </div>
+            <div id="networkIntelligence-collapsible" class="collapsible-body">
+              <div id="network-intelligence-panel" class="stack">
+                <div class="muted" style="text-align:center;padding:24px;">Loading VRGC status\u2026</div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 
       <section id="tab-telemetry" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-telemetry" aria-hidden="true">
         <div class="tab-grid">
+          <!-- ═══ USAGE & COST PANEL (top) ════════════════════════════════ -->
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('usageCost')">
+              <h3>\uD83D\uDCB0 Usage &amp; Cost</h3>
+              <span id="usageCost-collapse-icon" class="collapse-icon">\u25BC</span>
+            </div>
+            <div id="usageCost-collapsible" class="collapsible-body">
+              <div id="usage-cost-panel" class="stack"></div>
+            </div>
+          </section>
+          <!-- ═══ WINDOW SELECTOR ══════════════════════════════════════════ -->
           <section class="rail-section panel" style="grid-column:1/-1;padding-bottom:4px;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span class="muted" style="font-size:12px;">Change window:</span>
@@ -6348,6 +10508,16 @@ function dashboardHtml(port: number): string {
           <section class="rail-section panel">
             <h3>Retrieval Alerts</h3>
             <div id="retrieval-alerts"></div>
+          </section>
+          <!-- ═══ SLO GAUGE PANEL (E3c) ════════════════════════════════════ -->
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('sloGauges')">
+              <h3>\uD83D\uDFE2 SLO Gauges</h3>
+              <span id="sloGauges-collapse-icon" class="collapse-icon">\u25BC</span>
+            </div>
+            <div id="sloGauges-collapsible" class="collapsible-body">
+              <div id="slo-gauge-panel"></div>
+            </div>
           </section>
         </div>
       </section>
@@ -6387,6 +10557,56 @@ function dashboardHtml(port: number): string {
             </div>
             <div id="tool-call-log"></div>
           </section>
+          <!-- Activity Log — full width -->
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <h3>\u{1F4DD} Activity Log</h3>
+            <div class="log-filter-bar">
+              <label class="muted" style="font-size:11px;">Source:</label>
+              <select id="logs-tab-filter" onchange="filterLogs()">
+                <option value="">All</option>
+                <option value="diagnostics">diagnostics</option>
+                <option value="agent-diagnostics">agent-diagnostics</option>
+                <option value="computer-diagnostics">computer-diagnostics</option>
+                <option value="tools">tools</option>
+                <option value="browser">browser</option>
+                <option value="chat">chat</option>
+                <option value="agentic">agentic</option>
+                <option value="computer">computer</option>
+                <option value="settings">settings</option>
+                <option value="workspace">workspace</option>
+                <option value="scheduler">scheduler</option>
+                <option value="hardware">hardware</option>
+              </select>
+              <label class="muted" style="font-size:11px;">Severity:</label>
+              <select id="logs-severity-filter" onchange="filterLogs()">
+                <option value="">All</option>
+                <option value="info">info</option>
+                <option value="warn">warn</option>
+                <option value="error">error</option>
+              </select>
+              <div style="flex:1;"></div>
+              <span class="muted" style="font-size:10px;">Last 500 entries · auto-scroll</span>
+              <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="clearLogs()">Clear</button>
+            </div>
+            <div id="logs-panel-body" style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.15);padding:4px 0;"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ═══════════════ HARDWARE SWARM TAB ═══════════════ -->
+      <section id="tab-hardware" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-hardware" aria-hidden="true">
+        <div class="tab-grid">
+          <section class="rail-section panel" style="grid-column:1/-1;">
+            <div class="rail-header">
+              <h3>⚡ Local Hardware Swarm</h3>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button class="secondary-button" style="font-size:12px;" onclick="if(window.refreshHardwareSwarm) window.refreshHardwareSwarm()()">🔄 Refresh</button>
+              </div>
+            </div>
+            <div id="hardware-swarm-panel" class="stack" style="margin-top:10px;">
+              <!-- Container for the 5 model slots -->
+            </div>
+          </section>
         </div>
       </section>
 
@@ -6400,6 +10620,7 @@ function dashboardHtml(port: number): string {
                 <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('event')">+ Event</button>
                 <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('task')">+ Task</button>
                 <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('project')">+ Project</button>
+                <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('cron')">+ Cron Job</button>
                 <button class="secondary-button" style="font-size:12px;" onclick="refreshSchedulerData()">\u{1F504} Refresh</button>
               </div>
             </div>
@@ -6409,6 +10630,7 @@ function dashboardHtml(port: number): string {
               <button class="tab-button sched-subnav-btn" data-sched-view="projects" onclick="switchSchedulerView('projects')" style="font-size:12px;">\u{1F4CB} Projects</button>
               <button class="tab-button sched-subnav-btn" data-sched-view="board" onclick="switchSchedulerView('board')" style="font-size:12px;">\u{1F4CC} Board</button>
               <button class="tab-button sched-subnav-btn" data-sched-view="timeline" onclick="switchSchedulerView('timeline')" style="font-size:12px;">\u{1F4CA} Timeline</button>
+              <button class="tab-button sched-subnav-btn" data-sched-view="cron" onclick="switchSchedulerView('cron')" style="font-size:12px;">\u{23F0} Cron Jobs</button>
             </div>
             <!-- Calendar view -->
             <div id="sched-view-calendar">
@@ -6417,9 +10639,9 @@ function dashboardHtml(port: number): string {
                 <span id="sched-cal-title" style="font-size:14px;font-weight:600;min-width:120px;text-align:center;"></span>
                 <button class="secondary-button" onclick="schedCalNav(1)" style="font-size:12px;padding:4px 10px;">&rsaquo;</button>
                 <button class="tab-button sched-mode-btn" data-cal-mode="year" onclick="setCalMode('year')" style="font-size:11px;padding:4px 10px;">Year</button>
-                <button class="tab-button sched-mode-btn active" data-cal-mode="month" onclick="setCalMode('month')" style="font-size:11px;padding:4px 10px;">Month</button>
+                <button class="tab-button sched-mode-btn" data-cal-mode="month" onclick="setCalMode('month')" style="font-size:11px;padding:4px 10px;">Month</button>
                 <button class="tab-button sched-mode-btn" data-cal-mode="week" onclick="setCalMode('week')" style="font-size:11px;padding:4px 10px;">Week</button>
-                <button class="tab-button sched-mode-btn" data-cal-mode="day" onclick="setCalMode('day')" style="font-size:11px;padding:4px 10px;">Day</button>
+                <button class="tab-button sched-mode-btn active" data-cal-mode="day" onclick="setCalMode('day')" style="font-size:11px;padding:4px 10px;">Day</button>
               </div>
               <div id="sched-cal-body" style="min-height:200px;"></div>
             </div>
@@ -6456,6 +10678,15 @@ function dashboardHtml(port: number): string {
             <div id="sched-view-timeline" style="display:none;">
               <div id="sched-gantt-header" style="position:relative;height:24px;"></div>
               <div id="sched-gantt-rows" style="min-height:100px;"></div>
+            </div>
+            <!-- Cron Jobs view -->
+            <div id="sched-view-cron" style="display:none;">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+                <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('cron')">+ New Cron Job</button>
+                <button class="secondary-button" style="font-size:12px;" onclick="refreshCronJobs()">\u{1F504} Refresh</button>
+                <span id="sched-cron-count" class="muted" style="font-size:12px;"></span>
+              </div>
+              <div id="sched-cron-list" class="stack"><span class="muted" style="font-size:12px;">No cron jobs scheduled. Click + Cron Job to add one.</span></div>
             </div>
           </section>
         </div>
@@ -6511,6 +10742,983 @@ function dashboardHtml(port: number): string {
     });
   })();
   </script>
+</body>
+</html>`;
+}
+
+function setupWizardHtml(port: number): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PRISM \u2014 Setup Wizard</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/public/dashboard.css">
+  <style>
+    .wizard-backdrop {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .wizard-card {
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      max-width: 640px;
+      width: 100%;
+      padding: 40px 36px 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .wizard-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .wizard-logo {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .wizard-subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .wizard-progress {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 28px;
+    }
+    .wizard-progress-dot {
+      width: 32px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(148, 163, 184, 0.18);
+      transition: background 0.3s;
+    }
+    .wizard-progress-dot.active {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .wizard-progress-dot.done {
+      background: var(--accent-2);
+    }
+    .wizard-step { display: none; }
+    .wizard-step.active { display: block; }
+    .wizard-step h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    .wizard-step p {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 20px;
+      line-height: 1.5;
+    }
+    .wizard-option {
+      display: flex;
+      gap: 14px;
+      padding: 16px;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 10px;
+      align-items: flex-start;
+    }
+    .wizard-option:hover {
+      border-color: rgba(105, 210, 255, 0.3);
+      background: rgba(105, 210, 255, 0.04);
+    }
+    .wizard-option.selected {
+      border-color: var(--accent);
+      background: rgba(105, 210, 255, 0.08);
+    }
+    .wizard-option-radio {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.3);
+      flex-shrink: 0;
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s;
+    }
+    .wizard-option.selected .wizard-option-radio {
+      border-color: var(--accent);
+    }
+    .wizard-option.selected .wizard-option-radio::after {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .wizard-option-body h3 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .wizard-option-body .desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .wizard-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 28px;
+      gap: 10px;
+    }
+    .wizard-nav .skip-link {
+      color: var(--muted);
+      font-size: 12px;
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+    }
+    .wizard-nav .skip-link:hover { color: var(--accent); }
+    .wizard-field {
+      margin-bottom: 16px;
+    }
+    .wizard-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .wizard-field input[type="text"] {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .wizard-field input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+    .wizard-check-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .wizard-check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+    }
+    .wizard-check-item .check-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .wizard-check-item .check-icon.pass {
+      background: rgba(124, 241, 200, 0.15);
+      color: var(--accent-2);
+    }
+    .wizard-check-item .check-icon.fail {
+      background: rgba(255, 141, 141, 0.15);
+      color: var(--danger);
+    }
+    .wizard-check-item .check-icon.pending {
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--muted);
+    }
+    .wizard-check-detail {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .wizard-summary-ready {
+      text-align: center;
+      padding: 20px 0;
+    }
+    .wizard-summary-ready .big-check {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(124, 241, 200, 0.12);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wizard-backdrop">
+    <div class="wizard-card">
+      <div class="wizard-logo">PRISM</div>
+      <div class="wizard-subtitle">Frontier Operator Console \u2014 Setup Wizard</div>
+
+      <div class="wizard-progress" id="wizard-progress"></div>
+
+      <!-- Step 1: Welcome + Profile -->
+      <div class="wizard-step active" id="step-1">
+        <h2>Choose Your Profile</h2>
+        <p>This determines governance level. You can change this later in Settings.</p>
+        <div class="wizard-option selected" data-profile="individual" onclick="selectProfile(this, 'individual')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F680} Individual</h3>
+            <p class="desc">Personal productivity &amp; development. Minimal governance, fast defaults. Best for solo use, experimentation, and local agents.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-profile="business" onclick="selectProfile(this, 'business')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F3E2} Business</h3>
+            <p class="desc">Enterprise-grade governance. Full audit trails, mandatory rollback plans, strict approval workflows. For production and compliance.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Workspace Location -->
+      <div class="wizard-step" id="step-2">
+        <h2>Workspace Location</h2>
+        <p>PRISM stores configuration, agent state, and artifacts in a workspace directory.</p>
+        <div class="wizard-field">
+          <label>Workspace Path</label>
+          <input type="text" id="workspace-path" />
+        </div>
+        <div class="wizard-check-list" id="workspace-checks"></div>
+      </div>
+
+      <!-- Step 3: Provider Configuration -->
+      <div class="wizard-step" id="step-3">
+        <h2>LLM Provider</h2>
+        <p>Select which LLM provider to start with. You can add more later in the Provider &amp; Settings tab.</p>
+        <div class="wizard-option selected" data-provider="ollama" onclick="selectProvider(this, 'ollama')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F5A5} Ollama (Local)</h3>
+            <p class="desc">Run open-source models locally. No API key needed. Requires Ollama installed and running.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F916} OpenAI</h3>
+            <p class="desc">GPT-4o, GPT-4o-mini, and other OpenAI models. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="anthropic" onclick="selectProvider(this, 'anthropic')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u2728 Anthropic</h3>
+            <p class="desc">Claude models. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="google" onclick="selectProvider(this, 'google')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F50D} Google AI</h3>
+            <p class="desc">Gemini models. Requires API key.</p>
+          </div>
+        </div>
+        <div id="provider-key-field" class="wizard-field" style="display:none;margin-top:16px;">
+          <label id="provider-key-label">API Key</label>
+          <input type="text" id="provider-api-key" placeholder="sk-..." autocomplete="off" />
+        </div>
+        <div id="provider-test-result" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+
+      <!-- Step 4: Summary + Launch -->
+      <div class="wizard-step" id="step-4">
+        <h2>Ready to Launch</h2>
+        <p>Here\u2019s a summary of your configuration. PRISM will validate everything before launching.</p>
+        <div class="wizard-check-list" id="summary-checks"></div>
+        <div id="summary-status" style="margin-top:16px;text-align:center;"></div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="wizard-nav">
+        <button class="skip-link" id="wizard-skip" onclick="skipSetup()">Skip setup</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="secondary-button" style="font-size:12px;opacity:0.8;" onclick="startAdvancedWizard()">Advanced Setup \u2192</button>
+          <button class="secondary-button" id="wizard-back" onclick="wizardBack()" style="display:none;">Back</button>
+          <button class="primary-button" id="wizard-next" onclick="wizardNext()">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/public/setup-wizard.js"></script>
+</body>
+</html>`;
+}
+
+function setupWizardAdvancedHtml(port: number): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PRISM \u2014 Advanced Setup Wizard</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/public/dashboard.css">
+  <style>
+    .wizard-backdrop {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .wizard-card {
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      max-width: 720px;
+      width: 100%;
+      padding: 40px 36px 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .wizard-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .wizard-logo {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .wizard-subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .wizard-phase-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .wizard-progress {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 28px;
+    }
+    .wizard-progress-dot {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(148, 163, 184, 0.18);
+      transition: background 0.3s;
+    }
+    .wizard-progress-dot.active {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .wizard-progress-dot.done {
+      background: var(--accent-2);
+    }
+    .wizard-step { display: none; }
+    .wizard-step.active { display: block; }
+    .wizard-step h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    .wizard-step p {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 20px;
+      line-height: 1.5;
+    }
+    .wizard-option {
+      display: flex;
+      gap: 14px;
+      padding: 14px;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 8px;
+      align-items: flex-start;
+    }
+    .wizard-option:hover {
+      border-color: rgba(105, 210, 255, 0.3);
+      background: rgba(105, 210, 255, 0.04);
+    }
+    .wizard-option.selected {
+      border-color: var(--accent);
+      background: rgba(105, 210, 255, 0.08);
+    }
+    .wizard-option-radio {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.3);
+      flex-shrink: 0;
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s;
+    }
+    .wizard-option.selected .wizard-option-radio {
+      border-color: var(--accent);
+    }
+    .wizard-option.selected .wizard-option-radio::after {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .wizard-option-body h3 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .wizard-option-body .desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .wizard-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 28px;
+      gap: 10px;
+    }
+    .wizard-nav .skip-link {
+      color: var(--muted);
+      font-size: 12px;
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+    }
+    .wizard-nav .skip-link:hover { color: var(--accent); }
+    .wizard-field {
+      margin-bottom: 14px;
+    }
+    .wizard-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .wizard-field input[type="text"],
+    .wizard-field input[type="email"],
+    .wizard-field select {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .wizard-field input:focus,
+    .wizard-field select:focus {
+      border-color: var(--accent);
+    }
+    .wizard-check-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .wizard-check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+    }
+    .wizard-check-item .check-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .wizard-check-item .check-icon.pass {
+      background: rgba(124, 241, 200, 0.15);
+      color: var(--accent-2);
+    }
+    .wizard-check-item .check-icon.fail {
+      background: rgba(255, 141, 141, 0.15);
+      color: var(--danger);
+    }
+    .wizard-check-item .check-icon.pending {
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--muted);
+    }
+    .wizard-check-detail {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .wizard-summary-ready {
+      text-align: center;
+      padding: 20px 0;
+    }
+    .wizard-summary-ready .big-check {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(124, 241, 200, 0.12);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    .wizard-section {
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.015);
+    }
+    .wizard-section h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .wizard-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+      font-size: 13px;
+    }
+    .wizard-toggle-row:last-child { border-bottom: none; }
+    .wizard-toggle {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .wizard-toggle.on {
+      background: var(--accent);
+    }
+    .wizard-toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      transition: transform 0.2s;
+    }
+    .wizard-toggle.on::after {
+      transform: translateX(16px);
+    }
+    .wizard-role-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .wizard-role-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 12px;
+    }
+    .wizard-role-item select {
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 11px;
+      font-family: inherit;
+      max-width: 140px;
+    }
+    .wizard-cert-box {
+      margin-top: 16px;
+      padding: 16px;
+      border: 2px solid var(--accent);
+      border-radius: 14px;
+      background: rgba(105, 210, 255, 0.04);
+      text-align: center;
+    }
+    .wizard-cert-icon {
+      font-size: 40px;
+      margin-bottom: 8px;
+    }
+    .wizard-cert-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .wizard-cert-detail {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .wizard-inline-row {
+      display: flex;
+      gap: 12px;
+    }
+    .wizard-inline-row .wizard-field {
+      flex: 1;
+    }
+    .wizard-hint {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 3px;
+      font-weight: 400;
+    }
+  </style>
+</head>
+<body>
+  <div class="wizard-backdrop">
+    <div class="wizard-card">
+      <div class="wizard-logo">PRISM</div>
+      <div class="wizard-subtitle">Frontier Operator Console \u2014 Advanced Setup</div>
+
+      <div class="wizard-progress" id="wizard-progress"></div>
+
+      <!-- Step 1: Profile & Governance -->
+      <div class="wizard-step active" id="step-1">
+        <div class="wizard-phase-label">Phase A \u2014 Foundation</div>
+        <h2>Choose Your Profile</h2>
+        <p>This determines governance level, default agent behaviour, and compliance requirements.</p>
+        <div class="wizard-option selected" data-profile="individual" onclick="advSelectProfile(this, 'individual')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F680} Individual</h3>
+            <p class="desc">Personal productivity. Minimal governance, fast defaults. Tier-1 autonomous guardian, mesh swarms.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-profile="business" onclick="advSelectProfile(this, 'business')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F3E2} Business</h3>
+            <p class="desc">Enterprise governance. Full audit trails, star-topology swarms, tier-2 conditional guardian, mandatory compliance cron.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Workspace & Prerequisites -->
+      <div class="wizard-step" id="step-2">
+        <div class="wizard-phase-label">Phase A \u2014 Foundation</div>
+        <h2>Workspace Location</h2>
+        <p>PRISM stores configuration, agent state, and artifacts in a workspace directory.</p>
+        <div class="wizard-field">
+          <label>Workspace Path</label>
+          <input type="text" id="adv-workspace-path" />
+        </div>
+        <div class="wizard-check-list" id="adv-workspace-checks"></div>
+      </div>
+
+      <!-- Step 3: Primary LLM Provider -->
+      <div class="wizard-step" id="step-3">
+        <div class="wizard-phase-label">Phase A \u2014 Foundation</div>
+        <h2>LLM Provider</h2>
+        <p>Select which LLM provider to start with. More can be added later in Settings.</p>
+        <div class="wizard-option selected" data-provider="ollama" onclick="advSelectProvider(this, 'ollama')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F5A5} Ollama (Local)</h3>
+            <p class="desc">Run open-source models locally. No API key needed.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="openai" onclick="advSelectProvider(this, 'openai')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F916} OpenAI</h3>
+            <p class="desc">GPT-4o, GPT-4o-mini, and more. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="anthropic" onclick="advSelectProvider(this, 'anthropic')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u2728 Anthropic</h3>
+            <p class="desc">Claude models. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="google" onclick="advSelectProvider(this, 'google')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F50D} Google AI</h3>
+            <p class="desc">Gemini models. Requires API key.</p>
+          </div>
+        </div>
+        <div id="adv-provider-key-field" class="wizard-field" style="display:none;margin-top:14px;">
+          <label id="adv-provider-key-label">API Key</label>
+          <input type="text" id="adv-provider-api-key" placeholder="sk-..." autocomplete="off" />
+        </div>
+        <div id="adv-provider-test-result" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+
+      <!-- Step 4: Model Routing Strategy -->
+      <div class="wizard-step" id="step-4">
+        <div class="wizard-phase-label">Phase B \u2014 Intelligence Layer</div>
+        <h2>Model Routing Strategy</h2>
+        <p>Define how PRISM routes requests to different models based on task role or modality.</p>
+
+        <div class="wizard-option selected" data-strategy="single" onclick="advSelectStrategy(this, 'single')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>Single Model</h3>
+            <p class="desc">Route all tasks to one model. Simplest setup.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-strategy="multi" onclick="advSelectStrategy(this, 'multi')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>Multi-Model (Role-Based)</h3>
+            <p class="desc">Assign different models to each task role (chat, code generation, reasoning, etc.).</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-strategy="modality" onclick="advSelectStrategy(this, 'modality')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>Modality-Aware</h3>
+            <p class="desc">Route by input type: text, vision, code. Requires multiple providers.</p>
+          </div>
+        </div>
+
+        <div id="adv-role-overrides" style="display:none;margin-top:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <label style="font-size:12px;font-weight:600;color:var(--muted);">Role Overrides</label>
+            <button class="secondary-button" style="font-size:11px;padding:4px 10px;" onclick="advAcceptSuggestions()">Accept AI Suggestions</button>
+          </div>
+          <div class="wizard-role-grid" id="adv-role-grid"></div>
+        </div>
+      </div>
+
+      <!-- Step 5: Agentic Control & Guardian -->
+      <div class="wizard-step" id="step-5">
+        <div class="wizard-phase-label">Phase B \u2014 Intelligence Layer</div>
+        <h2>Agentic Control &amp; Guardian</h2>
+        <p>Configure the Guardian agent and set defaults for the agent pool.</p>
+
+        <div class="wizard-section">
+          <h4>\u{1F6E1} Guardian Agent</h4>
+          <div class="wizard-field">
+            <label>Guardian Model</label>
+            <select id="adv-guardian-model"><option value="">Loading models...</option></select>
+            <span class="wizard-hint">Select a local GGUF model for the guardian to use.</span>
+          </div>
+
+          <div class="wizard-field">
+            <label>Authority Tier</label>
+            <select id="adv-guardian-tier">
+              <option value="tier1_autonomous">Tier 1 \u2014 Autonomous (Individual default)</option>
+              <option value="tier2_conditional">Tier 2 \u2014 Conditional (Business default)</option>
+            </select>
+          </div>
+
+          <div class="wizard-toggle-row">
+            <span>Auto-start Guardian on launch</span>
+            <div class="wizard-toggle on" id="adv-guardian-autostart" onclick="advToggle(this)"></div>
+          </div>
+        </div>
+
+        <div class="wizard-section" style="margin-top:12px;">
+          <h4>\u{1F916} Default Swarm Topology</h4>
+          <div class="wizard-field">
+            <select id="adv-swarm-topology">
+              <option value="mesh">Mesh \u2014 Peer-to-peer (Individual default)</option>
+              <option value="star">Star \u2014 Central coordinator (Business default)</option>
+              <option value="pipeline">Pipeline \u2014 Sequential</option>
+              <option value="broadcast">Broadcast \u2014 Fan-out</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 6: Character Accountability (CAC) -->
+      <div class="wizard-step" id="step-6">
+        <div class="wizard-phase-label">Phase C \u2014 Identity &amp; Operations</div>
+        <h2>Character Accountability</h2>
+        <p>Assign your primary operator character. This establishes your identity chain for audit and compliance.</p>
+
+        <div class="wizard-field">
+          <label>Primary Character</label>
+          <select id="adv-cac-character"><option value="">Loading characters...</option></select>
+        </div>
+
+        <div class="wizard-inline-row">
+          <div class="wizard-field">
+            <label>Operator Email</label>
+            <input type="email" id="adv-cac-operator-email" placeholder="you@company.com" />
+          </div>
+          <div class="wizard-field">
+            <label>PRISM User Email</label>
+            <input type="email" id="adv-cac-prism-email" placeholder="assistant@prism.local" />
+          </div>
+        </div>
+
+        <div class="wizard-inline-row">
+          <div class="wizard-field">
+            <label>Operator ID</label>
+            <input type="text" id="adv-cac-operator-id" placeholder="Optional identifier" />
+          </div>
+          <div class="wizard-field">
+            <label>Workspace Hub</label>
+            <input type="text" id="adv-cac-workspace-hub" placeholder="e.g. main / department-name" />
+            <span class="wizard-hint" id="adv-cac-hub-hint">Suggested for individual, required for business profiles.</span>
+          </div>
+        </div>
+
+        <div id="adv-cac-assignment-result" style="margin-top:12px;font-size:12px;"></div>
+      </div>
+
+      <!-- Step 7: Browser Profile & Scheduler -->
+      <div class="wizard-step" id="step-7">
+        <div class="wizard-phase-label">Phase C \u2014 Identity &amp; Operations</div>
+        <h2>Browser Profile &amp; Scheduler</h2>
+        <p>Set up your browser automation profile and initial scheduled tasks.</p>
+
+        <div class="wizard-section">
+          <h4>\u{1F310} Browser Profile</h4>
+          <div class="wizard-toggle-row">
+            <span>Use CAC identity for browser profile</span>
+            <div class="wizard-toggle on" id="adv-browser-use-cac" onclick="advToggle(this); advUpdateBrowserFields();"></div>
+          </div>
+          <div class="wizard-inline-row" style="margin-top:10px;">
+            <div class="wizard-field">
+              <label>Browser Profile Email</label>
+              <input type="email" id="adv-browser-email" placeholder="you@company.com" />
+            </div>
+            <div class="wizard-field">
+              <label>Segment</label>
+              <select id="adv-browser-segment">
+                <option value="individual">Individual</option>
+                <option value="business">Business</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="wizard-section" style="margin-top:12px;">
+          <h4>\u{1F4C5} Scheduled Tasks</h4>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">Toggle suggested tasks for your profile. You can customise in the Scheduler tab later.</p>
+          <div id="adv-scheduler-suggestions"></div>
+        </div>
+      </div>
+
+      <!-- Step 8: Email & Calendar Integrations -->
+      <div class="wizard-step" id="step-8">
+        <div class="wizard-phase-label">Phase D \u2014 Integrations</div>
+        <h2>Email &amp; Calendar OAuth</h2>
+        <p>Connect your business accounts to enable secure, real-time access to your inbox and calendar. OAuth tokens remain local and encrypted.</p>
+
+        <div class="wizard-section">
+          <h4>Gmail</h4>
+          <div id="adv-gmail-status" style="margin-top:8px;font-size:12px;color:var(--muted);">Checking status...</div>
+          <button class="secondary-button" id="adv-gmail-connect" style="margin-top:8px;" onclick="advOAuthConnect('gmail')">Connect Gmail</button>
+        </div>
+
+        <div class="wizard-section" style="margin-top:16px;">
+          <h4>Outlook / Microsoft 365</h4>
+          <div id="adv-outlook-status" style="margin-top:8px;font-size:12px;color:var(--muted);">Checking status...</div>
+          <button class="secondary-button" id="adv-outlook-connect" style="margin-top:8px;" onclick="advOAuthConnect('outlook')">Connect Outlook</button>
+        </div>
+      </div>
+
+      <!-- Step 9: Summary & Initialization Certificate -->
+      <div class="wizard-step" id="step-9">
+        <div class="wizard-phase-label">Launch</div>
+        <h2>Summary &amp; Initialization Certificate</h2>
+        <p>Review your configuration. PRISM will create an immutable Initialization Certificate as your system\u2019s provenance record.</p>
+
+        <div class="wizard-check-list" id="adv-summary-checks"></div>
+        <div id="adv-summary-status" style="margin-top:12px;text-align:center;"></div>
+
+        <div class="wizard-cert-box" id="adv-cert-box" style="display:none;">
+          <div class="wizard-cert-icon">\u{1F4DC}</div>
+          <div class="wizard-cert-title">Initialization Certificate</div>
+          <div class="wizard-cert-detail" id="adv-cert-detail">
+            A dedicated session will be created documenting your full system configuration, then packaged as an immutable provenance record.
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="wizard-nav">
+        <button class="skip-link" id="adv-wizard-skip" onclick="advSkipSetup()">Use Basic Setup</button>
+        <div style="display:flex;gap:8px;">
+          <button class="secondary-button" id="adv-wizard-back" onclick="advWizardBack()" style="display:none;">Back</button>
+          <button class="primary-button" id="adv-wizard-next" onclick="advWizardNext()">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/public/setup-wizard-advanced.js"></script>
 </body>
 </html>`;
 }

@@ -278,6 +278,20 @@ const orchestrator = new Orchestrator({
 | **Profile-aware PolicyEngine** | ✅ DONE | src/core/policy/engine.ts |
 | **Execution profiles defined** | ✅ DONE | INDIVIDUAL_PROFILE, BUSINESS_PROFILE |
 | **PolicyContext profile parameter** | ✅ DONE | src/core/policy/types.ts |
+
+## Computer-Use Business Security Alignment Gate Mapping
+
+This implementation is part of the mandatory control path for enterprise computer-use readiness.
+
+CU-BG mapping:
+
+- `CU-BG-1`: Satisfied by profile-aware policy evaluation for terminal/container/browser-class operations.
+- `CU-BG-2`: Satisfied by tier3 approval routing and revoke semantics for high-risk actions.
+- `CU-BG-3`: Supported by policy reasons and event-lineage instrumentation requirements.
+- `CU-BG-4`: Verified through release packet evidence and traceability mapping.
+- `CU-BG-5`: Coupled to rollback-plan enforcement and incident replay drills.
+
+Canonical reference: `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`.
 | **Tier enforcement per profile** | ✅ DONE | Engine logic validates tiers |
 | **Rollback plan enforcement** | ✅ DONE | Business enforces, Individual warns |
 | **Audit configurable per profile** | ✅ DONE | profile.auditAllOperations flag |

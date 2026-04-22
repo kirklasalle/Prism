@@ -88,6 +88,9 @@ Resume from PRISM_BATON_PASS_VERBATIM.md as canonical context
   - ANTHROPIC_API_KEY
   - PRISM_OLLAMA_BASE_URL
   - PRISM_OLLAMA_MODELS
+  - OLLAMA_API_KEY
+  - PRISM_OLLAMA_CLOUD_BASE_URL
+  - PRISM_OLLAMA_CLOUD_MODELS
   - PRISM_CUSTOM_PROVIDER_URL
   - PRISM_CUSTOM_PROVIDER_NAME
   - PRISM_CUSTOM_PROVIDER_API_KEY
@@ -105,3 +108,13 @@ Resume from PRISM_BATON_PASS_VERBATIM.md as canonical context
    - Export JSON works
    - Copy JSON works
    - Export CSV works
+
+## Computer-Use Governance Continuity Note (2026-03-25)
+
+When using this baton to resume work, preserve the current PRISM computer-use governance baseline:
+
+- Canonical anchor: `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- Enterprise gating: `CU-BG-1` through `CU-BG-5` in `REQUIREMENTS_TRACEABILITY_MATRIX.md`
+- Release decision coupling: `PRODUCTION_RELEASE_RUNBOOK.md`
+
+Do not represent Business computer-use readiness as complete unless CU-BG evidence is present in the release packet.

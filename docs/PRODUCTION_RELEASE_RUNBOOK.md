@@ -15,8 +15,9 @@ Provide a step-by-step path from staging-ready build to production deployment wi
 3. Verify documentation synchronization
 4. Generate release notes and risk summary
 5. Run automated release validation gate: `npm run release:validate:strict`
-6. Create release packet directory using `PHASE_D2_RELEASE_PACKET_TEMPLATE.md`
-7. Validate profile parity package completeness:
+6. Validate Business Security Alignment Gate checklist for computer-use core
+7. Create release packet directory using `PHASE_D2_RELEASE_PACKET_TEMPLATE.md`
+8. Validate profile parity package completeness:
 
 - profile parity matrix,
 - governance-path evidence for shell/container/plugin operations,
@@ -41,6 +42,7 @@ Exit:
 6. Execute revoke drills for long-running terminal and container sessions
 7. Validate plugin/adaptor pack compatibility and trust-policy behavior
 8. Validate release packet completeness against `PHASE_D2_RELEASE_PACKET_TEMPLATE.md` Section 4
+9. Validate computer-use Business gate scenarios and confirmation controls
 
 Exit:
 
@@ -69,6 +71,7 @@ Decision input:
   - completed traceability matrix review,
   - release packet manifest review,
   - release packet validation checklist
+  - Business Security Alignment Gate status review (`CU-BG-*`)
 
 Decision:
 
@@ -145,10 +148,77 @@ P2:
 - Incident commander on-call aware
 - Profile parity matrix validated and archived
 - Governance-path evidence archived for shell/container/plugin operations
+- Computer-use Business gate evidence archived (`CU-BG-*` checks)
 - Investor/licensing appendix claims checked against validated release artifacts
 - `REQUIREMENTS_TRACEABILITY_MATRIX.md` checked and signed by Product/Governance
 - `PHASE_D2_RELEASE_PACKET_TEMPLATE.md` checklist completed and archived with candidate packet
 - `release-packet-manifest.md` validated against packet contents
+
+## Phase D3 / D4 Validation Drills
+
+Run these drills before any Phase D3 or D4 release decision.
+
+### D3 — Agent Control & Swarm
+
+```bash
+# Agent lifecycle round-trip
+node --test dist/tests/agent-lifecycle.test.js
+
+# Swarm topology (mesh / star / pipeline / broadcast)
+node --test dist/tests/swarm-orchestration.test.js
+
+# Chat-to-agent routing classifier
+node --test dist/tests/chat-router.test.js
+
+# Dashboard Agent Control tab real-data check
+# Verify /api/agents returns non-mock data from a running session
+curl -s http://localhost:3000/api/agents | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8'); JSON.parse(d); console.log('OK');"
+```
+
+### D4 — Spectrum Refraction Advanced
+
+```bash
+# Full D4c suite (20/20 required)
+npm run build && node --test dist/tests/spectrum-refraction-advanced.test.js
+
+# Verify SR catalog cache: two rapid getCatalog() calls should return same object reference
+node -e "
+const { LlmProviderManager } = require('./dist/src/core/operator/llm-provider-manager.js');
+const m = new LlmProviderManager({});
+Promise.all([m.getCatalog(), m.getCatalog()]).then(([a,b]) => {
+  console.log('cache hit:', a === b ? 'PASS' : 'FAIL');
+});
+"
+
+# Verify approval queue drains on graceful shutdown
+node --test dist/tests/approval-queue-integration.test.js
+
+# Verify demo scenario runner emits _demo: true on activity events
+node --test dist/tests/demo-scenario-runner.test.js 2>/dev/null || echo "no demo-scenario tests; manual verify required"
+```
+
+### LLM Retry (F2)
+
+```bash
+# Verify exponential retry is exercised when provider returns error
+node --test dist/tests/llm-provider-manager-cache.test.js
+```
+
+### Error requestId (F6)
+
+```bash
+# Verify any 4xx/5xx API error response contains requestId
+curl -s -o /dev/null -D - http://localhost:3000/api/nonexistent | grep requestId
+```
+
+## Business Security Alignment Gate (Computer Use Core)
+
+No enterprise-ready computer-use release decision is valid unless all are true:
+
+1. Computer-use governance pathways pass (allow/deny/timeout/revoke).
+2. CAC accountability requirements are present in governed computer-use audit samples.
+3. Sensitive-action confirmation controls are validated for Business profile workflows.
+4. External benchmark claims are clearly labeled `vendor-reported` unless reproduced in first-party qualification artifacts.
 
 ## Postmortem Requirements
 

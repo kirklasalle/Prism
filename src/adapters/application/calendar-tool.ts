@@ -16,6 +16,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
+import type { GmailOAuthAdapter } from "./email-oauth-adapter.js";
+import type { OutlookOAuthAdapter } from "./outlook-oauth-adapter.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Data types
@@ -77,7 +79,16 @@ function saveCalendar(dir: string, data: CalendarData): void {
 export class CalendarPlanTool implements Tool {
     readonly name = "calendar_plan";
 
-    constructor(private readonly _dataDir?: string) { }
+    /**
+     * @param _dataDir  Optional data directory override (useful in tests).
+     * @param gmailAdapter Optional Gmail/Google Calendar adapter.
+     * @param outlookAdapter Optional Outlook/Microsoft Calendar adapter.
+     */
+    constructor(
+        private readonly _dataDir?: string,
+        private readonly gmailAdapter?: GmailOAuthAdapter,
+        private readonly outlookAdapter?: OutlookOAuthAdapter
+    ) { }
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {
@@ -101,6 +112,112 @@ export class CalendarPlanTool implements Tool {
         const action = args.action ?? "";
         const calendarId = args.calendarId ?? "calendar-default";
         const dir = this._dataDir ?? dataDir();
+
+        // ── OAuth-live paths (when connected) ──────────────────────────────
+        const useGoogle = this.gmailAdapter?.isConnected === true;
+        const useOutlook = !useGoogle && this.outlookAdapter?.isConnected === true;
+
+        if (useGoogle) {
+            switch (action) {
+                case "availability_lookup":
+                case "list_range": {
+                    const timeMin = args.rangeStart ?? new Date().toISOString();
+                    const events = await this.gmailAdapter!.listEvents(50, timeMin);
+                    return {
+                        ok: true,
+                        output: {
+                            source: "google_calendar",
+                            calendarId: "primary",
+                            eventCount: events.length,
+                            events: events.map((e: any) => ({
+                                id: e.id,
+                                title: e.summary,
+                                start: e.start?.dateTime ?? e.start?.date,
+                                end: e.end?.dateTime ?? e.end?.date,
+                                location: e.location,
+                                description: e.description,
+                            })),
+                        },
+                    };
+                }
+                case "create_or_update_event": {
+                    const eventData = {
+                        summary: args.title,
+                        description: args.description,
+                        start: args.start ? { dateTime: args.start } : undefined,
+                        end: args.end ? { dateTime: args.end } : undefined,
+                        location: args.location,
+                    };
+                    let result;
+                    if (args.eventId) {
+                        result = await this.gmailAdapter!.updateEvent(args.eventId, eventData);
+                    } else {
+                        result = await this.gmailAdapter!.createEvent(eventData);
+                    }
+                    return {
+                        ok: true,
+                        output: { source: "google_calendar", eventId: result.id, status: "created/updated" },
+                        sideEffects: [{ type: "network", description: `Calendar event ${args.eventId ? "updated" : "created"} in Google Calendar` }],
+                    };
+                }
+                case "delete_event": {
+                    if (!args.eventId) return { ok: false, output: { error: "eventId required" } };
+                    await this.gmailAdapter!.deleteEvent(args.eventId);
+                    return { ok: true, output: { source: "google_calendar", deleted: args.eventId } };
+                }
+            }
+        }
+
+        if (useOutlook) {
+            switch (action) {
+                case "availability_lookup":
+                case "list_range": {
+                    const timeMin = args.rangeStart ?? new Date().toISOString();
+                    const events = await this.outlookAdapter!.listEvents(50, timeMin);
+                    return {
+                        ok: true,
+                        output: {
+                            source: "outlook_calendar",
+                            calendarId: "primary",
+                            eventCount: events.length,
+                            events: events.map((e: any) => ({
+                                id: e.id,
+                                title: e.subject,
+                                start: e.start?.dateTime,
+                                end: e.end?.dateTime,
+                                location: e.location?.displayName,
+                                description: e.bodyPreview,
+                            })),
+                        },
+                    };
+                }
+                case "create_or_update_event": {
+                    const eventData = {
+                        subject: args.title,
+                        body: { contentType: "HTML", content: args.description ?? "" },
+                        start: args.start ? { dateTime: args.start, timeZone: "UTC" } : undefined,
+                        end: args.end ? { dateTime: args.end, timeZone: "UTC" } : undefined,
+                        location: args.location ? { displayName: args.location } : undefined,
+                    };
+                    let result;
+                    if (args.eventId) {
+                        result = await this.outlookAdapter!.updateEvent(args.eventId, eventData);
+                    } else {
+                        result = await this.outlookAdapter!.createEvent(eventData);
+                    }
+                    return {
+                        ok: true,
+                        output: { source: "outlook_calendar", eventId: result.id, status: "created/updated" },
+                        sideEffects: [{ type: "network", description: `Calendar event ${args.eventId ? "updated" : "created"} in Outlook Calendar` }],
+                    };
+                }
+                case "delete_event": {
+                    if (!args.eventId) return { ok: false, output: { error: "eventId required" } };
+                    await this.outlookAdapter!.deleteEvent(args.eventId);
+                    return { ok: true, output: { source: "outlook_calendar", deleted: args.eventId } };
+                }
+            }
+        }
 
         switch (action) {
             case "availability_lookup": {

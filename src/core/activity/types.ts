@@ -8,7 +8,8 @@ export type ActivityLayer =
     | "governance"
     | "performance"
     | "llm"
-    | "agent";
+    | "agent"
+    | "demo";
 
 export type AuthorityTier = "tier1_autonomous" | "tier2_conditional" | "tier3_approval";
 
@@ -21,6 +22,7 @@ export interface AccountabilityChain {
     operatorEmail: string;
     clientId: string;
     executionProfileSegment: "individual" | "business";
+    workspaceHub?: string;
 }
 
 export interface ActivityEvent {

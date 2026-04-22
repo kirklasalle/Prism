@@ -60,3 +60,14 @@ export async function testBrowserSessionStateType(): Promise<void> {
   assert.strictEqual(states.length, 6);
   console.log("  ✓ BrowserSessionState covers all lifecycle states");
 }
+
+export async function testBrowserSessionManager(): Promise<void> {
+  console.log("BrowserSessionManager");
+  await testBrowserSessionManagerDiagnostics();
+  await testBrowserSessionManagerListEmpty();
+  await testBrowserSessionManagerGetSessionNull();
+  await testBrowserSessionManagerCloseNonexistent();
+  await testBrowserSessionManagerCloseAll();
+  await testBrowserSessionManagerActivityBusEmit();
+  await testBrowserSessionStateType();
+}

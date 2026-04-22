@@ -425,8 +425,8 @@ if (testResults.failed > 0) {
         .forEach((t: any) => {
             console.log(`  - ${t.name}: ${t.error}`);
         });
-    process.exit(1);
+    if (require.main === module) process.exit(1);
+    else throw new Error(`Plugin-pack-validator: ${testResults.failed} test(s) failed`);
 } else {
     console.log('\n✓ All tests passed!');
-    process.exit(0);
 }

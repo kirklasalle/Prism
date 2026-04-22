@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, formatRelativeTime, safeIso, dashboardLog } from './dashboard-core.js';
+import { state, request, escapeHtml, formatRelativeTime, safeIso, dashboardLog, statusBadge } from './dashboard-core.js';
 
 export
   function renderEvents() {
@@ -147,4 +147,25 @@ export
   });
   html += '</tbody></table>';
   container.innerHTML = html;
+}
+
+// ── Incident Triage Bundle (Phase E2) ─────────────────────────────────────────
+
+export async function captureIncidentBundle() {
+  try {
+    var resp = await fetch('/api/incidents/bundle', { method: 'POST' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.blob();
+    var url = URL.createObjectURL(data);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'prism-incident-bundle-' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    dashboardLog('logs', 'incident.bundle.captured', 'Evidence bundle downloaded');
+  } catch (e) {
+    dashboardLog('logs', 'incident.bundle.error', 'Bundle capture failed: ' + e.message);
+  }
 }

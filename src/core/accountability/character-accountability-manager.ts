@@ -17,6 +17,7 @@ export interface AssignCharacterInput {
     clientId: string;
     sessionId: string;
     executionProfile?: string;
+    workspaceHub?: string;
 }
 
 export interface BusinessEmailValidationPolicy {
@@ -62,6 +63,7 @@ export class CharacterAccountabilityManager {
             clientId: input.clientId,
             sessionId: input.sessionId,
             executionProfileSegment,
+            workspaceHub: (input.workspaceHub ?? "").trim(),
             state: "active",
             dispatchCount: 0,
             assignedAt: now,
@@ -216,6 +218,7 @@ export class CharacterAccountabilityManager {
             operatorEmail: assignment.operatorEmail,
             clientId: assignment.clientId,
             executionProfileSegment: assignment.executionProfileSegment,
+            workspaceHub: assignment.workspaceHub,
         };
 
         this.activityBus.emit({

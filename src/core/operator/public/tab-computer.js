@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, dashboardLog, safeRenderStep } from './dashboard-core.js';
+import { state, request, escapeHtml, dashboardLog, safeRenderStep, formatUptime } from './dashboard-core.js';
 
 var selectedFramebufferFile = null;
 var framebufferGalleryItems = [];
@@ -8,7 +8,7 @@ var framebufferBurstCurrentItem = null;
 var framebufferBurstPaused = false;
 var framebufferBurstSpeedMultiplier = 1;
 
-function updateBurstMediaBar() {
+export function updateBurstMediaBar() {
   var ppBtn = document.getElementById('fb-mc-playpause');
   if (ppBtn) ppBtn.textContent = framebufferBurstPaused ? '\u25B6 Play' : '\u23F8 Pause';
   var speeds = [
@@ -25,7 +25,7 @@ function updateBurstMediaBar() {
   }
 }
 
-function stopBurstFrameAnimation() {
+export function stopBurstFrameAnimation() {
   if (framebufferBurstAnimationInterval) {
     clearInterval(framebufferBurstAnimationInterval);
     framebufferBurstAnimationInterval = null;
@@ -36,7 +36,7 @@ function stopBurstFrameAnimation() {
   if (mediaBar) mediaBar.style.display = 'none';
 }
 
-function startBurstFrameAnimation(item) {
+export function startBurstFrameAnimation(item) {
   stopBurstFrameAnimation();
   if (!item || !item.sourceFiles || !item.sourceFiles.length) return;
   framebufferBurstCurrentItem = item;
@@ -54,7 +54,7 @@ function startBurstFrameAnimation(item) {
   img.style.display = 'block';
   if (placeholder) placeholder.style.display = 'none';
   var mediaBar = document.getElementById('framebuffer-media-bar');
-  if (mediaBar) { mediaBar.style.display = 'flex'; updateBurstMediaBar(); }
+  if (mediaBar) { mediaBar.style.display = 'flex'; if (window.updateBurstMediaBar) window.updateBurstMediaBar(); }
   if (frameUrls.length <= 1) return;
   var fps = Math.max(1, item.playbackFps || 8);
   var delay = Math.round(1000 / fps / Math.max(0.1, framebufferBurstSpeedMultiplier));
@@ -68,7 +68,7 @@ function startBurstFrameAnimation(item) {
 
 export function toggleBurstPlayPause() {
   framebufferBurstPaused = !framebufferBurstPaused;
-  updateBurstMediaBar();
+  if (window.updateBurstMediaBar) window.updateBurstMediaBar();
 }
 
 export function stopBurstFromUI() {
@@ -76,16 +76,16 @@ export function stopBurstFromUI() {
     var img = document.getElementById('framebuffer-preview');
     if (img) img.src = '/api/computer/screengrab/file/' + encodeURIComponent(framebufferBurstCurrentItem.sourceFiles[0]);
   }
-  stopBurstFrameAnimation();
+  if (window.stopBurstFrameAnimation) window.stopBurstFrameAnimation();
 }
 
 export function setBurstSpeed(multiplier) {
   framebufferBurstSpeedMultiplier = multiplier;
   if (framebufferBurstCurrentItem) {
     var wasPaused = framebufferBurstPaused;
-    startBurstFrameAnimation(framebufferBurstCurrentItem);
+    if (window.startBurstFrameAnimation) window.startBurstFrameAnimation(framebufferBurstCurrentItem);
     framebufferBurstPaused = wasPaused;
-    updateBurstMediaBar();
+    if (window.updateBurstMediaBar) window.updateBurstMediaBar();
   }
 }
 
@@ -265,10 +265,19 @@ export
 
 export
   async function refreshDeviceManager() {
+  var container = document.getElementById('device-tree-container');
+  var scanBtn = document.querySelector('[onclick="refreshDeviceManager()"]');
+  if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = '\u{1F504} Scanning\u2026'; }
+  if (container) container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">\u{1F50D} Scanning hardware via WMI\u2026 This may take a few seconds.</div>';
   try {
     state.computerDevices = await request('/api/computer/devices');
     renderDeviceTree();
-  } catch (e) { console.error('[computer] device scan failed', e); }
+  } catch (e) {
+    console.error('[computer] device scan failed', e);
+    if (container) container.innerHTML = '<div class="muted" style="color:#ff8d8d;">Device scan failed: ' + escapeHtml(e.message || String(e)) + '</div>';
+  } finally {
+    if (scanBtn) { scanBtn.disabled = false; scanBtn.textContent = '\u{1F504} Scan Devices'; }
+  }
 }
 
 export
@@ -276,23 +285,182 @@ export
   var container = document.getElementById('device-tree-container');
   if (!container || !state.computerDevices) return;
   var devs = state.computerDevices.devices || {};
+  var filterInput = document.getElementById('dm-search-input');
+  var query = filterInput ? filterInput.value.toLowerCase().trim() : '';
+
+  var icons = {
+    'Processors': '\u2699\uFE0F', 'Motherboard': '\u{1F4CB}', 'Memory': '\u{1F9E0}',
+    'Display Adapters': '\u{1F4BB}', 'Disk Drives': '\u{1F4BE}', 'Network Adapters': '\u{1F4F6}',
+    'Sound Devices': '\u{1F50A}', 'USB Controllers': '\u{1F50C}', 'USB Devices': '\u{1F4F1}',
+    'BIOS': '\u{1F4DF}', 'Optical Drives': '\u{1F4BF}'
+  };
+
+  var totalDevices = 0;
+  var totalIssues = 0;
   var html = '';
-  var icons = { 'Display Adapters': '\u{1F4BB}', 'Network Adapters': '\u{1F4F6}', 'Disk Drives': '\u{1F4BE}', 'Processors': '\u2699\uFE0F' };
-  for (var cat in devs) {
+
+  var catOrder = ['Processors', 'Motherboard', 'BIOS', 'Memory', 'Display Adapters', 'Disk Drives',
+    'Network Adapters', 'Sound Devices', 'USB Controllers', 'USB Devices', 'Optical Drives'];
+  var allCats = catOrder.filter(function (c) { return devs[c]; });
+  // Add any categories not in our order list
+  for (var k in devs) { if (allCats.indexOf(k) === -1) allCats.push(k); }
+
+  for (var ci = 0; ci < allCats.length; ci++) {
+    var cat = allCats[ci];
     var items = devs[cat] || [];
+    if (!Array.isArray(items)) items = [items];
+
+    // Filter by search query
+    var filtered = items;
+    if (query) {
+      filtered = items.filter(function (d) {
+        return (d.name || '').toLowerCase().indexOf(query) !== -1 || cat.toLowerCase().indexOf(query) !== -1;
+      });
+      if (filtered.length === 0) continue;
+    }
+
     var icon = icons[cat] || '\u{1F50C}';
-    html += '<details class="panel" style="padding:8px 12px;margin-bottom:4px;" open>';
-    html += '<summary style="cursor:pointer;font-weight:600;">' + icon + ' ' + escapeHtml(cat) + ' (' + items.length + ')</summary>';
-    if (items.length === 0) {
+    var okCount = 0, warnCount = 0, errCount = 0;
+    for (var si = 0; si < filtered.length; si++) {
+      var st = (filtered[si].status || 'OK').toLowerCase();
+      if (st === 'ok') okCount++;
+      else if (st === 'degraded' || st === 'pred fail') warnCount++;
+      else errCount++;
+    }
+    totalDevices += filtered.length;
+    totalIssues += warnCount + errCount;
+
+    var statusSummary = '';
+    if (warnCount > 0) statusSummary += '<span class="dm-cat-badge dm-badge-warn">' + warnCount + ' warning</span>';
+    if (errCount > 0) statusSummary += '<span class="dm-cat-badge dm-badge-error">' + errCount + ' error</span>';
+
+    html += '<details class="dm-category" ' + (errCount > 0 || warnCount > 0 ? 'open' : '') + '>';
+    html += '<summary class="dm-category-header">' + icon + ' ' + escapeHtml(cat) + ' <span class="dm-cat-count">(' + filtered.length + ')</span> ' + statusSummary + '</summary>';
+
+    if (filtered.length === 0) {
       html += '<div class="muted" style="padding:6px 0 0 18px;font-size:12px;">No devices detected.</div>';
     } else {
-      for (var i = 0; i < items.length; i++) {
-        html += '<div style="padding:4px 0 0 18px;font-size:12px;">\u2514 ' + escapeHtml(items[i]) + '</div>';
+      for (var di = 0; di < filtered.length; di++) {
+        var dev = filtered[di];
+        var devStatus = (dev.status || 'OK').toLowerCase();
+        var dotClass = devStatus === 'ok' ? 'dm-dot-ok' : (devStatus === 'degraded' || devStatus === 'pred fail') ? 'dm-dot-warn' : 'dm-dot-error';
+        // Find the real index in the unfiltered array for property lookup
+        var realIndex = items.indexOf(dev);
+        html += '<div class="dm-device-row" data-cat="' + escapeHtml(cat) + '" data-idx="' + realIndex + '" onclick="toggleDeviceProperties(this)">';
+        html += '<span class="dm-status-dot ' + dotClass + '"></span>';
+        html += '<span class="dm-device-name">' + escapeHtml(dev.name || 'Unknown Device') + '</span>';
+        html += '<span class="dm-device-status">' + escapeHtml(dev.status || 'OK') + '</span>';
+        html += '</div>';
+        html += '<div class="dm-props-panel" id="dm-props-' + escapeHtml(cat).replace(/\\s/g, '-') + '-' + realIndex + '" style="display:none;"></div>';
       }
     }
     html += '</details>';
   }
+
+  // Update total badge
+  var badge = document.getElementById('dm-total-badge');
+  if (badge) {
+    badge.textContent = totalDevices + ' device' + (totalDevices !== 1 ? 's' : '') + (totalIssues > 0 ? ' \u2022 ' + totalIssues + ' issue' + (totalIssues !== 1 ? 's' : '') : '');
+    badge.className = 'dm-total-badge' + (totalIssues > 0 ? ' dm-total-issues' : '');
+  }
+
+  if (state.computerDevices.fallback) {
+    html = '<div class="muted" style="font-size:11px;margin-bottom:8px;color:#ffd17a;">\u26A0 WMI scan unavailable \u2014 showing limited data from Node.js os module.</div>' + html;
+  }
+
   container.innerHTML = html || '<div class="muted">No device data. Click Scan Devices.</div>';
+}
+
+export
+  async function toggleDeviceProperties(el) {
+  var cat = el.getAttribute('data-cat');
+  var idx = el.getAttribute('data-idx');
+  var panelId = 'dm-props-' + cat.replace(/\\s/g, '-') + '-' + idx;
+  var panel = document.getElementById(panelId);
+  if (!panel) return;
+
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    el.classList.remove('dm-device-expanded');
+    return;
+  }
+
+  el.classList.add('dm-device-expanded');
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="muted" style="padding:8px;font-size:11px;">Loading properties\u2026</div>';
+
+  // First try cached props from the scan
+  var devs = state.computerDevices ? state.computerDevices.devices || {} : {};
+  var items = devs[cat] || [];
+  var dev = items[parseInt(idx, 10)];
+  if (dev && dev.props && Object.keys(dev.props).length > 2) {
+    renderDevicePropsPanel(panel, dev.props);
+    return;
+  }
+
+  // Fetch detailed properties from API
+  try {
+    var data = await request('/api/computer/devices/properties/' + encodeURIComponent(cat) + '/' + idx);
+    renderDevicePropsPanel(panel, data.properties || {});
+  } catch (e) {
+    panel.innerHTML = '<div class="muted" style="padding:8px;font-size:11px;color:#ff8d8d;">Failed to load properties: ' + escapeHtml(e.message || String(e)) + '</div>';
+  }
+}
+
+function renderDevicePropsPanel(panel, props) {
+  var keys = Object.keys(props).sort();
+  if (keys.length === 0) {
+    panel.innerHTML = '<div class="muted" style="padding:8px;font-size:11px;">No properties available.</div>';
+    return;
+  }
+  var html = '<table class="dm-props-table">';
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var v = props[k];
+    if (v === null || v === undefined || v === '') continue;
+    html += '<tr><td class="dm-prop-key">' + escapeHtml(k) + '</td><td class="dm-prop-val">' + escapeHtml(String(v)) + '</td></tr>';
+  }
+  html += '</table>';
+  panel.innerHTML = html;
+}
+
+export
+  function filterDeviceTree() {
+  renderDeviceTree();
+}
+
+export
+  async function generateDeviceReport() {
+  var devs = state.computerDevices ? state.computerDevices.devices || {} : {};
+  var categories = Object.keys(devs);
+  if (categories.length === 0) {
+    alert('Scan devices first before generating a report.');
+    return;
+  }
+  var btn = document.querySelector('[onclick="generateDeviceReport()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '\u{1F4CB} Generating\u2026'; }
+  try {
+    var data = await request('/api/computer/devices/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories: categories })
+    });
+    var report = (data.report || 'No data').replace(/\\\\n/g, '\\n');
+    var blob = new Blob([report], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'prism-device-report-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    dashboardLog('computer', 'device.report', 'Device report generated with ' + categories.length + ' categories');
+  } catch (e) {
+    alert('Report generation failed: ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '\u{1F4CB} Generate Report'; }
+  }
 }
 
 export
@@ -563,17 +731,17 @@ export
   async function previewSelectedFramebufferItem(selectedItem) {
   var selectionSummaryDiv = document.getElementById('framebuffer-selection-summary');
   if (!selectedItem) {
-    stopBurstFrameAnimation();
+    if (window.stopBurstFrameAnimation) window.stopBurstFrameAnimation();
     setFramebufferPreviewSource('/api/computer/screengrab/latest?t=' + Date.now());
     return;
   }
   if (selectedItem.kind !== 'burst') {
-    stopBurstFrameAnimation();
+    if (window.stopBurstFrameAnimation) window.stopBurstFrameAnimation();
     setFramebufferPreviewSource('/api/computer/screengrab/file/' + encodeURIComponent(selectedItem.previewName || selectedItem.name) + '?t=' + Date.now());
     return;
   }
   // Burst: animate frames directly on the <img> — no codec required
-  startBurstFrameAnimation(selectedItem);
+  if (window.startBurstFrameAnimation) window.startBurstFrameAnimation(selectedItem);
   if (selectionSummaryDiv) {
     selectionSummaryDiv.textContent = 'Burst animation \u2022 ' + selectedItem.frameCount + ' frames @ ' + (selectedItem.playbackFps || 8) + ' fps';
   }

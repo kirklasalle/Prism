@@ -1,0 +1,78 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://prism.local/schemas/computer-use-business-gate-status.schema.json",
+    "title": "PRISM Computer Use Business Gate Status",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schemaVersion",
+        "generatedAt",
+        "candidateId",
+        "strict",
+        "requirements"
+    ],
+    "properties": {
+        "schemaVersion": {
+            "type": "string",
+            "minLength": 1
+        },
+        "generatedAt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ISO 8601 timestamp"
+        },
+        "candidateId": {
+            "type": "string",
+            "minLength": 1
+        },
+        "strict": {
+            "type": "boolean"
+        },
+        "requirements": {
+            "type": "array",
+            "minItems": 5,
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "status",
+                    "evidenceLink",
+                    "reviewer"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "enum": [
+                            "CU-BG-1",
+                            "CU-BG-2",
+                            "CU-BG-3",
+                            "CU-BG-4",
+                            "CU-BG-5"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pass",
+                            "fail",
+                            "waived",
+                            "in_progress"
+                        ]
+                    },
+                    "evidenceLink": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reviewer": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "notes": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}

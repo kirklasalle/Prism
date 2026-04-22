@@ -31,6 +31,7 @@ Required files:
 9. `traceability-status.md`
 10. `release-packet-manifest.md`
 11. `go-no-go-signoff.md`
+12. `computer-use-business-gate-status.md`
 
 ## 3. File Templates
 
@@ -118,6 +119,18 @@ Decision fields:
 - packet completeness verdict,
 - inventory reviewer and timestamp.
 
+### 3.10 `computer-use-business-gate-status.md`
+
+- Status for `CU-BG-1` through `CU-BG-5`
+- Evidence links for each requirement
+- Reviewer sign-off (Engineering, QA/Validation, Product/Governance)
+
+Optional machine-readable companion (recommended for CI):
+
+- `computer-use-business-gate-status.json`
+- Schema: `COMPUTER_USE_BUSINESS_GATE_STATUS_SCHEMA.json`
+- Validator command: `npm run cu:bg:check`
+
 ## 4. Packet Validation Checklist
 
 - [ ] All required files present
@@ -127,6 +140,7 @@ Decision fields:
 - [ ] Claim alignment check approved by Product/Governance
 - [ ] Release packet manifest matches actual packet contents
 - [ ] Sign-off document completed by all required roles
+- [ ] Computer-use Business gate file complete (`CU-BG-1` through `CU-BG-5`)
 
 ## 5. Naming and Retention Rules
 

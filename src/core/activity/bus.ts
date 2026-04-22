@@ -50,6 +50,7 @@ export class ActivityBus {
             policyDecision: event.policyDecision,
             sideEffects: event.sideEffects,
             rollbackPlan: event.rollbackPlan,
+            workspaceHub: event.accountabilityChain?.workspaceHub,
         });
 
         return createHash("sha256").update(payload).digest("hex");

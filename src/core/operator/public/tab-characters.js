@@ -1,5 +1,20 @@
 import { state, request, escapeHtml, dashboardLog } from './dashboard-core.js';
 
+// ── Character archetype icons ────────────────────────────────────────────────
+var CHARACTER_ICONS = {
+  'aria': '\u{1F916}',
+  'phoenix': '\u{1F985}',
+  'sentinel': '\u{1F6E1}\uFE0F'
+};
+
+function characterIcon(characterId) {
+  var id = String(characterId || '').toLowerCase();
+  for (var key in CHARACTER_ICONS) {
+    if (id.indexOf(key) !== -1) return CHARACTER_ICONS[key];
+  }
+  return '\u{1F464}';
+}
+
 function stateBadge(stateValue) {
   var value = String(stateValue || 'unknown').toLowerCase();
   var palette = {
@@ -33,13 +48,25 @@ function formatList(items) {
   }).join('');
 }
 
+// ── Profile-aware helpers ────────────────────────────────────────────────────
+function getSelectedProfile() {
+  var el = document.getElementById('character-assign-profile');
+  return el ? el.value : 'individual';
+}
+
+function filteredCharacters() {
+  var profile = getSelectedProfile();
+  return (state.availableCharacters || []).filter(function (c) {
+    return !c.executionProfile || c.executionProfile === profile;
+  });
+}
+
 function selectedCharacter() {
   var select = document.getElementById('character-assign-character');
   var selectedId = select ? select.value : '';
-  for (var i = 0; i < state.availableCharacters.length; i++) {
-    if (state.availableCharacters[i].id === selectedId) {
-      return state.availableCharacters[i];
-    }
+  var chars = state.availableCharacters || [];
+  for (var i = 0; i < chars.length; i++) {
+    if (chars[i].id === selectedId) return chars[i];
   }
   return null;
 }
@@ -60,6 +87,21 @@ export function clearCharacterPanelStatus() {
   el.textContent = '';
 }
 
+// ── Dynamic Labels ───────────────────────────────────────────────────────────
+function updateDynamicLabels() {
+  var profile = getSelectedProfile();
+  var isBusiness = profile === 'business';
+  var prismEmailLabel = document.getElementById('label-prism-user-email');
+  var operatorEmailLabel = document.getElementById('label-operator-email');
+  var hubLabel = document.getElementById('label-workspace-hub');
+  var hubInput = document.getElementById('character-assign-workspace-hub');
+  if (prismEmailLabel) prismEmailLabel.textContent = isBusiness ? 'Employee Email *' : 'Assistant Email *';
+  if (operatorEmailLabel) operatorEmailLabel.textContent = isBusiness ? 'Company Email *' : 'Personal Email *';
+  if (hubLabel) hubLabel.textContent = isBusiness ? 'Department / Project *' : 'Workspace Label (optional)';
+  if (hubInput) hubInput.placeholder = isBusiness ? 'e.g., Engineering, Marketing, Project X' : 'e.g., My Projects, Home Lab (optional)';
+}
+
+// ── Summary ──────────────────────────────────────────────────────────────────
 export function renderCharacterSummary() {
   var container = document.getElementById('character-summary-cards');
   if (!container) return;
@@ -79,6 +121,7 @@ export function renderCharacterSummary() {
     + metricCard('Revoked', revoked, '#e74c3c');
 }
 
+// ── Character Profile Inspector ──────────────────────────────────────────────
 export function renderCharacterDefinitionPreview() {
   var container = document.getElementById('character-definition-preview');
   if (!container) return;
@@ -87,10 +130,11 @@ export function renderCharacterDefinitionPreview() {
     container.innerHTML = '<div class="muted" style="font-size:12px;">Select a character to inspect its CAC profile, tool permissions, and persona.</div>';
     return;
   }
+  var icon = characterIcon(character.id);
   container.innerHTML = ''
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">'
     + '<div>'
-    + '<div style="font-size:16px;font-weight:700;">' + escapeHtml(character.displayName || character.name || character.id) + '</div>'
+    + '<div style="font-size:16px;font-weight:700;">' + icon + ' ' + escapeHtml(character.displayName || character.name || character.id) + '</div>'
     + '<div class="muted" style="font-size:12px;margin-top:3px;">' + escapeHtml(character.id) + '</div>'
     + '</div>'
     + stateBadge(character.executionProfile || 'unknown')
@@ -100,12 +144,14 @@ export function renderCharacterDefinitionPreview() {
     + '<div class="panel" style="padding:10px;"><div class="muted" style="font-size:11px;">Execution Profile</div><div style="font-size:13px;font-weight:600;margin-top:4px;">' + escapeHtml(character.executionProfile || 'Unspecified') + '</div></div>'
     + '<div class="panel" style="padding:10px;"><div class="muted" style="font-size:11px;">Max Risk Tier</div><div style="font-size:13px;font-weight:600;margin-top:4px;">' + escapeHtml(character.maxRiskTier == null ? 'Unspecified' : String(character.maxRiskTier)) + '</div></div>'
     + '<div class="panel" style="padding:10px;"><div class="muted" style="font-size:11px;">Greeting</div><div style="font-size:13px;font-weight:600;margin-top:4px;">' + escapeHtml(character.greeting || 'None') + '</div></div>'
+    + '<div class="panel" style="padding:10px;"><div class="muted" style="font-size:11px;">Default Email</div><div style="font-size:13px;font-weight:600;margin-top:4px;">' + escapeHtml(character.defaultEmail || 'None') + '</div></div>'
     + '</div>'
     + '<div style="margin-top:12px;"><div class="muted" style="font-size:11px;margin-bottom:6px;">Tags</div>' + formatList(character.tags || []) + '</div>'
     + '<div style="margin-top:10px;"><div class="muted" style="font-size:11px;margin-bottom:6px;">Allowed Tools</div>' + formatList(character.allowedTools || []) + '</div>'
     + '<div style="margin-top:10px;"><div class="muted" style="font-size:11px;margin-bottom:6px;">Denied Tools</div>' + formatList(character.deniedTools || []) + '</div>';
 }
 
+// ── Filter & Roster ──────────────────────────────────────────────────────────
 export function filterCharacterAssignments(query) {
   state.characterFilterText = String(query || '');
   renderCharacterRoster();
@@ -130,6 +176,7 @@ export function renderCharacterRoster() {
       assignment.prismUserEmail,
       assignment.assignmentId,
       assignment.executionProfileSegment,
+      assignment.workspaceHub,
       assignment.character && assignment.character.displayName,
       assignment.character && assignment.character.name
     ].join(' ').toLowerCase();
@@ -144,14 +191,18 @@ export function renderCharacterRoster() {
     var assignment = filtered[i];
     var expanded = state.selectedAssignmentId === assignment.assignmentId;
     var displayName = assignment.character && (assignment.character.displayName || assignment.character.name) ? (assignment.character.displayName || assignment.character.name) : assignment.characterId;
+    var icon = characterIcon(assignment.characterId);
     html += '<div class="panel" style="padding:14px;margin-bottom:10px;">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">';
     html += '<div style="min-width:220px;flex:1;">';
     html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
-    html += '<div style="font-size:15px;font-weight:700;">' + escapeHtml(displayName) + '</div>';
+    html += '<div style="font-size:15px;font-weight:700;">' + icon + ' ' + escapeHtml(displayName) + '</div>';
     html += stateBadge(assignment.state);
+    if (assignment.workspaceHub) {
+      html += '<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:rgba(105,210,255,0.15);color:#69d2ff;font-size:10px;font-weight:600;">' + escapeHtml(assignment.workspaceHub) + '</span>';
+    }
     html += '</div>';
-    html += '<div class="muted" style="font-size:12px;margin-top:4px;">' + escapeHtml(assignment.characterId) + ' • ' + escapeHtml(assignment.assignmentId) + '</div>';
+    html += '<div class="muted" style="font-size:12px;margin-top:4px;">' + escapeHtml(assignment.characterId) + ' \u2022 ' + escapeHtml(assignment.assignmentId) + '</div>';
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px;font-size:12px;">';
     html += '<div><div class="muted" style="font-size:11px;">Operator</div><div>' + escapeHtml(assignment.operatorEmail || '-') + '</div></div>';
     html += '<div><div class="muted" style="font-size:11px;">Prism User</div><div>' + escapeHtml(assignment.prismUserEmail || '-') + '</div></div>';
@@ -179,6 +230,7 @@ export function renderCharacterRoster() {
         + '<div><strong>operatorId:</strong> ' + escapeHtml(assignment.operatorId || '-') + '</div>'
         + '<div><strong>clientId:</strong> ' + escapeHtml(assignment.clientId || '-') + '</div>'
         + '<div><strong>sessionId:</strong> ' + escapeHtml(assignment.sessionId || '-') + '</div>'
+        + '<div><strong>workspaceHub:</strong> ' + escapeHtml(assignment.workspaceHub || '-') + '</div>'
         + '</div></div>';
       html += '<div><div class="muted" style="font-size:11px;">Lifecycle</div><div style="margin-top:6px;line-height:1.6;">'
         + '<div><strong>Assigned:</strong> ' + escapeHtml(formatTimestamp(assignment.assignedAt)) + '</div>'
@@ -194,6 +246,7 @@ export function renderCharacterRoster() {
   container.innerHTML = html;
 }
 
+// ── Audit Log ────────────────────────────────────────────────────────────────
 export function renderCharacterAuditLog() {
   var container = document.getElementById('character-audit-log');
   if (!container) return;
@@ -210,7 +263,7 @@ export function renderCharacterAuditLog() {
     html += '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">';
     html += '<div>';
     html += '<div style="font-size:13px;font-weight:700;">' + escapeHtml(operation) + '</div>';
-    html += '<div class="muted" style="font-size:11px;margin-top:3px;">' + escapeHtml(event.characterId || '-') + ' • ' + escapeHtml(event.assignmentId || '-') + '</div>';
+    html += '<div class="muted" style="font-size:11px;margin-top:3px;">' + escapeHtml(event.characterId || '-') + ' \u2022 ' + escapeHtml(event.assignmentId || '-') + '</div>';
     html += '</div>';
     html += '<div style="text-align:right;">' + stateBadge(event.status || 'unknown') + '<div class="muted" style="font-size:11px;margin-top:4px;">' + escapeHtml(formatTimestamp(event.timestamp)) + '</div></div>';
     html += '</div>';
@@ -234,25 +287,49 @@ export function renderCharacterAuditLog() {
   container.innerHTML = html;
 }
 
+// ── Assignment Form (profile-filtered dropdown) ──────────────────────────────
 export function renderCharacterAssignmentForm() {
   var select = document.getElementById('character-assign-character');
   if (select) {
+    var chars = filteredCharacters();
     var options = '<option value="">Select a character...</option>';
-    for (var i = 0; i < state.availableCharacters.length; i++) {
-      var character = state.availableCharacters[i];
-      options += '<option value="' + escapeHtml(character.id) + '">' + escapeHtml((character.displayName || character.name || character.id) + ' (' + character.id + ')') + '</option>';
+    for (var i = 0; i < chars.length; i++) {
+      var character = chars[i];
+      var icon = characterIcon(character.id);
+      options += '<option value="' + escapeHtml(character.id) + '">' + escapeHtml(icon + ' ' + (character.displayName || character.name || character.id) + ' (' + character.id + ')') + '</option>';
     }
     var current = select.value;
     select.innerHTML = options;
-    if (current) select.value = current;
+    // Try to restore previous selection if still available
+    if (current) {
+      var found = false;
+      for (var j = 0; j < chars.length; j++) {
+        if (chars[j].id === current) { found = true; break; }
+      }
+      if (found) select.value = current;
+    }
   }
+  updateDynamicLabels();
   renderCharacterDefinitionPreview();
 }
 
+// ── Data Loading ─────────────────────────────────────────────────────────────
 export async function loadAvailableCharacters() {
   var data = await request('/api/workspace/characters');
   state.availableCharacters = Array.isArray(data.characters) ? data.characters : [];
   renderCharacterAssignmentForm();
+}
+
+export async function loadWorkspaceHub() {
+  try {
+    var data = await request('/api/workspace/hub');
+    var hubInput = document.getElementById('character-assign-workspace-hub');
+    if (hubInput && data.workspaceHub) {
+      hubInput.value = data.workspaceHub;
+    }
+  } catch (e) {
+    // Non-critical — hub field remains empty
+  }
 }
 
 export async function refreshCharacterAssignments() {
@@ -283,6 +360,7 @@ export async function refreshCharacterPanel() {
   try {
     await Promise.all([
       loadAvailableCharacters(),
+      loadWorkspaceHub(),
       refreshCharacterAssignments(),
       refreshCharacterAuditLog()
     ]);
@@ -291,6 +369,42 @@ export async function refreshCharacterPanel() {
   }
 }
 
+// ── Character Selection Changed ──────────────────────────────────────────────
+export function onCharacterDefinitionChanged() {
+  var character = selectedCharacter();
+  if (character) {
+    // Auto-populate fields from character defaults
+    var emailEl = document.getElementById('character-assign-prism-user-email');
+    var userIdEl = document.getElementById('character-assign-prism-user-id');
+    if (emailEl && character.defaultEmail) emailEl.value = character.defaultEmail;
+    if (userIdEl) userIdEl.value = character.name || character.id || '';
+  }
+  renderCharacterDefinitionPreview();
+}
+
+// ── Profile Selection Changed ────────────────────────────────────────────────
+export function onProfileChanged() {
+  updateDynamicLabels();
+  renderCharacterAssignmentForm();
+}
+
+// ── Workspace Hub Persistence ────────────────────────────────────────────────
+export async function onWorkspaceHubBlur() {
+  var hubInput = document.getElementById('character-assign-workspace-hub');
+  if (!hubInput) return;
+  var value = hubInput.value.trim();
+  try {
+    await request('/api/workspace/hub', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceHub: value })
+    });
+  } catch (e) {
+    // Silent — hub is also sent with each assignment
+  }
+}
+
+// ── Submit Assignment ────────────────────────────────────────────────────────
 export async function submitCharacterAssignment() {
   clearCharacterPanelStatus();
   var characterIdEl = document.getElementById('character-assign-character');
@@ -300,6 +414,8 @@ export async function submitCharacterAssignment() {
   var operatorEmailEl = document.getElementById('character-assign-operator-email');
   var clientIdEl = document.getElementById('character-assign-client-id');
   var profileEl = document.getElementById('character-assign-profile');
+  var hubEl = document.getElementById('character-assign-workspace-hub');
+  var profile = profileEl ? profileEl.value : 'individual';
   var payload = {
     characterId: characterIdEl ? characterIdEl.value.trim() : '',
     prismUserId: prismUserIdEl ? prismUserIdEl.value.trim() : '',
@@ -308,11 +424,42 @@ export async function submitCharacterAssignment() {
     operatorEmail: operatorEmailEl ? operatorEmailEl.value.trim() : '',
     clientId: clientIdEl ? clientIdEl.value.trim() : 'workspace-tab',
     sessionId: state.selectedSessionId || '',
-    executionProfile: profileEl ? profileEl.value : 'individual'
+    executionProfile: profile,
+    workspaceHub: hubEl ? hubEl.value.trim() : ''
   };
-  if (!payload.characterId || !payload.prismUserEmail || !payload.operatorEmail) {
-    setCharacterPanelStatus('Character, Prism user email, and operator email are required.', true);
+  // Validation
+  if (!payload.characterId) {
+    setCharacterPanelStatus('Please select a character.', true);
     return;
+  }
+  if (!payload.prismUserEmail) {
+    setCharacterPanelStatus((profile === 'business' ? 'Employee' : 'Assistant') + ' email is required.', true);
+    return;
+  }
+  if (!payload.operatorEmail) {
+    setCharacterPanelStatus((profile === 'business' ? 'Company' : 'Personal') + ' email is required.', true);
+    return;
+  }
+  var emailPattern = /^\S+@\S+\.\S+$/;
+  if (!emailPattern.test(payload.prismUserEmail)) {
+    setCharacterPanelStatus('Invalid ' + (profile === 'business' ? 'employee' : 'assistant') + ' email format.', true);
+    return;
+  }
+  if (!emailPattern.test(payload.operatorEmail)) {
+    setCharacterPanelStatus('Invalid ' + (profile === 'business' ? 'company' : 'personal') + ' email format.', true);
+    return;
+  }
+  if (profile === 'business' && !payload.workspaceHub) {
+    setCharacterPanelStatus('Department / Project is required for business profiles.', true);
+    return;
+  }
+  if (profile === 'business') {
+    var prismDomain = payload.prismUserEmail.split('@').pop().toLowerCase();
+    var opDomain = payload.operatorEmail.split('@').pop().toLowerCase();
+    if (prismDomain !== opDomain) {
+      setCharacterPanelStatus('Business profile requires matching email domains (' + escapeHtml(prismDomain) + ' vs ' + escapeHtml(opDomain) + ').', true);
+      return;
+    }
   }
   try {
     await request('/api/workspace/character-assign', {
@@ -329,6 +476,7 @@ export async function submitCharacterAssignment() {
   }
 }
 
+// ── Lifecycle Transitions ────────────────────────────────────────────────────
 async function transitionAssignment(url, assignmentId, reason) {
   clearCharacterPanelStatus();
   try {
@@ -364,10 +512,7 @@ export async function revokeCharacterAssignment(assignmentId) {
   await transitionAssignment('/api/workspace/character-revoke', assignmentId, reason);
 }
 
-export function onCharacterDefinitionChanged() {
-  renderCharacterDefinitionPreview();
-}
-
+// ── Init ─────────────────────────────────────────────────────────────────────
 export function initCharacterPanel() {
   renderCharacterSummary();
   renderCharacterAssignmentForm();

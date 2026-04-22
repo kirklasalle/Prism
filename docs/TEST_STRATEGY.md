@@ -106,6 +106,15 @@ Current implementation:
 5. Plugin/adaptor pack compatibility mismatch -> install blocked with structured policy reason
 6. Plugin/adaptor pack trust failure in Business profile -> enable blocked with audit event
 
+### Governance-critical computer-use Business scenarios (Phase C/D2)
+
+1. Browser high-risk action in Business profile -> approval pathway enforced and audit trail emitted
+2. Terminal destructive operation in Business profile -> allow/deny/timeout/revoke behavior deterministic
+3. Container privileged operation in Business profile -> policy decision enforced, outcome auditable
+4. Cross-tool orchestration (browser + terminal + container) -> no bypass of tier boundaries
+5. Sensitive action requiring confirmation -> explicit human confirmation checkpoint enforced
+6. Prompt-injection stress scenario -> risk handling path invoked and logged
+
 ### Governance-critical agent control scenarios (Phase D3)
 
 1. Agent spawn with model override -> dispatch uses assigned model, telemetry confirms
@@ -121,6 +130,22 @@ Current implementation:
 11. Swarm timeout -> running swarm stopped, partial results returned with failure status
 12. Chat-to-agent routing -> classifier determines intent, correct agent dispatched
 13. Telemetry promotion recommendation -> ephemeral agent exceeding threshold flagged
+
+### Governance-critical Spectrum Refraction (SR) scenarios (Phase D4)
+
+1. SR configure with identical Left/Right model+provider -> rejected with isolation error
+2. SR configure with same provider, different models -> accepted with `model` isolation level
+3. SR configure with different providers -> accepted with `full` isolation level
+4. SR activate with insufficient isolation -> rejected at activation gate
+5. SR activate with valid isolation -> SR mode enabled, status reflects active state
+6. SR deactivate -> SR mode disabled, fallback to single-model generation
+7. SR generateSR() pre-flight with insufficient isolation -> generation blocked before fan-out
+8. SR fan-out timing -> Left and Right generate concurrently (total ≈ max, not sum)
+9. SR aggregation -> Main receives both hemisphere outputs with XML tags, produces synthesis
+10. SR model capability validation -> unqualified Left/Right model produces advisory, blocks configuration
+11. SR media artifact extraction -> Creative hemisphere media outputs extracted and typed
+12. SR isolation badge in UI -> reflects real-time isolation level (🔒/🔏/⛔)
+13. SR chat rendering -> SR-generated messages display isolation level pill and attribution
 
 ### Governance-critical CAC identity scenarios (Phase C)
 
@@ -195,6 +220,7 @@ Additional minimum for parity-program promotion (Phase D2):
   - `balanced`,
   - `governed`
 - Traceability matrix generated mapping parity claims to tests and artifacts
+- Business Security Alignment Gate checks pass for computer-use critical pathways
 
 ## Artifact Requirements Per Test Run
 
@@ -222,6 +248,26 @@ Additional minimum for agent control promotion (Phase D3):
 - Agent telemetry pattern detection samples generated
 - Dashboard Agent Control tab verified (real data, no mock handlers)
 
+Additional minimum for Spectrum Refraction (SR) promotion (Phase D4):
+
+- SR isolation enforcement tests pass (identical Left/Right rejected at configure, activate, and runtime)
+- SR fan-out verified (concurrent generation, timing within expected bounds)
+- SR aggregation quality verified (XML-tagged sections present, synthesis not concatenation)
+- SR model capability validation tests pass (unqualified models produce advisory)
+- SR API endpoints functional (status/configure/activate/deactivate return correct state)
+- SR dashboard panel verified (isolation badge, model selection, cost advisory)
+- SR chat rendering verified (isolation level pill, hemisphere attribution)
+
+## Business Security Alignment Gate Test Checklist
+
+The following checklist is required for enterprise-ready computer-use claims:
+
+- Governance-tier pathways validated (`tier1`/`tier2`/`tier3`) for computer-use operations
+- CAC accountability fields present in governed computer-use event samples
+- Sensitive-action confirmation behavior verified in Business profile scenarios
+- Cross-tool orchestration coverage includes failure and revoke pathways
+- External benchmark statements in release evidence marked `vendor-reported` unless internally reproduced
+
 Minimum for CAC identity validation (Phase C):
 
 - CAC lifecycle tests pass for assign, dispatch, suspend, resume, revoke
@@ -242,3 +288,98 @@ CAC artifact additions:
 1. Contention scenario expansion for mixed approve/deny/timeout profiles by environment
 2. CI publication of profile-differentiated performance trend history
 3. Baseline-to-candidate contract diff policy for automated release blocking
+4. SR integration test suite: isolation enforcement, fan-out timing, aggregation quality, API endpoint coverage
+
+## Security Test Layer
+
+The following security-focused test scenarios are required for release readiness. These validate the 5-layer security stack documented in `DEVELOPER_GUIDE.md` Section 7C.
+
+### Authentication tests
+
+- Unauthenticated request to any protected endpoint returns `401 Unauthorized`.
+- Invalid token returns `401` (not `403`).
+- `timingSafeEqual` is used for token comparison (no early-exit on mismatch).
+- Public routes (`/`, `/favicon.ico`, setup pages) return successfully without a token.
+- WebSocket upgrade without `?token=` is rejected before connection establishment.
+
+### Session guard tests
+
+- API request without an active session returns `400` (session required).
+- `assertSessionExists()` is called on all 12 guarded store methods.
+- Readiness gate reports `session-selected: false` when no session exists.
+- Individual profile auto-creates a session on boot; Business profile does not.
+
+### Rate limiting tests
+
+- Exceeding 200 requests in a 60-second window returns `429 Too Many Requests`.
+- `Retry-After` header is present on 429 responses.
+- `X-Forwarded-For` is trusted only from loopback addresses.
+- Stale counter cleanup occurs after 5-minute interval.
+
+### Cross-session isolation tests
+
+- Messages from session A are not visible in session B queries.
+- SR configuration saved in session A does not leak to session B.
+- Activity events are queryable by session ID with correct filtering.
+
+### Approval timeout tests
+
+- Tier-3 approval request auto-denies after 120-second timeout.
+- Timeout denial is emitted as an activity event.
+- Approved and denied decisions resolve the promise correctly.
+
+### Directive integrity tests
+
+- `verifyDirectiveIntegrity()` passes with unmodified PAD file.
+- Modified PAD file triggers integrity failure.
+- `DIRECTIVE_SHA256` constant matches the actual PAD hash.
+
+### Tool contract governance tests
+
+- Tool registration with missing contract fields is rejected.
+- Governance normalizer auto-promotes under-reported risk levels.
+- Contract violation during execution is caught and denied.
+
+### Phase D4c — Spectrum Refraction Advanced Test Scenarios
+
+These 20 test cases cover the advanced SR engine capabilities introduced in Phase D4c. All tests live in `tests/spectrum-refraction-advanced.test.ts` and run via `node --test`.
+
+**Per-hemisphere timeout & partial result (2 tests)**
+
+- Returns partial result when left hemisphere times out (right succeeds).
+- Returns partial result when right hemisphere times out (left succeeds).
+
+**Circuit breaker (4 tests)**
+
+- Circuit opens after configured consecutive failure threshold.
+- Circuit resets to closed state after a successful call.
+- `getSRCircuitBreakerState()` returns `open: false` for un-tripped circuits.
+- `circuitBreakerEnabled: false` disables tracking entirely (all failures allowed through).
+
+**Signed audit trail / activity events (4 tests)**
+
+- `sr.fanout_start` event emitted before fan-out begins.
+- `sr.fanout_complete` event emitted after parallel generation finishes.
+- `sr.generation_complete` event emitted with timing data after aggregation.
+- `sr.circuit_breaker_triggered` event emitted when an open circuit blocks a hemisphere.
+
+**Parallel timing (1 test)**
+
+- Total elapsed time ≈ max(hemispheres), not sum — verifying true parallelism.
+
+**Cost estimation (3 tests)**
+
+- `SRCostEstimate` returned with correct shape (inputTokens, outputTokens, costUsd per hemisphere + aggregate).
+- `totalEstimatedCostUsd ≥ sum` of constituent parts.
+- Aggregation cost accounts for expanded input (3× output tokens added to aggregate input).
+
+**Multi-key slot assignment (6 tests)**
+
+- Sets and gets API key for default slot.
+- Sets and gets API key for named slot.
+- Default and named slots are independent (setting one does not affect the other).
+- `listSlots()` returns only named slot names (not the default slot).
+- `clearApiKey()` removes only the specified slot.
+- Returns `null` for unknown provider+slot combination.
+
+**Coverage gate:** all 20 tests must pass (0 failures) before any Phase D4 release decision.

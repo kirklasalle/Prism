@@ -6,11 +6,11 @@ Character briefs define the persona, capabilities, and governance constraints fo
 
 At runtime PRISM resolves character briefs from the **workspace** characters directory:
 
-| Platform | Default path |
-|----------|-------------|
-| Windows  | `%USERPROFILE%\Documents\Prism_Refraction\characters\` |
-| macOS    | `~/Documents/Prism_Refraction/characters/` |
-| Linux    | `$XDG_DATA_HOME/Prism_Refraction/characters/` (fallback `~/.local/share`) |
+| Platform | Default path                                                                |
+| -------- | ----------------------------------------------------------------------------|
+| Windows  | `%USERPROFILE%\Documents\Prism_Refraction\characters\`                      |
+| macOS    | `~/Documents/Prism_Refraction/characters/`                                  |
+| Linux    | `$XDG_DATA_HOME/Prism_Refraction/characters/` (fallback `~/.local/share`)   |
 
 Override with `PRISM_WORKSPACE_ROOT` to relocate the entire workspace including characters.
 
@@ -45,7 +45,7 @@ Each `.json` file in the characters directory defines one agent identity:
 ### Field Reference
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ----- | ---- | -------- | ----------- |
 | `name` | string | yes | Unique kebab-case identifier |
 | `displayName` | string | yes | Human-readable name |
 | `systemPrompt` | string | yes | Base system prompt injected for this character |

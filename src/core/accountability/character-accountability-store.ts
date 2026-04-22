@@ -12,6 +12,7 @@ export interface CharacterAssignment {
     clientId: string;
     sessionId: string;
     executionProfileSegment: "individual" | "business";
+    workspaceHub: string;
     state: CharacterAssignmentState;
     suspendReason?: string;
     revocationReason?: string;
@@ -91,6 +92,7 @@ export class CharacterAccountabilityStore {
         this.ensureColumn("character_assignments", "prism_user_email", "TEXT");
         this.ensureColumn("character_assignments", "operator_email", "TEXT");
         this.ensureColumn("character_assignments", "execution_profile_segment", "TEXT DEFAULT 'individual'");
+        this.ensureColumn("character_assignments", "workspace_hub", "TEXT DEFAULT ''");
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {
@@ -106,12 +108,12 @@ export class CharacterAccountabilityStore {
         this.db.prepare(`
             INSERT OR REPLACE INTO character_assignments (
                 assignment_id, character_id, prism_user_id, prism_user_email,
-                operator_id, operator_email, client_id, session_id, execution_profile_segment, state,
+                operator_id, operator_email, client_id, session_id, execution_profile_segment, workspace_hub, state,
                 suspend_reason, revocation_reason, dispatch_count,
                 assigned_at, updated_at, last_active_at
             ) VALUES (
                 :assignmentId, :characterId, :prismUserId, :prismUserEmail,
-                :operatorId, :operatorEmail, :clientId, :sessionId, :executionProfileSegment, :state,
+                :operatorId, :operatorEmail, :clientId, :sessionId, :executionProfileSegment, :workspaceHub, :state,
                 :suspendReason, :revocationReason, :dispatchCount,
                 :assignedAt, :updatedAt, :lastActiveAt
             )
@@ -125,6 +127,7 @@ export class CharacterAccountabilityStore {
             clientId: assignment.clientId,
             sessionId: assignment.sessionId,
             executionProfileSegment: assignment.executionProfileSegment,
+            workspaceHub: assignment.workspaceHub ?? "",
             state: assignment.state,
             suspendReason: assignment.suspendReason ?? null,
             revocationReason: assignment.revocationReason ?? null,
@@ -213,6 +216,7 @@ export class CharacterAccountabilityStore {
             clientId: String(row.client_id),
             sessionId: String(row.session_id),
             executionProfileSegment: String(row.execution_profile_segment) as "individual" | "business",
+            workspaceHub: row.workspace_hub != null ? String(row.workspace_hub) : "",
             state: String(row.state) as CharacterAssignmentState,
             suspendReason: row.suspend_reason != null ? String(row.suspend_reason) : undefined,
             revocationReason: row.revocation_reason != null ? String(row.revocation_reason) : undefined,

@@ -1,9 +1,30 @@
-﻿import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, safeRenderStep, dashboardLog, togglePanelCollapse, formatUptime, toCsvValue } from './dashboard-core.js';
+import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, safeRenderStep, dashboardLog, togglePanelCollapse, formatUptime, toCsvValue } from './dashboard-core.js';
+
+function renderNotice() {
+  let el = document.getElementById('global-notice-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'global-notice-toast';
+    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:8888;padding:10px 20px;border-radius:8px;font-size:13px;pointer-events:none;transition:opacity 0.3s;opacity:0;max-width:480px;text-align:center;';
+    document.body.appendChild(el);
+  }
+  clearTimeout(el._timer);
+  if (!state.notice) { el.style.opacity = '0'; return; }
+  const msg = typeof state.notice === 'object' ? state.notice.message : String(state.notice);
+  const isError = typeof state.notice === 'object' && state.notice.type === 'error';
+  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:8888;padding:10px 20px;border-radius:8px;font-size:13px;pointer-events:none;transition:opacity 0.3s;opacity:1;max-width:480px;text-align:center;'
+    + (isError
+      ? 'background:rgba(255,80,80,0.18);color:#ff8d8d;border:1px solid rgba(255,80,80,0.4);'
+      : 'background:rgba(124,241,200,0.12);color:#7cf1c8;border:1px solid rgba(124,241,200,0.4);');
+  el.textContent = msg;
+  el._timer = setTimeout(() => { state.notice = null; el.style.opacity = '0'; }, 4000);
+}
 
 var PROVIDER_META = {
-  openai: { icon: '\u{1F916}', desc: 'OpenAI \u2014 GPT-4o, GPT-4, GPT-3.5 and more.' },
+  openai: { icon: '\u{1F916}', desc: 'OpenAI \u2014 GPT-5-mini, GPT-5.1, GPT-3.5 and more.' },
   anthropic: { icon: '\u2728', desc: 'Anthropic \u2014 Claude models.' },
   ollama: { icon: '\u{1F5A5}', desc: 'Ollama \u2014 Run open-source models locally.' },
+  'ollama-cloud': { icon: '\u2601\uFE0F', desc: 'Ollama Cloud \u2014 Run large cloud models (GPT-OSS, DeepSeek V3.1, Kimi K2, Qwen3 Coder) via Ollama\u2019s hosted API.', apiKeyUrl: 'https://ollama.com/settings/keys' },
   custom: { icon: '\u{1F527}', desc: 'Custom \u2014 Any OpenAI-compatible endpoint.' },
   google: { icon: '\u{1F50D}', desc: 'Google AI \u2014 Gemini models.' },
   mistral: { icon: '\u{1F30A}', desc: 'Mistral AI \u2014 Mistral & Codestral models.' },
@@ -14,7 +35,9 @@ var PROVIDER_META = {
   perplexity: { icon: '\u{1F50E}', desc: 'Perplexity \u2014 Search-augmented models.' },
   fireworks: { icon: '\u{1F386}', desc: 'Fireworks AI \u2014 Fast open-model hosting.' },
   openrouter: { icon: '\u{1F310}', desc: 'OpenRouter \u2014 Access hundreds of models via one API.' },
-  lmstudio: { icon: '\u{1F4BB}', desc: 'LM Studio \u2014 Run models locally via LM Studio.' }
+  lmstudio: { icon: '\u{1F4BB}', desc: 'LM Studio \u2014 Run models locally via LM Studio.' },
+  llamacpp: { icon: '\u{1F999}', desc: 'Llama.cpp \u2014 Connect to local Llama.cpp server.' },
+  bitnetcpp: { icon: '\u26A1', desc: 'BitNet.cpp \u2014 Ultra-efficient 1-bit inference locally.' }
 };
 
 var STRENGTH_COLORS = {
@@ -36,6 +59,22 @@ var STRENGTH_COLORS = {
   'search': '#66d9e8',
   'creative': '#f5cf6c',
   'analysis': '#69db7c'
+};
+
+var MODALITY_DISPLAY = {
+  'text': { icon: '\u{1F4DD}', color: '#94a3b8', label: 'Text' },
+  'code': { icon: '\u{1F4BB}', color: '#4dabf7', label: 'Code' },
+  'image-understanding': { icon: '\u{1F5BC}', color: '#a78bfa', label: 'Image In' },
+  'image-generation': { icon: '\u{1F3A8}', color: '#c084fc', label: 'Image Gen' },
+  'video-understanding': { icon: '\u{1F3AC}', color: '#fb923c', label: 'Video In' },
+  'video-generation': { icon: '\u{1F3A5}', color: '#f97316', label: 'Video Gen' },
+  'voice-input': { icon: '\u{1F3A4}', color: '#34d399', label: 'Voice In' },
+  'voice-output': { icon: '\u{1F50A}', color: '#10b981', label: 'Voice Out' },
+  'tts': { icon: '\u{1F5E3}', color: '#6ee7b7', label: 'TTS' },
+  'stt': { icon: '\u{1F4AC}', color: '#6ee7b7', label: 'STT' },
+  'realtime': { icon: '\u26A1', color: '#fbbf24', label: 'Realtime' },
+  'embedding': { icon: '\u{1F9E9}', color: '#74c0fc', label: 'Embedding' },
+  'multimodal-reasoning': { icon: '\u{1F9E0}', color: '#f472b6', label: 'MM Reason' }
 };
 
 export
@@ -537,6 +576,22 @@ export
 }
 
 export
+  async function updateModelMatrix() {
+  state.matrixRefreshing = true;
+  safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+  try {
+    await request('/api/models/matrix/refresh', { method: 'POST' });
+    await refreshChrome();
+    state.notice = 'Model matrix updated successfully.';
+  } catch (error) {
+    state.notice = { type: 'error', message: 'Failed to update model matrix: ' + String(error) };
+  }
+  state.matrixRefreshing = false;
+  safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+  render();
+}
+
+export
   function renderCapabilityMatrix() {
   const container = document.getElementById('capability-matrix');
   if (!container) return;
@@ -609,7 +664,13 @@ export
       var tier = matrixEntry && typeof matrixEntry.tier === 'number' ? matrixEntry.tier : guessTier(model, provider.kind);
       var locality = matrixEntry && matrixEntry.locality ? matrixEntry.locality : provider.kind;
       var strengths = matrixEntry && Array.isArray(matrixEntry.strengths) ? matrixEntry.strengths : null;
-      allRows.push({ provider: provider.label, providerId: provider.id, model: model, tier: tier, kind: locality, enabled: provider.enabled, strengths: strengths });
+      var profiles = state.modelProfiles || {};
+      var profileEntry = profiles[model];
+      var modalities = profileEntry && Array.isArray(profileEntry.modalities) ? profileEntry.modalities : null;
+      var deprecated = matrixEntry && matrixEntry.deprecated ? true : false;
+      var sunsetDate = matrixEntry && matrixEntry.sunsetDate ? matrixEntry.sunsetDate : null;
+      var successor = matrixEntry && matrixEntry.successor ? matrixEntry.successor : null;
+      allRows.push({ provider: provider.label, providerId: provider.id, model: model, tier: tier, kind: locality, enabled: provider.enabled, strengths: strengths, modalities: modalities, deprecated: deprecated, sunsetDate: sunsetDate, successor: successor });
     });
   });
 
@@ -647,7 +708,11 @@ export
   let html = '<div class="action-card" style="cursor:pointer;" onclick="toggleCapabilityMatrix()">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;">'
     + '<span class="muted" style="margin:0;">Model Capability Matrix</span>'
+    + '<div style="display:flex;align-items:center;gap:8px;">'
+    + '<button class="secondary-button" style="padding:3px 10px;font-size:11px;" onclick="event.stopPropagation();updateModelMatrix()"' + (state.matrixRefreshing ? ' disabled' : '') + '>'
+    + (state.matrixRefreshing ? 'Updating\u2026' : 'Update Matrix') + '</button>'
     + '<span class="muted" style="font-size:11px;">' + escapeHtml(rows.length + ' / ' + allRows.length + ' models') + '  ' + (isExpanded ? '&#x25B2;' : '&#x25BC;') + '</span>'
+    + '</div>'
     + '</div></div>';
 
   if (!allRows.length) {
@@ -742,21 +807,36 @@ export
     + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;provider&#39;)">Provider' + sortArrow('provider') + '</th>'
     + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;tier&#39;)">Tier' + sortArrow('tier') + '</th>'
     + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;locality&#39;)">Locality' + sortArrow('locality') + '</th>'
+    + '<th>Status</th>'
+    + '<th>Modalities</th>'
     + '<th>Proficiencies</th>'
     + '</tr></thead><tbody>';
 
   var displayRows = isExpanded ? rows : rows.slice(0, 5);
   if (!displayRows.length) {
-    html += '<tr><td colspan="5" class="muted" style="text-align:center;">No models match the current filters.</td></tr>';
+    html += '<tr><td colspan="7" class="muted" style="text-align:center;">No models match the current filters.</td></tr>';
   }
   displayRows.forEach(function (row) {
     var color = tierColors[row.tier] || '#aaa';
     var dimStyle = row.enabled ? '' : ' style="opacity:0.5;"';
+    var statusBadge = '';
+    if (row.deprecated && row.sunsetDate && new Date(row.sunsetDate) <= new Date()) {
+      statusBadge = '<span style="background:#ff6b6b22;color:#ff6b6b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">SUNSET</span>';
+    } else if (row.deprecated) {
+      statusBadge = '<span style="background:#ffa94d22;color:#ffa94d;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">DEPRECATED</span>';
+    } else {
+      statusBadge = '<span style="background:#69db7c22;color:#69db7c;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">Active</span>';
+    }
+    if (row.successor) {
+      statusBadge += ' <span style="font-size:10px;color:var(--muted);">→ ' + escapeHtml(row.successor) + '</span>';
+    }
     html += '<tr' + dimStyle + '>'
       + '<td class="mono">' + escapeHtml(row.model) + '</td>'
       + '<td>' + escapeHtml(row.provider) + (row.enabled ? '' : ' <span style="font-size:10px;color:var(--muted);">(unconfigured)</span>') + '</td>'
       + '<td><span style="color:' + color + ';font-weight:600;">' + escapeHtml(tierLabels[row.tier] || 'T?') + '</span></td>'
       + '<td>' + (row.kind === 'local' ? '🖥 Local' : '☁ Cloud') + '</td>'
+      + '<td>' + statusBadge + '</td>'
+      + '<td>' + getModelModalityBadges(row.model, row.modalities) + '</td>'
       + '<td>' + getModelProficiencyBadges(row.model, row.strengths) + '</td>'
       + '</tr>';
   });
@@ -849,6 +929,29 @@ export
   return strengths.map(function (s) {
     var c = STRENGTH_COLORS[s] || '#94a3b8';
     return '<span style="display:inline-block;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:600;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44;margin:1px 2px;">' + escapeHtml(s) + '</span>';
+  }).join('');
+}
+
+export
+  function getModelModalityBadges(modelName, explicitModalities) {
+  var modalities = explicitModalities;
+  if (!modalities || !modalities.length) {
+    var profiles = state.modelProfiles || {};
+    var profile = profiles[modelName];
+    modalities = profile && profile.modalities ? profile.modalities : [];
+  }
+  if (!modalities || !modalities.length) {
+    return '<span class="muted" style="font-size:10px;">-</span>';
+  }
+  // Skip 'text' as it's universal — only show distinctive modalities
+  var displayModalities = modalities.filter(function (m) { return m !== 'text'; });
+  if (!displayModalities.length) {
+    return '<span class="muted" style="font-size:10px;">text only</span>';
+  }
+  return displayModalities.map(function (m) {
+    var info = MODALITY_DISPLAY[m] || { icon: '', color: '#94a3b8', label: m };
+    return '<span title="' + escapeHtml(m) + '" style="display:inline-block;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:600;background:' + info.color + '18;color:' + info.color + ';border:1px solid ' + info.color + '33;margin:1px 2px;cursor:default;">'
+      + info.icon + ' ' + escapeHtml(info.label) + '</span>';
   }).join('');
 }
 
@@ -1279,7 +1382,11 @@ export
         html += '<div class="ps-key-row">';
         html += '<input type="' + (isKeyVisible ? 'text' : 'password') + '" id="ps-key-' + escapeHtml(provider.id) + '" placeholder="' + (provider.hasApiKey ? 'Key is set (enter new to replace)' : 'Enter API key') + '" />';
         html += '<button class="secondary-button" onclick="toggleApiKeyVisibility(\'' + escapeHtml(provider.id) + '\')" style="white-space:nowrap;">' + (isKeyVisible ? 'Hide' : 'Show') + '</button>';
-        html += '</div></div>';
+        html += '</div>';
+        if (meta.apiKeyUrl) {
+          html += '<div style="margin-top:4px;"><a href="' + escapeHtml(meta.apiKeyUrl) + '" target="_blank" rel="noopener noreferrer" style="color:#7eb8ff;font-size:12px;">\u{1F511} Get API Key \u2192</a></div>';
+        }
+        html += '</div>';
       }
 
       html += '<div class="ps-field"><label>Models (comma-separated)</label>';
@@ -1778,6 +1885,46 @@ export
     }
   });
 
+  /* ── Section 1b: Character Accountability (CAC) ── */
+  sec('cac', 'Character Accountability (CAC)', function () {
+    var cac = state.cacChain;
+    if (!cac || !cac.chains || cac.chains.length === 0) {
+      html += '<div class="muted">No active Character Accountability Chain found for this session.</div>';
+    } else {
+      for (var i = 0; i < cac.chains.length; i++) {
+        var chain = cac.chains[i];
+        var a = chain.assignment;
+        html += '<div style="border:1px solid var(--border-color);border-radius:6px;padding:12px;margin-bottom:8px;">';
+        html += '<div style="font-weight:600;margin-bottom:8px;">Assignment ID: <span class="mono" style="font-size:11px;">' + escapeHtml(a.assignmentId) + '</span></div>';
+        readonlyRow('Character', a.characterId);
+        readonlyRow('Operator Email', a.operatorEmail);
+        readonlyRow('Prism User Email', a.prismUserEmail || 'N/A');
+        readonlyRow('State', a.state);
+        readonlyRow('Assigned At', formatRelativeTime(a.assignedAt));
+        
+        var evts = chain.events || [];
+        if (evts.length > 0) {
+          html += '<div style="margin-top:12px;font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;">Audit Events (' + evts.length + ')</div>';
+          html += '<div style="margin-top:8px;max-height:200px;overflow-y:auto;background:var(--bg-card);border-radius:4px;padding:8px;">';
+          for (var j = 0; j < evts.length; j++) {
+             var evt = evts[j];
+             html += '<div style="font-size:11px;padding:4px 0;border-bottom:1px solid rgba(128,128,128,0.1);">';
+             html += '<span class="muted" style="margin-right:8px;">' + escapeHtml(formatRelativeTime(evt.timestamp)) + '</span>';
+             html += '<span style="font-weight:500;">' + escapeHtml(evt.operation) + '</span> ';
+             html += '<span class="' + (evt.status === 'succeeded' ? 'stg-badge-green' : (evt.status === 'failed' ? 'stg-badge-red' : 'stg-badge-blue')) + '" style="font-size:9px;padding:1px 4px;border-radius:4px;">' + escapeHtml(evt.status) + '</span>';
+             html += '</div>';
+          }
+          html += '</div>';
+        }
+        
+        html += '<div style="margin-top:12px;">';
+        html += '<button class="secondary-button" style="font-size:11px;" onclick="exportCacAuditJson(\'' + escapeHtml(a.assignmentId) + '\')">Export Audit JSON</button>';
+        html += '</div>';
+        html += '</div>';
+      }
+    }
+  });
+
   /* ── Section 2: LLM Summary ── */
   sec('llm', 'LLM Configuration (Summary)', function () {
     var provider = state.llmCatalog ? (state.llmCatalog.activeProviderId || 'none') : 'unknown';
@@ -1957,6 +2104,64 @@ export
 
     html += '<div style="margin-top:10px;">';
     html += '<button class="stg-recheck-btn" id="stg-recheck-btn" onclick="recheckReadiness()">' + (state.readinessChecking ? 'Checking\u2026' : 'Re-check Readiness') + '</button>';
+    html += '</div>';
+  });
+
+  /* ── Section 10b: OAuth Integrations (Phase E2) ── */
+  sec('oauth', 'Email OAuth Integrations', function () {
+    var gStatus = state.oauthStatus && state.oauthStatus.gmail;
+    var oStatus = state.oauthStatus && state.oauthStatus.outlook;
+
+    /* Gmail row */
+    html += '<div class="stg-row" style="flex-direction:column;align-items:flex-start;gap:8px;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between;">';
+    html += '<span class="stg-label" style="font-weight:600;">Gmail</span>';
+    if (gStatus && gStatus.connected) {
+      html += '<span class="stg-badge badge-green" title="Connected">&#10003; ' + escapeHtml(gStatus.email || 'Connected') + '</span>';
+      html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="oauthDisconnect(\'gmail\')">Disconnect</button>';
+    } else if (gStatus && gStatus.available) {
+      html += '<span class="stg-badge badge-yellow">Not connected</span>';
+      html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="oauthConnect(\'gmail\')">Connect Gmail</button>';
+    } else {
+      html += '<span class="stg-badge badge-grey" title="Set PRISM_GMAIL_CLIENT_ID and PRISM_GMAIL_CLIENT_SECRET to enable">Unavailable</span>';
+    }
+    html += '</div>';
+    if (gStatus && gStatus.error) {
+      html += '<span style="color:var(--color-error,#e55);font-size:11px;">' + escapeHtml(gStatus.error) + '</span>';
+    }
+    html += '</div>';
+
+    /* Outlook row */
+    html += '<div class="stg-row" style="flex-direction:column;align-items:flex-start;gap:8px;margin-top:8px;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between;">';
+    html += '<span class="stg-label" style="font-weight:600;">Outlook / Microsoft 365</span>';
+    if (oStatus && oStatus.connected) {
+      html += '<span class="stg-badge badge-green" title="Connected">&#10003; ' + escapeHtml(oStatus.email || oStatus.displayName || 'Connected') + '</span>';
+      html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="oauthDisconnect(\'outlook\')">Disconnect</button>';
+    } else if (oStatus && oStatus.available) {
+      html += '<span class="stg-badge badge-yellow">Not connected</span>';
+      html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="oauthConnect(\'outlook\')">Connect Outlook</button>';
+    } else {
+      html += '<span class="stg-badge badge-grey" title="Set PRISM_OUTLOOK_CLIENT_ID to enable">Unavailable</span>';
+    }
+    html += '</div>';
+    if (oStatus && oStatus.error) {
+      html += '<span style="color:var(--color-error,#e55);font-size:11px;">' + escapeHtml(oStatus.error) + '</span>';
+    }
+    html += '</div>';
+
+    html += '<div class="stg-row muted" style="font-size:11px;margin-top:6px;">';
+    html += 'OAuth tokens are stored encrypted on disk. Credentials never leave this machine.';
+    html += '</div>';
+  });
+
+  /* ── Section 11: Setup Wizard ── */
+  sec('wizard', 'Setup Wizard', function () {
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Re-run the guided setup wizard to reconfigure profile, workspace, or provider.</span>';
+    html += '</div>';
+    html += '<div style="margin-top:8px;">';
+    html += '<button class="secondary-button" style="font-size:12px;" onclick="window.location.href=\'/setup?rerun=true\'">Re-run Setup Wizard</button>';
     html += '</div>';
   });
 
@@ -2216,6 +2421,499 @@ export
   }
 }
 
+// ── Spectrum Refraction (Prism SR) UI ───────────────────────────────
+
+export
+  async function toggleSRPanel() {
+  var panel = document.getElementById('sr-panel');
+  if (!panel) return;
+  state.srPanelExpanded = !state.srPanelExpanded;
+  panel.style.display = state.srPanelExpanded ? '' : 'none';
+  if (state.srPanelExpanded) {
+    await refreshSRStatus();
+    await refreshSRPresets();
+    await refreshSRCatalog();
+    renderSRPanel();
+  }
+}
+
+async function refreshSRStatus() {
+  if (!state.selectedSessionId) return;
+  try {
+    var data = await request('/api/sr/status?sessionId=' + encodeURIComponent(state.selectedSessionId));
+    state.srConfig = data.config || null;
+    state.srCandidates = data.candidates || null;
+    state.srValidation = data.validation || null;
+    state.srIsolationLevel = data.isolationLevel || null;
+    state.srIsolationAdvisory = data.isolationAdvisory || null;
+  } catch (e) {
+    dashboardLog('SR status fetch failed: ' + e);
+  }
+}
+
+async function refreshSRPresets() {
+  try {
+    var data = await request('/api/sr/presets?scope=global');
+    state.srPresets = data.presets || [];
+  } catch (e) {
+    dashboardLog('SR presets fetch failed: ' + e);
+    state.srPresets = [];
+  }
+}
+
+async function refreshSRCatalog() {
+  try {
+    var data = await request('/api/sr/catalog');
+    state.srCatalog = data.providers || [];
+  } catch (e) {
+    dashboardLog('SR catalog fetch failed: ' + e);
+    state.srCatalog = [];
+  }
+}
+
+function renderSRPanel() {
+  var container = document.getElementById('sr-panel-content');
+  if (!container) return;
+
+  var config = state.srConfig || { enabled: false, leftProviderId: null, leftModel: null, rightProviderId: null, rightModel: null };
+  var candidates = state.srCandidates || { left: [], right: [] };
+  var validation = state.srValidation || { left: null, right: null };
+  var catalog = state.srCatalog || [];
+  var presets = state.srPresets || [];
+
+  var html = '';
+
+  // Determine if toggle can be activated
+  var canToggle = config.leftModel && config.rightModel && state.srIsolationLevel && state.srIsolationLevel !== 'insufficient';
+
+  // Cost advisory
+  html += '<div class="muted" style="font-size:11px;padding:6px 10px;background:rgba(255,180,50,0.08);border-radius:6px;border:1px solid rgba(255,180,50,0.2);margin-bottom:10px;">';
+  html += '\u26A0\uFE0F SR mode sends each prompt to 3 models + 1 aggregation pass (4 total LLM calls per message).';
+  html += '</div>';
+
+  // Activation row: status label + toggle title + toggle switch
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:' + (canToggle ? '12' : '4') + 'px;">';
+  html += '<span style="font-size:13px;font-weight:600;color:' + (config.enabled ? '#7cf1c8' : 'var(--fg-muted)') + ';">';
+  html += config.enabled ? '\u2B24 SR Active' : '\u26AA SR Inactive';
+  html += '</span>';
+
+  // Toggle title label
+  html += '<span style="font-size:12px;font-weight:500;color:var(--fg-muted);">Enable Prism SR</span>';
+  html += '<label class="tp-toggle" style="margin-left:4px;"' + (!canToggle ? ' title="Configure Left and Right models with valid isolation first"' : ' title="Toggle Spectrum Refraction on/off"') + '>';
+  html += '<input type="checkbox" ' + (config.enabled ? 'checked' : '') + ' ' + (!canToggle ? 'disabled' : '') + ' onchange="toggleSRActivation()">';
+  html += '<span class="tp-toggle-track"></span>';
+  html += '</label>';
+  html += '</div>';
+
+  // Helper text when toggle is disabled
+  if (!canToggle) {
+    html += '<div style="font-size:10px;color:#ff8787;margin-bottom:10px;padding:4px 8px;background:rgba(255,135,135,0.08);border-radius:4px;border:1px solid rgba(255,135,135,0.15);">';
+    html += '\u26A0 Configure Left and Right hemisphere models with valid isolation to enable SR.';
+    html += '</div>';
+  }
+
+  // Isolation level badge
+  if (config.leftModel && config.rightModel && state.srIsolationLevel) {
+    var isoLevel = state.srIsolationLevel;
+    var isoColor = isoLevel === 'full' ? '#7cf1c8' : isoLevel === 'model' ? '#4dabf7' : '#ff8787';
+    var isoIcon = isoLevel === 'full' ? '\u{1F512}' : isoLevel === 'model' ? '\u{1F50F}' : '\u26D4';
+    var isoLabel = isoLevel === 'full' ? 'Full Isolation' : isoLevel === 'model' ? 'Model-Level Isolation' : 'Insufficient Isolation';
+    html += '<div style="font-size:11px;padding:6px 10px;border-radius:6px;background:' + isoColor + '15;border:1px solid ' + isoColor + '40;margin-bottom:12px;display:flex;align-items:center;gap:8px;">';
+    html += '<span>' + isoIcon + '</span>';
+    html += '<span style="font-weight:600;color:' + isoColor + ';">' + isoLabel + '</span>';
+    if (state.srIsolationAdvisory) {
+      html += '<span class="muted" style="font-size:10px;"> \u2014 ' + escapeHtml(state.srIsolationAdvisory) + '</span>';
+    }
+    html += '</div>';
+  }
+
+  // --- Hemisphere columns ---
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
+
+  // Left (Logic) Hemisphere
+  html += '<div style="flex:1;min-width:260px;">';
+  html += '<div style="font-size:12px;font-weight:600;color:#4dabf7;margin-bottom:6px;">\u{1F9E0} Left Hemisphere \u2014 Logic</div>';
+  html += '<div class="muted" style="font-size:10px;margin-bottom:6px;">T3+ minimum | code, reasoning, agentic, tool-use</div>';
+  html += buildSRProviderDropdown('left', config, candidates.left, catalog);
+  html += buildSRModelDropdown('left', config, candidates.left, catalog);
+  if (validation.left) {
+    var lvColor = validation.left.valid ? (validation.left.level === 'optimal' ? '#7cf1c8' : validation.left.level === 'standard' ? '#4dabf7' : '#ffd43b') : '#ff8787';
+    html += '<div style="font-size:10px;padding:4px 8px;border-radius:4px;background:' + lvColor + '20;color:' + lvColor + ';border:1px solid ' + lvColor + '40;">';
+    html += escapeHtml(validation.left.advisoryText);
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Right (Creative) Hemisphere
+  html += '<div style="flex:1;min-width:260px;">';
+  html += '<div style="font-size:12px;font-weight:600;color:#f06595;margin-bottom:6px;">\u{1F3A8} Right Hemisphere \u2014 Creative</div>';
+  html += '<div class="muted" style="font-size:10px;margin-bottom:6px;">Requires image-generation | Optimal: + video + audio</div>';
+  html += buildSRProviderDropdown('right', config, candidates.right, catalog);
+  html += buildSRModelDropdown('right', config, candidates.right, catalog);
+  if (validation.right) {
+    var rvColor = validation.right.valid ? (validation.right.level === 'optimal' ? '#7cf1c8' : validation.right.level === 'standard' ? '#4dabf7' : '#ffd43b') : '#ff8787';
+    html += '<div style="font-size:10px;padding:4px 8px;border-radius:4px;background:' + rvColor + '20;color:' + rvColor + ';border:1px solid ' + rvColor + '40;">';
+    html += escapeHtml(validation.right.advisoryText);
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '</div>'; // close flex row
+
+  // ── Action bar: Save, Presets dropdown, Suggested Models ──
+  html += '<div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+
+  // Save button (cyberpunk primary style)
+  html += '<button class="primary-button" onclick="saveSRConfig()" style="font-size:12px;padding:6px 18px;">Save SR Configuration</button>';
+
+  // Presets dropdown
+  html += '<select id="sr-presets-select" onchange="onSRPresetSelected()" style="font-size:12px;padding:5px 8px;background:var(--bg-card);color:var(--fg);border:1px solid var(--border);border-radius:14px;min-width:180px;max-width:280px;">';
+  html += '<option value="">Saved Configurations (' + presets.length + ')</option>';
+  for (var pi = 0; pi < presets.length; pi++) {
+    var p = presets[pi];
+    var pLabel = escapeHtml(p.name) + ' \u2014 ' + escapeHtml((p.leftProviderId || '?') + '/' + (p.leftModel || '?').split('/').pop());
+    html += '<option value="' + escapeHtml(p.id) + '">' + pLabel + '</option>';
+  }
+  html += '</select>';
+
+  // Delete preset button (only visible when a preset is selected)
+  html += '<button class="secondary-button" id="sr-preset-delete-btn" onclick="deleteSRPreset()" style="font-size:11px;padding:4px 10px;display:none;" title="Delete selected preset">\u2715</button>';
+
+  // Save As preset button
+  html += '<button class="secondary-button" onclick="promptSaveSRPreset()" style="font-size:11px;padding:4px 12px;" title="Save current config as a named preset">Save As\u2026</button>';
+
+  // Suggested Models button
+  html += '<button class="secondary-button" onclick="suggestSRModels()" style="font-size:11px;padding:4px 14px;" title="Auto-select optimal models from the capability matrix">\u2728 Suggested Models</button>';
+
+  html += '</div>';
+
+  // Inline preset name input (hidden by default)
+  html += '<div id="sr-preset-save-row" style="display:none;margin-top:8px;display:none;align-items:center;gap:8px;">';
+  html += '<input id="sr-preset-name-input" type="text" placeholder="Preset name\u2026" style="font-size:12px;padding:4px 10px;background:var(--bg-card);color:var(--fg);border:1px solid var(--border);border-radius:8px;width:200px;" maxlength="80">';
+  html += '<button class="primary-button" onclick="confirmSaveSRPreset()" style="font-size:11px;padding:4px 14px;">Save</button>';
+  html += '<button class="secondary-button" onclick="cancelSaveSRPreset()" style="font-size:11px;padding:4px 10px;">Cancel</button>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+// ── SR Provider/Model dropdown builders with full catalog ──────────
+
+function buildSRProviderDropdown(side, config, qualifiedCandidates, catalog) {
+  var selectedProvider = side === 'left' ? (config.leftProviderId || '') : (config.rightProviderId || '');
+  var onchangeFn = side === 'left' ? 'onSRLeftProviderChanged()' : 'onSRRightProviderChanged()';
+  var qualifiedProviders = getUniqueProviders(qualifiedCandidates);
+  var otherProviders = [];
+  for (var i = 0; i < catalog.length; i++) {
+    if (qualifiedProviders.indexOf(catalog[i].id) === -1 && catalog[i].models.length > 0) {
+      otherProviders.push(catalog[i]);
+    }
+  }
+
+  var html = '<div style="margin-bottom:6px;">';
+  html += '<label style="font-size:10px;color:var(--fg-muted);">Provider</label>';
+  html += '<select id="sr-' + side + '-provider" onchange="' + onchangeFn + '" style="width:100%;font-size:12px;padding:4px 8px;background:var(--bg-card);color:var(--fg);border:1px solid var(--border);border-radius:4px;">';
+  if (qualifiedProviders.length > 0) {
+    html += '<optgroup label="\u2713 Qualified">';
+    for (var qi = 0; qi < qualifiedProviders.length; qi++) {
+      var qp = qualifiedProviders[qi];
+      html += '<option value="' + escapeHtml(qp) + '" ' + (qp === selectedProvider ? 'selected' : '') + '>' + escapeHtml(qp) + '</option>';
+    }
+    html += '</optgroup>';
+  }
+  if (otherProviders.length > 0) {
+    html += '<optgroup label="Other Available">';
+    for (var oi = 0; oi < otherProviders.length; oi++) {
+      var op = otherProviders[oi];
+      html += '<option value="' + escapeHtml(op.id) + '" ' + (op.id === selectedProvider ? 'selected' : '') + '>' + escapeHtml(op.label || op.id) + ' (' + op.models.length + ' models)</option>';
+    }
+    html += '</optgroup>';
+  }
+  if (qualifiedProviders.length === 0 && otherProviders.length === 0) {
+    html += '<option value="">No providers available</option>';
+  }
+  html += '</select></div>';
+  return html;
+}
+
+function buildSRModelDropdown(side, config, qualifiedCandidates, catalog) {
+  var selectedProvider = side === 'left' ? (config.leftProviderId || '') : (config.rightProviderId || '');
+  var selectedModel = side === 'left' ? (config.leftModel || '') : (config.rightModel || '');
+
+  // Qualified models for this provider
+  var qualifiedModels = qualifiedCandidates.filter(function (c) { return c.providerId === selectedProvider; });
+  var qualifiedModelNames = {};
+  for (var q = 0; q < qualifiedModels.length; q++) qualifiedModelNames[qualifiedModels[q].model] = true;
+
+  // All models from catalog for this provider (that aren't already in qualified list)
+  var catalogProvider = null;
+  for (var ci = 0; ci < catalog.length; ci++) {
+    if (catalog[ci].id === selectedProvider) { catalogProvider = catalog[ci]; break; }
+  }
+  var otherModels = [];
+  if (catalogProvider) {
+    for (var mi = 0; mi < catalogProvider.models.length; mi++) {
+      if (!qualifiedModelNames[catalogProvider.models[mi]]) {
+        otherModels.push(catalogProvider.models[mi]);
+      }
+    }
+  }
+
+  var html = '<div style="margin-bottom:6px;">';
+  html += '<label style="font-size:10px;color:var(--fg-muted);">Model</label>';
+  html += '<select id="sr-' + side + '-model" onchange="onSRModelChanged()" style="width:100%;font-size:12px;padding:4px 8px;background:var(--bg-card);color:var(--fg);border:1px solid var(--border);border-radius:4px;">';
+  if (qualifiedModels.length > 0) {
+    html += '<optgroup label="\u2713 Qualified">';
+    for (var j = 0; j < qualifiedModels.length; j++) {
+      var m = qualifiedModels[j];
+      html += '<option value="' + escapeHtml(m.model) + '" ' + (m.model === selectedModel ? 'selected' : '') + '>';
+      html += escapeHtml(m.model) + ' (T' + m.tier + ' ' + m.level + ')';
+      html += '</option>';
+    }
+    html += '</optgroup>';
+  }
+  if (otherModels.length > 0) {
+    html += '<optgroup label="Other Available">';
+    for (var oj = 0; oj < otherModels.length; oj++) {
+      html += '<option value="' + escapeHtml(otherModels[oj]) + '" ' + (otherModels[oj] === selectedModel ? 'selected' : '') + '>';
+      html += escapeHtml(otherModels[oj]);
+      html += '</option>';
+    }
+    html += '</optgroup>';
+  }
+  if (qualifiedModels.length === 0 && otherModels.length === 0) {
+    html += '<option value="">No models available</option>';
+  }
+  html += '</select></div>';
+  return html;
+}
+
+function getUniqueProviders(candidates) {
+  var seen = {};
+  var result = [];
+  for (var i = 0; i < candidates.length; i++) {
+    if (!seen[candidates[i].providerId]) {
+      seen[candidates[i].providerId] = true;
+      result.push(candidates[i].providerId);
+    }
+  }
+  return result;
+}
+
+// ── SR event handlers ──────────────────────────────────────────────
+
+export
+  function onSRLeftProviderChanged() {
+  var sel = document.getElementById('sr-left-provider');
+  if (sel && state.srConfig) {
+    state.srConfig.leftProviderId = sel.value;
+    state.srConfig.leftModel = null;
+  }
+  renderSRPanel();
+}
+
+export
+  function onSRRightProviderChanged() {
+  var sel = document.getElementById('sr-right-provider');
+  if (sel && state.srConfig) {
+    state.srConfig.rightProviderId = sel.value;
+    state.srConfig.rightModel = null;
+  }
+  renderSRPanel();
+}
+
+export
+  function onSRModelChanged() {
+  // No-op — values read on save
+}
+
+export
+  async function saveSRConfig() {
+  if (!state.selectedSessionId) return;
+  var leftProvider = document.getElementById('sr-left-provider');
+  var leftModel = document.getElementById('sr-left-model');
+  var rightProvider = document.getElementById('sr-right-provider');
+  var rightModel = document.getElementById('sr-right-model');
+
+  try {
+    var result = await request('/api/sr/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: state.selectedSessionId,
+        leftProviderId: leftProvider ? leftProvider.value : null,
+        leftModel: leftModel ? leftModel.value : null,
+        rightProviderId: rightProvider ? rightProvider.value : null,
+        rightModel: rightModel ? rightModel.value : null,
+      })
+    });
+    state.srConfig = result.config;
+    state.srValidation = result.validation;
+    state.srIsolationLevel = result.isolationLevel || null;
+    state.notice = { message: 'SR configuration saved.', type: 'success' };
+    renderNotice();
+    renderSRPanel();
+  } catch (e) {
+    state.notice = { message: 'SR save failed: ' + e, type: 'error' };
+    renderNotice();
+  }
+}
+
+export
+  async function toggleSRActivation() {
+  if (!state.selectedSessionId) return;
+  var isActive = state.srConfig && state.srConfig.enabled;
+  var endpoint = isActive ? '/api/sr/deactivate' : '/api/sr/activate';
+
+  try {
+    var result = await request(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: state.selectedSessionId })
+    });
+    state.srConfig = result.config;
+    if (result.isolationLevel) state.srIsolationLevel = result.isolationLevel;
+    state.notice = { message: isActive ? 'SR deactivated.' : 'SR activated! Prompts now fan out to 3 models.', type: 'success' };
+    renderNotice();
+    renderSRPanel();
+  } catch (e) {
+    state.notice = { message: 'SR toggle failed: ' + e, type: 'error' };
+    renderNotice();
+  }
+}
+
+// ── SR Presets ──────────────────────────────────────────────────────
+
+export
+  function onSRPresetSelected() {
+  var sel = document.getElementById('sr-presets-select');
+  var delBtn = document.getElementById('sr-preset-delete-btn');
+  if (!sel) return;
+  if (delBtn) delBtn.style.display = sel.value ? '' : 'none';
+  if (!sel.value || !state.selectedSessionId) return;
+
+  request('/api/sr/presets/' + encodeURIComponent(sel.value) + '/load', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: state.selectedSessionId })
+  }).then(function (result) {
+    state.srConfig = result.config;
+    state.srValidation = result.validation;
+    state.srIsolationLevel = result.isolationLevel || null;
+    state.srIsolationAdvisory = result.isolationAdvisory || null;
+    state.notice = { message: 'Preset loaded.', type: 'success' };
+    renderNotice();
+    renderSRPanel();
+  }).catch(function (e) {
+    state.notice = { message: 'Load preset failed: ' + e, type: 'error' };
+    renderNotice();
+  });
+}
+
+export
+  function promptSaveSRPreset() {
+  var row = document.getElementById('sr-preset-save-row');
+  if (row) { row.style.display = 'flex'; }
+  var inp = document.getElementById('sr-preset-name-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+}
+
+export
+  function cancelSaveSRPreset() {
+  var row = document.getElementById('sr-preset-save-row');
+  if (row) row.style.display = 'none';
+}
+
+export
+  async function confirmSaveSRPreset() {
+  var inp = document.getElementById('sr-preset-name-input');
+  if (!inp || !inp.value.trim()) {
+    state.notice = { message: 'Please enter a preset name.', type: 'error' };
+    renderNotice();
+    return;
+  }
+  var leftProvider = document.getElementById('sr-left-provider');
+  var leftModel = document.getElementById('sr-left-model');
+  var rightProvider = document.getElementById('sr-right-provider');
+  var rightModel = document.getElementById('sr-right-model');
+
+  try {
+    await request('/api/sr/presets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: inp.value.trim(),
+        scope: 'global',
+        leftProviderId: leftProvider ? leftProvider.value : null,
+        leftModel: leftModel ? leftModel.value : null,
+        rightProviderId: rightProvider ? rightProvider.value : null,
+        rightModel: rightModel ? rightModel.value : null,
+      })
+    });
+    cancelSaveSRPreset();
+    await refreshSRPresets();
+    state.notice = { message: 'Preset "' + inp.value.trim() + '" saved.', type: 'success' };
+    renderNotice();
+    renderSRPanel();
+  } catch (e) {
+    state.notice = { message: 'Save preset failed: ' + e, type: 'error' };
+    renderNotice();
+  }
+}
+
+export
+  async function deleteSRPreset() {
+  var sel = document.getElementById('sr-presets-select');
+  if (!sel || !sel.value) return;
+  var presetId = sel.value;
+  var presetName = '';
+  for (var i = 0; i < (state.srPresets || []).length; i++) {
+    if (state.srPresets[i].id === presetId) { presetName = state.srPresets[i].name; break; }
+  }
+  if (!confirm('Delete preset "' + presetName + '"?')) return;
+
+  try {
+    await request('/api/sr/presets/' + encodeURIComponent(presetId), { method: 'DELETE' });
+    await refreshSRPresets();
+    state.notice = { message: 'Preset deleted.', type: 'success' };
+    renderNotice();
+    renderSRPanel();
+  } catch (e) {
+    state.notice = { message: 'Delete preset failed: ' + e, type: 'error' };
+    renderNotice();
+  }
+}
+
+// ── SR Suggested Models ─────────────────────────────────────────────
+
+export
+  async function suggestSRModels() {
+  try {
+    var data = await request('/api/sr/suggest');
+    if (!data.left && !data.right) {
+      state.notice = { message: data.reasoning || 'No qualified models available.', type: 'error' };
+      renderNotice();
+      return;
+    }
+    // Apply suggestions to state
+    if (!state.srConfig) state.srConfig = { enabled: false, leftProviderId: null, leftModel: null, rightProviderId: null, rightModel: null };
+    if (data.left) {
+      state.srConfig.leftProviderId = data.left.providerId;
+      state.srConfig.leftModel = data.left.model;
+    }
+    if (data.right) {
+      state.srConfig.rightProviderId = data.right.providerId;
+      state.srConfig.rightModel = data.right.model;
+    }
+    state.notice = { message: '\u2728 ' + (data.reasoning || 'Models suggested.'), type: 'success' };
+    renderNotice();
+    renderSRPanel();
+  } catch (e) {
+    state.notice = { message: 'Suggest models failed: ' + e, type: 'error' };
+    renderNotice();
+  }
+}
+
 var _settingsTabInitialized = false;
 export function initSettingsTab() {
   if (_settingsTabInitialized) return;
@@ -2224,6 +2922,7 @@ export function initSettingsTab() {
   var row = document.getElementById('provider-matrix-row');
   if (!divider || !leftPanel || !row) return;
   _settingsTabInitialized = true;
+  refreshCacChain();
 
   // Restore saved split
   var savedPct = localStorage.getItem('prism-provider-matrix-split');
@@ -2267,3 +2966,86 @@ export function initSettingsTab() {
     if (bar) bar.style.background = 'rgba(148,163,184,0.15)';
   });
 }
+
+// ── OAuth Integration helpers (Phase E2) ─────────────────────────────────────
+
+export async function refreshOAuthStatus() {
+  try {
+    var gmailResp = await fetch('/api/auth/gmail/status');
+    var outlookResp = await fetch('/api/auth/outlook/status');
+    var gmail = gmailResp.ok ? await gmailResp.json() : null;
+    var outlook = outlookResp.ok ? await outlookResp.json() : null;
+    state.oauthStatus = { gmail: gmail, outlook: outlook };
+  } catch (e) {
+    /* Silently ignore — panel will show unavailable */
+    state.oauthStatus = state.oauthStatus || {};
+  }
+}
+
+export async function oauthConnect(provider) {
+  try {
+    var resp = await fetch('/api/auth/' + provider + '/authorize');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    if (data.authUrl) {
+      window.open(data.authUrl, '_blank', 'width=520,height=640,noopener');
+      // Poll for status change — after the popup completes the callback, the
+      // token will be stored and the next poll will reflect connected state.
+      var polls = 0;
+      var pollInterval = setInterval(async function () {
+        polls++;
+        await refreshOAuthStatus();
+        render();
+        if ((state.oauthStatus[provider] && state.oauthStatus[provider].connected) || polls >= 60) {
+          clearInterval(pollInterval);
+        }
+      }, 2000);
+    }
+  } catch (e) {
+    dashboardLog('oauth', 'connect.error', 'OAuth connect failed: ' + e.message);
+  }
+}
+
+export async function oauthDisconnect(provider) {
+  try {
+    await fetch('/api/auth/' + provider + '/disconnect', { method: 'DELETE' });
+    await refreshOAuthStatus();
+    render();
+  } catch (e) {
+    dashboardLog('oauth', 'disconnect.error', 'OAuth disconnect failed: ' + e.message);
+  }
+}
+
+export async function refreshCacChain() {
+  try {
+    const res = await request('/api/v1/cac/chain');
+    state.cacChain = res;
+    render();
+  } catch (e) {
+    console.error('Failed to fetch CAC chain', e);
+  }
+}
+
+export function exportCacAuditJson(assignmentId) {
+  var cac = state.cacChain;
+  if (!cac || !cac.chains) return;
+  var chain = cac.chains.find(function(c) { return c.assignment && c.assignment.assignmentId === assignmentId; });
+  if (!chain) return;
+
+  var payload = {
+    exportedAt: new Date().toISOString(),
+    assignment: chain.assignment,
+    events: chain.events || []
+  };
+
+  var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = 'prism-cac-audit-' + assignmentId + '-' + timestamp + '.json';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};

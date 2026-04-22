@@ -2,12 +2,13 @@ import { state, request, escapeHtml, dashboardLog } from './dashboard-core.js';
 
 /* ── Local state ── */
 let currentSchedulerView = 'calendar';
-let calMode = 'year';
+let calMode = 'day';
 let calCursor = new Date();
 let cachedEvents = [];
 let cachedProjects = [];
 let cachedTasks = [];
-let modalType = null; // 'event' | 'task' | 'project'
+let cachedCronJobs = [];
+let modalType = null; // 'event' | 'task' | 'project' | 'cron'
 let modalEditId = null;
 
 /* ── Date helpers ── */
@@ -53,13 +54,13 @@ export async function refreshSchedulerData() {
     var yearStart = now.getFullYear() + '-01-01';
     var yearEnd = now.getFullYear() + '-12-31';
     var evtData = await request('/api/scheduler/events?start=' + yearStart + '&end=' + yearEnd);
-    cachedEvents = evtData.events || evtData || [];
+    cachedEvents = Array.isArray(evtData.events) ? evtData.events : Array.isArray(evtData) ? evtData : [];
   } catch (_) {
     cachedEvents = [];
   }
   try {
     var projData = await request('/api/scheduler/projects');
-    cachedProjects = projData.projects || projData || [];
+    cachedProjects = Array.isArray(projData.projects) ? projData.projects : Array.isArray(projData) ? projData : [];
     // Collect all tasks from projects
     cachedTasks = [];
     for (var i = 0; i < cachedProjects.length; i++) {
@@ -74,6 +75,12 @@ export async function refreshSchedulerData() {
     cachedProjects = [];
     cachedTasks = [];
   }
+  try {
+    var cronData = await request('/api/scheduler/cron');
+    cachedCronJobs = Array.isArray(cronData) ? cronData : [];
+  } catch (_) {
+    cachedCronJobs = [];
+  }
   renderSchedulerPanel();
 }
 
@@ -81,7 +88,7 @@ export async function refreshSchedulerData() {
 
 export function switchSchedulerView(view) {
   currentSchedulerView = view;
-  var views = ['calendar', 'projects', 'board', 'timeline'];
+  var views = ['calendar', 'projects', 'board', 'timeline', 'cron'];
   for (var i = 0; i < views.length; i++) {
     var panel = document.getElementById('sched-view-' + views[i]);
     if (panel) panel.style.display = views[i] === view ? '' : 'none';
@@ -99,6 +106,7 @@ export function renderSchedulerPanel() {
     case 'projects': renderSchedulerProjects(); break;
     case 'board': renderSchedulerBoard(); break;
     case 'timeline': renderSchedulerGantt(); break;
+    case 'cron': renderCronJobs(); break;
   }
 }
 
@@ -535,6 +543,27 @@ export function openSchedulerModal(type, editId) {
     html += '<input id="sched-modal-project-name" type="text" placeholder="Project name" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
     html += '<label style="font-size:12px;font-weight:600;">Description</label>';
     html += '<textarea id="sched-modal-project-desc" rows="3" placeholder="Project description" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:12px;resize:vertical;"></textarea>';
+  } else if (type === 'cron') {
+    if (titleEl) titleEl.textContent = 'New Cron Job';
+    html += '<label style="font-size:12px;font-weight:600;">Label</label>';
+    html += '<input id="sched-modal-cron-label" type="text" placeholder="Job label" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
+    html += '<label style="font-size:12px;font-weight:600;">Type</label>';
+    html += '<select id="sched-modal-cron-type" onchange="toggleCronFields()" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;">';
+    html += '<option value="recurring">Recurring (Cron)</option><option value="once">One-time</option>';
+    html += '</select>';
+    html += '<div id="sched-cron-recurring-fields">';
+    html += '<label style="font-size:12px;font-weight:600;">Cron Expression</label>';
+    html += '<input id="sched-modal-cron-expr" type="text" placeholder="*/5 * * * *" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;font-family:monospace;" />';
+    html += '<div class="muted" style="font-size:11px;margin-bottom:8px;">Format: minute hour dayOfMonth month dayOfWeek</div>';
+    html += '</div>';
+    html += '<div id="sched-cron-once-fields" style="display:none;">';
+    html += '<label style="font-size:12px;font-weight:600;">Run At</label>';
+    html += '<input id="sched-modal-cron-runat" type="datetime-local" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
+    html += '</div>';
+    html += '<label style="font-size:12px;font-weight:600;">Action</label>';
+    html += '<input id="sched-modal-cron-action" type="text" placeholder="action-name" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
+    html += '<label style="font-size:12px;font-weight:600;">Payload (JSON, optional)</label>';
+    html += '<textarea id="sched-modal-cron-payload" rows="3" placeholder=\'{"key": "value"}\' style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:12px;resize:vertical;font-family:monospace;"></textarea>';
   }
 
   bodyEl.innerHTML = html;
@@ -606,6 +635,49 @@ export async function saveSchedulerModal() {
     } catch (e) {
       dashboardLog('scheduler', 'scheduler.error', 'Failed to save project: ' + e.message);
     }
+  } else if (modalType === 'cron') {
+    var cronLabel = (document.getElementById('sched-modal-cron-label') || {}).value || '';
+    var cronType = (document.getElementById('sched-modal-cron-type') || {}).value || 'recurring';
+    var cronExpr = (document.getElementById('sched-modal-cron-expr') || {}).value || '';
+    var cronRunAt = (document.getElementById('sched-modal-cron-runat') || {}).value || '';
+    var cronAction = (document.getElementById('sched-modal-cron-action') || {}).value || '';
+    var cronPayloadRaw = (document.getElementById('sched-modal-cron-payload') || {}).value || '';
+    if (!cronLabel || !cronAction) {
+      dashboardLog('scheduler', 'scheduler.error', 'Cron job label and action are required');
+      return;
+    }
+    var cronBody = { label: cronLabel, type: cronType, action: cronAction };
+    if (cronType === 'recurring') {
+      if (!cronExpr) {
+        dashboardLog('scheduler', 'scheduler.error', 'Cron expression is required for recurring jobs');
+        return;
+      }
+      cronBody.cronExpression = cronExpr;
+    } else {
+      if (!cronRunAt) {
+        dashboardLog('scheduler', 'scheduler.error', 'Run-at datetime is required for one-time jobs');
+        return;
+      }
+      cronBody.runAt = cronRunAt;
+    }
+    if (cronPayloadRaw.trim()) {
+      try {
+        cronBody.payload = JSON.parse(cronPayloadRaw);
+      } catch (_) {
+        dashboardLog('scheduler', 'scheduler.error', 'Payload must be valid JSON');
+        return;
+      }
+    }
+    try {
+      await request('/api/scheduler/cron', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cronBody)
+      });
+      dashboardLog('scheduler', 'scheduler.cron-saved', cronLabel);
+    } catch (e) {
+      dashboardLog('scheduler', 'scheduler.error', 'Failed to save cron job: ' + e.message);
+    }
   }
 
   closeSchedulerModal();
@@ -622,5 +694,113 @@ export async function initSchedulerTab() {
     calMode = 'day';
     renderSchedulerCalendar();
   };
+  window.toggleCronFields = toggleCronFields;
+  window.cancelCronJob = cancelCronJob;
+  window.previewCronJob = previewCronJob;
+  window.refreshCronJobs = refreshCronJobs;
   await refreshSchedulerData();
+}
+
+/* ── Cron Jobs ── */
+
+export async function refreshCronJobs() {
+  try {
+    var cronData = await request('/api/scheduler/cron');
+    cachedCronJobs = Array.isArray(cronData) ? cronData : [];
+  } catch (_) {
+    cachedCronJobs = [];
+  }
+  var countEl = document.getElementById('sched-cron-count');
+  if (countEl) countEl.textContent = cachedCronJobs.length + ' job' + (cachedCronJobs.length !== 1 ? 's' : '');
+  renderCronJobs();
+}
+
+export function renderCronJobs() {
+  var container = document.getElementById('sched-cron-list');
+  if (!container) return;
+  var countEl = document.getElementById('sched-cron-count');
+  if (countEl) countEl.textContent = cachedCronJobs.length + ' job' + (cachedCronJobs.length !== 1 ? 's' : '');
+  if (!cachedCronJobs.length) {
+    container.innerHTML = '<span class="muted" style="font-size:12px;">No cron jobs scheduled. Click + Cron Job to add one.</span>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < cachedCronJobs.length; i++) {
+    var job = cachedCronJobs[i];
+    var typeBadge = job.type === 'recurring'
+      ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(105,210,255,0.15);color:var(--accent);">recurring</span>'
+      : '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,180,60,0.15);color:#ffb43c;">once</span>';
+    var schedInfo = job.cronExpression
+      ? '<code style="font-size:11px;background:rgba(148,163,184,0.1);padding:2px 6px;border-radius:4px;">' + escapeHtml(job.cronExpression) + '</code>'
+      : '<span style="font-size:11px;">Run at: ' + escapeHtml(job.runAt || 'N/A') + '</span>';
+    var nextRun = job.nextRunAt ? '<span style="font-size:11px;color:var(--text-muted);">Next: ' + escapeHtml(new Date(job.nextRunAt).toLocaleString()) + '</span>' : '';
+    var lastRun = job.lastRunAt ? '<span style="font-size:11px;color:var(--text-muted);">Last: ' + escapeHtml(new Date(job.lastRunAt).toLocaleString()) + '</span>' : '';
+    html += '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface);">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+    html += '<div style="display:flex;gap:8px;align-items:center;"><strong style="font-size:13px;">' + escapeHtml(job.label) + '</strong>' + typeBadge + '</div>';
+    html += '<div style="display:flex;gap:4px;">';
+    html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="previewCronJob(\'' + escapeHtml(job.id) + '\')">Preview</button>';
+    html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;color:#f87171;" onclick="cancelCronJob(\'' + escapeHtml(job.id) + '\')">Cancel</button>';
+    html += '</div></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">';
+    html += schedInfo;
+    html += '<span style="font-size:11px;color:var(--text-muted);">Action: <strong>' + escapeHtml(job.action) + '</strong></span>';
+    if (nextRun) html += nextRun;
+    if (lastRun) html += lastRun;
+    html += '</div></div>';
+  }
+  container.innerHTML = html;
+}
+
+export async function cancelCronJob(jobId) {
+  try {
+    await request('/api/scheduler/cron/' + jobId, { method: 'DELETE' });
+    dashboardLog('scheduler', 'scheduler.cron-cancelled', jobId);
+  } catch (e) {
+    dashboardLog('scheduler', 'scheduler.error', 'Failed to cancel cron job: ' + e.message);
+  }
+  await refreshCronJobs();
+}
+
+export async function previewCronJob(jobId) {
+  var modal = document.getElementById('sched-modal');
+  var titleEl = document.getElementById('sched-modal-title');
+  var bodyEl = document.getElementById('sched-modal-body');
+  var saveBtn = document.getElementById('sched-modal-save');
+  if (!modal || !bodyEl) return;
+  if (saveBtn) saveBtn.style.display = 'none';
+  if (titleEl) titleEl.textContent = 'Cron Job Preview';
+  try {
+    var data = await request('/api/scheduler/cron/' + jobId + '/preview');
+    var html = '<div style="font-size:13px;">';
+    html += '<div style="margin-bottom:8px;"><strong>Label:</strong> ' + escapeHtml(data.label || '') + '</div>';
+    html += '<div style="margin-bottom:8px;"><strong>Type:</strong> ' + escapeHtml(data.type || '') + '</div>';
+    if (data.cronExpression) html += '<div style="margin-bottom:8px;"><strong>Cron:</strong> <code>' + escapeHtml(data.cronExpression) + '</code></div>';
+    if (data.runAt) html += '<div style="margin-bottom:8px;"><strong>Run At:</strong> ' + escapeHtml(data.runAt) + '</div>';
+    html += '<div style="margin-bottom:8px;"><strong>Action:</strong> ' + escapeHtml(data.action || '') + '</div>';
+    if (data.nextRunAt) html += '<div style="margin-bottom:8px;"><strong>Next Run:</strong> ' + escapeHtml(new Date(data.nextRunAt).toLocaleString()) + '</div>';
+    if (data.nextOccurrences && data.nextOccurrences.length) {
+      html += '<div style="margin-top:12px;"><strong>Next 10 Occurrences:</strong></div>';
+      html += '<ol style="margin:6px 0 0 18px;padding:0;font-size:12px;">';
+      for (var oi = 0; oi < data.nextOccurrences.length; oi++) {
+        html += '<li style="margin-bottom:2px;">' + escapeHtml(new Date(data.nextOccurrences[oi]).toLocaleString()) + '</li>';
+      }
+      html += '</ol>';
+    }
+    html += '</div>';
+    bodyEl.innerHTML = html;
+  } catch (e) {
+    bodyEl.innerHTML = '<span class="muted">Failed to load preview: ' + escapeHtml(e.message || '') + '</span>';
+  }
+  modal.style.display = 'flex';
+}
+
+export function toggleCronFields() {
+  var typeSelect = document.getElementById('sched-modal-cron-type');
+  var recurringFields = document.getElementById('sched-cron-recurring-fields');
+  var onceFields = document.getElementById('sched-cron-once-fields');
+  if (!typeSelect) return;
+  var isRecurring = typeSelect.value === 'recurring';
+  if (recurringFields) recurringFields.style.display = isRecurring ? '' : 'none';
+  if (onceFields) onceFields.style.display = isRecurring ? 'none' : '';
 }

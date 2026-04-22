@@ -132,6 +132,19 @@ if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemma3:1b
 if not defined PRISM_OLLAMA_MODELS set PRISM_OLLAMA_MODELS=gemma3:1b,granite3.1-moe:1b,driaforall/tiny-agent-a:1.5b,qwen3-vl:2b
 
 echo [START] Running PRISM server mode...
+
+REM Check if PM2 is available and user wants managed mode
+where pm2 >nul 2>nul
+if errorlevel 1 goto :start_direct
+if /I "%PRISM_USE_PM2%"=="0" goto :start_direct
+echo [PM2] PM2 detected. Starting with process management...
+echo [PM2] To disable: set PRISM_USE_PM2=0
+if not exist "logs" mkdir logs
+pm2 start ecosystem.config.js
+echo [PM2] PRISM launched via PM2. Use 'pm2 logs prism' or 'npm run pm2:monit' to monitor.
+goto :wait_loop
+
+:start_direct
 start "PRISM Server" npm start
 
 echo [WAIT] Waiting for PRISM server to be ready on port %PRISM_DASHBOARD_PORT%...
@@ -140,8 +153,30 @@ timeout /t 1 /nobreak >nul
 netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
 if errorlevel 1 goto :wait_loop
 
-echo [START] Launching dashboard at http://localhost:%PRISM_DASHBOARD_PORT%
-start "" "http://localhost:%PRISM_DASHBOARD_PORT%"
+REM Read admin auth token from workspace state (written by server on startup)
+set "PRISM_TOKEN_FILE=%PRISM_WORKSPACE_ROOT%\state\admin-token"
+set "PRISM_AUTH_TOKEN="
+REM Brief wait for token file (server writes it shortly after binding port)
+set "PRISM_TOKEN_RETRIES=0"
+:token_wait
+if exist "%PRISM_TOKEN_FILE%" goto :token_read
+set /a PRISM_TOKEN_RETRIES+=1
+if %PRISM_TOKEN_RETRIES% GEQ 5 goto :token_read
+timeout /t 1 /nobreak >nul
+goto :token_wait
+:token_read
+if exist "%PRISM_TOKEN_FILE%" (
+  for /f "usebackq delims=" %%T in ("%PRISM_TOKEN_FILE%") do set "PRISM_AUTH_TOKEN=%%T"
+)
+
+if defined PRISM_AUTH_TOKEN (
+  echo [START] Launching dashboard at http://localhost:%PRISM_DASHBOARD_PORT%/dashboard?token=...
+  start "" "http://localhost:%PRISM_DASHBOARD_PORT%/dashboard?token=%PRISM_AUTH_TOKEN%"
+) else (
+  echo [WARN] Could not read auth token. Dashboard may require manual token entry.
+  echo [START] Launching dashboard at http://localhost:%PRISM_DASHBOARD_PORT%
+  start "" "http://localhost:%PRISM_DASHBOARD_PORT%"
+)
 
 goto :eof
 

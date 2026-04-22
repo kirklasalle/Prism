@@ -31,6 +31,7 @@ interface ReleaseValidationArtifact {
     artifacts: {
         perfQualification: string;
         contractSnapshot: string;
+        cuBgValidation: string;
         releaseValidation: string;
     };
     gates: ReleaseGateResult[];
@@ -42,6 +43,7 @@ export interface ReleaseGateEvaluationInput {
     artifactsPresent: {
         perfQualification: boolean;
         contractSnapshot: boolean;
+        cuBgValidation: boolean;
     };
     stagingValidated: boolean;
     rollbackRehearsed: boolean;
@@ -62,6 +64,9 @@ export function evaluateReleaseGates(input: ReleaseGateEvaluationInput): {
     const contractsPassed = input.commandResults
         .filter((entry) => entry.command.includes("tool-contract-snapshot"))
         .every((entry) => entry.ok);
+    const cuBgPassed = input.commandResults
+        .filter((entry) => entry.command.includes("cu-bg-gate-check"))
+        .every((entry) => entry.ok);
 
     const gates: ReleaseGateResult[] = [
         {
@@ -81,6 +86,13 @@ export function evaluateReleaseGates(input: ReleaseGateEvaluationInput): {
             label: "Performance qualification generated",
             requiredFor: "candidate",
             status: perfPassed && input.artifactsPresent.perfQualification ? "passed" : "failed",
+        },
+        {
+            id: "candidate-cubg",
+            label: "Computer-use Business gate validation passed",
+            requiredFor: "candidate",
+            status: cuBgPassed && input.artifactsPresent.cuBgValidation ? "passed" : "failed",
+            details: "Run CU-BG validator and provide computer-use gate status artifact.",
         },
         {
             id: "production-staging",
@@ -117,6 +129,8 @@ async function main(): Promise<void> {
     const outputPath = process.env.PRISM_RELEASE_VALIDATION_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "release-validation.json");
     const perfPath = process.env.PRISM_PERF_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "perf-qualification.json");
     const contractPath = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-snapshot.json");
+    const cuBgValidationPath = process.env.PRISM_CU_BG_VALIDATION_OUTPUT_PATH
+        ?? workspacePath("artifacts", "ci-gates", "computer-use-business-gate-validation.json");
     const latestReleaseCandidate = resolveLatestReleaseCandidateDir();
     const releasePacketManifestPath = latestReleaseCandidate
         ? `${latestReleaseCandidate}/release-packet-manifest.md`
@@ -130,6 +144,7 @@ async function main(): Promise<void> {
         "node dist/tests/index.js",
         "node dist/src/benchmarks/tool-contract-snapshot.js",
         "node dist/src/benchmarks/performance-qualification.js",
+        `node dist/src/benchmarks/cu-bg-gate-check.js${strictMode ? " --strict" : ""}`,
     ];
 
     const commandResults: Array<{ command: string; ok: boolean; exitCode: number }> = [];
@@ -146,6 +161,7 @@ async function main(): Promise<void> {
         artifactsPresent: {
             perfQualification: existsSync(perfPath),
             contractSnapshot: existsSync(contractPath),
+            cuBgValidation: existsSync(cuBgValidationPath),
         },
         stagingValidated: resolveBooleanOverride(
             process.env.PRISM_STAGING_VALIDATED,
@@ -175,6 +191,7 @@ async function main(): Promise<void> {
         artifacts: {
             perfQualification: perfPath,
             contractSnapshot: contractPath,
+            cuBgValidation: cuBgValidationPath,
             releaseValidation: outputPath,
         },
         gates: evaluation.gates,

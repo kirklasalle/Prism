@@ -215,3 +215,20 @@ it("BUSINESS_PROFILE should enforce rollback plan for mutations", () => {
 ```
 
 See `tests/orchestrator-execution-profile.test.ts` for comprehensive test examples.
+
+## Appendix: Business Security Alignment Gate Coupling (2026-03-25)
+
+Execution profiles are part of the enterprise control plane for computer use.
+
+For `BUSINESS_PROFILE`, release readiness requires explicit pass evidence that:
+
+1. Tiered governance remains enforced for browser/terminal/container operations.
+2. Sensitive-action confirmation controls are active for consequential pathways.
+3. CAC accountability chain requirements remain explicit in governed traces.
+4. External benchmark references are labeled `vendor-reported` unless Prism-reproduced.
+
+Canonical references:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md` (`CU-BG-*` requirements)
+- `PRODUCTION_RELEASE_RUNBOOK.md` (Business gate release checks)

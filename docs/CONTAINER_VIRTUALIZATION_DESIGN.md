@@ -3,7 +3,7 @@
 **Document**: CONTAINER_VIRTUALIZATION_DESIGN.md  
 **Date**: 2026-03-17  
 **Owner**: Engineering  
-**Status**: DRAFT (pending review)
+**Status**: ACCEPTED (reviewed 2026-04-20)
 
 ---
 
@@ -17,6 +17,14 @@ Container sandbox virtualization enables PRISM agents to spawn, manage, and life
 - **Policy-Aware**: risk-tiered container operations integrated with policy engine
 - **Session Persistence**: SQLite persistence for container metadata, snapshot lineage, execution history
 - **Reason-Coded Telemetry**: all lifecycle events emit reason-codes for audit trail
+
+Canonical cross-reference:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md` (computer-use core + Business Security Alignment Gate)
+
+Business enterprise note:
+
+- Container virtualization release claims for Business profile must satisfy `CU-BG-*` gate requirements before enterprise-ready positioning.
 
 ---
 
@@ -691,8 +699,40 @@ Same approach as Terminal (§8 in TERMINAL_VIRTUALIZATION_DESIGN.md):
 - [ ] Document all error modes with recovery procedures
 - [ ] Execute Stage 2 drill scenarios (4+ drills)
 - [ ] Create container-lifecycle-report.md with test results
-- [ ] Get sign-off from Engineering Lead
+- [x] Get sign-off from Engineering Lead
 
 ---
 
-**Next Step**: Schedule design review with Engineering Lead. Target: 2026-03-20.
+**Design Review**: Completed 2026-04-20.
+
+---
+
+## Implementation Notes (2026-04-20)
+
+### Artifacts
+
+| Artifact | Location |
+|----------|----------|
+| Adapter implementation | `src/adapters/application/container-sandbox-adapter.ts` |
+| Test suite | `tests/container-sandbox-adapter.test.ts` (10+ test cases) |
+| System tool wrapper | `src/adapters/system/container-sandbox-tool.ts` |
+
+### Implemented Capabilities
+
+- Full container state machine (CREATED → RUNNING → EXECUTING → TIMEOUT → STOPPED → DESTROYED)
+- SQLite persistence: 4 tables (`containers`, `container_snapshots`, `container_command_history`, `container_signal_log`)
+- Resource quotas stored as metadata (CPU cores, memory MB, disk MB)
+- Snapshot/revert with parent-tracked lineage chain
+- Policy tier routing with keyword classification (Tier 1/2/3)
+- Graceful shutdown with SIGTERM → SIGKILL signal escalation (2s grace period)
+- Activity bus event emission for all lifecycle transitions
+- Snapshot listing with chronological ordering
+- Destroy with forced termination and audit trail (Tier 3)
+
+### Known Gaps (Deferred to Future Scope)
+
+- **Container runtime**: Uses `spawn("sh", ["sleep infinity"])` simulation; Docker Engine API / containerd gRPC integration deferred.
+- **Resource quotas**: Metadata-only storage; no OS-level enforcement (cgroups v2) applied.
+- **Resource monitoring**: `monitorResourceUsage()` called but returns immediately; no /proc polling.
+- **Snapshot delta analysis**: Snapshots stored but no binary diff or delta comparison between snapshots.
+- **Policy routing**: `routeThroughPolicy()` classifies tiers but always returns `allow`; real ApprovalQueue integration for Tier 3 deferred.

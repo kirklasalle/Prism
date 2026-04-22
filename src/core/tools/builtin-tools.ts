@@ -4,18 +4,19 @@ import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../..
 import { ShellTool } from "../../adapters/system/shell-tool.js";
 import { TerminalSessionTool } from "../../adapters/system/terminal-session-tool.js";
 import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
-import {
-    CalendarPlanningTool,
-    EmailCapabilityTool,
-    NotesExtractionTool,
-    TasksTimelineTool,
-} from "../../adapters/application/individual-capability-tools.js";
+import { PrismDashboardControlTool } from "../../adapters/application/prism-dashboard-tool.js";
 import { NetworkTool } from "../../adapters/network/network-tool.js";
 import { VisionCaptureTool } from "../../adapters/system/vision-capture-tool.js";
 import { BrowserControlTool } from "../../adapters/system/browser-control-tool.js";
+import { EmailOpsTool } from "../../adapters/application/email-tool.js";
+import { CalendarPlanTool } from "../../adapters/application/calendar-tool.js";
+import { NotesExtractTool } from "../../adapters/application/notes-tool.js";
+import { TasksTimelineTool } from "../../adapters/application/tasks-tool.js";
+import type { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
+import type { OutlookOAuthAdapter } from "../../adapters/application/outlook-oauth-adapter.js";
 import type { Tool } from "./types.js";
 
-export function builtinTools(): Tool[] {
+export function builtinTools(gmail?: GmailOAuthAdapter, outlook?: OutlookOAuthAdapter): Tool[] {
     return [
         // System adapters
         new ShellTool(),
@@ -30,10 +31,11 @@ export function builtinTools(): Tool[] {
         // Network adapters
         new NetworkTool(),
         // Application adapters
+        new PrismDashboardControlTool(),
         new Neo4jQueryTool(),
-        new EmailCapabilityTool(),
-        new CalendarPlanningTool(),
-        new NotesExtractionTool(),
+        new EmailOpsTool(undefined, gmail, outlook),
+        new CalendarPlanTool(undefined, gmail, outlook),
+        new NotesExtractTool(),
         new TasksTimelineTool(),
         // Vision adapters
         new VisionCaptureTool(),

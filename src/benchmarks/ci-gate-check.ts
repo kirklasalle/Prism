@@ -32,6 +32,7 @@ function run(): void {
     const contractsPath = path.join(outputDir, "tool-contract-snapshot.json");
     const stage2Path = path.join(outputDir, "e-stage2-qualification-summary.json");
     const releaseValidationPath = path.join(outputDir, "release-validation.json");
+    const cuBgValidationPath = path.join(outputDir, "computer-use-business-gate-validation.json");
 
     checks.push({
         id: "artifact-perf",
@@ -65,6 +66,14 @@ function run(): void {
         details: releaseValidationPath,
     });
 
+    checks.push({
+        id: "artifact-cu-bg-validation",
+        description: "Computer-use Business gate validation artifact exists",
+        required: true,
+        passed: exists(cuBgValidationPath),
+        details: cuBgValidationPath,
+    });
+
     if (exists(perfPath)) {
         const perf = readJson<{ passed?: boolean }>(perfPath);
         checks.push({
@@ -92,6 +101,16 @@ function run(): void {
             description: "Release validation passed",
             required: true,
             passed: releaseValidation.passed === true,
+        });
+    }
+
+    if (exists(cuBgValidationPath)) {
+        const cuBgValidation = readJson<{ passed?: boolean }>(cuBgValidationPath);
+        checks.push({
+            id: "gate-cu-bg-validation",
+            description: "Computer-use Business gate validation passed",
+            required: true,
+            passed: cuBgValidation.passed === true,
         });
     }
 

@@ -157,5 +157,21 @@ To fully leverage execution profiles across the system:
 
 ---
 
+## Computer-Use Business Gate Alignment (2026-03-25)
+
+Execution profile implementation is now explicitly coupled to the Business Security Alignment Gate for computer-use pathways.
+
+Enterprise claim requirement:
+
+- `BUSINESS_PROFILE` behavior must be evidenced through `CU-BG-1` through `CU-BG-5` checks before enterprise-ready computer-use messaging.
+
+Related references:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md`
+- `PRODUCTION_RELEASE_RUNBOOK.md`
+
+---
+
 **Status**: ✓ Complete and tested  
 **All tests passing**: 20/20 ✓

@@ -63,17 +63,26 @@ export const state = {
   modalityFilterEnabled: false,
   sessionRoutingStrategy: 'direct',
   modelProfiles: null,
+  // Spectrum Refraction (Prism SR) state
+  srConfig: null,
+  srCandidates: null,
+  srValidation: null,
+  srPanelExpanded: false,
+  srActivating: false,
+  srIsolationLevel: null,
+  srIsolationAdvisory: null,
   settingsPanelCollapsed: false,
   llmAuditCollapsed: false,
-  toolsPanelCollapsed: false,
-  pluginsPanelCollapsed: false,
-  utilitiesPanelCollapsed: false,
+  toolsPanelCollapsed: true,
+  pluginsPanelCollapsed: true,
+  utilitiesPanelCollapsed: true,
   networkToolsCollapsed: false,
   networkSettingsCollapsed: false,
   networkTelemetryCollapsed: false,
   networkConsoleCollapsed: false,
   networkCommandHistory: [],
   networkTelemetryData: { totalCommands: 0, tier1Count: 0, tier2Count: 0, tier3Count: 0, lastCommand: null, errorCount: 0 },
+  vrgcAvailable: false,
   agentMgmtCollapsed: false,
   subAgentCollapsed: false,
   swarmControlCollapsed: false,
@@ -107,10 +116,18 @@ export const state = {
   pluginReviews: {},
   utilityReviews: {},
   toolsFilterText: '',
+  toolsSubTab: 'tools',
+  toolsSortBy: 'name',
+  pluginsSortBy: 'name',
+  utilitiesSortBy: 'name',
   runtimeSettings: null,
   settingsSaving: false,
   settingsSections: { runtime: false, llm: false, approval: false, selfReview: false, retrieval: false, timeouts: false, prefs: false, paths: false, readiness: false },
   agentData: null,
+  guardianStatus: null,
+  localGgufModels: null,
+  customRecommendedModels: null,
+  guardianTasks: null,
   browserSessions: [],
   computerSystemInfo: null,
   computerConsoleHistory: [],
@@ -127,7 +144,68 @@ export const state = {
   toolCallLog: [],
   logEntries: [],
   logFilter: { tab: '', severity: '' },
-  logsAutoScroll: true
+  logsAutoScroll: true,
+  hardwareSwarm: [],
+  diagnosticsPanelCollapsed: true,
+  diagnosticsReport: null,
+  diagnosticsRunning: false,
+  diagnosticsProgress: [],
+  diagnosticsLastRunAt: null,
+  expandedDiagnosticSuiteId: null,
+  agentDiagnosticsPanelCollapsed: true,
+  agentDiagnosticsReport: null,
+  agentDiagnosticsRunning: false,
+  agentDiagnosticsProgress: [],
+  agentDiagnosticsLastRunAt: null,
+  expandedAgentDiagnosticSuiteId: null,
+  computerDiagnosticsPanelCollapsed: true,
+  computerDiagnosticsReport: null,
+  computerDiagnosticsRunning: false,
+  computerDiagnosticsProgress: [],
+  computerDiagnosticsLastRunAt: null,
+  expandedComputerDiagnosticSuiteId: null,
+  knowledgeGraphDiagnosticsPanelCollapsed: true,
+  knowledgeGraphDiagnosticsReport: null,
+  knowledgeGraphDiagnosticsRunning: false,
+  knowledgeGraphDiagnosticsProgress: [],
+  knowledgeGraphDiagnosticsLastRunAt: null,
+  expandedKnowledgeGraphDiagnosticSuiteId: null,
+  workspaceDiagnosticsPanelCollapsed: true,
+  workspaceDiagnosticsReport: null,
+  workspaceDiagnosticsRunning: false,
+  workspaceDiagnosticsProgress: [],
+  workspaceDiagnosticsLastRunAt: null,
+  expandedWorkspaceDiagnosticSuiteId: null,
+  networkDiagnosticsPanelCollapsed: true,
+  networkDiagnosticsReport: null,
+  networkDiagnosticsRunning: false,
+  networkDiagnosticsProgress: [],
+  networkDiagnosticsLastRunAt: null,
+  expandedNetworkDiagnosticSuiteId: null,
+  logsDiagnosticsPanelCollapsed: true,
+  logsDiagnosticsReport: null,
+  logsDiagnosticsRunning: false,
+  logsDiagnosticsProgress: [],
+  logsDiagnosticsLastRunAt: null,
+  expandedLogsDiagnosticSuiteId: null,
+  telemetryDiagnosticsPanelCollapsed: true,
+  telemetryDiagnosticsReport: null,
+  telemetryDiagnosticsRunning: false,
+  telemetryDiagnosticsProgress: [],
+  telemetryDiagnosticsLastRunAt: null,
+  expandedTelemetryDiagnosticSuiteId: null,
+  schedulerDiagnosticsPanelCollapsed: true,
+  schedulerDiagnosticsReport: null,
+  schedulerDiagnosticsRunning: false,
+  schedulerDiagnosticsProgress: [],
+  schedulerDiagnosticsLastRunAt: null,
+  expandedSchedulerDiagnosticSuiteId: null,
+  demoDiagnosticsPanelCollapsed: true,
+  demoDiagnosticsReport: null,
+  demoDiagnosticsRunning: false,
+  demoDiagnosticsProgress: [],
+  demoDiagnosticsLastRunAt: null,
+  expandedDemoDiagnosticSuiteId: null,
 };
 
 export const tabs = [
@@ -144,12 +222,80 @@ export const tabs = [
   { id: 'scheduler', label: 'Scheduler' }
 ];
 
+// ── Auth token (injected via <meta> tag from server) ──────────────────
+function getAuthToken() {
+  var meta = document.querySelector('meta[name="prism-auth-token"]');
+  return meta ? meta.getAttribute('content') || '' : '';
+}
+
+export function authHeaders(extra) {
+  var token = getAuthToken();
+  var headers = extra ? Object.assign({}, extra) : {};
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  return headers;
+}
+
+export function wsUrl(path) {
+  var token = getAuthToken();
+  var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var base = protocol + '//' + location.host + (path || '/ws');
+  return token ? base + '?token=' + encodeURIComponent(token) : base;
+}
+
+// ── Reconnection utility with exponential backoff ─────────────────────
+export function createReconnector(connectFn, opts) {
+  var baseDelay = (opts && opts.baseDelay) || 1000;
+  var maxDelay = (opts && opts.maxDelay) || 30000;
+  var maxRetries = (opts && opts.maxRetries) || 50;
+  var label = (opts && opts.label) || 'reconnector';
+  var attempt = 0;
+  var active = false;
+  var timer = null;
+
+  function schedule() {
+    if (active) return; // prevent duplicate reconnect loops
+    attempt++;
+    if (attempt > maxRetries) {
+      console.warn('[' + label + '] max retries (' + maxRetries + ') reached — giving up');
+      return;
+    }
+    var delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+    // Add jitter: ±20%
+    delay = delay * (0.8 + Math.random() * 0.4);
+    console.log('[' + label + '] reconnecting in ' + Math.round(delay) + 'ms (attempt ' + attempt + '/' + maxRetries + ')');
+    active = true;
+    timer = setTimeout(function () {
+      active = false;
+      connectFn();
+    }, delay);
+  }
+
+  function reset() {
+    attempt = 0;
+    active = false;
+    if (timer) { clearTimeout(timer); timer = null; }
+  }
+
+  function stop() {
+    reset();
+    attempt = maxRetries + 1; // prevent further reconnects
+  }
+
+  return { schedule: schedule, reset: reset, stop: stop };
+}
+
 export
   async function request(url, options) {
-  const response = await fetch(url, options);
+  var opts = options || {};
+  opts.headers = authHeaders(opts.headers);
+  const response = await fetch(url, opts);
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};
   if (!response.ok) {
+    if (response.status === 401) {
+      document.title = 'PRISM — Session Expired';
+      throw new Error('Unauthorized — reload with a valid token.');
+    }
     throw new Error(payload.error || ('Request failed with status ' + response.status));
   }
   return payload;
@@ -171,7 +317,7 @@ export
   var s = String(text);
   // Fenced code blocks
   s = s.replace(/```(\w*?)\n([\s\S]*?)```/g, function (_, lang, code) {
-    return '<pre><code class="lang-' + escapeHtml(lang || 'text') + '">' + escapeHtml(code) + '</code></pre>';
+    return '<div class="code-block-wrapper"><div class="code-block-header"><span class="code-block-lang">' + escapeHtml(lang || 'text') + '</span><button class="code-block-copy" onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.innerText); this.innerText=\'Copied!\'; setTimeout(()=>this.innerText=\'Copy\',2000)">Copy</button></div><pre><code class="lang-' + escapeHtml(lang || 'text') + '">' + escapeHtml(code) + '</code></pre></div>';
   });
   // Inline code
   s = s.replace(/`([^`]+?)`/g, function (_, code) {
@@ -308,6 +454,8 @@ export
   if (summary) {
     summary.style.display = state[stateKey] ? '' : 'none';
   }
+  // Dispatch custom event so tab-tools can refresh summary badges
+  try { document.dispatchEvent(new CustomEvent('panel-collapse-toggle', { detail: { panelKey: panelKey, collapsed: state[stateKey] } })); } catch (_) { }
 }
 
 export
@@ -320,13 +468,13 @@ export
 }
 
 export
-  function dashboardLog(source, operation, detail) {
+  function dashboardLog(source, operation, detail, severity) {
   var entry = {
     type: 'log_entry',
     timestamp: new Date().toISOString(),
     source: source,
     operation: operation,
-    severity: 'info',
+    severity: severity || 'info',
     summary: detail || operation
   };
   state.logEntries.push(entry);
@@ -443,7 +591,10 @@ export function toggleItemEnabled(kind, name) {
     else getUtilityState(name);
   }
   stateStore[name].enabled = !stateStore[name].enabled;
-  fetch('/api/tools/' + encodeURIComponent(name) + '/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: stateStore[name].enabled }) }).catch(function () { });
+  var endpoint = kind === 'plugin'
+    ? '/api/v1/plugins/' + encodeURIComponent(name) + '/toggle'
+    : '/api/tools/' + encodeURIComponent(name) + '/toggle';
+  fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: stateStore[name].enabled }) }).catch(function () { });
   render();
 }
 

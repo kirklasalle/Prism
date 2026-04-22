@@ -13,6 +13,41 @@ import {
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 
 export async function testDashboardService(): Promise<void> {
+    // Isolate from host environment — provider API keys in env would cause
+    // the "API key is missing" assertion to fail.
+    const savedEnvKeys: Record<string, string | undefined> = {};
+    const providerEnvVars = [
+        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY",
+        "MISTRAL_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY",
+        "XAI_API_KEY", "OPENROUTER_API_KEY",
+    ];
+    for (const key of providerEnvVars) {
+        savedEnvKeys[key] = process.env[key];
+        delete process.env[key];
+    }
+    // Disable auth gate for integration tests
+    const savedAuthDisabled = process.env.PRISM_AUTH_DISABLED;
+    process.env.PRISM_AUTH_DISABLED = "true";
+    try {
+        await _runDashboardServiceTests();
+    } finally {
+        // Restore auth setting
+        if (savedAuthDisabled !== undefined) {
+            process.env.PRISM_AUTH_DISABLED = savedAuthDisabled;
+        } else {
+            delete process.env.PRISM_AUTH_DISABLED;
+        }
+        for (const key of providerEnvVars) {
+            if (savedEnvKeys[key] !== undefined) {
+                process.env[key] = savedEnvKeys[key];
+            } else {
+                delete process.env[key];
+            }
+        }
+    }
+}
+
+async function _runDashboardServiceTests(): Promise<void> {
     const activityBus = new ActivityBus();
     const approvalQueue = new ApprovalQueue();
     const chatSessionStore = new ChatSessionStore(":memory:");
@@ -172,7 +207,7 @@ export async function testDashboardService(): Promise<void> {
         emitReadinessAudit: (source: string, snapshot: { ready: boolean }) => void;
     }).getReadinessSnapshot(unconfiguredSession.sessionId);
     assert.strictEqual(readinessAfter.ready, false);
-    const bindingRequirement = readinessAfter.requirements.find((requirement) => requirement.id === "llm.provider-model-bound");
+    const bindingRequirement = readinessAfter.requirements.find((requirement) => requirement.id === "provider-model-selected");
     assert.ok(bindingRequirement);
     assert.strictEqual(bindingRequirement!.passed, false);
 
@@ -566,7 +601,7 @@ export async function testDashboardService(): Promise<void> {
     assert.strictEqual(reloadedPackages[0]!.packageId, createdPackage.package.packageId);
     assert.strictEqual(reloadedPackages[0]!.sessionIds.length, 2);
     assert.ok(reloadedPackages[0]!.exportArtifactPath, "export path must survive restart");
-    reloadService.stop().catch(() => { /* ignore */ });
+    await reloadService.stop().catch(() => { /* ignore */ });
     reloadSqlite.close();
     reloadChatStore.close();
 
@@ -574,7 +609,7 @@ export async function testDashboardService(): Promise<void> {
     packageChatStore.close();
     rmSync(packageTempDir, { recursive: true, force: true });
 
-    telemetryService.stop();
+    await telemetryService.stop();
     telemetryStore.close();
 
     chatSessionStore.close();

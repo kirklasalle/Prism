@@ -4,6 +4,10 @@ PRISM is a policy-governed, full-computer-use agent runtime designed to evolve i
 
 Current named release: **Prism v0.2.0 — D2 Parity**.
 
+> **April 2026 — Security Hardening Complete:** Token-based authentication, rate limiting, optional HTTPS/TLS, and security headers are now enforced on all dashboard endpoints.
+
+> **April 2026 — User Testing Ready:** PM2 process management, WebSocket auto-reconnect with exponential backoff, Docker deployment support, and provider health endpoint added.
+
 Research quick links:
 
 - Full-context research documentation: `docs/PRISM_RESEARCH_DOCUMENTATION.md`
@@ -13,6 +17,7 @@ Research quick links:
 - Investor parity appendix: `docs/INVESTOR_APPENDIX_PARITY.md`
 - Licensing and brand appendix: `docs/LICENSING_BRAND_APPENDIX.md`
 - Individual-native + domain-pack strategy: `docs/INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md`
+- SR competitive analysis: `docs/MARKET_REVIEW.md`
 
 This repository now contains:
 
@@ -21,6 +26,7 @@ This repository now contains:
 - live approval controls,
 - memory subsystems,
 - workflow orchestration with retries/timeouts/fallbacks,
+- Spectrum Refraction (SR) tri-model parallel fan-out orchestration with structured aggregation,
 - and integration tests for approval success, denial, and timeout paths.
 
 ## Vision
@@ -53,14 +59,30 @@ It is a next-generation agent operating system focused on five differentiators:
    - Swarm coordination enables parallel multi-agent goal completion under policy governance.
    - Intelligent telemetry learns operational patterns and recommends agent lifecycle promotions.
 
-6. **Trust-by-Design Telemetry**
+6. **Spectrum Refraction (SR) — Compounded Tri-Model Orchestration**
+   - Novel parallel fan-out architecture: Left (Logic) + Right (Creative) + Main (Coordination) generate simultaneously.
+   - Structured XML-tagged aggregation fuses analytical rigor with creative breadth into a unified compound response.
+   - Mandatory instance isolation enforcement: Left ≠ Right validated at configuration, activation, and runtime gates.
+   - Three isolation quality levels: `full` (different providers), `model` (same provider, different models), `insufficient` (rejected).
+   - Model capability validation ensures each hemisphere meets role-specific requirements (logic strength, creative modality).
+   - No competing framework offers native multi-model simultaneous fan-out with structured aggregation and isolation enforcement.
+
+7. **Trust-by-Design Telemetry**
    - Structured activity events are hashed and persisted.
    - Quality gates are measurable, not anecdotal.
 
-7. **Character Accountability Control (CAC)**
+8. **Character Accountability Control (CAC)**
    - Every agent action is linked to a character identity, a Prism user, and an operator via an immutable accountability chain.
    - Profile-aware email validation enforces domain-matching constraints in business mode while remaining permissive in individual mode.
    - Full lifecycle tracking: assign → dispatch → suspend → resume → revoke, with audit events at every transition.
+
+9. **Cryptographic Governance — Permanent Active Directives (PAD)**
+   - The 10 Laws (rooted in Asimov's Three Laws, extended to cover privacy, equity, transparency, and operational boundaries) are the immutable root governance document.
+   - SHA-256 integrity verification at boot and runtime (Guardian Agent periodic re-check every 10 minutes).
+   - Amendment requires Governance Council approval + cryptographic re-signing — enforcing Law 10 at the code level.
+   - Machine-readable law manifest maps each directive to its runtime enforcement mechanism.
+   - CI Gate 9 blocks merge/release when directives are modified without updating the integrity constant.
+   - Governance preamble injected into all Tier 2+ model system prompts, ensuring every LLM interaction operates within the 10 Laws.
 
 ## Current Capabilities
 
@@ -81,6 +103,13 @@ It is a next-generation agent operating system focused on five differentiators:
   - Profile-aware email domain validation: business profile enforces matching domains; individual profile is permissive
   - Execution profile segment normalization: `enterprise` and `corporate` resolve to canonical `business` segment
   - Full accountability chain propagated into activity events and SHA-256 integrity hashes
+- **Permanent Active Directives (PAD) Governance:**
+  - 10 Laws as cryptographically immutable root governance document
+  - SHA-256 integrity verification at boot + Guardian Agent periodic re-check (600s)
+  - Machine-readable law manifest with enforcement mapping (`src/core/security/directive-manifest.ts`)
+  - Governance preamble injection into Tier 2+ model system prompts
+  - CI Gate 9 blocks unauthorized directive modification
+  - Amendment process: Governance Council approval + hash constant update in same commit
 - Memory subsystems:
   - episodic buffer
   - session summary store
@@ -92,6 +121,15 @@ It is a next-generation agent operating system focused on five differentiators:
   - retries
   - step timeout
   - `always`, `on_failure`, and `on_timeout` fallback routing
+- **Spectrum Refraction (SR) Tri-Model Orchestration:**
+  - Compounding parallel fan-out: Left (Logic) + Right (Creative) + Main (Coordination)
+  - Structured XML-tagged aggregation with hemisphere attribution
+  - Mandatory instance isolation enforcement at configure, activate, and runtime gates
+  - Isolation quality classification: full / model / insufficient
+  - Model capability validation per hemisphere role (logic vs creative)
+  - Media artifact extraction from Creative hemisphere
+  - 4 SR API endpoints: `/api/sr/status`, `/api/sr/configure`, `/api/sr/activate`, `/api/sr/deactivate`
+  - SR panel in Provider & Settings tab with isolation badge and cost advisory
 - **Agent Control & Intelligent Orchestration:**
   - Agent lifecycle management with three tiers: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop)
   - Per-agent model assignment: dynamic provider/model override per agent, hot-swappable at runtime
@@ -109,7 +147,56 @@ It is a next-generation agent operating system focused on five differentiators:
     - **Utilities** — 30 system utilities across Benchmarks & Qualification (11), Operator Services (5), Memory & Retrieval (5), Activity & Audit (3), Replay & Verification (3), Configuration (3)
   - Network tab: ~50 curated network commands (ipconfig, ping, tracert, netstat, netsh, arp, nslookup, route, net, etc.) with tier-based governance, live interface viewer, telemetry counters, and interactive console
   - 41+ HTTP API routes for programmatic access
-  - WebSocket for real-time event streaming
+  - WebSocket for real-time event streaming and UI log ingestion into Logs & Debug
+  - **Prism Dashboard Control Tool**: LLM-native tool for agents to inspect active tabs, navigate the dashboard, emit telemetry, and publish logs directly to the operator's view.
+  - **Guardian Agent (llama.cpp)**: Permanent autonomous system agent powered by local llama.cpp inference. Monitors runtime health, self-heals crashed model slots, enforces policy boundaries, and operates Prism independently alongside the operator. Configurable via environment variables with speculative decoding support for 2–6x faster inference.
+- **Security Hardening:**
+  - Token-based authentication gate on all HTTP and WebSocket endpoints (auto-generated 256-bit token, timing-safe comparison)
+  - Per-IP rate limiting (200 req/min default, configurable via `PRISM_RATE_LIMIT`)
+  - Optional HTTPS/TLS via `PRISM_TLS_CERT` + `PRISM_TLS_KEY` environment variables
+  - Security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
+  - Auth bypass for dev: `PRISM_AUTH_DISABLED=true`
+- **Deployment & Process Management:**
+  - PM2 process management with auto-restart, memory limits, and log rotation (`ecosystem.config.js`)
+  - Docker support: multi-stage `Dockerfile` and `docker-compose.yml` with health checks and persistent volumes
+  - WebSocket auto-reconnect with exponential backoff (1s → 30s cap, max 50 retries) and connection status indicator
+  - SSE (EventSource) reconnect with matching exponential backoff
+  - Provider health endpoint: `GET /api/llm/provider-health` — tests all configured providers in parallel with latency measurement
+
+## Quick Start
+
+### Standard (Node.js)
+
+```bash
+# Windows
+start_web.bat
+
+# Linux / macOS
+chmod +x start_web.sh && ./start_web.sh
+```
+
+### With PM2 (auto-restart on crash)
+
+```bash
+npm install -g pm2
+npm run pm2:start       # Start with PM2
+npm run pm2:logs        # View logs
+npm run pm2:monit       # Monitor dashboard
+npm run pm2:stop        # Stop
+```
+
+### With Docker
+
+```bash
+npm run docker:build    # Build image
+npm run docker:up       # Start container (detached)
+npm run docker:down     # Stop container
+
+# Or directly:
+docker compose up -d
+```
+
+The dashboard will be available at `http://localhost:7070`.
 
 ## Why this architecture is aligned with modern agent research
 
@@ -191,6 +278,7 @@ PRISM is intentionally built to remove those failure modes from the start.
 - `src/core/memory`: episodic/session/semantic memory + retrieval metrics
 - `src/core/accountability`: character accountability store and manager (CAC identity chain, lifecycle, profile-aware validation)
 - `src/core/agents`: agent pool, lifecycle manager, telemetry collector, swarm coordinator, agent router, task decomposer
+- `src/core/operator`: dashboard service, LLM provider manager, model capability matrix (incl. SR), chat session store (incl. SR config)
 - `src/core/config`: workspace resolver, execution profiles, environment config
 - `src/adapters/system`: shell/filesystem tools
 - `src/adapters/protocol`: HTTP tool
@@ -203,11 +291,11 @@ PRISM is intentionally built to remove those failure modes from the start.
 
 All runtime data is stored outside the source tree in an OS-aware persistent workspace:
 
-| Platform | Default Path |
-|----------|-------------|
+| Platform | Default Path                               |
+| :------- | :----------------------------------------- |
 | Windows  | `%USERPROFILE%\Documents\Prism_Refraction` |
-| macOS    | `~/Documents/Prism_Refraction` |
-| Linux    | `$XDG_DATA_HOME/Prism_Refraction` |
+| macOS    | `~/Documents/Prism_Refraction`             |
+| Linux    | `$XDG_DATA_HOME/Prism_Refraction`          |
 
 Override with `PRISM_WORKSPACE_ROOT` env var. Subdirectories include `config/`, `artifacts/`, `data/`, `state/`, `characters/`, and `logs/`. See the [User Guide](docs/USER_GUIDE.md#6-workspace--persistence) for full layout.
 
@@ -220,10 +308,11 @@ Override with `PRISM_WORKSPACE_ROOT` env var. Subdirectories include `config/`, 
 3. Use the **Chat Interface** tab for conversational LLM interaction
 4. Use the **Provider & Settings** tab to configure LLM providers, review model capabilities, adjust runtime settings, and view the LLM Audit Trail
 5. Use the **Tools & Plugins** tab to browse all 19 built-in tools, 7 MCP plugins, and 30 system utilities
-6. Use the **Network** tab to run curated network diagnostics, view live interface data, and monitor network operations
-7. Use the **Telemetry** tab for retrieval observability and performance metrics
-8. Use the **Logs & Debug** tab to inspect the activity event stream
-9. Use **Pending Approvals** to approve/deny Tier-3 requests
+6. Use the **Agentic Control** tab to monitor the **Guardian Agent** (local llama.cpp), manage agent swarms, and view local hardware resource allocation.
+7. Use the **Computer & Browser Control** tabs for direct autonomous system and web interaction.
+8. Use the **Network** tab to run curated network diagnostics, view live interface data, and monitor network operations
+9. Use the **Telemetry** tab for retrieval observability and performance metrics
+10. Use the **Logs & Debug** tab to inspect the activity event stream and trace AI decision paths.
 
 Optional startup preflight modes:
 
@@ -260,6 +349,7 @@ PRISM chat now supports runtime provider/model switching with:
 - OpenAI
 - Anthropic
 - Ollama (local)
+- Llama.cpp (local)
 - Custom provider endpoints (OpenAI-compatible; includes Cutson/custom setups)
 
 ### Security model for API keys
@@ -295,6 +385,29 @@ Ollama (local):
 
 - `PRISM_OLLAMA_BASE_URL` (optional; default `http://127.0.0.1:11434`)
 - `PRISM_OLLAMA_MODELS` (optional fallback comma list)
+
+Ollama Cloud (remote):
+
+- `OLLAMA_API_KEY` or `PRISM_OLLAMA_CLOUD_API_KEY` (required; API key from <https://ollama.com/settings/keys>)
+- `PRISM_OLLAMA_CLOUD_BASE_URL` (optional; default `https://ollama.com`)
+- `PRISM_OLLAMA_CLOUD_MODELS` (optional comma list; defaults to gpt-oss:120b, gpt-oss:20b, deepseek-v3.1:671b, kimi-k2:1t, qwen3-coder:480b, kimi-k2-thinking)
+
+Llama.cpp (local):
+
+- `PRISM_LLAMACPP_BASE_URL` (optional; default `http://127.0.0.1:8080/v1`)
+- `PRISM_LLAMACPP_MODELS` (optional fallback comma list)
+- `PRISM_LLAMACPP_BIN` (optional; path to `llama-server` binary, default `llama-server`)
+
+Guardian Agent (llama.cpp autonomous agent):
+
+- `PRISM_GUARDIAN_MODEL_ALIAS` (optional; default `guardian`)
+- `PRISM_GUARDIAN_MODEL_PATH` (required for auto-start; path to GGUF model file)
+- `PRISM_GUARDIAN_AUTHORITY` (optional; `tier1_autonomous` or `tier2_conditional`, default `tier2_conditional`)
+- `PRISM_GUARDIAN_AUTOSTART` (optional; `true`/`false`, default `true`)
+- `PRISM_GUARDIAN_CTX_SIZE` (optional; context size, default `4096`)
+- `PRISM_GUARDIAN_DRAFT_MODEL` (optional; path to GGUF draft model for speculative decoding)
+- `PRISM_GUARDIAN_GPU_LAYERS` (optional; number of GPU layers to offload)
+- `PRISM_GUARDIAN_FLASH_ATTN` (optional; `true` to enable flash attention)
 
 Custom/Cutson-compatible provider:
 
@@ -372,6 +485,19 @@ npm run start:server
 
 If no provider is configured or a provider call fails, PRISM returns a clear in-chat error with guidance to switch provider/model.
 
+## Appendix: Spectrum Refraction (SR) Architecture (2026-04-12)
+
+Spectrum Refraction is PRISM's novel tri-model orchestration system, introducing compounding parallel generation as a core runtime capability.
+
+Canonical references:
+
+- Implementation: `src/core/operator/model-capability-matrix.ts` (SR types, validation), `src/core/operator/llm-provider-manager.ts` (generation pipeline)
+- API: `src/core/operator/dashboard-service.ts` (SR endpoints)
+- UI: `src/dashboard/tab-settings.js` (SR panel), `src/dashboard/tab-chat.js` (SR response badge)
+- Market review: `docs/MARKET_REVIEW.md` (competitive positioning and feature comparison)
+
+Key design constraint: Left and Right hemispheres must always be distinct instances (different model and/or different provider). This is validated and enforced at every gate — no competitor enforces multi-model isolation.
+
 ## Documentation Map
 
 - Full-context research dossier: `PRISM_RESEARCH_DOCUMENTATION.md`
@@ -380,6 +506,9 @@ If no provider is configured or a provider call fails, PRISM returns a clear in-
 - Operator usage and controls: `USER_GUIDE.md`
 - Milestones and sequence: `ROADMAP.md`
 - Full docs index and reading order: `DOCS_INDEX.md`
+- SR competitive analysis: `MARKET_REVIEW.md`
+- Actionable work items: `TODO.md`
+- Version history: `../CHANGELOG.md`
 
 ### Complete Documentation Catalog
 
@@ -401,11 +530,36 @@ Execution and operations:
 Navigation and indexing:
 
 - `DOCS_INDEX.md` — canonical docs index and recommended reading order
+- `MARKET_REVIEW.md` — competitive landscape analysis for Spectrum Refraction positioning
+- `TODO.md` — actionable near-term, medium-term, and aspirational work items
+- `../CHANGELOG.md` — version history and release notes
 
 Supporting startup/release scripts referenced by docs:
 
 - `start_web.bat` — primary Windows startup and preflight entrypoint
 - `release_strict_ready.bat` — strict release validation helper
+
+## Appendix: Computer Use Core + Business Security Alignment Gate (2026-03-25)
+
+Computer use is a core PRISM capability, not an auxiliary feature. PRISM defines computer use as the governed combination of browser automation, terminal virtualization, and container sandbox orchestration under policy-tier control.
+
+Canonical reference:
+
+- `docs/COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+
+Business enterprise non-drift requirements:
+
+- Preserve mandatory governance tiers (`tier1_autonomous`, `tier2_conditional`, `tier3_approval`) for all computer-use pathways.
+- Preserve CAC accountability chain requirements on governed operations and lifecycle transitions.
+- Preserve sandboxed-execution, least-privilege, and sensitive-action confirmation controls for Business profile workflows.
+- Do not present external benchmark numbers as Prism-validated unless reproduced in first-party qualification artifacts.
+
+Implementation status labels for computer-use claims must use one of:
+
+- `Implemented`
+- `In Progress`
+- `Planned`
+- `Out of Scope`
 
 ## References
 
@@ -415,3 +569,4 @@ Supporting startup/release scripts referenced by docs:
 4. Shen et al., *HuggingGPT* (arXiv:2303.17580): <https://arxiv.org/abs/2303.17580>
 5. Model Context Protocol Introduction: <https://modelcontextprotocol.io/introduction>
 6. NIST AI Risk Management Framework: <https://www.nist.gov/itl/ai-risk-management-framework>
+7. PRISM Spectrum Refraction Market Review: `docs/MARKET_REVIEW.md` (competitive analysis of 6 frameworks, April 2026)

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, copyFileSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -83,6 +83,10 @@ let _resolvedRoot: string | undefined;
 interface PrismPreferences {
     workspaceRoot?: string;
     runtimeSettings?: Record<string, unknown>;
+    setupComplete?: boolean;
+    executionProfileSegment?: "individual" | "business";
+    /** UI mode preference — "simple" for non-technical users, "advanced" for operator dashboard. */
+    uiMode?: "simple" | "advanced";
     lastModified: string;
 }
 
@@ -313,4 +317,88 @@ export function setWorkspaceRoot(newPath: string): void {
  */
 export function _resetWorkspaceRootCache(): void {
     _resolvedRoot = undefined;
+}
+
+/**
+ * Override the cached workspace root without persisting to preferences.
+ * Only needed for testing to isolate workspace from a running server.
+ */
+export function _setWorkspaceRootForTest(newPath: string): void {
+    _resolvedRoot = newPath;
+    process.env.PRISM_WORKSPACE_ROOT = newPath;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Workspace Hub
+// ──────────────────────────────────────────────────────────────────────────────
+
+interface WorkspaceHubConfig {
+    workspaceHub: string;
+    updatedAt: string;
+}
+
+const HUB_CONFIG_FILE = "workspace-hub.json";
+
+export function getWorkspaceHub(): string {
+    const configPath = join(resolveWorkspaceRoot(), "config", HUB_CONFIG_FILE);
+    if (!existsSync(configPath)) return "";
+    try {
+        const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as WorkspaceHubConfig;
+        return String(parsed.workspaceHub ?? "").trim();
+    } catch {
+        return "";
+    }
+}
+
+export function setWorkspaceHub(hub: string): void {
+    const configDir = join(resolveWorkspaceRoot(), "config");
+    if (!existsSync(configDir)) {
+        mkdirSync(configDir, { recursive: true });
+    }
+    const configPath = join(configDir, HUB_CONFIG_FILE);
+    const config: WorkspaceHubConfig = {
+        workspaceHub: hub.trim(),
+        updatedAt: new Date().toISOString(),
+    };
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Default Character Seeding
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Seed the workspace characters/ directory with default character definitions
+ * from the repo characters/ directory if the workspace has no character files.
+ * Safe to call multiple times — only seeds when the directory is empty.
+ */
+export function seedDefaultCharacters(): void {
+    const workspaceDir = workspacePath("characters");
+    if (!existsSync(workspaceDir)) {
+        mkdirSync(workspaceDir, { recursive: true });
+    }
+
+    // Check if any JSON files already exist
+    const existing = readdirSync(workspaceDir).filter((f) => f.toLowerCase().endsWith(".json"));
+    if (existing.length > 0) return;
+
+    // Locate repo characters/ directory
+    const repoRoot = projectRoot();
+    const repoCharsDir = join(repoRoot, "characters");
+    if (!existsSync(repoCharsDir)) return;
+
+    const repoFiles = readdirSync(repoCharsDir).filter((f) => f.toLowerCase().endsWith(".json"));
+    for (const fileName of repoFiles) {
+        const src = join(repoCharsDir, fileName);
+        const dest = join(workspaceDir, fileName);
+        try {
+            copyFileSync(src, dest);
+        } catch {
+            // Skip files that fail to copy
+        }
+    }
+
+    if (repoFiles.length > 0) {
+        console.log(`[PRISM][workspace] Seeded ${repoFiles.length} default character(s) into ${workspaceDir}`);
+    }
 }

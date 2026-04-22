@@ -16,6 +16,17 @@ import {
     loadRuntimeProfiles,
     ALL_TASK_ROLES,
     ALL_MODALITIES,
+    getDeprecationStatus,
+    getActiveProfiles,
+    getDeprecatedProfiles,
+    resolvePromptStrategy,
+    PROVIDER_PROMPT_STRATEGIES,
+    validateSRLeftModel,
+    validateSRRightModel,
+    filterSRLogicModels,
+    filterSRCreativeModels,
+    validateSRTriad,
+    SR_SYSTEM_PROMPTS,
 } from "./model-capability-matrix.js";
 import type {
     TaskRole,
@@ -25,7 +36,15 @@ import type {
     ModelCapabilityProfile,
     ModelModality,
     ModalityDetectionInput,
+    DeprecationStatus,
+    ProviderPromptStrategy,
+    SpectrumRefractionConfig,
+    SRValidationResult,
+    SRTriadValidation,
+    SRIsolationLevel,
 } from "./model-capability-matrix.js";
+import { computeCostUsd } from "./usage-pricing-catalog.js";
+import type { ActivityBus } from "../activity/bus.js";
 
 export type RoutingStrategy = "single" | "multi" | "modality";
 
@@ -42,17 +61,54 @@ export interface RoutingConfig {
     preferredModality: string | null;
 }
 
-export type { TaskRole, ModelRouterSelection, AdaptivePromptParams, ModelCapabilityProfile, ModelModality };
+export type { TaskRole, ModelRouterSelection, AdaptivePromptParams, ModelCapabilityProfile, ModelModality, SpectrumRefractionConfig, SRValidationResult, SRTriadValidation, SRIsolationLevel };
+
+/** Output from a Spectrum Refraction generation pass. */
+export interface SRGenerationOutput {
+    /** Final aggregated content. */
+    content: string;
+    /** Individual hemisphere outputs for transparency. */
+    hemispheres: {
+        left: LlmGenerationOutput | null;
+        right: LlmGenerationOutput | null;
+        main: LlmGenerationOutput | null;
+    };
+    /** The aggregation pass output. */
+    aggregation: LlmGenerationOutput | null;
+    /** Timing breakdown in ms. */
+    timing: {
+        fanOutMs: number;
+        aggregationMs: number;
+        totalMs: number;
+    };
+    /** Media artifacts extracted from the Creative hemisphere. */
+    mediaArtifacts: Array<{ type: "image" | "audio" | "video"; data: string; mimeType?: string }>;
+    /** Isolation quality of this SR generation. */
+    isolationLevel: SRIsolationLevel;
+}
+
+/** Cost estimate for a single SR generation pass. */
+export interface SRCostEstimate {
+    leftEstimatedCostUsd: number;
+    rightEstimatedCostUsd: number;
+    mainFanOutEstimatedCostUsd: number;
+    aggregationEstimatedCostUsd: number;
+    totalEstimatedCostUsd: number;
+    currency: "USD";
+    avgInputTokens: number;
+    avgOutputTokens: number;
+    advisory?: string;
+}
 
 export type PrismLlmProviderId =
-    | "openai" | "anthropic" | "ollama" | "custom"
+    | "openai" | "anthropic" | "ollama" | "ollama-cloud" | "custom"
     | "google" | "mistral" | "cohere" | "groq" | "together"
-    | "deepseek" | "perplexity" | "fireworks" | "openrouter" | "lmstudio";
+    | "deepseek" | "perplexity" | "fireworks" | "openrouter" | "lmstudio" | "llamacpp" | "bitnetcpp";
 
 export const ALL_PROVIDER_IDS: PrismLlmProviderId[] = [
     "openai", "anthropic", "google", "mistral", "cohere", "groq",
     "together", "deepseek", "perplexity", "fireworks", "openrouter",
-    "ollama", "lmstudio", "custom",
+    "ollama", "ollama-cloud", "lmstudio", "llamacpp", "bitnetcpp", "custom",
 ];
 
 export interface PersistedProviderSettings {
@@ -118,12 +174,13 @@ interface LlmGenerationInput {
     stream?: boolean;
 }
 
-interface LlmGenerationOutput {
+export interface LlmGenerationOutput {
     providerId: PrismLlmProviderId;
     model: string;
     content: string;
     toolCalls?: LlmToolCall[];
     stopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop";
+    tokensUsed?: { input: number; output: number; costUsd: number };
 }
 
 export interface LlmToolDefinition {
@@ -185,6 +242,15 @@ const PERPLEXITY_DEFAULT_MODELS = ["sonar-pro", "sonar"];
 const FIREWORKS_DEFAULT_MODELS = ["accounts/fireworks/models/llama-v3p1-70b-instruct", "accounts/fireworks/models/mixtral-8x7b-instruct"];
 const OPENROUTER_DEFAULT_MODELS = ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "meta-llama/llama-3.1-70b-instruct"];
 
+const OLLAMA_CLOUD_DEFAULT_MODELS = [
+    "gpt-oss:120b",
+    "gpt-oss:20b",
+    "deepseek-v3.1:671b",
+    "kimi-k2:1t",
+    "qwen3-coder:480b",
+    "kimi-k2-thinking",
+];
+
 function parseModelList(raw: string | undefined, fallback: string[]): string[] {
     if (!raw?.trim()) {
         return [...fallback];
@@ -218,6 +284,8 @@ function normalizeModels(models: string[]): string[] {
     return normalized;
 }
 
+import { LlamaCppSupervisor } from "./llama-cpp-supervisor.js";
+
 export class LlmProviderManager {
     private readonly defaults: Record<PrismLlmProviderId, ProviderSettings>;
     private readonly persistedSettings = new Map<PrismLlmProviderId, PersistedProviderSettings>();
@@ -231,10 +299,22 @@ export class LlmProviderManager {
         preferredModality: null,
     };
 
+    /** Short-lived TTL cache for getCatalog() called without a selection override. */
+    private catalogCache: { catalog: LlmProviderCatalog; expiresAt: number } | null = null;
+    private static readonly CATALOG_CACHE_TTL_MS = 5_000;
+
+    /** Circuit breaker state: key = `${hemisphereRole}:${providerId}` */
+    private readonly srCircuitBreaker = new Map<string, { failures: number; openUntil: number }>();
+    private static readonly SR_CB_FAILURE_THRESHOLD = 3;
+    private static readonly SR_CB_OPEN_DURATION_MS = 30_000;
+
     constructor(
         private readonly env: NodeJS.ProcessEnv = process.env,
         settings: PersistedProviderSettings[] = [],
         private readonly secretStore?: ProviderSecretStore,
+        private readonly llamaSupervisor?: LlamaCppSupervisor,
+        private readonly bitnetSupervisor?: LlamaCppSupervisor,
+        private readonly activityBus?: ActivityBus,
     ) {
         const customBaseUrl = this.env.PRISM_CUSTOM_PROVIDER_URL?.trim() ?? "";
 
@@ -278,6 +358,20 @@ export class LlmProviderManager {
                     : null,
                 requiresApiKey: false,
             } as ProviderSettings,
+            "ollama-cloud": {
+                id: "ollama-cloud",
+                label: "Ollama Cloud",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_OLLAMA_CLOUD_BASE_URL?.trim() || "https://ollama.com"),
+                apiKey: this.env.OLLAMA_API_KEY?.trim() || this.env.PRISM_OLLAMA_CLOUD_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_OLLAMA_CLOUD_MODELS, OLLAMA_CLOUD_DEFAULT_MODELS),
+                defaultModel: this.env.PRISM_LLM_PROVIDER === "ollama-cloud"
+                    ? this.env.PRISM_LLM_MODEL?.trim() || OLLAMA_CLOUD_DEFAULT_MODELS[0] || null
+                    : OLLAMA_CLOUD_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
             custom: {
                 id: "custom",
                 label: this.env.PRISM_CUSTOM_PROVIDER_NAME?.trim() || "Custom Provider",
@@ -409,6 +503,24 @@ export class LlmProviderManager {
                 defaultModel: null,
                 requiresApiKey: false,
             } as ProviderSettings,
+            llamacpp: {
+                id: "llamacpp",
+                label: "Llama.cpp (Local)",
+                kind: "local",
+                baseUrl: trimSlash(this.env.PRISM_LLAMACPP_BASE_URL?.trim() || "http://127.0.0.1:8080/v1"),
+                defaultModels: parseModelList(this.env.PRISM_LLAMACPP_MODELS, []),
+                defaultModel: null,
+                requiresApiKey: false,
+            } as ProviderSettings,
+            bitnetcpp: {
+                id: "bitnetcpp",
+                label: "BitNet.cpp (Local)",
+                kind: "local",
+                baseUrl: trimSlash(this.env.PRISM_BITNET_BASE_URL?.trim() || "http://127.0.0.1:8082/v1"),
+                defaultModels: parseModelList(this.env.PRISM_BITNET_MODELS, []),
+                defaultModel: null,
+                requiresApiKey: false,
+            } as ProviderSettings,
         };
 
         this.setPersistedProviderSettings(settings);
@@ -440,13 +552,35 @@ export class LlmProviderManager {
     }
 
     async getCatalog(selection?: Partial<LlmSelection>): Promise<LlmProviderCatalog> {
-        const [ollamaModels, lmStudioModels] = await Promise.all([
+        // Return cached catalog when no per-call selection override is requested.
+        if (!selection && this.catalogCache && Date.now() < this.catalogCache.expiresAt) {
+            return this.catalogCache.catalog;
+        }
+
+        const [ollamaModels, ollamaCloudModels, lmStudioModels, llamacppRunning, bitnetRunning] = await Promise.all([
             this.fetchOllamaModels(this.getResolvedSettings("ollama")),
+            this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")),
             this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")),
+            this.llamaSupervisor
+                ? Promise.resolve(this.llamaSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
+                : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")),
+            this.bitnetSupervisor
+                ? Promise.resolve(this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
+                : Promise.resolve([] as string[]),
         ]);
+
+        // Merge discovered local GGUF models with running models (deduplicated)
+        const llamacppDiscovered = this.llamaSupervisor?.discoverLocalModels() ?? [];
+        const llamacppModels = [...new Set([...llamacppRunning, ...llamacppDiscovered])];
+        const bitnetDiscovered = this.bitnetSupervisor?.discoverLocalModels() ?? [];
+        const bitnetcppModels = [...new Set([...bitnetRunning, ...bitnetDiscovered])];
+
         const providers: LlmProviderSnapshot[] = ALL_PROVIDER_IDS.map((id) => {
             if (id === "ollama") return this.snapshotFor(id, ollamaModels);
+            if (id === "ollama-cloud") return this.snapshotFor(id, ollamaCloudModels);
             if (id === "lmstudio") return this.snapshotFor(id, lmStudioModels);
+            if (id === "llamacpp") return this.snapshotFor(id, llamacppModels);
+            if (id === "bitnetcpp") return this.snapshotFor(id, bitnetcppModels);
             return this.snapshotFor(id);
         });
 
@@ -485,11 +619,18 @@ export class LlmProviderManager {
             this.activeModel = effectiveModel;
         }
 
-        return {
+        const catalog: LlmProviderCatalog = {
             activeProviderId: effectiveProviderId,
             activeModel: effectiveModel,
             providers,
         };
+
+        // Cache the result for getCatalog() calls without a selection override.
+        if (!selection) {
+            this.catalogCache = { catalog, expiresAt: Date.now() + LlmProviderManager.CATALOG_CACHE_TTL_MS };
+        }
+
+        return catalog;
     }
 
     async setActiveSelection(providerId: string, model?: string): Promise<LlmProviderCatalog> {
@@ -510,12 +651,40 @@ export class LlmProviderManager {
 
         this.activeProviderId = resolved;
         this.activeModel = model?.trim() || provider.models[0] || null;
+        this.catalogCache = null; // Invalidate cache on selection change
 
         return {
             ...catalog,
             activeProviderId: this.activeProviderId,
             activeModel: this.activeModel,
         };
+    }
+
+    /**
+     * Retry a provider call with truncated exponential backoff.
+     * Retries only on thrown errors (transient network/timeout failures),
+     * not on null returns (misconfiguration / model-not-loaded).
+     *
+     * Delays: 500 ms → 1 s → 2 s (3 retries, capped at 4 s per attempt).
+     */
+    private async withExponentialRetry<T>(
+        fn: () => Promise<T>,
+        maxRetries = 3,
+        baseDelayMs = 500,
+    ): Promise<T> {
+        let lastError: unknown;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            } catch (err) {
+                lastError = err;
+                if (attempt < maxRetries) {
+                    const delay = Math.min(baseDelayMs * Math.pow(2, attempt), 4000);
+                    await new Promise<void>((res) => setTimeout(res, delay));
+                }
+            }
+        }
+        throw lastError;
     }
 
     async generate(input: LlmGenerationInput, selection?: Partial<LlmSelection>): Promise<LlmGenerationOutput | null> {
@@ -534,15 +703,30 @@ export class LlmProviderManager {
         const adaptiveParams = buildAdaptiveParams(profile);
 
         if (catalog.activeProviderId === "anthropic") {
-            return this.generateWithAnthropic(settings, catalog.activeModel, input);
+            return this.withExponentialRetry(() =>
+                this.generateWithAnthropic(settings, catalog.activeModel!, input));
         }
 
         if (catalog.activeProviderId === "ollama") {
-            return this.generateWithOllama(settings, catalog.activeModel, input, adaptiveParams);
+            return this.withExponentialRetry(() =>
+                this.generateWithOllama(settings, catalog.activeModel!, input, adaptiveParams));
+        }
+
+        if (catalog.activeProviderId === "ollama-cloud") {
+            return this.withExponentialRetry(() =>
+                this.generateWithOllamaCloud(settings, catalog.activeModel!, input, adaptiveParams));
+        }
+
+        // Apply dynamic port routing if managed by supervisor
+        if (catalog.activeProviderId === "llamacpp" && this.llamaSupervisor) {
+            const dynamicPort = this.llamaSupervisor.getPortForAlias(catalog.activeModel);
+            if (!dynamicPort) return null; // Model not fully loaded
+            settings.baseUrl = `http://127.0.0.1:${dynamicPort}/v1`;
         }
 
         // All other providers use OpenAI-compatible API
-        return this.generateWithOpenAiCompatible(settings, catalog.activeModel, input);
+        return this.withExponentialRetry(() =>
+            this.generateWithOpenAiCompatible(settings, catalog.activeModel!, input));
     }
 
     /**
@@ -633,6 +817,431 @@ export class LlmProviderManager {
         if (!result) return null;
 
         return { ...result, routing, adaptiveParams };
+    }
+
+    // ── Spectrum Refraction (Prism SR) ─────────────────────────────────
+
+    /**
+     * Validate SR model selections against the capability matrix.
+     */
+    validateSRModels(leftModel: string | null, rightModel: string | null): {
+        left: SRValidationResult | null;
+        right: SRValidationResult | null;
+    } {
+        return {
+            left: leftModel ? validateSRLeftModel(resolveProfile(leftModel)) : null,
+            right: rightModel ? validateSRRightModel(resolveProfile(rightModel)) : null,
+        };
+    }
+
+    /**
+     * Cross-validate the SR triad including instance isolation enforcement.
+     * Returns the full triad validation with isolation level classification.
+     */
+    validateSRTriadConfig(
+        leftProviderId: string | null,
+        leftModel: string | null,
+        rightProviderId: string | null,
+        rightModel: string | null,
+    ): SRTriadValidation {
+        const left = (leftProviderId && leftModel) ? { providerId: leftProviderId, model: leftModel } : null;
+        const right = (rightProviderId && rightModel) ? { providerId: rightProviderId, model: rightModel } : null;
+        return validateSRTriad(left, right);
+    }
+
+    /**
+     * Get available models filtered for SR Left and Right hemispheres.
+     */
+    async getSRModelCandidates(): Promise<{
+        left: Array<{ providerId: string; model: string; tier: number; level: string; advisory: string }>;
+        right: Array<{ providerId: string; model: string; tier: number; level: string; advisory: string }>;
+    }> {
+        const catalog = await this.getCatalog();
+        const available: AvailableModel[] = [];
+        for (const provider of catalog.providers) {
+            if (!provider.enabled) continue;
+            for (const model of provider.models) {
+                available.push({
+                    providerId: provider.id,
+                    model,
+                    locality: provider.kind === "local" ? "local" : "cloud",
+                });
+            }
+        }
+
+        const leftCandidates = filterSRLogicModels(available).map(c => ({
+            providerId: c.providerId,
+            model: c.model,
+            tier: c.profile.tier,
+            level: c.validation.level,
+            advisory: c.validation.advisoryText,
+        }));
+
+        const rightCandidates = filterSRCreativeModels(available).map(c => ({
+            providerId: c.providerId,
+            model: c.model,
+            tier: c.profile.tier,
+            level: c.validation.level,
+            advisory: c.validation.advisoryText,
+        }));
+
+        return { left: leftCandidates, right: rightCandidates };
+    }
+
+    /**
+     * Spectrum Refraction generation — fan-out to three models, then aggregate.
+     *
+     * 1. Fan-out: Left (logic), Right (creative), Main (direct) — in parallel
+     * 2. Aggregation: Main model synthesizes all three outputs
+     *
+     * D4c enhancements: per-hemisphere timeouts, circuit breaker, SR audit trail.
+     */
+    async generateSR(
+        input: LlmGenerationInput,
+        srConfig: SpectrumRefractionConfig,
+        mainSelection?: Partial<LlmSelection>,
+    ): Promise<SRGenerationOutput | null> {
+        if (!srConfig.enabled || !srConfig.leftModel || !srConfig.rightModel) return null;
+
+        // ── Pre-flight guard: enforce instance isolation ──
+        const triadCheck = validateSRTriad(srConfig.leftModel, srConfig.rightModel);
+        if (!triadCheck.valid) {
+            console.error(`[SR] Pre-flight isolation check FAILED: ${triadCheck.advisory}`);
+            return null;
+        }
+
+        const totalStart = Date.now();
+        const leftProviderId = srConfig.leftModel.providerId;
+        const rightProviderId = srConfig.rightModel.providerId;
+        const sessionIdForAudit = mainSelection?.providerId ?? "sr";
+
+        // ── Emit audit: fan-out start ──
+        this.activityBus?.emit({
+            sessionId: sessionIdForAudit,
+            layer: "llm",
+            operation: "sr.fanout_start",
+            status: "started",
+            details: {
+                leftProvider: leftProviderId,
+                leftModel: srConfig.leftModel.model,
+                leftSlot: srConfig.leftSlot ?? null,
+                rightProvider: rightProviderId,
+                rightModel: srConfig.rightModel.model,
+                rightSlot: srConfig.rightSlot ?? null,
+                isolationLevel: triadCheck.isolationLevel,
+                circuitBreakerEnabled: srConfig.circuitBreakerEnabled !== false,
+            },
+        });
+
+        // ── Circuit breaker: check per-hemisphere state ──
+        const cbEnabled = srConfig.circuitBreakerEnabled !== false;
+        const leftCbKey = `left:${leftProviderId}`;
+        const rightCbKey = `right:${rightProviderId}`;
+        const now = Date.now();
+        const leftCbOpen = cbEnabled && this.isCBOpen(leftCbKey, now);
+        const rightCbOpen = cbEnabled && this.isCBOpen(rightCbKey, now);
+
+        if (leftCbOpen) {
+            console.warn(`[SR] Left hemisphere circuit breaker OPEN for provider: ${leftProviderId}`);
+            this.activityBus?.emit({
+                sessionId: sessionIdForAudit,
+                layer: "llm",
+                operation: "sr.circuit_breaker_triggered",
+                status: "failed",
+                details: { hemisphere: "left", providerId: leftProviderId },
+            });
+        }
+        if (rightCbOpen) {
+            console.warn(`[SR] Right hemisphere circuit breaker OPEN for provider: ${rightProviderId}`);
+            this.activityBus?.emit({
+                sessionId: sessionIdForAudit,
+                layer: "llm",
+                operation: "sr.circuit_breaker_triggered",
+                status: "failed",
+                details: { hemisphere: "right", providerId: rightProviderId },
+            });
+        }
+
+        const leftTimeoutMs = srConfig.leftTimeoutMs ?? 60_000;
+        const rightTimeoutMs = srConfig.rightTimeoutMs ?? 60_000;
+
+        // Build hemisphere-specific inputs
+        const leftInput: LlmGenerationInput = {
+            message: input.message,
+            conversation: input.conversation,
+            systemPrompt: SR_SYSTEM_PROMPTS.left,
+            tools: input.tools,
+            tool_choice: input.tool_choice,
+        };
+
+        const rightInput: LlmGenerationInput = {
+            message: input.message,
+            conversation: input.conversation,
+            systemPrompt: SR_SYSTEM_PROMPTS.right,
+        };
+
+        const mainInput: LlmGenerationInput = {
+            message: input.message,
+            conversation: input.conversation,
+            systemPrompt: input.systemPrompt,
+            tools: input.tools,
+            tool_choice: input.tool_choice,
+        };
+
+        // Fan-out: three parallel generations (circuit-broken hemispheres skip)
+        const fanOutStart = Date.now();
+
+        const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> =>
+            Promise.race([
+                promise,
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+            ]);
+
+        const leftGen = leftCbOpen
+            ? Promise.resolve(null)
+            : withTimeout(
+                this.generate(leftInput, { providerId: leftProviderId, model: srConfig.leftModel.model }),
+                leftTimeoutMs,
+            ).then(result => {
+                if (cbEnabled) this.recordCBOutcome(leftCbKey, result !== null);
+                return result;
+            });
+
+        const rightGen = rightCbOpen
+            ? Promise.resolve(null)
+            : withTimeout(
+                this.generate(rightInput, { providerId: rightProviderId, model: srConfig.rightModel.model }),
+                rightTimeoutMs,
+            ).then(result => {
+                if (cbEnabled) this.recordCBOutcome(rightCbKey, result !== null);
+                return result;
+            });
+
+        const mainGen = withTimeout(this.generate(mainInput, mainSelection), 60_000);
+
+        const [leftResult, rightResult, mainResult] = await Promise.all([leftGen, rightGen, mainGen]);
+
+        const fanOutMs = Date.now() - fanOutStart;
+
+        // ── Emit audit: fan-out complete ──
+        this.activityBus?.emit({
+            sessionId: sessionIdForAudit,
+            layer: "llm",
+            operation: "sr.fanout_complete",
+            status: "succeeded",
+            details: {
+                fanOutMs,
+                leftSuccess: leftResult !== null,
+                rightSuccess: rightResult !== null,
+                mainSuccess: mainResult !== null,
+                leftCircuitOpen: leftCbOpen,
+                rightCircuitOpen: rightCbOpen,
+            },
+        });
+
+        // Build advisory notes for timed-out or circuit-broken hemispheres
+        const leftTimedOut = !leftCbOpen && leftResult === null;
+        const rightTimedOut = !rightCbOpen && rightResult === null;
+        const leftAdvisory = leftCbOpen
+            ? `(Logic Hemisphere skipped — circuit breaker open for provider: ${leftProviderId})`
+            : leftTimedOut
+                ? `(Logic Hemisphere timed out after ${leftTimeoutMs}ms)`
+                : null;
+        const rightAdvisory = rightCbOpen
+            ? `(Creative Hemisphere skipped — circuit breaker open for provider: ${rightProviderId})`
+            : rightTimedOut
+                ? `(Creative Hemisphere timed out after ${rightTimeoutMs}ms)`
+                : null;
+
+        const leftOutput = leftResult?.content ?? leftAdvisory ?? "(Logic Hemisphere did not respond)";
+        const rightOutput = rightResult?.content ?? rightAdvisory ?? "(Creative Hemisphere did not respond)";
+        const mainOutput = mainResult?.content ?? "(Primary analysis did not respond)";
+
+        const leftModelLabel = srConfig.leftModel.model;
+        const rightModelLabel = srConfig.rightModel.model;
+        const mainModelLabel = mainSelection?.model ?? "main";
+
+        const aggregationMessage = [
+            `<user-prompt>${input.message}</user-prompt>`,
+            "",
+            `<logic-hemisphere model="${leftModelLabel}" provider="${leftProviderId}" isolation="${triadCheck.isolationLevel}">`,
+            leftOutput,
+            `</logic-hemisphere>`,
+            "",
+            `<creative-hemisphere model="${rightModelLabel}" provider="${rightProviderId}">`,
+            rightOutput,
+            `</creative-hemisphere>`,
+            "",
+            `<primary-analysis model="${mainModelLabel}">`,
+            mainOutput,
+            `</primary-analysis>`,
+            "",
+            "Synthesize these three perspectives into a single cohesive response following your system instructions.",
+        ].join("\n");
+
+        const aggregationInput: LlmGenerationInput = {
+            message: aggregationMessage,
+            conversation: [],
+            systemPrompt: SR_SYSTEM_PROMPTS.aggregation,
+        };
+
+        // Aggregation pass — main model synthesizes
+        const aggStart = Date.now();
+        const aggregationResult = await this.generate(aggregationInput, mainSelection);
+        const aggregationMs = Date.now() - aggStart;
+
+        // Extract media artifacts from creative hemisphere output
+        const mediaArtifacts = this.extractMediaArtifacts(rightResult?.content ?? "");
+
+        const totalMs = Date.now() - totalStart;
+
+        // ── Emit audit: generation complete ──
+        this.activityBus?.emit({
+            sessionId: sessionIdForAudit,
+            layer: "llm",
+            operation: "sr.generation_complete",
+            status: "succeeded",
+            details: {
+                totalMs,
+                fanOutMs,
+                aggregationMs,
+                isolationLevel: triadCheck.isolationLevel,
+                leftTimedOut,
+                rightTimedOut,
+                leftCircuitOpen: leftCbOpen,
+                rightCircuitOpen: rightCbOpen,
+            },
+        });
+
+        return {
+            content: aggregationResult?.content ?? mainOutput,
+            hemispheres: {
+                left: leftResult,
+                right: rightResult,
+                main: mainResult,
+            },
+            aggregation: aggregationResult,
+            timing: { fanOutMs, aggregationMs, totalMs },
+            mediaArtifacts,
+            isolationLevel: triadCheck.isolationLevel,
+        };
+    }
+
+    /** Check if the circuit breaker is currently open for a given key. */
+    private isCBOpen(key: string, now: number): boolean {
+        const state = this.srCircuitBreaker.get(key);
+        if (!state) return false;
+        if (state.openUntil > 0 && now < state.openUntil) return true;
+        // Reset expired open state
+        if (state.openUntil > 0 && now >= state.openUntil) {
+            state.failures = 0;
+            state.openUntil = 0;
+        }
+        return false;
+    }
+
+    /** Record the outcome of a hemisphere call and update circuit breaker state. */
+    private recordCBOutcome(key: string, success: boolean): void {
+        let state = this.srCircuitBreaker.get(key);
+        if (!state) {
+            state = { failures: 0, openUntil: 0 };
+            this.srCircuitBreaker.set(key, state);
+        }
+        if (success) {
+            state.failures = 0;
+            state.openUntil = 0;
+        } else {
+            state.failures += 1;
+            if (state.failures >= LlmProviderManager.SR_CB_FAILURE_THRESHOLD) {
+                state.openUntil = Date.now() + LlmProviderManager.SR_CB_OPEN_DURATION_MS;
+                console.warn(`[SR] Circuit breaker OPENED for ${key} until ${new Date(state.openUntil).toISOString()}`);
+            }
+        }
+    }
+
+    /** Expose SR circuit breaker state for /api/sr/status. */
+    getSRCircuitBreakerState(): Record<string, { failures: number; openUntil: number; open: boolean }> {
+        const result: Record<string, { failures: number; openUntil: number; open: boolean }> = {};
+        const now = Date.now();
+        for (const [key, state] of this.srCircuitBreaker) {
+            result[key] = { ...state, open: state.openUntil > 0 && now < state.openUntil };
+        }
+        return result;
+    }
+
+    /**
+     * Estimate the per-generation cost of running an SR fan-out.
+     * Uses the `computeCostUsd` pricing catalog for each hemisphere + aggregation pass.
+     */
+    estimateSRCost(
+        srConfig: SpectrumRefractionConfig,
+        avgInputTokens: number = 2_000,
+        avgOutputTokens: number = 1_000,
+        mainSelection?: Partial<LlmSelection>,
+    ): SRCostEstimate {
+        const leftProvider = srConfig.leftModel?.providerId ?? "";
+        const leftModel = srConfig.leftModel?.model ?? "";
+        const rightProvider = srConfig.rightModel?.providerId ?? "";
+        const rightModel = srConfig.rightModel?.model ?? "";
+        const mainProvider = mainSelection?.providerId ?? leftProvider;
+        const mainModel = mainSelection?.model ?? leftModel;
+
+        // Aggregation input is substantially larger (3 hemisphere outputs + user prompt)
+        const aggInputTokens = avgInputTokens + avgOutputTokens * 3;
+
+        const leftCost = computeCostUsd(leftProvider, leftModel, avgInputTokens, avgOutputTokens);
+        const rightCost = computeCostUsd(rightProvider, rightModel, avgInputTokens, avgOutputTokens);
+        const mainFanOutCost = computeCostUsd(mainProvider, mainModel, avgInputTokens, avgOutputTokens);
+        const aggregationCost = computeCostUsd(mainProvider, mainModel, aggInputTokens, avgOutputTokens);
+
+        const totalCost = leftCost + rightCost + mainFanOutCost + aggregationCost;
+
+        const advisory = totalCost === 0
+            ? "Pricing unavailable for one or more configured models. Ensure provider models match pricing catalog entries."
+            : undefined;
+
+        return {
+            leftEstimatedCostUsd: leftCost,
+            rightEstimatedCostUsd: rightCost,
+            mainFanOutEstimatedCostUsd: mainFanOutCost,
+            aggregationEstimatedCostUsd: aggregationCost,
+            totalEstimatedCostUsd: totalCost,
+            currency: "USD",
+            avgInputTokens,
+            avgOutputTokens,
+            advisory,
+        };
+    }
+
+    /**
+     * Extract base64-encoded media artifacts from creative model output.
+     */
+    private extractMediaArtifacts(content: string): SRGenerationOutput["mediaArtifacts"] {
+        const artifacts: SRGenerationOutput["mediaArtifacts"] = [];
+
+        // Match base64 data URIs (data:image/png;base64,... etc.)
+        const dataUriPattern = /data:(image|audio|video)\/([^;]+);base64,([A-Za-z0-9+/=]+)/g;
+        let match: RegExpExecArray | null;
+        while ((match = dataUriPattern.exec(content)) !== null) {
+            const mediaType = match[1] as "image" | "audio" | "video";
+            const mimeType = `${match[1]}/${match[2]}`;
+            artifacts.push({ type: mediaType, data: match[3]!, mimeType });
+        }
+
+        // Match markdown image references that may contain base64
+        const mdImagePattern = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g;
+        while ((match = mdImagePattern.exec(content)) !== null) {
+            const innerMatch = /data:(image)\/([^;]+);base64,(.+)/.exec(match[2]!);
+            if (innerMatch) {
+                artifacts.push({
+                    type: "image",
+                    data: innerMatch[3]!,
+                    mimeType: `image/${innerMatch[2]}`,
+                });
+            }
+        }
+
+        return artifacts;
     }
 
     // ── Routing configuration ──────────────────────────────────────────
@@ -784,10 +1393,17 @@ export class LlmProviderManager {
 
     // ── Model Matrix Management (Phase 5) ──────────────────────────────
 
-    getFullModelMatrix(): { known: readonly ModelCapabilityProfile[]; runtime: readonly ModelCapabilityProfile[] } {
+    getFullModelMatrix(): {
+        known: readonly ModelCapabilityProfile[];
+        runtime: readonly ModelCapabilityProfile[];
+        deprecated: readonly ModelCapabilityProfile[];
+        promptStrategies: readonly ProviderPromptStrategy[];
+    } {
         return {
             known: getKnownProfiles(),
             runtime: getRuntimeProfiles(),
+            deprecated: getDeprecatedProfiles(),
+            promptStrategies: PROVIDER_PROMPT_STRATEGIES,
         };
     }
 
@@ -813,8 +1429,15 @@ export class LlmProviderManager {
         unknown: string[];
         suggested: ModelCapabilityProfile[];
     }> {
-        const snapshot = this.snapshotFor(providerId as PrismLlmProviderId);
-        const catalogModels = snapshot.models;
+        const testResult = await this.testProvider(providerId);
+        let catalogModels: string[];
+        if (testResult.ok && testResult.models && testResult.models.length > 0) {
+            catalogModels = testResult.models;
+        } else {
+            const snapshot = this.snapshotFor(providerId as PrismLlmProviderId);
+            catalogModels = snapshot.models;
+        }
+
         const knownProfiles = getKnownProfiles();
 
         const known: string[] = [];
@@ -973,6 +1596,29 @@ export class LlmProviderManager {
         }
     }
 
+    private async fetchOllamaCloudModels(settings: ProviderSettings): Promise<string[]> {
+        if (!settings.apiKey?.trim()) return settings.defaultModels;
+        try {
+            const response = await fetch(`${settings.baseUrl}/api/tags`, {
+                method: "GET",
+                headers: {
+                    Accept: "application/json",
+                    Authorization: `Bearer ${settings.apiKey}`,
+                },
+            });
+            if (!response.ok) {
+                return settings.defaultModels;
+            }
+            const payload = await response.json() as { models?: Array<{ name?: string }> };
+            const names = (payload.models ?? [])
+                .map((entry) => entry.name?.trim())
+                .filter((value): value is string => Boolean(value));
+            return names.length > 0 ? names : settings.defaultModels;
+        } catch {
+            return settings.defaultModels;
+        }
+    }
+
     private async fetchLmStudioModels(settings: ProviderSettings): Promise<string[]> {
         try {
             const response = await fetch(`${settings.baseUrl}/v1/models`, {
@@ -992,7 +1638,7 @@ export class LlmProviderManager {
         }
     }
 
-    async testProvider(providerId: string): Promise<{ ok: boolean; message: string; models: string[] }> {
+    async testProvider(providerId: string): Promise<{ ok: boolean; message: string; models: string[]; latencyMs?: number }> {
         const resolved = this.resolveProvider(providerId);
         if (!resolved) {
             return { ok: false, message: "Unknown provider.", models: [] };
@@ -1001,26 +1647,53 @@ export class LlmProviderManager {
         if (!settings.baseUrl?.trim()) {
             return { ok: false, message: "Base URL not configured.", models: [] };
         }
+        const startTime = Date.now();
         try {
             if (resolved === "ollama") {
                 const response = await fetch(`${settings.baseUrl}/api/tags`, { method: "GET" });
                 if (!response.ok) {
-                    return { ok: false, message: `Ollama returned ${response.status}.`, models: [] };
+                    return { ok: false, message: `Ollama returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
                 }
                 const payload = await response.json() as { models?: Array<{ name?: string }> };
                 const models = (payload.models ?? []).map((m) => m.name?.trim() ?? "").filter(Boolean);
                 const final = models.length > 0 ? models : settings.defaultModels;
-                return { ok: true, message: `Connected to Ollama. ${final.length} model(s) found.`, models: final };
+                return { ok: true, message: `Connected to Ollama. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+            }
+            if (resolved === "ollama-cloud") {
+                if (!settings.apiKey?.trim()) {
+                    return { ok: false, message: "Ollama Cloud API key is not set.", models: [], latencyMs: Date.now() - startTime };
+                }
+                const response = await fetch(`${settings.baseUrl}/api/tags`, {
+                    method: "GET",
+                    headers: { Accept: "application/json", Authorization: `Bearer ${settings.apiKey}` },
+                });
+                if (!response.ok) {
+                    return { ok: false, message: `Ollama Cloud returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
+                }
+                const payload = await response.json() as { models?: Array<{ name?: string }> };
+                const models = (payload.models ?? []).map((m) => m.name?.trim() ?? "").filter(Boolean);
+                const final = models.length > 0 ? models : settings.defaultModels;
+                return { ok: true, message: `Connected to Ollama Cloud. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
             }
             if (resolved === "lmstudio") {
                 const response = await fetch(`${settings.baseUrl}/v1/models`, { method: "GET", headers: { Accept: "application/json" } });
                 if (!response.ok) {
-                    return { ok: false, message: `LM Studio returned ${response.status}.`, models: [] };
+                    return { ok: false, message: `LM Studio returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
                 }
                 const payload = await response.json() as { data?: Array<{ id?: string }> };
                 const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
                 const final = models.length > 0 ? models : settings.defaultModels;
-                return { ok: true, message: `Connected to LM Studio. ${final.length} model(s) found.`, models: final };
+                return { ok: true, message: `Connected to LM Studio. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+            }
+            if (resolved === "llamacpp") {
+                const response = await fetch(`${settings.baseUrl}/models`, { method: "GET", headers: { Accept: "application/json" } });
+                if (!response.ok) {
+                    return { ok: false, message: `Llama.cpp returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
+                }
+                const payload = await response.json() as { data?: Array<{ id?: string }> };
+                const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
+                const final = models.length > 0 ? models : settings.defaultModels;
+                return { ok: true, message: `Connected to Llama.cpp. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
             }
             if (resolved === "anthropic") {
                 // Try the model list endpoint first
@@ -1032,7 +1705,7 @@ export class LlmProviderManager {
                     const payload = await listResp.json() as { data?: Array<{ id?: string }> };
                     const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
                     const final = models.length > 0 ? models : settings.defaultModels;
-                    return { ok: true, message: `Connected to Anthropic. ${final.length} model(s) found.`, models: final };
+                    return { ok: true, message: `Connected to Anthropic. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
                 }
                 // Fall back to a minimal chat probe
                 const probeResp = await fetch(`${settings.baseUrl}/messages`, {
@@ -1041,11 +1714,11 @@ export class LlmProviderManager {
                     body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
                 });
                 return probeResp.ok || probeResp.status === 400
-                    ? { ok: true, message: "Connected to Anthropic.", models: settings.defaultModels }
-                    : { ok: false, message: `Anthropic returned ${probeResp.status}.`, models: [] };
+                    ? { ok: true, message: "Connected to Anthropic.", models: settings.defaultModels, latencyMs: Date.now() - startTime }
+                    : { ok: false, message: `Anthropic returned ${probeResp.status}.`, models: [], latencyMs: Date.now() - startTime };
             }
             // OpenAI-compatible: fetch model list
-            const authHeader = settings.apiKeyHeader === "Authorization"
+            const authHeader: Record<string, string> = settings.apiKeyHeader === "Authorization"
                 ? { Authorization: `Bearer ${settings.apiKey ?? ""}` }
                 : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
             const response = await fetch(`${settings.baseUrl}/models`, {
@@ -1053,15 +1726,29 @@ export class LlmProviderManager {
                 headers: { ...authHeader, Accept: "application/json" },
             });
             if (!response.ok) {
-                return { ok: false, message: `Provider returned ${response.status}.`, models: [] };
+                return { ok: false, message: `Provider returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
             }
             const payload = await response.json() as { data?: Array<{ id?: string }> };
             const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
             const final = models.length > 0 ? models : settings.defaultModels;
-            return { ok: true, message: `Provider connected. ${final.length} model(s) found.`, models: final };
+            return { ok: true, message: `Provider connected. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
         } catch (error) {
-            return { ok: false, message: String(error), models: [] };
+            return { ok: false, message: String(error), models: [], latencyMs: Date.now() - startTime };
         }
+    }
+
+    async testAllProviders(): Promise<Array<{ providerId: string; ok: boolean; message: string; models: string[]; latencyMs?: number }>> {
+        const results = await Promise.allSettled(
+            ALL_PROVIDER_IDS.map(async (id) => {
+                const result = await this.testProvider(id);
+                return { providerId: id, ...result };
+            }),
+        );
+        return results.map((r, i) =>
+            r.status === "fulfilled"
+                ? r.value
+                : { providerId: ALL_PROVIDER_IDS[i], ok: false, message: String((r as PromiseRejectedResult).reason), models: [] },
+        );
     }
 
     private async generateWithOpenAiCompatible(
@@ -1069,7 +1756,7 @@ export class LlmProviderManager {
         model: string,
         input: LlmGenerationInput,
     ): Promise<LlmGenerationOutput> {
-        const authHeader = settings.apiKeyHeader === "Authorization"
+        const authHeader: Record<string, string> = settings.apiKeyHeader === "Authorization"
             ? { Authorization: `Bearer ${settings.apiKey}` }
             : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
 
@@ -1149,6 +1836,7 @@ export class LlmProviderManager {
                 };
                 finish_reason?: string;
             }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
         };
 
         const choice = payload.choices?.[0];
@@ -1172,7 +1860,13 @@ export class LlmProviderManager {
             throw new Error("Provider returned an empty response.");
         }
 
-        return { providerId: settings.id, model, content, toolCalls, stopReason };
+        const inputTok = payload.usage?.prompt_tokens ?? 0;
+        const outputTok = payload.usage?.completion_tokens ?? 0;
+        const costUsd = computeCostUsd(settings.id, model, inputTok, outputTok);
+        return {
+            providerId: settings.id, model, content, toolCalls, stopReason,
+            tokensUsed: { input: inputTok, output: outputTok, costUsd }
+        };
     }
 
     private async generateWithAnthropic(
@@ -1256,6 +1950,7 @@ export class LlmProviderManager {
         const payload = await response.json() as {
             content?: Array<{ type?: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
             stop_reason?: string;
+            usage?: { input_tokens?: number; output_tokens?: number };
         };
 
         const blocks = payload.content ?? [];
@@ -1282,12 +1977,16 @@ export class LlmProviderManager {
             throw new Error("Provider returned an empty response.");
         }
 
+        const inputTokA = payload.usage?.input_tokens ?? 0;
+        const outputTokA = payload.usage?.output_tokens ?? 0;
+        const costUsdA = computeCostUsd(settings.id, model, inputTokA, outputTokA);
         return {
             providerId: settings.id,
             model,
             content: textContent,
             toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
             stopReason,
+            tokensUsed: { input: inputTokA, output: outputTokA, costUsd: costUsdA },
         };
     }
 
@@ -1362,6 +2061,8 @@ export class LlmProviderManager {
                 content?: string;
                 tool_calls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
             };
+            prompt_eval_count?: number;
+            eval_count?: number;
         };
 
         const content = payload.message?.content?.trim() ?? "";
@@ -1377,12 +2078,122 @@ export class LlmProviderManager {
             throw new Error("Provider returned an empty response.");
         }
 
+        const inputTokO = payload.prompt_eval_count ?? 0;
+        const outputTokO = payload.eval_count ?? 0;
+        const costUsdO = computeCostUsd(settings.id, model, inputTokO, outputTokO);
         return {
             providerId: settings.id,
             model,
             content,
             toolCalls: toolCalls?.length ? toolCalls : undefined,
             stopReason: toolCalls?.length ? "tool_use" : "end_turn",
+            tokensUsed: { input: inputTokO, output: outputTokO, costUsd: costUsdO },
+        };
+    }
+
+    /**
+     * Generate via Ollama Cloud API (https://ollama.com).
+     * Uses the same Ollama REST API format but adds Bearer token authentication.
+     */
+    private async generateWithOllamaCloud(
+        settings: ProviderSettings,
+        model: string,
+        input: LlmGenerationInput,
+        adaptiveParams?: AdaptivePromptParams,
+    ): Promise<LlmGenerationOutput> {
+        const numCtx = adaptiveParams?.numCtx ?? 4096;
+        const numPredict = adaptiveParams?.numPredict ?? 512;
+        const temperature = adaptiveParams?.temperature ?? 0.3;
+
+        const messages: any[] = [
+            { role: "system", content: input.systemPrompt },
+        ];
+
+        for (const entry of input.conversation) {
+            if (entry.role === "tool") {
+                messages.push({
+                    role: "tool",
+                    content: typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content),
+                });
+            } else if (entry.role === "assistant" && entry.tool_calls?.length) {
+                messages.push({
+                    role: "assistant",
+                    content: typeof entry.content === "string" ? entry.content : "",
+                    tool_calls: entry.tool_calls.map((tc) => ({
+                        function: { name: tc.name, arguments: tc.arguments },
+                    })),
+                });
+            } else {
+                messages.push({ role: entry.role === "system" ? "system" : entry.role, content: entry.content });
+            }
+        }
+
+        messages.push({ role: "user", content: input.message });
+
+        const body: any = {
+            model,
+            messages,
+            stream: false,
+            options: {
+                temperature,
+                num_ctx: numCtx,
+                num_predict: numPredict,
+            },
+        };
+
+        if (input.tools?.length) {
+            body.tools = input.tools.map((t) => ({
+                type: "function",
+                function: { name: t.name, description: t.description, parameters: t.parameters },
+            }));
+        }
+
+        const response = await fetch(`${settings.baseUrl}/api/chat`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${settings.apiKey ?? ""}`,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => "");
+            throw new Error(`Provider request failed (${response.status}): ${errText}`);
+        }
+
+        const payload = await response.json() as {
+            message?: {
+                content?: string;
+                tool_calls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
+            };
+            prompt_eval_count?: number;
+            eval_count?: number;
+        };
+
+        const content = payload.message?.content?.trim() ?? "";
+        const rawToolCalls = payload.message?.tool_calls;
+
+        const toolCalls: LlmToolCall[] | undefined = rawToolCalls?.map((tc, i) => ({
+            id: `ollama_cloud_tc_${i}`,
+            name: tc.function.name,
+            arguments: tc.function.arguments ?? {},
+        }));
+
+        if (!content && !toolCalls?.length) {
+            throw new Error("Provider returned an empty response.");
+        }
+
+        const inputTokC = payload.prompt_eval_count ?? 0;
+        const outputTokC = payload.eval_count ?? 0;
+        const costUsdC = computeCostUsd("ollama-cloud", model, inputTokC, outputTokC);
+        return {
+            providerId: "ollama-cloud",
+            model,
+            content,
+            toolCalls: toolCalls?.length ? toolCalls : undefined,
+            stopReason: toolCalls?.length ? "tool_use" : "end_turn",
+            tokensUsed: { input: inputTokC, output: outputTokC, costUsd: costUsdC },
         };
     }
 }
