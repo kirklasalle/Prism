@@ -10,11 +10,14 @@
 import * as assert from "assert";
 import { describe, it, before, after } from "mocha";
 import sqlite3 from "sqlite3";
+import { join } from "node:path";
 import {
     ToolContractExtractor,
     ToolContract,
     ExtractionRequest
 } from "../src/core/tools/tool-contract-extractor.js";
+import { ToolRegistry } from "../src/core/tools/registry.js";
+import { Tool } from "../src/core/tools/types.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
 import { ActivityBus } from "../src/core/activity/bus.js";
 
@@ -29,6 +32,47 @@ describe("Tool Contract Extractor", () => {
         policyEngine = new PolicyEngine();
         activityBus = new ActivityBus();
         extractor = new ToolContractExtractor(db, policyEngine, activityBus);
+        
+        const registry = new ToolRegistry();
+        
+        // 1. Tool with contract (decorator extraction)
+        registry.register({
+            name: "tool-decorator",
+            contract: {
+                version: "1.0.0",
+                args: { id: { type: "string" } }
+            },
+            execute: async () => ({ ok: true, output: { status: "done" } })
+        });
+
+        // 2. Tool with governance (dynamic extraction)
+        registry.register({
+            name: "tool-dynamic",
+            governance: {
+                actions: {
+                    run: { mutating: true, minimumRisk: "medium", rollbackRequired: false }
+                }
+            },
+            execute: async () => ({ ok: true, output: { status: "done" } })
+        });
+
+        // 3. Another tool for count
+        registry.register({
+            name: "tool-hybrid",
+            contract: {
+                version: "2.0.0",
+                args: { limit: { type: "number" } }
+            },
+            governance: {
+                actions: {
+                    search: { mutating: false, minimumRisk: "low", rollbackRequired: false }
+                }
+            },
+            execute: async () => ({ ok: true, output: { status: "done" } })
+        });
+
+        extractor.setToolRegistry(registry);
+        extractor.addManifestPath(join(process.cwd(), "test-manifests"));
     });
 
     after(async () => {
@@ -50,10 +94,10 @@ describe("Tool Contract Extractor", () => {
 
             const result = await extractor.extractContracts(request);
             assert.strictEqual(result.status, "success");
-            assert.strictEqual(result.extracted_contracts.length, 3);
-            assert.strictEqual(result.comparisons.length, 3);
+            assert.strictEqual(result.extracted_contracts.length, 4);
+            assert.strictEqual(result.comparisons.length, 4);
             assert.strictEqual(result.approval_required, false);
-            assert.strictEqual(result.risk_summary.tier1 + result.risk_summary.tier2 + result.risk_summary.tier3, 3);
+            assert.strictEqual(result.risk_summary.tier1 + result.risk_summary.tier2 + result.risk_summary.tier3, 4);
         });
 
         it("supports source-specific extraction", async () => {

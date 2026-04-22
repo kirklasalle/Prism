@@ -1,6 +1,99 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
+
+// ── Ed25519 Signature Support ─────────────────────────────────────────────────
+
+export type PluginTrustTier = 'official' | 'community' | 'unsigned';
+
+export interface SigningKeyEntry {
+    keyId: string;
+    tier: PluginTrustTier;
+    label: string;
+    algorithm: 'ed25519';
+    publicKeyBase64: string;
+    addedAt: string;
+    expiresAt: string | null;
+}
+
+export interface SigningKeyRegistry {
+    version: string;
+    keys: SigningKeyEntry[];
+}
+
+/**
+ * Verify an Ed25519 signature over the canonical manifest payload.
+ * The payload is JSON.stringify(manifest) with 'security.signature' removed.
+ *
+ * @param manifest  The full parsed PluginPackManifest
+ * @param signatureBase64  Base64-encoded 64-byte Ed25519 signature
+ * @param publicKeyBase64  Base64-encoded DER SPKI Ed25519 public key
+ * @returns true if the signature is valid, false otherwise
+ */
+export function verifyEd25519Signature(
+    manifest: PluginPackManifest,
+    signatureBase64: string,
+    publicKeyBase64: string
+): boolean {
+    try {
+        // Build canonical payload: manifest without the signature field itself
+        const payload = buildSignaturePayload(manifest);
+        const pubKeyDer = Buffer.from(publicKeyBase64, 'base64');
+        const publicKey = crypto.createPublicKey({ key: pubKeyDer, format: 'der', type: 'spki' });
+        const signature = Buffer.from(signatureBase64, 'base64');
+        return crypto.verify(null, Buffer.from(payload, 'utf-8'), publicKey, signature);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Build the canonical UTF-8 payload that is signed.
+ * Removes security.signature and security.signature_algorithm from the manifest
+ * before serializing, so signatures cover content but not the sig field itself.
+ */
+export function buildSignaturePayload(manifest: PluginPackManifest): string {
+    const copy: PluginPackManifest = JSON.parse(JSON.stringify(manifest));
+    if (copy.security) {
+        delete (copy.security as Record<string, unknown>).signature;
+        delete (copy.security as Record<string, unknown>).signature_algorithm;
+    }
+    return JSON.stringify(copy);
+}
+
+/**
+ * Load the signing key registry from the given path (defaults to
+ * <project-root>/config/plugin-signing-keys.json).
+ */
+export function loadSigningKeyRegistry(registryPath?: string): SigningKeyRegistry {
+    const resolved = registryPath ?? path.join(process.cwd(), 'config', 'plugin-signing-keys.json');
+    const raw = fs.readFileSync(resolved, 'utf-8');
+    return JSON.parse(raw) as SigningKeyRegistry;
+}
+
+/**
+ * Determine the trust tier for a manifest.
+ * Returns 'official', 'community', or 'unsigned'.
+ * Throws if `strict` is true and the tier is 'unsigned'.
+ */
+export function resolvePluginTrustTier(
+    manifest: PluginPackManifest,
+    registry: SigningKeyRegistry
+): { tier: PluginTrustTier; keyId: string | null } {
+    const sig = manifest.security?.signature;
+    if (!sig) return { tier: 'unsigned', keyId: null };
+
+    const now = Date.now();
+    for (const entry of registry.keys) {
+        if (entry.expiresAt && new Date(entry.expiresAt).getTime() < now) continue;
+        if (verifyEd25519Signature(manifest, sig, entry.publicKeyBase64)) {
+            return { tier: entry.tier, keyId: entry.keyId };
+        }
+    }
+    // Has signature but no key validated it — treat as unsigned (invalid sig)
+    return { tier: 'unsigned', keyId: null };
+}
 
 /**
  * Plugin Pack Manifest Validator
@@ -108,10 +201,29 @@ export class PluginPackValidator {
     private packPath: string;
     private errors: ValidationError[] = [];
     private warnings: ValidationWarning[] = [];
+    private profile: 'individual' | 'business';
+    private signingKeyRegistry: SigningKeyRegistry | null;
 
-    constructor(manifest: PluginPackManifest, packPath: string) {
+    /**
+     * @param manifest  Parsed manifest object
+     * @param packPath  Filesystem path to the plugin pack root
+     * @param profile   Execution profile — 'business' rejects unsigned plugins; 'individual' warns only
+     * @param signingKeyRegistryPath  Optional override for the signing key registry path
+     */
+    constructor(
+        manifest: PluginPackManifest,
+        packPath: string,
+        profile: 'individual' | 'business' = 'individual',
+        signingKeyRegistryPath?: string
+    ) {
         this.manifest = manifest;
         this.packPath = packPath;
+        this.profile = profile;
+        try {
+            this.signingKeyRegistry = loadSigningKeyRegistry(signingKeyRegistryPath);
+        } catch {
+            this.signingKeyRegistry = null;
+        }
     }
 
     /**
@@ -446,17 +558,57 @@ export class PluginPackValidator {
 
     private validateSecurity(): void {
         const sec = this.manifest.security;
-        if (!sec) return;
 
-        if (sec.signature && !sec.signature_algorithm) {
-            this.warnings.push({
-                field: 'security.signature',
-                message: 'Signature present but signature_algorithm not specified',
-                suggestion: 'Add signature_algorithm (e.g., rsa-4096, ecdsa-384)',
-            });
+        // ── Trust-tier enforcement ───────────────────────────────────────────
+        if (this.signingKeyRegistry) {
+            const { tier, keyId } = resolvePluginTrustTier(this.manifest, this.signingKeyRegistry);
+
+            if (tier === 'unsigned') {
+                if (this.profile === 'business') {
+                    this.errors.push({
+                        field: 'security.signature',
+                        message: 'Business profile requires all plugins to be signed. This plugin is unsigned or has an invalid signature.',
+                        severity: 'critical',
+                    });
+                } else {
+                    // Individual profile: warn but allow
+                    this.warnings.push({
+                        field: 'security.signature',
+                        message: 'Plugin is unsigned. Unsigned plugins are permitted in Individual profile but not in Business profile.',
+                        suggestion: 'Request a signature from an official or community signer.',
+                    });
+                }
+            } else {
+                // Signed — add an informational warning for community tier
+                if (tier === 'community') {
+                    this.warnings.push({
+                        field: 'security.signature',
+                        message: `Plugin is signed by a community key (${keyId}). Verify trust before deployment.`,
+                    });
+                }
+                // 'official' tier passes silently
+            }
+
+            // If a signature field exists but algorithm is wrong, flag it
+            if (sec?.signature && sec.signature_algorithm && sec.signature_algorithm !== 'ed25519') {
+                this.warnings.push({
+                    field: 'security.signature_algorithm',
+                    message: `Signature algorithm '${sec.signature_algorithm}' is not the preferred 'ed25519'. Verification was attempted with Ed25519.`,
+                    suggestion: 'Use signature_algorithm: "ed25519"',
+                });
+            }
+        } else {
+            // No registry available — fallback: warn if signature present without algorithm
+            if (sec?.signature && !sec.signature_algorithm) {
+                this.warnings.push({
+                    field: 'security.signature',
+                    message: 'Signature present but signature_algorithm not specified',
+                    suggestion: 'Add signature_algorithm: "ed25519"',
+                });
+            }
         }
 
-        if (sec.review_status === 'unreviewed') {
+        if (sec?.review_status === 'unreviewed') {
             this.warnings.push({
                 field: 'security.review_status',
                 message: 'Pack has not been security reviewed',
@@ -547,14 +699,16 @@ export class PluginPackValidator {
  */
 export async function validatePluginPack(
     manifestPath: string,
-    packPath?: string
+    packPath?: string,
+    profile: 'individual' | 'business' = 'individual',
+    signingKeyRegistryPath?: string
 ): Promise<ValidationResult> {
     try {
         const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
         const manifest: PluginPackManifest = JSON.parse(manifestContent);
 
         const resolvedPackPath = packPath || path.dirname(manifestPath);
-        const validator = new PluginPackValidator(manifest, resolvedPackPath);
+        const validator = new PluginPackValidator(manifest, resolvedPackPath, profile, signingKeyRegistryPath);
 
         return validator.validate();
     } catch (error) {

@@ -299,8 +299,15 @@ export class LlmProviderManager {
         preferredModality: null,
     };
 
-    /** Short-lived TTL cache for getCatalog() called without a selection override. */
-    private catalogCache: { catalog: LlmProviderCatalog; expiresAt: number } | null = null;
+    /** Short-lived TTL cache for network-discovered model lists (the expensive part of getCatalog). */
+    private discoveredModelsCache: {
+        ollama: string[];
+        "ollama-cloud": string[];
+        lmstudio: string[];
+        llamacpp: string[];
+        bitnetcpp: string[];
+        expiresAt: number;
+    } | null = null;
     private static readonly CATALOG_CACHE_TTL_MS = 5_000;
 
     /** Circuit breaker state: key = `${hemisphereRole}:${providerId}` */
@@ -549,38 +556,56 @@ export class LlmProviderManager {
                 defaultModel: settingsEntry.defaultModel?.trim() || null,
             });
         }
+        // Note: discoveredModelsCache is intentionally NOT cleared here.
+        // Network-discovered model lists (probe results) are unaffected by settings changes.
+        // Provider snapshots are always rebuilt from current settings + cached discovered models.
     }
 
     async getCatalog(selection?: Partial<LlmSelection>): Promise<LlmProviderCatalog> {
-        // Return cached catalog when no per-call selection override is requested.
-        if (!selection && this.catalogCache && Date.now() < this.catalogCache.expiresAt) {
-            return this.catalogCache.catalog;
+        // Cache only the network-discovered model lists (expensive network probes).
+        // Provider snapshots are always rebuilt from current settings so that settings
+        // changes (saveProviderSettings) are reflected immediately without re-probing.
+        let discovered: NonNullable<typeof this.discoveredModelsCache>;
+        if (this.discoveredModelsCache && Date.now() < this.discoveredModelsCache.expiresAt) {
+            discovered = this.discoveredModelsCache;
+        } else {
+            const [ollamaModels, ollamaCloudModels, lmStudioModels, llamacppRunning, bitnetRunning] = await Promise.all([
+                this.fetchOllamaModels(this.getResolvedSettings("ollama")),
+                this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")),
+                this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")),
+                this.llamaSupervisor
+                    ? Promise.resolve(this.llamaSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
+                    : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")),
+                this.bitnetSupervisor
+                    ? Promise.resolve(this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
+                    : Promise.resolve([] as string[]),
+            ]);
+
+            // Merge discovered local GGUF models with running models (deduplicated)
+            const llamacppDiscovered = this.llamaSupervisor?.discoverLocalModels() ?? [];
+            const llamacppModels = [...new Set([...llamacppRunning, ...llamacppDiscovered])];
+            const bitnetDiscovered = this.bitnetSupervisor?.discoverLocalModels() ?? [];
+            const bitnetcppModels = [...new Set([...bitnetRunning, ...bitnetDiscovered])];
+
+            discovered = {
+                ollama: ollamaModels,
+                "ollama-cloud": ollamaCloudModels,
+                lmstudio: lmStudioModels,
+                llamacpp: llamacppModels,
+                bitnetcpp: bitnetcppModels,
+                expiresAt: Date.now() + LlmProviderManager.CATALOG_CACHE_TTL_MS,
+            };
+            this.discoveredModelsCache = discovered;
         }
 
-        const [ollamaModels, ollamaCloudModels, lmStudioModels, llamacppRunning, bitnetRunning] = await Promise.all([
-            this.fetchOllamaModels(this.getResolvedSettings("ollama")),
-            this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")),
-            this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")),
-            this.llamaSupervisor
-                ? Promise.resolve(this.llamaSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
-                : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")),
-            this.bitnetSupervisor
-                ? Promise.resolve(this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
-                : Promise.resolve([] as string[]),
-        ]);
-
-        // Merge discovered local GGUF models with running models (deduplicated)
-        const llamacppDiscovered = this.llamaSupervisor?.discoverLocalModels() ?? [];
-        const llamacppModels = [...new Set([...llamacppRunning, ...llamacppDiscovered])];
-        const bitnetDiscovered = this.bitnetSupervisor?.discoverLocalModels() ?? [];
-        const bitnetcppModels = [...new Set([...bitnetRunning, ...bitnetDiscovered])];
-
-        const providers: LlmProviderSnapshot[] = ALL_PROVIDER_IDS.map((id) => {
-            if (id === "ollama") return this.snapshotFor(id, ollamaModels);
-            if (id === "ollama-cloud") return this.snapshotFor(id, ollamaCloudModels);
-            if (id === "lmstudio") return this.snapshotFor(id, lmStudioModels);
-            if (id === "llamacpp") return this.snapshotFor(id, llamacppModels);
-            if (id === "bitnetcpp") return this.snapshotFor(id, bitnetcppModels);
+        // Always rebuild snapshots from current settings + cached discovered models.
+        // This ensures settings changes are reflected immediately.
+        const providers = ALL_PROVIDER_IDS.map((id) => {
+            if (id === "ollama") return this.snapshotFor(id, discovered.ollama);
+            if (id === "ollama-cloud") return this.snapshotFor(id, discovered["ollama-cloud"]);
+            if (id === "lmstudio") return this.snapshotFor(id, discovered.lmstudio);
+            if (id === "llamacpp") return this.snapshotFor(id, discovered.llamacpp);
+            if (id === "bitnetcpp") return this.snapshotFor(id, discovered.bitnetcpp);
             return this.snapshotFor(id);
         });
 
@@ -619,18 +644,11 @@ export class LlmProviderManager {
             this.activeModel = effectiveModel;
         }
 
-        const catalog: LlmProviderCatalog = {
+        return {
             activeProviderId: effectiveProviderId,
             activeModel: effectiveModel,
             providers,
         };
-
-        // Cache the result for getCatalog() calls without a selection override.
-        if (!selection) {
-            this.catalogCache = { catalog, expiresAt: Date.now() + LlmProviderManager.CATALOG_CACHE_TTL_MS };
-        }
-
-        return catalog;
     }
 
     async setActiveSelection(providerId: string, model?: string): Promise<LlmProviderCatalog> {
@@ -651,7 +669,7 @@ export class LlmProviderManager {
 
         this.activeProviderId = resolved;
         this.activeModel = model?.trim() || provider.models[0] || null;
-        this.catalogCache = null; // Invalidate cache on selection change
+        this.discoveredModelsCache = null; // Invalidate discovered-models cache on selection change
 
         return {
             ...catalog,
@@ -1579,6 +1597,7 @@ export class LlmProviderManager {
         try {
             const response = await fetch(`${settings.baseUrl}/api/tags`, {
                 method: "GET",
+                signal: AbortSignal.timeout(500),
                 headers: {
                     Accept: "application/json",
                 },
@@ -1601,6 +1620,7 @@ export class LlmProviderManager {
         try {
             const response = await fetch(`${settings.baseUrl}/api/tags`, {
                 method: "GET",
+                signal: AbortSignal.timeout(500),
                 headers: {
                     Accept: "application/json",
                     Authorization: `Bearer ${settings.apiKey}`,
@@ -1623,6 +1643,7 @@ export class LlmProviderManager {
         try {
             const response = await fetch(`${settings.baseUrl}/v1/models`, {
                 method: "GET",
+                signal: AbortSignal.timeout(500),
                 headers: { Accept: "application/json" },
             });
             if (!response.ok) {

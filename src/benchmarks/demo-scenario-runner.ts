@@ -608,6 +608,35 @@ function defineScenarios(): Scenario[] {
                 return steps;
             },
         },
+        {
+            id: "C9", title: "Autonomous System Control — Mouse & Perception", category: "C", profile: "individual", tags: ["practical"], tier: 2,
+            async run(ctx) {
+                const steps: DemoStep[] = [];
+                ctx.emitDemo("C9", 1, "demo:C9:system_control", "started");
+
+                // Step 1: Capture Screenshot
+                const { result: r1, durationMs: d1 } = await timed(() => ctx.orchestrator.run({
+                    operation: "computer", args: { action: "screenshot" }, risk: "low", mutatesState: false
+                }));
+                steps.push(step(1, "Capture system screenshot", r1.ok ? "pass" : "fail", d1));
+
+                // Step 2: Move Mouse (Relative)
+                const { result: r2, durationMs: d2 } = await timed(() => ctx.orchestrator.run({
+                    operation: "computer", args: { action: "mouse_move", coordinate: [100, 100] }, risk: "medium", mutatesState: true
+                }));
+                steps.push(step(2, "Move mouse to (100, 100)", r2.ok ? "pass" : "fail", d2));
+
+                // Step 3: Perception check (VisionCaptureTool)
+                const { result: r3, durationMs: d3 } = await timed(() => ctx.orchestrator.run({
+                    operation: "vision_capture", args: { action: "capture_screen" }, risk: "low", mutatesState: false
+                }));
+                steps.push(step(3, "Perception: High-res vision capture", r3.ok ? "pass" : "fail", d3));
+
+                ctx.emitDemo("C9", 3, "demo:C9:system_control", "succeeded");
+                return steps;
+            },
+        },
+
 
         // ─── Category D: Workflow Orchestration ───
         {

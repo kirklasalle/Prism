@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import sqlite3 from "sqlite3";
+import { TerminalSessionAdapter } from "./adapters/application/terminal-session-adapter.js";
+import { ContainerSandboxAdapter } from "./adapters/application/container-sandbox-adapter.js";
 import { ActivityBus } from "./core/activity/bus.js";
 import { ConsoleActivitySubscriber } from "./core/activity/console-subscriber.js";
 import { SqliteActivityStore } from "./core/activity/sqlite-store.js";
@@ -114,8 +117,16 @@ async function main(): Promise<void> {
     const gmailOAuth = new GmailOAuthAdapter(oauthTokenStore);
     const outlookOAuth = new OutlookOAuthAdapter(oauthTokenStore);
 
+    // Initialize system adapters — PTY terminal + container sandbox
+    const adapterDb = new sqlite3.Database(dbPath);
+    const executionProfile = resolveExecutionProfileFromEnv(environmentProfile);
+    const terminalAdapter = new TerminalSessionAdapter(adapterDb, policyEngine, activityBus, executionProfile);
+    const containerAdapter = new ContainerSandboxAdapter(adapterDb, policyEngine, activityBus, executionProfile);
+    console.log(`[PRISM][adapters] TerminalSessionAdapter PTY init: pending (node-pty)`);
+    console.log(`[PRISM][adapters] ContainerSandboxAdapter runtime: ${containerAdapter.getRuntimeBackend()}`);
+
     const registry = new ToolRegistry();
-    for (const tool of builtinTools(gmailOAuth, outlookOAuth)) {
+    for (const tool of builtinTools(gmailOAuth, outlookOAuth, terminalAdapter, containerAdapter)) {
         registry.register(tool);
     }
     registry.register(new SemanticQueryTool(semanticIndex, episodicMemory, sessionMemory, metricsCollector));
@@ -147,7 +158,6 @@ async function main(): Promise<void> {
         }
     }
 
-    const executionProfile = resolveExecutionProfileFromEnv(environmentProfile);
     const orchestrator = new Orchestrator(
         sessionId, activityBus, policyEngine, registry,
         { approvalQueue, approvalTimeoutMs: 30_000, executionProfile },
@@ -177,6 +187,8 @@ async function main(): Promise<void> {
         usageMeteringService,
         gmailOAuth,
         outlookOAuth,
+        terminalAdapter,
+        containerAdapter,
     );
 
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
@@ -365,6 +377,7 @@ async function main(): Promise<void> {
             retrievalDashboardStore.close();
             sessionMemory.close();
             chatSessionStore.close();
+            adapterDb.close();
             await dashboardService.stop();
         });
         return;
@@ -532,6 +545,7 @@ async function main(): Promise<void> {
     retrievalDashboardStore.close();
     sessionMemory.close();
     chatSessionStore.close();
+    adapterDb.close();
     await dashboardService.stop();
 }
 

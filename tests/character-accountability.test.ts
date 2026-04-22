@@ -119,6 +119,58 @@ export async function testCharacterAccountability(): Promise<void> {
         });
         assert.strictEqual(businessAssignment.executionProfileSegment, "business");
 
+        // ── E5: permissionScopes and revokeExpiredScopes ─────────────────────
+
+        // setPermissionScopes — basic assignment
+        const scopeAssignment = manager.assign({
+            characterId: "analyst",
+            prismUserId: "prism-system-user",
+            prismUserEmail: "prism@prism.local",
+            operatorId: "operator-kirk",
+            operatorEmail: "kirk@lasalle.io",
+            clientId: "browser-client-scope",
+            sessionId: "session-scope-1",
+        });
+        const futureExpiry = new Date(Date.now() + 60_000).toISOString();
+        const updated = manager.setPermissionScopes(scopeAssignment.assignmentId, [
+            { scope: "email:read", expiresAt: futureExpiry },
+            { scope: "calendar:read", expiresAt: null },
+        ]);
+        assert.ok(updated, "setPermissionScopes should return updated assignment");
+        assert.strictEqual(updated!.permissionScopes?.length, 2, "Should have 2 scopes");
+        assert.strictEqual(updated!.permissionScopes?.[0].scope, "email:read");
+
+        // Persisted after reload
+        const reloaded = manager.get(scopeAssignment.assignmentId);
+        assert.strictEqual(reloaded?.permissionScopes?.length, 2, "Scopes should persist in SQLite");
+
+        // revokeExpiredScopes — nothing expires yet
+        const revoked0 = manager.revokeExpiredScopes();
+        assert.strictEqual(revoked0.length, 0, "No scopes expired yet");
+
+        // setPermissionScopes with a past expiry to trigger revocation
+        const pastExpiry = new Date(Date.now() - 1000).toISOString();
+        const expiredAssignment = manager.assign({
+            characterId: "analyst",
+            prismUserId: "prism-system-user",
+            prismUserEmail: "prism@prism.local",
+            operatorId: "operator-kirk",
+            operatorEmail: "kirk@lasalle.io",
+            clientId: "browser-client-expired",
+            sessionId: "session-scope-2",
+        });
+        manager.setPermissionScopes(expiredAssignment.assignmentId, [
+            { scope: "tool:execute", expiresAt: pastExpiry },
+        ]);
+        const revoked1 = manager.revokeExpiredScopes();
+        assert.strictEqual(revoked1.length, 1, "One assignment should be revoked due to expired scope");
+        assert.strictEqual(revoked1[0].assignmentId, expiredAssignment.assignmentId);
+        assert.strictEqual(revoked1[0].state, "revoked");
+
+        // Already-revoked assignment should not appear in a second pass
+        const revoked2 = manager.revokeExpiredScopes();
+        assert.strictEqual(revoked2.length, 0, "Already-revoked assignments should not be re-revoked");
+
         console.log("✓ CharacterAccountability tests passed");
     } finally {
         store.close();

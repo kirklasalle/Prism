@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "description": "PRISM plugin signing key registry. Keys are DER-encoded Ed25519 public keys in base64 format.",
+    "keys": [
+        {
+            "keyId": "prism-official-2026-01",
+            "tier": "official",
+            "label": "PRISM Official Release Key (2026)",
+            "algorithm": "ed25519",
+            "publicKeyBase64": "MCowBQYDK2VwAyEA2Ih1sJxGZ4xHeJfMH1loaHuT1Jp3+Ocj7+mLXgQLnBg=",
+            "addedAt": "2026-01-01T00:00:00.000Z",
+            "expiresAt": null
+        }
+    ],
+    "_note": "Replace publicKeyBase64 with actual PRISM release signing key before production. Generate with: node -e \"const c=require('crypto');const {publicKey}=c.generateKeyPairSync('ed25519');console.log(publicKey.export({type:'spki',format:'der'}).toString('base64'))\""
+}

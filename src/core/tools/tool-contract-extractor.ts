@@ -604,6 +604,16 @@ export class ToolContractExtractor {
                         return;
                     }
 
+                    // Check in-memory cache first (useful for unit tests and recent lookups)
+                    const cachedBaseline = this.baselineCache.get(current.tool_id);
+                    if (cachedBaseline && !row) {
+                        row = {
+                            version: cachedBaseline.version,
+                            parameters: JSON.stringify(cachedBaseline.parameters),
+                            return_type: cachedBaseline.return_type
+                        };
+                    }
+
                     if (!row) {
                         // No baseline exists, not a breaking change
                         resolve({

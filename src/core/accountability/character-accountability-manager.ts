@@ -6,6 +6,7 @@ import {
     type CharacterAssignment,
     type CharacterAssignmentFilter,
     type CharacterAssignmentState,
+    type PermissionScope,
 } from "./character-accountability-store.js";
 
 export interface AssignCharacterInput {
@@ -168,6 +169,55 @@ export class CharacterAccountabilityManager {
     }
     list(filter: CharacterAssignmentFilter = {}): CharacterAssignment[] {
         return this.store.list(filter);
+    }
+
+    /**
+     * Set (replace) the permission scopes for an assignment.
+     * Scopes with a null expiresAt never expire.
+     */
+    setPermissionScopes(assignmentId: string, scopes: PermissionScope[]): CharacterAssignment | null {
+        const existing = this.store.get(assignmentId);
+        if (!existing || existing.state === "revoked") return null;
+
+        const updated: CharacterAssignment = {
+            ...existing,
+            permissionScopes: scopes,
+            updatedAt: new Date().toISOString(),
+        };
+        this.store.save(updated);
+
+        this.emitLifecycleEvent("character_accountability.scopes_updated", updated, "succeeded", {
+            scopes: scopes.map((s) => ({ scope: s.scope, expiresAt: s.expiresAt })),
+        });
+
+        return updated;
+    }
+
+    /**
+     * Scan all active assignments and revoke any that have at least one scope expired.
+     * Returns the list of assignments that were revoked.
+     */
+    revokeExpiredScopes(): CharacterAssignment[] {
+        const now = Date.now();
+        const active = this.store.list({ state: "active" });
+        const revoked: CharacterAssignment[] = [];
+
+        for (const assignment of active) {
+            const scopes = assignment.permissionScopes ?? [];
+            const hasExpired = scopes.some(
+                (s) => s.expiresAt !== null && new Date(s.expiresAt).getTime() < now
+            );
+            if (hasExpired) {
+                const result = this.transitionState(
+                    assignment.assignmentId,
+                    "revoked",
+                    "permission_scope_expired"
+                );
+                if (result) revoked.push(result);
+            }
+        }
+
+        return revoked;
     }
 
     private transitionState(

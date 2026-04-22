@@ -31,6 +31,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _setWorkspaceRootForTest } from "../src/core/config/workspace-resolver.js";
 
+const DEFAULT_TIMEOUT_MS = 30_000;
+const EXTENDED_TIMEOUT_MS = 60_000;
+const EXTENDED_TESTS = new Set([
+    "BrowserSessionManager",
+    "BrowserControlTool",
+    "BrowserProfileManager",
+    "ContainerSandboxAdapter",
+    "TerminalSessionAdapter",
+    "OAuthAdapters",
+    "DashboardService",
+]);
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`TIMEOUT after ${ms}ms -- "${label}" did not complete. Check for hanging async ops.`));
+        }, ms);
+        promise.then(
+            (v) => { clearTimeout(timer); resolve(v); },
+            (e) => { clearTimeout(timer); reject(e); }
+        );
+    });
+}
+
 async function runTests(): Promise<void> {
     // Isolate workspace root so tests don't conflict with a running server's SQLite DBs.
     // Must use _setWorkspaceRootForTest to directly set the module-level _resolvedRoot cache —
@@ -82,12 +106,19 @@ async function runTests(): Promise<void> {
 
     try {
         for (const test of tests) {
+            const timeoutMs = EXTENDED_TESTS.has(test.name) ? EXTENDED_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+            process.stdout.write(`  -> ${test.name.padEnd(36)} `);
+            const t0 = Date.now();
             try {
-                await test.fn();
+                await withTimeout(test.fn(), timeoutMs, test.name);
+                const elapsed = Date.now() - t0;
+                process.stdout.write(`OK   ${elapsed}ms\n`);
                 passed++;
             } catch (error: unknown) {
+                const elapsed = Date.now() - t0;
+                process.stdout.write(`FAIL ${elapsed}ms\n`);
                 failed++;
-                console.error(`✗ ${test.name} failed:`, error);
+                console.error(`   ✗ ${test.name}:`, error instanceof Error ? error.message : error);
             }
         }
     } finally {

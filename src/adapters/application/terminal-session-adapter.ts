@@ -12,7 +12,6 @@
 
 import sqlite3 from "sqlite3";
 import { v4 as uuidv4 } from "uuid";
-import { spawn, ChildProcess } from "child_process";
 import { PolicyEngine } from "../../core/policy/engine.js";
 import { ActivityBus } from "../../core/activity/bus.js";
 import type { ExecutionProfile } from "../../core/policy/execution-profiles.js";
@@ -89,11 +88,12 @@ export class TerminalSessionAdapter {
     private policyEngine: PolicyEngine;
     private activityBus: ActivityBus;
     private executionProfile: ExecutionProfile;
-    private activeSessions: Map<string, { process?: ChildProcess; ptyProcess?: any; session: TerminalSession }> = new Map();
+    private activeSessions: Map<string, { ptyProcess: any; session: TerminalSession }> = new Map();
     private initializationPromise: Promise<void>;
     private ptyEnabled = false;
     private ptyModule: any = null;
     private ptyInitPromise: Promise<void>;
+    private ptyInitError: string | null = null;
 
     constructor(db: sqlite3.Database, policyEngine: PolicyEngine, activityBus: ActivityBus, executionProfile?: ExecutionProfile) {
         this.db = db;
@@ -101,23 +101,28 @@ export class TerminalSessionAdapter {
         this.activityBus = activityBus;
         this.executionProfile = executionProfile ?? INDIVIDUAL_PROFILE;
         this.initializationPromise = this.initializeDatabase();
-        this.ptyInitPromise = this.tryInitPty().catch(() => { /* graceful degradation: node-pty unavailable, using child_process mock */ });
+        this.ptyInitPromise = this.tryInitPty().catch((error: unknown) => {
+            this.ptyEnabled = false;
+            this.ptyModule = null;
+            this.ptyInitError = error instanceof Error ? error.message : String(error);
+        });
     }
 
-    /** Attempt to load node-pty module.
-     *  Falls back silently to child_process if not installed.
-     *  Actual PTY spawn is verified lazily in startSession() where failures
-     *  are caught and fall back to child_process.spawn. This avoids the
-     *  ConPTY helper subprocess crash (AttachConsole failed) on some Windows
-     *  environments during initialization. */
+    /** Attempt to load node-pty module for real PTY sessions. */
     private async tryInitPty(): Promise<void> {
         const pty = await import("node-pty");
-        // Only check that the module loaded — don't spawn here.
-        // ConPTY's conpty_console_list_agent can crash the process on Windows
-        // if we try to spawn during init. The startSession try/catch handles this.
-        if (typeof pty.spawn === "function") {
-            this.ptyModule = pty;
-            this.ptyEnabled = true;
+        if (typeof pty.spawn !== "function") {
+            throw new Error("node-pty loaded but spawn() is unavailable");
+        }
+        this.ptyModule = pty;
+        this.ptyEnabled = true;
+    }
+
+    private async ensurePtyReady(): Promise<void> {
+        await this.ptyInitPromise;
+        if (!this.ptyEnabled || !this.ptyModule) {
+            const reason = this.ptyInitError ? ` (${this.ptyInitError})` : "";
+            throw new Error(`PTY runtime is unavailable${reason}. Install and enable a working node-pty backend.`);
         }
     }
 
@@ -230,8 +235,8 @@ export class TerminalSessionAdapter {
         const session_id = uuidv4();
         const start_time = new Date().toISOString();
 
-        // Spawn shell — use node-pty if available for real PTY, fall back to child_process mock
-        await this.ptyInitPromise;
+        // PTY is mandatory. No child_process fallback is permitted.
+        await this.ensurePtyReady();
 
         const session: TerminalSession = {
             session_id,
@@ -245,64 +250,42 @@ export class TerminalSessionAdapter {
             environment: { ...process.env } as Record<string, string>
         };
 
-        let sessionEntry: { process?: ChildProcess; ptyProcess?: any; session: TerminalSession };
-
-        if (this.ptyEnabled && this.ptyModule) {
+        let sessionEntry!: { ptyProcess: any; session: TerminalSession };
+        const backendErrors: string[] = [];
+        for (const useConpty of (process.platform === "win32" ? [true, false] : [undefined])) {
             try {
-                const ptyProc = this.ptyModule.spawn(shell, [], {
+                const spawnOpts: Record<string, unknown> = {
                     name: "xterm-256color",
                     cols: 80,
                     rows: 24,
                     cwd: working_directory,
                     env: process.env as Record<string, string>,
-                    useConpty: process.platform === "win32" ? false : undefined, // Disable ConPTY to avoid AttachConsole crash
-                });
+                };
+                if (useConpty !== undefined) spawnOpts["useConpty"] = useConpty;
 
-                // Health check: verify the PTY process survives for 200ms.
-                // On Windows, node-pty can spawn successfully but the process
-                // exits almost immediately (e.g., broken WinPTY/ConPTY).
+                const ptyProc = this.ptyModule.spawn(shell, [], spawnOpts);
+
+                // Verify backend stability before exposing session.
                 let earlyExit = false;
                 const exitHandler = () => { earlyExit = true; };
                 ptyProc.once("exit", exitHandler);
-                await new Promise(resolve => setTimeout(resolve, 200));
+                await new Promise(resolve => setTimeout(resolve, 400));
                 ptyProc.removeListener("exit", exitHandler);
 
-                if (earlyExit) {
-                    // PTY process died during health check — fall back to child_process
-                    this.ptyEnabled = false;
-                    this.ptyModule = null;
-                    const shellProc = spawn(shell, [], {
-                        cwd: working_directory,
-                        stdio: ["pipe", "pipe", "pipe"],
-                        env: process.env
-                    });
-                    session.process_id = shellProc.pid;
-                    sessionEntry = { process: shellProc, session };
-                } else {
+                if (!earlyExit) {
                     session.process_id = ptyProc.pid;
                     sessionEntry = { ptyProcess: ptyProc, session };
+                    break;
                 }
-            } catch {
-                // PTY spawn failed at runtime (e.g., Windows native binary issue) — fall back to child_process
-                // Permanently disable PTY for this adapter instance to avoid repeated failures
-                this.ptyEnabled = false;
-                this.ptyModule = null;
-                const shellProc = spawn(shell, [], {
-                    cwd: working_directory,
-                    stdio: ["pipe", "pipe", "pipe"],
-                    env: process.env
-                });
-                session.process_id = shellProc.pid;
-                sessionEntry = { process: shellProc, session };
+
+                backendErrors.push(`PTY backend exited early (useConpty=${String(useConpty)})`);
+            } catch (error) {
+                backendErrors.push(`PTY spawn failed (useConpty=${String(useConpty)}): ${error instanceof Error ? error.message : String(error)}`);
             }
-        } else {
-            const shellProc = spawn(shell, [], {
-                cwd: working_directory,
-                stdio: ["pipe", "pipe", "pipe"],
-                env: process.env
-            });
-            session.process_id = shellProc.pid;
-            sessionEntry = { process: shellProc, session };
+        }
+
+        if (!sessionEntry) {
+            throw new Error(`Unable to start a real PTY session. ${backendErrors.join("; ")}`);
         }
 
         // Store in memory
@@ -347,7 +330,7 @@ export class TerminalSessionAdapter {
             throw new Error(`Session ${session_id} not found`);
         }
 
-        const { process: shellProcess, ptyProcess, session } = sessionEntry;
+        const { ptyProcess, session } = sessionEntry;
 
         // Step 1: Classify command tier
         const tier = this.classifyCommandTier(command);
@@ -370,131 +353,57 @@ export class TerminalSessionAdapter {
         let stdout = "";
         let stderr = "";
 
-        if (ptyProcess) {
-            // Real PTY execution — sentinel-based exit code detection
-            return new Promise((resolve, reject) => {
-                const SENTINEL = "__PRISM_DONE__";
-                const sentinelRe = new RegExp(`${SENTINEL}:(\\d+)`);
-                let ptyBuffer = "";
+        // Real PTY execution — sentinel-based exit code detection
+        return new Promise((resolve, reject) => {
+            const SENTINEL = "__PRISM_DONE__";
+            const sentinelRe = new RegExp(`${SENTINEL}:(\\d+)`);
+            let ptyBuffer = "";
 
-                const onData = async (data: string) => {
-                    if (timedOut) return;
-                    ptyBuffer += data;
-                    const match = ptyBuffer.match(sentinelRe);
-                    if (match) {
-                        clearTimeout(timeoutHandle);
-                        ptyProcess.removeListener("data", onData);
-                        const exit_code = parseInt(match[1], 10);
-                        const sentinelIdx = ptyBuffer.indexOf(SENTINEL);
-                        const rawOut = sentinelIdx > 0 ? ptyBuffer.substring(0, sentinelIdx) : ptyBuffer;
-                        const lines = rawOut.split(/\r?\n/);
-                        if (lines[0]?.trim() === command.trim()) lines.shift();
-                        stdout = lines.join("\n").trim();
-                        const execution_time_ms = Date.now() - start;
-                        const response: ExecCommandResponse = {
-                            session_id,
-                            command,
-                            exit_code,
-                            stdout,
-                            stderr: "",
-                            execution_time_ms,
-                            timestamp: new Date().toISOString()
-                        };
-                        session.state = TerminalSessionState.ACTIVE;
-                        session.last_activity = new Date().toISOString();
-                        await this.persistSession(session);
-                        await this.persistCommandExecution(response, `tier_${tier}_executed`);
-                        resolve(response);
-                    }
-                };
+            const onData = async (data: string) => {
+                if (timedOut) return;
+                ptyBuffer += data;
+                const match = ptyBuffer.match(sentinelRe);
+                if (match) {
+                    clearTimeout(timeoutHandle);
+                    ptyProcess.removeListener("data", onData);
+                    const exit_code = parseInt(match[1], 10);
+                    const sentinelIdx = ptyBuffer.indexOf(SENTINEL);
+                    const rawOut = sentinelIdx > 0 ? ptyBuffer.substring(0, sentinelIdx) : ptyBuffer;
+                    const lines = rawOut.split(/\r?\n/);
+                    if (lines[0]?.trim() === command.trim()) lines.shift();
+                    stdout = lines.join("\n").trim();
+                    const execution_time_ms = Date.now() - start;
+                    const response: ExecCommandResponse = {
+                        session_id,
+                        command,
+                        exit_code,
+                        stdout,
+                        stderr,
+                        execution_time_ms,
+                        timestamp: new Date().toISOString()
+                    };
+                    session.state = TerminalSessionState.ACTIVE;
+                    session.last_activity = new Date().toISOString();
+                    await this.persistSession(session);
+                    await this.persistCommandExecution(response, `tier_${tier}_executed`);
+                    resolve(response);
+                }
+            };
 
-                ptyProcess.once("exit", () => {
-                    if (!ptyBuffer.match(sentinelRe)) {
-                        clearTimeout(timeoutHandle);
-                        ptyProcess.removeListener("data", onData);
-                        reject(new Error("PTY process exited before command completed"));
-                    }
-                });
-
-                ptyProcess.on("data", onData);
-                // Use platform-appropriate shell syntax for sentinel detection
-                if (process.platform === "win32") {
-                    ptyProcess.write(`${command} & echo ${SENTINEL}:%ERRORLEVEL%\r\n`);
-                } else {
-                    ptyProcess.write(`${command}; echo ${SENTINEL}:$?\n`);
+            ptyProcess.once("exit", () => {
+                if (!ptyBuffer.match(sentinelRe)) {
+                    clearTimeout(timeoutHandle);
+                    ptyProcess.removeListener("data", onData);
+                    reject(new Error("PTY process exited before command completed"));
                 }
             });
-        }
 
-        const proc = shellProcess as ChildProcess;
-        return new Promise((resolve, reject) => {
-            proc.stdin?.write(command + "\n");
-
-            const stdoutListener = (data: Buffer) => {
-                if (!timedOut) {
-                    stdout += data.toString();
-                }
-            };
-
-            const stderrListener = (data: Buffer) => {
-                if (!timedOut) {
-                    stderr += data.toString();
-                }
-            };
-
-            proc.stdout?.on("data", stdoutListener);
-            proc.stderr?.on("data", stderrListener);
-
-            // Simple exit code detection — use platform-appropriate syntax
-            const isWin = process.platform === "win32";
-            const exitCodeRegex = isWin ? /__PRISM_DONE__=(\d+)/ : /\$\?=(\d+)/;
-            const checkExitCode = () => {
-                if (isWin) {
-                    proc.stdin?.write(`echo __PRISM_DONE__=%ERRORLEVEL%\r\n`);
-                } else {
-                    proc.stdin?.write(`echo __PRISM_DONE__=$?\n`);
-                }
-
-                let exitBuffer = "";
-                const onExitData = async (data: Buffer) => {
-                    exitBuffer += data.toString();
-                    console.log("DEBUG EXIT_BUFFER:", JSON.stringify(exitBuffer));
-                    const match = exitBuffer.match(exitCodeRegex);
-                    if (match) {
-                        const execution_time_ms = Date.now() - start;
-                        const exit_code = parseInt(match[1], 10);
-
-                        // Cleanup listeners
-                        clearTimeout(timeoutHandle);
-                        proc.stdout?.removeListener("data", stdoutListener);
-                        proc.stdout?.removeListener("data", onExitData);
-                        proc.stderr?.removeListener("data", stderrListener);
-
-                        const response: ExecCommandResponse = {
-                            session_id,
-                            command,
-                            exit_code,
-                            stdout,
-                            stderr,
-                            execution_time_ms,
-                            timestamp: new Date().toISOString()
-                        };
-
-                        // Update session state and persist
-                        session.state = TerminalSessionState.ACTIVE;
-                        session.last_activity = new Date().toISOString();
-                        await this.persistSession(session);
-                        await this.persistCommandExecution(response, `tier_${tier}_executed`);
-
-                        resolve(response);
-                    }
-                };
-
-                proc.stdout?.on("data", onExitData);
-            };
-
-            // Give command time to execute before checking exit code
-            setTimeout(checkExitCode, 100);
+            ptyProcess.on("data", onData);
+            if (process.platform === "win32") {
+                ptyProcess.write(`${command} & echo ${SENTINEL}:%ERRORLEVEL%\r\n`);
+            } else {
+                ptyProcess.write(`${command}; echo ${SENTINEL}:$?\n`);
+            }
         });
     }
 
@@ -510,41 +419,14 @@ export class TerminalSessionAdapter {
             throw new Error(`Session ${session_id} not found`);
         }
 
-        const { process: shellProcess, ptyProcess, session } = sessionEntry;
+        const { ptyProcess, session } = sessionEntry;
 
-        if (ptyProcess) {
-            // node-pty: single kill() call terminates the PTY and its child process
-            ptyProcess.kill();
-            this.db.run(
-                "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-                [session_id, "SIGTERM", "graceful_stop", new Date().toISOString()],
-                () => {}
-            );
-        } else {
-            const proc = shellProcess as ChildProcess;
-            // Send SIGTERM for graceful shutdown
-            proc.kill("SIGTERM");
-
-            // Log signal
-            this.db.run(
-                "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-                [session_id, "SIGTERM", "graceful_stop", new Date().toISOString()],
-                () => {}
-            );
-
-            // Wait 2 seconds for graceful shutdown
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // If still alive, send SIGKILL
-            if (!proc.killed) {
-                proc.kill("SIGKILL");
-                this.db.run(
-                    "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-                    [session_id, "SIGKILL", "forced_stop", new Date().toISOString()],
-                    () => {}
-                );
-            }
-        }
+        ptyProcess.kill();
+        this.db.run(
+            "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
+            [session_id, "SIGTERM", "graceful_stop", new Date().toISOString()],
+            () => { }
+        );
 
         // Update session state
         session.state = TerminalSessionState.TERMINATED;
@@ -579,20 +461,16 @@ export class TerminalSessionAdapter {
             throw new Error(`Session ${session_id} not found`);
         }
 
-        const { process: shellProcess, ptyProcess, session } = sessionEntry;
+        const { ptyProcess, session } = sessionEntry;
 
         // Force terminate
-        if (ptyProcess) {
-            ptyProcess.kill();
-        } else {
-            (shellProcess as ChildProcess).kill("SIGKILL");
-        }
+        ptyProcess.kill();
 
         // Log signal
         this.db.run(
             "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
             [session_id, "SIGKILL", `revocation: ${reason}`, new Date().toISOString()],
-            () => {}
+            () => { }
         );
 
         // Update session state
@@ -784,37 +662,17 @@ export class TerminalSessionAdapter {
             return;
         }
 
-        const { process: shellProcess, ptyProcess, session } = sessionEntry;
+        const { ptyProcess, session } = sessionEntry;
 
         this.db.run(
             "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
             [session_id, "SIGTERM", "timeout_handler", new Date().toISOString()],
-            () => {}
+            () => { }
         );
 
-        if (ptyProcess) {
-            ptyProcess.kill();
-            session.state = TerminalSessionState.TIMEOUT;
-            this.persistSession(session).catch(() => {});
-        } else {
-            const proc = shellProcess as ChildProcess;
-            proc.kill("SIGTERM");
-
-            // Wait 2 seconds then SIGKILL if still alive
-            setTimeout(() => {
-                if (!proc.killed) {
-                    proc.kill("SIGKILL");
-                    this.db.run(
-                        "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-                        [session_id, "SIGKILL", "timeout_kill", new Date().toISOString()],
-                        () => {}
-                    );
-
-                    session.state = TerminalSessionState.TIMEOUT;
-                    this.persistSession(session).catch(() => {});
-                }
-            }, 2000);
-        }
+        ptyProcess.kill();
+        session.state = TerminalSessionState.TIMEOUT;
+        this.persistSession(session).catch(() => { });
     }
 
     /**

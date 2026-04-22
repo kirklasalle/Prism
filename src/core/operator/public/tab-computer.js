@@ -905,6 +905,43 @@ export
   }
 }
 
+export async function refreshAdapterStatus() {
+  try {
+    state.adapterStatus = await request('/api/system/adapters');
+    renderAdapterStatus();
+  } catch (e) { console.error('[computer] adapter status failed', e); }
+}
+
+export function renderAdapterStatus() {
+  var container = document.getElementById('adapter-status-container');
+  if (!container) return;
+  var status = state.adapterStatus;
+  if (!status) return;
+
+  var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">';
+
+  // PTY Status
+  var ptyColor = status.terminal.enabled ? 'var(--accent)' : 'var(--danger)';
+  html += '<div class="panel" style="padding:12px;border-left:4px solid ' + ptyColor + ';">';
+  html += '<div class="muted" style="font-size:11px;">PTY Execution (Terminal)</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">';
+  html += '<span style="font-size:14px;font-weight:600;">' + (status.terminal.enabled ? 'HARDENED' : 'LEGACY') + '</span>';
+  html += '<span class="stg-badge ' + (status.terminal.enabled ? 'stg-badge-blue' : 'stg-badge-amber') + '" style="font-size:9px;">' + escapeHtml(status.terminal.backend) + '</span>';
+  html += '</div></div>';
+
+  // Container Status
+  var sandboxColor = status.container.enabled ? 'var(--accent-2)' : 'var(--danger)';
+  html += '<div class="panel" style="padding:12px;border-left:4px solid ' + sandboxColor + ';">';
+  html += '<div class="muted" style="font-size:11px;">Container Sandbox (Filesystem)</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">';
+  html += '<span style="font-size:14px;font-weight:600;">' + (status.container.enabled ? 'ISOLATED' : 'VIRTUAL') + '</span>';
+  html += '<span class="stg-badge ' + (status.container.enabled ? 'stg-badge-green' : 'stg-badge-amber') + '" style="font-size:9px;">' + escapeHtml(status.container.backend) + '</span>';
+  html += '</div></div>';
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
 export
   async function initComputerTab() {
   if (!state.computerSystemInfo) {
@@ -915,21 +952,71 @@ export
   }
   refreshBrowserInfo();
   if (state.computerPollInterval) { clearInterval(state.computerPollInterval); state.computerPollInterval = null; }
-  async function pollUsage() {
+  async function pollAll() {
     try {
       var data = await request('/api/computer/usage');
       renderUsageMetrics(data);
     } catch (e) { console.error('[computer] usage poll failed', e); }
+    refreshAdapterStatus();
   }
-  pollUsage();
-  state.computerPollInterval = setInterval(pollUsage, 5000);
+  pollAll();
+  state.computerPollInterval = setInterval(pollAll, 5000);
   await refreshFramebufferGallery();
   if (state.framebufferAutoRefresh && !state.framebufferPollInterval) {
     state.framebufferPollInterval = setInterval(refreshFramebufferViewer, 2000);
   }
+  initFramebufferInteraction();
+}
+
+export function initFramebufferInteraction() {
+  const img = document.getElementById('framebuffer-preview');
+  if (!img) return;
+  img.style.cursor = 'crosshair';
+  img.onclick = null; // Remove the default window.open(this.src) click handler from template
+
+  img.addEventListener('mousemove', function (e) {
+    const rect = img.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width;
+    const yPct = (e.clientY - rect.top) / rect.height;
+    const meta = document.getElementById('fb-meta');
+    if (meta && !meta.dataset.busy) {
+      meta.textContent = 'Cursor: ' + Math.round(xPct * 100) + '%, ' + Math.round(yPct * 100) + '%';
+    }
+  });
+
+  img.addEventListener('click', async function (e) {
+    if (framebufferBurstAnimationInterval) return;
+    const rect = img.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width;
+    const yPct = (e.clientY - rect.top) / rect.height;
+    const targetX = Math.round(xPct * img.naturalWidth);
+    const targetY = Math.round(yPct * img.naturalHeight);
+    const meta = document.getElementById('fb-meta');
+    if (meta) {
+      meta.textContent = 'Moving mouse to ' + targetX + ', ' + targetY + '...';
+      meta.dataset.busy = "true";
+    }
+    try {
+      await request('/api/agentic/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'computer',
+          args: { action: 'mouse_move', coordinate: [targetX, targetY] }
+        })
+      });
+      if (meta) meta.textContent = 'Moved to ' + targetX + ', ' + targetY;
+      setTimeout(refreshFramebufferViewer, 500);
+    } catch (err) {
+      if (meta) meta.textContent = 'Move failed: ' + err.message;
+    } finally {
+      if (meta) delete meta.dataset.busy;
+    }
+  });
 }
 
 export async function pollUsage() {
+
   try {
     var data = await request('/api/computer/usage');
     renderUsageMetrics(data);

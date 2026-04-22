@@ -1,4 +1,4 @@
-﻿import type { ActivityBus } from "../activity/bus.js";
+import type { ActivityBus } from "../activity/bus.js";
 import type { ApprovalQueue } from "../approval/approval-queue.js";
 import type { PolicyEngine } from "../policy/engine.js";
 import type { ToolRegistry } from "../tools/registry.js";
@@ -78,7 +78,7 @@ export class Orchestrator {
 
     private readonly workflowExecutor = new WorkflowExecutor();
 
-    async run(request: ToolRequest): Promise<void> {
+    async run(request: ToolRequest): Promise<import("../tools/types.js").ToolResult> {
         const start = Date.now();
 
         this.activityBus.emit({
@@ -130,7 +130,7 @@ export class Orchestrator {
         });
 
         if (policy.decision === "deny") {
-            return;
+            return { ok: false, output: { error: `Policy denied: ${policy.reasons.join(", ")}` } };
         }
 
         if (policy.decision === "require_approval") {
@@ -144,7 +144,7 @@ export class Orchestrator {
                     policyDecision: policy.decision,
                     details: { message: "No approval queue configured — operation blocked." },
                 });
-                return;
+                return { ok: false, output: { error: "Approval required but no queue configured" } };
             }
 
             this.activityBus.emit({
@@ -178,7 +178,7 @@ export class Orchestrator {
                     policyDecision: "deny",
                     details: { message: "Operation denied or timed out." },
                 });
-                return;
+                return { ok: false, output: { error: "Operation denied or timed out" } };
             }
 
             this.activityBus.emit({
@@ -203,7 +203,7 @@ export class Orchestrator {
                 policyDecision: policy.decision,
                 details: { message: `Tool "${request.operation}" not found in registry.` },
             });
-            return;
+            return { ok: false, output: { error: `Tool "${request.operation}" not found` } };
         }
 
         const contractErrors = this.toolRegistry.validateRequest(normalizedRequest);
@@ -217,7 +217,7 @@ export class Orchestrator {
                 policyDecision: policy.decision,
                 details: { errors: contractErrors },
             });
-            return;
+            return { ok: false, output: { error: "Contract validation failed", details: contractErrors } };
         }
 
         const result = await tool.execute(normalizedRequest);
@@ -234,6 +234,8 @@ export class Orchestrator {
             sideEffects: result.sideEffects,
             rollbackPlan: normalizedRequest.rollbackPlan,
         });
+
+        return result;
     }
 
     /**

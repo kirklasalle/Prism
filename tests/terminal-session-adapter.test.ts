@@ -2,8 +2,7 @@
  * Terminal Session Adapter — Integration Tests (P0-2)
  *
  * Tests REAL terminal/shell execution via the TerminalSessionAdapter.
- * This validates both the child_process fallback path AND the node-pty
- * PTY path when available.
+ * This enforces node-pty backed PTY sessions only.
  *
  * Coverage:
  *   ✓ Session lifecycle (start → exec → stop)
@@ -45,16 +44,20 @@ const SHELL = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
 
 /** Close db cleanly. */
 function closeDb(db: sqlite3.Database): Promise<void> {
-    return new Promise((resolve) => db.close(() => resolve()));
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            db.close(() => resolve());
+        }, 25);
+    });
 }
 
 // ── Test Functions ──────────────────────────────────────────────────────
 
 export async function testTerminalSessionAdapter(): Promise<void> {
+    await testPtyDetection();
     await testSessionStartAndMetadata();
     await testRealCommandExecution();
     await testCommandExitCodes();
-    await testPtyDetection();
     await testResizeTerminal();
     await testCommandHistory();
     await testCommandTierClassification();
@@ -140,24 +143,15 @@ async function testCommandExitCodes(): Promise<void> {
 async function testPtyDetection(): Promise<void> {
     const { adapter, db } = createTestAdapter();
     try {
-        // isPtyEnabled should return a boolean
-        const ptyEnabled = adapter.isPtyEnabled();
-        assert.strictEqual(typeof ptyEnabled, "boolean", "isPtyEnabled() should return a boolean");
-
-        // On this system, node-pty@1.1.0 is installed, so it should be true
-        // (but we don't hard-assert this in case the binary fails to load)
-        if (ptyEnabled) {
-            console.log("    ✓ PTY is enabled (node-pty loaded successfully)");
-        } else {
-            console.log("    ⚠ PTY is NOT enabled — using child_process fallback");
-        }
-
-        // Wait for pty init to settle
+        // Wait for init to settle and enforce real PTY readiness.
         await new Promise((r) => setTimeout(r, 500));
-
-        // Check again after init promise settles
         const ptyEnabledAfter = adapter.isPtyEnabled();
-        assert.strictEqual(typeof ptyEnabledAfter, "boolean", "isPtyEnabled() should still return boolean after init");
+        assert.strictEqual(ptyEnabledAfter, true, "PTY must be enabled (real node-pty backend required)");
+        console.log("    ✓ PTY is enabled and required");
+
+        // Prove the PTY backend can actually host a live session.
+        const probeSession = await adapter.startSession(SHELL, process.cwd(), "pty-probe");
+        await adapter.stopSession(probeSession.session_id);
     } finally {
         await closeDb(db);
     }

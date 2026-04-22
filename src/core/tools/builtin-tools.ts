@@ -3,6 +3,8 @@ import { ContainerSandboxTool } from "../../adapters/system/container-sandbox-to
 import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../../adapters/system/file-tools.js";
 import { ShellTool } from "../../adapters/system/shell-tool.js";
 import { TerminalSessionTool } from "../../adapters/system/terminal-session-tool.js";
+import { ComputerUseTool } from "../../adapters/system/computer-use-tool.js";
+
 import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
 import { PrismDashboardControlTool } from "../../adapters/application/prism-dashboard-tool.js";
 import { NetworkTool } from "../../adapters/network/network-tool.js";
@@ -14,14 +16,21 @@ import { NotesExtractTool } from "../../adapters/application/notes-tool.js";
 import { TasksTimelineTool } from "../../adapters/application/tasks-tool.js";
 import type { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
 import type { OutlookOAuthAdapter } from "../../adapters/application/outlook-oauth-adapter.js";
+import type { TerminalSessionAdapter } from "../../adapters/application/terminal-session-adapter.js";
+import type { ContainerSandboxAdapter } from "../../adapters/application/container-sandbox-adapter.js";
 import type { Tool } from "./types.js";
 
-export function builtinTools(gmail?: GmailOAuthAdapter, outlook?: OutlookOAuthAdapter): Tool[] {
+export function builtinTools(
+    gmail?: GmailOAuthAdapter,
+    outlook?: OutlookOAuthAdapter,
+    terminalAdapter?: TerminalSessionAdapter,
+    containerAdapter?: ContainerSandboxAdapter,
+): Tool[] {
     return [
         // System adapters
         new ShellTool(),
-        new TerminalSessionTool(),
-        new ContainerSandboxTool(),
+        new TerminalSessionTool(terminalAdapter),
+        new ContainerSandboxTool(containerAdapter),
         new FileReadTool(),
         new FileWriteTool(),
         new FileDeleteTool(),
@@ -41,5 +50,7 @@ export function builtinTools(gmail?: GmailOAuthAdapter, outlook?: OutlookOAuthAd
         new VisionCaptureTool(),
         // Browser adapters
         new BrowserControlTool(),
+        // Computer use (Windows Native)
+        new ComputerUseTool(),
     ];
 }

@@ -1,0 +1,7 @@
+{
+  "tool_name": "test-manifest-tool",
+  "version": "1.0.0",
+  "description": "Test manifest tool",
+  "parameters": { "id": "string" },
+  "return_type": "object"
+}

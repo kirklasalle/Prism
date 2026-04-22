@@ -2,14 +2,13 @@
  * Container Sandbox Adapter — Integration Tests (P0-3)
  *
  * Tests REAL container lifecycle via the ContainerSandboxAdapter.
- * Validates the dockerode Docker path when available, falling back
- * to the child_process mock path when Docker daemon is not present.
+ * Uses built-in Prism filesystem-isolated runtime (no Docker required).
  *
  * Coverage:
  *   ✓ Container lifecycle (create → start → exec → stop → destroy)
  *   ✓ Real command execution in container
  *   ✓ Snapshot and Revert workflow
- *   ✓ Docker detection (isDockerEnabled)
+ *   ✓ Runtime detection (isContainerRuntimeEnabled, getRuntimeBackend)
  *   ✓ Policy tier classification and governance hooks
  *   ✓ SQLite persistence
  *   ✓ Activity bus event emission
@@ -39,7 +38,11 @@ function createTestAdapter(): {
 
 /** Close db cleanly. */
 function closeDb(db: sqlite3.Database): Promise<void> {
-    return new Promise((resolve) => db.close(() => resolve()));
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            db.close(() => resolve());
+        }, 25);
+    });
 }
 
 const DEFAULT_QUOTA: ResourceQuota = {
@@ -68,15 +71,18 @@ async function testDockerDetection(): Promise<void> {
     try {
         // Wait for init to settle
         await new Promise(r => setTimeout(r, 500));
-        
-        const dockerEnabled = adapter.isDockerEnabled();
-        assert.strictEqual(typeof dockerEnabled, "boolean", "isDockerEnabled() should return a boolean");
 
-        if (dockerEnabled) {
-            console.log("    ✓ Docker is enabled (daemon reachable)");
-        } else {
-            console.log("    ⚠ Docker is NOT enabled — using child_process mock fallback");
-        }
+        // Docker is no longer required — built-in Prism runtime is always used
+        const dockerEnabled = adapter.isDockerEnabled();
+        assert.strictEqual(dockerEnabled, false, "Docker should be disabled (builtin runtime replaces it)");
+
+        // Verify builtin runtime is available
+        const runtimeEnabled = adapter.isContainerRuntimeEnabled();
+        assert.strictEqual(runtimeEnabled, true, "Builtin container runtime must be available");
+
+        const backend = adapter.getRuntimeBackend();
+        assert.strictEqual(backend, "builtin-prism", "Runtime backend should be 'builtin-prism'");
+        console.log("    ✓ Builtin container runtime is enabled (Docker not required)");
     } finally {
         await closeDb(db);
     }
@@ -89,7 +95,7 @@ async function testContainerLifecycle(): Promise<void> {
         const created = await adapter.createContainer("alpine:latest", DEFAULT_QUOTA);
         assert.ok(created.container_id.length > 10, "Container ID should be generated");
         assert.strictEqual(created.state, ContainerState.CREATED, "State should be CREATED");
-        
+
         // 2. Start
         const started = await adapter.startContainer(created.container_id);
         assert.strictEqual(started.state, ContainerState.RUNNING, "State should be RUNNING");
@@ -120,28 +126,16 @@ async function testCommandExecution(): Promise<void> {
         const container = await adapter.createContainer("alpine:latest", DEFAULT_QUOTA);
         await adapter.startContainer(container.container_id);
 
-        const dockerEnabled = adapter.isDockerEnabled();
-
         // Basic echo
         const echoCmd = "echo test-exec";
         const result = await adapter.execInContainer(container.container_id, echoCmd);
-        
+
         assert.strictEqual(result.container_id, container.container_id);
         assert.strictEqual(result.command, echoCmd);
         assert.ok(result.execution_time_ms >= 0);
-        
-        if (dockerEnabled) {
-            assert.strictEqual(result.exit_code, 0, "Docker exec should return 0");
-            assert.ok(result.stdout.includes("test-exec"), "Stdout should contain expected output");
-        } else {
-            // Mock path
-            assert.strictEqual(result.exit_code, 0, "Mock exec should return 0 (simulated)");
-            // Our mock path uses a spawned "sh" that does "sleep infinity".
-            // So if we write "echo test-exec\\n" to its stdin, and "echo $?=$?\\n", it WILL actually execute!
-            // Wait, does the mock path execute for real inside the host system? YES! It spawns "sh".
-            // Note: on Windows, "sh" might not be available, causing the mock to fail.
-            // Wait, if it fails, it will throw. Let's see if it throws or works.
-        }
+
+        assert.strictEqual(result.exit_code, 0, "Container exec should return 0");
+        assert.ok(result.stdout.includes("test-exec"), "Stdout should contain expected output");
 
         await adapter.destroyContainer(container.container_id, "test done");
     } finally {
@@ -203,7 +197,7 @@ async function testErrorHandling(): Promise<void> {
             /not found or not running/,
             "Should throw if container not started"
         );
-        
+
         await adapter.destroyContainer(c.container_id, "cleanup");
     } finally {
         await closeDb(db);
@@ -229,7 +223,7 @@ async function testActivityBusAndPersistence(): Promise<void> {
 
         // Verify activity bus events
         const events = bus.listEvents();
-        
+
         const createEv = events.find(e => e.operation === "container_create");
         assert.ok(createEv, "Should emit container_create");
         assert.strictEqual(createEv?.sessionId, c.container_id);

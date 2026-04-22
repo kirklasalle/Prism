@@ -2,6 +2,11 @@ import { DatabaseSync } from "node:sqlite";
 
 export type CharacterAssignmentState = "active" | "suspended" | "revoked";
 
+export interface PermissionScope {
+    scope: string;
+    expiresAt: string | null; // ISO-8601 or null for never-expires
+}
+
 export interface CharacterAssignment {
     assignmentId: string;
     characterId: string;
@@ -20,6 +25,7 @@ export interface CharacterAssignment {
     assignedAt: string;
     updatedAt: string;
     lastActiveAt: string;
+    permissionScopes?: PermissionScope[];
 }
 
 export interface CharacterAssignmentFilter {
@@ -93,6 +99,7 @@ export class CharacterAccountabilityStore {
         this.ensureColumn("character_assignments", "operator_email", "TEXT");
         this.ensureColumn("character_assignments", "execution_profile_segment", "TEXT DEFAULT 'individual'");
         this.ensureColumn("character_assignments", "workspace_hub", "TEXT DEFAULT ''");
+        this.ensureColumn("character_assignments", "permission_scopes", "TEXT DEFAULT '[]'");
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {
@@ -110,12 +117,12 @@ export class CharacterAccountabilityStore {
                 assignment_id, character_id, prism_user_id, prism_user_email,
                 operator_id, operator_email, client_id, session_id, execution_profile_segment, workspace_hub, state,
                 suspend_reason, revocation_reason, dispatch_count,
-                assigned_at, updated_at, last_active_at
+                assigned_at, updated_at, last_active_at, permission_scopes
             ) VALUES (
                 :assignmentId, :characterId, :prismUserId, :prismUserEmail,
                 :operatorId, :operatorEmail, :clientId, :sessionId, :executionProfileSegment, :workspaceHub, :state,
                 :suspendReason, :revocationReason, :dispatchCount,
-                :assignedAt, :updatedAt, :lastActiveAt
+                :assignedAt, :updatedAt, :lastActiveAt, :permissionScopes
             )
         `).run({
             assignmentId: assignment.assignmentId,
@@ -135,6 +142,7 @@ export class CharacterAccountabilityStore {
             assignedAt: assignment.assignedAt,
             updatedAt: assignment.updatedAt,
             lastActiveAt: assignment.lastActiveAt,
+            permissionScopes: JSON.stringify(assignment.permissionScopes ?? []),
         });
     }
 
@@ -206,6 +214,14 @@ export class CharacterAccountabilityStore {
     }
 
     private toAssignment(row: Record<string, unknown>): CharacterAssignment {
+        let permissionScopes: PermissionScope[] = [];
+        try {
+            if (row.permission_scopes) {
+                permissionScopes = JSON.parse(String(row.permission_scopes)) as PermissionScope[];
+            }
+        } catch {
+            permissionScopes = [];
+        }
         return {
             assignmentId: String(row.assignment_id),
             characterId: String(row.character_id),
@@ -224,6 +240,7 @@ export class CharacterAccountabilityStore {
             assignedAt: String(row.assigned_at),
             updatedAt: String(row.updated_at),
             lastActiveAt: String(row.last_active_at),
+            permissionScopes,
         };
     }
 }

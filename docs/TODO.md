@@ -238,21 +238,21 @@ Actionable work items extracted from ROADMAP.md and engineering sessions. See RO
 
 ### E4: Plugin Cryptographic Signatures [P1]
 
-- [ ] `plugin-pack-validator.ts`: implement `verifyEd25519Signature(manifest, signature, publicKey)`
-- [ ] Trust-tier enforcement: `official` (signed by PRISM key), `community` (signed by trusted key), `unsigned` (dev-mode only)
-- [ ] Key registry: `config/plugin-signing-keys.json` (PRISM official key + community trusted keys)
-- [ ] Business profile: reject unsigned plugins at activation
-- [ ] Individual profile: warn on unsigned, allow with explicit confirmation
-- [ ] Tests: extend `tests/plugin-pack-validator.test.ts` with signature verification cases
+- [x] `plugin-pack-validator.ts`: implement `verifyEd25519Signature(manifest, signature, publicKey)`
+- [x] Trust-tier enforcement: `official` (signed by PRISM key), `community` (signed by trusted key), `unsigned` (dev-mode only)
+- [x] Key registry: `config/plugin-signing-keys.json` (PRISM official key + community trusted keys)
+- [x] Business profile: reject unsigned plugins at activation
+- [x] Individual profile: warn on unsigned, allow with explicit confirmation
+- [x] Tests: extend `tests/plugin-pack-validator.test.ts` with signature verification cases
 
 ### E5: CAC Identity Expansion [P1]
 
-- [ ] `browser-session-manager.ts`: bind Playwright session fingerprint (user-agent, viewport, session token) to CAC chain
-- [ ] `character-accountability-manager.ts`: add `permissionScopes` field with expiry-based auto-revocation
-- [ ] Add `permissionScopes` to `CharacterAssignment` type
-- [ ] Self-review scheduler: check expired scopes and trigger revocation events
+- [x] `browser-session-manager.ts`: bind Playwright session fingerprint (user-agent, viewport, session token) to CAC chain
+- [x] `character-accountability-manager.ts`: add `permissionScopes` field with expiry-based auto-revocation
+- [x] Add `permissionScopes` to `CharacterAssignment` type
+- [x] Self-review scheduler: `revokeExpiredScopes()` on `CharacterAccountabilityManager` checks and revokes
 - [ ] OAuth email verification for Business profile characters (Google/Microsoft)
-- [ ] Tests: extend `tests/character-accountability.test.ts` with scope expiry and browser binding cases
+- [x] Tests: extend `tests/character-accountability.test.ts` with scope expiry and browser binding cases
 
 ### E6: Observability Integration [P1]
 

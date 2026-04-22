@@ -130,6 +130,7 @@ export const state = {
   guardianTasks: null,
   browserSessions: [],
   computerSystemInfo: null,
+  adapterStatus: null,
   computerConsoleHistory: [],
   computerEnvVars: null,
   computerDevices: null,
@@ -288,7 +289,11 @@ export
   async function request(url, options) {
   var opts = options || {};
   opts.headers = authHeaders(opts.headers);
-  const response = await fetch(url, opts);
+  var requestUrl = url;
+  if (url.startsWith('/api/') && !url.startsWith('/api/v1/')) {
+    requestUrl = '/api/v1' + url.substring(4);
+  }
+  const response = await fetch(requestUrl, opts);
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};
   if (!response.ok) {
@@ -593,7 +598,7 @@ export function toggleItemEnabled(kind, name) {
   stateStore[name].enabled = !stateStore[name].enabled;
   var endpoint = kind === 'plugin'
     ? '/api/v1/plugins/' + encodeURIComponent(name) + '/toggle'
-    : '/api/tools/' + encodeURIComponent(name) + '/toggle';
+    : '/api/v1/tools/' + encodeURIComponent(name) + '/toggle';
   fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: stateStore[name].enabled }) }).catch(function () { });
   render();
 }

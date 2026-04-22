@@ -264,7 +264,8 @@ export class AgenticChatExecutor {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const WRITE_TOOLS = new Set(["file_write", "file_delete", "shell_exec", "terminal_session", "container_sandbox"]);
+const WRITE_TOOLS = new Set(["file_write", "file_delete", "shell_exec", "terminal_session", "container_sandbox", "computer"]);
+
 const FILE_TOOLS = new Set(["file_read", "file_write", "file_delete", "file_list"]);
 
 function isWriteOperation(toolName: string, args: Record<string, unknown>): boolean {

@@ -48,6 +48,11 @@ export interface BrowserSession {
   assignmentId?: string;
   prismUserEmail?: string;
   profileSyncedAt?: string;
+  // CAC fingerprint
+  userAgent?: string;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  sessionToken?: string;
 }
 
 // ── Launch options ───────────────────────────────────────────────────────
@@ -73,6 +78,11 @@ export interface BrowserSessionInfo {
   profileId?: string;
   assignmentId?: string;
   prismUserEmail?: string;
+  // CAC fingerprint
+  userAgent?: string;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  sessionToken?: string;
 }
 
 // ── Internal record holding Playwright handles ──────────────────────────
@@ -223,6 +233,16 @@ export class BrowserSessionManager {
     meta.state = "active";
     meta.updatedAt = new Date().toISOString();
 
+    // ── CAC fingerprint capture ────────────────────────────────────────
+    try {
+      meta.userAgent = await (page as any).evaluate(() => navigator.userAgent) as string;
+    } catch { /* not critical */ }
+    try {
+      const vp = (page as any).viewportSize?.();
+      if (vp) { meta.viewportWidth = vp.width; meta.viewportHeight = vp.height; }
+    } catch { /* not critical */ }
+    meta.sessionToken = randomUUID();
+
     this.sessions.set(id, { meta, browser, context, page });
     this.resetIdleTimer(id);
     this.emit("browser.session.started", {
@@ -231,6 +251,10 @@ export class BrowserSessionManager {
       profileId: meta.profileId,
       prismUserEmail: meta.prismUserEmail,
       assignmentId: meta.assignmentId,
+      userAgent: meta.userAgent,
+      viewportWidth: meta.viewportWidth,
+      viewportHeight: meta.viewportHeight,
+      sessionToken: meta.sessionToken,
     });
 
     return { ...meta };
@@ -336,6 +360,10 @@ export class BrowserSessionManager {
       profileId: s.meta.profileId,
       assignmentId: s.meta.assignmentId,
       prismUserEmail: s.meta.prismUserEmail,
+      userAgent: s.meta.userAgent,
+      viewportWidth: s.meta.viewportWidth,
+      viewportHeight: s.meta.viewportHeight,
+      sessionToken: s.meta.sessionToken,
     }));
   }
 
@@ -356,6 +384,10 @@ export class BrowserSessionManager {
       profileId: s.meta.profileId,
       assignmentId: s.meta.assignmentId,
       prismUserEmail: s.meta.prismUserEmail,
+      userAgent: s.meta.userAgent,
+      viewportWidth: s.meta.viewportWidth,
+      viewportHeight: s.meta.viewportHeight,
+      sessionToken: s.meta.sessionToken,
     };
   }
 

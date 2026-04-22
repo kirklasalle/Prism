@@ -1,6 +1,6 @@
 import type { ToolRequest } from "./types.js";
 
-export type ToolArgSchemaType = "string" | "number" | "boolean" | "object";
+export type ToolArgSchemaType = "string" | "number" | "boolean" | "object" | "array";
 
 export interface ToolArgSchema {
     type: ToolArgSchemaType;
@@ -81,6 +81,9 @@ export function validateToolRequestAgainstContract(
 function matchesType(expected: ToolArgSchemaType, value: unknown): boolean {
     if (expected === "object") {
         return typeof value === "object" && value !== null && !Array.isArray(value);
+    }
+    if (expected === "array") {
+        return Array.isArray(value);
     }
 
     return typeof value === expected;
