@@ -1,9 +1,13 @@
 import { testActivityBus } from "./activity-bus.test.js";
 import { testAdapterSafetyRegression } from "./adapter-safety.test.js";
+import { testAdapterSafetyRegressionExpanded } from "./adapter-safety-expanded.test.js";
+import { testNetworkAdapterSafety } from "./network-adapter-safety.test.js";
+import { testApprovalContentionMixedOutcomes } from "./approval-contention-mixed-outcomes.test.js";
 import { testDashboardService } from "./dashboard-service.test.js";
-import { testCharacterAccountability } from "./character-accountability.test.js";
+import { testCharacterAccountability, testCharacterAccountabilityPhaseE3 } from "./character-accountability.test.js";
 import { testD2SystemTools } from "./d2-system-tools.test.js";
 import { testD2GovernancePaths } from "./d2-governance-paths.test.js";
+import { testPolicyPathMutatingOps } from "./policy-path-mutating-ops.test.js";
 import { testDomainWorkflowTemplates } from "./domain-workflow-templates.test.js";
 import { testEnvironmentProfiles } from "./environment-profiles.test.js";
 import { testLlmProviderManager } from "./llm-provider-manager.test.js";
@@ -26,6 +30,48 @@ import { testGuardianAgent } from "./guardian-agent.test.js";
 import { testTerminalSessionAdapter } from "./terminal-session-adapter.test.js";
 import { testContainerSandboxAdapter } from "./container-sandbox-adapter.test.js";
 import { testOAuthAdapters } from "./oauth-adapters.test.js";
+import {
+    testUtilityRegistry,
+    testRiskOverrideStore,
+    testIncidentTrendStore,
+    testRetrievalAlertTuning,
+} from "./operator-surfaces-phase-e3.test.js";
+import { testPerfTrendReport } from "./perf-trend-report.test.js";
+import { testCccCompiler } from "./ccc-compiler.test.js";
+import { testDlmaArbiter } from "./dlma-arbiter.test.js";
+import { testShwsSynthesizer } from "./shws-synthesizer.test.js";
+import { testSRNModelFanout } from "./sr-n-model-fanout.test.js";
+import { testSrMemoryAndRecommender } from "./sr-memory-recommender.test.js";
+import { testSrTool } from "./sr-tool.test.js";
+import { testTenantContext } from "./tenant-context.test.js";
+import { testSyncScaffold } from "./sync-scaffold.test.js";
+import { testPluginMarketplace } from "./plugin-marketplace.test.js";
+import { testPwaAssets } from "./pwa-assets.test.js";
+import { testPersistenceInterfaces } from "./persistence-interfaces.test.js";
+import { testPostgresAdapter } from "./postgres-adapter.test.js";
+import { testMultiTenantWorkspace } from "./multi-tenant-workspace.test.js";
+import { testSoakHarness } from "./soak-harness.test.js";
+import { testStressHarness } from "./stress-harness.test.js";
+import { testArtifactSignature } from "./artifact-signature.test.js";
+import { testOwaspScan } from "./owasp-scan.test.js";
+import { testPlatformParityAudit } from "./platform-parity-audit.test.js";
+import { testMarketplaceCuration } from "./marketplace-curation.test.js";
+import { testSrShowcaseDemo } from "./sr-showcase.test.js";
+import { testPluginScaffold } from "./plugin-scaffold.test.js";
+import { testPtacOrchestrator } from "./ptac-orchestrator.test.js";
+import { testOpenAiCompatShim } from "./openai-compat-shim.test.js";
+import { testOpenAiCompatRoutes } from "./openai-compat-routes.test.js";
+import { testIamStore } from "./iam-store.test.js";
+import { testIamRbac } from "./iam-rbac.test.js";
+import {
+    testIamSsoSession,
+    testIamSsoOidc,
+    testIamSsoSaml,
+    testIamRoutesEndToEnd,
+} from "./iam-sso.test.js";
+import { testScimRoutes, testIamAdminRoutes } from "./iam-scim-admin.test.js";
+import { testHelmLint } from "./helm-lint.test.js";
+import { testSoc2Exporter } from "./soc2-exporter.test.js";
 import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -56,6 +102,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 async function runTests(): Promise<void> {
+    // Filter known-benign Windows ConPTY teardown noise from node-pty's
+    // `conpty_console_list.cc` — when a PTY child process has already exited,
+    // the native cleanup helper calls `AttachConsole(pid)` which throws
+    // "AttachConsole failed". This surfaces as an uncaughtException during
+    // process teardown but is not a test failure; swallow it so the runner
+    // can exit with a non-zero status only when an actual test fails.
+    process.on("uncaughtException", (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("AttachConsole failed")) {
+            return; // benign node-pty Windows cleanup race
+        }
+        // Re-raise anything else by exiting with the original Node behaviour.
+        console.error("Uncaught exception during test run:", err);
+        process.exit(1);
+    });
+
     // Isolate workspace root so tests don't conflict with a running server's SQLite DBs.
     // Must use _setWorkspaceRootForTest to directly set the module-level _resolvedRoot cache —
     // env var alone is ignored because .prism-preferences.json takes priority in resolveWorkspaceRoot().
@@ -69,10 +131,15 @@ async function runTests(): Promise<void> {
         { name: "PolicyEngine", fn: testPolicyEngine },
         { name: "OrchestratorExecutionProfile", fn: testOrchestratorExecutionProfile },
         { name: "D2GovernancePaths", fn: testD2GovernancePaths },
+        { name: "PolicyPathMutatingOps", fn: testPolicyPathMutatingOps },
         { name: "ActivityBus", fn: testActivityBus },
         { name: "AdapterSafetyRegression", fn: testAdapterSafetyRegression },
+        { name: "AdapterSafetyRegressionExpanded", fn: testAdapterSafetyRegressionExpanded },
+        { name: "NetworkAdapterSafety", fn: testNetworkAdapterSafety },
+        { name: "ApprovalContentionMixedOutcomes", fn: testApprovalContentionMixedOutcomes },
         { name: "DashboardService", fn: testDashboardService },
         { name: "CharacterAccountability", fn: testCharacterAccountability },
+        { name: "CharacterAccountabilityPhaseE3", fn: testCharacterAccountabilityPhaseE3 },
         { name: "D2SystemTools", fn: testD2SystemTools },
         { name: "LlmProviderManager", fn: testLlmProviderManager },
         { name: "SessionTraceExplorer", fn: testSessionTraceExplorer },
@@ -97,6 +164,45 @@ async function runTests(): Promise<void> {
         { name: "TerminalSessionAdapter", fn: testTerminalSessionAdapter },
         { name: "ContainerSandboxAdapter", fn: testContainerSandboxAdapter },
         { name: "OAuthAdapters", fn: testOAuthAdapters },
+        { name: "UtilityRegistry", fn: testUtilityRegistry },
+        { name: "RiskOverrideStore", fn: testRiskOverrideStore },
+        { name: "IncidentTrendStore", fn: testIncidentTrendStore },
+        { name: "RetrievalAlertTuning", fn: testRetrievalAlertTuning },
+        { name: "PerfTrendReport", fn: testPerfTrendReport },
+        { name: "CccCompiler", fn: testCccCompiler },
+        { name: "DlmaArbiter", fn: testDlmaArbiter },
+        { name: "ShwsSynthesizer", fn: testShwsSynthesizer },
+        { name: "SRNModelFanout", fn: testSRNModelFanout },
+        { name: "SrMemoryAndRecommender", fn: testSrMemoryAndRecommender },
+        { name: "SrTool", fn: testSrTool },
+        { name: "TenantContext", fn: testTenantContext },
+        { name: "SyncScaffold", fn: testSyncScaffold },
+        { name: "PwaAssets", fn: testPwaAssets },
+        { name: "PluginMarketplace", fn: testPluginMarketplace },
+        { name: "PersistenceInterfaces", fn: testPersistenceInterfaces },
+        { name: "PostgresAdapter", fn: testPostgresAdapter },
+        { name: "MultiTenantWorkspace", fn: testMultiTenantWorkspace },
+        { name: "SoakHarness", fn: testSoakHarness },
+        { name: "StressHarness", fn: testStressHarness },
+        { name: "ArtifactSignature", fn: testArtifactSignature },
+        { name: "OwaspScan", fn: testOwaspScan },
+        { name: "PlatformParityAudit", fn: testPlatformParityAudit },
+        { name: "MarketplaceCuration", fn: testMarketplaceCuration },
+        { name: "SrShowcaseDemo", fn: testSrShowcaseDemo },
+        { name: "PluginScaffold", fn: testPluginScaffold },
+        { name: "PtacOrchestrator", fn: testPtacOrchestrator },
+        { name: "OpenAiCompatShim", fn: testOpenAiCompatShim },
+        { name: "OpenAiCompatRoutes", fn: testOpenAiCompatRoutes },
+        { name: "IamStore", fn: testIamStore },
+        { name: "IamRbac", fn: testIamRbac },
+        { name: "IamSsoSession", fn: testIamSsoSession },
+        { name: "IamSsoOidc", fn: testIamSsoOidc },
+        { name: "IamSsoSaml", fn: testIamSsoSaml },
+        { name: "IamRoutesE2E", fn: testIamRoutesEndToEnd },
+        { name: "ScimRoutes", fn: testScimRoutes },
+        { name: "IamAdminRoutes", fn: testIamAdminRoutes },
+        { name: "HelmLint", fn: testHelmLint },
+        { name: "Soc2Exporter", fn: testSoc2Exporter },
     ];
 
     let passed = 0;

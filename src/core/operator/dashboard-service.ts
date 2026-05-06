@@ -1,8 +1,8 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+﻿import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve as resolvePath, sep as pathSep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { homedir } from "node:os";
@@ -52,36 +52,47 @@ import { AgenticChatExecutor, type AgenticTurnEvent, type AgenticResult } from "
 import { CharacterAccountabilityStore, type CharacterAssignmentFilter } from "../accountability/character-accountability-store.js";
 import { CharacterAccountabilityManager } from "../accountability/character-accountability-manager.js";
 import { workspaceCharactersDir, workspaceDbPath } from "../config/workspace-resolver.js";
+import { importCharacter as importCharacterAdapter } from "../characters/character-import-adapter.js";
 import { UsageMeteringService, type UsageWindow } from "./usage-metering-service.js";
 import { LlamaCppSupervisor } from "./llama-cpp-supervisor.js";
 import { GuardianAgent } from "../agents/guardian-agent.js";
+import type { McpClientAdapter } from "../../adapters/protocol/mcp-client-tool.js";
+import type { ConsoleInterceptor, ConsoleLine } from "../logging/console-interceptor.js";
 import { DashboardControlTool } from "../tools/dashboard-control-tool.js";
 import { ComputerUseTool } from "../../adapters/system/computer-use-tool.js";
 import { SchedulerEngine, parseCronExpression, getNextNCronOccurrences } from "./scheduler-engine.js";
 
 import { AuthGate } from "../security/auth.js";
 import { RateLimiter } from "../security/rate-limiter.js";
+import { applyCorsAndCsrf, resolveAllowedOrigins, type CorsCsrfConfig } from "../security/cors-csrf.js";
 import { loadPluginPack } from "../plugins/plugin-pack-loader.js";
 import type { PluginPackManifest } from "../plugins/plugin-pack-validator.js";
 import { deriveSessionTitle, parseEventFilters, buildSessionConfigDiff, normalizeSessionPackageStatus, normalizePrompt, parseMultipartParts, sanitizeFileName } from "./utils/http-helpers.js";
 import { dashboardHtml, simpleModeHtml, setupWizardHtml, setupWizardAdvancedHtml } from "./templates/index.js";
 
 import { Router } from "./routes/index.js";
+import { TooltipsRegistry } from "./tooltips-registry.js";
 import { generateOpenApiSpec } from "./openapi-generator.js";
 
 import sqlite3 from "sqlite3";
 
 import { ToolContractExtractor, type ExtractionRequest } from "../tools/tool-contract-extractor.js";
 import { PolicyEngine } from "../policy/engine.js";
+import { classifyChatTier } from "./chat-tier-classifier.js";
 import { A2ATaskAdapter } from "../../adapters/application/a2a-task-adapter.js";
 import { GovernanceHooksAdapter } from "../../adapters/application/governance-hooks-adapter.js";
 import { MetricsStore, HistogramSnapshot } from "../activity/metrics-store.js";
 import { OtelExporter } from "../activity/otel-exporter.js";
+import { Soc2EvidenceExporter } from "../compliance/soc2-exporter.js";
 import { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
 import { OutlookOAuthAdapter } from "../../adapters/application/outlook-oauth-adapter.js";
 import { createOAuthTokenStore } from "../operator/oauth-token-store.js";
 import { TerminalSessionAdapter } from "../../adapters/application/terminal-session-adapter.js";
 import { ContainerSandboxAdapter } from "../../adapters/application/container-sandbox-adapter.js";
+import { UtilityRegistry, registerBuiltInUtilities } from "./utility-registry.js";
+import { RiskOverrideStore, type RiskTier } from "./risk-override-store.js";
+import { IncidentTrendStore } from "../memory/incident-trend-store.js";
+import { tuneFromIncidentTrends, withRetrievalAlertPolicy } from "../memory/retrieval-alert-policy.js";
 
 export interface DashboardRuntimeStatus {
   sessionId: string;
@@ -786,6 +797,7 @@ export class DashboardService {
   private readonly providerSecretStore: ProviderSecretStore;
   private readonly authGate: AuthGate;
   private readonly rateLimiter: RateLimiter;
+  private readonly corsCsrfConfig: CorsCsrfConfig;
   private tlsEnabled = false;
   private readonly actionsByName = new Map<string, DashboardAction>();
   private readonly actionStates = new Map<string, DashboardActionState>();
@@ -810,6 +822,12 @@ export class DashboardService {
   private readonly framebufferCapture = new FramebufferCapture();
   private readonly wsServer: WebSocketServer;
   private readonly wsClients = new Set<WebSocket>();
+  /** Optional MCP adapter for /api/mcp/servers and Guardian self-heal task. */
+  private mcpAdapter: McpClientAdapter | null = null;
+  /** Optional console interceptor for /api/debug/console + live WS stream. */
+  private consoleInterceptor: ConsoleInterceptor | null = null;
+  /** Unsubscribe handle for the console-line listener. */
+  private consoleUnsubscribe: (() => void) | null = null;
   private readonly openSockets = new Set<Socket>();
   private readonly sseClients = new Map<string, ServerResponse>();
   private readonly networkCommandHistory: Array<{ command: string; tier?: string; ok: boolean; timestamp: string }> = [];
@@ -845,6 +863,19 @@ export class DashboardService {
   private demoDiagnosticsLastRunAt: string | null = null;
   private readonly characterAccountabilityStore: CharacterAccountabilityStore;
   private readonly characterAccountabilityManager: CharacterAccountabilityManager;
+  private readonly utilityRegistry!: UtilityRegistry;
+  private readonly riskOverrideStore!: RiskOverrideStore;
+  private readonly incidentTrendStore!: IncidentTrendStore;
+  // ── Phase H: Novel Systems Incubation (CCC + DLMA + SHWS) ──────────
+  // Lazy-initialized to keep the dashboard fast when PRISM_INCUBATION=off.
+  private incubation?: {
+    enabled: boolean;
+    compiler: import("../incubation/ccc/compiler.js").CausalCompiler;
+    arbiter: import("../incubation/dlma/arbiter.js").DualLensArbiter;
+    synthesizer: import("../incubation/shws/synthesizer.js").WorkflowSynthesizer;
+    history: import("../incubation/shws/history-index.js").WorkflowHistoryIndex;
+    constitution: import("../incubation/ccc/types.js").Constitution;
+  };
   private usageMetering?: UsageMeteringService;
   private runtimeSettings: Record<string, unknown> = {
     approvalTimeoutMs: 30000,
@@ -861,6 +892,7 @@ export class DashboardService {
   };
   private readonly downloadStatus = new Map<string, DownloadProgress>();
   private readonly router = new Router();
+  private readonly tooltipsRegistry: TooltipsRegistry = new TooltipsRegistry(resolvePath(process.cwd(), "docs", "tooltips"));
   private customRecommendedModels: Array<{ name: string; fileName: string; size: string; path: string; source: string; addedAt: string }> = [];
 
 
@@ -873,6 +905,7 @@ export class DashboardService {
   /* ── Observability (Phase E6) ───────────────────────────────────────── */
   private readonly metricsStore: MetricsStore;
   private readonly otelExporter: OtelExporter;
+  private readonly soc2Exporter: Soc2EvidenceExporter;
 
   /* ── OAuth adapters (Phase E2) ──────────────────────────────────────── */
   private readonly gmailOAuth: GmailOAuthAdapter;
@@ -917,12 +950,21 @@ export class DashboardService {
       tokenFilePath: workspacePath("state", "admin-token"),
       disabled: authDisabled,
       publicRoutes: ["/health", "/api/health", "/favicon.ico", "/.well-known/agent.json", "/metrics", "/api/v1/openapi.json", "/api/openapi.json"],
-      publicPrefixes: ["/public/", "/setup", "/api/auth/"],
+      publicPrefixes: ["/public/", "/setup", "/api/auth/", "/api/iam/sso/", "/scim/v2/"],
     });
     this.rateLimiter = new RateLimiter({
       maxRequests: Number(process.env.PRISM_RATE_LIMIT ?? 200),
       windowMs: 60_000,
     });
+
+    // ── R2: CORS allowlist + Origin/Referer CSRF guard ─────────────────
+    // Loopback variants of the dashboard's own port are always allowed;
+    // additional origins are added via PRISM_CORS_ORIGINS (comma-sep).
+    // Wildcards are rejected by resolveAllowedOrigins().
+    this.corsCsrfConfig = {
+      allowedOrigins: resolveAllowedOrigins(this.port, process.env),
+      logRejections: process.env.PRISM_SECURITY_QUIET !== "true",
+    };
 
     // ── Observability (Phase E6) — initialize early so all events are counted ─
     this.metricsStore = new MetricsStore();
@@ -933,6 +975,12 @@ export class DashboardService {
       consoleExport: process.env.PRISM_OTEL_CONSOLE === "true",
     });
     this.otelExporter.start();
+
+    // ── SOC 2 evidence exporter (Phase SOC2-1) ─ default off ───────────────
+    this.soc2Exporter = new Soc2EvidenceExporter(this.activityBus);
+    if (this.soc2Exporter.isEnabled()) {
+      this.soc2Exporter.start();
+    }
 
     // ── OAuth adapters (Phase E2) ─────────────────────────────────────────────
     const oauthTokenStore = createOAuthTokenStore();
@@ -1083,6 +1131,72 @@ export class DashboardService {
     } catch {
       // Graceful degradation — A2A endpoints will return 503 if adapter failed to init.
     }
+
+    // ── Operator surfaces (Phase E3 follow-on) ───────────────────────────
+    this.riskOverrideStore = new RiskOverrideStore(
+      workspacePath("state", "risk-overrides.json"),
+      this.activityBus,
+    );
+    this.incidentTrendStore = new IncidentTrendStore(this.activityBus);
+    this.utilityRegistry = new UtilityRegistry(this.activityBus);
+    registerBuiltInUtilities(this.utilityRegistry, {
+      runContractDiffGate: async () => {
+        // Lightweight wrapper — runs the gate script in-process.
+        const cp = await import("node:child_process");
+        const out = await new Promise<{ code: number; stdout: string; stderr: string }>((resolveCp) => {
+          const child = cp.spawn(process.execPath, ["scripts/contract-diff-gate.cjs"], {
+            cwd: process.cwd(), env: process.env,
+          });
+          let stdout = ""; let stderr = "";
+          child.stdout.on("data", (b) => { stdout += b.toString(); });
+          child.stderr.on("data", (b) => { stderr += b.toString(); });
+          child.on("close", (code) => resolveCp({ code: code ?? 0, stdout, stderr }));
+        });
+        return {
+          summary: out.code === 0
+            ? "Contract diff gate passed."
+            : `Contract diff gate failed (exit ${out.code}).`,
+          details: { exitCode: out.code, stdout: out.stdout.slice(-2000), stderr: out.stderr.slice(-2000) },
+        };
+      },
+      exportPolicyAudit: async () => {
+        if (!this.policyAuditExporter) {
+          return { summary: "Policy audit exporter not available.", details: { available: false } };
+        }
+        const bundle = this.policyAuditExporter.exportBundle({ sessionId: this.status.sessionId });
+        return { summary: `Exported policy audit bundle (${bundle.recordCount} decisions).`, details: { bundle } };
+      },
+      exportSessionTrace: async () => {
+        if (!this.traceExplorer) {
+          return { summary: "Session trace explorer not available.", details: { available: false } };
+        }
+        const bundle = this.traceExplorer.exportBundle({ sessionId: this.status.sessionId });
+        return { summary: `Exported session trace bundle (${bundle.eventCount} events).`, details: { bundle } };
+      },
+      runRetrievalTrends: async () => {
+        if (!this.retrievalDashboardStore) {
+          return { summary: "Retrieval dashboard store not configured.", details: { available: false } };
+        }
+        const report = this.retrievalDashboardStore.getTrendReport(this.status.sessionId);
+        return { summary: report ? `Trend report ready (${report.snapshotsCompared} snapshots).` : "No trend data yet.", details: { report } };
+      },
+      runPerfTrendReport: async () => {
+        const cp = await import("node:child_process");
+        const out = await new Promise<{ code: number; stdout: string; stderr: string }>((resolveCp) => {
+          const child = cp.spawn(process.execPath, ["scripts/perf-trend-report.cjs"], {
+            cwd: process.cwd(), env: process.env,
+          });
+          let stdout = ""; let stderr = "";
+          child.stdout.on("data", (b) => { stdout += b.toString(); });
+          child.stderr.on("data", (b) => { stderr += b.toString(); });
+          child.on("close", (code) => resolveCp({ code: code ?? 0, stdout, stderr }));
+        });
+        return {
+          summary: out.code === 0 ? "Perf trend report generated." : `Perf trend report failed (exit ${out.code}).`,
+          details: { exitCode: out.code, stdout: out.stdout.slice(-2000), stderr: out.stderr.slice(-2000) },
+        };
+      },
+    });
 
     this.schedulerEngine = new SchedulerEngine({
       activityBus: this.activityBus,
@@ -1747,8 +1861,136 @@ export class DashboardService {
     }
   }
 
-  createChatSession(title?: string): ChatSessionSummary {
-    return this.chatStore.createSession(title);
+  /**
+   * Phase E3b: create a chat session bound to a character + CAC identity.
+   *
+   * Governance contract:
+   *   - If `input.characterId` is omitted, resolve from `PrismPreferences.defaultCharacterId`.
+   *   - If there is still no character and `input.allowUnbound !== true`, throw a tagged
+   *     Error with `.code = "no_default_character"` so the caller can return 409 +
+   *     `{ action: "run_wizard" }`.
+   *   - If `input.cacAssignmentId` is omitted, auto-create one via `AccountabilityManager`
+   *     using workspace defaults (placeholder emails accepted; runtime enforces tier caps).
+   *   - The session row records the character, CAC assignment id, and execution-profile
+   *     snapshot so downstream policy / UI can render the governance state without
+   *     re-reading preferences.
+   *
+   * The `allowUnbound` branch exists for internal bootstrap (`start()`) and for the
+   * initialization-certificate seed where no character yet exists; those sessions are
+   * displayed with a "no character bound" banner until reassigned.
+   */
+  createChatSession(input?: string | {
+    title?: string;
+    characterId?: string | null;
+    cacAssignmentId?: string | null;
+    operatorEmail?: string | null;
+    assistantEmail?: string | null;
+    allowUnbound?: boolean;
+  }): ChatSessionSummary {
+    const opts = typeof input === "string" || input === undefined
+      ? { title: typeof input === "string" ? input : undefined }
+      : input;
+
+    const prefs = readPreferences() ?? undefined;
+    const executionProfile = (this.status.executionProfileSegment || prefs?.executionProfileSegment || "individual").toString().toLowerCase();
+
+    // Resolve character id: explicit > workspace default > auto-pick from workspace characters.
+    let characterId = (opts.characterId ?? prefs?.defaultCharacterId ?? "").toString().trim() || null;
+
+    if (!characterId && !opts.allowUnbound) {
+      // Auto-pick the first character matching the execution profile so sessions can be
+      // created without requiring the setup wizard when characters are already available.
+      const available = this.listWorkspaceCharacters();
+      const profileMatch =
+        available.find(
+          (c) => !c.executionProfile || c.executionProfile.toLowerCase() === executionProfile,
+        ) ?? available[0] ?? null;
+      if (profileMatch) {
+        characterId = profileMatch.id;
+        // Persist as default so subsequent sessions resolve without re-scanning.
+        try {
+          writePreferences({ defaultCharacterId: characterId, lastUsedCharacterId: characterId });
+        } catch (_) {
+          /* non-fatal — preferences write failure must not block session creation */
+        }
+      } else {
+        const err = new Error("no_default_character") as Error & { code?: string };
+        err.code = "no_default_character";
+        throw err;
+      }
+    }
+
+    // Validate character exists when one was resolved.
+    if (characterId) {
+      const available = this.listWorkspaceCharacters();
+      if (!available.some((c) => c.id === characterId)) {
+        const err = new Error(`character_not_found: ${characterId}`) as Error & { code?: string };
+        err.code = "character_not_found";
+        throw err;
+      }
+    }
+
+    // Create session row first so CAC auto-assignment can reference its id.
+    const session = this.chatStore.createSession({
+      title: opts.title ?? "New Session",
+      characterId,
+      executionProfile,
+      operatorEmail: opts.operatorEmail ?? null,
+      assistantEmail: opts.assistantEmail ?? null,
+    });
+
+    // If a CAC assignment id was supplied, bind it. Otherwise, when we have a character,
+    // auto-create an assignment with workspace-default identities (placeholders OK).
+    let cacAssignmentId = opts.cacAssignmentId ?? null;
+    let operatorEmailFinal = opts.operatorEmail ?? null;
+    let assistantEmailFinal = opts.assistantEmail ?? null;
+
+    if (!cacAssignmentId && characterId) {
+      const operatorEmail = (opts.operatorEmail ?? `operator@prism.local`).toString().trim();
+      const assistantEmail = (opts.assistantEmail ?? `${characterId}@prism.local`).toString().trim();
+      try {
+        const assignment = this.characterAccountabilityManager.assign({
+          characterId,
+          prismUserId: "prism-user",
+          prismUserEmail: operatorEmail,
+          operatorId: "operator",
+          operatorEmail,
+          clientId: "dashboard",
+          sessionId: session.sessionId,
+          executionProfile,
+          workspaceHub: getWorkspaceHub(),
+        });
+        cacAssignmentId = assignment.assignmentId;
+        operatorEmailFinal = assignment.operatorEmail;
+        assistantEmailFinal = assistantEmail;
+      } catch (err) {
+        // Business-segment domain-mismatch is the usual failure. We surface via session
+        // metadata as unbound-CAC; runtime policy will block tier-2+ until reassigned.
+        void err;
+      }
+    }
+
+    if (cacAssignmentId || operatorEmailFinal || assistantEmailFinal) {
+      const rebound = this.chatStore.bindSessionCharacter(session.sessionId, {
+        characterId: characterId ?? "",
+        cacAssignmentId,
+        executionProfile,
+        operatorEmail: operatorEmailFinal,
+        assistantEmail: assistantEmailFinal,
+      });
+      if (rebound) {
+        return rebound;
+      }
+    }
+
+    // Persist last-used character so the next session picker prefills correctly.
+    if (characterId) {
+      try {
+        writePreferences({ lastUsedCharacterId: characterId });
+      } catch { /* non-fatal */ }
+    }
+
+    return session;
   }
 
   deleteChatSession(sessionId: string): void {
@@ -2242,6 +2484,51 @@ export class DashboardService {
   }
 
   /**
+   * Attach the MCP client adapter so the dashboard can expose
+   * /api/mcp/servers and the Guardian agent can drive self-heal.
+   */
+  setMcpAdapter(adapter: McpClientAdapter): void {
+    this.mcpAdapter = adapter;
+    // Wire Guardian's self-heal hook so mcp_health_recovery has a live adapter.
+    this.guardianAgent.setMcpAdapterFn(() => this.mcpAdapter);
+  }
+
+  /** True if an MCP adapter is currently attached. */
+  hasMcpAdapter(): boolean {
+    return this.mcpAdapter !== null;
+  }
+
+  /** Return the attached MCP adapter, if any. */
+  getMcpAdapter(): McpClientAdapter | null {
+    return this.mcpAdapter;
+  }
+
+  /**
+   * Attach a ConsoleInterceptor so the dashboard can broadcast captured
+   * stdout/stderr lines to WebSocket clients and serve /api/debug/console.
+   * Idempotent.
+   */
+  setConsoleInterceptor(interceptor: ConsoleInterceptor): void {
+    if (this.consoleInterceptor === interceptor) return;
+    if (this.consoleUnsubscribe) {
+      this.consoleUnsubscribe();
+      this.consoleUnsubscribe = null;
+    }
+    this.consoleInterceptor = interceptor;
+    this.consoleUnsubscribe = interceptor.onLine((entry: ConsoleLine) => {
+      const payload = JSON.stringify({
+        type: "console",
+        ts: entry.ts,
+        stream: entry.stream,
+        line: entry.line,
+      });
+      for (const ws of this.wsClients) {
+        try { ws.send(payload); } catch { /* ignore broken clients */ }
+      }
+    });
+  }
+
+  /**
    * Return a slim LlmDelegate bound to this service's LlmProviderManager.
    * Used by AgentPool so it shares the same provider settings and API keys.
    */
@@ -2388,7 +2675,7 @@ export class DashboardService {
   }
 
   /** Broadcast a JSON event to all connected WebSocket and SSE clients. */
-  private broadcastEvent(event: Record<string, unknown>): void {
+  public broadcastEvent(event: Record<string, unknown>): void {
     const data = JSON.stringify(event);
     for (const ws of this.wsClients) {
       if (ws.readyState === WebSocket.OPEN) {
@@ -2554,11 +2841,41 @@ export class DashboardService {
   getCharacterAccountabilityStore(): CharacterAccountabilityStore { return this.characterAccountabilityStore; }
   getCharacterAccountabilityManager(): CharacterAccountabilityManager { return this.characterAccountabilityManager; }
   getSchedulerEngine(): SchedulerEngine { return this.schedulerEngine; }
+  getSchedulerEvents(): Map<string, { id: string; title: string; start: string; end?: string; description?: string; createdAt: string }> { return this.schedulerEvents; }
+  getSchedulerProjects(): Map<string, any> { return this.schedulerProjects; }
+  getImportHistory(): Array<{ id: string; timestamp: string; mode: string; fileName: string; targetDir: string; registeredType: string | null; status: string; message: string; size: number }> { return this.importHistory; }
+  public listWorkspaceCharacters(): Array<{ id: string; name: string; displayName: string; executionProfile: string | null; persona: string | null; greeting: string | null; systemPrompt: string | null; tags: string[]; maxRiskTier: number | null; allowedTools: string[]; deniedTools: string[]; defaultEmail: string | null; sourcePath: string; tooltipTips: string[] }> {
+    const dir = workspaceCharactersDir();
+    if (!existsSync(dir)) { return []; }
+    const files = readdirSync(dir).filter((entry) => entry.toLowerCase().endsWith(".json")).sort((left, right) => left.localeCompare(right));
+    const characters: Array<{ id: string; name: string; displayName: string; executionProfile: string | null; persona: string | null; greeting: string | null; systemPrompt: string | null; tags: string[]; maxRiskTier: number | null; allowedTools: string[]; deniedTools: string[]; defaultEmail: string | null; sourcePath: string; tooltipTips: string[] }> = [];
+    for (const fileName of files) {
+      const fullPath = join(dir, fileName);
+      try {
+        const parsed = JSON.parse(readFileSync(fullPath, "utf-8")) as Record<string, unknown>;
+        const toolPermissions = (parsed.toolPermissions ?? {}) as Record<string, unknown>;
+        const allow = Array.isArray(toolPermissions.allow) ? toolPermissions.allow.map((entry) => String(entry)) : [];
+        const deny = Array.isArray(toolPermissions.deny) ? toolPermissions.deny.map((entry) => String(entry)) : [];
+        const name = String(parsed.name ?? fileName.replace(/\.json$/i, "")).trim();
+        const tooltipTips = Array.isArray(parsed.tooltipTips)
+          ? parsed.tooltipTips.map((entry) => String(entry)).filter((entry) => entry.trim().length > 0)
+          : [];
+        characters.push({ id: name, name, displayName: String(parsed.displayName ?? name).trim() || name, executionProfile: parsed.executionProfile != null ? String(parsed.executionProfile) : null, persona: parsed.persona != null ? String(parsed.persona) : null, greeting: parsed.greeting != null ? String(parsed.greeting) : null, systemPrompt: parsed.systemPrompt != null ? String(parsed.systemPrompt) : null, tags: Array.isArray(parsed.tags) ? parsed.tags.map((entry) => String(entry)) : [], maxRiskTier: Number.isFinite(Number(parsed.maxRiskTier)) ? Number(parsed.maxRiskTier) : null, allowedTools: allow, deniedTools: deny, defaultEmail: parsed.defaultEmail != null ? String(parsed.defaultEmail) : null, sourcePath: fullPath, tooltipTips });
+      } catch { /* Ignore malformed character documents. */ }
+    }
+    return characters;
+  }
   getToolRegistry(): ToolRegistry | null { return this.toolRegistry; }
   getContainerAdapter(): ContainerSandboxAdapter | null { return this.containerAdapter; }
   getTerminalAdapter(): TerminalSessionAdapter | null { return this.terminalAdapter; }
   getGmailOAuth(): GmailOAuthAdapter { return this.gmailOAuth; }
   getOutlookOAuth(): OutlookOAuthAdapter { return this.outlookOAuth; }
+  public getTooltipsRegistry(): TooltipsRegistry { return this.tooltipsRegistry; }
+  /** Broadcast a Guardian-curated tooltip insight to all connected clients. */
+  public emitTooltipInsight(tipId: string, message: string, kind: string = "guardian"): void {
+    if (!tipId) return;
+    this.broadcastEvent({ type: "guardian_tip", tipId, kind, message: String(message ?? "") });
+  }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
 
@@ -2571,6 +2888,15 @@ export class DashboardService {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+    // ── R2: CORS allowlist + Origin/Referer CSRF guard ────────────────
+    // Runs before rate-limit / auth so that a misconfigured cross-origin
+    // page never burns the IP's rate-limit budget and never gets a hint
+    // about whether a route is auth-gated. Preflights are answered here
+    // and short-circuit the rest of the pipeline.
+    const corsResult = applyCorsAndCsrf(req, res, this.corsCsrfConfig);
+    if (corsResult.responseSent) return;
+    if (!corsResult.allowed) return;
 
     // ── Request body size guard (Content-Length fast-path) ───────────
     const contentLengthHeader = req.headers["content-length"];
@@ -2614,16 +2940,22 @@ export class DashboardService {
       return;
     }
 
-    if (method === "GET" && url.startsWith("/public/") && (url.endsWith(".js") || url.endsWith(".css"))) {
+    if (method === "GET" && url.startsWith("/public/") && (url.endsWith(".js") || url.endsWith(".css") || url.endsWith(".html"))) {
       const safeFile = url.slice("/public/".length).replace(/\.\./g, "");
-      if (!safeFile || safeFile.includes("/") || safeFile.includes("\\")) {
+      if (!safeFile) {
         return this.json(res, 404, { error: "Not found" });
       }
-      const filePath = join(DashboardService.publicDir, safeFile);
+      const publicRoot = resolvePath(DashboardService.publicDir);
+      const filePath = resolvePath(publicRoot, safeFile);
+      // Containment check: reject any resolved path that escapes publicDir (defence-in-depth over the `..` strip above).
+      if (filePath !== publicRoot && !filePath.startsWith(publicRoot + pathSep)) {
+        return this.json(res, 404, { error: "Not found" });
+      }
       if (!existsSync(filePath)) { return this.json(res, 404, { error: "Not found" }); }
       const content = readFileSync(filePath);
+      const contentType = url.endsWith(".css") ? "text/css; charset=utf-8" : url.endsWith(".html") ? "text/html; charset=utf-8" : "application/javascript; charset=utf-8";
       res.writeHead(200, {
-        "Content-Type": url.endsWith(".css") ? "text/css; charset=utf-8" : "application/javascript; charset=utf-8",
+        "Content-Type": contentType,
         "Cache-Control": "no-store",
       });
       res.end(content);
@@ -2650,6 +2982,106 @@ export class DashboardService {
       });
       return;
     }
+
+    // ── PTAC-aligned /api/chat — tier-classified contract endpoint ──────────
+    //
+    // This is a thin, governance-first entry point that classifies a free-text
+    // prompt into Tier 1 / 2 / 3 and returns the contract shape that PTAC
+    // scenarios s03 (tier-1 capability), s05 (tier-2 approval), and s06
+    // (tier-3 deny) assert against. It complements — does NOT replace — the
+    // session-scoped chat surface at `/api/chat/sessions/:id/messages`, which
+    // remains the path used by the dashboard UI for full LLM round-trips.
+    //
+    // Response shapes:
+    //   - Tier 1: 200 { tier: 1, accepted: true, reason_code, response, session_id }
+    //   - Tier 2: 202 { tier: 2, approval_pending_ids: [id], reason_code, session_id }
+    //   - Tier 3: 200 { tier: 3, denied: true, reason_code, matched_pattern, session_id }
+    //
+    // Tier-2 entries are enqueued fire-and-forget into ApprovalQueue with a
+    // 120s timeout. Operators resolve them via POST /api/approval/approve/:id
+    // or POST /api/approval/deny/:id (existing routes).
+    if (method === "POST" && url === "/api/chat") {
+      let body: { prompt?: unknown; sessionId?: unknown };
+      try {
+        body = await this.readJsonBody<{ prompt?: unknown; sessionId?: unknown }>(req);
+      } catch (err) {
+        return this.json(res, 400, { error: "invalid_json", message: String((err as Error).message) });
+      }
+      const prompt = typeof body.prompt === "string" ? body.prompt : "";
+      const sessionId = typeof body.sessionId === "string" && body.sessionId.length > 0
+        ? body.sessionId
+        : `ptac-${randomUUID().slice(0, 8)}`;
+      if (prompt.trim().length === 0) {
+        return this.json(res, 400, {
+          error: "missing_prompt",
+          message: "Request body must include a non-empty 'prompt' field.",
+        });
+      }
+      const classification = classifyChatTier(prompt);
+
+      // Audit every classification decision through the activity bus so the
+      // accountability chain captures both allowed and refused requests.
+      this.activityBus.emit({
+        sessionId,
+        layer: "governance",
+        operation: "chat.tier_classified",
+        status: "succeeded",
+        details: {
+          tier: classification.tier,
+          reason_code: classification.reasonCode,
+          matched_pattern: classification.matchedPattern,
+          prompt_length: prompt.length,
+        },
+      });
+
+      if (classification.tier === 3) {
+        return this.json(res, 200, {
+          tier: 3,
+          denied: true,
+          reason_code: classification.reasonCode,
+          matched_pattern: classification.matchedPattern,
+          session_id: sessionId,
+        });
+      }
+
+      if (classification.tier === 2) {
+        // Enqueue an approval request. ApprovalQueue assigns the id internally;
+        // we snapshot the queue before/after to recover the new id without
+        // changing the queue API. Promise is intentionally fire-and-forget —
+        // the operator resolves it later via the approval endpoints.
+        const before = new Set(this.queue.list().map((entry) => entry.id));
+        void this.queue.request(
+          sessionId,
+          "chat.tier2",
+          { prompt, reason_code: classification.reasonCode, matched_pattern: classification.matchedPattern },
+          120_000,
+        );
+        const after = this.queue.list().map((entry) => entry.id);
+        const newIds = after.filter((id) => !before.has(id));
+        return this.json(res, 202, {
+          tier: 2,
+          approval_pending_ids: newIds,
+          reason_code: classification.reasonCode,
+          matched_pattern: classification.matchedPattern,
+          session_id: sessionId,
+        });
+      }
+
+      // Tier 1 — autonomous capability response. The intentional minimal body
+      // here lets PTAC self-drive scenarios assert end-to-end without pulling
+      // a live LLM provider into the test path. Real conversational chat
+      // continues to flow through /api/chat/sessions/:id/messages.
+      return this.json(res, 200, {
+        tier: 1,
+        accepted: true,
+        reason_code: classification.reasonCode,
+        response:
+          "Acknowledged. Tier-1 capability prompt accepted by the governance layer; "
+          + "for a full conversational reply, post to /api/chat/sessions/:id/messages.",
+        session_id: sessionId,
+      });
+    }
+    // ── End PTAC-aligned /api/chat ──────────────────────────────────────────
 
     if (method === "GET" && (url === "/pending" || url === "/api/pending" || url === "/api/approval/pending")) {
       return this.json(res, 200, this.queue.list());
@@ -2938,6 +3370,73 @@ export class DashboardService {
       }
     }
 
+    // Phase E3b — wizard: persist workspace default character. Called from step 4.
+    if (method === "POST" && url === "/api/setup/character") {
+      try {
+        const body = await this.readJsonBody<{ characterId?: string }>(req);
+        const characterId = String(body.characterId ?? "").trim();
+        if (!characterId) {
+          return this.json(res, 400, { error: "characterId is required." });
+        }
+        const available = this.listWorkspaceCharacters();
+        if (!available.some((c) => c.id === characterId)) {
+          return this.json(res, 404, { error: `character_not_found: ${characterId}` });
+        }
+        writePreferences({ defaultCharacterId: characterId, lastUsedCharacterId: characterId });
+        return this.json(res, 200, { ok: true, defaultCharacterId: characterId });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // Phase E3b — wizard: bootstrap the first CAC assignment + seed session. Called from step 5.
+    if (method === "POST" && url === "/api/setup/cac") {
+      try {
+        const body = await this.readJsonBody<{
+          characterId?: string;
+          operatorEmail?: string;
+          assistantEmail?: string;
+          title?: string;
+        }>(req);
+        const prefs = readPreferences();
+        const characterId = String(body.characterId ?? prefs?.defaultCharacterId ?? "").trim();
+        if (!characterId) {
+          return this.json(res, 400, {
+            error: "no_default_character",
+            message: "Run POST /api/setup/character first or provide characterId.",
+          });
+        }
+        const available = this.listWorkspaceCharacters();
+        if (!available.some((c) => c.id === characterId)) {
+          return this.json(res, 404, { error: `character_not_found: ${characterId}` });
+        }
+        const operatorEmail = String(body.operatorEmail ?? `operator@prism.local`).trim();
+        const assistantEmail = String(body.assistantEmail ?? `${characterId}@prism.local`).trim();
+
+        // Seed an initial session and auto-create the CAC assignment.
+        const session = this.createChatSession({
+          title: body.title ?? "First session",
+          characterId,
+          operatorEmail,
+          assistantEmail,
+        });
+        try {
+          writePreferences({
+            cacBootstrapAssignmentId: session.cacAssignmentId ?? undefined,
+            lastUsedCharacterId: characterId,
+          });
+        } catch { /* non-fatal */ }
+        return this.json(res, 201, {
+          ok: true,
+          session,
+          cacAssignmentId: session.cacAssignmentId,
+        });
+      } catch (error) {
+        const tagged = error as Error & { code?: string };
+        return this.json(res, 400, { error: tagged.message ?? String(error), code: tagged.code });
+      }
+    }
+
     if (method === "POST" && url === "/api/setup/complete") {
       try {
         writePreferences({ setupComplete: true });
@@ -3043,7 +3542,10 @@ export class DashboardService {
         const timestamp = new Date().toISOString();
 
         // 1. Create a dedicated chat session
-        const session = this.createChatSession("PRISM Initialization Certificate \u2014 " + timestamp);
+        const session = this.createChatSession({
+          title: "PRISM Initialization Certificate \u2014 " + timestamp,
+          allowUnbound: true,
+        });
 
         // 2. Build certificate content
         const certLines: string[] = [
@@ -3150,6 +3652,42 @@ export class DashboardService {
         summary: typeof e.details?.summary === "string" ? e.details.summary : e.operation,
       }));
       return this.json(res, 200, logs);
+    }
+
+    if (method === "GET" && url === "/api/mcp/servers") {
+      if (!this.mcpAdapter) {
+        return this.json(res, 200, { servers: [], attached: false });
+      }
+      return this.json(res, 200, {
+        servers: this.mcpAdapter.getServerStates(),
+        attached: true,
+      });
+    }
+
+    if (method === "POST" && /^\/api\/mcp\/servers\/[^/]+\/reconnect$/.test(url)) {
+      if (!this.mcpAdapter) {
+        return this.json(res, 503, { error: "MCP adapter not attached" });
+      }
+      const name = decodeURIComponent(url.split("/")[4] ?? "");
+      if (!name) return this.json(res, 400, { error: "Missing server name" });
+      const result = await this.mcpAdapter.forceReconnect(name);
+      return this.json(res, result.ok ? 200 : 502, result);
+    }
+
+    if (method === "GET" && url.startsWith("/api/debug/console")) {
+      if (!this.consoleInterceptor) {
+        return this.json(res, 200, { lines: [], attached: false });
+      }
+      let limit = 500;
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const raw = Number(parsed.searchParams.get("limit") ?? 500);
+        if (Number.isFinite(raw)) limit = Math.max(1, Math.min(5000, raw));
+      } catch { /* keep default */ }
+      return this.json(res, 200, {
+        lines: this.consoleInterceptor.getTail(limit),
+        attached: true,
+      });
     }
 
     if (method === "GET" && url === "/api/chat/sessions") {
@@ -3362,6 +3900,16 @@ export class DashboardService {
       try {
         const results = await this.llmProviders.testAllProviders();
         return this.json(res, 200, { providers: results, timestamp: new Date().toISOString() });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Session-independent provider catalog (for settings tab, no session required) ──
+    if (method === "GET" && url === "/api/llm/catalog") {
+      try {
+        const catalog = await this.llmProviders.getCatalog();
+        return this.json(res, 200, catalog);
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
       }
@@ -4127,22 +4675,40 @@ export class DashboardService {
         if (body.approval_routing && result.extracted_contracts) {
           for (const contract of result.extracted_contracts) {
             if (contract.risk_tier === "tier3") {
-              // Fire-and-forget: enqueue for operator review, do not block response
+              const toolId = contract.tool_id;
+              // Fire-and-forget: enqueue for operator review, do not block response.
+              // On resolution (approve / deny / timeout) feed the decision back
+              // into the extractor so contract_changes is updated and pollers
+              // (GET /api/tools/stage/status) see the final state.
+              const enqueuedAt = Date.now();
               void this.queue.request(
                 "system",
-                `tool.stage.${contract.tool_id}`,
+                `tool.stage.${toolId}`,
                 { tool_name: contract.tool_name, version: contract.version, risk_tier: contract.risk_tier },
                 300_000, // 5-minute approval window
-              ).then((approved) => {
-                this.activityBus.emit({
-                  operation: "tool.stage.approval_resolved",
-                  status: approved ? "succeeded" : "failed",
-                  sessionId: "system",
-                  layer: "governance",
-                  details: { tool_id: contract.tool_id, approved },
-                });
+              ).then(async (approved) => {
+                const elapsed = Date.now() - enqueuedAt;
+                // ApprovalQueue resolves false on both deny and timeout; treat
+                // ~window-elapsed false as timeout, otherwise as deny.
+                const decision: "approved" | "denied" | "timeout" = approved
+                  ? "approved"
+                  : (elapsed >= 295_000 ? "timeout" : "denied");
+                try {
+                  await extractor.consumeApprovalDecision(toolId, decision, {
+                    decisionSource: "approval_queue",
+                    decidedAt: new Date().toISOString(),
+                  });
+                } catch (err) {
+                  this.activityBus.emit({
+                    operation: "tool.stage.approval_resolved",
+                    status: "failed",
+                    sessionId: "system",
+                    layer: "governance",
+                    details: { tool_id: toolId, decision, error: String(err) },
+                  });
+                }
               });
-              approvalIds.push(contract.tool_id);
+              approvalIds.push(toolId);
             }
           }
         }
@@ -4150,6 +4716,24 @@ export class DashboardService {
         return this.json(res, 200, { ...result, approval_pending_ids: approvalIds });
       } catch (error) {
         return this.json(res, 500, { error: `Tool staging failed: ${String(error)}` });
+      }
+    }
+
+    if (method === "GET" && url.startsWith("/api/tools/stage/status")) {
+      try {
+        const u = new URL(url, "http://localhost");
+        const toolId = u.searchParams.get("tool_id");
+        if (!toolId) {
+          return this.json(res, 400, { error: "tool_id query parameter is required" });
+        }
+        const extractor = this.getOrCreateToolContractExtractor();
+        const status = await extractor.getContractChangeStatus(toolId);
+        if (!status) {
+          return this.json(res, 404, { tool_id: toolId, approval_status: "unknown" });
+        }
+        return this.json(res, 200, status);
+      } catch (error) {
+        return this.json(res, 500, { error: `Status lookup failed: ${String(error)}` });
       }
     }
 
@@ -4494,7 +5078,11 @@ export class DashboardService {
     }
 
     if (method === "GET" && url?.startsWith("/api/computer/screengrab/file/")) {
-      const name = decodeURIComponent(url.slice("/api/computer/screengrab/file/".length));
+      // Strip query string (e.g. ?token=... cache-buster ?t=...) before
+      // validating the filename so authed <img> requests don't 400 out.
+      const rawTail = url.slice("/api/computer/screengrab/file/".length);
+      const queryIdx = rawTail.indexOf("?");
+      const name = decodeURIComponent(queryIdx >= 0 ? rawTail.slice(0, queryIdx) : rawTail);
       if (!/^[\w\-.]+\.png$/.test(name)) return this.json(res, 400, { error: "Invalid filename" });
       const filePath = join(workspaceFramebufferDir(), name);
       if (!existsSync(filePath)) return this.json(res, 404, { error: "File not found" });
@@ -5843,8 +6431,102 @@ $r | ConvertTo-Json -Depth 4 -Compress
 
     if (method === "POST" && url === "/api/chat/sessions") {
       try {
-        const body = await this.readJsonBody<{ title?: string }>(req);
-        return this.json(res, 201, { session: this.createChatSession(body.title) });
+        const body = await this.readJsonBody<{
+          title?: string;
+          characterId?: string;
+          cacAssignmentId?: string;
+          operatorEmail?: string;
+          assistantEmail?: string;
+        }>(req);
+        const session = this.createChatSession({
+          title: body.title,
+          characterId: body.characterId,
+          cacAssignmentId: body.cacAssignmentId,
+          operatorEmail: body.operatorEmail,
+          assistantEmail: body.assistantEmail,
+        });
+        return this.json(res, 201, { session });
+      } catch (error) {
+        const tagged = error as Error & { code?: string };
+        if (tagged?.code === "no_default_character") {
+          return this.json(res, 409, {
+            error: "no_default_character",
+            action: "run_wizard",
+            message: "No character is bound to this workspace. Run the setup wizard or pass characterId.",
+          });
+        }
+        if (tagged?.code === "character_not_found") {
+          return this.json(res, 404, { error: tagged.message });
+        }
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // Phase E3b: (re)bind an existing chat session to a character + CAC identity.
+    const sessionCharacterMatch = /^\/api\/session\/([^/]+)\/character$/.exec(url);
+    if (sessionCharacterMatch && method === "POST") {
+      try {
+        const sessionId = decodeURIComponent(sessionCharacterMatch[1]!);
+        const body = await this.readJsonBody<{
+          characterId?: string;
+          cacAssignmentId?: string;
+          operatorEmail?: string;
+          assistantEmail?: string;
+        }>(req);
+        const characterId = String(body.characterId ?? "").trim();
+        if (!characterId) {
+          return this.json(res, 400, { error: "characterId is required." });
+        }
+        const available = this.listWorkspaceCharacters();
+        if (!available.some((c) => c.id === characterId)) {
+          return this.json(res, 404, { error: `character_not_found: ${characterId}` });
+        }
+        const executionProfile = (this.status.executionProfileSegment || "individual").toLowerCase();
+        let cacAssignmentId = (body.cacAssignmentId ?? "").toString().trim() || null;
+        let operatorEmailFinal = body.operatorEmail ?? null;
+        let assistantEmailFinal = body.assistantEmail ?? null;
+
+        if (!cacAssignmentId) {
+          const operatorEmail = (body.operatorEmail ?? `operator@prism.local`).toString().trim();
+          const assistantEmail = (body.assistantEmail ?? `${characterId}@prism.local`).toString().trim();
+          try {
+            const assignment = this.characterAccountabilityManager.assign({
+              characterId,
+              prismUserId: "prism-user",
+              prismUserEmail: operatorEmail,
+              operatorId: "operator",
+              operatorEmail,
+              clientId: "dashboard",
+              sessionId,
+              executionProfile,
+              workspaceHub: getWorkspaceHub(),
+            });
+            cacAssignmentId = assignment.assignmentId;
+            operatorEmailFinal = assignment.operatorEmail;
+            assistantEmailFinal = assistantEmail;
+          } catch (err) {
+            const e = err as { message?: string };
+            return this.json(res, 400, { error: e.message ?? "CAC assignment failed" });
+          }
+        } else {
+          // Existing assignment provided — record a dispatch so the chain reflects the rebind.
+          this.characterAccountabilityManager.recordDispatch(cacAssignmentId);
+        }
+
+        const session = this.chatStore.bindSessionCharacter(sessionId, {
+          characterId,
+          cacAssignmentId,
+          executionProfile,
+          operatorEmail: operatorEmailFinal,
+          assistantEmail: assistantEmailFinal,
+        });
+        if (!session) {
+          return this.json(res, 404, { error: "session_not_found" });
+        }
+        try {
+          writePreferences({ lastUsedCharacterId: characterId });
+        } catch { /* non-fatal */ }
+        return this.json(res, 200, { session });
       } catch (error) {
         return this.json(res, 400, { error: String(error) });
       }
@@ -6020,12 +6702,12 @@ $r | ConvertTo-Json -Depth 4 -Compress
     }
 
     // ── SLO Gauge API ─────────────────────────────────────────────────────────
-    if (method === "GET" && url === "/api/v1/telemetry/slo-summary") {
+    if (method === "GET" && url === "/api/telemetry/slo-summary") {
       return this.json(res, 200, computeSloSummary(this.metricsStore));
     }
 
     // ── CAC Identity Chain API ────────────────────────────────────────────────
-    if (method === "GET" && url.startsWith("/api/v1/cac/chain")) {
+    if (method === "GET" && url.startsWith("/api/cac/chain")) {
       try {
         const parsed = new URL(`http://localhost${url}`);
         const sessionId = parsed.searchParams.get("sessionId") || this.status.sessionId;
@@ -6322,686 +7004,6 @@ $r | ConvertTo-Json -Depth 4 -Compress
         lastCommand: last?.command ?? null,
       });
     }
-
-    // ── Workspace API endpoints ────────────────────────────────────────
-    if (method === "GET" && url === "/api/workspace/info") {
-      const root = resolveWorkspaceRoot();
-      const manifestPath = join(root, "prism-workspace.json");
-      let manifest = null;
-      if (existsSync(manifestPath)) {
-        try { manifest = JSON.parse(readFileSync(manifestPath, "utf-8")); } catch { /* ignore */ }
-      }
-      return this.json(res, 200, {
-        workspaceRoot: root,
-        exists: existsSync(root),
-        manifest,
-      });
-    }
-
-    if (method === "GET" && url === "/api/workspace/hub") {
-      return this.json(res, 200, { workspaceHub: getWorkspaceHub() });
-    }
-
-    if (method === "POST" && url === "/api/workspace/hub") {
-      try {
-        const body = await this.readJsonBody<{ workspaceHub?: string }>(req);
-        const hub = String(body.workspaceHub ?? "").trim();
-        setWorkspaceHub(hub);
-        return this.json(res, 200, { ok: true, workspaceHub: hub });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 400, { error: e.message ?? "Failed to set workspace hub" });
-      }
-    }
-
-    if (method === "GET" && url.startsWith("/api/workspace/characters")) {
-      const characters = this.listWorkspaceCharacters();
-      return this.json(res, 200, { characters, total: characters.length });
-    }
-
-    if (method === "GET" && url.startsWith("/api/workspace/character-assignments")) {
-      const parsed = new URL(`http://localhost${url}`);
-      const filter: CharacterAssignmentFilter = {};
-      const characterId = parsed.searchParams.get("characterId")?.trim();
-      const prismUserId = parsed.searchParams.get("prismUserId")?.trim();
-      const prismUserEmail = parsed.searchParams.get("prismUserEmail")?.trim();
-      const operatorId = parsed.searchParams.get("operatorId")?.trim();
-      const operatorEmail = parsed.searchParams.get("operatorEmail")?.trim();
-      const clientId = parsed.searchParams.get("clientId")?.trim();
-      const sessionId = parsed.searchParams.get("sessionId")?.trim();
-      const executionProfileSegment = parsed.searchParams.get("executionProfileSegment")?.trim();
-      const state = parsed.searchParams.get("state")?.trim();
-      if (characterId) filter.characterId = characterId;
-      if (prismUserId) filter.prismUserId = prismUserId;
-      if (prismUserEmail) filter.prismUserEmail = prismUserEmail;
-      if (operatorId) filter.operatorId = operatorId;
-      if (operatorEmail) filter.operatorEmail = operatorEmail;
-      if (clientId) filter.clientId = clientId;
-      if (sessionId) filter.sessionId = sessionId;
-      if (executionProfileSegment === "individual" || executionProfileSegment === "business") {
-        filter.executionProfileSegment = executionProfileSegment;
-      }
-      if (state === "active" || state === "suspended" || state === "revoked") {
-        filter.state = state;
-      }
-      const assignments = this.characterAccountabilityManager.list(filter);
-      const characterIndex = new Map(this.listWorkspaceCharacters().map((character) => [character.id, character]));
-      return this.json(res, 200, {
-        assignments: assignments.map((assignment) => ({
-          ...assignment,
-          character: characterIndex.get(assignment.characterId) ?? null,
-        })),
-        total: assignments.length,
-      });
-    }
-
-    if (method === "GET" && url.startsWith("/api/workspace/character-audit")) {
-      const parsed = new URL(`http://localhost${url}`);
-      const characterId = parsed.searchParams.get("characterId")?.trim() ?? "";
-      const assignmentId = parsed.searchParams.get("assignmentId")?.trim() ?? "";
-      const operatorEmail = parsed.searchParams.get("operatorEmail")?.trim().toLowerCase() ?? "";
-      const limitRaw = Number(parsed.searchParams.get("limit") ?? "20");
-      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.trunc(limitRaw))) : 20;
-      const events = this.activityBus
-        .listEvents()
-        .filter((event) => event.operation.startsWith("character_accountability."))
-        .filter((event) => !characterId || event.characterId === characterId)
-        .filter((event) => !assignmentId || event.assignmentId === assignmentId)
-        .filter((event) => !operatorEmail || (event.operatorEmail ?? "").toLowerCase() === operatorEmail)
-        .slice()
-        .sort((left, right) => String(right.timestamp).localeCompare(String(left.timestamp)))
-        .slice(0, limit);
-      return this.json(res, 200, { events, total: events.length });
-    }
-
-    if (method === "POST" && url === "/api/workspace/character-assign") {
-      try {
-        const body = await this.readJsonBody<{
-          characterId?: string;
-          prismUserId?: string;
-          prismUserEmail?: string;
-          operatorId?: string;
-          operatorEmail?: string;
-          clientId?: string;
-          sessionId?: string;
-          executionProfile?: string;
-          workspaceHub?: string;
-        }>(req);
-        const assignment = this.characterAccountabilityManager.assign({
-          characterId: String(body.characterId ?? "").trim(),
-          prismUserId: String(body.prismUserId ?? "").trim(),
-          prismUserEmail: String(body.prismUserEmail ?? "").trim(),
-          operatorId: String(body.operatorId ?? "").trim(),
-          operatorEmail: String(body.operatorEmail ?? "").trim(),
-          clientId: String(body.clientId ?? "dashboard").trim() || "dashboard",
-          sessionId: String(body.sessionId ?? this.status.sessionId).trim() || this.status.sessionId,
-          executionProfile: String(body.executionProfile ?? this.status.executionProfileSegment).trim() || this.status.executionProfileSegment,
-          workspaceHub: String(body.workspaceHub ?? getWorkspaceHub()).trim(),
-        });
-        return this.json(res, 200, { ok: true, assignment });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 400, { error: e.message ?? "Character assignment failed" });
-      }
-    }
-
-    if (method === "POST" && url === "/api/workspace/character-dispatch") {
-      try {
-        const body = await this.readJsonBody<{ assignmentId?: string }>(req);
-        const assignmentId = String(body.assignmentId ?? "").trim();
-        if (!assignmentId) {
-          return this.json(res, 400, { error: "assignmentId is required." });
-        }
-        const assignment = this.characterAccountabilityManager.recordDispatch(assignmentId);
-        if (!assignment) {
-          return this.json(res, 404, { error: "Active assignment not found." });
-        }
-        return this.json(res, 200, { ok: true, assignment });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 400, { error: e.message ?? "Dispatch failed" });
-      }
-    }
-
-    if (method === "POST" && url === "/api/workspace/character-suspend") {
-      try {
-        const body = await this.readJsonBody<{ assignmentId?: string; reason?: string }>(req);
-        const assignmentId = String(body.assignmentId ?? "").trim();
-        const reason = String(body.reason ?? "dashboard suspend").trim() || "dashboard suspend";
-        if (!assignmentId) {
-          return this.json(res, 400, { error: "assignmentId is required." });
-        }
-        const assignment = this.characterAccountabilityManager.suspend(assignmentId, reason);
-        if (!assignment) {
-          return this.json(res, 404, { error: "Active assignment not found." });
-        }
-        return this.json(res, 200, { ok: true, assignment });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 400, { error: e.message ?? "Suspend failed" });
-      }
-    }
-
-    if (method === "POST" && url === "/api/workspace/character-resume") {
-      try {
-        const body = await this.readJsonBody<{ assignmentId?: string }>(req);
-        const assignmentId = String(body.assignmentId ?? "").trim();
-        if (!assignmentId) {
-          return this.json(res, 400, { error: "assignmentId is required." });
-        }
-        const assignment = this.characterAccountabilityManager.resume(assignmentId);
-        if (!assignment) {
-          return this.json(res, 404, { error: "Suspended assignment not found." });
-        }
-        return this.json(res, 200, { ok: true, assignment });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 400, { error: e.message ?? "Resume failed" });
-      }
-    }
-
-    if (method === "POST" && url === "/api/workspace/character-revoke") {
-      try {
-        const body = await this.readJsonBody<{ assignmentId?: string; reason?: string }>(req);
-        const assignmentId = String(body.assignmentId ?? "").trim();
-        const reason = String(body.reason ?? "dashboard revoke").trim() || "dashboard revoke";
-        if (!assignmentId) {
-          return this.json(res, 400, { error: "assignmentId is required." });
-        }
-        const assignment = this.characterAccountabilityManager.revoke(assignmentId, reason);
-        if (!assignment) {
-          return this.json(res, 404, { error: "Assignment not found." });
-        }
-        return this.json(res, 200, { ok: true, assignment });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 400, { error: e.message ?? "Revoke failed" });
-      }
-    }
-
-    if (method === "GET" && url === "/api/workspace/files") {
-      const root = resolveWorkspaceRoot();
-      if (!existsSync(root)) {
-        return this.json(res, 200, { root, entries: [] });
-      }
-      const walkDir = (dir: string, prefix: string): Array<{ name: string; path: string; type: "file" | "dir"; size: number }> => {
-        const results: Array<{ name: string; path: string; type: "file" | "dir"; size: number }> = [];
-        let items: string[];
-        try { items = readdirSync(dir); } catch { return results; }
-        for (const item of items) {
-          const fullPath = join(dir, item);
-          const relPath = prefix ? prefix + "/" + item : item;
-          try {
-            const st = statSync(fullPath);
-            if (st.isDirectory()) {
-              results.push({ name: item, path: relPath, type: "dir", size: 0 });
-              results.push(...walkDir(fullPath, relPath));
-            } else {
-              results.push({ name: item, path: relPath, type: "file", size: st.size });
-            }
-          } catch { /* skip inaccessible */ }
-        }
-        return results;
-      };
-      const entries = walkDir(root, "");
-      return this.json(res, 200, { root, entries });
-    }
-
-    if (method === "POST" && url === "/api/workspace/open-explorer") {
-      const root = resolveWorkspaceRoot();
-      try {
-        const { exec: execCb } = await import("node:child_process");
-        const { platform: osPlatform } = await import("node:os");
-        const p = osPlatform();
-        const cmd = p === "win32" ? `explorer "${root}"` : p === "darwin" ? `open "${root}"` : `xdg-open "${root}"`;
-        execCb(cmd, { timeout: 10_000 }, () => { });
-        return this.json(res, 200, { ok: true, path: root });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 500, { error: e.message ?? "Failed to open explorer" });
-      }
-    }
-
-    if (method === "POST" && url === "/api/workspace/relocate") {
-      try {
-        const payload = await this.readJsonBody<{ path?: string }>(req);
-        const newPath = (payload.path ?? "").trim();
-        if (!newPath) {
-          return this.json(res, 400, { error: "Path is required." });
-        }
-        const { isAbsolute } = await import("node:path");
-        if (!isAbsolute(newPath)) {
-          return this.json(res, 400, { error: "Path must be absolute (e.g. C:\\Users\\you\\Documents\\MyWorkspace)." });
-        }
-        setWorkspaceRoot(newPath);
-        ensureWorkspaceStructure();
-        seedDefaultCharacters();
-        return this.json(res, 200, { ok: true, workspaceRoot: resolveWorkspaceRoot() });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 500, { error: e.message ?? "Failed to relocate workspace" });
-      }
-    }
-
-    if (method === "POST" && url === "/api/workspace/import") {
-      try {
-        const payload = await this.readJsonBody<{
-          mode?: string; fileName?: string; content?: string;
-          targetDir?: string; registeredType?: string;
-          files?: Array<{ name: string; content: string; relativePath?: string }>;
-        }>(req);
-        const mode = (payload.mode ?? "").trim();
-        if (!mode || !["general", "registered", "folder"].includes(mode)) {
-          return this.json(res, 400, { error: "mode must be 'general', 'registered', or 'folder'." });
-        }
-        const root = resolveWorkspaceRoot();
-        const profile = this.status.executionProfileSegment || "individual";
-        const blockedExtensions = [".exe", ".bat", ".cmd", ".ps1", ".sh", ".msi", ".dll", ".sys"];
-        const VALID_TARGET_DIRS = ["config", "artifacts", "data", "data/tasks", "data/notes", "data/email", "data/calendar", "characters", "logs", "workspace", "state"];
-        const REGISTERED_TYPES: Record<string, { targetDir: string; validate: (parsed: unknown) => string | null }> = {
-          character: {
-            targetDir: "characters",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.name || typeof o.name !== "string") return "Character must have a 'name' field.";
-              if (!o.systemPrompt && !o.persona) return "Character must have a 'systemPrompt' or 'persona' field.";
-              return null;
-            },
-          },
-          "mcp-config": {
-            targetDir: "config",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.mcpServers || typeof o.mcpServers !== "object") return "MCP config must have a 'mcpServers' object.";
-              return null;
-            },
-          },
-          "session-package": {
-            targetDir: "artifacts/packages",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.exportedAt && !o.package) return "Session package must have 'exportedAt' or 'package' field.";
-              return null;
-            },
-          },
-          "tool-contract": {
-            targetDir: "artifacts/contracts",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!Array.isArray(o.tools)) return "Tool contract must have a 'tools' array.";
-              return null;
-            },
-          },
-          "self-review": {
-            targetDir: "artifacts/self-review",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.generatedAt) return "Self-review report must have a 'generatedAt' field.";
-              return null;
-            },
-          },
-          "task-timeline": {
-            targetDir: "data/tasks",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.timelineId || !Array.isArray(o.tasks)) return "Task timeline must have 'timelineId' and 'tasks' array.";
-              return null;
-            },
-          },
-          note: {
-            targetDir: "data/notes",
-            validate: () => null,
-          },
-        };
-
-        // ── Folder import ──
-        if (mode === "folder") {
-          const targetDir = (payload.targetDir ?? "").trim();
-          if (!targetDir || !VALID_TARGET_DIRS.includes(targetDir)) {
-            return this.json(res, 400, { error: "targetDir must be one of: " + VALID_TARGET_DIRS.join(", ") });
-          }
-          const files = payload.files;
-          if (!Array.isArray(files) || files.length === 0) {
-            return this.json(res, 400, { error: "No files provided for folder import." });
-          }
-          if (files.length > 500) {
-            return this.json(res, 400, { error: "Folder import limited to 500 files at a time." });
-          }
-          const results: Array<{ name: string; status: string; message: string }> = [];
-          for (const file of files) {
-            const relPath = (file.relativePath ?? file.name).replace(/\\/g, "/");
-            if (relPath.includes("..")) {
-              results.push({ name: relPath, status: "rejected", message: "Path traversal not allowed." });
-              continue;
-            }
-            const ext = "." + relPath.split(".").pop()?.toLowerCase();
-            if (profile === "business" && blockedExtensions.includes(ext)) {
-              results.push({ name: relPath, status: "rejected", message: "Executable blocked by business profile." });
-              continue;
-            }
-            try {
-              const buf = Buffer.from(file.content, "base64");
-              if (buf.length > 10 * 1024 * 1024) {
-                results.push({ name: relPath, status: "rejected", message: "File exceeds 10 MB limit." });
-                continue;
-              }
-              const fullPath = join(root, targetDir, relPath);
-              const dir = dirname(fullPath);
-              if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-              writeFileSync(fullPath, buf);
-              results.push({ name: relPath, status: "imported", message: "OK" });
-            } catch (fe: unknown) {
-              results.push({ name: relPath, status: "error", message: (fe as { message?: string }).message ?? "Write failed" });
-            }
-          }
-          const imported = results.filter(r => r.status === "imported").length;
-          const entry = {
-            id: Date.now().toString(36),
-            timestamp: new Date().toISOString(),
-            mode: "folder",
-            fileName: imported + " files into " + targetDir,
-            targetDir,
-            registeredType: null,
-            status: imported === files.length ? "success" : "partial",
-            message: imported + "/" + files.length + " files imported",
-            size: 0,
-          };
-          this.importHistory.unshift(entry);
-          if (this.importHistory.length > 100) this.importHistory.length = 100;
-          return this.json(res, 200, { ok: true, results, summary: entry });
-        }
-
-        // ── General + Registered single-file import ──
-        const fileName = (payload.fileName ?? "").trim();
-        const content = (payload.content ?? "").trim();
-        if (!fileName) return this.json(res, 400, { error: "fileName is required." });
-        if (!content) return this.json(res, 400, { error: "content (base64) is required." });
-        if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
-          return this.json(res, 400, { error: "fileName must not contain path separators or '..'." });
-        }
-        const buf = Buffer.from(content, "base64");
-        if (buf.length > 10 * 1024 * 1024) {
-          return this.json(res, 400, { error: "File exceeds 10 MB size limit." });
-        }
-        const ext = "." + fileName.split(".").pop()?.toLowerCase();
-        if (profile === "business" && blockedExtensions.includes(ext)) {
-          return this.json(res, 400, { error: "Executable file types are blocked under Business profile policy." });
-        }
-
-        if (mode === "registered") {
-          const rType = (payload.registeredType ?? "").trim();
-          if (!rType || !REGISTERED_TYPES[rType]) {
-            return this.json(res, 400, { error: "registeredType must be one of: " + Object.keys(REGISTERED_TYPES).join(", ") });
-          }
-          const spec = REGISTERED_TYPES[rType];
-          let parsed: unknown = null;
-          const isJson = ext === ".json";
-          if (isJson) {
-            try { parsed = JSON.parse(buf.toString("utf-8")); } catch {
-              return this.json(res, 400, { error: "File is not valid JSON." });
-            }
-            const vErr = spec.validate(parsed);
-            if (vErr) return this.json(res, 400, { error: "Validation failed: " + vErr });
-          }
-          const destDir = join(root, spec.targetDir);
-          if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
-          let destName = rType === "mcp-config" ? "mcp-settings.json" : fileName;
-          const destPath = join(destDir, destName);
-          if (existsSync(destPath)) {
-            const ts = Date.now().toString(36);
-            const parts = destName.split(".");
-            if (parts.length > 1) {
-              parts[parts.length - 2] += "-" + ts;
-              destName = parts.join(".");
-            } else {
-              destName = destName + "-" + ts;
-            }
-          }
-          writeFileSync(join(destDir, destName), buf);
-          const entry = {
-            id: Date.now().toString(36),
-            timestamp: new Date().toISOString(),
-            mode: "registered",
-            fileName: destName,
-            targetDir: spec.targetDir,
-            registeredType: rType,
-            status: "success",
-            message: "Imported as " + rType + " to " + spec.targetDir + "/" + destName,
-            size: buf.length,
-          };
-          this.importHistory.unshift(entry);
-          if (this.importHistory.length > 100) this.importHistory.length = 100;
-          return this.json(res, 200, { ok: true, entry });
-        }
-
-        // ── General import ──
-        const targetDir = (payload.targetDir ?? "").trim();
-        if (!targetDir || !VALID_TARGET_DIRS.includes(targetDir)) {
-          return this.json(res, 400, { error: "targetDir must be one of: " + VALID_TARGET_DIRS.join(", ") });
-        }
-        const destDir = join(root, targetDir);
-        if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
-        let destName = fileName;
-        if (existsSync(join(destDir, destName))) {
-          const ts = Date.now().toString(36);
-          const parts = destName.split(".");
-          if (parts.length > 1) {
-            parts[parts.length - 2] += "-" + ts;
-            destName = parts.join(".");
-          } else {
-            destName = destName + "-" + ts;
-          }
-        }
-        writeFileSync(join(destDir, destName), buf);
-        const entry = {
-          id: Date.now().toString(36),
-          timestamp: new Date().toISOString(),
-          mode: "general",
-          fileName: destName,
-          targetDir,
-          registeredType: null,
-          status: "success",
-          message: "Imported to " + targetDir + "/" + destName,
-          size: buf.length,
-        };
-        this.importHistory.unshift(entry);
-        if (this.importHistory.length > 100) this.importHistory.length = 100;
-        return this.json(res, 200, { ok: true, entry });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 500, { error: e.message ?? "Import failed" });
-      }
-    }
-
-    if (method === "GET" && url === "/api/workspace/import/history") {
-      return this.json(res, 200, { history: this.importHistory });
-    }
-
-    if (method === "GET" && url === "/api/workspace/git-status") {
-      const root = resolveWorkspaceRoot();
-      try {
-        const { exec: execCb } = await import("node:child_process");
-        const { promisify } = await import("node:util");
-        const exec = promisify(execCb);
-        const gitResult = await exec("git status --porcelain", { cwd: root, timeout: 10_000 }).catch(() => null);
-        const branchResult = await exec("git rev-parse --abbrev-ref HEAD", { cwd: root, timeout: 5_000 }).catch(() => null);
-        const remoteResult = await exec("git remote -v", { cwd: root, timeout: 5_000 }).catch(() => null);
-        return this.json(res, 200, {
-          isGitRepo: gitResult !== null,
-          branch: branchResult?.stdout?.trim() ?? null,
-          remote: remoteResult?.stdout?.trim() ?? null,
-          changedFiles: gitResult?.stdout?.trim()?.split("\n").filter(Boolean).length ?? 0,
-        });
-      } catch {
-        return this.json(res, 200, { isGitRepo: false, branch: null, remote: null, changedFiles: 0 });
-      }
-    }
-
-    // ── Scheduler API endpoints ──────────────────────────────────────────
-
-    if (method === "GET" && url.startsWith("/api/scheduler/events")) {
-      const qs = new URL(url, "http://localhost").searchParams;
-      const startFilter = qs.get("start") || "";
-      const endFilter = qs.get("end") || "";
-      let events = [...this.schedulerEvents.values()];
-      if (startFilter) events = events.filter((e) => (e.end || e.start) >= startFilter);
-      if (endFilter) events = events.filter((e) => e.start <= endFilter);
-      return this.json(res, 200, { events });
-    }
-
-    if (method === "POST" && url === "/api/scheduler/events") {
-      const body = await this.readJsonBody<{ eventId?: string; title?: string; start?: string; end?: string; description?: string }>(req);
-      if (!body.title || !body.start) return this.json(res, 400, { error: "title and start are required" });
-      const id = body.eventId || randomUUID();
-      const evt = { id, title: body.title, start: body.start, end: body.end, description: body.description, createdAt: new Date().toISOString() };
-      this.schedulerEvents.set(id, evt);
-      return this.json(res, 200, { event: evt });
-    }
-
-    if (method === "GET" && url === "/api/scheduler/projects") {
-      const projects = [...this.schedulerProjects.values()];
-      return this.json(res, 200, { projects });
-    }
-
-    const projectDetailMatch = /^\/api\/scheduler\/projects\/([^/?]+)$/.exec(url);
-    if (method === "GET" && projectDetailMatch) {
-      const pid = decodeURIComponent(projectDetailMatch[1]!);
-      const project = this.schedulerProjects.get(pid);
-      if (!project) return this.json(res, 404, { error: "Project not found" });
-      return this.json(res, 200, { project });
-    }
-
-    if (method === "POST" && url === "/api/scheduler/projects") {
-      const body = await this.readJsonBody<{ name?: string; description?: string }>(req);
-      if (!body.name) return this.json(res, 400, { error: "name is required" });
-      const id = randomUUID();
-      const project = { id, name: body.name, description: body.description, tasks: [] as Array<{ id: string; title: string; status: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string; createdAt: string }>, milestones: [] as Array<{ title: string; dueDate?: string }>, createdAt: new Date().toISOString() };
-      this.schedulerProjects.set(id, project);
-      return this.json(res, 200, { project });
-    }
-
-    if (method === "GET" && url === "/api/scheduler/tasks") {
-      const tasks: Array<Record<string, unknown>> = [];
-      for (const p of this.schedulerProjects.values()) {
-        for (const t of p.tasks) tasks.push({ ...t, projectId: p.id, projectName: p.name });
-      }
-      return this.json(res, 200, { tasks });
-    }
-
-    if (method === "POST" && url === "/api/scheduler/tasks") {
-      const body = await this.readJsonBody<{ title?: string; projectId?: string; status?: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string }>(req);
-      if (!body.title) return this.json(res, 400, { error: "title is required" });
-      const task = { id: randomUUID(), title: body.title, status: body.status || "backlog", assignee: body.assignee, startDate: body.startDate, endDate: body.endDate, dueDate: body.dueDate, createdAt: new Date().toISOString() };
-      if (body.projectId) {
-        const project = this.schedulerProjects.get(body.projectId);
-        if (project) { project.tasks.push(task); }
-        else { return this.json(res, 404, { error: "Project not found" }); }
-      }
-      return this.json(res, 200, { task });
-    }
-
-    const taskUpdateMatch = /^\/api\/scheduler\/tasks\/([^/?]+)/.exec(url);
-    if (method === "PUT" && taskUpdateMatch) {
-      const taskId = decodeURIComponent(taskUpdateMatch[1]!);
-      const qs = new URL(url, "http://localhost").searchParams;
-      const projectId = qs.get("projectId") || "";
-      const body = await this.readJsonBody<{ status?: string; title?: string; assignee?: string }>(req);
-      let found = false;
-      for (const p of this.schedulerProjects.values()) {
-        if (projectId && p.id !== projectId) continue;
-        const task = p.tasks.find((t) => t.id === taskId);
-        if (task) {
-          if (body.status) task.status = body.status;
-          if (body.title) task.title = body.title;
-          if (body.assignee !== undefined) task.assignee = body.assignee;
-          found = true;
-          break;
-        }
-      }
-      if (!found) return this.json(res, 404, { error: "Task not found" });
-      return this.json(res, 200, { ok: true });
-    }
-
-    // ── Cron Jobs API endpoints ───────────────────────────────────────
-    if (method === "GET" && url === "/api/scheduler/cron") {
-      const jobs = this.schedulerEngine.list().map((e) => ({
-        ...e,
-        nextOccurrences: e.cronExpression
-          ? getNextNCronOccurrences(e.cronExpression, 3).map((d) => d.toISOString())
-          : [],
-      }));
-      return this.json(res, 200, jobs);
-    }
-
-    if (method === "POST" && url === "/api/scheduler/cron") {
-      const body = await this.readJsonBody<{
-        label?: string;
-        type?: string;
-        cronExpression?: string;
-        runAt?: string;
-        action?: string;
-        payload?: Record<string, unknown>;
-      }>(req);
-      if (!body.label || !body.action) {
-        return this.json(res, 400, { error: "label and action are required" });
-      }
-      try {
-        let entry;
-        if (body.type === "once") {
-          if (!body.runAt) {
-            return this.json(res, 400, { error: "runAt is required for one-time jobs" });
-          }
-          entry = this.schedulerEngine.scheduleOnce(body.label, body.runAt, body.action, body.payload);
-        } else {
-          if (!body.cronExpression) {
-            return this.json(res, 400, { error: "cronExpression is required for recurring jobs" });
-          }
-          // Validate cron expression before scheduling
-          parseCronExpression(body.cronExpression);
-          entry = this.schedulerEngine.scheduleRecurring(body.label, body.cronExpression, body.action, body.payload);
-        }
-        this.broadcastEvent({ type: "scheduler:cron-created", id: entry.id, label: entry.label });
-        return this.json(res, 201, { job: entry });
-      } catch (err: any) {
-        return this.json(res, 400, { error: "Invalid cron expression: " + (err?.message || String(err)) });
-      }
-    }
-
-    if (method === "POST" && url === "/api/scheduler/cron/validate") {
-      const body = await this.readJsonBody<{ cronExpression?: string }>(req);
-      if (!body.cronExpression) {
-        return this.json(res, 400, { valid: false, error: "cronExpression is required" });
-      }
-      try {
-        const fields = parseCronExpression(body.cronExpression);
-        const nextDates = getNextNCronOccurrences(body.cronExpression, 5).map((d) => d.toISOString());
-        return this.json(res, 200, { valid: true, fields, nextDates });
-      } catch (err: any) {
-        return this.json(res, 200, { valid: false, error: err?.message || String(err) });
-      }
-    }
-
-    // /api/scheduler/cron/:id and /api/scheduler/cron/:id/preview
-    const cronIdMatch = /^\/api\/scheduler\/cron\/([^/?]+)(\/preview)?$/.exec(url);
-    if (cronIdMatch) {
-      const cronId = decodeURIComponent(cronIdMatch[1]!);
-      const isPreview = !!cronIdMatch[2];
-
-      if (isPreview && method === "GET") {
-        const entry = this.schedulerEngine.get(cronId);
-        if (!entry) return this.json(res, 404, { error: "Cron job not found" });
-        const nextOccurrences = this.schedulerEngine.getNextOccurrences(cronId, 10).map((d) => d.toISOString());
-        return this.json(res, 200, { ...entry, nextOccurrences });
-      }
-
-      if (!isPreview && method === "DELETE") {
-        const removed = this.schedulerEngine.cancel(cronId);
-        if (!removed) return this.json(res, 404, { error: "Cron job not found" });
-        this.broadcastEvent({ type: "scheduler:cron-cancelled", id: cronId });
-        return this.json(res, 200, { ok: true });
-      }
-    }
-
     // ── A2A Protocol routes (Phase F) ─────────────────────────────────────
     // GET /.well-known/agent.json — Agent Card (publicly accessible)
     if (method === "GET" && url === "/.well-known/agent.json") {
@@ -7162,6 +7164,244 @@ $r | ConvertTo-Json -Depth 4 -Compress
       }
     }
 
+    // ── Operator Utilities (Phase E3): list, execute, fetch run status ───
+    // NOTE: route literals match the post-normalization `url` (`/api/v1/*` → `/api/*`).
+    if (method === "GET" && url === "/api/utilities") {
+      return this.json(res, 200, { utilities: this.utilityRegistry.list() });
+    }
+    if (method === "POST" && /^\/api\/utilities\/[^/]+\/execute$/.test(url)) {
+      const id = decodeURIComponent(url.split("/")[4]!);
+      const desc = this.utilityRegistry.get(id);
+      if (!desc) return this.json(res, 404, { error: "Unknown utility", utilityId: id });
+      try {
+        const body = await this.readJsonBody<{ params?: Record<string, unknown>; reason?: string }>(req).catch(() => ({} as { params?: Record<string, unknown>; reason?: string }));
+        const params = body && "params" in body ? (body as { params?: Record<string, unknown> }).params : undefined;
+        const reason = body && "reason" in body ? (body as { reason?: string }).reason : undefined;
+        const run = await this.utilityRegistry.execute(id, params ?? {}, reason);
+        return this.json(res, run.status === "failed" ? 500 : 200, { run });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Utility execution failed";
+        return this.json(res, 500, { error: "Utility execution failed", detail: msg });
+      }
+    }
+    if (method === "GET" && /^\/api\/utilities\/runs\/[^/]+$/.test(url)) {
+      const runId = decodeURIComponent(url.split("/").pop()!);
+      const run = this.utilityRegistry.getRun(runId);
+      if (!run) return this.json(res, 404, { error: "Unknown run", runId });
+      return this.json(res, 200, { run });
+    }
+    if (method === "GET" && url === "/api/utilities/runs") {
+      return this.json(res, 200, { runs: this.utilityRegistry.listRuns() });
+    }
+
+    // ── Tool Risk Overrides (Phase E3) ───────────────────────────────────
+    if (method === "GET" && url === "/api/tools/risk-overrides") {
+      return this.json(res, 200, { overrides: this.riskOverrideStore.list() });
+    }
+    if (method === "GET" && /^\/api\/tools\/[^/]+\/risk$/.test(url)) {
+      const toolId = decodeURIComponent(url.split("/")[4]!);
+      const ov = this.riskOverrideStore.get(toolId);
+      return this.json(res, 200, { toolId, override: ov ?? null });
+    }
+    if (method === "PATCH" && /^\/api\/tools\/[^/]+\/risk$/.test(url)) {
+      const toolId = decodeURIComponent(url.split("/")[4]!);
+      try {
+        const body = await this.readJsonBody<{ tier?: RiskTier; reason?: string; expiresAt?: string | null; setBy?: string }>(req);
+        if (!body?.tier || !body?.reason) {
+          return this.json(res, 400, { error: "Missing required fields", required: ["tier", "reason"] });
+        }
+        const ov = this.riskOverrideStore.set({
+          toolId,
+          overrideTier: body.tier,
+          reason: body.reason,
+          expiresAt: body.expiresAt ?? null,
+          setBy: body.setBy ?? "operator",
+        });
+        return this.json(res, 200, { override: ov });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to set override";
+        return this.json(res, 400, { error: "Failed to set override", detail: msg });
+      }
+    }
+    if (method === "DELETE" && /^\/api\/tools\/[^/]+\/risk$/.test(url)) {
+      const toolId = decodeURIComponent(url.split("/")[4]!);
+      const cleared = this.riskOverrideStore.clear(toolId, "operator");
+      return this.json(res, cleared ? 200 : 404, { toolId, cleared: !!cleared, override: cleared });
+    }
+
+    // ── CAC Identity Panel (Phase E3) ────────────────────────────────────
+    if (method === "GET" && url === "/api/cac/assignments") {
+      const audit = this.characterAccountabilityManager.exportAudit({});
+      return this.json(res, 200, { assignments: audit });
+    }
+    if (method === "GET" && /^\/api\/cac\/assignments\/[^/]+\/chain$/.test(url)) {
+      const assignmentId = decodeURIComponent(url.split("/")[5]!);
+      const chain = this.characterAccountabilityManager.getAssignmentChain(assignmentId);
+      if (!chain) return this.json(res, 404, { error: "Unknown assignment", assignmentId });
+      return this.json(res, 200, chain);
+    }
+    if (method === "GET" && url.startsWith("/api/cac/export")) {
+      const isCsv = /[?&]format=csv\b/.test(rawUrl);
+      const audit = this.characterAccountabilityManager.exportAudit({});
+      if (isCsv) {
+        const headers = [
+          "assignmentId", "characterId", "operatorId", "operatorEmail", "prismUserEmail",
+          "executionProfileSegment", "state", "assignedAt", "updatedAt", "dispatchCount",
+          "scopesActive", "scopesExpired", "emailVerifiedAt", "emailVerifiedProvider",
+        ];
+        const escape = (v: unknown) => {
+          const s = v == null ? "" : String(v);
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const lines = [headers.join(",")];
+        for (const row of audit) {
+          lines.push(headers.map((h) => escape((row as Record<string, unknown>)[h])).join(","));
+        }
+        res.writeHead(200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="cac-audit-${Date.now()}.csv"`,
+        });
+        res.end(lines.join("\n"));
+        return;
+      }
+      return this.json(res, 200, { assignments: audit, exportedAt: new Date().toISOString() });
+    }
+    if (method === "POST" && /^\/api\/cac\/[^/]+\/verify-email$/.test(url)) {
+      const assignmentId = decodeURIComponent(url.split("/")[4]!);
+      try {
+        const body = await this.readJsonBody<{ provider?: "gmail" | "outlook"; verifiedEmail?: string }>(req);
+        const provider = body?.provider;
+        const email = body?.verifiedEmail;
+        if (!provider || !email) {
+          return this.json(res, 400, { error: "Missing required fields", required: ["provider", "verifiedEmail"] });
+        }
+        const updated = this.characterAccountabilityManager.markEmailVerified(assignmentId, email, provider);
+        if (!updated) return this.json(res, 409, { error: "Verification rejected (assignment missing/revoked or email mismatch)" });
+        return this.json(res, 200, { assignment: updated });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Verification failed";
+        return this.json(res, 400, { error: "Verification failed", detail: msg });
+      }
+    }
+
+    // ── Incident Trend Tuning (Phase E5) ─────────────────────────────────
+    if (method === "GET" && url.startsWith("/api/retrieval/incident-trends")) {
+      const profile = /[?&]profile=(individual|business|unknown)/.exec(rawUrl)?.[1] ?? "unknown";
+      const windowMatch = /[?&]windowDays=(\d+)/.exec(rawUrl)?.[1];
+      const windowDays = windowMatch ? Math.max(1, Math.min(60, parseInt(windowMatch, 10))) : 7;
+      const report = this.incidentTrendStore.getReport(profile as "individual" | "business" | "unknown", windowDays);
+      const base = withRetrievalAlertPolicy({});
+      const tuned = tuneFromIncidentTrends(base, {
+        profile: report.profile,
+        windowDays: report.windowDays,
+        dailyAverage: report.dailyAverage,
+      });
+      return this.json(res, 200, { report, tuning: tuned });
+    }
+
+    // ── Phase H: Novel Systems Incubation (CCC + DLMA + SHWS) ────────────
+    // All endpoints carry `prototype: true` and are gated by PRISM_INCUBATION.
+    // NOTE: gate matches the post-normalization `url` (`/api/v1/*` → `/api/*`).
+    if (url.startsWith("/api/incubation/")) {
+      const inc = await this.getIncubation();
+      if (!inc.enabled) {
+        this.json(res, 503, {
+          error: "incubation_disabled",
+          message: "Set PRISM_INCUBATION=on to enable Novel Systems prototypes.",
+          prototype: true,
+        });
+        return;
+      }
+
+      // POST /api/v1/incubation/ccc/compile (matches normalized /api/incubation/...)
+      if (method === "POST" && url === "/api/incubation/ccc/compile") {
+        const body = await this.readJsonBody<{
+          dag?: { id?: string; name?: string; steps?: unknown[]; fallbacks?: unknown[] };
+          profileSegment?: "individual" | "business";
+        }>(req);
+        if (!body.dag || !Array.isArray(body.dag.steps)) {
+          this.json(res, 400, { error: "dag.steps required", prototype: true });
+          return;
+        }
+        const { INDIVIDUAL_PROFILE: ind, BUSINESS_PROFILE: biz } = await import("../policy/execution-profiles.js");
+        const profile = body.profileSegment === "business" ? biz : ind;
+        const dag = {
+          id: body.dag.id ?? "ad-hoc",
+          name: body.dag.name ?? "ad-hoc",
+          steps: body.dag.steps as Array<import("../runtime/workflow.js").WorkflowStep>,
+          fallbacks: (body.dag.fallbacks ?? []) as Array<import("../runtime/workflow.js").WorkflowFallback>,
+        };
+        const plan = inc.compiler.compile(dag, { profile, constitution: inc.constitution });
+        this.json(res, 200, { plan, prototype: true });
+        return;
+      }
+
+      // GET /api/v1/incubation/ccc/constitutions
+      if (method === "GET" && url === "/api/incubation/ccc/constitutions") {
+        this.json(res, 200, { constitutions: [inc.constitution], prototype: true });
+        return;
+      }
+
+      // POST /api/v1/incubation/dlma/query
+      if (method === "POST" && url === "/api/incubation/dlma/query") {
+        const body = await this.readJsonBody<{ text?: string; k?: number }>(req);
+        if (!body.text) {
+          this.json(res, 400, { error: "text required", prototype: true });
+          return;
+        }
+        const result = inc.arbiter.query(body.text, body.k ?? 5);
+        this.json(res, 200, { ...result, prototype: true });
+        return;
+      }
+
+      // GET /api/v1/incubation/dlma/weights
+      if (method === "GET" && url === "/api/incubation/dlma/weights") {
+        this.json(res, 200, { weights: inc.arbiter.getWeights(), prototype: true });
+        return;
+      }
+
+      // POST /api/v1/incubation/shws/propose
+      if (method === "POST" && url === "/api/incubation/shws/propose") {
+        const body = await this.readJsonBody<{
+          failedStepId?: string;
+          dag?: { id?: string; name?: string; steps?: unknown[]; fallbacks?: unknown[] };
+          profileSegment?: "individual" | "business";
+        }>(req);
+        if (!body.failedStepId || !body.dag || !Array.isArray(body.dag.steps)) {
+          this.json(res, 400, { error: "failedStepId and dag.steps required", prototype: true });
+          return;
+        }
+        const { INDIVIDUAL_PROFILE: ind, BUSINESS_PROFILE: biz } = await import("../policy/execution-profiles.js");
+        const profile = body.profileSegment === "business" ? biz : ind;
+        const candidate = inc.synthesizer.proposeFallback({
+          failedStepId: body.failedStepId,
+          dag: {
+            id: body.dag.id ?? "ad-hoc",
+            name: body.dag.name ?? "ad-hoc",
+            steps: body.dag.steps as Array<import("../runtime/workflow.js").WorkflowStep>,
+            fallbacks: (body.dag.fallbacks ?? []) as Array<import("../runtime/workflow.js").WorkflowFallback>,
+          },
+          profile,
+          constitution: inc.constitution,
+        });
+        this.json(res, 200, { candidate, prototype: true });
+        return;
+      }
+
+      // GET /api/v1/incubation/shws/recent-syntheses
+      if (method === "GET" && url === "/api/incubation/shws/recent-syntheses") {
+        this.json(res, 200, {
+          recent: inc.synthesizer.getRecentCandidates(20),
+          stats: inc.synthesizer.getStats(),
+          prototype: true,
+        });
+        return;
+      }
+
+      this.json(res, 404, { error: "incubation route not found", prototype: true });
+      return;
+    }
+
     // ── Observability: Prometheus /metrics endpoint (Phase E6) ────────────
     // Standard Prometheus scrape endpoint — returns text/plain exposition format.
     // Add to publicRoutes so scraping agents don't need Bearer token (standard practice).
@@ -7195,8 +7435,8 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return;
     }
 
-    // ── E3e-3/E3e-4: GET /api/v1/openapi.json — OpenAPI 3.0 spec ────────────
-    if (method === "GET" && url === "/api/v1/openapi.json") {
+    // ── E3e-3/E3e-4: GET /api/openapi.json — OpenAPI 3.0 spec ────────────
+    if (method === "GET" && url === "/api/openapi.json") {
       const spec = {
         openapi: "3.0.3",
         info: {
@@ -7373,17 +7613,11 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return;
     }
 
-    // ── E2: Backward-compat redirect /api/<path> → /api/v1/<path> ─────────
-    // Any unversioned /api/ route that hasn't already been handled gets a 301.
-    // Excludes routes that are intentionally unversioned (health, metrics, setup, etc.)
-    // Only redirects GET requests to avoid confusing non-idempotent operations.
-    if (method === "GET" && url.startsWith("/api/") && !url.startsWith("/api/v1/")) {
-      const remainder = url.slice("/api/".length);
-      const redirectTarget = "/api/v1/" + remainder;
-      res.writeHead(301, { Location: redirectTarget });
-      res.end();
-      return;
-    }
+    // ── E2: No backward-compat redirect ─────────────────────────────────────
+    // Removed: the redirect /api/<path> → /api/v1/<path> was creating ERR_TOO_MANY_REDIRECTS
+    // loops when browsers had cached old 301s in the opposite direction (/api/v1/* → /api/*).
+    // The client-side request() function already rewrites /api/ → /api/v1/ before fetch,
+    // and all inline handlers accept both normalized (/api/) paths natively.
 
     this.json(res, 404, { error: "Not found" });
   }
@@ -7396,17 +7630,60 @@ $r | ConvertTo-Json -Depth 4 -Compress
     return null;
   }
 
+  /**
+   * Phase H — Novel Systems Incubation. Lazy-initialized on first use, gated
+   * by the PRISM_INCUBATION env flag (defaults to "on" in dev, "off" in prod).
+   * All endpoints under /api/v1/incubation/* explicitly mark `prototype: true`.
+   */
+  private async getIncubation(): Promise<NonNullable<DashboardService["incubation"]>> {
+    if (this.incubation) return this.incubation;
+    const envFlag = process.env.PRISM_INCUBATION;
+    const enabled = envFlag === undefined
+      ? process.env.NODE_ENV !== "production"
+      : envFlag.toLowerCase() === "on";
+
+    const { CausalCompiler } = await import("../incubation/ccc/compiler.js");
+    const { DualLensArbiter } = await import("../incubation/dlma/arbiter.js");
+    const { CausalLens } = await import("../incubation/dlma/causal-lens.js");
+    const { WorkflowSynthesizer } = await import("../incubation/shws/synthesizer.js");
+    const { WorkflowHistoryIndex } = await import("../incubation/shws/history-index.js");
+    const { PolicyValidator } = await import("../incubation/shws/policy-validator.js");
+    const { loadConstitution } = await import("../incubation/ccc/constitution.js");
+    const { EpisodicMemory } = await import("../memory/episodic-memory.js");
+    const { SemanticMemoryIndex } = await import("../memory/semantic-memory.js");
+    const { resolve } = await import("node:path");
+
+    const policyEngine = new PolicyEngine();
+    const compiler = new CausalCompiler(policyEngine);
+    const validator = new PolicyValidator(compiler);
+    const history = new WorkflowHistoryIndex(200);
+    const synthesizer = new WorkflowSynthesizer(history, validator, this.queue, this.activityBus);
+
+    // Dedicated memories subscribed to the live dashboard ActivityBus
+    const ep = new EpisodicMemory(600);
+    const sem = new SemanticMemoryIndex();
+    this.activityBus.subscribe(ep);
+    this.activityBus.subscribe(sem);
+    const causal = new CausalLens(ep);
+    const arbiter = new DualLensArbiter(sem, causal, this.activityBus);
+
+    const constitution = loadConstitution(resolve(process.cwd(), "examples", "constitutions", "business-default.json"));
+
+    this.incubation = { enabled, compiler, arbiter, synthesizer, history, constitution };
+    return this.incubation;
+  }
+
   private json(res: ServerResponse, status: number, body: unknown): void {
     // Inject a requestId into all error responses (4xx / 5xx) so callers can
     // correlate failures in logs and support tickets.
     const responseBody = (status >= 400 && body !== null && typeof body === "object")
       ? { ...body as object, requestId: randomUUID() }
       : body;
-    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
     res.end(JSON.stringify(responseBody, null, 2));
   }
 
-  private async readJsonBody<T extends object>(req: IncomingMessage): Promise<T> {
+  public async readJsonBody<T extends object>(req: IncomingMessage): Promise<T> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
       chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
@@ -7418,73 +7695,6 @@ $r | ConvertTo-Json -Depth 4 -Compress
     }
 
     return JSON.parse(raw) as T;
-  }
-
-  private listWorkspaceCharacters(): Array<{
-    id: string;
-    name: string;
-    displayName: string;
-    executionProfile: string | null;
-    persona: string | null;
-    greeting: string | null;
-    systemPrompt: string | null;
-    tags: string[];
-    maxRiskTier: number | null;
-    allowedTools: string[];
-    deniedTools: string[];
-    defaultEmail: string | null;
-    sourcePath: string;
-  }> {
-    const dir = workspaceCharactersDir();
-    if (!existsSync(dir)) {
-      return [];
-    }
-    const files = readdirSync(dir)
-      .filter((entry) => entry.toLowerCase().endsWith(".json"))
-      .sort((left, right) => left.localeCompare(right));
-    const characters: Array<{
-      id: string;
-      name: string;
-      displayName: string;
-      executionProfile: string | null;
-      persona: string | null;
-      greeting: string | null;
-      systemPrompt: string | null;
-      tags: string[];
-      maxRiskTier: number | null;
-      allowedTools: string[];
-      deniedTools: string[];
-      defaultEmail: string | null;
-      sourcePath: string;
-    }> = [];
-    for (const fileName of files) {
-      const fullPath = join(dir, fileName);
-      try {
-        const parsed = JSON.parse(readFileSync(fullPath, "utf-8")) as Record<string, unknown>;
-        const toolPermissions = (parsed.toolPermissions ?? {}) as Record<string, unknown>;
-        const allow = Array.isArray(toolPermissions.allow) ? toolPermissions.allow.map((entry) => String(entry)) : [];
-        const deny = Array.isArray(toolPermissions.deny) ? toolPermissions.deny.map((entry) => String(entry)) : [];
-        const name = String(parsed.name ?? fileName.replace(/\.json$/i, "")).trim();
-        characters.push({
-          id: name,
-          name,
-          displayName: String(parsed.displayName ?? name).trim() || name,
-          executionProfile: parsed.executionProfile != null ? String(parsed.executionProfile) : null,
-          persona: parsed.persona != null ? String(parsed.persona) : null,
-          greeting: parsed.greeting != null ? String(parsed.greeting) : null,
-          systemPrompt: parsed.systemPrompt != null ? String(parsed.systemPrompt) : null,
-          tags: Array.isArray(parsed.tags) ? parsed.tags.map((entry) => String(entry)) : [],
-          maxRiskTier: Number.isFinite(Number(parsed.maxRiskTier)) ? Number(parsed.maxRiskTier) : null,
-          allowedTools: allow,
-          deniedTools: deny,
-          defaultEmail: parsed.defaultEmail != null ? String(parsed.defaultEmail) : null,
-          sourcePath: fullPath,
-        });
-      } catch {
-        // Ignore malformed character documents in the panel list.
-      }
-    }
-    return characters;
   }
 
   private async generateAssistantReply(sessionId: string, content: string, conversation: ChatMessage[]): Promise<{

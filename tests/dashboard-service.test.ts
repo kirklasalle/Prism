@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -28,9 +28,32 @@ export async function testDashboardService(): Promise<void> {
     // Disable auth gate for integration tests
     const savedAuthDisabled = process.env.PRISM_AUTH_DISABLED;
     process.env.PRISM_AUTH_DISABLED = "true";
+    // Isolate from any persisted developer/host preferences (e.g. a
+    // `.prism-preferences.json` with `defaultCharacterId: "aria-individual"`
+    // would leak into in-memory test fixtures and trigger character_not_found
+    // when the test creates a session without an explicit character).
+    const savedPrefsPath = process.env.PRISM_PREFERENCES_PATH;
+    const isolatedPrefsDir = mkdtempSync(join(tmpdir(), "prism-prefs-test-"));
+    const isolatedPrefsFile = join(isolatedPrefsDir, "prefs.json");
+    process.env.PRISM_PREFERENCES_PATH = isolatedPrefsFile;
+    // Seed setupComplete=true so GET / serves the dashboard shell instead of
+    // redirecting to the setup wizard. The test asserts on dashboard shell HTML.
+    writeFileSync(isolatedPrefsFile, JSON.stringify({
+        setupComplete: true,
+        lastModified: new Date().toISOString(),
+    }) + "\n", "utf-8");
     try {
         await _runDashboardServiceTests();
     } finally {
+        // Restore preferences path and clean up
+        if (savedPrefsPath !== undefined) {
+            process.env.PRISM_PREFERENCES_PATH = savedPrefsPath;
+        } else {
+            delete process.env.PRISM_PREFERENCES_PATH;
+        }
+        try {
+            rmSync(isolatedPrefsDir, { recursive: true, force: true });
+        } catch { /* best-effort */ }
         // Restore auth setting
         if (savedAuthDisabled !== undefined) {
             process.env.PRISM_AUTH_DISABLED = savedAuthDisabled;
@@ -119,7 +142,7 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(actionEvents[0]!.status, "succeeded");
     assert.ok(typeof actionEvents[0]!.details?.correlationId === "string");
 
-    const session = dashboardService.createChatSession("Provider Session");
+    const session = dashboardService.createChatSession({ title: "Provider Session", allowUnbound: true });
     const initialCatalog = await dashboardService.getSessionLlmCatalog(session.sessionId);
     assert.ok(initialCatalog.providers.length > 0);
 
@@ -159,7 +182,7 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(persistedSession!.llmProviderId, "openai");
     assert.strictEqual(persistedSession!.llmModel, "gpt-5-mini");
 
-    const deletable = dashboardService.createChatSession("Delete Me");
+    const deletable = dashboardService.createChatSession({ title: "Delete Me", allowUnbound: true });
     chatSessionStore.appendMessage(deletable.sessionId, "user", "Goodbye");
     assert.ok(dashboardService.listChatSessions().some((entry) => entry.sessionId === deletable.sessionId));
 
@@ -178,7 +201,7 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(finalSelectionEvent.details?.selectedProviderId, "openai");
     assert.ok(typeof finalSelectionEvent.details?.correlationId === "string");
 
-    const draftSession = dashboardService.createChatSession("Draft Session");
+    const draftSession = dashboardService.createChatSession({ title: "Draft Session", allowUnbound: true });
     const draftSaved = await dashboardService.saveSessionLlmConfigDraft(draftSession.sessionId, "ollama");
     assert.ok(draftSaved.draft);
     assert.strictEqual(draftSaved.draft!.providerId, "ollama");
@@ -201,7 +224,7 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.ok(Array.isArray(readinessBefore.requirements));
     assert.ok(readinessBefore.requirements.length > 0);
 
-    const unconfiguredSession = dashboardService.createChatSession("Onboarding Session");
+    const unconfiguredSession = dashboardService.createChatSession({ title: "Onboarding Session", allowUnbound: true });
     const readinessAfter = await (dashboardService as unknown as {
         getReadinessSnapshot: (sessionId?: string) => Promise<{ ready: boolean; requirements: Array<{ id: string; passed: boolean }> }>;
         emitReadinessAudit: (source: string, snapshot: { ready: boolean }) => void;
@@ -305,8 +328,13 @@ async function _runDashboardServiceTests(): Promise<void> {
 
     const shellHtml = await fetchText("/");
     assert.ok(shellHtml.includes('role="tablist" aria-label="Dashboard sections"'));
-    assert.ok(shellHtml.includes('body.js-ready .tab-panel { display: none; }'));
-    assert.ok(shellHtml.includes('body.js-ready .tab-panel.active { display: block; }'));
+    // The progressive-enhancement tab CSS lives in the external stylesheet
+    // (dashboard.css), not inlined in the HTML shell. Verify the shell links
+    // to it and that the rules exist in that stylesheet.
+    assert.ok(shellHtml.includes('href="/public/dashboard.css"'));
+    const dashboardCss = await fetchText("/public/dashboard.css");
+    assert.ok(dashboardCss.includes('body.js-ready .tab-panel'));
+    assert.ok(dashboardCss.includes('body.js-ready .tab-panel.active'));
 
     const summary = await fetchJson("/api/telemetry/summary?window=1d") as TelemetrySummary;
     assert.ok(summary.generatedAt, "generatedAt present");
@@ -420,6 +448,24 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(selectedTrace.selectedCorrelationId, "trace-abc");
     assert.strictEqual(selectedTrace.selectedTraceEvents.length, 2);
 
+    // ── Phase E3 + incubation route normalization regression guard ──────
+    // The dashboard `handle()` rewrites `/api/v1/*` → `/api/*` before route
+    // matching. Phase E3 routes were once authored against the un-normalized
+    // form and silently 404'd; this block prevents a recurrence by exercising
+    // each endpoint family through the real HTTP path.
+    const utilitiesResp = await fetchJson("/api/v1/utilities") as { utilities?: unknown[] };
+    assert.ok(Array.isArray(utilitiesResp.utilities), "GET /api/v1/utilities must return { utilities: [...] }");
+    const riskResp = await fetchJson("/api/v1/tools/risk-overrides") as { overrides?: unknown[] };
+    assert.ok(Array.isArray(riskResp.overrides), "GET /api/v1/tools/risk-overrides must return { overrides: [...] }");
+    const cacResp = await fetchJson("/api/v1/cac/assignments") as { assignments?: unknown[] };
+    assert.ok(Array.isArray(cacResp.assignments), "GET /api/v1/cac/assignments must return { assignments: [...] }");
+    // Incubation gate is off by default → expect a structured 503, NOT a 404.
+    const incResp = await fetchJson("/api/v1/incubation/dlma/weights") as { error?: string; prototype?: boolean };
+    assert.ok(
+        incResp && (incResp.error === "incubation_disabled" || incResp.prototype === true),
+        "GET /api/v1/incubation/* must reach the incubation gate (503/200 with prototype:true), not the final 404",
+    );
+
     const packageTempDir = mkdtempSync(join(tmpdir(), "prism-dashboard-packages-"));
     const packageDbPath = join(packageTempDir, "activity.db");
     const packageStorePath = join(packageTempDir, "dashboard-session-packages.json");
@@ -473,8 +519,8 @@ async function _runDashboardServiceTests(): Promise<void> {
         req.end();
     });
 
-    const chapterOne = packageService.createChatSession("Chapter One");
-    const chapterTwo = packageService.createChatSession("Chapter Two");
+    const chapterOne = packageService.createChatSession({ title: "Chapter One", allowUnbound: true });
+    const chapterTwo = packageService.createChatSession({ title: "Chapter Two", allowUnbound: true });
     packageChatStore.appendMessage(chapterOne.sessionId, "user", "chapter one input");
     packageChatStore.appendMessage(chapterOne.sessionId, "assistant", "chapter one output");
     packageChatStore.appendMessage(chapterTwo.sessionId, "user", "chapter two input");
