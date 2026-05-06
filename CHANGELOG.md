@@ -2,6 +2,21 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.14.1 — 2026-05-07 — Docker-publish hotfix
+
+Patch release on top of `v0.14.0` to fix the multi-arch Docker image build that broke on the `v0.14.0` tag run (`docker-publish.yml`). Helm chart and source release artifacts on `v0.14.0` were unaffected and remain published.
+
+**Root cause.** `tsc`'s emitted output directory was implicitly derived from the common ancestor of the matched source files. With `include: ["src/**/*.ts","tests/**/*.ts"]` and the Docker builder stage only `COPY`'ing `src/`, the inferred `rootDir` collapsed to `src/`, so `tsc` emitted to `dist/core/operator/...` instead of `dist/src/core/operator/...`. The hardcoded `cp -r src/core/operator/public dist/src/core/operator/public` in the Dockerfile then failed with `cp: can't create directory ... No such file or directory`.
+
+**Fix.**
+- `tsconfig.json` — added explicit `"rootDir": "."` so emit paths are deterministic regardless of which include patterns match in a given build context. Local `npm run build` and the multi-arch Docker build now both emit to `dist/<original-path>/...`.
+- `Dockerfile` — added defensive `mkdir -p dist/src/core/operator` before the `cp -r`, so a future similar misalignment would surface with a real error rather than a silent path drift.
+
+**Verification.** Local `npm run build` succeeds; `dist/src/core/operator/dashboard-service.js` present; `node dist/tests/index.js` reports `Tests: 75 | Passed: 75 | Failed: 0`.
+
+**Known unrelated failures (pre-existing on `feat/agentic-ux-polish`, not introduced or addressed by `v0.14.0`/`v0.14.1`).**
+- `quality-gates.yml`: `tests/plugin-pack-validator.test.ts` uses CommonJS `require()` at line ~477 inside an ES module package, breaking under Mocha on Linux CI; one signature-tier assertion (`resolvePluginTrustTier: valid official signature returns official tier`) also fails. These ran red on the four runs prior to `v0.14.0` and are tracked for a follow-up patch.
+
 ## v0.14.0 — 2026-05-07 — Five-workstream aggregate release
 
 Rolls up Workstreams 1–5. `package.json` bumped from `0.5.0` → `0.14.0`. All work is **strictly additive** with the Frontend Protection Guarantee preserved end-to-end. **No new external runtime dependencies** introduced across any workstream. **75/75 unit tests pass.**

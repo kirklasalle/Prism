@@ -12,6 +12,7 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 
 RUN npx tsc -p tsconfig.json && \
+    mkdir -p dist/src/core/operator && \
     cp -r src/core/operator/public dist/src/core/operator/public
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────
