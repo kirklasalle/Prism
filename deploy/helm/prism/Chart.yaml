@@ -1,0 +1,19 @@
+apiVersion: v2
+name: prism
+description: PRISM — Agents-as-a-Service control plane (dashboard + multi-provider runtime).
+type: application
+version: 0.1.0
+appVersion: "0.13.0-cloud-trial"
+home: https://github.com/kirklasalle/Prism
+sources:
+  - https://github.com/kirklasalle/Prism
+keywords:
+  - prism
+  - agents
+  - aaas
+  - llm
+  - assistants
+maintainers:
+  - name: Kirk LaSalle
+    url: https://github.com/kirklasalle
+icon: https://raw.githubusercontent.com/kirklasalle/Prism/main/screengrab/icon.png

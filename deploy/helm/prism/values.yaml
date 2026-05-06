@@ -1,0 +1,146 @@
+# Default values for the PRISM Helm chart.
+#
+# This file is consumed by both the cloud-trial Terraform module and any
+# operator deploying PRISM by hand. Every value below is referenced from
+# at least one template under `templates/`. Comments explain the
+# operational impact of each knob.
+
+# ── Image ────────────────────────────────────────────────────────────────────
+image:
+  # Default points at GHCR; the docker-publish workflow tags both
+  # `:<git-tag>` and `:edge` (latest main).
+  repository: ghcr.io/kirklasalle/prism
+  tag: "" # falls back to .Chart.appVersion when empty
+  pullPolicy: IfNotPresent
+
+# Optional registry pull-secrets when consuming a private image registry.
+imagePullSecrets: []
+
+# Override chart name fragment used in resource names. Empty = chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Replicas + scheduling ────────────────────────────────────────────────────
+# v1 PRISM holds in-process state (SQLite + cached LLM clients), so this
+# chart deliberately constrains itself to a single replica. HA-multi-node
+# is tracked as a follow-up alongside the externalised pending-flow store.
+replicaCount: 1
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ── Service ──────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 7070
+  # Set to true to add a NodePort. ClusterIP + Ingress is the recommended path.
+  extraNodePort: false
+
+# ── Ingress ──────────────────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: prism.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # tls:
+  #   - secretName: prism-tls
+  #     hosts:
+  #       - prism.example.com
+
+  # ── Persistence ──────────────────────────────────────────────────────────────
+  # PRISM's workspace (SQLite KG, plugin manifests, character configs, etc.)
+  # lives at /data/Prism_Refraction. A PVC is required for any deployment
+  # that wants state to survive pod restarts.
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  mountPath: /data/Prism_Refraction
+
+# ── Resources ────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# ── Pod security ─────────────────────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false # node:22-alpine writes to /tmp
+
+# ── Probes ───────────────────────────────────────────────────────────────────
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# ── Environment ──────────────────────────────────────────────────────────────
+# Plain string env values surfaced via env: into the container. Sensitive
+# values should go in `envFromSecrets` instead so they're sourced from a
+# mounted Secret (typically created out-of-band by an SRE / KMS pipeline).
+env:
+  PRISM_ENV_PROFILE: prod
+  PRISM_DASHBOARD_PORT: "7070"
+  PRISM_MULTI_TENANT: "off"
+  PRISM_ENTERPRISE_IAM: "off"
+  PRISM_SCIM: "off"
+  PRISM_SOC2_EXPORTER: "off"
+
+# Names of pre-existing Secrets to mount as env (entire keyspace).
+# Example:
+#   envFromSecrets:
+#     - prism-llm-keys           # OPENAI_API_KEY, ANTHROPIC_API_KEY, ...
+#     - prism-iam-secrets        # PRISM_SSO_SESSION_SECRET, etc.
+envFromSecrets: []
+
+# Names of pre-existing ConfigMaps to mount as env.
+envFromConfigMaps: []
+
+# ── Service account ──────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ── PodDisruptionBudget ──────────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# ── ServiceMonitor (Prometheus operator) ─────────────────────────────────────
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
