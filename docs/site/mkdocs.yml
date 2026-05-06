@@ -1,0 +1,58 @@
+site_name: PRISM
+site_description: Agents-as-a-Service infrastructure with strong governance primitives.
+site_url: https://prism.example.com
+repo_url: https://github.com/kirklasalle/Prism
+repo_name: kirklasalle/Prism
+edit_uri: edit/main/docs/site/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - 5-Minute Path: ../GETTING_STARTED.md
+      - Setup Wizard: ../SETUP_WIZARD_GUIDE.md
+      - User Guide: ../USER_GUIDE.md
+  - Concepts:
+      - Spectrum Refraction: ../PAD_WHITEPAPER.md
+      - Business vs Individual: ../BUSINESS_VS_INDIVIDUAL_GUIDE.md
+      - Character Selection: ../CHARACTER_SELECTION_GUIDE.md
+  - Plugins:
+      - Authoring Guide: ../PLUGIN_SDK_AUTHORING_GUIDE.md
+      - Marketplace Curation: ../MARKETPLACE_CURATION_POLICY.md
+  - Operations:
+      - Deployment: ../DEPLOYMENT_GUIDE.md
+      - Incident Triage: ../INCIDENT_TRIAGE_RUNBOOK.md
+      - Admin / SRE Guide: ../ADMIN_SRE_GUIDE.md
+  - Compliance:
+      - SOC 2 Readiness: ../SOC2_READINESS_CHECKLIST.md
+      - OWASP Top 10: ../OWASP_TOP_10_CHECKLIST.md
+      - Linux/macOS Parity: ../LINUX_MACOS_PARITY_REPORT.md
+      - License Model: ../LICENSE_MODEL_RECOMMENDATION.md
+  - Developer:
+      - Architecture: ../DEVELOPER_GUIDE.md
+      - Error Recovery: ../ERROR_RECOVERY.md

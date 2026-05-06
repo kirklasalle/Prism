@@ -1,0 +1,5 @@
+{
+    "version": 1,
+    "_comment": "Release artifact signing keys (Phase F-F). Generate with: node scripts/generate-plugin-key.cjs --tier release --keyId prism-release-YYYY-MM --out keys/release-YYYY-MM.pem. Keep private keys OUT of source control. See docs/SECURITY_KEY_MANAGEMENT.md for rotation SOP.",
+    "keys": []
+}
