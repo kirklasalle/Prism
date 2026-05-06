@@ -261,6 +261,59 @@ describe("GuardianAgent", () => {
         assert.equal(status.slotInfo!.status, "ready");
         guardian.stop();
     });
+
+    // ── mcp_health_recovery task ──────────────────────────────────────
+
+    it("mcp_health_recovery returns success when no MCP adapter is attached", async () => {
+        const result = await guardian.runTask("mcp_health_recovery");
+        assert.ok(result, "task must exist");
+        assert.equal(result!.lastResult, "success");
+        assert.match(String(result!.lastDetail), /skipped|not attached/i);
+    });
+
+    it("mcp_health_recovery reports all-healthy when adapter has no down servers", async () => {
+        guardian.setMcpAdapterFn(() => ({
+            getServerStates: () => [
+                { name: "alpha", state: "connected" as const, retryCount: 0, lastError: null },
+                { name: "beta",  state: "connected" as const, retryCount: 0, lastError: null },
+            ],
+            forceReconnect: async () => ({ ok: true }),
+        }));
+        const result = await guardian.runTask("mcp_health_recovery");
+        assert.equal(result!.lastResult, "success");
+        assert.match(String(result!.lastDetail), /healthy/);
+    });
+
+    it("mcp_health_recovery force-reconnects down servers and reports recovery", async () => {
+        const reconnected: string[] = [];
+        guardian.setMcpAdapterFn(() => ({
+            getServerStates: () => [
+                { name: "alpha", state: "connected" as const, retryCount: 0, lastError: null },
+                { name: "beta",  state: "down" as const,      retryCount: 1, lastError: "exited" },
+                { name: "gamma", state: "failed" as const,    retryCount: 10, lastError: "max attempts" },
+            ],
+            forceReconnect: async (n) => {
+                reconnected.push(n);
+                return { ok: true };
+            },
+        }));
+        const result = await guardian.runTask("mcp_health_recovery");
+        assert.equal(result!.lastResult, "success");
+        assert.deepEqual(reconnected.sort(), ["beta", "gamma"]);
+        assert.match(String(result!.lastDetail), /Recovered 2/);
+    });
+
+    it("mcp_health_recovery returns warning when reconnect fails", async () => {
+        guardian.setMcpAdapterFn(() => ({
+            getServerStates: () => [
+                { name: "beta", state: "down" as const, retryCount: 1, lastError: "exited" },
+            ],
+            forceReconnect: async () => ({ ok: false, error: "still broken" }),
+        }));
+        const result = await guardian.runTask("mcp_health_recovery");
+        assert.equal(result!.lastResult, "warning");
+        assert.match(String(result!.lastDetail), /still down/);
+    });
 });
 
 export async function testGuardianAgent(): Promise<void> {

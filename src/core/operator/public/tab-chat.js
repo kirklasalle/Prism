@@ -449,17 +449,57 @@ export
 }
 
 export
-  async function createSession() {
-  const payload = await request('/api/chat/sessions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({})
-  });
-  state.selectedSessionId = payload.session.sessionId;
-  await loadSessions();
-  await loadMessages();
-  await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
-  render();
+  async function createSession(options) {
+  const opts = options && typeof options === 'object' ? options : {};
+  // Strip the internal `silent` flag before sending to the server.
+  const silent = Boolean(opts.silent);
+  const body = Object.assign({}, opts);
+  delete body.silent;
+  try {
+    const payload = await request('/api/chat/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    state.selectedSessionId = payload.session.sessionId;
+    await loadSessions();
+    await loadMessages();
+    await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
+    render();
+  } catch (err) {
+    console.error('[createSession] failed:', err);
+    try { dashboardLog('chat', 'createSession.error', err && err.message ? err.message : String(err)); } catch (_) { /* noop */ }
+    // Phase E3b: 409 from the governance gate — offer the wizard unless silent.
+    const msg = (err && err.message) ? err.message : String(err);
+    if (/no_default_character/.test(msg)) {
+      if (!silent) {
+        const goWizard = confirm('PRISM: No default character is bound to this workspace.\n\nOpen the setup wizard to pick one?');
+        if (goWizard) {
+          window.location.href = '/setup?rerun=true&step=4';
+          return;
+        }
+      }
+      state.notice = 'Session creation blocked: no default character. Use the wizard to pick one.';
+      try { render(); } catch (_) { /* noop */ }
+      return;
+    }
+    state.notice = 'Failed to create session: ' + msg;
+    try { render(); } catch (_) { /* noop */ }
+    if (!silent) {
+      alert('PRISM: ' + state.notice + '\n\nCheck DevTools → Network for the failing request and DevTools → Console for details.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Phase E3b: "New Session" button entrypoint. For now this delegates to
+ * createSession() so the server-side default-character resolution handles the
+ * common case; a future iteration will open a character picker modal inline.
+ */
+export
+  async function openNewSessionModal() {
+  return createSession();
 }
 
 export
@@ -474,9 +514,11 @@ export
 
 export
   async function refreshChrome() {
+  // Always fetch a provider catalog: session-specific if a session is active,
+  // otherwise the global session-independent catalog so settings panels populate.
   const llmUrl = state.selectedSessionId
     ? '/api/llm/providers?sessionId=' + encodeURIComponent(state.selectedSessionId)
-    : null;
+    : '/api/llm/catalog';
   const llmConfigUrl = state.selectedSessionId
     ? '/api/llm/config?sessionId=' + encodeURIComponent(state.selectedSessionId)
     : null;
@@ -490,17 +532,17 @@ export
   const chatTelemetryUrl = '/api/events?limit=25'
     + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '');
   const [status, readiness, llmCatalog, llmConfig, llmAuditEvents, chatTelemetryPayload, pending, actions, actionHistory, traceData, events, retrievalData, prioritizedAlertsData, telemetrySummaryData, runtimeExcellenceData, releaseValidationData, releaseDecisionData, selfReviewLatest, selfReviewHistory, packagePayload, packageHistoryPayload, settingsPayload, agentDataPayload, computerSystemInfoPayload, toolsStatusPayload, pluginsStatusPayload, llmModalitiesPayload, modelMatrixPayload] = await Promise.all([
-    request('/api/status'),
+    request('/api/status').catch(() => null),
     request(readinessUrl).catch(() => null),
-    llmUrl ? request(llmUrl) : Promise.resolve(null),
+    request(llmUrl).catch(() => null),
     llmConfigUrl ? request(llmConfigUrl).catch(() => null) : Promise.resolve(null),
-    request(llmAuditUrl),
+    request(llmAuditUrl).catch(() => []),
     request(chatTelemetryUrl).catch(function () { return []; }),
-    request('/api/pending'),
-    request('/api/actions'),
-    request('/api/action-history'),
+    request('/api/pending').catch(() => []),
+    request('/api/actions').catch(() => []),
+    request('/api/action-history').catch(() => []),
     request(tracesUrl).catch(() => ({ traces: [], selectedTraceEvents: [] })),
-    request('/api/events?limit=8'),
+    request('/api/events?limit=8').catch(() => []),
     request('/api/retrieval/alerts').catch(() => ({ alerts: [] })),
     request('/api/retrieval/prioritized-alerts').catch(() => null),
     request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
@@ -552,9 +594,12 @@ export
   if (modalitySummary && Array.isArray(modalitySummary.modalities) && modalitySummary.modalities.length > 0) {
     state.availableModalities = modalitySummary.modalities;
   }
-  state.modelMatrixEntries = Array.isArray(modelMatrixPayload && modelMatrixPayload.models)
-    ? modelMatrixPayload.models
-    : [];
+  // /api/models/matrix returns { known, runtime, deprecated } — combine all into modelMatrixEntries
+  // so resolveMatrixEntry() can enrich the capability matrix with tier/locality/strengths.
+  state.modelMatrixEntries = [
+    ...(Array.isArray(modelMatrixPayload && modelMatrixPayload.runtime) ? modelMatrixPayload.runtime : []),
+    ...(Array.isArray(modelMatrixPayload && modelMatrixPayload.known) ? modelMatrixPayload.known : []),
+  ];
   state.status = status;
   state.readiness = readiness;
   state.llmCatalog = llmCatalog;
@@ -599,9 +644,25 @@ export
     const onClick = extraClass === 'session-chapter'
       ? 'event.stopPropagation(); selectSession(this.dataset.sessionId)'
       : 'selectSession(this.dataset.sessionId)';
+    // Phase E3b: governance badge — bound character + CAC placeholder warning.
+    const charBadge = session.characterId
+      ? '<span class="session-badge" title="Bound character" style="display:inline-block;padding:1px 6px;margin-right:4px;border-radius:8px;background:var(--surface-alt,rgba(255,255,255,0.08));font-size:10px;">🎭 ' + escapeHtml(session.characterId) + '</span>'
+      : '<span class="session-badge" title="No character bound" style="display:inline-block;padding:1px 6px;margin-right:4px;border-radius:8px;background:rgba(220,53,69,0.25);color:#ffb8c0;font-size:10px;">⚠ unbound</span>';
+    const placeholderEmail = (e) => {
+      if (!e) return true;
+      const s = String(e).toLowerCase();
+      return s.endsWith('@prism.local') || s.endsWith('@placeholder');
+    };
+    const cacBadge = (placeholderEmail(session.operatorEmail) || placeholderEmail(session.assistantEmail))
+      ? '<span class="session-badge" title="CAC uses placeholder email — fix via setup wizard" style="display:inline-block;padding:1px 6px;border-radius:8px;background:rgba(255,193,7,0.25);color:#ffd86b;font-size:10px;">⚠ placeholder CAC</span>'
+      : '';
+    const governanceRow = (charBadge || cacBadge)
+      ? '<div class="session-governance" style="margin-top:4px;">' + charBadge + cacBadge + '</div>'
+      : '';
     return '<div class="session-card' + activeClass + className + '" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="' + onClick + '">'
       + '<div class="session-title">' + escapeHtml(session.title) + '</div>'
       + '<div class="session-preview">' + escapeHtml(preview) + '</div>'
+      + governanceRow
       + '<div class="session-meta"><span>' + escapeHtml(String(session.messageCount)) + ' msgs</span><span>' + escapeHtml(formatRelativeTime(session.updatedAt)) + '</span></div>'
       + '<div class="action-buttons">'
       + '<button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button>'
@@ -881,6 +942,7 @@ export
 export
   function renderOverview() {
   const container = document.getElementById('runtime-overview');
+  if (!container) return;
   if (!state.status) {
     container.innerHTML = '<div class="muted">Loading runtime status...</div>';
     return;

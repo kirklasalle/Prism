@@ -232,4 +232,69 @@ describe("McpClientAdapter", () => {
         assert.ok(proxy.mcpDescription.length > 0, "description should be set");
         adapter.disconnectAll();
     });
+
+    it("getServerStates reports connected state with toolCount", async () => {
+        const adapter = new McpClientAdapter();
+        const registry = new ToolRegistry();
+        await adapter.loadAndRegister(settingsPath, registry);
+
+        const states = adapter.getServerStates();
+        assert.equal(states.length, 1);
+        assert.equal(states[0]!.name, "test-echo");
+        assert.equal(states[0]!.state, "connected");
+        assert.equal(states[0]!.toolCount, 2);
+        assert.equal(states[0]!.retryCount, 0);
+        assert.equal(states[0]!.lastError, null);
+
+        adapter.disconnectAll();
+    });
+
+    it("forceReconnect on a connected server keeps it healthy", async () => {
+        const adapter = new McpClientAdapter();
+        const registry = new ToolRegistry();
+        await adapter.loadAndRegister(settingsPath, registry);
+
+        const result = await adapter.forceReconnect("test-echo");
+        assert.equal(result.ok, true);
+        const states = adapter.getServerStates();
+        assert.equal(states[0]!.state, "connected");
+        assert.equal(states[0]!.toolCount, 2);
+
+        adapter.disconnectAll();
+    });
+
+    it("forceReconnect returns error for unknown server name", async () => {
+        const adapter = new McpClientAdapter();
+        const registry = new ToolRegistry();
+        await adapter.loadAndRegister(settingsPath, registry);
+
+        const result = await adapter.forceReconnect("does-not-exist");
+        assert.equal(result.ok, false);
+        assert.match(String(result.error), /Unknown MCP server/);
+
+        adapter.disconnectAll();
+    });
+
+    it("McpConnection.stderrTail captures lines (no truncation)", async () => {
+        // A throwaway script that writes a long stderr line and exits.
+        const failScriptPath = join(tempDir, "fail-server.mjs");
+        const longLine = "X".repeat(180); // > the old 120-char cap
+        writeFileSync(
+            failScriptPath,
+            `process.stderr.write(${JSON.stringify(longLine)} + "\\n");\n` +
+            `process.stderr.write("Traceback (most recent call last):\\n");\n` +
+            `process.stderr.write("  File 'foo.py', line 1\\n");\n` +
+            `process.stderr.write("ValueError: something specific went wrong\\n");\n` +
+            `process.exit(2);\n`,
+        );
+        const conn = new McpConnection("fail", { command: "node", args: [failScriptPath] });
+        await assert.rejects(() => conn.connect());
+        const tail = conn.stderrTail(20);
+        assert.ok(tail.length >= 4, `expected >= 4 stderr lines, got ${tail.length}`);
+        // The long line should NOT be truncated.
+        assert.ok(tail.some((l) => l === longLine), "expected full long line preserved verbatim");
+        // firstStderrHint should prefer the actual exception, not the Traceback header.
+        const hint = conn.firstStderrHint();
+        assert.match(hint, /ValueError: something specific went wrong/);
+    });
 });

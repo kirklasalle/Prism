@@ -24,6 +24,21 @@
 - TODO.md: actionable near-term, medium-term, and aspirational work items
 - ../CHANGELOG.md: version history and release notes
 
+## 2026 Q2 Audit and Readiness (NEW)
+
+- PRISM_FULL_AUDIT_2026_Q2.md: comprehensive audit — what is implemented, what looks complete but isn't, canonical gap list G-1 through G-25, system critique, readiness scorecard
+- PRISM_COMPETITIVE_AaaS_MAP_2026.md: AaaS market survey — top 10 frameworks, commercial cloud AaaS list, OSS toolkits, unique-niche positioning for PRISM
+- PRISM_UPDATED_ROADMAP_2026_Q2.md: formal roadmap appending Phase R (Readiness) between E and F; extended F/G/H/I workstreams
+- READINESS_RUNBOOK.md: operator checklist turning Phase R into executable tasks with IDs, target files, acceptance criteria, and effort bands
+
+## User and Operator Guides (NEW)
+
+- BUSINESS_VS_INDIVIDUAL_GUIDE.md: profile differences — tool-by-tool examples, CAC domain enforcement, character pairing
+- DEPLOYMENT_GUIDE.md: local, Docker, Docker Compose, PM2, systemd, TLS, backup, post-deploy checklist
+- ADMIN_SRE_GUIDE.md: day-2 operations — health, metrics, rotations, backup drills, incident response, capacity planning
+- ERROR_RECOVERY.md: lost admin token, corrupted DB, lost JWT secret, expired TLS, plugin verification failures, PAD integrity violations
+- CHARACTER_SELECTION_GUIDE.md: when to use Aria / Phoenix / Sentinel × Individual / Business variants
+
 ## Delivery and Release Support
 
 - PHASE_EXECUTION_PLAN.md: phase definitions and gate criteria

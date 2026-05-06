@@ -171,7 +171,98 @@ export async function testCharacterAccountability(): Promise<void> {
         const revoked2 = manager.revokeExpiredScopes();
         assert.strictEqual(revoked2.length, 0, "Already-revoked assignments should not be re-revoked");
 
+        // ── R3: Business profile rejects placeholder / non-routable email domains ──
+        const placeholderManager = new CharacterAccountabilityManager(store, activityBus);
+        const placeholderCases: Array<{ email: string; reason: string }> = [
+            { email: "admin@prism.local", reason: "PRISM scaffolding placeholder" },
+            { email: "user@example.com", reason: "RFC 2606 reserved" },
+            { email: "test@example.org", reason: "RFC 2606 reserved" },
+            { email: "ops@localhost", reason: "loopback" },
+            { email: "ceo@invalid", reason: "RFC 6761 reserved" },
+            { email: "lead@workstation.local", reason: "subdomain of .local" },
+        ];
+        for (const { email, reason } of placeholderCases) {
+            assert.throws(() => {
+                placeholderManager.assign({
+                    characterId: "analyst",
+                    prismUserId: "prism-system-user",
+                    prismUserEmail: email,
+                    operatorId: "operator-kirk",
+                    operatorEmail: email,
+                    clientId: "browser-client-placeholder",
+                    sessionId: "session-placeholder",
+                    executionProfile: "business",
+                });
+            }, /placeholder|non-production|Invalid/, `Should reject ${reason}: ${email}`);
+        }
+
+        // Same placeholder emails MUST be accepted on Individual profile —
+        // PRISM ships sample data with `@prism.local` for individual users.
+        const individualOk = placeholderManager.assign({
+            characterId: "analyst",
+            prismUserId: "prism-system-user",
+            prismUserEmail: "user@prism.local",
+            operatorId: "operator-kirk",
+            operatorEmail: "user@prism.local",
+            clientId: "browser-client-individual",
+            sessionId: "session-individual",
+            executionProfile: "individual",
+        });
+        assert.strictEqual(individualOk.executionProfileSegment, "individual");
+
         console.log("✓ CharacterAccountability tests passed");
+    } finally {
+        store.close();
+    }
+}
+
+/**
+ * Phase E3 / E5 — chain inspector + email-verification helpers.
+ */
+export async function testCharacterAccountabilityPhaseE3(): Promise<void> {
+    const tempDir = mkdtempSync(join(tmpdir(), "prism-cac-e3-"));
+    const dbPath = join(tempDir, "activity.db");
+    const activityBus = new ActivityBus();
+    const store = new CharacterAccountabilityStore(dbPath);
+    const manager = new CharacterAccountabilityManager(store, activityBus);
+
+    try {
+        const a = manager.assign({
+            characterId: "analyst",
+            prismUserId: "prism-system-user",
+            prismUserEmail: "user@acme-corp.com",
+            operatorId: "operator-1",
+            operatorEmail: "operator@acme-corp.com",
+            clientId: "test-client",
+            sessionId: "session-e3",
+            executionProfile: "business",
+        });
+
+        const chain = manager.getAssignmentChain(a.assignmentId);
+        assert.ok(chain);
+        assert.strictEqual(chain!.assignment.assignmentId, a.assignmentId);
+        assert.strictEqual(chain!.scopes.total, 0);
+        assert.strictEqual(chain!.emailVerification.verified, false);
+
+        // Mismatched email → reject
+        const bad = manager.markEmailVerified(a.assignmentId, "nope@acme-corp.com", "gmail");
+        assert.strictEqual(bad, null);
+        assert.strictEqual(manager.isEmailVerificationFresh(a.assignmentId), false);
+
+        // Matching email → accepted
+        const ok = manager.markEmailVerified(a.assignmentId, "operator@acme-corp.com", "gmail");
+        assert.ok(ok);
+        assert.ok(ok!.emailVerifiedAt);
+        assert.strictEqual(ok!.emailVerifiedProvider, "gmail");
+        assert.strictEqual(manager.isEmailVerificationFresh(a.assignmentId), true);
+        assert.strictEqual(manager.isEmailVerificationFresh(a.assignmentId, 0), false);
+
+        const audit = manager.exportAudit({});
+        const row = audit.find((r) => r.assignmentId === a.assignmentId);
+        assert.ok(row);
+        assert.strictEqual(row!.emailVerifiedProvider, "gmail");
+
+        console.log("✓ CharacterAccountability Phase E3/E5 tests passed");
     } finally {
         store.close();
     }

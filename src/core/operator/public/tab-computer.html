@@ -1,0 +1,179 @@
+<div class="tab-grid">
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('localControl')"
+      data-tip-id="computer:local" data-tip-kind="computer">
+      <h3>🖥️ Local Computer Control</h3>
+      <span id="localControl-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="localControl-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">System information, telemetry overview, and quick actions.</div>
+      <div id="local-system-info" class="stack">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+          <div class="panel" style="padding:12px;">
+            <div class="muted" style="font-size:11px;">Operating System</div>
+            <div id="sys-os" style="font-size:14px;font-weight:600;">Detecting...</div>
+          </div>
+          <div class="panel" style="padding:12px;">
+            <div class="muted" style="font-size:11px;">Hostname</div>
+            <div id="sys-hostname" style="font-size:14px;font-weight:600;">Detecting...</div>
+          </div>
+          <div class="panel" style="padding:12px;">
+            <div class="muted" style="font-size:11px;">Platform</div>
+            <div id="sys-platform" style="font-size:14px;font-weight:600;">Detecting...</div>
+          </div>
+          <div class="panel" style="padding:12px;">
+            <div class="muted" style="font-size:11px;">Uptime</div>
+            <div id="sys-uptime" style="font-size:14px;font-weight:600;">Detecting...</div>
+          </div>
+        </div>
+      </div>
+      <div id="usage-metrics" style="margin-top:12px;"></div>
+      <div id="adapter-status-container"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('consoleView')"
+      data-tip-id="computer:console" data-tip-kind="computer">
+      <h3>📠 Console View</h3>
+      <span id="consoleView-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="consoleView-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">Execute local system commands.</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <input id="computer-console-input" type="text"
+          placeholder="Enter system command (e.g. systeminfo, dir, tasklist)"
+          style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:13px;"
+          onkeydown="if(event.key==='Enter')runLocalCommand()" />
+        <button onclick="runLocalCommand()"
+          style="padding:6px 14px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;">▶
+          Run</button>
+      </div>
+      <pre id="computer-console-output"
+        style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;max-height:400px;overflow:auto;font-size:12px;white-space:pre-wrap;color:var(--text-muted);">Ready — enter a system command above.</pre>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('visionFramebuffer')"
+      data-tip-id="computer:framebuffer" data-tip-kind="computer">
+      <h3>👁️ Vision Framebuffer</h3>
+      <span id="visionFramebuffer-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="visionFramebuffer-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">Agentic computer-use vision — shows the latest screengrab from the
+        framebuffer. Captures occur automatically during agentic <code>computer use</code> actions.</div>
+      <div class="framebuffer-controls">
+        <button onclick="captureScreengrab()" title="Capture a single screenshot now">📸 Capture</button>
+        <button onclick="burstCapture()" title="Burst capture 8 FPS for 2 seconds">🎥 Burst (8 FPS)</button>
+        <button onclick="refreshFramebufferViewer()" title="Refresh the viewer with the latest image">🔄
+          Refresh</button>
+        <button id="fb-auto-toggle" onclick="toggleFramebufferAutoRefresh()"
+          title="Auto-refresh the viewer every 2 seconds">Auto-Refresh: OFF</button>
+        <button onclick="runFramebufferDiagnostics()" title="Run capture diagnostics">🔧 Diagnostics</button>
+        <span class="framebuffer-meta" id="fb-meta"></span>
+      </div>
+      <div class="framebuffer-viewer" id="framebuffer-viewer">
+        <div class="fb-placeholder" id="fb-placeholder">No screengrab captured yet.<br />Use <strong>Capture</strong> or
+          trigger an agentic action to begin.</div>
+        <img id="framebuffer-preview" style="display:none;" alt="Latest screengrab"
+          onclick="window.open(this.src, '_blank')" title="Click to open full size" />
+        <video id="framebuffer-preview-video" style="display:none;" autoplay loop muted playsinline
+          title="Burst video — click to open" onclick="window.open(this.src, '_blank')"></video>
+      </div>
+      <div class="framebuffer-media-bar" id="framebuffer-media-bar">
+        <button id="fb-mc-playpause" onclick="toggleBurstPlayPause()" title="Play / Pause burst animation">⏸
+          Pause</button>
+        <button onclick="stopBurstFromUI()" title="Stop animation and show first frame">⏹ Stop</button>
+        <span class="fb-media-spacer"></span>
+        <span class="fb-media-label">Speed:</span>
+        <button id="fb-mc-speed-half" onclick="setBurstSpeed(0.5)" title="Half speed">0.5×</button>
+        <button id="fb-mc-speed-1x" onclick="setBurstSpeed(1)" title="Normal speed" class="active">1×</button>
+        <button id="fb-mc-speed-2x" onclick="setBurstSpeed(2)" title="Double speed">2×</button>
+      </div>
+      <div class="framebuffer-selection-summary" id="framebuffer-selection-summary"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px;flex-wrap:wrap;">
+        <span class="muted" style="font-size:10px;">📁</span>
+        <span class="framebuffer-gallery-path" id="framebuffer-path">Loading…</span>
+        <span style="flex:1;"></span>
+        <span id="framebuffer-gallery-summary" class="muted" style="font-size:11px;"></span>
+      </div>
+      <div class="framebuffer-gallery" id="framebuffer-gallery"></div>
+      <div class="framebuffer-gallery-controls" id="framebuffer-gallery-controls"></div>
+      <div id="fb-diagnostics"
+        style="display:none;margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;background:rgba(0,0,0,0.3);">
+      </div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('computerConfig')"
+      data-tip-id="computer:env" data-tip-kind="computer">
+      <h3>⚙️ Configuration &amp; Settings</h3>
+      <span id="computerConfig-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="computerConfig-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">System configuration, environment variables, and editor settings.
+      </div>
+      <div id="computer-config-container" class="stack">
+        <div style="margin-bottom:12px;">
+          <h4 style="margin:0 0 6px 0;font-size:13px;">Environment Variables</h4>
+          <div id="env-vars-list" class="muted"
+            style="font-family:monospace;font-size:12px;max-height:200px;overflow:auto;">Click Refresh to load
+            environment variables.</div>
+          <button class="primary-button" onclick="refreshEnvVars()" style="font-size:11px;margin-top:6px;">🔄
+            Refresh</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('policyControl')"
+      data-tip-id="computer:policy" data-tip-kind="computer">
+      <h3>📋 Policy Control</h3>
+      <span id="policyControl-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="policyControl-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">Windows Group Policy viewer and local security policy access.
+        <strong>(Windows only)</strong></div>
+      <div id="policy-control-container" class="stack">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+          <button class="primary-button" onclick="openPolicyEditor('gpedit')" style="font-size:12px;">📜 Group Policy
+            Editor</button>
+          <button class="primary-button" onclick="openPolicyEditor('secpol')" style="font-size:12px;">🔐 Local Security
+            Policy</button>
+          <button class="primary-button" onclick="refreshPolicyStatus()" style="font-size:12px;">🔄 Refresh Policy
+            Status</button>
+        </div>
+        <div id="policy-status-output" class="muted" style="margin-top:10px;font-size:12px;">Policy status not yet
+          loaded.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('deviceManager')"
+      data-tip-id="computer:devices" data-tip-kind="computer">
+      <h3>🔧 Device Manager <span id="dm-total-badge" class="dm-total-badge"></span></h3>
+      <span id="deviceManager-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="deviceManager-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">Comprehensive WMI hardware inventory — click any device to inspect
+        all properties.</div>
+      <input id="dm-search-input" class="dm-search-input" type="text" placeholder="🔍 Filter devices…"
+        oninput="filterDeviceTree()" />
+      <div class="dm-toolbar">
+        <button class="primary-button" onclick="refreshDeviceManager()" style="font-size:12px;">🔄 Scan Devices</button>
+        <button class="primary-button" onclick="generateDeviceReport()" style="font-size:12px;">📋 Generate
+          Report</button>
+        <button class="primary-button" onclick="openSystemDeviceManager()" style="font-size:12px;">🖥️ Open System
+          Device Manager</button>
+      </div>
+      <div id="device-tree-container" class="stack" style="font-size:13px;">
+        <div class="muted" style="text-align:center;padding:18px;">Click <strong>Scan Devices</strong> to enumerate
+          hardware via WMI.</div>
+      </div>
+    </div>
+  </section>
+</div>

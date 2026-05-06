@@ -13,6 +13,30 @@ export interface ChatSessionSummary {
     messageCount: number;
     lastMessagePreview: string | null;
     lastMessageRole: "user" | "assistant" | "system" | null;
+    /** E3b governance-gate: character id this session is bound to. Null on legacy rows. */
+    characterId: string | null;
+    /** E3b governance-gate: CAC assignment id snapshot. */
+    cacAssignmentId: string | null;
+    /** Execution profile snapshot at session creation time ('individual' | 'business'). */
+    executionProfile: string | null;
+    /** Operator email snapshot from CAC assignment (may be placeholder). */
+    operatorEmail: string | null;
+    /** Assistant/character email snapshot from CAC assignment (may be placeholder). */
+    assistantEmail: string | null;
+}
+
+/**
+ * Input for creating a new chat session. As of Phase E3b every new session must
+ * be bound to a character; the string overload is retained for backward-compat
+ * with legacy callers (the server layer fills in a default character).
+ */
+export interface CreateSessionInput {
+    title?: string;
+    characterId?: string | null;
+    cacAssignmentId?: string | null;
+    executionProfile?: string | null;
+    operatorEmail?: string | null;
+    assistantEmail?: string | null;
 }
 
 export interface ChatMessage {
@@ -65,7 +89,9 @@ export interface ProviderSettingsInput {
     defaultModel?: string | null;
 }
 
-export class ChatSessionStore {
+import type { ISessionStore } from "../database/store-interfaces.js";
+
+export class ChatSessionStore implements ISessionStore {
     private readonly db: DatabaseSync;
     private readonly insertSessionStmt: StatementSync;
     private readonly insertMessageStmt: StatementSync;
@@ -79,8 +105,16 @@ export class ChatSessionStore {
         this.db.exec("PRAGMA journal_mode=WAL");
         this.migrate();
         this.insertSessionStmt = this.db.prepare(`
-            INSERT INTO chat_sessions (session_id, title, created_at, updated_at)
-            VALUES (:sessionId, :title, :createdAt, :updatedAt)
+            INSERT INTO chat_sessions (
+                session_id, title, created_at, updated_at,
+                character_id, cac_assignment_id, execution_profile,
+                operator_email, assistant_email
+            )
+            VALUES (
+                :sessionId, :title, :createdAt, :updatedAt,
+                :characterId, :cacAssignmentId, :executionProfile,
+                :operatorEmail, :assistantEmail
+            )
         `);
         this.insertMessageStmt = this.db.prepare(`
             INSERT INTO chat_messages (message_id, session_id, role, content, created_at, metadata_json)
@@ -171,6 +205,14 @@ export class ChatSessionStore {
 
         this.ensureColumn("chat_sessions", "llm_provider_id", "TEXT");
         this.ensureColumn("chat_sessions", "llm_model", "TEXT");
+
+        // Phase E3b governance-gate columns — bind every session to a character + CAC identity.
+        // Legacy rows keep NULL values and surface a "no character bound" banner until reassigned.
+        this.ensureColumn("chat_sessions", "character_id", "TEXT");
+        this.ensureColumn("chat_sessions", "cac_assignment_id", "TEXT");
+        this.ensureColumn("chat_sessions", "execution_profile", "TEXT");
+        this.ensureColumn("chat_sessions", "operator_email", "TEXT");
+        this.ensureColumn("chat_sessions", "assistant_email", "TEXT");
 
         // Attachment storage table
         this.db.exec(`
@@ -283,16 +325,58 @@ export class ChatSessionStore {
         this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
 
-    createSession(title: string = "New Session"): ChatSessionSummary {
+    createSession(input: string | CreateSessionInput = "New Session"): ChatSessionSummary {
+        const opts: CreateSessionInput = typeof input === "string" ? { title: input } : input;
         const now = new Date().toISOString();
         const sessionId = randomUUID();
         this.insertSessionStmt.run({
             sessionId,
-            title: sanitizeTitle(title),
+            title: sanitizeTitle(opts.title ?? "New Session"),
             createdAt: now,
             updatedAt: now,
+            characterId: opts.characterId ?? null,
+            cacAssignmentId: opts.cacAssignmentId ?? null,
+            executionProfile: opts.executionProfile ?? null,
+            operatorEmail: opts.operatorEmail ?? null,
+            assistantEmail: opts.assistantEmail ?? null,
         });
         return this.getSession(sessionId)!;
+    }
+
+    /**
+     * Phase E3b: (re)bind an existing session to a character + CAC identity.
+     * Returns the refreshed session summary, or null if the session does not exist.
+     */
+    bindSessionCharacter(sessionId: string, input: {
+        characterId: string;
+        cacAssignmentId?: string | null;
+        executionProfile?: string | null;
+        operatorEmail?: string | null;
+        assistantEmail?: string | null;
+    }): ChatSessionSummary | null {
+        const now = new Date().toISOString();
+        const result = this.db.prepare(`
+            UPDATE chat_sessions
+            SET character_id = :characterId,
+                cac_assignment_id = :cacAssignmentId,
+                execution_profile = :executionProfile,
+                operator_email = :operatorEmail,
+                assistant_email = :assistantEmail,
+                updated_at = :updatedAt
+            WHERE session_id = :sessionId
+        `).run({
+            sessionId,
+            characterId: input.characterId,
+            cacAssignmentId: input.cacAssignmentId ?? null,
+            executionProfile: input.executionProfile ?? null,
+            operatorEmail: input.operatorEmail ?? null,
+            assistantEmail: input.assistantEmail ?? null,
+            updatedAt: now,
+        });
+        if (!result.changes) {
+            return null;
+        }
+        return this.getSession(sessionId);
     }
 
     listSessions(): ChatSessionSummary[] {
@@ -304,6 +388,11 @@ export class ChatSessionStore {
                 s.updated_at,
                 s.llm_provider_id,
                 s.llm_model,
+                s.character_id,
+                s.cac_assignment_id,
+                s.execution_profile,
+                s.operator_email,
+                s.assistant_email,
                 COALESCE(m.message_count, 0) AS message_count,
                 m.last_message_preview,
                 m.last_message_role
@@ -337,6 +426,11 @@ export class ChatSessionStore {
             updated_at: string;
             llm_provider_id: string | null;
             llm_model: string | null;
+            character_id: string | null;
+            cac_assignment_id: string | null;
+            execution_profile: string | null;
+            operator_email: string | null;
+            assistant_email: string | null;
             message_count: number;
             last_message_preview: string | null;
             last_message_role: "user" | "assistant" | "system" | null;
@@ -352,6 +446,11 @@ export class ChatSessionStore {
             messageCount: row.message_count,
             lastMessagePreview: row.last_message_preview,
             lastMessageRole: row.last_message_role,
+            characterId: row.character_id,
+            cacAssignmentId: row.cac_assignment_id,
+            executionProfile: row.execution_profile,
+            operatorEmail: row.operator_email,
+            assistantEmail: row.assistant_email,
         }));
     }
 

@@ -15,7 +15,7 @@ export class DashboardHandler implements IRouteHandler {
   async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
     const url = req.url ?? "";
     const prefs = readPreferences();
-    
+
     if (!prefs?.setupComplete && !url.startsWith("/dashboard")) {
       res.writeHead(302, { Location: "/setup" });
       res.end();
@@ -31,6 +31,7 @@ export class DashboardHandler implements IRouteHandler {
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Clear-Site-Data": '"cache"',
         Pragma: "no-cache",
         Expires: "0",
       });
@@ -48,6 +49,10 @@ export class DashboardHandler implements IRouteHandler {
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      // Clear-Site-Data evicts any previously cached 301/302 redirects for /api/* ↔ /api/v1/*
+      // that were issued by older server versions. Without this, browsers in redirect-loop
+      // mode will never reach the API regardless of server-side fixes.
+      "Clear-Site-Data": '"cache"',
       Pragma: "no-cache",
       Expires: "0",
     });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import sqlite3 from "sqlite3";
 import { TerminalSessionAdapter } from "./adapters/application/terminal-session-adapter.js";
@@ -34,6 +34,7 @@ import { DashboardService, type DashboardAction } from "./core/operator/dashboar
 import { SelfReviewScheduler } from "./core/operator/self-review-scheduler.js";
 import { UsageMeteringService } from "./core/operator/usage-metering-service.js";
 import { McpClientAdapter } from "./adapters/protocol/mcp-client-tool.js";
+import { getConsoleInterceptor } from "./core/logging/console-interceptor.js";
 import { AgentPool } from "./core/agents/agent-pool.js";
 import { AgentLifecycleManager } from "./core/agents/agent-lifecycle.js";
 import { AgentTelemetryCollector } from "./core/agents/agent-telemetry-collector.js";
@@ -52,6 +53,12 @@ import {
 } from "./core/config/workspace-resolver.js";
 
 async function main(): Promise<void> {
+    // Install the console interceptor BEFORE any startup logging so the
+    // dashboard's Live Console panel captures every line — including the
+    // earliest [PRISM][startup] warnings about JWT secrets, etc.
+    const consoleInterceptor = getConsoleInterceptor();
+    consoleInterceptor.install();
+
     const runtimeMode = resolveRuntimeMode(process.env.PRISM_MODE ?? process.argv[2]);
     const cliSetup = process.argv.includes("--setup");
     const dashboardPort = Number(process.env.PRISM_DASHBOARD_PORT ?? 7070);
@@ -60,22 +67,82 @@ async function main(): Promise<void> {
     );
     const retrievalAlertProfile = resolveRetrievalAlertProfile(environmentProfile);
 
-    // Startup environment validation — warn on missing/misconfigured variables
+    // Startup environment validation — fail fast in production, warn in dev.
+    // Each FATAL condition refuses to boot when NODE_ENV=production.
+    const isProduction = process.env.NODE_ENV === "production";
     const envWarnings: string[] = [];
-    if (!process.env.PRISM_JWT_SECRET || process.env.PRISM_JWT_SECRET.length < 32) {
-        envWarnings.push("PRISM_JWT_SECRET is unset or too short (<32 chars) — authentication may be insecure");
+    const envFatals: string[] = [];
+
+    const jwtSecret = process.env.PRISM_JWT_SECRET ?? "";
+    if (jwtSecret.length < 32) {
+        if (isProduction) {
+            envFatals.push(
+                "PRISM_JWT_SECRET must be set to a string of at least 32 characters " +
+                "(generate via: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
+            );
+        } else {
+            // Dev convenience: auto-generate a persistent secret stored under
+            // the workspace data dir so the warning does not fire on every
+            // restart and so the same token survives across reboots.
+            try {
+                const dataDir = process.env.PRISM_DATA_DIR
+                    ?? join(process.env.USERPROFILE ?? process.env.HOME ?? process.cwd(), ".prism");
+                mkdirSync(dataDir, { recursive: true });
+                const secretPath = join(dataDir, ".prism-jwt-secret");
+                let secret = "";
+                if (existsSync(secretPath)) {
+                    secret = readFileSync(secretPath, "utf8").trim();
+                }
+                if (secret.length < 32) {
+                    secret = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+                    writeFileSync(secretPath, secret, { encoding: "utf8", mode: 0o600 });
+                    console.warn(
+                        `[PRISM][startup] PRISM_JWT_SECRET not set — generated a development ` +
+                        `secret at ${secretPath} (mode 0600). Set PRISM_JWT_SECRET explicitly for ` +
+                        `production deployments.`,
+                    );
+                }
+                process.env.PRISM_JWT_SECRET = secret;
+            } catch (err) {
+                envWarnings.push(
+                    "PRISM_JWT_SECRET not set and dev auto-generation failed " +
+                    `(${(err as Error).message}) — authentication may be insecure`,
+                );
+            }
+        }
     }
-    if (process.env.PRISM_AUTH_DISABLED === "true" && process.env.NODE_ENV === "production") {
-        envWarnings.push("PRISM_AUTH_DISABLED=true is forbidden in production");
+
+    if (process.env.PRISM_AUTH_DISABLED === "true") {
+        const msg = "PRISM_AUTH_DISABLED=true disables dashboard authentication entirely";
+        if (isProduction) envFatals.push(`${msg} — forbidden when NODE_ENV=production`);
+        else envWarnings.push(`${msg} — only acceptable in development`);
     }
+
+    if (isProduction && !process.env.PRISM_DATA_DIR) {
+        envFatals.push(
+            "PRISM_DATA_DIR must be set in production so SQLite databases, characters, " +
+            "plugin packs, and audit logs are persistent across container restarts",
+        );
+    }
+
     if (!process.env.PRISM_DASHBOARD_PORT) {
         envWarnings.push("PRISM_DASHBOARD_PORT not set — defaulting to 7070");
     }
-    if (process.env.NODE_ENV === "production" && !process.env.PRISM_DATA_DIR) {
-        envWarnings.push("PRISM_DATA_DIR not set in production — workspace may be ephemeral");
-    }
+
     for (const warn of envWarnings) {
         console.warn(`[PRISM][startup] WARN: ${warn}`);
+    }
+
+    if (envFatals.length > 0) {
+        console.error("\n[PRISM][startup] FATAL: refusing to boot in production with the following issues:");
+        for (const fatal of envFatals) {
+            console.error(`  - ${fatal}`);
+        }
+        console.error(
+            "\nSet NODE_ENV=development for local work, or fix the environment and retry. " +
+            "See .env.example at the workspace root for documentation of every variable.",
+        );
+        process.exit(1);
     }
 
     // Initialize persistent workspace
@@ -191,6 +258,10 @@ async function main(): Promise<void> {
         containerAdapter,
     );
 
+    // Wire MCP adapter + console interceptor so /api/mcp/servers,
+    // /api/debug/console, and the Guardian's mcp_health_recovery task work.
+    dashboardService.setMcpAdapter(mcpAdapter);
+    dashboardService.setConsoleInterceptor(consoleInterceptor);
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
     const llmDelegate = dashboardService.getLlmDelegate();
     const agentTelemetry = new AgentTelemetryCollector();

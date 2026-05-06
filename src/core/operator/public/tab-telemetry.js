@@ -221,6 +221,7 @@ export
 export
   function renderSelfReview() {
   const container = document.getElementById('self-review');
+  if (!container) return;
   if (!state.selfReviewLatest) {
     container.innerHTML = '<div class="muted">No self-review report generated yet.</div>';
     return;
@@ -256,6 +257,7 @@ export
 export
   function renderRetrievalObservability() {
   const container = document.getElementById('retrieval-alerts');
+  if (!container) return;
   const data = state.prioritizedAlerts;
   if (!data || !data.alerts || !data.alerts.length) {
     const hasLegacy = state.retrievalAlerts && state.retrievalAlerts.length > 0;
@@ -329,6 +331,7 @@ export
 export
   function renderRuntimeExcellence() {
   const container = document.getElementById('runtime-excellence');
+  if (!container) return;
   const data = state.runtimeExcellence;
   if (!data) {
     container.innerHTML = '<div class="muted">Runtime excellence snapshot unavailable.</div>';
@@ -368,6 +371,7 @@ export
 export
   function renderReleaseReadiness() {
   const container = document.getElementById('release-readiness');
+  if (!container) return;
   const report = state.releaseValidation;
   const decision = state.releaseDecision;
   const packageSnapshot = state.packageReleaseSnapshot;

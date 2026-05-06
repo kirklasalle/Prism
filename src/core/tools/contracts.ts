@@ -35,7 +35,7 @@ export function validateToolContract(toolName: string, contract: ToolContract): 
             continue;
         }
 
-        if (!["string", "number", "boolean", "object"].includes(schema.type)) {
+        if (!["string", "number", "boolean", "object", "array"].includes(schema.type)) {
             errors.push(`Tool ${toolName} arg "${argName}" has unsupported type "${schema.type}".`);
         }
 

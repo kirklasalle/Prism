@@ -1,7 +1,8 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { ActivityEvent, ActivitySubscriber } from "./types.js";
+import type { IActivityStore } from "../database/store-interfaces.js";
 
-export class SqliteActivityStore implements ActivitySubscriber {
+export class SqliteActivityStore implements IActivityStore {
     private readonly db: DatabaseSync;
     private readonly insertStmt: StatementSync;
     private readonly selectStmt: StatementSync;

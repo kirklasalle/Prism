@@ -18,19 +18,29 @@ import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+    DIRECTIVE_SHA256_GENERATED,
+    DIRECTIVE_HASH_GENERATED_AT,
+} from "./directive-hash.generated.js";
 
 /* ── Known-Good Directive Hash ───────────────────────────────────────── */
 
 /**
  * SHA-256 hex digest of Permanent_Active_Directives.txt (UTF-8).
- * Updating this value requires a code change through git + CI + code review,
- * satisfying Law 10's "cryptographically secured approval" requirement.
  *
- * Last verified: 2026-04-17
- * PAD version: 2026-02-23 (Updated field in document header)
+ * The value is sourced from `directive-hash.generated.ts`, which is rebuilt by
+ * `scripts/compute-directive-hash.cjs` on every `npm run prebuild`. Editing
+ * the PAD therefore produces a tracked diff in the generated file that MUST
+ * be committed alongside the PAD change — satisfying Law 10's
+ * "cryptographically secured approval" requirement (git + CI + code review)
+ * while eliminating the prior risk of a stale hardcoded constant.
+ *
+ * The generation timestamp is exported for inclusion in audit events.
  */
-export const DIRECTIVE_SHA256 =
-    "1a87dac4340e110c85bbdbeb120a529228b0662ea7fa9bdedfbe33692496b7ab";
+export const DIRECTIVE_SHA256: string = DIRECTIVE_SHA256_GENERATED;
+
+/** ISO-8601 timestamp of the most recent prebuild hash regeneration. */
+export const DIRECTIVE_HASH_LAST_GENERATED_AT: string = DIRECTIVE_HASH_GENERATED_AT;
 
 /** Filename of the Permanent Active Directives document. */
 export const DIRECTIVE_FILENAME = "Permanent_Active_Directives.txt";

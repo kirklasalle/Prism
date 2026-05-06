@@ -4,12 +4,15 @@
     --panel-strong: rgba(10, 24, 45, 0.94);
     --border: rgba(148, 163, 184, 0.16);
     --text: #edf3ff;
+    --fg: #edf3ff;
+    --fg-muted: #98a6bc;
     --muted: #98a6bc;
     --accent: #69d2ff;
     --accent-2: #7cf1c8;
     --danger: #ff8d8d;
     --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
     --radius: 22px;
+    --surface: rgba(255, 255, 255, 0.03);
 }
 
 * {
@@ -2704,6 +2707,311 @@ select optgroup {
     vertical-align: middle;
 }
 
+/* ── Composer (chat input) ──────────────────────────────────────── */
+.composer-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 820px;
+    position: relative;
+    border-radius: 24px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(2, 8, 18, 0.7);
+    padding: 0;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    overflow: hidden;
+}
+
+.composer-container:focus-within {
+    border-color: rgba(105, 210, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(105, 210, 255, 0.08), 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Override legacy absolute-positioning rule for #send-button so it stays in the flex row */
+.composer-container #send-button {
+    position: static;
+    right: auto;
+    bottom: auto;
+    width: 40px;
+    height: 40px;
+}
+
+.composer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px 10px;
+    border-top: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+.composer-left-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.composer-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.composer-icon-btn:hover {
+    background: rgba(105, 210, 255, 0.1);
+    color: var(--accent);
+}
+
+.composer-send-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #69d2ff 0%, #4fb8e8 50%, #7cf1c8 100%);
+    color: #07111f;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+    box-shadow: 0 2px 12px rgba(105, 210, 255, 0.3);
+    flex-shrink: 0;
+}
+
+.composer-send-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 4px 20px rgba(105, 210, 255, 0.45);
+}
+
+.composer-send-btn:active {
+    transform: scale(0.95);
+}
+
+.composer-send-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ── Thinking animation ─────────────────────────────────────────── */
+.thinking-badge {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(105, 210, 255, 0.12);
+    color: var(--accent);
+    animation: thinking-fade 1.4s ease-in-out infinite;
+    vertical-align: middle;
+}
+
+.thinking-dots {
+    display: flex;
+    gap: 6px;
+    padding: 6px 0 2px;
+    align-items: center;
+}
+
+.thinking-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.3;
+    animation: dot-bounce 1.4s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes dot-bounce {
+
+    0%,
+    60%,
+    100% {
+        transform: translateY(0);
+        opacity: 0.3;
+    }
+
+    30% {
+        transform: translateY(-6px);
+        opacity: 1;
+    }
+}
+
+@keyframes thinking-fade {
+
+    0%,
+    100% {
+        opacity: 0.45;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* ── Framebuffer extras (Computer tab) ──────────────────────────── */
+.framebuffer-gallery-path {
+    font-family: monospace;
+    font-size: 10px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 460px;
+}
+
+.framebuffer-selection-summary {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 4px 0 2px;
+    min-height: 18px;
+}
+
+.framebuffer-gallery-controls {
+    display: flex;
+    gap: 6px;
+    padding: 6px 0 2px;
+    flex-wrap: wrap;
+}
+
+.framebuffer-gallery-controls button {
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.framebuffer-gallery-controls button:hover {
+    background: rgba(124, 241, 200, 0.08);
+    border-color: var(--accent);
+}
+
+.framebuffer-media-bar {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(10, 14, 23, 0.85);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    flex-wrap: wrap;
+}
+
+.framebuffer-media-bar button {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.framebuffer-media-bar button:hover {
+    background: rgba(124, 241, 200, 0.08);
+    border-color: var(--accent);
+}
+
+.framebuffer-media-bar button.active {
+    background: rgba(124, 241, 200, 0.15);
+    border-color: #7cf1c8;
+    color: #7cf1c8;
+}
+
+.framebuffer-media-bar .fb-media-spacer {
+    flex: 1;
+}
+
+.framebuffer-media-bar .fb-media-label {
+    font-size: 10px;
+    color: var(--muted);
+}
+
+/* ── Log source badge variants (Logs & Debug tab) ───────────────── */
+.log-src-diagnostics {
+    background: rgba(105, 210, 255, 0.12);
+    color: #69d2ff;
+}
+
+.log-src-agent-diagnostics {
+    background: rgba(168, 130, 255, 0.12);
+    color: #a882ff;
+}
+
+.log-src-computer-diagnostics {
+    background: rgba(124, 241, 200, 0.12);
+    color: #7cf1c8;
+}
+
+.log-src-browser {
+    background: rgba(105, 210, 255, 0.12);
+    color: #69d2ff;
+}
+
+.log-src-scheduler {
+    background: rgba(255, 157, 122, 0.12);
+    color: #ff9d7a;
+}
+
+.log-src-hardware {
+    background: rgba(255, 141, 141, 0.12);
+    color: #ff8d8d;
+}
+
+/* ── Log severity variant (alias for .log-sev-warning) ──────────── */
+.log-sev-warn {
+    background: rgba(255, 209, 122, 0.15);
+    color: #ffd17a;
+}
+
+/* ── Log filter bar ─────────────────────────────────────────────── */
+.log-filter-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.log-filter-bar select {
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.log-filter-bar select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
 .brand-env-dot.dev {
     background: #69d2ff;
 }
@@ -3166,4 +3474,224 @@ select optgroup {
     align-items: center;
     margin-bottom: 8px;
     flex-wrap: wrap;
+}
+/* -----------------------------------------------------------------------
+ * PRISM Tooltips ("Prism Tips")
+ * Single-overlay rich tooltip, additive � never overrides existing styles.
+ * ----------------------------------------------------------------------- */
+.prism-tip {
+    position: absolute;
+    z-index: 10000;
+    max-width: 360px;
+    min-width: 220px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.97);
+    color: #e2e8f0;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    font-size: 12px;
+    line-height: 1.45;
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 140ms ease-out, transform 140ms ease-out;
+    visibility: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+.prism-tip.visible {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .prism-tip {
+        transition: none;
+        transform: none;
+    }
+}
+
+.prism-tip-arrow {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: rgba(15, 23, 42, 0.97);
+    border-left: 1px solid rgba(148, 163, 184, 0.28);
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+    transform: rotate(45deg);
+    pointer-events: none;
+}
+
+.prism-tip[data-placement="below"] .prism-tip-arrow {
+    top: -6px;
+}
+
+.prism-tip[data-placement="above"] .prism-tip-arrow {
+    bottom: -6px;
+    border-left: none;
+    border-top: none;
+    border-right: 1px solid rgba(148, 163, 184, 0.28);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.prism-tip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 12px;
+    color: #f8fafc;
+    margin-bottom: 4px;
+}
+
+.prism-tip-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.prism-tip-summary {
+    color: #cbd5e1;
+    margin-bottom: 6px;
+}
+
+.prism-tip-dynamic {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    margin-top: 6px;
+    border-radius: 6px;
+    background: rgba(99, 102, 241, 0.12);
+    border-left: 2px solid rgba(99, 102, 241, 0.55);
+    color: #e0e7ff;
+    font-size: 11.5px;
+}
+
+.prism-tip-dynamic-guardian {
+    background: rgba(34, 197, 94, 0.12);
+    border-left-color: rgba(34, 197, 94, 0.55);
+    color: #d1fae5;
+}
+
+.prism-tip-dynamic-telemetry {
+    background: rgba(59, 130, 246, 0.12);
+    border-left-color: rgba(59, 130, 246, 0.55);
+    color: #dbeafe;
+}
+
+.prism-tip-dynamic-server {
+    background: rgba(245, 158, 11, 0.12);
+    border-left-color: rgba(245, 158, 11, 0.55);
+    color: #fef3c7;
+}
+
+.prism-tip-dynamic-lore {
+    background: rgba(168, 85, 247, 0.12);
+    border-left-color: rgba(168, 85, 247, 0.55);
+    color: #f3e8ff;
+}
+
+.prism-tip-dynamic-glyph {
+    flex: 0 0 auto;
+    line-height: 1.45;
+}
+
+.prism-tip-dynamic-text {
+    flex: 1 1 auto;
+}
+
+.prism-tip-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.prism-tip-metric {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.14);
+    font-size: 10.5px;
+}
+
+.prism-tip-metric-key {
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.prism-tip-metric-val {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.prism-tip-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.prism-tip-link {
+    color: #93c5fd;
+    text-decoration: none;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.prism-tip-link:hover,
+.prism-tip-link:focus {
+    background: rgba(59, 130, 246, 0.22);
+    color: #bfdbfe;
+    outline: none;
+}
+
+/* -- Character chip strip (Workspace tab) ------------------------------- */
+.character-chip-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 8px 0;
+}
+
+.character-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.10);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    color: #e2e8f0;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+
+.character-chip:hover,
+.character-chip:focus-visible {
+    background: rgba(99, 102, 241, 0.18);
+    border-color: rgba(99, 102, 241, 0.55);
+    outline: none;
+}
+
+.character-chip.selected {
+    background: rgba(99, 102, 241, 0.28);
+    border-color: rgba(99, 102, 241, 0.85);
+    color: #f5f3ff;
+}
+
+.character-chip-icon {
+    font-size: 13px;
+    line-height: 1;
 }

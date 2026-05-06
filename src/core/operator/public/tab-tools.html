@@ -1,0 +1,139 @@
+<div style="display:flex;flex-direction:column;gap:12px;">
+  <div id="tools-overview-bar" data-tip-id="tools:overview" data-tip-kind="tools"></div>
+  <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('pluginsPanel')" data-tip-id="tools:plugins"
+      data-tip-kind="tools">
+      <h3>🧩 Plugins</h3>
+      <span class="tp-panel-summary" id="pluginsPanel-summary" style="display:none;"></span>
+      <span class="collapse-chevron" id="chevron-pluginsPanel">▶</span>
+    </div>
+    <div class="collapsible-body collapsed" id="body-pluginsPanel">
+      <div id="plugins-panel" class="stack"></div>
+    </div>
+  </section>
+  <div class="tp-split-row">
+    <section class="rail-section panel tp-split-col">
+      <div class="collapsible-header" onclick="togglePanelCollapse('toolsPanel')" data-tip-id="tools:tools"
+        data-tip-kind="tools">
+        <h3>🛠️ Tools</h3>
+        <span class="tp-panel-summary" id="toolsPanel-summary" style="display:none;"></span>
+        <span class="collapse-chevron" id="chevron-toolsPanel">▶</span>
+      </div>
+      <div class="collapsible-body collapsed" id="body-toolsPanel">
+        <div id="tools-panel" class="stack"></div>
+      </div>
+    </section>
+    <section class="rail-section panel tp-split-col">
+      <div class="collapsible-header" onclick="togglePanelCollapse('utilitiesPanel')" data-tip-id="tools:utilities"
+        data-tip-kind="tools">
+        <h3>⚙️ Utilities</h3>
+        <span class="tp-panel-summary" id="utilitiesPanel-summary" style="display:none;"></span>
+        <span class="collapse-chevron" id="chevron-utilitiesPanel">▶</span>
+      </div>
+      <div class="collapsible-body collapsed" id="body-utilitiesPanel">
+        <div id="utilities-panel" class="stack"></div>
+        <div id="phase-e3-utilities-runner" class="stack" style="margin-top:8px"></div>
+        <div id="phase-e3-risk-overrides" class="stack" style="margin-top:8px"></div>
+      </div>
+    </section>
+  </div>
+  <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('diagnosticsPanel')" data-tip-id="tools:diagnostics"
+      data-tip-kind="tools">
+      <h3>🧪 Diagnostics</h3>
+      <span class="tp-panel-summary" id="diagnosticsPanel-summary" style="display:none;"></span>
+      <span class="collapse-chevron" id="chevron-diagnosticsPanel">▶</span>
+    </div>
+    <div class="collapsible-body collapsed" id="body-diagnosticsPanel">
+      <div id="diagnostics-panel" class="stack"></div>
+      <section class="rail-section panel" style="margin-top:8px;">
+        <div class="collapsible-header" onclick="togglePanelCollapse('agentDiagnosticsPanel')" data-tip-id="diag:agent"
+          data-tip-kind="diagnostics">
+          <h3>🤖 Agent Diagnostics</h3>
+          <span class="tp-panel-summary" id="agentDiagnosticsPanel-summary" style="display:none;"></span>
+          <span class="collapse-chevron" id="chevron-agentDiagnosticsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-agentDiagnosticsPanel">
+          <div id="agent-diagnostics-panel" class="stack"></div>
+        </div>
+      </section>
+      <section class="rail-section panel" style="margin-top:8px;">
+        <div class="collapsible-header" onclick="togglePanelCollapse('computerDiagnosticsPanel')"
+          data-tip-id="diag:computer" data-tip-kind="diagnostics">
+          <h3>🖥️ Computer Diagnostics</h3>
+          <span class="tp-panel-summary" id="computerDiagnosticsPanel-summary" style="display:none;"></span>
+          <span class="collapse-chevron" id="chevron-computerDiagnosticsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-computerDiagnosticsPanel">
+          <div id="computer-diagnostics-panel" class="stack"></div>
+        </div>
+      </section>
+      <section class="rail-section panel" style="margin-top:8px;">
+        <div class="collapsible-header" onclick="togglePanelCollapse('workspaceDiagnosticsPanel')"
+          data-tip-id="diag:workspace" data-tip-kind="diagnostics">
+          <h3>📂 Workspace Diagnostics</h3>
+          <span class="tp-panel-summary" id="workspaceDiagnosticsPanel-summary" style="display:none;"></span>
+          <span class="collapse-chevron" id="chevron-workspaceDiagnosticsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-workspaceDiagnosticsPanel">
+          <div id="workspace-diagnostics-panel" class="stack"></div>
+        </div>
+      </section>
+      <section class="rail-section panel" style="margin-top:8px;">
+        <div class="collapsible-header" onclick="togglePanelCollapse('networkDiagnosticsPanel')"
+          data-tip-id="diag:network" data-tip-kind="diagnostics">
+          <h3>🌐 Network Diagnostics</h3>
+          <span class="tp-panel-summary" id="networkDiagnosticsPanel-summary" style="display:none;"></span>
+          <span class="collapse-chevron" id="chevron-networkDiagnosticsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-networkDiagnosticsPanel">
+          <div id="network-diagnostics-panel" class="stack"></div>
+        </div>
+      </section>
+      <section class="rail-section panel" style="margin-top:8px;">
+        <div class="collapsible-header" onclick="togglePanelCollapse('telemetryDiagnosticsPanel')"
+          data-tip-id="diag:telemetry" data-tip-kind="diagnostics">
+          <h3>📊 Telemetry Diagnostics</h3>
+          <span class="tp-panel-summary" id="telemetryDiagnosticsPanel-summary" style="display:none;"></span>
+          <span class="collapse-chevron" id="chevron-telemetryDiagnosticsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-telemetryDiagnosticsPanel">
+          <div id="telemetry-diagnostics-panel" class="stack"></div>
+        </div>
+      </section>
+      <section class="rail-section panel" style="margin-top:8px;">
+        <div class="collapsible-header" onclick="togglePanelCollapse('logsDiagnosticsPanel')" data-tip-id="diag:logs"
+          data-tip-kind="diagnostics">
+          <h3>📝 Logs & Debug Diagnostics</h3>
+          <span class="tp-panel-summary" id="logsDiagnosticsPanel-summary" style="display:none;"></span>
+          <span class="collapse-chevron" id="chevron-logsDiagnosticsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-logsDiagnosticsPanel">
+          <div id="logs-diagnostics-panel" class="stack"></div>
+        </div>
+      </section>
+      <section class="rail-section panel" style="margin-top:8px;">
+        <div class="collapsible-header" onclick="togglePanelCollapse('schedulerDiagnosticsPanel')"
+          data-tip-id="diag:scheduler" data-tip-kind="diagnostics">
+          <h3>📅 Scheduler Diagnostics</h3>
+          <span class="tp-panel-summary" id="schedulerDiagnosticsPanel-summary" style="display:none;"></span>
+          <span class="collapse-chevron" id="chevron-schedulerDiagnosticsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-schedulerDiagnosticsPanel">
+          <div id="scheduler-diagnostics-panel" class="stack"></div>
+        </div>
+      </section>
+    </div>
+  </section>
+  <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('demoDiagnosticsPanel')" data-tip-id="tools:demo"
+      data-tip-kind="tools">
+      <h3>🎬 Demo Scenarios</h3>
+      <span class="tp-panel-summary" id="demoDiagnosticsPanel-summary" style="display:none;"></span>
+      <span class="collapse-chevron" id="chevron-demoDiagnosticsPanel">▶</span>
+    </div>
+    <div class="collapsible-body collapsed" id="body-demoDiagnosticsPanel">
+      <div id="demo-diagnostics-panel" class="stack"></div>
+    </div>
+  </section>
+</div>

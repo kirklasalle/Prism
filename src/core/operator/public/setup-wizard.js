@@ -1,12 +1,20 @@
 // Setup Wizard — step-based first-run configuration for PRISM
+//
+// Phase E3b: steps 4 (character) + 5 (CAC identity) were inserted. The legacy
+// "Summary + Launch" step is now step-6. No existing wiring was removed.
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 6;
 let currentStep = 1;
 let wizardState = {
   profile: 'individual',
   workspaceRoot: '',
   provider: 'ollama',
   apiKey: '',
+  // Phase E3b additions:
+  characterId: '',
+  operatorEmail: '',
+  assistantEmail: '',
+  importCharacterPreview: null,
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -55,7 +63,9 @@ function showStep(n) {
 
   if (n === 2) initWorkspaceStep();
   if (n === 3) initProviderStep();
-  if (n === 4) initSummaryStep();
+  if (n === 4) initCharacterStep();
+  if (n === 5) initIdentityStep();
+  if (n === 6) initSummaryStep();
 }
 
 // ── Step 1: Profile selection ────────────────────────────────────────────────
@@ -152,7 +162,126 @@ async function testProviderConnection() {
   }
 }
 
-// ── Step 4: Summary ──────────────────────────────────────────────────────────
+// ── Step 4 (E3b): Character selection ───────────────────────────────────────
+
+async function initCharacterStep() {
+  try {
+    const res = await api('GET', '/api/workspace/characters');
+    const chars = Array.isArray(res?.characters) ? res.characters : [];
+    const profile = wizardState.profile;
+    const filtered = chars.filter(c => !c.executionProfile || c.executionProfile === profile);
+    const list = document.getElementById('wizard-character-list');
+    if (list) {
+      list.innerHTML = filtered.map(c => `
+        <div class="wizard-option" data-character-id="${escHtml(c.id)}" onclick="wizardSelectCharacter(this, '${escHtml(c.id)}')">
+          <div style="font-weight:600;">${escHtml(c.displayName || c.name)}</div>
+          <div style="font-size:12px;opacity:0.75;margin-top:4px;">${escHtml(c.persona || '')}</div>
+          <div style="font-size:11px;opacity:0.6;margin-top:4px;">Tier cap: ${c.maxRiskTier ?? '—'}</div>
+        </div>
+      `).join('') || '<div style="opacity:0.7;font-size:13px;">No bundled characters for this profile. Use the Import tab.</div>';
+    }
+  } catch {
+    const list = document.getElementById('wizard-character-list');
+    if (list) list.innerHTML = '<div style="color:var(--danger);">Failed to load characters.</div>';
+  }
+  // Default tab = bundled
+  wizardCharacterTab('bundled');
+}
+
+window.wizardCharacterTab = function wizardCharacterTab(tab) {
+  const bundled = document.getElementById('wizard-character-panel-bundled');
+  const imp = document.getElementById('wizard-character-panel-import');
+  if (bundled) bundled.style.display = tab === 'bundled' ? '' : 'none';
+  if (imp) imp.style.display = tab === 'import' ? '' : 'none';
+};
+
+window.wizardSelectCharacter = function wizardSelectCharacter(el, id) {
+  wizardState.characterId = id;
+  document.querySelectorAll('#wizard-character-list .wizard-option').forEach(o => o.classList.remove('selected'));
+  if (el) el.classList.add('selected');
+  const selectedEl = document.getElementById('wizard-character-selected');
+  if (selectedEl) selectedEl.textContent = `Selected: ${id}`;
+};
+
+window.wizardCharacterPreviewImport = async function wizardCharacterPreviewImport() {
+  const ta = document.getElementById('wizard-character-import-json');
+  const out = document.getElementById('wizard-character-import-result');
+  const commitBtn = document.getElementById('wiz-char-commit-import');
+  if (!ta || !out) return;
+  let parsed;
+  try { parsed = JSON.parse(ta.value); }
+  catch (e) { out.innerHTML = `<span style="color:var(--danger);">Invalid JSON: ${escHtml(String(e))}</span>`; return; }
+  const res = await api('POST', '/api/workspace/character-import', {
+    manifest: parsed,
+    targetProfile: wizardState.profile,
+    commit: false,
+  });
+  if (res && res.ok) {
+    wizardState.importCharacterPreview = res.character;
+    const warnings = (res.warnings || []).map(w => `<li>${escHtml(w)}</li>`).join('');
+    out.innerHTML = `<div style="color:var(--success);">\u2713 Detected shape: ${escHtml(res.shape)}. Preview: <strong>${escHtml(res.character.name)}</strong></div>` +
+      (warnings ? `<ul style="margin-top:4px;opacity:0.85;">${warnings}</ul>` : '');
+    if (commitBtn) commitBtn.disabled = false;
+  } else {
+    const errs = (res?.errors || [res?.error || 'Import preview failed']).map(e => `<li>${escHtml(e)}</li>`).join('');
+    out.innerHTML = `<div style="color:var(--danger);">\u2717 Import rejected:</div><ul>${errs}</ul>`;
+    if (commitBtn) commitBtn.disabled = true;
+  }
+};
+
+window.wizardCharacterCommitImport = async function wizardCharacterCommitImport() {
+  const ta = document.getElementById('wizard-character-import-json');
+  const out = document.getElementById('wizard-character-import-result');
+  if (!ta) return;
+  let parsed;
+  try { parsed = JSON.parse(ta.value); }
+  catch (e) { if (out) out.innerHTML = `<span style="color:var(--danger);">Invalid JSON: ${escHtml(String(e))}</span>`; return; }
+  const res = await api('POST', '/api/workspace/character-import', {
+    manifest: parsed,
+    targetProfile: wizardState.profile,
+    commit: true,
+  });
+  if (res && res.ok) {
+    wizardState.characterId = res.character.name;
+    if (out) out.innerHTML = `<div style="color:var(--success);">\u2713 Imported ${escHtml(res.character.name)}.</div>`;
+    const selectedEl = document.getElementById('wizard-character-selected');
+    if (selectedEl) selectedEl.textContent = `Selected: ${res.character.name}`;
+    // Refresh the bundled panel so the new character shows up.
+    await initCharacterStep();
+  } else if (out) {
+    out.innerHTML = `<div style="color:var(--danger);">\u2717 ${escHtml(res?.error || 'Commit failed')}</div>`;
+  }
+};
+
+// ── Step 5 (E3b): CAC Identity ──────────────────────────────────────────────
+
+function initIdentityStep() {
+  const opEl = document.getElementById('wizard-operator-email');
+  const asEl = document.getElementById('wizard-assistant-email');
+  const warnEl = document.getElementById('wizard-cac-warning');
+  if (opEl) {
+    if (!opEl.value) opEl.value = wizardState.operatorEmail || 'operator@prism.local';
+    opEl.oninput = () => { wizardState.operatorEmail = opEl.value; updateCacWarning(); };
+  }
+  if (asEl) {
+    const defaultAssistant = wizardState.characterId ? `${wizardState.characterId}@prism.local` : 'assistant@prism.local';
+    if (!asEl.value) asEl.value = wizardState.assistantEmail || defaultAssistant;
+    asEl.oninput = () => { wizardState.assistantEmail = asEl.value; updateCacWarning(); };
+  }
+  wizardState.operatorEmail = opEl?.value || '';
+  wizardState.assistantEmail = asEl?.value || '';
+  updateCacWarning();
+
+  function updateCacWarning() {
+    if (!warnEl) return;
+    const op = (wizardState.operatorEmail || '').toLowerCase();
+    const as = (wizardState.assistantEmail || '').toLowerCase();
+    const isPlaceholder = (e) => !e || e.endsWith('@prism.local') || e.endsWith('@placeholder');
+    warnEl.style.display = (isPlaceholder(op) || isPlaceholder(as)) ? '' : 'none';
+  }
+}
+
+// ── Step 6: Summary ──────────────────────────────────────────────────────────
 
 async function initSummaryStep() {
   const container = document.getElementById('summary-checks');
@@ -224,6 +353,27 @@ window.wizardNext = async function wizardNext() {
       if (wsInput && wsInput.value) {
         await api('POST', '/api/setup/workspace', { workspaceRoot: wsInput.value });
       }
+    }
+    // Phase E3b — step 4: persist defaultCharacterId before advancing.
+    if (currentStep === 4) {
+      if (!wizardState.characterId) {
+        const sel = document.getElementById('wizard-character-selected');
+        if (sel) sel.innerHTML = '<span style="color:var(--danger);">Select a character or import one before continuing.</span>';
+        return;
+      }
+      try {
+        await api('POST', '/api/setup/character', { characterId: wizardState.characterId });
+      } catch { /* surfaced by summary readiness */ }
+    }
+    // Phase E3b — step 5: seed CAC + first session before advancing to summary.
+    if (currentStep === 5) {
+      try {
+        await api('POST', '/api/setup/cac', {
+          characterId: wizardState.characterId,
+          operatorEmail: wizardState.operatorEmail,
+          assistantEmail: wizardState.assistantEmail,
+        });
+      } catch { /* non-fatal; summary will show readiness */ }
     }
     showStep(currentStep + 1);
   } else {

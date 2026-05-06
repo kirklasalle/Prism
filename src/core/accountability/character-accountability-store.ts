@@ -26,6 +26,10 @@ export interface CharacterAssignment {
     updatedAt: string;
     lastActiveAt: string;
     permissionScopes?: PermissionScope[];
+    /** Phase E5: ISO-8601 timestamp when the operator email was verified via OAuth. */
+    emailVerifiedAt?: string | null;
+    /** Phase E5: which OAuth provider verified the email ("gmail" | "outlook"). */
+    emailVerifiedProvider?: "gmail" | "outlook" | null;
 }
 
 export interface CharacterAssignmentFilter {
@@ -100,6 +104,8 @@ export class CharacterAccountabilityStore {
         this.ensureColumn("character_assignments", "execution_profile_segment", "TEXT DEFAULT 'individual'");
         this.ensureColumn("character_assignments", "workspace_hub", "TEXT DEFAULT ''");
         this.ensureColumn("character_assignments", "permission_scopes", "TEXT DEFAULT '[]'");
+        this.ensureColumn("character_assignments", "email_verified_at", "TEXT");
+        this.ensureColumn("character_assignments", "email_verified_provider", "TEXT");
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {
@@ -117,12 +123,14 @@ export class CharacterAccountabilityStore {
                 assignment_id, character_id, prism_user_id, prism_user_email,
                 operator_id, operator_email, client_id, session_id, execution_profile_segment, workspace_hub, state,
                 suspend_reason, revocation_reason, dispatch_count,
-                assigned_at, updated_at, last_active_at, permission_scopes
+                assigned_at, updated_at, last_active_at, permission_scopes,
+                email_verified_at, email_verified_provider
             ) VALUES (
                 :assignmentId, :characterId, :prismUserId, :prismUserEmail,
                 :operatorId, :operatorEmail, :clientId, :sessionId, :executionProfileSegment, :workspaceHub, :state,
                 :suspendReason, :revocationReason, :dispatchCount,
-                :assignedAt, :updatedAt, :lastActiveAt, :permissionScopes
+                :assignedAt, :updatedAt, :lastActiveAt, :permissionScopes,
+                :emailVerifiedAt, :emailVerifiedProvider
             )
         `).run({
             assignmentId: assignment.assignmentId,
@@ -143,6 +151,8 @@ export class CharacterAccountabilityStore {
             updatedAt: assignment.updatedAt,
             lastActiveAt: assignment.lastActiveAt,
             permissionScopes: JSON.stringify(assignment.permissionScopes ?? []),
+            emailVerifiedAt: assignment.emailVerifiedAt ?? null,
+            emailVerifiedProvider: assignment.emailVerifiedProvider ?? null,
         });
     }
 
@@ -241,6 +251,10 @@ export class CharacterAccountabilityStore {
             updatedAt: String(row.updated_at),
             lastActiveAt: String(row.last_active_at),
             permissionScopes,
+            emailVerifiedAt: row.email_verified_at != null ? String(row.email_verified_at) : null,
+            emailVerifiedProvider: row.email_verified_provider != null
+                ? (String(row.email_verified_provider) as "gmail" | "outlook")
+                : null,
         };
     }
 }

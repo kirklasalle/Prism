@@ -1,0 +1,360 @@
+{
+    "tab:workspace": [
+        {
+            "label": "Workspace Guide",
+            "href": "/docs/DEPLOYMENT_GUIDE.md"
+        },
+        {
+            "label": "Wiki: Workspaces",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Workspaces"
+        }
+    ],
+    "character:aria-individual": [
+        {
+            "label": "Character Selection Guide",
+            "href": "/docs/CHARACTER_SELECTION_GUIDE.md"
+        },
+        {
+            "label": "Wiki: ARIA",
+            "href": "https://github.com/kirklasalle/Prism/wiki/ARIA"
+        }
+    ],
+    "character:aria-business": [
+        {
+            "label": "Business vs Individual",
+            "href": "/docs/BUSINESS_VS_INDIVIDUAL_GUIDE.md"
+        },
+        {
+            "label": "Wiki: ARIA",
+            "href": "https://github.com/kirklasalle/Prism/wiki/ARIA"
+        }
+    ],
+    "character:phoenix-individual": [
+        {
+            "label": "Character Selection Guide",
+            "href": "/docs/CHARACTER_SELECTION_GUIDE.md"
+        },
+        {
+            "label": "Wiki: PHOENIX",
+            "href": "https://github.com/kirklasalle/Prism/wiki/PHOENIX"
+        }
+    ],
+    "character:phoenix-business": [
+        {
+            "label": "Business vs Individual",
+            "href": "/docs/BUSINESS_VS_INDIVIDUAL_GUIDE.md"
+        },
+        {
+            "label": "Wiki: PHOENIX",
+            "href": "https://github.com/kirklasalle/Prism/wiki/PHOENIX"
+        }
+    ],
+    "character:sentinel-individual": [
+        {
+            "label": "Character Selection Guide",
+            "href": "/docs/CHARACTER_SELECTION_GUIDE.md"
+        },
+        {
+            "label": "Wiki: SENTINEL",
+            "href": "https://github.com/kirklasalle/Prism/wiki/SENTINEL"
+        }
+    ],
+    "character:sentinel-business": [
+        {
+            "label": "Business vs Individual",
+            "href": "/docs/BUSINESS_VS_INDIVIDUAL_GUIDE.md"
+        },
+        {
+            "label": "Wiki: SENTINEL",
+            "href": "https://github.com/kirklasalle/Prism/wiki/SENTINEL"
+        }
+    ],
+    "character:example-analyst": [
+        {
+            "label": "Character Selection Guide",
+            "href": "/docs/CHARACTER_SELECTION_GUIDE.md"
+        }
+    ],
+    "shell:brand": [
+        {
+            "label": "README",
+            "href": "/README.md"
+        },
+        {
+            "label": "Wiki Home",
+            "href": "https://github.com/kirklasalle/Prism/wiki"
+        }
+    ],
+    "shell:setup-wizard": [
+        {
+            "label": "Deployment Guide",
+            "href": "/docs/DEPLOYMENT_GUIDE.md"
+        },
+        {
+            "label": "Wiki: Setup Wizard",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Setup-Wizard"
+        }
+    ],
+    "shell:export-session": [
+        {
+            "label": "Wiki: Sessions",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Sessions"
+        }
+    ],
+    "shell:import-session": [
+        {
+            "label": "Wiki: Sessions",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Sessions"
+        }
+    ],
+    "shell:package-sessions": [
+        {
+            "label": "Wiki: Session Packaging",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Session-Packaging"
+        }
+    ],
+    "shell:new-session": [
+        {
+            "label": "Wiki: Sessions",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Sessions"
+        }
+    ],
+    "shell:ws-status": [
+        {
+            "label": "Wiki: Realtime Channel",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Realtime"
+        }
+    ],
+    "shell:tab:chat": [
+        {
+            "label": "Wiki: Chat",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Chat"
+        }
+    ],
+    "shell:tab:settings": [
+        {
+            "label": "Wiki: Providers & Settings",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Providers-and-Settings"
+        }
+    ],
+    "shell:tab:tools": [
+        {
+            "label": "Wiki: Tools & Plugins",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Tools-and-Plugins"
+        }
+    ],
+    "shell:tab:agentic": [
+        {
+            "label": "PAD Whitepaper",
+            "href": "/docs/PAD_WHITEPAPER.md"
+        },
+        {
+            "label": "Wiki: Agentic Control",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Agentic-Control"
+        }
+    ],
+    "shell:tab:computer": [
+        {
+            "label": "Wiki: Computer Control",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Computer-Control"
+        }
+    ],
+    "shell:tab:browser": [
+        {
+            "label": "Wiki: Browser Control",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Browser-Control"
+        }
+    ],
+    "shell:tab:workspace": [
+        {
+            "label": "Character Selection Guide",
+            "href": "/docs/CHARACTER_SELECTION_GUIDE.md"
+        },
+        {
+            "label": "Wiki: Workspace",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Workspace"
+        }
+    ],
+    "shell:tab:network": [
+        {
+            "label": "Wiki: Network",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Network"
+        }
+    ],
+    "shell:tab:telemetry": [
+        {
+            "label": "Admin/SRE Guide",
+            "href": "/docs/ADMIN_SRE_GUIDE.md"
+        },
+        {
+            "label": "Wiki: Telemetry",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Telemetry"
+        }
+    ],
+    "shell:tab:logs": [
+        {
+            "label": "Wiki: Logs & Debug",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Logs-and-Debug"
+        }
+    ],
+    "shell:tab:scheduler": [
+        {
+            "label": "Wiki: Scheduler",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Scheduler"
+        }
+    ],
+    "chat:send": [
+        {
+            "label": "Wiki: Chat",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Chat"
+        }
+    ],
+    "chat:composer": [
+        {
+            "label": "Wiki: Composer",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Chat#composer"
+        }
+    ],
+    "chat:messages": [
+        {
+            "label": "Wiki: Messages",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Chat#messages"
+        }
+    ],
+    "chat:attach": [
+        {
+            "label": "Wiki: Attachments",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Attachments"
+        }
+    ],
+    "chat:paste": [
+        {
+            "label": "Wiki: Attachments",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Attachments"
+        }
+    ],
+    "settings:sr-toggle": [
+        {
+            "label": "Wiki: Spectrum Refraction",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Spectrum-Refraction"
+        }
+    ],
+    "settings:model-routing": [
+        {
+            "label": "Wiki: Model Routing",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Model-Routing"
+        }
+    ],
+    "settings:provider-config": [
+        {
+            "label": "Wiki: Providers",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Providers"
+        }
+    ],
+    "settings:capability-matrix": [
+        {
+            "label": "Wiki: Capability Matrix",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Capability-Matrix"
+        }
+    ],
+    "settings:llm-audit": [
+        {
+            "label": "Wiki: LLM Audit",
+            "href": "https://github.com/kirklasalle/Prism/wiki/LLM-Audit"
+        }
+    ],
+    "tools:plugins": [
+        {
+            "label": "Wiki: Plugins",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Plugins"
+        }
+    ],
+    "tools:diagnostics": [
+        {
+            "label": "Wiki: Diagnostics",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Diagnostics"
+        }
+    ],
+    "agentic:guardian": [
+        {
+            "label": "PAD Whitepaper",
+            "href": "/docs/PAD_WHITEPAPER.md"
+        },
+        {
+            "label": "Wiki: Guardian",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Guardian-Agent"
+        }
+    ],
+    "agentic:swarm": [
+        {
+            "label": "Wiki: Swarms",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Swarms"
+        }
+    ],
+    "agentic:hardware-swarm": [
+        {
+            "label": "Wiki: Hardware Swarm",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Hardware-Swarm"
+        }
+    ],
+    "computer:framebuffer": [
+        {
+            "label": "Wiki: Vision",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Vision-Framebuffer"
+        }
+    ],
+    "computer:devices": [
+        {
+            "label": "Wiki: Device Manager",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Device-Manager"
+        }
+    ],
+    "browser:control": [
+        {
+            "label": "Wiki: Browser Control",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Browser-Control"
+        }
+    ],
+    "workspace:location": [
+        {
+            "label": "Wiki: Workspaces",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Workspaces"
+        }
+    ],
+    "workspace:import-manager": [
+        {
+            "label": "Wiki: Import Manager",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Import-Manager"
+        }
+    ],
+    "network:vrgc": [
+        {
+            "label": "Wiki: VRGC",
+            "href": "https://github.com/kirklasalle/Prism/wiki/VRGC"
+        }
+    ],
+    "telemetry:release-readiness": [
+        {
+            "label": "Wiki: Release Readiness",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Release-Readiness"
+        }
+    ],
+    "telemetry:slo-gauges": [
+        {
+            "label": "Wiki: SLOs",
+            "href": "https://github.com/kirklasalle/Prism/wiki/SLOs"
+        }
+    ],
+    "logs:approvals": [
+        {
+            "label": "Wiki: Approvals",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Approvals"
+        }
+    ],
+    "scheduler:header": [
+        {
+            "label": "Wiki: Scheduler",
+            "href": "https://github.com/kirklasalle/Prism/wiki/Scheduler"
+        }
+    ]
+}

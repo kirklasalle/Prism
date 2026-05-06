@@ -1,0 +1,15 @@
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Caches
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor
+.vscode/
+.idea/

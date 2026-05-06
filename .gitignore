@@ -10,3 +10,12 @@ models/
 screengrab/
 *.db.sq
 *.db.sq2
+
+# Local environment & secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Plugin signing private keys — must be stored in operator-controlled secret manager
+config/plugin-private-key*.pem
+*.priv.pem

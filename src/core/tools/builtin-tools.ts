@@ -3,7 +3,6 @@ import { ContainerSandboxTool } from "../../adapters/system/container-sandbox-to
 import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../../adapters/system/file-tools.js";
 import { ShellTool } from "../../adapters/system/shell-tool.js";
 import { TerminalSessionTool } from "../../adapters/system/terminal-session-tool.js";
-import { ComputerUseTool } from "../../adapters/system/computer-use-tool.js";
 
 import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
 import { PrismDashboardControlTool } from "../../adapters/application/prism-dashboard-tool.js";
@@ -50,7 +49,7 @@ export function builtinTools(
         new VisionCaptureTool(),
         // Browser adapters
         new BrowserControlTool(),
-        // Computer use (Windows Native)
-        new ComputerUseTool(),
+        // NOTE: ComputerUseTool is registered by DashboardService with a framebufferCapture dependency;
+        // do not register it here or the registry will throw "Tool already registered: computer".
     ];
 }

@@ -1,0 +1,49 @@
+{
+    "version": "1.0.0",
+    "entries": [
+        {
+            "id": "example-tools-pack",
+            "name": "Example Tools Pack",
+            "version": "0.1.0",
+            "description": "Sample tools demonstrating marketplace flow.",
+            "source": "file://examples/marketplace/example-tools-pack.zip",
+            "trust": "signed",
+            "tags": [
+                "example",
+                "tools"
+            ],
+            "tier": 0,
+            "curated": true,
+            "reviewedBy": "prism-curation-team",
+            "reviewedAt": "2026-05-05T00:00:00.000Z"
+        },
+        {
+            "id": "research-helper",
+            "name": "Research Helper",
+            "version": "0.2.1",
+            "description": "Web fetch + citation builders.",
+            "source": "file://examples/marketplace/research-helper.zip",
+            "trust": "verified",
+            "tags": [
+                "research"
+            ],
+            "tier": 0,
+            "curated": true,
+            "reviewedBy": "prism-curation-team",
+            "reviewedAt": "2026-05-05T00:00:00.000Z"
+        },
+        {
+            "id": "unsigned-experiment",
+            "name": "Unsigned Experiment",
+            "version": "0.0.1",
+            "description": "Unsigned community pack (blocked under business profile).",
+            "source": "file://examples/marketplace/unsigned-experiment.zip",
+            "trust": "unsigned",
+            "tags": [
+                "experimental"
+            ],
+            "tier": 0,
+            "curated": false
+        }
+    ]
+}

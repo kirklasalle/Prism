@@ -30,6 +30,27 @@ export interface McpServerConfig {
     timeoutMs?: number;
 }
 
+/**
+ * Capacity for the per-connection stderr ring buffer. 200 lines is plenty for a
+ * full Python traceback (~30 lines) plus a sustained warning stream and keeps
+ * worst-case memory under ~80 KB per server.
+ */
+const STDERR_RING_CAPACITY = 200;
+
+/** Reason a connection ended; drives reconnect policy. */
+export type McpExitReason = "crash" | "shutdown";
+
+/** Lightweight, JSON-safe view of a connection's current state. */
+export interface McpServerStateView {
+    name: string;
+    state: "connected" | "down" | "retrying" | "failed";
+    toolCount: number;
+    retryCount: number;
+    nextRetryAt: string | null;
+    lastError: string | null;
+    stderrTail: string[];
+}
+
 export interface McpServerSettings {
     mcpServers: Record<string, McpServerConfig>;
 }
@@ -97,8 +118,17 @@ export class McpConnection {
     >();
     private _isConnected = false;
     private _tools: McpToolDescriptor[] = [];
-    /** Stderr lines buffered during the connection handshake. */
+    /**
+     * Ring buffer of recent stderr lines. Retained for the life of the
+     * connection (NOT cleared after handshake) so that operators can inspect
+     * post-connect warnings via /api/mcp/servers and reconnects can replay
+     * the failure context. Capped at STDERR_RING_CAPACITY lines.
+     */
     private stderrBuffer: string[] = [];
+    /** True once `disconnect()` is called explicitly (clean shutdown). */
+    private explicitDisconnect = false;
+    /** Optional listener notified once when the child process exits. */
+    private onExitCallback: ((reason: McpExitReason) => void) | null = null;
     private readonly serverName: string;
     private readonly config: McpServerConfig;
 
@@ -109,6 +139,16 @@ export class McpConnection {
 
     get isConnected(): boolean {
         return this._isConnected;
+    }
+
+    /** The server's configured name (e.g. as it appears in mcp-settings.json). */
+    getName(): string {
+        return this.serverName;
+    }
+
+    /** The original configuration used to spawn the server. */
+    getConfig(): Readonly<McpServerConfig> {
+        return this.config;
     }
 
     /**
@@ -134,17 +174,17 @@ export class McpConnection {
             throw new Error(`[MCP:${this.serverName}] Failed to open stdio pipes`);
         }
 
-        // stderr: buffer lines until the handshake completes.
-        // Once connected, forward lines normally for runtime diagnostics.
-        // If connect() throws, only the first meaningful line is surfaced.
+        // stderr: append every line (full-fidelity, no truncation) into a
+        // ring buffer for the life of the connection. Forward to console.error
+        // once the handshake completes; pre-connect lines are surfaced via
+        // firstStderrHint() and stderrTail() if connect() throws.
         this.proc.stderr?.on("data", (chunk: Buffer) => {
-            const lines = chunk.toString().split("\n").filter(Boolean);
-            if (this._isConnected) {
-                for (const line of lines) {
+            const lines = chunk.toString().split(/\r?\n/).filter((l) => l.length > 0);
+            for (const line of lines) {
+                this.appendStderr(line);
+                if (this._isConnected) {
                     console.error(`[MCP:${this.serverName}] stderr: ${line}`);
                 }
-            } else {
-                this.stderrBuffer.push(...lines);
             }
         });
 
@@ -174,10 +214,28 @@ export class McpConnection {
         });
 
         this.proc.on("exit", (code: number | null) => {
+            const wasConnected = this._isConnected;
             this._isConnected = false;
             this.rejectAll(
                 new Error(`[MCP:${this.serverName}] Process exited (code=${code ?? "null"})`),
             );
+            const reason: McpExitReason = this.explicitDisconnect ? "shutdown" : "crash";
+            // Surface the full stderr tail for crashes so operators see the
+            // complete traceback rather than just the first 120 chars.
+            if (reason === "crash" && wasConnected) {
+                const tail = this.stderrTail(20);
+                if (tail.length > 0) {
+                    console.error(
+                        `[MCP:${this.serverName}] stderr tail (${tail.length} line(s)) at exit:\n` +
+                            tail.map((l) => `  ${l}`).join("\n"),
+                    );
+                }
+            }
+            const cb = this.onExitCallback;
+            this.onExitCallback = null;
+            if (cb) {
+                try { cb(reason); } catch { /* never throw out of an exit handler */ }
+            }
         });
 
         // Step 1: initialize
@@ -206,7 +264,8 @@ export class McpConnection {
         this._tools = result?.tools ?? [];
 
         this._isConnected = true;
-        this.stderrBuffer = []; // discard pre-connect noise now that we're healthy
+        // Note: we intentionally retain stderrBuffer across the handshake
+        // so that any pre-connect warnings remain visible in /api/mcp/servers.
         console.log(
             `[MCP:${this.serverName}] Connected — ${this._tools.length} tool(s) available`,
         );
@@ -218,23 +277,68 @@ export class McpConnection {
     }
 
     /**
-     * Return the first non-trivial line from the pre-connect stderr buffer, if any.
+     * Subscribe to a single exit notification. Replaces any previous callback;
+     * cleared automatically once invoked. Used by McpClientAdapter to drive
+     * reconnect on crash without coupling McpConnection to the controller.
+     */
+    onExit(cb: (reason: McpExitReason) => void): void {
+        this.onExitCallback = cb;
+    }
+
+    /** Return up to `n` most recent stderr lines (oldest first). */
+    stderrTail(n: number): string[] {
+        if (n <= 0) return [];
+        return this.stderrBuffer.slice(Math.max(0, this.stderrBuffer.length - n));
+    }
+
+    /** Append one line to the bounded stderr ring buffer. */
+    private appendStderr(line: string): void {
+        this.stderrBuffer.push(line);
+        if (this.stderrBuffer.length > STDERR_RING_CAPACITY) {
+            this.stderrBuffer.splice(0, this.stderrBuffer.length - STDERR_RING_CAPACITY);
+        }
+    }
+
+    /**
+     * Return the first non-trivial line from the stderr ring buffer, if any.
      * Used to enrich error messages without dumping a full traceback.
+     *
+     * If a Python traceback is present, prefer the LAST line containing an
+     * "Error:"/"Exception:" pattern (the actual exception) over the first
+     * "Traceback (most recent call last):" header — otherwise the operator
+     * sees a useless header with no follow-up.
      */
     firstStderrHint(): string {
-        // Skip generic Python header lines; find the first real error line.
-        const meaningfulPrefixes = ["error:", "syntaxerror:", "typeerror:", "runtimeerror:",
-            "modulenotfounderror:", "importerror:", "valueerror:", "traceback"];
+        const tracebackIdx = this.stderrBuffer.findIndex(
+            (l) => l.trimStart().toLowerCase().startsWith("traceback"),
+        );
+        if (tracebackIdx >= 0) {
+            for (let i = this.stderrBuffer.length - 1; i > tracebackIdx; i--) {
+                const line = this.stderrBuffer[i]!.trim();
+                if (/^[A-Z][A-Za-z0-9_]*(Error|Exception)\b/.test(line)) {
+                    return line.slice(0, 200);
+                }
+            }
+            // No identifiable exception line — fall back to last non-blank.
+            for (let i = this.stderrBuffer.length - 1; i > tracebackIdx; i--) {
+                const line = this.stderrBuffer[i]!.trim();
+                if (line) return line.slice(0, 200);
+            }
+        }
+        const meaningfulPrefixes = [
+            "error:", "syntaxerror:", "typeerror:", "runtimeerror:",
+            "modulenotfounderror:", "importerror:", "valueerror:",
+        ];
         for (const line of this.stderrBuffer) {
             const lower = line.trimStart().toLowerCase();
             if (meaningfulPrefixes.some((p) => lower.startsWith(p))) {
-                return line.trim().slice(0, 120);
+                return line.trim().slice(0, 200);
             }
         }
         // Fall back to last non-blank line (often the actual error)
         for (let i = this.stderrBuffer.length - 1; i >= 0; i--) {
             const line = this.stderrBuffer[i]!.trim();
-            if (line) return line.slice(0, 120);
+            if (line) return line.slice(0, 200);
         }
         return "";
     }
@@ -258,6 +362,7 @@ export class McpConnection {
 
     /** Gracefully terminate the server process and reject all pending requests. */
     disconnect(): void {
+        this.explicitDisconnect = true;
         this.rejectAll(new Error(`[MCP:${this.serverName}] Disconnected`));
         this._isConnected = false;
         try {
@@ -411,7 +516,8 @@ export interface McpLoadOptions {
 }
 
 export class McpClientAdapter {
-    private readonly connections: Array<{ name: string; conn: McpConnection }> = [];
+    private readonly entries: Map<string, McpAdapterEntry> = new Map();
+    private toolRegistry: ToolRegistry | null = null;
 
     /**
      * Read an mcp-settings.json file, spawn each configured server,
@@ -425,6 +531,7 @@ export class McpClientAdapter {
         registry: ToolRegistry,
         options: McpLoadOptions = {},
     ): Promise<McpLoadResult> {
+        this.toolRegistry = registry;
         const settings = loadSettings(settingsPath);
 
         const registered: string[] = [];
@@ -438,55 +545,231 @@ export class McpClientAdapter {
         }
 
         for (const [name, config] of serverEntries) {
-            const conn = new McpConnection(name, config);
+            const entry: McpAdapterEntry = this.entries.get(name) ?? {
+                name,
+                config,
+                conn: null,
+                state: "down",
+                retryCount: 0,
+                nextRetryAt: null,
+                lastError: null,
+                registeredToolNames: [],
+                retryTimer: null,
+            };
+            this.entries.set(name, entry);
+            entry.config = config;
             try {
-                await conn.connect();
-                let toolCount = 0;
-                for (const descriptor of conn.getTools()) {
-                    const proxy = new McpProxyTool(conn, name, descriptor);
-                    try {
-                        registry.register(proxy);
-                        registered.push(proxy.name);
-                        toolCount++;
-                    } catch (err: unknown) {
-                        errors.push({
-                            server: name,
-                            error: `register "${descriptor.name}": ${String(err)}`,
-                        });
-                    }
-                }
-                serverToolCounts[name] = toolCount;
-                this.connections.push({ name, conn });
+                const result = await this.connectAndRegister(entry);
+                registered.push(...result.registeredNames);
+                serverToolCounts[name] = result.toolCount;
             } catch (err: unknown) {
-                // Attach the first non-empty stderr line (e.g. "SyntaxError: …" or
-                // "ModuleNotFoundError: …") so the caller's single warn line is informative.
-                const stderrHint = conn.firstStderrHint();
+                const conn = entry.conn;
+                const stderrHint = conn?.firstStderrHint() ?? "";
                 const baseMsg = String(err);
                 const hint = stderrHint && !baseMsg.includes(stderrHint)
                     ? ` — ${stderrHint}`
                     : "";
-                errors.push({ server: name, error: `${baseMsg}${hint}` });
+                const fullMsg = `${baseMsg}${hint}`;
+                entry.lastError = fullMsg;
+                entry.state = "down";
+                errors.push({ server: name, error: fullMsg });
+                // Surface the FULL stderr (no truncation) so operators see the
+                // complete Python traceback that explains the failure.
+                if (conn) {
+                    const tail = conn.stderrTail(20);
+                    if (tail.length > 0) {
+                        console.error(
+                            `[MCP:${name}] full stderr at startup failure (${tail.length} line(s)):\n` +
+                                tail.map((l) => `  ${l}`).join("\n"),
+                        );
+                    }
+                }
             }
         }
 
         return { registered, errors, serverToolCounts };
     }
 
-    /** Return a tool list summary for all connected servers. */
+    /**
+     * Connect (or reconnect) one entry and register its tools. On exit, schedules
+     * an exponential-backoff reconnect unless the connection was closed cleanly.
+     */
+    private async connectAndRegister(
+        entry: McpAdapterEntry,
+    ): Promise<{ registeredNames: string[]; toolCount: number }> {
+        // Tear down any prior tool registrations and drop the old connection.
+        this.unregisterEntryTools(entry);
+        const conn = new McpConnection(entry.name, entry.config);
+        entry.conn = conn;
+        entry.state = "retrying";
+        try {
+            await conn.connect();
+        } catch (err) {
+            entry.state = "down";
+            throw err;
+        }
+        const registeredNames: string[] = [];
+        let toolCount = 0;
+        for (const descriptor of conn.getTools()) {
+            const proxy = new McpProxyTool(conn, entry.name, descriptor);
+            try {
+                this.toolRegistry?.register(proxy);
+                registeredNames.push(proxy.name);
+                toolCount++;
+            } catch {
+                // Duplicate registration on reconnect is non-fatal.
+            }
+        }
+        entry.registeredToolNames = registeredNames;
+        entry.state = "connected";
+        entry.retryCount = 0;
+        entry.nextRetryAt = null;
+        entry.lastError = null;
+
+        conn.onExit((reason) => {
+            if (reason === "shutdown") {
+                entry.state = "down";
+                return;
+            }
+            entry.state = "down";
+            entry.lastError = `Process exited unexpectedly`;
+            this.scheduleReconnect(entry);
+        });
+
+        return { registeredNames, toolCount };
+    }
+
+    /** Schedule an exp-backoff reconnect for one entry. */
+    private scheduleReconnect(entry: McpAdapterEntry): void {
+        if (entry.retryTimer) {
+            clearTimeout(entry.retryTimer);
+            entry.retryTimer = null;
+        }
+        const MAX_ATTEMPTS = 10;
+        if (entry.retryCount >= MAX_ATTEMPTS) {
+            entry.state = "failed";
+            entry.nextRetryAt = null;
+            console.error(
+                `[MCP:${entry.name}] Reconnect gave up after ${MAX_ATTEMPTS} attempts`,
+            );
+            return;
+        }
+        // 1s, 2s, 4s, 8s, 16s, 30s cap.
+        const SCHEDULE = [1000, 2000, 4000, 8000, 16000, 30000];
+        const delayMs = SCHEDULE[Math.min(entry.retryCount, SCHEDULE.length - 1)]!;
+        entry.retryCount++;
+        entry.state = "retrying";
+        entry.nextRetryAt = new Date(Date.now() + delayMs).toISOString();
+        entry.retryTimer = setTimeout(() => {
+            entry.retryTimer = null;
+            void this.connectAndRegister(entry).catch((err: unknown) => {
+                entry.lastError = String(err);
+                this.scheduleReconnect(entry);
+            });
+        }, delayMs);
+    }
+
+    /** Force an immediate reconnect attempt for one server (used by Guardian / API). */
+    async forceReconnect(name: string): Promise<{ ok: boolean; error?: string }> {
+        const entry = this.entries.get(name);
+        if (!entry) return { ok: false, error: `Unknown MCP server: ${name}` };
+        if (entry.retryTimer) {
+            clearTimeout(entry.retryTimer);
+            entry.retryTimer = null;
+        }
+        entry.retryCount = 0;
+        entry.nextRetryAt = null;
+        try {
+            await this.connectAndRegister(entry);
+            return { ok: true };
+        } catch (err: unknown) {
+            entry.lastError = String(err);
+            this.scheduleReconnect(entry);
+            return { ok: false, error: String(err) };
+        }
+    }
+
+    /** Unregister tools previously registered for this entry, if the registry supports it. */
+    private unregisterEntryTools(entry: McpAdapterEntry): void {
+        const reg = this.toolRegistry as unknown as {
+            unregister?: (toolName: string) => void;
+        } | null;
+        if (!reg || typeof reg.unregister !== "function") {
+            entry.registeredToolNames = [];
+            return;
+        }
+        for (const toolName of entry.registeredToolNames) {
+            try { reg.unregister(toolName); } catch { /* ignore */ }
+        }
+        entry.registeredToolNames = [];
+    }
+
+    /** Return a tool list summary for all currently-connected servers. */
     getConnectedServers(): Array<{ name: string; toolCount: number }> {
-        return this.connections.map(({ name, conn }) => ({
-            name,
-            toolCount: conn.getTools().length,
-        }));
+        const out: Array<{ name: string; toolCount: number }> = [];
+        for (const entry of this.entries.values()) {
+            if (entry.state === "connected" && entry.conn) {
+                out.push({ name: entry.name, toolCount: entry.conn.getTools().length });
+            }
+        }
+        return out;
+    }
+
+    /** Snapshot of every server's current state (for /api/mcp/servers). */
+    getServerStates(): McpServerStateView[] {
+        const out: McpServerStateView[] = [];
+        for (const entry of this.entries.values()) {
+            out.push({
+                name: entry.name,
+                state: entry.state,
+                toolCount: entry.conn?.getTools().length ?? 0,
+                retryCount: entry.retryCount,
+                nextRetryAt: entry.nextRetryAt,
+                lastError: entry.lastError,
+                stderrTail: entry.conn?.stderrTail(20) ?? [],
+            });
+        }
+        return out;
+    }
+
+    /** True if at least one configured server is currently in "down" or "failed". */
+    hasUnhealthyServers(): boolean {
+        for (const entry of this.entries.values()) {
+            if (entry.state === "down" || entry.state === "failed") return true;
+        }
+        return false;
+    }
+
+    /** All configured server names. */
+    getServerNames(): string[] {
+        return Array.from(this.entries.keys());
     }
 
     /** Disconnect all server processes. Call on PRISM shutdown. */
     disconnectAll(): void {
-        for (const { conn } of this.connections) {
-            conn.disconnect();
+        for (const entry of this.entries.values()) {
+            if (entry.retryTimer) {
+                clearTimeout(entry.retryTimer);
+                entry.retryTimer = null;
+            }
+            entry.conn?.disconnect();
+            entry.conn = null;
+            entry.state = "down";
         }
-        this.connections.length = 0;
+        this.entries.clear();
     }
+}
+
+interface McpAdapterEntry {
+    name: string;
+    config: McpServerConfig;
+    conn: McpConnection | null;
+    state: "connected" | "down" | "retrying" | "failed";
+    retryCount: number;
+    nextRetryAt: string | null;
+    lastError: string | null;
+    registeredToolNames: string[];
+    retryTimer: ReturnType<typeof setTimeout> | null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

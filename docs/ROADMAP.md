@@ -64,6 +64,7 @@ Date: 2026-03-11
   - ARIA-compliant tab navigation for accessibility
   - WebSocket real-time event streaming
   - 38+ HTTP API routes for programmatic dashboard access
+  - Decoupled monolithic dashboard template into 12 distinct HTML fragments with dynamic async lazy-loading
 - **Persistent Workspace (Prism_Refraction) (complete):**
   - OS-aware workspace resolver (`workspace-resolver.ts`) — Windows/macOS/Linux detection with `PRISM_WORKSPACE_ROOT` override
   - All SQLite stores, benchmarks, application tools, and MCP config use workspace paths
@@ -612,3 +613,28 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 - Activity events emitted with correct `source` field (`web`, `tui`, `cli`)
 - Non-interactive CLI mode tested in Docker container and CI pipeline
 - Test evidence: `tests/wizard-parity.test.ts` (25 tests, 8 suites)
+
+---
+
+## 2026 Q2 — Phase R (Readiness) and Beyond
+
+Phase R (Readiness) has been added between Phase E and Phase F based on the [2026 Q2 audit](PRISM_FULL_AUDIT_2026_Q2.md). Phase R closes the gap between "code complete" and "user-testable + production-deployable."
+
+For the full roadmap — E-Close residuals, Phase R's 8 workstreams (R1 config hygiene, R2 security hardening, R3 wizard UX, R4 E2E tests, R5 ops/data, R6 observability, R7 CI/CD, R8 docs), and extended F / G / H / I plans — see:
+
+- [PRISM_UPDATED_ROADMAP_2026_Q2.md](PRISM_UPDATED_ROADMAP_2026_Q2.md) — formal updated roadmap
+- [READINESS_RUNBOOK.md](READINESS_RUNBOOK.md) — operator checklist with task IDs, target files, acceptance criteria, and effort bands
+- [PRISM_FULL_AUDIT_2026_Q2.md](PRISM_FULL_AUDIT_2026_Q2.md) — audit baseline and canonical gap list G-1 through G-25
+- [PRISM_COMPETITIVE_AaaS_MAP_2026.md](PRISM_COMPETITIVE_AaaS_MAP_2026.md) — AaaS market survey and competitive positioning
+
+Phase summary:
+
+| Phase | Status | Window |
+|---|---|---|
+| A / B / C / D1 / D2 / D3 / D4 | Closed | Through April 2026 |
+| E — Integration Hardening | Active | May–Jun 2026 |
+| **R — Readiness (NEW)** | Planned | Jun–Jul 2026 |
+| F — Expansion (A2A, OCI, Python SDK) | Planned | Aug–Oct 2026 |
+| G — Ecosystem (marketplace, docs site) | Planned | Nov 2026 – Q1 2027 |
+| H — Enterprise (SSO, multi-tenant, HA) | Planned | Q2 2027 |
+| I — Compliance & Scale (SOC 2 II) | Planned | Q3 2027 |

@@ -1,4 +1,5 @@
 import { state, request, escapeHtml, dashboardLog } from './dashboard-core.js';
+import { registerTooltipById } from './prism-tooltips.js';
 
 // ── Character archetype icons ────────────────────────────────────────────────
 var CHARACTER_ICONS = {
@@ -290,13 +291,19 @@ export function renderCharacterAuditLog() {
 // ── Assignment Form (profile-filtered dropdown) ──────────────────────────────
 export function renderCharacterAssignmentForm() {
   var select = document.getElementById('character-assign-character');
+  var chars = filteredCharacters();
   if (select) {
-    var chars = filteredCharacters();
     var options = '<option value="">Select a character...</option>';
     for (var i = 0; i < chars.length; i++) {
       var character = chars[i];
       var icon = characterIcon(character.id);
-      options += '<option value="' + escapeHtml(character.id) + '">' + escapeHtml(icon + ' ' + (character.displayName || character.name || character.id) + ' (' + character.id + ')') + '</option>';
+      var optTitle = (character.displayName || character.name || character.id) + ' \u2014 ' + (character.persona || character.greeting || 'PRISM character');
+      options += '<option value="' + escapeHtml(character.id) + '"'
+        + ' title="' + escapeHtml(optTitle) + '"'
+        + ' data-tip-id="character:' + escapeHtml(character.id) + '"'
+        + ' data-tip-kind="character">'
+        + escapeHtml(icon + ' ' + (character.displayName || character.name || character.id) + ' (' + character.id + ')')
+        + '</option>';
     }
     var current = select.value;
     select.innerHTML = options;
@@ -309,8 +316,108 @@ export function renderCharacterAssignmentForm() {
       if (found) select.value = current;
     }
   }
+  renderCharacterChipStrip(chars, select ? select.value : '');
+  registerCharacterTooltips(chars);
   updateDynamicLabels();
   renderCharacterDefinitionPreview();
+}
+
+// ── Character Chip Strip (sibling to <select>; full Prism Tooltip support) ──
+function renderCharacterChipStrip(chars, selectedId) {
+  var strip = document.getElementById('character-chip-strip');
+  if (!strip) return;
+  if (!chars || !chars.length) {
+    strip.innerHTML = '<span class="muted" style="font-size:11px;">No characters match the current profile.</span>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < chars.length; i++) {
+    var character = chars[i];
+    var icon = characterIcon(character.id);
+    var label = character.displayName || character.name || character.id;
+    var summary = (label + ' \u2014 ' + (character.persona || character.greeting || 'PRISM character')).slice(0, 200);
+    var selectedClass = (selectedId && selectedId === character.id) ? ' selected' : '';
+    html += '<button type="button" class="character-chip' + selectedClass + '"'
+      + ' data-character-id="' + escapeHtml(character.id) + '"'
+      + ' data-tip-id="character:' + escapeHtml(character.id) + '"'
+      + ' data-tip-kind="character"'
+      + ' title="' + escapeHtml(summary) + '"'
+      + ' aria-label="' + escapeHtml(label) + ' character"'
+      + ' onclick="onCharacterChipClick(\'' + escapeHtml(character.id) + '\')">'
+      + '<span class="character-chip-icon" aria-hidden="true">' + icon + '</span>'
+      + '<span class="character-chip-label">' + escapeHtml(label) + '</span>'
+      + '</button>';
+  }
+  strip.innerHTML = html;
+}
+
+function registerCharacterTooltips(chars) {
+  if (!chars) return;
+  for (var i = 0; i < chars.length; i++) {
+    var c = chars[i];
+    registerTooltipById('character:' + c.id, buildCharacterTipDescriptor(c));
+  }
+}
+
+export function buildCharacterTipDescriptor(character) {
+  var label = character.displayName || character.name || character.id;
+  var icon = characterIcon(character.id);
+  var summaryParts = [];
+  if (character.persona) summaryParts.push(character.persona);
+  if (character.executionProfile) summaryParts.push('Profile: ' + character.executionProfile);
+  if (character.maxRiskTier != null) summaryParts.push('Max risk tier: ' + character.maxRiskTier);
+  var summary = summaryParts.join(' \u2022 ') || (character.greeting || 'PRISM character');
+  var lore = Array.isArray(character.tooltipTips) ? character.tooltipTips.slice() : [];
+  return {
+    id: 'character:' + character.id,
+    kind: 'character',
+    label: label,
+    icon: icon,
+    summary: summary,
+    lore: lore,
+    telemetry: function () {
+      var assignments = (state.characterAssignments || []).filter(function (a) {
+        return a.characterId === character.id;
+      });
+      if (!assignments.length) return { 'assignments': '0' };
+      var totalDispatch = 0;
+      var lastActive = null;
+      for (var i = 0; i < assignments.length; i++) {
+        totalDispatch += Number(assignments[i].dispatchCount || 0);
+        var t = assignments[i].lastActiveAt || assignments[i].updatedAt;
+        if (t && (!lastActive || t > lastActive)) lastActive = t;
+      }
+      var metrics = {
+        'assignments': String(assignments.length),
+        'dispatches': String(totalDispatch),
+      };
+      if (lastActive) {
+        try { metrics['last active'] = new Date(lastActive).toLocaleString(); }
+        catch (e) { metrics['last active'] = String(lastActive); }
+      }
+      return metrics;
+    },
+    // Links are merged in by the server registry; no per-element override needed.
+  };
+}
+
+export function onCharacterChipClick(characterId) {
+  var select = document.getElementById('character-assign-character');
+  if (!select) return;
+  // Verify the option exists; if not, no-op (e.g., profile filter changed).
+  var found = false;
+  for (var i = 0; i < select.options.length; i++) {
+    if (select.options[i].value === characterId) { found = true; break; }
+  }
+  if (!found) return;
+  select.value = characterId;
+  // Update chip selection state.
+  var chips = document.querySelectorAll('#character-chip-strip .character-chip');
+  for (var j = 0; j < chips.length; j++) {
+    if (chips[j].getAttribute('data-character-id') === characterId) chips[j].classList.add('selected');
+    else chips[j].classList.remove('selected');
+  }
+  onCharacterDefinitionChanged();
 }
 
 // ── Data Loading ─────────────────────────────────────────────────────────────

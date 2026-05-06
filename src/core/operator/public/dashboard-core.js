@@ -243,6 +243,18 @@ export function wsUrl(path) {
   return token ? base + '?token=' + encodeURIComponent(token) : base;
 }
 
+// ── Authed asset URL helper ───────────────────────────────────────────
+// For asset URLs consumed by <img>, <video>, window.open, etc. that
+// cannot carry an Authorization header. Appends ?token=... so the
+// AuthGate's query-string fallback authenticates the request.
+export function assetUrl(url) {
+  if (!url) return url;
+  var token = getAuthToken();
+  if (!token) return url;
+  var sep = url.indexOf('?') < 0 ? '?' : '&';
+  return url + sep + 'token=' + encodeURIComponent(token);
+}
+
 // ── Reconnection utility with exponential backoff ─────────────────────
 export function createReconnector(connectFn, opts) {
   var baseDelay = (opts && opts.baseDelay) || 1000;

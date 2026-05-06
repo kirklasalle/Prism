@@ -2,11 +2,15 @@
 
 PRISM is a policy-governed, full-computer-use agent runtime designed to evolve into a world-class, state-of-the-art (SOTA), and novel agent platform for high-trust autonomous operations.
 
-Current named release: **Prism v0.2.0 — D2 Parity**.
+Current named release: **Prism v0.4.2 — Phase D4c: SR Advanced Features + Production Hardening**.
+
+PRISM positions itself as a **governance-native, self-hostable Agents-as-a-Service (AaaS) runtime** — the only open-source platform with cryptographically enforced directives (PAD), a profile-aware 3-tier policy engine, and Spectrum Refraction tri-model fan-out. See [docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md](docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md) for the market landscape.
 
 > **April 2026 — Security Hardening Complete:** Token-based authentication, rate limiting, optional HTTPS/TLS, and security headers are now enforced on all dashboard endpoints.
 
 > **April 2026 — User Testing Ready:** PM2 process management, WebSocket auto-reconnect with exponential backoff, Docker deployment support, and provider health endpoint added.
+
+> **2026 Q2 — Full Audit & Updated Roadmap:** See [docs/PRISM_FULL_AUDIT_2026_Q2.md](docs/PRISM_FULL_AUDIT_2026_Q2.md), [docs/PRISM_UPDATED_ROADMAP_2026_Q2.md](docs/PRISM_UPDATED_ROADMAP_2026_Q2.md), and [docs/READINESS_RUNBOOK.md](docs/READINESS_RUNBOOK.md) for the 2026 Q2 audit findings, gap analysis, and Phase R (Readiness) execution plan. New user guides: [BUSINESS_VS_INDIVIDUAL_GUIDE.md](docs/BUSINESS_VS_INDIVIDUAL_GUIDE.md), [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md), [ADMIN_SRE_GUIDE.md](docs/ADMIN_SRE_GUIDE.md), [ERROR_RECOVERY.md](docs/ERROR_RECOVERY.md), [CHARACTER_SELECTION_GUIDE.md](docs/CHARACTER_SELECTION_GUIDE.md).
 
 Research quick links:
 

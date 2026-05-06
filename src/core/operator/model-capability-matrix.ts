@@ -1836,6 +1836,32 @@ export interface SRValidationResult {
     advisoryText: string;
 }
 
+/** Maximum number of hemispheres allowed in N-model SR fan-out. */
+export const SR_MAX_HEMISPHERES = 8;
+
+/**
+ * Specification for a single SR hemisphere in N-model fan-out mode.
+ * @phase A — first-class array form (additive to legacy left/right fields).
+ */
+export interface HemisphereSpec {
+    /** Stable identifier for this hemisphere within the SR config (e.g., "logic", "creative", "h3"). */
+    id: string;
+    providerId: string;
+    model: string;
+    /** Optional API key slot for same-provider isolation. */
+    slot?: string;
+    /** Optional profile id from `sr-hemisphere-profiles.ts` (overridden by explicit systemPrompt). */
+    profileId?: string;
+    /** Override system prompt; if omitted, profile lookup is used; if neither, role default applies. */
+    systemPrompt?: string;
+    /** Coarse role used for default prompt + cost reporting. */
+    role: "logic" | "creative" | "custom";
+    /** Per-hemisphere generation timeout (default 60_000ms). */
+    timeoutMs?: number;
+    /** Optional human label for UI/audit. */
+    label?: string;
+}
+
 /** SR configuration for a session. */
 export interface SpectrumRefractionConfig {
     enabled: boolean;
@@ -1853,6 +1879,84 @@ export interface SpectrumRefractionConfig {
     circuitBreakerEnabled?: boolean;
     /** Expose individual Left/Right hemisphere outputs alongside the aggregated result. */
     showHemispheres?: boolean;
+    /**
+     * N-model fan-out hemispheres (Phase A — additive). When provided, supersedes
+     * legacy `leftModel`/`rightModel`. Cap: `SR_MAX_HEMISPHERES`.
+     * Mixing both forms in a single config is rejected by `normalizeSRConfig`.
+     */
+    hemispheres?: HemisphereSpec[];
+}
+
+/**
+ * Normalize an SR config into a unified `hemispheres[]` array form.
+ *
+ * Backward-compat: if only `leftModel`/`rightModel` are set, they are converted
+ * to two `HemisphereSpec` entries with role `logic` and `creative` respectively.
+ * If `hemispheres[]` is provided, it is returned (after validation) as-is.
+ * Mixing both forms (legacy + hemispheres) raises a validation error.
+ *
+ * @returns `{ hemispheres: HemisphereSpec[]; errors: string[] }`. `errors` empty on success.
+ */
+export function normalizeSRConfig(cfg: SpectrumRefractionConfig): { hemispheres: HemisphereSpec[]; errors: string[] } {
+    const errors: string[] = [];
+    const hasLegacy = !!(cfg.leftModel || cfg.rightModel);
+    const hasArray = !!(cfg.hemispheres && cfg.hemispheres.length > 0);
+
+    if (hasLegacy && hasArray) {
+        errors.push("SR config has both legacy leftModel/rightModel and hemispheres[] — choose one form.");
+        return { hemispheres: [], errors };
+    }
+
+    if (hasArray) {
+        const arr = cfg.hemispheres!;
+        if (arr.length > SR_MAX_HEMISPHERES) {
+            errors.push(`SR hemispheres[] length ${arr.length} exceeds SR_MAX_HEMISPHERES (${SR_MAX_HEMISPHERES}).`);
+            return { hemispheres: [], errors };
+        }
+        const seenIds = new Set<string>();
+        for (const h of arr) {
+            if (!h.id || !h.providerId || !h.model) {
+                errors.push(`Hemisphere missing required fields (id/providerId/model): ${JSON.stringify(h)}`);
+                continue;
+            }
+            if (seenIds.has(h.id)) {
+                errors.push(`Duplicate hemisphere id: ${h.id}`);
+            }
+            seenIds.add(h.id);
+        }
+        // Pairwise instance-isolation check: at least two distinct (provider+model) pairs required.
+        const sigs = new Set(arr.map(h => `${h.providerId}::${h.model}`));
+        if (arr.length >= 2 && sigs.size < 2) {
+            errors.push("SR hemispheres[] requires at least two distinct (providerId, model) pairs for instance isolation.");
+        }
+        return { hemispheres: arr.slice(), errors };
+    }
+
+    // Legacy path: synthesize hemispheres[] from leftModel/rightModel.
+    const out: HemisphereSpec[] = [];
+    if (cfg.leftModel) {
+        out.push({
+            id: "logic",
+            providerId: cfg.leftModel.providerId,
+            model: cfg.leftModel.model,
+            slot: cfg.leftSlot,
+            role: "logic",
+            timeoutMs: cfg.leftTimeoutMs,
+            label: "Logic Hemisphere",
+        });
+    }
+    if (cfg.rightModel) {
+        out.push({
+            id: "creative",
+            providerId: cfg.rightModel.providerId,
+            model: cfg.rightModel.model,
+            slot: cfg.rightSlot,
+            role: "creative",
+            timeoutMs: cfg.rightTimeoutMs,
+            label: "Creative Hemisphere",
+        });
+    }
+    return { hemispheres: out, errors };
 }
 
 /**

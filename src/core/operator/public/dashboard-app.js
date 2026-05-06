@@ -1,6 +1,7 @@
 // Dashboard App — entry point, imports all modules, wires window.*
+import { loadTabHtml, prefetchTabHtml } from './tab-loader.js';
 import { state, tabs, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, formatUptime, togglePanelCollapse, safeRenderStep, dashboardLog, renderLogsPanel, filterLogs, clearLogs, getToolState, getPluginState, getUtilityState, getReview, setItemRating, setItemApproval, saveItemNotes, toggleItemExpand, toggleItemEnabled, toCsvValue, authHeaders, wsUrl, createReconnector } from './dashboard-core.js';
-import { reconcileExpandedSessionPackages, loadSessionPackages, loadSessionPackageHistory, mutateSessionPackage, getPackagedSessionIdSet, buildSessionTimeline, exportSession, importSession, packageSessions, toggleSessionPackage, getSessionsForPackage, runPackageWorkflow, setPackageStatus, cyclePackageStatus, exportPackageTrace, unpackageSessionPackage, getLocalLlmSelection, setLocalLlmSelection, clearLocalLlmSelection, loadSessions, createSession, loadMessages, refreshChrome, renderSessions, renderOnboarding, renderToolBlocks, renderMessages, renderOverview, renderBrandPanel, selectSession, deleteSession, renameSession, copySession, handleFileSelect, pasteFromClipboard, removeAttachment, renderAttachmentPreview, uploadAttachments, sendMessage, runAction, quickApplyLlm, refreshOllamaModels, rollbackLlmConfig, approve, deny, connectAgenticStream } from './tab-chat.js';
+import { reconcileExpandedSessionPackages, loadSessionPackages, loadSessionPackageHistory, mutateSessionPackage, getPackagedSessionIdSet, buildSessionTimeline, exportSession, importSession, packageSessions, toggleSessionPackage, getSessionsForPackage, runPackageWorkflow, setPackageStatus, cyclePackageStatus, exportPackageTrace, unpackageSessionPackage, getLocalLlmSelection, setLocalLlmSelection, clearLocalLlmSelection, loadSessions, createSession, openNewSessionModal, loadMessages, refreshChrome, renderSessions, renderOnboarding, renderToolBlocks, renderMessages, renderOverview, renderBrandPanel, selectSession, deleteSession, renameSession, copySession, handleFileSelect, pasteFromClipboard, removeAttachment, renderAttachmentPreview, uploadAttachments, sendMessage, runAction, quickApplyLlm, refreshOllamaModels, rollbackLlmConfig, approve, deny, connectAgenticStream } from './tab-chat.js';
 import { renderRoutingStrategyControls, renderLlm, onHeaderProviderChanged, onHeaderModelChanged, renderHeader, fetchReadinessAndRefresh, toggleCapabilityMatrix, setMatrixSort, setMatrixFilter, setMatrixDraftField, clearMatrixDraft, startMatrixEdit, saveMatrixEntry, deleteMatrixEntry, updateModelMatrix, renderCapabilityMatrix, guessTier, resolveMatrixEntry, sortArrow, getModelProficiencyBadges, getModelModalityBadges, fetchModelProfiles, fetchRoutingState, saveRoutingConfig, suggestOptimalRouting, setRoutingStrategy, setSessionRoutingStrategy, onModalitySelected, onModalityFilterToggle, setModalityOverride, getModelsForModalityFilter, setRoleOverride, renderModelRouting, setAgentOverride, onLlmProviderChanged, onLlmModelChanged, renderProviderCards, toggleProviderCard, toggleApiKeyVisibility, saveProviderCardSettings, saveProviderCardApiKey, removeProviderCardApiKey, testProviderConnection, discoverModels, renderLlmAudit, exportLlmAuditJson, copyLlmAuditJson, buildLlmAuditPayload, exportLlmAuditCsv, renderSettingsPanel, sec, readonlyRow, badgeRow, numberRow, selectRow, toggleSettingsSection, markSettingDirty, saveSettings, recheckReadiness, toggleReadinessCat, toggleReadinessCheck, fixReadinessCheck, resolveReadinessCheck, toggleOnboardingExpand, initSettingsTab, toggleSRPanel, onSRLeftProviderChanged, onSRRightProviderChanged, onSRModelChanged, saveSRConfig, toggleSRActivation, onSRPresetSelected, promptSaveSRPreset, cancelSaveSRPreset, confirmSaveSRPreset, deleteSRPreset, suggestSRModels, refreshOAuthStatus, oauthConnect, oauthDisconnect, refreshCacChain, exportCacAuditJson as exportCacAuditJsonHandler } from './tab-settings.js';
 import { testTool, checkPluginHealth, updateToolsFilter, renderToolsOverviewBar, renderToolsPanel, showRegisterToolForm, cancelRegisterTool, submitRegisterTool, renderPluginsPanel, showInstallPluginForm, cancelInstallPlugin, submitInstallPlugin, renderUtilitiesPanel, computePanelSummary, renderPanelSummaries, switchToolsSubTab, setToolsSort, setPluginsSort, setUtilitiesSort, refreshAllToolStatus, renderDiagnosticsPanel, runBrowserDiagnostics, loadDiagnosticsReport, computeDiagnosticsSummary, handleDiagnosticsWsMessage, toggleDiagnosticSuite, computeAgentDiagnosticsSummary, loadAgentDiagnosticsReport, runAgentDiagnostics, handleAgentDiagnosticsWsMessage, toggleAgentDiagnosticSuite, renderAgentDiagnosticsPanel, computeComputerDiagnosticsSummary, loadComputerDiagnosticsReport, runComputerDiagnostics, handleComputerDiagnosticsWsMessage, toggleComputerDiagnosticSuite, renderComputerDiagnosticsPanel, computeKnowledgeGraphDiagnosticsSummary, loadKnowledgeGraphDiagnosticsReport, runKnowledgeGraphDiagnostics, handleKnowledgeGraphDiagnosticsWsMessage, toggleKnowledgeGraphDiagnosticSuite, renderKnowledgeGraphDiagnosticsPanel, computeWorkspaceDiagnosticsSummary, loadWorkspaceDiagnosticsReport, runWorkspaceDiagnostics, handleWorkspaceDiagnosticsWsMessage, toggleWorkspaceDiagnosticSuite, renderWorkspaceDiagnosticsPanel, computeNetworkDiagnosticsSummary, loadNetworkDiagnosticsReport, runNetworkDiagnostics, handleNetworkDiagnosticsWsMessage, toggleNetworkDiagnosticSuite, renderNetworkDiagnosticsPanel, computeTelemetryDiagnosticsSummary, loadTelemetryDiagnosticsReport, runTelemetryDiagnostics, handleTelemetryDiagnosticsWsMessage, toggleTelemetryDiagnosticSuite, renderTelemetryDiagnosticsPanel, computeLogsDiagnosticsSummary, loadLogsDiagnosticsReport, runLogsDiagnostics, handleLogsDiagnosticsWsMessage, toggleLogsDiagnosticSuite, renderLogsDiagnosticsPanel, computeSchedulerDiagnosticsSummary, loadSchedulerDiagnosticsReport, runSchedulerDiagnostics, handleSchedulerDiagnosticsWsMessage, toggleSchedulerDiagnosticSuite, renderSchedulerDiagnosticsPanel, computeDemoDiagnosticsSummary, loadDemoDiagnosticsReport, runDemoDiagnostics, handleDemoDiagnosticsWsMessage, toggleDemoDiagnosticSuite, renderDemoDiagnosticsPanel, pollPluginHealth, startPluginHealthPolling, stopPluginHealthPolling } from './tab-tools.js';
 import { renderGuardianPanel, refreshGuardianStatus, startGuardian, stopGuardian, configureGuardian, refreshLocalModels, updateGuardianModel, addToRecommended, removeFromRecommended, loadCustomRecommendedModels, downloadRecommendedModels, startModelDownload, refreshGuardianTasks, runGuardianTask, toggleGuardianTask, runAllGuardianTasks, renderAgentList, renderSubAgentTree, renderSwarmTopology, renderAgentTelemetry, refreshAgentList, launchNewAgent, stopAgent, promoteAgent, demoteAgent, createSwarm, refreshSwarmStatus, initAgenticTab } from './tab-agentic.js';
@@ -10,9 +11,14 @@ import { renderSelfReview, renderRetrievalObservability, setTelemetryWindow, ren
 import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle } from './tab-logs.js';
 import { initSchedulerTab, refreshSchedulerData, switchSchedulerView, renderSchedulerPanel, setCalMode, schedCalNav, daysInMonth, eventsForDate, formatDateStr, isToday, renderSchedulerCalendar, mondayOfWeek, renderMiniMonth, renderFullMonth, renderWeekView, renderDayView, renderSchedulerProjects, openProjectDetail, renderSchedulerBoard, initBoardDragDrop, renderSchedulerGantt, openSchedulerModal, closeSchedulerModal, saveSchedulerModal } from './tab-scheduler.js';
 import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWorkspaceFileTree, formatFileSize, filterWorkspaceFiles, openWorkspaceInExplorer, changeWorkspaceLocation, showImportStatus, triggerWorkspaceImport, triggerGeneralImport, triggerRegisteredImport, triggerFolderImport, readFileAsBase64, refreshImportHistory, renderImportHistory, initWorkspaceTab } from './tab-workspace.js';
-import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel } from './tab-characters.js';
+import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick } from './tab-characters.js';
 import { renderNetworkToolsPanel, renderNetworkSettingsPanel, renderNetworkTelemetryPanel, renderNetworkConsolePanel, runNetworkCommand, refreshNetworkInterfaces, refreshNetworkTelemetry, renderNetworkIntelligencePanel, checkVrgcStatus, runVrgcResearch, runVrgcSecurityScan, runVrgcPerformanceTest, runVrgcFtpBrowse } from './tab-network.js';
 import { initHardwareTab, refreshHardwareSwarm, loadModelToSlot, unloadModelSlot } from './tab-hardware.js';
+import { initPrismTooltips, pushGuardianTip } from './prism-tooltips.js';
+import { registerShellTooltips } from './shell-tooltips.js';
+import { registerChatTooltips } from './tab-chat-tooltips.js';
+import { registerTabTooltipCatalog } from './tab-tips-catalog.js';
+import './phase-e3-panels.js';
 
 window.refreshHardwareSwarm = refreshHardwareSwarm;
 window.loadModelToSlot = loadModelToSlot;
@@ -39,9 +45,20 @@ console.error = function (...args) {
 };
 async function bootstrap() {
   try {
+    initPrismTooltips();
+    registerShellTooltips();
+    registerChatTooltips();
+    registerTabTooltipCatalog();
+    await loadTabHtml('chat');
+    wireComposer();
     await loadSessions();
     if (state.sessions.length === 0) {
-      await createSession();
+      try {
+        await createSession({ silent: true });
+      } catch (_) {
+        // Session creation failed — still load non-session data so tabs render.
+        await refreshChrome().catch(() => null);
+      }
     } else {
       await Promise.all([refreshChrome(), loadMessages()]);
     }
@@ -56,6 +73,17 @@ async function bootstrap() {
     state.notice = String(error);
   } finally {
     render();
+    // Warm the fragment cache for the most-likely-next tabs during idle time so first-click feels instant.
+    const prefetchNext = () => {
+      prefetchTabHtml('settings');
+      prefetchTabHtml('tools');
+      prefetchTabHtml('agentic');
+    };
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(prefetchNext, { timeout: 2000 });
+    } else {
+      setTimeout(prefetchNext, 1500);
+    }
   }
 }
 
@@ -118,7 +146,7 @@ function render() {
 }
 
 
-function setActiveTab(tabId) {
+async function setActiveTab(tabId) {
   if (!tabs.some(tab => tab.id === tabId)) {
     return;
   }
@@ -134,26 +162,50 @@ function setActiveTab(tabId) {
     clearInterval(state.framebufferPollInterval);
     state.framebufferPollInterval = null;
   }
+
+  // Load the tab HTML dynamically if not loaded
+  try {
+    await loadTabHtml(tabId);
+  } catch (err) {
+    console.error("Failed to load tab HTML", err);
+  }
+
   state.activeTab = tabId;
+  // Track tab visit counts for shell tooltip telemetry providers (no-op if state already has it).
+  if (!state.tabActivity) state.tabActivity = {};
+  state.tabActivity[tabId] = (state.tabActivity[tabId] || 0) + 1;
+  render(); // make the panel visible immediately while data loads
+  if (tabId === 'chat') {
+    wireComposer();
+  }
   if (tabId === 'settings') {
+    // Re-fetch model profiles and routing state on every settings visit so
+    // the matrix and routing panels reflect any background changes.
+    fetchModelProfiles().catch(function () { }).then(function () {
+      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+      safeRenderStep('modelRouting', renderModelRouting);
+    });
+    fetchRoutingState().catch(function () { }).then(function () {
+      safeRenderStep('modelRouting', renderModelRouting);
+    });
     refreshChrome().then(function () { render(); });
     refreshOAuthStatus().then(function () { render(); });
     initSettingsTab();
   }
   if (tabId === 'agentic') {
-    initAgenticTab();
-    refreshGuardianStatus();
-    initHardwareTab();
+    try { await initAgenticTab(); } catch (e) { console.error('[tab] agentic init:', e); }
+    try { await refreshGuardianStatus(); } catch (e) { console.error('[tab] guardian:', e); }
+    try { await initHardwareTab(); } catch (e) { console.error('[tab] hardware init:', e); }
   }
   if (tabId === 'workspace') {
-    initWorkspaceTab();
-    initCharacterPanel();
+    try { await initWorkspaceTab(); } catch (e) { console.error('[tab] workspace init:', e); }
+    try { await initCharacterPanel(); } catch (e) { console.error('[tab] character panel:', e); }
   }
   if (tabId === 'computer') {
-    initComputerTab();
+    try { await initComputerTab(); } catch (e) { console.error('[tab] computer init:', e); }
   }
   if (tabId === 'browser') {
-    initBrowserTab().catch(function () { });
+    try { await initBrowserTab(); } catch (e) { console.error('[tab] browser init:', e); }
   }
   if (tabId === 'tools') {
     // Lazy-load diagnostics report on first visit
@@ -236,7 +288,7 @@ function setActiveTab(tabId) {
     }
   }
   if (tabId === 'scheduler') {
-    initSchedulerTab();
+    try { await initSchedulerTab(); } catch (e) { console.error('[tab] scheduler init:', e); }
   }
   if (tabId === 'telemetry') {
     setTelemetryWindow(state.telemetryWindow);
@@ -284,6 +336,14 @@ function connectWebSocket() {
           refreshGuardianStatus();
           refreshGuardianTasks();
         }
+      }
+      // Guardian-curated tooltip insights → Prism Tooltips dynamic line.
+      if (data.type === 'guardian_tip' && data.tipId) {
+        pushGuardianTip({
+          tipId: data.tipId,
+          kind: data.kind || 'guardian',
+          message: data.message || data.detail || '',
+        });
       }
       // Debounced refresh of panel summaries on any tool/plugin state update
       if (data.type === 'tool_state' || data.type === 'plugin_state' || data.type === 'utility_state') {
@@ -400,18 +460,28 @@ function renderTabs() {
   }
 }
 
-// Keyboard shortcut: Enter sends message
-var comp = document.getElementById('composer');
-comp.addEventListener('keydown', function (event) {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    void sendMessage();
-  }
-});
-comp.addEventListener('input', function () {
-  this.style.height = 'auto';
-  this.style.height = this.scrollHeight + 'px';
-});
+// Keyboard shortcut: Enter sends message.
+// NOTE: #composer lives inside tab-chat.html (async-loaded); we must wire it
+// AFTER the chat fragment has been injected into the DOM. bootstrap() calls
+// wireComposer() once loadTabHtml('chat') resolves. We also guard with a
+// module-level flag so repeated tab switches don't double-bind listeners.
+let _composerWired = false;
+function wireComposer() {
+  if (_composerWired) return;
+  const comp = document.getElementById('composer');
+  if (!comp) return;
+  comp.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void sendMessage();
+    }
+  });
+  comp.addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = this.scrollHeight + 'px';
+  });
+  _composerWired = true;
+}
 
 bootstrap();
 
@@ -483,6 +553,7 @@ Object.assign(window, {
   clearLocalLlmSelection,
   loadSessions,
   createSession,
+  openNewSessionModal,
   loadMessages,
   refreshChrome,
   renderSessions,
@@ -837,6 +908,7 @@ Object.assign(window, {
   onProfileChanged,
   onWorkspaceHubBlur,
   initCharacterPanel,
+  onCharacterChipClick,
   renderNetworkToolsPanel,
   renderNetworkSettingsPanel,
   renderNetworkTelemetryPanel,
@@ -874,6 +946,46 @@ Object.assign(window, {
   stopBurstFrameAnimation,
   startBurstFrameAnimation,
 });
+
+// Boot marker — if this line prints, the ES module graph evaluated and window.createSession is wired.
+// If the "New Session" button still does nothing, inspect for CSS/overlay or auth failure instead.
+try {
+  console.log('[boot] dashboard-app.js wired window.createSession =', typeof window.createSession);
+} catch (_) { /* noop */ }
+
+// Resilient click binding for the "New Session" button.
+// The inline onclick="createSession()" depends on a working global; this fallback catches the case
+// where something prevents that global from being callable and logs a visible diagnostic instead of
+// silently doing nothing. Additive — the inline onclick still runs first.
+(function wireNewSessionButton() {
+  function attach() {
+    var btn = document.getElementById('new-session-button');
+    if (!btn) return;
+    if (btn.dataset.prismWired === '1') return;
+    btn.dataset.prismWired = '1';
+    btn.addEventListener('click', async function (ev) {
+      // Only handle the event if the inline onclick did not already fire a fetch.
+      // We can't tell from here, so we defer slightly and only act if the global is missing.
+      if (typeof window.createSession !== 'function') {
+        ev.preventDefault();
+        console.error('[new-session] window.createSession is not a function (type=' + typeof window.createSession + '). Module wiring failed — reload and inspect console for red errors above.');
+        alert('PRISM: cannot create a new session — the dashboard JavaScript did not finish loading. Please reload the page. If this persists, open DevTools (F12) → Console and report the first red error.');
+        return;
+      }
+      try {
+        // Inline onclick runs synchronously and already started the fetch; this listener just logs.
+        console.log('[new-session] button clicked; window.createSession=' + typeof window.createSession);
+      } catch (err) {
+        console.error('[new-session] click handler threw:', err);
+      }
+    }, true); // capture phase so we log before any stopPropagation
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attach, { once: true });
+  } else {
+    attach();
+  }
+})();
 
 // Resize handle
 (function () {

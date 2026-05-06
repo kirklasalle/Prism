@@ -3,6 +3,7 @@ import { state, request, escapeHtml, formatRelativeTime, safeIso, dashboardLog, 
 export
   function renderEvents() {
   const container = document.getElementById('events');
+  if (!container) return;
   if (!state.events.length) {
     container.innerHTML = '<div class="muted">No recent events.</div>';
     return;
@@ -19,6 +20,7 @@ export
 export
   function renderTraceView() {
   const container = document.getElementById('trace-view');
+  if (!container) return;
   const traceData = state.traceData;
   if (!traceData || !traceData.traces || !traceData.traces.length) {
     container.innerHTML = '<div class="muted">No correlated traces yet.</div>';
@@ -76,6 +78,7 @@ export
 export
   function renderActions() {
   const container = document.getElementById('actions');
+  if (!container) return;
   let html = '';
   if (state.notice) {
     html += '<div class="notice">' + escapeHtml(state.notice) + '</div>';
@@ -100,6 +103,7 @@ export
 export
   function renderApprovals() {
   const container = document.getElementById('pending');
+  if (!container) return;
   if (!state.pending.length) {
     container.innerHTML = '<div class="muted">No pending approvals.</div>';
     return;
@@ -116,6 +120,7 @@ export
 export
   function renderActionHistory() {
   const container = document.getElementById('action-history');
+  if (!container) return;
   if (!state.actionHistory.length) {
     container.innerHTML = '<div class="muted">No action runs recorded yet.</div>';
     return;

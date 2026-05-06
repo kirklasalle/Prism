@@ -98,7 +98,7 @@ async function testUnsupportedArgTypeFails(): Promise<void> {
     const contract: ToolContract = {
         version: "1.0.0",
         args: {
-            data: { type: "array" as any, required: true },
+            data: { type: "function" as any, required: true },
         },
     };
     const errors = validateToolContract("bad_type", contract);

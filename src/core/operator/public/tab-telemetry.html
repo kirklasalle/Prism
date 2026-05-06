@@ -1,0 +1,59 @@
+<div class="tab-grid">
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('usageCost')"
+      data-tip-id="telemetry:usage-cost" data-tip-kind="telemetry">
+      <h3>💰 Usage &amp; Cost</h3>
+      <span id="usageCost-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="usageCost-collapsible" class="collapsible-body">
+      <div id="usage-cost-panel" class="stack"></div>
+    </div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:time-window" data-tip-kind="telemetry"
+    style="grid-column:1/-1;padding-bottom:4px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span class="muted" style="font-size:12px;">Change window:</span>
+      <button class="tab-button" id="tw-1h" onclick="setTelemetryWindow('1h')">1 hour</button>
+      <button class="tab-button" id="tw-1d" onclick="setTelemetryWindow('1d')">1 day</button>
+      <button class="tab-button" id="tw-7d" onclick="setTelemetryWindow('7d')">7 days</button>
+    </div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:what-changed" data-tip-kind="telemetry">
+    <h3>What Changed</h3>
+    <div id="telemetry-what-changed"></div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:runtime-overview" data-tip-kind="telemetry">
+    <h3>Runtime Overview</h3>
+    <div id="runtime-overview" class="stack"></div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:runtime-excellence" data-tip-kind="telemetry">
+    <h3>Runtime Excellence</h3>
+    <div id="runtime-excellence"></div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:release-readiness" data-tip-kind="telemetry">
+    <h3>Release Readiness</h3>
+    <div id="release-readiness"></div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:package-history" data-tip-kind="telemetry">
+    <h3>Package History</h3>
+    <div id="package-history"></div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:self-review" data-tip-kind="telemetry">
+    <h3>Self Review</h3>
+    <div id="self-review"></div>
+  </section>
+  <section class="rail-section panel" data-tip-id="telemetry:retrieval-alerts" data-tip-kind="telemetry">
+    <h3>Retrieval Alerts</h3>
+    <div id="retrieval-alerts"></div>
+  </section>
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('sloGauges')"
+      data-tip-id="telemetry:slo-gauges" data-tip-kind="telemetry">
+      <h3>🟢 SLO Gauges</h3>
+      <span id="sloGauges-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="sloGauges-collapsible" class="collapsible-body">
+      <div id="slo-gauge-panel"></div>
+    </div>
+  </section>
+</div>

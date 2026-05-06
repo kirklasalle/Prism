@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prism-client"
+version = "0.1.0"
+description = "Official Python SDK for the PRISM governance-native Agents-as-a-Service runtime."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Kirk LaSalle" }]
+keywords = ["prism", "agents", "aaas", "llm", "governance", "spectrum-refraction"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = []  # stdlib-only by design (urllib + json)
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/kirklasalle/Prism"
+Documentation = "https://github.com/kirklasalle/Prism/tree/main/docs"
+Source = "https://github.com/kirklasalle/Prism"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["prism_client*"]

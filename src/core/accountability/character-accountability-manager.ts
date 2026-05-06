@@ -50,6 +50,8 @@ export class CharacterAccountabilityManager {
         const operatorEmail = normalizeEmail(input.operatorEmail);
 
         if (executionProfileSegment === "business") {
+            assertNotPlaceholderEmail(prismUserEmail, "prismUserEmail");
+            assertNotPlaceholderEmail(operatorEmail, "operatorEmail");
             this.assertBusinessEmailPolicy(prismUserEmail, operatorEmail);
         }
 
@@ -220,6 +222,143 @@ export class CharacterAccountabilityManager {
         return revoked;
     }
 
+    /**
+     * Phase E3 / E5: Mark the operator's email as verified by an OAuth provider.
+     */
+    markEmailVerified(
+        assignmentId: string,
+        verifiedEmail: string,
+        provider: "gmail" | "outlook",
+    ): CharacterAssignment | null {
+        const existing = this.store.get(assignmentId);
+        if (!existing || existing.state === "revoked") return null;
+        if (normalizeEmail(verifiedEmail) !== normalizeEmail(existing.operatorEmail)) {
+            this.emitLifecycleEvent("character_accountability.email_verification_mismatch", existing, "failed", {
+                provider,
+                verifiedEmail: normalizeEmail(verifiedEmail),
+                expectedEmail: existing.operatorEmail,
+            });
+            return null;
+        }
+        const updated: CharacterAssignment = {
+            ...existing,
+            emailVerifiedAt: new Date().toISOString(),
+            emailVerifiedProvider: provider,
+            updatedAt: new Date().toISOString(),
+        };
+        this.store.save(updated);
+        this.emitLifecycleEvent("character_accountability.email_verified", updated, "succeeded", {
+            provider,
+            verifiedEmail: normalizeEmail(verifiedEmail),
+        });
+        return updated;
+    }
+
+    /**
+     * Phase E5: True when the operator email has been verified within the
+     * supplied freshness window (default 30 days).
+     */
+    isEmailVerificationFresh(assignmentId: string, maxAgeMs: number = 30 * 86_400_000): boolean {
+        const existing = this.store.get(assignmentId);
+        if (!existing || !existing.emailVerifiedAt) return false;
+        const t = new Date(existing.emailVerifiedAt).getTime();
+        if (isNaN(t)) return false;
+        return (Date.now() - t) <= maxAgeMs;
+    }
+
+    /**
+     * Phase E3: Materialize a CAC chain for visualization / export.
+     */
+    getAssignmentChain(assignmentId: string): {
+        assignment: CharacterAssignment;
+        chain: AccountabilityChain;
+        scopes: { active: number; expired: number; total: number };
+        emailVerification: { verified: boolean; freshDays: number | null; provider: string | null };
+    } | null {
+        const assignment = this.store.get(assignmentId);
+        if (!assignment) return null;
+        const now = Date.now();
+        const scopes = assignment.permissionScopes ?? [];
+        let active = 0; let expired = 0;
+        for (const s of scopes) {
+            if (s.expiresAt === null || new Date(s.expiresAt).getTime() > now) active += 1;
+            else expired += 1;
+        }
+        const chain: AccountabilityChain = {
+            assignmentId: assignment.assignmentId,
+            characterId: assignment.characterId,
+            prismUserId: assignment.prismUserId,
+            prismUserEmail: assignment.prismUserEmail,
+            operatorId: assignment.operatorId,
+            operatorEmail: assignment.operatorEmail,
+            clientId: assignment.clientId,
+            executionProfileSegment: assignment.executionProfileSegment,
+            workspaceHub: assignment.workspaceHub,
+        };
+        const verifiedAtMs = assignment.emailVerifiedAt ? new Date(assignment.emailVerifiedAt).getTime() : null;
+        const freshDays = verifiedAtMs && !isNaN(verifiedAtMs)
+            ? Math.floor((now - verifiedAtMs) / 86_400_000)
+            : null;
+        return {
+            assignment,
+            chain,
+            scopes: { active, expired, total: scopes.length },
+            emailVerification: {
+                verified: !!assignment.emailVerifiedAt,
+                freshDays,
+                provider: assignment.emailVerifiedProvider ?? null,
+            },
+        };
+    }
+
+    /**
+     * Phase E3: Export an audit-friendly snapshot of assignments. Suitable
+     * input for either JSON download or CSV transformation.
+     */
+    exportAudit(filter: CharacterAssignmentFilter = {}): Array<{
+        assignmentId: string;
+        characterId: string;
+        operatorId: string;
+        operatorEmail: string;
+        prismUserEmail: string;
+        executionProfileSegment: "individual" | "business";
+        state: CharacterAssignmentState;
+        assignedAt: string;
+        updatedAt: string;
+        dispatchCount: number;
+        scopesActive: number;
+        scopesExpired: number;
+        emailVerifiedAt: string | null;
+        emailVerifiedProvider: string | null;
+    }> {
+        const rows = this.store.list(filter);
+        const now = Date.now();
+        return rows.map((a) => {
+            const scopes = a.permissionScopes ?? [];
+            let active = 0; let expired = 0;
+            for (const s of scopes) {
+                if (s.expiresAt === null || new Date(s.expiresAt).getTime() > now) active += 1;
+                else expired += 1;
+            }
+            return {
+                assignmentId: a.assignmentId,
+                characterId: a.characterId,
+                operatorId: a.operatorId,
+                operatorEmail: a.operatorEmail,
+                prismUserEmail: a.prismUserEmail,
+                executionProfileSegment: a.executionProfileSegment,
+                state: a.state,
+                assignedAt: a.assignedAt,
+                updatedAt: a.updatedAt,
+                dispatchCount: a.dispatchCount,
+                scopesActive: active,
+                scopesExpired: expired,
+                emailVerifiedAt: a.emailVerifiedAt ?? null,
+                emailVerifiedProvider: a.emailVerifiedProvider ?? null,
+            };
+        });
+    }
+
     private transitionState(
         assignmentId: string,
         nextState: CharacterAssignmentState,
@@ -320,6 +459,60 @@ function assertValidEmail(value: string, field: string): void {
     const normalized = normalizeEmail(value);
     if (!normalized || !/^\S+@\S+\.\S+$/.test(normalized)) {
         throw new Error(`Invalid ${field}: ${value}`);
+    }
+}
+
+/**
+ * Domains that are clearly placeholders / non-routable / scaffolding artifacts
+ * and must never be accepted as the accountability anchor for a Business
+ * profile assignment. Matches both the exact domain and any subdomain.
+ *
+ * This list is intentionally conservative — it blocks the common shapes that
+ * appear when an operator types a dummy value to "see if the wizard works":
+ *  - prism.local           (PRISM scaffolding placeholder)
+ *  - example.com / .org / .net / .test  (RFC 2606 reserved)
+ *  - localhost / .localhost            (loopback, not routable)
+ *  - invalid               (RFC 6761 reserved)
+ *  - test / .test          (RFC 6761 reserved)
+ *
+ * Operators running an actual business deployment can use any other domain
+ * (their corporate domain, an SSO provider domain, etc.).
+ */
+const PLACEHOLDER_EMAIL_DOMAINS: readonly string[] = [
+    "prism.local",
+    "example.com",
+    "example.org",
+    "example.net",
+    "example.test",
+    "test",
+    "test.test",
+    "invalid",
+    "localhost",
+    "localdomain",
+    "local",
+    "lan",
+    "home",
+    "internal",
+];
+
+export function isPlaceholderEmailDomain(domain: string): boolean {
+    const d = domain.trim().toLowerCase();
+    if (!d) return true;
+    for (const placeholder of PLACEHOLDER_EMAIL_DOMAINS) {
+        if (d === placeholder || d.endsWith("." + placeholder)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function assertNotPlaceholderEmail(email: string, field: string): void {
+    const domain = emailDomain(email);
+    if (isPlaceholderEmailDomain(domain)) {
+        throw new Error(
+            `Business profile rejects placeholder ${field}: "${email}" uses a non-production domain (`
+            + `"${domain}"). Use a real, routable domain (e.g. your corporate or SSO provider domain).`,
+        );
     }
 }
 

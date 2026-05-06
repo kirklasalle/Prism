@@ -2,7 +2,7 @@ name: PRISM Quality Gates
 
 on:
   push:
-    branches: ["**"]
+    branches: [ "**" ]
   pull_request:
 
 jobs:
@@ -33,6 +33,9 @@ jobs:
         env:
           PRISM_ENV_PROFILE: staging
 
+      - name: Generate profile-differentiated perf trend report
+        if: always()
+        run: npm run perf:trend-report
       - name: Generate tool contract snapshot
         run: npm run contracts:snapshot
 
@@ -66,6 +69,13 @@ jobs:
           path: prism-output/perf-qualification.json
           if-no-files-found: warn
 
+      - name: Upload profile-differentiated trend artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-trends
+          path: prism-output/profile-trends/**
+          if-no-files-found: warn
       - name: Upload tool contract snapshot artifact
         if: always()
         uses: actions/upload-artifact@v4

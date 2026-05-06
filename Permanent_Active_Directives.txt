@@ -2,7 +2,7 @@
 
 **Created:** March 08, 2025  
 **Updated:** February 23, 2026  
-**Author:** Kirk LaSalle; GitHub Copilot  
+**Author:** Kirk LaSalle  
 **Tags:** #ids #standardized_header #docs\reference\Permanent_Active_Directives.md #docs\reference\permanent_active_directives.md #documentation #multimodal #security #official #permanent  
 **Category:** Reference Documentation  
 **Status:** Active  

@@ -24,5 +24,12 @@
         "personal",
         "friendly"
     ],
-    "defaultEmail": "aria@prism.local"
+    "defaultEmail": "aria@prism.local",
+    "tooltipTips": [
+        "ARIA leads with empathy — perfect for everyday writing and planning.",
+        "Try asking ARIA to ‘explain like I’m new to this’ — she shines at onboarding.",
+        "ARIA uses Tier 2 risk max; high-risk actions defer to your approval queue.",
+        "Pair ARIA with PHOENIX for plan-then-execute multi-step workflows.",
+        "Personality: warm, approachable, structured, patient."
+    ]
 }

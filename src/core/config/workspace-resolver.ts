@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, copyFileSync, writeFi
 import { homedir, platform } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tenantSubroot } from "./tenant-context.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Workspace Manifest
@@ -87,6 +88,12 @@ interface PrismPreferences {
     executionProfileSegment?: "individual" | "business";
     /** UI mode preference — "simple" for non-technical users, "advanced" for operator dashboard. */
     uiMode?: "simple" | "advanced";
+    /** Phase E3b: workspace-level default character bound to new chat sessions. */
+    defaultCharacterId?: string;
+    /** Phase E3b: most recent character used for a new session (prefills modal). */
+    lastUsedCharacterId?: string;
+    /** Phase E3b: the CAC assignment id the first-run wizard created. */
+    cacBootstrapAssignmentId?: string;
     lastModified: string;
 }
 
@@ -106,6 +113,12 @@ function projectRoot(): string {
 }
 
 export function preferencesPath(): string {
+    // Test/multi-workspace override — when set, the preferences file lives
+    // at the absolute path provided. Lets integration tests run in isolation
+    // without inheriting the developer's local prefs file (and lets backup /
+    // migration tooling target an alternate workspace cleanly).
+    const override = process.env.PRISM_PREFERENCES_PATH?.trim();
+    if (override) return override;
     return join(projectRoot(), PREFERENCES_FILE);
 }
 
@@ -153,9 +166,23 @@ export function resolveWorkspaceRoot(): string {
 /**
  * Join segments onto the workspace root to build a full path.
  *
+ * When multi-tenant mode is active (`PRISM_MULTI_TENANT=on`) and a
+ * non-default tenant is on the AsyncLocalStorage stack, the tenant's
+ * subroot (`{root}/.tenants/{id}/`) is used instead of the bare root.
+ * Default tenant + flag-off path returns the legacy result unchanged.
+ *
  * @example workspacePath("state", "prism-activity.db")
  */
 export function workspacePath(...segments: string[]): string {
+    return join(tenantSubroot(resolveWorkspaceRoot()), ...segments);
+}
+
+/**
+ * Like `workspacePath()` but always resolves against the bare workspace
+ * root, ignoring any active tenant scope. Use for cross-tenant assets
+ * (e.g. shared installer artifacts) that must NOT be tenant-isolated.
+ */
+export function untenantedWorkspacePath(...segments: string[]): string {
     return join(resolveWorkspaceRoot(), ...segments);
 }
 

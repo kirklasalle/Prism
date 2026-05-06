@@ -220,6 +220,13 @@ export
 export
   function renderLlm() {
   const container = document.getElementById('llm-provider');
+  if (!container) return;
+  // Session Provider Assignment requires an active session — show a clear prompt
+  // even if a global catalog is loaded, because Apply/Draft actions are session-scoped.
+  if (!state.selectedSessionId) {
+    container.innerHTML = '<div class="muted">Select a session to configure its provider and model.</div>';
+    return;
+  }
   if (!state.llmCatalog) {
     container.innerHTML = '<div class="muted">Loading providers...</div>';
     return;
@@ -1637,6 +1644,7 @@ export
 export
   function renderLlmAudit() {
   const container = document.getElementById('llm-audit');
+  if (!container) return;
   const events = state.llmAuditEvents || [];
   if (!events.length) {
     container.innerHTML = '<div class="muted">No provider switch events for this scope.</div>'
@@ -1901,22 +1909,22 @@ export
         readonlyRow('Prism User Email', a.prismUserEmail || 'N/A');
         readonlyRow('State', a.state);
         readonlyRow('Assigned At', formatRelativeTime(a.assignedAt));
-        
+
         var evts = chain.events || [];
         if (evts.length > 0) {
           html += '<div style="margin-top:12px;font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;">Audit Events (' + evts.length + ')</div>';
           html += '<div style="margin-top:8px;max-height:200px;overflow-y:auto;background:var(--bg-card);border-radius:4px;padding:8px;">';
           for (var j = 0; j < evts.length; j++) {
-             var evt = evts[j];
-             html += '<div style="font-size:11px;padding:4px 0;border-bottom:1px solid rgba(128,128,128,0.1);">';
-             html += '<span class="muted" style="margin-right:8px;">' + escapeHtml(formatRelativeTime(evt.timestamp)) + '</span>';
-             html += '<span style="font-weight:500;">' + escapeHtml(evt.operation) + '</span> ';
-             html += '<span class="' + (evt.status === 'succeeded' ? 'stg-badge-green' : (evt.status === 'failed' ? 'stg-badge-red' : 'stg-badge-blue')) + '" style="font-size:9px;padding:1px 4px;border-radius:4px;">' + escapeHtml(evt.status) + '</span>';
-             html += '</div>';
+            var evt = evts[j];
+            html += '<div style="font-size:11px;padding:4px 0;border-bottom:1px solid rgba(128,128,128,0.1);">';
+            html += '<span class="muted" style="margin-right:8px;">' + escapeHtml(formatRelativeTime(evt.timestamp)) + '</span>';
+            html += '<span style="font-weight:500;">' + escapeHtml(evt.operation) + '</span> ';
+            html += '<span class="' + (evt.status === 'succeeded' ? 'stg-badge-green' : (evt.status === 'failed' ? 'stg-badge-red' : 'stg-badge-blue')) + '" style="font-size:9px;padding:1px 4px;border-radius:4px;">' + escapeHtml(evt.status) + '</span>';
+            html += '</div>';
           }
           html += '</div>';
         }
-        
+
         html += '<div style="margin-top:12px;">';
         html += '<button class="secondary-button" style="font-size:11px;" onclick="exportCacAuditJson(\'' + escapeHtml(a.assignmentId) + '\')">Export Audit JSON</button>';
         html += '</div>';
@@ -3029,7 +3037,7 @@ export async function refreshCacChain() {
 export function exportCacAuditJson(assignmentId) {
   var cac = state.cacChain;
   if (!cac || !cac.chains) return;
-  var chain = cac.chains.find(function(c) { return c.assignment && c.assignment.assignmentId === assignmentId; });
+  var chain = cac.chains.find(function (c) { return c.assignment && c.assignment.assignmentId === assignmentId; });
   if (!chain) return;
 
   var payload = {

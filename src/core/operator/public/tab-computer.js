@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, dashboardLog, safeRenderStep, formatUptime } from './dashboard-core.js';
+import { state, request, escapeHtml, dashboardLog, safeRenderStep, formatUptime, assetUrl } from './dashboard-core.js';
 
 var selectedFramebufferFile = null;
 var framebufferGalleryItems = [];
@@ -47,7 +47,7 @@ export function startBurstFrameAnimation(item) {
   if (!img) return;
   if (video) video.style.display = 'none';
   var frameUrls = item.sourceFiles.map(function (fn) {
-    return '/api/computer/screengrab/file/' + encodeURIComponent(fn);
+    return assetUrl('/api/computer/screengrab/file/' + encodeURIComponent(fn));
   });
   var frameIndex = 0;
   img.src = frameUrls[0];
@@ -74,7 +74,7 @@ export function toggleBurstPlayPause() {
 export function stopBurstFromUI() {
   if (framebufferBurstCurrentItem && framebufferBurstCurrentItem.sourceFiles && framebufferBurstCurrentItem.sourceFiles.length) {
     var img = document.getElementById('framebuffer-preview');
-    if (img) img.src = '/api/computer/screengrab/file/' + encodeURIComponent(framebufferBurstCurrentItem.sourceFiles[0]);
+    if (img) img.src = assetUrl('/api/computer/screengrab/file/' + encodeURIComponent(framebufferBurstCurrentItem.sourceFiles[0]));
   }
   if (window.stopBurstFrameAnimation) window.stopBurstFrameAnimation();
 }
@@ -635,7 +635,7 @@ export
   }
 
   var frameUrls = item.sourceFiles.map(function (fileName) {
-    return '/api/computer/screengrab/file/' + encodeURIComponent(fileName) + '?t=' + Date.now();
+    return assetUrl('/api/computer/screengrab/file/' + encodeURIComponent(fileName) + '?t=' + Date.now());
   });
   var images = await Promise.all(frameUrls.map(loadFramebufferImage));
   var first = images[0];
@@ -732,12 +732,12 @@ export
   var selectionSummaryDiv = document.getElementById('framebuffer-selection-summary');
   if (!selectedItem) {
     if (window.stopBurstFrameAnimation) window.stopBurstFrameAnimation();
-    setFramebufferPreviewSource('/api/computer/screengrab/latest?t=' + Date.now());
+    setFramebufferPreviewSource(assetUrl('/api/computer/screengrab/latest?t=' + Date.now()));
     return;
   }
   if (selectedItem.kind !== 'burst') {
     if (window.stopBurstFrameAnimation) window.stopBurstFrameAnimation();
-    setFramebufferPreviewSource('/api/computer/screengrab/file/' + encodeURIComponent(selectedItem.previewName || selectedItem.name) + '?t=' + Date.now());
+    setFramebufferPreviewSource(assetUrl('/api/computer/screengrab/file/' + encodeURIComponent(selectedItem.previewName || selectedItem.name) + '?t=' + Date.now()));
     return;
   }
   // Burst: animate frames directly on the <img> — no codec required
@@ -805,7 +805,7 @@ export async function refreshFramebufferGallery() {
         : '<div class="framebuffer-item-badge">PNG</div>';
       html += '<div class="framebuffer-item' + (item.name === selectedFramebufferFile ? ' selected' : '') + '" data-filename="' + escapeHtml(item.name) + '" onclick="selectFramebufferFile(this)" title="' + escapeHtml(title) + '">' +
         '<div class="framebuffer-item-poster">' +
-        '<img src="/api/computer/screengrab/file/' + encodeURIComponent(item.previewName || item.name) + '" alt="' + escapeHtml(item.name) + '" />' +
+        '<img src="' + escapeHtml(assetUrl('/api/computer/screengrab/file/' + encodeURIComponent(item.previewName || item.name))) + '" alt="' + escapeHtml(item.name) + '" />' +
         badge +
         '</div>' +
         '<div class="framebuffer-item-body">' +
@@ -819,7 +819,7 @@ export async function refreshFramebufferGallery() {
     if (selectedItem) {
       await previewSelectedFramebufferItem(selectedItem);
     } else if (!selectedItem && selectedFramebufferFile) {
-      setFramebufferPreviewSource('/api/computer/screengrab/file/' + encodeURIComponent(selectedFramebufferFile) + '?t=' + Date.now());
+      setFramebufferPreviewSource(assetUrl('/api/computer/screengrab/file/' + encodeURIComponent(selectedFramebufferFile) + '?t=' + Date.now()));
     } else if (selectionSummaryDiv) {
       selectionSummaryDiv.textContent = 'Latest preview';
     }
@@ -858,7 +858,7 @@ export function selectFramebufferFile(element) {
 export
   async function openFramebufferFile() {
   if (!selectedFramebufferFile) { alert('Select a file first'); return; }
-  window.open('/api/computer/screengrab/file/' + encodeURIComponent(selectedFramebufferFile), '_blank');
+  window.open(assetUrl('/api/computer/screengrab/file/' + encodeURIComponent(selectedFramebufferFile)), '_blank');
 }
 
 export

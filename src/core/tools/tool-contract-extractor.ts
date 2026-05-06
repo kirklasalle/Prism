@@ -931,6 +931,121 @@ export class ToolContractExtractor {
     }
 
     /**
+     * Update the approval status of a single tool's pending contract change.
+     *
+     * This is the per-tool counterpart to {@link resolveApproval} (which acts on
+     * the entire request). It is the bidirectional callback target wired from
+     * {@link ApprovalQueue} resolutions in `dashboard-service.ts` so that
+     * approve/deny/timeout decisions made by an operator flow back into the
+     * `contract_changes` table.
+     *
+     * @param tool_id - Tool identifier whose pending change should be updated
+     * @param decision - "approved" | "denied" | "timeout"
+     * @param decisionContext - Optional metadata (decidedBy, decidedAt, source)
+     * @returns Whether a row was updated
+     */
+    async consumeApprovalDecision(
+        tool_id: string,
+        decision: "approved" | "denied" | "timeout",
+        decisionContext?: { decidedBy?: string; decidedAt?: string; decisionSource?: string }
+    ): Promise<{ tool_id: string; decision: typeof decision; updated: boolean }> {
+        await this.initializationPromise;
+
+        const updated = await new Promise<number>((resolve, reject) => {
+            this.db.run(
+                `UPDATE contract_changes
+                 SET approval_status = ?
+                 WHERE tool_id = ? AND approval_status = 'pending'`,
+                [decision, tool_id],
+                function (this: { changes: number }, err: any) {
+                    if (err) reject(err);
+                    else resolve(this.changes ?? 0);
+                }
+            );
+        });
+
+        // If no pending row existed (e.g. tier-3 enqueued without a baseline-diff
+        // comparison), insert a synthetic record so polling clients can read the
+        // resolved decision via getContractChangeStatus().
+        if (updated === 0) {
+            await new Promise<void>((resolve, reject) => {
+                this.db.run(
+                    `INSERT INTO contract_changes
+                     (change_id, tool_id, baseline_version, current_version, change_type, breaking, risk_score, details, approval_status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        uuidv4(),
+                        tool_id,
+                        "",
+                        "",
+                        "approval_only",
+                        0,
+                        0,
+                        JSON.stringify({ source: decisionContext?.decisionSource ?? "approval_queue" }),
+                        decision,
+                    ],
+                    (err: any) => {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+        }
+
+        this.activityBus.emit({
+            sessionId: tool_id,
+            layer: "governance",
+            operation: "tool.stage.approval_resolved",
+            status: decision === "approved" ? "succeeded" : "failed",
+            details: {
+                tool_id,
+                decision,
+                decidedBy: decisionContext?.decidedBy,
+                decidedAt: decisionContext?.decidedAt ?? new Date().toISOString(),
+                decisionSource: decisionContext?.decisionSource ?? "approval_queue",
+                rows_updated: updated,
+            },
+            authorityTier: "tier3_approval",
+            policyDecision: decision === "approved" ? "allow" : "deny",
+        });
+
+        return { tool_id, decision, updated: true };
+    }
+
+    /**
+     * Read the latest approval status for a tool's contract change.
+     * Used by polling clients (e.g. `GET /api/tools/stage/status?tool_id=...`).
+     *
+     * @param tool_id - Tool identifier
+     * @returns Status row, or null if no contract change exists for the tool
+     */
+    async getContractChangeStatus(
+        tool_id: string
+    ): Promise<{ tool_id: string; approval_status: string; change_id: string; created_timestamp: string } | null> {
+        await this.initializationPromise;
+        return new Promise((resolve, reject) => {
+            this.db.get(
+                `SELECT change_id, tool_id, approval_status, created_timestamp
+                 FROM contract_changes
+                 WHERE tool_id = ?
+                 ORDER BY created_timestamp DESC
+                 LIMIT 1`,
+                [tool_id],
+                (err: any, row: any) => {
+                    if (err) reject(err);
+                    else if (!row) resolve(null);
+                    else resolve({
+                        tool_id: row.tool_id,
+                        approval_status: row.approval_status,
+                        change_id: row.change_id,
+                        created_timestamp: row.created_timestamp,
+                    });
+                }
+            );
+        });
+    }
+
+    /**
      * Resolve approval and register staged tools into the ToolRegistry.
      * Called when an approval decision is received (approve/reject).
      *

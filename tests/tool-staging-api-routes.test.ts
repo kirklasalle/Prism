@@ -158,4 +158,17 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
         assert.strictEqual(res.status, 200);
         assert.ok(res.body.risk_summary, "should include risk_summary");
     });
+
+    it("GET /api/tools/stage/status returns 400 when tool_id is missing", async () => {
+        const res = await requestJson("GET", "/api/tools/stage/status", undefined);
+        assert.strictEqual(res.status, 400);
+        assert.ok(res.body.error?.includes("tool_id"));
+    });
+
+    it("GET /api/tools/stage/status returns 404 for an unknown tool", async () => {
+        const res = await requestJson("GET", "/api/tools/stage/status?tool_id=does-not-exist", undefined);
+        assert.strictEqual(res.status, 404);
+        assert.strictEqual(res.body.tool_id, "does-not-exist");
+        assert.strictEqual(res.body.approval_status, "unknown");
+    });
 });

@@ -305,8 +305,46 @@ export function setupWizardHtml(port: number): string {
         <div id="provider-test-result" style="margin-top:8px;font-size:12px;"></div>
       </div>
 
-      <!-- Step 4: Summary + Launch -->
+      <!-- Step 4 (E3b): Choose First Assistant -->
       <div class="wizard-step" id="step-4">
+        <h2>Choose Your First Assistant</h2>
+        <p>Every session in PRISM runs under a character \u2014 a persona with its own tool permissions, risk tier cap, and accountability chain. Pick one to make your default.</p>
+        <div id="wizard-character-tabs" style="display:flex;gap:8px;margin:12px 0;">
+          <button type="button" class="secondary-button" id="wiz-char-tab-bundled" onclick="wizardCharacterTab('bundled')">Bundled</button>
+          <button type="button" class="secondary-button" id="wiz-char-tab-import" onclick="wizardCharacterTab('import')">Import</button>
+        </div>
+        <div id="wizard-character-panel-bundled">
+          <div id="wizard-character-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+        </div>
+        <div id="wizard-character-panel-import" style="display:none;">
+          <p style="font-size:13px;opacity:0.8;">Paste a character manifest from another system (Openclaw, CrewAI, AutoGen, or a plain OpenAI prompt JSON). PRISM will normalize it into canonical shape.</p>
+          <textarea id="wizard-character-import-json" rows="8" style="width:100%;font-family:monospace;font-size:12px;" placeholder='{"persona": "...", "instructions": "..."}'></textarea>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button type="button" class="secondary-button" onclick="wizardCharacterPreviewImport()">Preview</button>
+            <button type="button" class="primary-button" id="wiz-char-commit-import" onclick="wizardCharacterCommitImport()" disabled>Import &amp; use</button>
+          </div>
+          <div id="wizard-character-import-result" style="margin-top:8px;font-size:12px;"></div>
+        </div>
+        <div id="wizard-character-selected" style="margin-top:12px;font-size:13px;opacity:0.85;"></div>
+      </div>
+
+      <!-- Step 5 (E3b): Identity & First Session -->
+      <div class="wizard-step" id="step-5">
+        <h2>Identity &amp; First Session</h2>
+        <p>Your Character Accountability Chain (CAC) binds every action back to a real identity. You can accept placeholder emails now and boot the workspace; tier-2+ tool calls on the Business profile stay blocked until real addresses land.</p>
+        <label style="display:block;margin-top:12px;">Operator email (the human accountable for decisions):
+          <input type="email" id="wizard-operator-email" style="width:100%;margin-top:4px;" placeholder="operator@prism.local" />
+        </label>
+        <label style="display:block;margin-top:12px;">Assistant email (character identity):
+          <input type="email" id="wizard-assistant-email" style="width:100%;margin-top:4px;" placeholder="aria@prism.local" />
+        </label>
+        <div id="wizard-cac-warning" style="margin-top:12px;padding:8px;border-radius:6px;background:rgba(255,176,0,0.12);color:#ffb000;font-size:12px;display:none;">
+          Placeholder emails accepted. Business-profile tier-2+ tool calls will be denied at runtime until you replace them in the CAC identity panel.
+        </div>
+      </div>
+
+      <!-- Step 6 (renumbered from step-4): Summary + Launch -->
+      <div class="wizard-step" id="step-6">
         <h2>Ready to Launch</h2>
         <p>Here\u2019s a summary of your configuration. PRISM will validate everything before launching.</p>
         <div class="wizard-check-list" id="summary-checks"></div>

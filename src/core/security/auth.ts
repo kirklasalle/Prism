@@ -11,6 +11,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { IncomingMessage } from "node:http";
+import type { IamPrincipal } from "../iam/rbac.js";
 
 export interface AuthConfig {
     /** Path to token file on disk */
@@ -26,6 +27,13 @@ export interface AuthConfig {
 export interface AuthResult {
     authenticated: boolean;
     reason?: string;
+    /**
+     * Optional authenticated identity. Populated by enterprise IAM paths
+     * (Phase H) and by the legacy admin-token path when callers opt in via
+     * `attachPrincipal`. Absence of this field is normal and means the
+     * caller should rely on the existing token-only contract.
+     */
+    principal?: IamPrincipal;
 }
 
 const DEFAULT_PUBLIC_ROUTES = [

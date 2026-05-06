@@ -67,6 +67,7 @@ const SCAFFOLD_HTML = `<!DOCTYPE html><html><body>
 <select id="character-assign-character">
   <option value="">Select a character...</option>
 </select>
+<div id="character-chip-strip"></div>
 <input id="character-assign-prism-user-id" />
 <input id="character-assign-prism-user-email" />
 <input id="character-assign-operator-id" />
@@ -162,6 +163,17 @@ describe("tab-workspace.js & tab-characters.js — Frontend Unit Tests", functio
         // Set up temp directory with mock dashboard-core.js and real modules
         tmpDir = mkdtempSync(join(tmpdir(), "prism-tab-workspace-ui-"));
         writeFileSync(join(tmpDir, "dashboard-core.js"), MOCK_DASHBOARD_CORE, "utf-8");
+        // Stub prism-tooltips.js so tab-characters.js can import it under jsdom
+        // without exercising real DOM listeners or network fetches.
+        writeFileSync(join(tmpDir, "prism-tooltips.js"), `
+export const __registered = new Map();
+export function initPrismTooltips() {}
+export function registerTooltip(el, descriptor) { __registered.set(el, descriptor); }
+export function registerTooltipById(tipId, descriptor) { __registered.set(tipId, descriptor); }
+export function setDynamicProvider() {}
+export function pushGuardianTip() {}
+export function primeServerTip() {}
+`, "utf-8");
         copyFileSync(
             join(process.cwd(), "src", "core", "operator", "public", "tab-workspace.js"),
             join(tmpDir, "tab-workspace.js"),
@@ -181,12 +193,12 @@ describe("tab-workspace.js & tab-characters.js — Frontend Unit Tests", functio
         (global as any).URL = dom.window.URL;
         (global as any).FileReader = dom.window.FileReader;
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
-        (global as any).alert = () => {};
+        (global as any).alert = () => { };
         (global as any).prompt = () => null;
         // Use a no-op setTimeout stub that captures but doesn't execute callbacks
         // to avoid jsdom's infinite recursion with timerInitializationSteps
         (global as any).setTimeout = (_fn: Function) => 0;
-        (global as any).clearTimeout = () => {};
+        (global as any).clearTimeout = () => { };
 
         // Provide the global constants that tab-workspace.js expects from the HTML template
         (global as any).IMPORT_TARGET_DIRS = [
@@ -659,6 +671,24 @@ describe("tab-workspace.js & tab-characters.js — Frontend Unit Tests", functio
             const select = dom.window.document.getElementById("character-assign-character") as any;
             assert.ok(select.innerHTML.includes("Sentinel"), "Should include business character");
             assert.ok(!select.innerHTML.includes("Aria"), "Should exclude individual character");
+        });
+
+        it("renders a character chip strip with data-tip-id and title for each chip", () => {
+            mockState.availableCharacters = [
+                { id: "aria-individual", displayName: "ARIA", executionProfile: "individual", persona: "warm, helpful" },
+                { id: "phoenix-individual", displayName: "PHOENIX", executionProfile: "individual", persona: "decisive" },
+            ];
+            const profileEl = dom.window.document.getElementById("character-assign-profile") as any;
+            profileEl.value = "individual";
+            charMod.renderCharacterAssignmentForm();
+            const strip = dom.window.document.getElementById("character-chip-strip")!;
+            const chips = strip.querySelectorAll(".character-chip");
+            assert.strictEqual(chips.length, 2, "Should render one chip per filtered character");
+            const aria = strip.querySelector('[data-character-id="aria-individual"]') as HTMLElement;
+            assert.ok(aria, "ARIA chip should exist");
+            assert.strictEqual(aria.getAttribute("data-tip-id"), "character:aria-individual");
+            assert.strictEqual(aria.getAttribute("data-tip-kind"), "character");
+            assert.ok((aria.getAttribute("title") || "").length > 0, "Chip should carry a non-empty title attribute");
         });
     });
 

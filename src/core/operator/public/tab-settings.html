@@ -1,0 +1,106 @@
+<div class="tab-grid" style="grid-template-columns:1fr;">
+
+  <section class="rail-section panel" id="sr-section" data-tip-id="settings:sr-toggle" data-tip-kind="settings"
+    style="border:1px solid rgba(139,92,246,0.25);background:linear-gradient(135deg,rgba(139,92,246,0.06),rgba(59,130,246,0.04));">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 8px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:18px;">🌈</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#a78bfa;">Prism SR:</div>
+          <div style="font-size:11px;color:var(--fg-muted);">Compounding model orchestration — Logic + Creative + Main
+            model synthesis</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="toggleSRPanel()"
+        style="background:linear-gradient(135deg,#8b5cf6,#3b82f6);border:none;font-weight:600;font-size:12px;padding:6px 16px;border-radius:6px;cursor:pointer;color:#fff;">
+        Spectrum Refraction
+      </button>
+    </div>
+    <div id="sr-panel" style="display:none;">
+      <div id="sr-panel-content" class="stack"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('sessionProvider')"
+      data-tip-id="settings:session-provider" data-tip-kind="settings">
+      <h3>Session Provider Assignment</h3>
+      <span class="collapse-chevron" id="chevron-sessionProvider">▼</span>
+    </div>
+    <div class="collapsible-body" id="body-sessionProvider">
+      <div id="llm-provider" class="stack"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('modelRouting')" data-tip-id="settings:model-routing"
+      data-tip-kind="settings">
+      <h3>🔀 Model Routing</h3>
+      <span class="collapse-chevron" id="chevron-modelRouting">▶</span>
+    </div>
+    <div class="collapsible-body collapsed" id="body-modelRouting">
+      <div class="muted" style="margin-bottom:8px;">Configure how PRISM routes tasks to models. Single-provider uses the
+        active provider for all roles. Multi-provider enables per-role and per-agent model assignment.</div>
+      <div id="model-routing-container" class="stack"></div>
+    </div>
+  </section>
+
+  <div id="provider-matrix-row" style="display: flex; align-items: stretch; gap: 0; min-width: 0;">
+    <section id="provider-config-panel" class="rail-section panel"
+      style="flex: 0 0 50%; min-width: 200px; overflow: hidden; box-sizing: border-box;">
+      <div class="collapsible-header" onclick="togglePanelCollapse('providerConfig')"
+        data-tip-id="settings:provider-config" data-tip-kind="settings">
+        <h3>Provider Configuration</h3>
+        <span class="collapse-chevron" id="chevron-providerConfig">▶</span>
+      </div>
+      <div class="collapsible-body collapsed" id="body-providerConfig">
+        <div class="muted" style="margin-bottom:12px;">Configure API keys and settings for each provider. Expand a card
+          to manage.</div>
+        <div id="provider-cards-container" class="stack"></div>
+      </div>
+      <div id="providerConfig-summary" style="padding:8px 12px;"></div>
+    </section>
+    <div id="provider-matrix-divider" title="Drag to resize" data-tip-id="settings:divider" data-tip-kind="settings"
+      style="width:8px;cursor:col-resize;flex-shrink:0;position:relative;user-select:none;z-index:1;">
+      <div
+        style="position:absolute;top:8%;bottom:8%;left:50%;transform:translateX(-50%);width:2px;background:rgba(148,163,184,0.15);border-radius:2px;pointer-events:none;">
+      </div>
+    </div>
+    <section id="model-matrix-panel" class="rail-section panel"
+      style="flex: 1 1 0; min-width: 200px; overflow: hidden; box-sizing: border-box;">
+      <div class="collapsible-header" onclick="togglePanelCollapse('modelMatrix')"
+        data-tip-id="settings:capability-matrix" data-tip-kind="settings">
+        <h3>Model Capability Matrix</h3>
+        <span class="collapse-chevron" id="chevron-modelMatrix">▼</span>
+      </div>
+      <div class="collapsible-body" id="body-modelMatrix">
+        <div class="muted" style="margin-bottom:8px;">Available models scored by capability tier (T1 Minimal → T5
+          Frontier). Role routing selects the best model for each task.</div>
+        <div id="capability-matrix" class="stack"></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('settingsPanel')" data-tip-id="settings:settings-panel"
+      data-tip-kind="settings">
+      <h3>Settings</h3>
+      <span class="collapse-chevron" id="chevron-settingsPanel">▼</span>
+    </div>
+    <div class="collapsible-body" id="body-settingsPanel">
+      <div id="settings-panel" class="stack"></div>
+      <div id="phase-e3-cac-panel" class="stack" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('llmAudit')" data-tip-id="settings:llm-audit"
+      data-tip-kind="settings">
+      <h3>LLM Audit Trail</h3>
+      <span class="collapse-chevron" id="chevron-llmAudit">▼</span>
+    </div>
+    <div class="collapsible-body" id="body-llmAudit">
+      <div id="llm-audit"></div>
+    </div>
+  </section>
+</div>

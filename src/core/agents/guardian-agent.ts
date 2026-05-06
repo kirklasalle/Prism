@@ -94,6 +94,8 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
     { id: "system_snapshot", name: "System Resource Snapshot", category: "monitoring", intervalMs: 120000, enabled: true },
     { id: "agent_census", name: "Agent Census", category: "monitoring", intervalMs: 120000, enabled: true },
     { id: "log_volume_analysis", name: "Log Volume Analysis", category: "monitoring", intervalMs: 120000, enabled: true },
+    // MCP self-heal — every 60s, kick stuck/down servers back up.
+    { id: "mcp_health_recovery", name: "MCP Health & Recovery", category: "monitoring", intervalMs: 60000, enabled: true },
 ];
 
 const DEFAULT_CONFIG: GuardianConfig = {
@@ -132,6 +134,11 @@ export class GuardianAgent extends EventEmitter {
     private taskTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
     private agentListFn?: () => { agents: Array<{ id: string; state: string; role: string; lifecycle: string }> };
     private logEntriesFn?: () => Array<{ severity: string; timestamp: string }>;
+    /** Optional MCP recovery hook — supplies the live adapter at runtime. */
+    private mcpAdapterFn?: () => {
+        getServerStates: () => Array<{ name: string; state: "connected" | "down" | "retrying" | "failed"; retryCount: number; lastError: string | null }>;
+        forceReconnect: (name: string) => Promise<{ ok: boolean; error?: string }>;
+    } | null;
 
     constructor(
         private readonly activityBus: ActivityBus,
@@ -373,6 +380,14 @@ export class GuardianAgent extends EventEmitter {
         this.logEntriesFn = fn;
     }
 
+    /** Inject MCP adapter resolver for the mcp_health_recovery task. */
+    public setMcpAdapterFn(fn: () => ({
+        getServerStates: () => Array<{ name: string; state: "connected" | "down" | "retrying" | "failed"; retryCount: number; lastError: string | null }>;
+        forceReconnect: (name: string) => Promise<{ ok: boolean; error?: string }>;
+    } | null)): void {
+        this.mcpAdapterFn = fn;
+    }
+
     /** Returns current task catalog with status. */
     public getTaskStatus(): GuardianTask[] {
         return this.tasks.map(t => ({ ...t }));
@@ -469,6 +484,7 @@ export class GuardianAgent extends EventEmitter {
             case "system_snapshot": return this.taskSystemSnapshot();
             case "agent_census": return this.taskAgentCensus();
             case "log_volume_analysis": return this.taskLogVolumeAnalysis();
+            case "mcp_health_recovery": return await this.taskMcpHealthRecovery();
             default: return { status: "failure", detail: `Unknown task: ${taskId}` };
         }
     }
@@ -724,6 +740,51 @@ export class GuardianAgent extends EventEmitter {
             return { status: "success", detail: `${recent.length} entries in last 5min (${errors.length} errors, ${warnings.length} warnings). Total stored: ${total}` };
         } catch (error) {
             return { status: "failure", detail: `Log analysis failed: ${String(error)}` };
+        }
+    }
+
+    /**
+     * Inspect every configured MCP server. Force-reconnect any that are in
+     * "down" or "failed" state. Servers in "retrying" are left alone — the
+     * adapter's own backoff timer will handle them.
+     */
+    private async taskMcpHealthRecovery(): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
+        const adapter = this.mcpAdapterFn?.() ?? null;
+        if (!adapter) {
+            return { status: "success", detail: "MCP adapter not attached — skipped" };
+        }
+        try {
+            const states = adapter.getServerStates();
+            if (states.length === 0) {
+                return { status: "success", detail: "No MCP servers configured" };
+            }
+            const down = states.filter(s => s.state === "down" || s.state === "failed");
+            if (down.length === 0) {
+                return { status: "success", detail: `All ${states.length} MCP server(s) healthy` };
+            }
+            const recovered: string[] = [];
+            const stillDown: string[] = [];
+            for (const s of down) {
+                this.emitEvent("guardian.healing", `MCP ${s.name} ${s.state} — attempting reconnect`);
+                const result = await adapter.forceReconnect(s.name);
+                if (result.ok) {
+                    recovered.push(s.name);
+                    this.issuesResolved++;
+                    this.emitEvent("guardian.healed", `MCP ${s.name} recovered`);
+                } else {
+                    stillDown.push(s.name);
+                    this.issuesDetected++;
+                }
+            }
+            if (recovered.length > 0 && stillDown.length === 0) {
+                return { status: "success", detail: `Recovered ${recovered.length} MCP server(s): ${recovered.join(", ")}` };
+            }
+            if (recovered.length > 0) {
+                return { status: "warning", detail: `Recovered ${recovered.join(", ")}; still down: ${stillDown.join(", ")}` };
+            }
+            return { status: "warning", detail: `${stillDown.length} MCP server(s) still down: ${stillDown.join(", ")}` };
+        } catch (error) {
+            return { status: "failure", detail: `MCP recovery task failed: ${String(error)}` };
         }
     }
 
