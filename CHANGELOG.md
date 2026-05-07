@@ -2,6 +2,25 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.15.1 — 2026-05-07 — CI hygiene: Quality Gates + CodeQL
+
+Patch release on top of `v0.15.0`. Closes the two pre-existing CI gates that have been red since W1 — they ran red on every release tag from v0.14.0 through v0.15.0 but were never code defects in PRISM itself. **No source-tree changes.** Workflows-only.
+
+**Fixes.**
+
+1. **PRISM Quality Gates: Playwright Chromium installation** in [.github/workflows/quality-gates.yml](.github/workflows/quality-gates.yml).
+   - The QG runner ran `npm test`, which transitively launches a real Chromium via Playwright for the browser-session test set, but never installed the browser binaries on the runner. 51 mocha tests timed out trying to launch a missing executable.
+   - Added `actions/cache@v4` keyed on `package-lock.json` against `~/.cache/ms-playwright`, plus a conditional `npx playwright install --with-deps chromium` on cache miss / `npx playwright install-deps chromium` on cache hit (system libs aren't cached).
+   - First run after this change repopulates the cache (~2 minutes); subsequent runs are warm.
+
+2. **PRISM CodeQL: tolerate disabled code scanning** in [.github/workflows/codeql.yml](.github/workflows/codeql.yml).
+   - Code scanning on private repos requires GitHub Advanced Security (a paid add-on). With GHAS off, the analysis step succeeds but the SARIF upload to the Security tab fails with HTTP 403, marking the workflow run as failed and (with branch-protection wired) blocking PRs on a billing decision rather than a code defect.
+   - Added `continue-on-error: true` at the `analyze` job level. The analysis still runs on every push / PR / weekly cron, so the moment GHAS is enabled it becomes a real gate with no workflow change needed.
+
+**Still tracked.** When GHAS is enabled, drop `continue-on-error: true` from `codeql.yml` and CodeQL becomes a hard gate again. Until then the run is informational.
+
+**Verification.** Both workflows YAML-valid; will be confirmed green on this commit's CI run before tagging.
+
 ## v0.15.0 — 2026-05-07 — W6: ActivityBus retention policy
 
 Minor release on top of `v0.14.3`. Begins W6 (post-W5 closeout) with a default-off retention policy for the `activity_events` table. No changes to existing schema, ActivityBus contract, or any existing subscriber. Frontend additivity guarantee preserved (no UI changes in this release).
