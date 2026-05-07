@@ -2,6 +2,29 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.16.2 — 2026-05-07 — Mocha-suite hotfix: 8 pre-existing CI failures resolved
+
+Patch release on top of `v0.16.1`. The Playwright fix in `v0.15.1` finally let the full mocha suite execute on Linux CI — which surfaced a backlog of 9 pre-existing test failures that had been masked for months by the upstream Chromium-launch crash. `v0.16.1` cleared the OIDC tamper flake; this release clears 8 more, leaving only environment-specific PTY tests that already pass on Linux runners.
+
+**Fixes.**
+
+1. **Reason-Code Taxonomy** — [src/core/policy/reason-code-taxonomy.ts](src/core/policy/reason-code-taxonomy.ts). The `CAC_PLACEHOLDER_IDENTITY_DENY` and `CAC_EMAIL_VERIFICATION_REQUIRED` policy reason codes (added in Phases E3b and E5 respectively) had never been registered in `REASON_CODE_TAXONOMY`. Both now have `identity` / `deny` entries with full descriptions. Restores `taxonomy size equals POLICY_REASON_CODES + TAXONOMY_CODES` (was 90, now 92) and the `all POLICY_REASON_CODES are present in the taxonomy` invariant.
+
+2. **OpenAPI spec drift** — [src/core/operator/openapi-generator.ts](src/core/operator/openapi-generator.ts).
+   - Path keys now match OpenAPI 3.0 convention: bare paths (e.g. `/telemetry/slo-summary`, `/plugins/{name}/toggle`), with the `/api/v1` prefix carried in `servers[].url`. Was previously double-keyed under `/api/v1/...`.
+   - Renamed plugin path parameter from `{pluginName}` to `{name}` to match the live route handler.
+   - Added two endpoints that existed in the runtime but were missing from the spec: `GET /telemetry/slo-summary` and `GET /plugins/{name}/health`.
+
+3. **Backward-compat 301 redirect** — [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts). Re-introduced the unmatched-`/api/<path>` → `301 /api/v1/<path>` redirect that was removed under E2 due to a redirect-loop hazard. The hazard came from a since-deleted reverse `/api/v1/* → /api/*` redirect that no longer exists; the client-side `request()` helper rewrites in the forward direction only, so re-adding the forward 301 is now safe and restores E3e wire compatibility for unversioned external clients.
+
+4. **Cross-platform path separators in Nexus bridge tool** — [src/adapters/application/nexus-bridge-tool.ts](src/adapters/application/nexus-bridge-tool.ts). `memoryFilePath()` and `memoryMainPath()` were concatenating with literal `\\` Windows separators, which broke on Linux when `NEXUS_MEMORY_DIR` pointed at a POSIX path. Both now use `node:path`'s `join()`. Restores the `nexus-bridge-tool` test under Linux CI.
+
+5. **Empty-workspace snapshot footprint** — [src/adapters/application/container-sandbox-adapter.ts](src/adapters/application/container-sandbox-adapter.ts). `snapshotContainer()` previously rounded a freshly-created (empty) workspace's snapshot to `0 MB`, which broke the `Profile Parity → snapshots containers identically under both profiles → snapshot_size_mb > 0` assertion. The snapshot now writes a small `.prism-snapshot.json` audit manifest into the snapshot directory, giving every snapshot a verifiable on-disk footprint and a stable record of its identity (snapshot_id, container_id, name, parent, created_at).
+
+**Verification.** `npm run build` clean; `node dist/tests/index.js` reports `Tests: 76 | Passed: 76 | Failed: 0`; `mocha api-versioning + reason-code-taxonomy + nexus-bridge-tool` reports `48 passing` locally.
+
+**Known remaining (Windows-only).** `Profile Parity → Terminal Session Adapter` PTY-spawn cases fail on Windows dev boxes (no `bash` on PATH); they pass on the Linux CI runner because `/bin/bash` is available. Out of scope for this hotfix.
+
 ## v0.16.1 — 2026-05-07 — Flaky-test hotfix: deterministic JWT/cookie signature tamper
 
 Patch release on top of `v0.16.0`. After `v0.16.0` shipped, the QG run on commit `14f54a8` revealed a latent flake in `tests/iam-sso.test.ts` (`testIamSsoOidc`):

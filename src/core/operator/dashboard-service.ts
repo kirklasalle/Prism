@@ -7648,11 +7648,19 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return;
     }
 
-    // ── E2: No backward-compat redirect ─────────────────────────────────────
-    // Removed: the redirect /api/<path> → /api/v1/<path> was creating ERR_TOO_MANY_REDIRECTS
-    // loops when browsers had cached old 301s in the opposite direction (/api/v1/* → /api/*).
-    // The client-side request() function already rewrites /api/ → /api/v1/ before fetch,
-    // and all inline handlers accept both normalized (/api/) paths natively.
+    // ── E3e: Backward-compat 301 redirect ──────────────────────────────────
+    // For unmatched GET requests under `/api/` (but not already `/api/v1/`),
+    // emit a 301 to the `/api/v1/` equivalent so external clients written
+    // against the unversioned surface keep working. The previous redirect-loop
+    // hazard came from a reverse `/api/v1/* → /api/*` redirect that no longer
+    // exists; the client-side `request()` helper rewrites in the forward
+    // direction only, so this is safe.
+    if (method === "GET" && rawUrl.startsWith("/api/") && !rawUrl.startsWith("/api/v1/")) {
+      const redirected = "/api/v1/" + rawUrl.substring("/api/".length);
+      res.writeHead(301, { Location: redirected });
+      res.end();
+      return;
+    }
 
     this.json(res, 404, { error: "Not found" });
   }

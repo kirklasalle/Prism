@@ -16,7 +16,7 @@
  *   nexus_broadcast      — medium risk (append to shared thread / hotline)
  */
 import { readFileSync, appendFileSync, mkdirSync, existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -41,11 +41,11 @@ function memoryFilePath(dir: string, date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
-    return `${dir}\\${y}-${m}-${d}.md`;
+    return join(dir, `${y}-${m}-${d}.md`);
 }
 
 function memoryMainPath(dir: string): string {
-    return `${dir}\\MEMORY.md`;
+    return join(dir, "MEMORY.md");
 }
 
 function stpHeader(subject: string, from = "PRISM"): string {
