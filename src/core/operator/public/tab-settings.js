@@ -754,6 +754,57 @@ export
   html += '</select>';
   html += '</div>';
 
+  // ── Live capability snapshot table (moved to top of card per UX request) ──
+  // The Model / Provider / Tier / Locality / Status / Modalities / Proficiencies
+  // table is rendered FIRST, immediately under the filters, before the management
+  // UI (Create/Edit Matrix Entry + Registered Matrix Entries). Frontend Protection
+  // Guarantee preserved: same DOM, same handlers, same IDs — only the order changed.
+  var thStyle = 'cursor:pointer;user-select:none;';
+  html += '<table class="events-table" style="margin-top:8px;"><thead><tr>'
+    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;model&#39;)">Model' + sortArrow('model') + '</th>'
+    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;provider&#39;)">Provider' + sortArrow('provider') + '</th>'
+    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;tier&#39;)">Tier' + sortArrow('tier') + '</th>'
+    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;locality&#39;)">Locality' + sortArrow('locality') + '</th>'
+    + '<th>Status</th>'
+    + '<th>Modalities</th>'
+    + '<th>Proficiencies</th>'
+    + '</tr></thead><tbody>';
+
+  var displayRows = isExpanded ? rows : rows.slice(0, 5);
+  if (!displayRows.length) {
+    html += '<tr><td colspan="7" class="muted" style="text-align:center;">No models match the current filters.</td></tr>';
+  }
+  displayRows.forEach(function (row) {
+    var color = tierColors[row.tier] || '#aaa';
+    var dimStyle = row.enabled ? '' : ' style="opacity:0.5;"';
+    var statusBadge = '';
+    if (row.deprecated && row.sunsetDate && new Date(row.sunsetDate) <= new Date()) {
+      statusBadge = '<span style="background:#ff6b6b22;color:#ff6b6b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">SUNSET</span>';
+    } else if (row.deprecated) {
+      statusBadge = '<span style="background:#ffa94d22;color:#ffa94d;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">DEPRECATED</span>';
+    } else {
+      statusBadge = '<span style="background:#69db7c22;color:#69db7c;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">Active</span>';
+    }
+    if (row.successor) {
+      statusBadge += ' <span style="font-size:10px;color:var(--muted);">→ ' + escapeHtml(row.successor) + '</span>';
+    }
+    html += '<tr' + dimStyle + '>'
+      + '<td class="mono">' + escapeHtml(row.model) + '</td>'
+      + '<td>' + escapeHtml(row.provider) + (row.enabled ? '' : ' <span style="font-size:10px;color:var(--muted);">(unconfigured)</span>') + '</td>'
+      + '<td><span style="color:' + color + ';font-weight:600;">' + escapeHtml(tierLabels[row.tier] || 'T?') + '</span></td>'
+      + '<td>' + (row.kind === 'local' ? '🖥 Local' : '☁ Cloud') + '</td>'
+      + '<td>' + statusBadge + '</td>'
+      + '<td>' + getModelModalityBadges(row.model, row.modalities) + '</td>'
+      + '<td>' + getModelProficiencyBadges(row.model, row.strengths) + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+
+  if (!isExpanded && rows.length > 5) {
+    html += '<div class="muted" style="text-align:center;margin-top:8px;font-size:12px;cursor:pointer;" onclick="toggleCapabilityMatrix()">'
+      + '... and ' + (rows.length - 5) + ' more models (Click to expand) ...</div>';
+  }
+
   html += '<div class="panel" style="padding:10px;margin-top:8px;">';
   html += '<div class="muted" style="font-size:12px;font-weight:600;margin-bottom:8px;">'
     + (state.matrixEditingPattern ? 'Edit Matrix Entry' : 'Create Matrix Entry')
@@ -807,52 +858,6 @@ export
     html += '</tbody></table>';
   }
   html += '</div>';
-
-  var thStyle = 'cursor:pointer;user-select:none;';
-  html += '<table class="events-table" style="margin-top:8px;"><thead><tr>'
-    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;model&#39;)">Model' + sortArrow('model') + '</th>'
-    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;provider&#39;)">Provider' + sortArrow('provider') + '</th>'
-    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;tier&#39;)">Tier' + sortArrow('tier') + '</th>'
-    + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;locality&#39;)">Locality' + sortArrow('locality') + '</th>'
-    + '<th>Status</th>'
-    + '<th>Modalities</th>'
-    + '<th>Proficiencies</th>'
-    + '</tr></thead><tbody>';
-
-  var displayRows = isExpanded ? rows : rows.slice(0, 5);
-  if (!displayRows.length) {
-    html += '<tr><td colspan="7" class="muted" style="text-align:center;">No models match the current filters.</td></tr>';
-  }
-  displayRows.forEach(function (row) {
-    var color = tierColors[row.tier] || '#aaa';
-    var dimStyle = row.enabled ? '' : ' style="opacity:0.5;"';
-    var statusBadge = '';
-    if (row.deprecated && row.sunsetDate && new Date(row.sunsetDate) <= new Date()) {
-      statusBadge = '<span style="background:#ff6b6b22;color:#ff6b6b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">SUNSET</span>';
-    } else if (row.deprecated) {
-      statusBadge = '<span style="background:#ffa94d22;color:#ffa94d;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">DEPRECATED</span>';
-    } else {
-      statusBadge = '<span style="background:#69db7c22;color:#69db7c;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">Active</span>';
-    }
-    if (row.successor) {
-      statusBadge += ' <span style="font-size:10px;color:var(--muted);">→ ' + escapeHtml(row.successor) + '</span>';
-    }
-    html += '<tr' + dimStyle + '>'
-      + '<td class="mono">' + escapeHtml(row.model) + '</td>'
-      + '<td>' + escapeHtml(row.provider) + (row.enabled ? '' : ' <span style="font-size:10px;color:var(--muted);">(unconfigured)</span>') + '</td>'
-      + '<td><span style="color:' + color + ';font-weight:600;">' + escapeHtml(tierLabels[row.tier] || 'T?') + '</span></td>'
-      + '<td>' + (row.kind === 'local' ? '🖥 Local' : '☁ Cloud') + '</td>'
-      + '<td>' + statusBadge + '</td>'
-      + '<td>' + getModelModalityBadges(row.model, row.modalities) + '</td>'
-      + '<td>' + getModelProficiencyBadges(row.model, row.strengths) + '</td>'
-      + '</tr>';
-  });
-  html += '</tbody></table>';
-
-  if (!isExpanded && rows.length > 5) {
-    html += '<div class="muted" style="text-align:center;margin-top:8px;font-size:12px;cursor:pointer;" onclick="toggleCapabilityMatrix()">'
-      + '... and ' + (rows.length - 5) + ' more models (Click to expand) ...</div>';
-  }
 
   if (isExpanded) {
     html += '<div class="muted" style="margin-top:12px;">Role Coverage</div>';
