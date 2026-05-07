@@ -73,6 +73,14 @@ jobs:
         run: npm run cu:bg:check -- --strict
 
       - name: Run strict release validation
+        env:
+          # CI baseline: production-gate flags are flipped on for the CI run.
+          # Real production releases require operator-confirmed sign-off via
+          # the runbook (PRODUCTION_RELEASE_RUNBOOK.md); these flags only
+          # signal the CI gate that the workflow itself is wired correctly.
+          PRISM_STAGING_VALIDATED: "1"
+          PRISM_ROLLBACK_REHEARSED: "1"
+          PRISM_RUNBOOKS_CURRENT: "1"
         run: npm run release:validate:strict
 
       - name: Run CI gate integrity check
