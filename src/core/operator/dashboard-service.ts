@@ -2708,6 +2708,36 @@ export class DashboardService {
     }
   }
 
+  /**
+   * Drive every connected dashboard like a screencast: sequentially broadcast
+   * `{type:'ui_action', action:'switch_tab', tabId, anchor?, message?}` envelopes
+   * with a configurable dwell between steps. Used by the Workflow Demo so the
+   * operator can literally watch PRISM walk Chat → Agentic → Computer → Browser
+   * → Logs while the underlying DAG runs in parallel.
+   *
+   * No-op when no clients are connected. Defensive — any per-step error is
+   * swallowed so the cosmetic narrator never crashes the host action.
+   *
+   * Suppress the entire tour by setting `PRISM_DEMO_TOUR_DISABLED=1`.
+   */
+  public async broadcastUiTour(steps: Array<{ tabId: string; anchor?: string; dwellMs?: number; message?: string }>): Promise<void> {
+    if (process.env.PRISM_DEMO_TOUR_DISABLED === "1") return;
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    if (this.wsClients.size === 0 && this.sseClients.size === 0) return;
+    for (const step of steps) {
+      try {
+        const tabId = String(step.tabId || "").trim();
+        if (!tabId) continue;
+        const envelope: Record<string, unknown> = { type: "ui_action", action: "switch_tab", tabId };
+        if (step.anchor) envelope.anchor = String(step.anchor);
+        if (step.message) envelope.message = String(step.message);
+        this.broadcastEvent(envelope);
+      } catch { /* defensive: tour is cosmetic, never crash the caller */ }
+      const dwell = Math.max(0, Math.min(60_000, Number(step.dwellMs) || 0));
+      if (dwell > 0) await new Promise<void>((r) => setTimeout(r, dwell));
+    }
+  }
+
   private async fetchOllamaTags(): Promise<Array<{ name: string; source: string }>> {
     return new Promise((resolve) => {
       const req = httpGet("http://localhost:11434/api/tags", (res) => {
@@ -2891,6 +2921,9 @@ export class DashboardService {
   getTerminalAdapter(): TerminalSessionAdapter | null { return this.terminalAdapter; }
   getGmailOAuth(): GmailOAuthAdapter { return this.gmailOAuth; }
   getOutlookOAuth(): OutlookOAuthAdapter { return this.outlookOAuth; }
+  /** Public access to the framebuffer capture surface, used by the Workflow Demo
+   *  to fire a real CUA screengrab as part of the Option-C automation tour. */
+  public getFramebufferCapture(): FramebufferCapture { return this.framebufferCapture; }
   public getTooltipsRegistry(): TooltipsRegistry { return this.tooltipsRegistry; }
   /** Broadcast a Guardian-curated tooltip insight to all connected clients. */
   public emitTooltipInsight(tipId: string, message: string, kind: string = "guardian"): void {
@@ -7793,7 +7826,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
         this.triggerAction(actionName, sessionId);
         const action = this.actionStates.get(actionName)!;
         return {
-          content: `Started ${action.label}. Track progress in Quick Actions and Recent Action History.`,
+          content: `Started ${action.label}. Track progress in [Quick Actions](prism://tab/logs#actions) and [Recent Action History](prism://tab/logs#action-history).`,
           metadata: { intent: "run_action", actionName },
         };
       } catch (error) {

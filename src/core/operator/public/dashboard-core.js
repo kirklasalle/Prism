@@ -354,6 +354,15 @@ export
   // Links
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, label, href) {
     var safeHref = escapeHtml(href);
+    // PRISM in-app deep links: prism://tab/<tabId>[#<anchor>]
+    var prismMatch = /^prism:\/\/tab\/([a-z0-9_-]+)(?:#([a-z0-9_-]+))?$/i.exec(href);
+    if (prismMatch) {
+      var tabId = escapeHtml(prismMatch[1]);
+      var anchor = prismMatch[2] ? escapeHtml(prismMatch[2]) : '';
+      return '<a href="#" class="prism-deep-link" data-prism-tab="' + tabId + '"'
+        + (anchor ? ' data-prism-anchor="' + anchor + '"' : '')
+        + '>' + escapeHtml(label) + '</a>';
+    }
     if (!/^https?:\/\//i.test(href)) return escapeHtml(label);
     return '<a href="' + safeHref + '" target="_blank" rel="noopener">' + escapeHtml(label) + '</a>';
   });

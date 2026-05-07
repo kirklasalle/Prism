@@ -145,6 +145,42 @@ function render() {
   }
 }
 
+// PRISM in-app deep-link plumbing: scroll to a panel anchor and pulse it briefly so
+// the operator's eye lands on the right card after a tab switch (used by both the
+// click delegate for `prism://tab/<id>#<anchor>` chat links and by server-driven
+// UI tour broadcasts via `{type:'ui_action', action:'switch_tab', anchor, ...}`).
+function scrollAndFlashAnchor(anchor) {
+  if (!anchor) return;
+  // Defer one frame so the lazy-loaded tab panel has been rendered into the DOM.
+  requestAnimationFrame(function () {
+    setTimeout(function () {
+      try {
+        var el = document.getElementById(anchor);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('prism-flash');
+        setTimeout(function () { el.classList.remove('prism-flash'); }, 1400);
+      } catch (_e) { /* defensive: never crash UI on flash */ }
+    }, 30);
+  });
+}
+
+// Global click delegate for in-chat `prism://tab/<id>#<anchor>` links rendered by
+// renderMarkdown() in dashboard-core.js. Attached once at module load; idempotent.
+if (typeof window !== 'undefined' && !window.__prismDeepLinkDelegate) {
+  window.__prismDeepLinkDelegate = true;
+  document.addEventListener('click', function (ev) {
+    var a = ev.target && ev.target.closest && ev.target.closest('a[data-prism-tab]');
+    if (!a) return;
+    ev.preventDefault();
+    var tabId = a.getAttribute('data-prism-tab');
+    var anchor = a.getAttribute('data-prism-anchor') || '';
+    if (!tabId) return;
+    Promise.resolve(setActiveTab(tabId)).then(function () {
+      if (anchor) scrollAndFlashAnchor(anchor);
+    });
+  }, false);
+}
 
 async function setActiveTab(tabId) {
   if (!tabs.some(tab => tab.id === tabId)) {
@@ -329,6 +365,9 @@ function connectWebSocket() {
       const data = JSON.parse(event.data);
       if (data.type === 'ui_action' && data.action === 'switch_tab' && data.tabId) {
         setActiveTab(data.tabId);
+        // Optional: scroll to + flash a panel anchor; surface an optional toast message.
+        if (data.anchor) { scrollAndFlashAnchor(data.anchor); }
+        if (data.message) { dashboardLog(data.tabId, 'tour.step', String(data.message)); }
       }
       if (data.type === 'guardian_event') {
         dashboardLog('agentic', 'guardian.event', data.detail || data.operation);
