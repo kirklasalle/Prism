@@ -482,3 +482,43 @@ PRISM reaches research-informed production maturity when:
 - vs. AutoGen/CrewAI: PRISM adds governed lifecycle (ephemeral/semi-permanent/permanent), per-agent model assignment with dynamic switching, tiered policy enforcement per dispatch, and intelligent telemetry with promotion recommendations. AutoGen/CrewAI offer ungoverned multi-agent patterns without lifecycle management or model-level control.
 - vs. LangGraph: PRISM's swarm topologies (mesh/star/pipeline/broadcast) are first-class runtime primitives with timeout budgets and activity tracing, whereas LangGraph requires manual graph construction for equivalent coordination patterns.
 - vs. OpenClaw Agents: PRISM preserves full causal observability and approval gates for every agent dispatch, ensuring enterprise-grade auditability that OpenClaw's agent system does not provide.
+
+## 13. Computer Use Frontier Addendum (2026-03-25)
+
+### 13.1 Why this matters
+
+Computer use is now a frontier differentiator in agent platforms. It materially expands real-world automation reach where APIs are absent, but introduces a higher-risk operating surface than text-only or API-only agents.
+
+### 13.2 External signals factored
+
+- Anthropic computer-use documentation emphasizes: sandboxed environments, bounded agent loops, prompt-injection risk controls, and human confirmation for consequential actions.
+- Anthropic release/news context indicates rapid model capability movement in computer-use workloads.
+- OpenAI computer-use preview similarly positions the capability as useful but not perfectly reliable, with explicit recommendation for oversight.
+
+### 13.3 Implications for PRISM
+
+1. Preserve governance first
+
+- Computer-use growth must not weaken tiered policy and approval boundaries.
+
+1. Preserve accountability first
+
+- CAC chain and lifecycle evidence must remain mandatory in governed computer-use pathways.
+
+1. Preserve epistemic clarity
+
+- External benchmark metrics are informative but must be labeled as `vendor-reported` unless reproduced in Prism harnesses.
+
+1. Preserve enterprise controls
+
+- Business profile requires sandboxing, least privilege, and explicit sensitive-action confirmation semantics.
+
+### 13.4 Required doc alignment
+
+This addendum is operationalized through:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- `PRISM_PRD.md` (Business Security Alignment Gate)
+- `TEST_STRATEGY.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md`
+- `PRODUCTION_RELEASE_RUNBOOK.md`

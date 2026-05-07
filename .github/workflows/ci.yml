@@ -1,0 +1,206 @@
+#
+# PRISM CI — fast-feedback build & smoke gate.
+#
+# This workflow runs on every push and pull request and is intended to
+# complete in under five minutes. Heavy qualifications (perf, e:stage2,
+# contract snapshots, business-trust evidence) live in `quality-gates.yml`
+# and run on schedule / explicit dispatch.
+#
+# What this gate enforces:
+#
+#   1. `npm ci` succeeds with the committed lockfile.
+#   2. `npm run build` is clean — including the prebuild PAD hash compute.
+#   3. The PAD on disk hashes to the value the runtime expects (G-12).
+#   4. The plugin signing key generator produces a valid Ed25519 keypair.
+#   5. The directive-integrity test suite (24 cases) is green.
+#   6. The PTAC scenario registry is non-empty and well-formed.
+#   7. The release-validation test suite is green.
+#   8. Plugin-pack validator + business trust validator + policy engine
+#      tests are green (governance core).
+#
+# These eight gates are the production minimum for "merge-ready". A red
+# light here means the runtime would refuse to boot in production
+# (NODE_ENV=production) or a governance subsystem regressed.
+
+name: PRISM CI — Build & Smoke
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prism-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-smoke:
+    name: Build & smoke gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (deterministic)
+        run: npm ci
+
+      - name: Build (runs prebuild PAD hash compute)
+        run: npm run build
+
+      - name: Verify generated PAD hash matches on-disk PAD
+        # The prebuild script wrote `src/core/security/directive-hash.generated.ts`
+        # using the SHA-256 of `Permanent_Active_Directives.txt`. We recompute
+        # the hash here from a clean shell and assert the file is unchanged
+        # — a drift indicates the prebuild was bypassed or someone edited
+        # PAD without rebuilding.
+        run: |
+          set -euo pipefail
+          ACTUAL=$(sha256sum Permanent_Active_Directives.txt | awk '{print $1}')
+          EMBEDDED=$(grep -oE '[0-9a-f]{64}' src/core/security/directive-hash.generated.ts | head -n1)
+          if [ "$ACTUAL" != "$EMBEDDED" ]; then
+            echo "::error::PAD hash drift — on-disk=$ACTUAL embedded=$EMBEDDED"
+            exit 1
+          fi
+          echo "PAD hash OK ($ACTUAL)"
+
+      - name: Verify plugin signing key generator emits valid Ed25519 pair
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/ci-keys
+          node scripts/generate-plugin-key.cjs --json --keyId ci-smoke-key --tier bootstrap --label "ci-smoke" > tmp/ci-keys/out.json
+          node -e "
+            const fs = require('fs');
+            const { createPublicKey, createPrivateKey, verify, sign } = require('crypto');
+            const out = JSON.parse(fs.readFileSync('tmp/ci-keys/out.json','utf8'));
+            const entry = out.registryEntry || {};
+            if (!entry.publicKeyBase64 || !out.privateKeyPem) {
+              console.error('missing keys in generator output'); process.exit(1);
+            }
+            if (entry.algorithm !== 'ed25519') {
+              console.error('unexpected algorithm: ' + entry.algorithm); process.exit(1);
+            }
+            const pub = createPublicKey({ key: Buffer.from(entry.publicKeyBase64,'base64'), format: 'der', type: 'spki' });
+            const priv = createPrivateKey(out.privateKeyPem);
+            const msg = Buffer.from('prism-ci-roundtrip');
+            const sig = sign(null, msg, priv);
+            if (!verify(null, msg, pub, sig)) {
+              console.error('emitted keypair failed sign/verify roundtrip'); process.exit(1);
+            }
+            console.log('Ed25519 keypair OK keyId=' + entry.keyId);
+          "
+
+      - name: Run directive integrity tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/directive-integrity.test.js"
+
+      - name: Run PTAC scenario registry tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/ptac-scenario-registry.test.js"
+
+      - name: Run optional-deps probe tests (R1-5)
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 60000 "dist/tests/optional-deps.test.js"
+
+      - name: Run R2 security tests (CORS + CSRF + per-route rate limits)
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/cors-csrf.test.js" "dist/tests/rate-limiter-routes.test.js"
+
+      - name: Run R5 backup/migration tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/db-migrations.test.js" "dist/tests/db-backup.test.js"
+
+      - name: Run R6 Grafana dashboard structural tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/grafana-dashboard.test.js"
+
+      - name: Run governance-core tests (policy + trust + release validation)
+        run: |
+          node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 \
+            "dist/tests/policy-engine.test.js" \
+            "dist/tests/business-trust-validator.test.js" \
+            "dist/tests/release-validation.test.js" \
+            "dist/tests/d2-governance-paths.test.js"
+
+      - name: Run character accountability tests (R3 placeholder rejection)
+        run: node --test --test-force-exit dist/tests/character-accountability.test.js
+
+  e2e-smoke:
+    name: E2E smoke (Playwright + dashboard)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build-and-smoke
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (deterministic)
+        run: npm ci
+
+      - name: Install Playwright Chromium browser
+        # Pinned to chromium only — webkit/firefox are not exercised by the
+        # current smoke. `--with-deps` pulls the system libs the headless
+        # Chromium needs on Ubuntu runners.
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+
+      - name: Run E2E smoke (R4)
+        env:
+          # The smoke spawns its own server with its own ephemeral
+          # PRISM_DATA_DIR and a random port, so no extra env wiring is
+          # needed here. NODE_ENV is set inside the test process.
+          PRISM_TELEMETRY_DISABLED: "true"
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 180000 "dist/tests/e2e/playwright-smoke.test.js"
+
+  build-and-smoke-windows:
+    name: Build & smoke gate (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (deterministic)
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run directive integrity tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/directive-integrity.test.js"
+
+      - name: Run PTAC scenario registry tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/ptac-scenario-registry.test.js"
+
+      - name: Run optional-deps probe tests (R1-5)
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 60000 "dist/tests/optional-deps.test.js"
+
+      - name: Run R2 security tests (CORS + CSRF + per-route rate limits)
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/cors-csrf.test.js" "dist/tests/rate-limiter-routes.test.js"
+
+      - name: Run R5 backup/migration tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/db-migrations.test.js" "dist/tests/db-backup.test.js"
+
+      - name: Run R6 Grafana dashboard structural tests
+        run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/grafana-dashboard.test.js"

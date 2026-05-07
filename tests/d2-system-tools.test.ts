@@ -41,7 +41,11 @@ async function testTerminalSessionToolLifecycle(): Promise<void> {
     });
     assert.strictEqual(exec.ok, true);
     assert.strictEqual(exec.output["exitCode"], 0);
-    assert.strictEqual(exec.output["simulated"], true);
+    assert.strictEqual(exec.output["simulated"], false, "P0-1: exec must no longer be simulated");
+    // Verify real output from the echo command
+    const stdout = String(exec.output["stdout"] ?? "").trim();
+    assert.ok(stdout.includes("hi"), `Expected stdout to contain 'hi', got: '${stdout}'`);
+    assert.strictEqual(exec.output["backend"], "child_process");
     assert.strictEqual(exec.sideEffects?.[0]?.action, "exec");
     assert.strictEqual(exec.sideEffects?.[0]?.mutating, true);
     assert.strictEqual(exec.sideEffects?.[0]?.reversible, true);

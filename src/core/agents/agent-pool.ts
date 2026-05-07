@@ -49,6 +49,86 @@ const DEFAULT_AGENTS: SubAgentDefinition[] = [
         role: "memory-indexing",
         description: "Extracts and structures knowledge for memory indexing.",
     },
+    {
+        agentId: "speaker",
+        role: "speech-synthesis",
+        description: "Converts text to natural-sounding speech audio.",
+        systemContext:
+            "You are a text-to-speech agent. Convert the provided text into speech output. " +
+            "Preserve tone, emphasis, and pacing appropriate to the content.",
+    },
+    {
+        agentId: "listener",
+        role: "speech-recognition",
+        description: "Transcribes spoken audio into accurate text.",
+        systemContext:
+            "You are a speech-to-text agent. Transcribe the audio input accurately, " +
+            "including punctuation, speaker identification, and timestamps when possible.",
+    },
+    {
+        agentId: "realtime",
+        role: "realtime-voice",
+        description: "Handles low-latency, bidirectional voice conversations.",
+        systemContext:
+            "You are a real-time voice conversation agent. Respond naturally with low latency. " +
+            "Maintain conversational context and handle interruptions gracefully.",
+    },
+    {
+        agentId: "image-analyst",
+        role: "image-analysis",
+        description: "Analyzes images for content, objects, text, and context.",
+        systemContext:
+            "You are an image analysis agent. Describe image contents, identify objects, " +
+            "extract text (OCR), and provide contextual interpretation.",
+    },
+    {
+        agentId: "illustrator",
+        role: "image-creation",
+        description: "Generates images from text descriptions and prompts.",
+        systemContext:
+            "You are an image generation agent. Create images that accurately match " +
+            "the provided description, style, and compositional requirements.",
+    },
+    {
+        agentId: "video-analyst",
+        role: "video-analysis",
+        description: "Analyzes video content for scenes, actions, and context.",
+        systemContext:
+            "You are a video analysis agent. Describe scenes, identify actions, " +
+            "extract key frames, and provide temporal context from video input.",
+    },
+    {
+        agentId: "video-creator",
+        role: "video-creation",
+        description: "Generates video content from text or image prompts.",
+        systemContext:
+            "You are a video generation agent. Produce video content that matches " +
+            "the provided description, storyboard, or reference materials.",
+    },
+    {
+        agentId: "audio-producer",
+        role: "audio-production",
+        description: "Produces music, sound effects, and audio content.",
+        systemContext:
+            "You are an audio production agent. Generate music, sound effects, " +
+            "instrument tracks, and voice synthesis according to the provided specifications.",
+    },
+    {
+        agentId: "writer",
+        role: "document-writing",
+        description: "Writes long-form documents, reports, and structured content.",
+        systemContext:
+            "You are a document writing agent. Produce well-structured, professional documents " +
+            "including reports, briefs, proposals, and technical documentation.",
+    },
+    {
+        agentId: "researcher",
+        role: "research",
+        description: "Conducts factual, legal, and geographical research.",
+        systemContext:
+            "You are a research agent. Conduct thorough factual research including U.S. legal research, " +
+            "geographical analysis, and domain-specific investigation. Cite sources and flag uncertainty.",
+    },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────

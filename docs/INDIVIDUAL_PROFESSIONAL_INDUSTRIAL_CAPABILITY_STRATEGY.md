@@ -139,3 +139,21 @@ To prevent domain bleed while preserving reuse:
 3. Domain pack activation never bypasses existing tiered governance semantics.
 4. Dashboard exposes active session config, profile context, and audit evidence.
 5. Release gates include reliability + retrieval diagnostics + policy-path correctness.
+
+## Computer-Use Enterprise Gate Alignment
+
+The profile strategy in this document must remain consistent with PRISM's computer-use governance baseline:
+
+- Individual profile may optimize for speed and operator efficiency.
+- Business/industrial deployment must enforce CU-BG controls before enterprise-readiness claims are made.
+- Capability parity does not waive governance obligations; it requires evidence that parity and governance coexist.
+
+Required CU-BG evidence set:
+
+1. Profile-aware policy routing across browser/terminal/container operations.
+2. Approval/revoke controls on high-risk operations.
+3. Reason-coded lineage and replay-ready traces.
+4. Release packet artifacts proving governed parity.
+5. Incident drill and rollback readiness.
+
+Canonical reference: `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`.

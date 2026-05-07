@@ -1,7 +1,8 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { ActivityEvent, ActivitySubscriber } from "./types.js";
+import type { IActivityStore } from "../database/store-interfaces.js";
 
-export class SqliteActivityStore implements ActivitySubscriber {
+export class SqliteActivityStore implements IActivityStore {
     private readonly db: DatabaseSync;
     private readonly insertStmt: StatementSync;
     private readonly selectStmt: StatementSync;
@@ -15,11 +16,15 @@ export class SqliteActivityStore implements ActivitySubscriber {
         (id, timestamp, session_id, layer, operation, status,
          confidence, duration_ms, details,
          authority_tier, policy_decision, side_effects,
+         character_id, prism_user_id, prism_user_email,
+         operator_id, operator_email, client_id, assignment_id, accountability_chain,
          rollback_plan, hash)
       VALUES
         (:id, :timestamp, :sessionId, :layer, :operation, :status,
          :confidence, :durationMs, :details,
          :authorityTier, :policyDecision, :sideEffects,
+         :characterId, :prismUserId, :prismUserEmail,
+         :operatorId, :operatorEmail, :clientId, :assignmentId, :accountabilityChain,
          :rollbackPlan, :hash)
     `);
 
@@ -45,6 +50,14 @@ export class SqliteActivityStore implements ActivitySubscriber {
         authority_tier  TEXT,
         policy_decision TEXT,
         side_effects  TEXT,
+        character_id  TEXT,
+        prism_user_id TEXT,
+        prism_user_email TEXT,
+        operator_id   TEXT,
+        operator_email TEXT,
+        client_id     TEXT,
+        assignment_id TEXT,
+        accountability_chain TEXT,
         rollback_plan TEXT,
         hash          TEXT
       );
@@ -60,6 +73,14 @@ export class SqliteActivityStore implements ActivitySubscriber {
             { name: "authority_tier", definition: "TEXT" },
             { name: "policy_decision", definition: "TEXT" },
             { name: "side_effects", definition: "TEXT DEFAULT '[]'" },
+            { name: "character_id", definition: "TEXT" },
+            { name: "prism_user_id", definition: "TEXT" },
+            { name: "prism_user_email", definition: "TEXT" },
+            { name: "operator_id", definition: "TEXT" },
+            { name: "operator_email", definition: "TEXT" },
+            { name: "client_id", definition: "TEXT" },
+            { name: "assignment_id", definition: "TEXT" },
+            { name: "accountability_chain", definition: "TEXT" },
             { name: "rollback_plan", definition: "TEXT" },
             { name: "hash", definition: "TEXT" },
         ]);
@@ -95,6 +116,14 @@ export class SqliteActivityStore implements ActivitySubscriber {
             authorityTier: event.authorityTier ?? null,
             policyDecision: event.policyDecision ?? null,
             sideEffects: JSON.stringify(event.sideEffects ?? []),
+            characterId: event.characterId ?? null,
+            prismUserId: event.prismUserId ?? null,
+            prismUserEmail: event.prismUserEmail ?? null,
+            operatorId: event.operatorId ?? null,
+            operatorEmail: event.operatorEmail ?? null,
+            clientId: event.clientId ?? null,
+            assignmentId: event.assignmentId ?? null,
+            accountabilityChain: event.accountabilityChain ? JSON.stringify(event.accountabilityChain) : null,
             rollbackPlan: event.rollbackPlan ?? null,
             hash: event.hash ?? null,
         });
@@ -104,6 +133,13 @@ export class SqliteActivityStore implements ActivitySubscriber {
         sessionId?: string;
         operation?: string;
         layer?: string;
+        characterId?: string;
+        prismUserId?: string;
+        prismUserEmail?: string;
+        operatorId?: string;
+        operatorEmail?: string;
+        clientId?: string;
+        assignmentId?: string;
     }): ActivityEvent[] {
         const conditions: string[] = [];
         const params: Record<string, string> = {};
@@ -111,6 +147,13 @@ export class SqliteActivityStore implements ActivitySubscriber {
         if (filter.sessionId) { conditions.push("session_id = :sessionId"); params.sessionId = filter.sessionId; }
         if (filter.operation) { conditions.push("operation = :operation"); params.operation = filter.operation; }
         if (filter.layer) { conditions.push("layer = :layer"); params.layer = filter.layer; }
+        if (filter.characterId) { conditions.push("character_id = :characterId"); params.characterId = filter.characterId; }
+        if (filter.prismUserId) { conditions.push("prism_user_id = :prismUserId"); params.prismUserId = filter.prismUserId; }
+        if (filter.prismUserEmail) { conditions.push("prism_user_email = :prismUserEmail"); params.prismUserEmail = filter.prismUserEmail; }
+        if (filter.operatorId) { conditions.push("operator_id = :operatorId"); params.operatorId = filter.operatorId; }
+        if (filter.operatorEmail) { conditions.push("operator_email = :operatorEmail"); params.operatorEmail = filter.operatorEmail; }
+        if (filter.clientId) { conditions.push("client_id = :clientId"); params.clientId = filter.clientId; }
+        if (filter.assignmentId) { conditions.push("assignment_id = :assignmentId"); params.assignmentId = filter.assignmentId; }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
         const rows = this.db.prepare(
@@ -130,6 +173,16 @@ export class SqliteActivityStore implements ActivitySubscriber {
             authorityTier: row.authority_tier != null ? String(row.authority_tier) as ActivityEvent["authorityTier"] : undefined,
             policyDecision: row.policy_decision != null ? String(row.policy_decision) as ActivityEvent["policyDecision"] : undefined,
             sideEffects: JSON.parse(String(row.side_effects ?? "[]")),
+            characterId: row.character_id != null ? String(row.character_id) : undefined,
+            prismUserId: row.prism_user_id != null ? String(row.prism_user_id) : undefined,
+            prismUserEmail: row.prism_user_email != null ? String(row.prism_user_email) : undefined,
+            operatorId: row.operator_id != null ? String(row.operator_id) : undefined,
+            operatorEmail: row.operator_email != null ? String(row.operator_email) : undefined,
+            clientId: row.client_id != null ? String(row.client_id) : undefined,
+            assignmentId: row.assignment_id != null ? String(row.assignment_id) : undefined,
+            accountabilityChain: row.accountability_chain != null
+                ? JSON.parse(String(row.accountability_chain)) as ActivityEvent["accountabilityChain"]
+                : undefined,
             rollbackPlan: row.rollback_plan != null ? String(row.rollback_plan) : undefined,
             hash: row.hash != null ? String(row.hash) : undefined,
         }));

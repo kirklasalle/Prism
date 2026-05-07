@@ -1,0 +1,126 @@
+#
+# PRISM Nightly — full test suite + OAuth canary (when configured).
+#
+# Runs the *entire* in-process test runner (mocha + bespoke runner) plus
+# the heavier E2E smoke once per day. Failures are surfaced as a sticky
+# GitHub issue tagged `nightly-fail` so the on-call rotation sees them
+# without depending on email.
+#
+# Intentionally distinct from `ci.yml` (per-PR, fast) and
+# `quality-gates.yml` (heavy gates on demand). This is the "did anything
+# rot overnight?" canary.
+#
+# What this gate runs:
+#
+#   1. `npm run build` — full TypeScript compile.
+#   2. `node dist/tests/index.js` — bespoke runner (62+ unit tests).
+#   3. `npm run test:e2e` — Playwright + HTTP smoke against a freshly
+#      booted dist server.
+#   4. Optional OAuth canary scenarios when the canary secrets are
+#      configured (skipped silently otherwise).
+#
+
+name: PRISM Nightly
+
+on:
+    schedule:
+        # Every night at 06:00 UTC (off-peak across most regions).
+        - cron: "0 6 * * *"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    issues: write
+
+concurrency:
+    group: prism-nightly
+    cancel-in-progress: false
+
+jobs:
+    nightly:
+        name: Nightly full suite
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node 22
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Install dependencies (deterministic)
+              run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            - name: In-process test runner
+              run: node dist/tests/index.js
+
+            - name: Install Playwright Chromium (best-effort)
+              run: npx playwright install --with-deps chromium || true
+
+            - name: E2E smoke
+              run: npm run test:e2e
+
+            - name: OAuth canary (skipped when secrets absent)
+              env:
+                  PRISM_CANARY_GMAIL_CLIENT_ID: ${{ secrets.PRISM_CANARY_GMAIL_CLIENT_ID }}
+                  PRISM_CANARY_GMAIL_CLIENT_SECRET: ${{ secrets.PRISM_CANARY_GMAIL_CLIENT_SECRET }}
+                  PRISM_CANARY_GMAIL_REFRESH_TOKEN: ${{ secrets.PRISM_CANARY_GMAIL_REFRESH_TOKEN }}
+              run: |
+                  if [ -n "$PRISM_CANARY_GMAIL_CLIENT_ID" ]; then
+                    echo "Running Gmail canary scenario s08…"
+                    npm run ptac:host -- --scenario=s08-gmail-canary || exit 1
+                  else
+                    echo "Gmail canary secrets absent — skipping s08."
+                  fi
+
+    notify-on-failure:
+        name: Open nightly-fail issue on red
+        needs: nightly
+        if: failure()
+        runs-on: ubuntu-latest
+        permissions:
+            issues: write
+        steps:
+            - name: File or update sticky issue
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const title = `Nightly failed — ${new Date().toISOString().slice(0,10)}`;
+                      const body = [
+                        `The nightly full-suite + E2E job failed.`,
+                        ``,
+                        `**Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                        `**SHA:** \`${context.sha}\``,
+                        ``,
+                        `Please triage and either fix or mute (with reason) before the next nightly window.`,
+                      ].join("\n");
+                      const { data: existing } = await github.rest.issues.listForRepo({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        state: "open",
+                        labels: "nightly-fail",
+                        per_page: 1,
+                      });
+                      if (existing.length > 0) {
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: existing[0].number,
+                          body,
+                        });
+                      } else {
+                        await github.rest.issues.create({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          title,
+                          body,
+                          labels: ["nightly-fail"],
+                        });
+                      }

@@ -1,0 +1,29 @@
+PRISM has been deployed.
+
+  Release: {{ .Release.Name }}
+  Image:   {{ include "prism.image" . }}
+  Replica: {{ .Values.replicaCount }}
+
+To reach the dashboard:
+
+{{- if .Values.ingress.enabled }}
+  Visit one of the configured ingress hosts:
+{{- range .Values.ingress.hosts }}
+    https://{{ .host }}{{ (index .paths 0).path }}
+{{- end }}
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  kubectl --namespace {{ .Release.Namespace }} get svc {{ include "prism.fullname" . }} \
+      -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}'
+{{- else }}
+  Port-forward locally:
+
+    kubectl --namespace {{ .Release.Namespace }} port-forward \
+        svc/{{ include "prism.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+  Then open http://localhost:{{ .Values.service.port }}/setup
+{{- end }}
+
+The dashboard admin token is written by PRISM on first boot to:
+  {{ .Values.persistence.mountPath }}/state/admin-token
+inside the pod. Read it with:
+  kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "prism.fullname" . }} -- cat {{ .Values.persistence.mountPath }}/state/admin-token

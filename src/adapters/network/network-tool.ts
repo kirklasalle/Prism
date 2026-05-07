@@ -48,6 +48,9 @@ const NETWORK_COMMANDS: readonly NetworkCommandDef[] = [
     { match: ["ss"], tier: "tier1", description: "Socket statistics (modern netstat)", mutating: false, platform: "linux" },
     { match: ["ip", "addr"], tier: "tier1", description: "Display IP address configuration", mutating: false, platform: "linux" },
     { match: ["ip", "route"], tier: "tier1", description: "Display routing table", mutating: false, platform: "linux" },
+    { match: ["openssl", "s_client"], tier: "tier1", description: "TLS/SSL certificate inspection and handshake diagnostics", mutating: false, platform: "both" },
+    { match: ["curl", "-I"], tier: "tier1", description: "Fetch HTTP response headers only (HEAD request)", mutating: false, platform: "both" },
+    { match: ["dig", "+trace"], tier: "tier1", description: "DNS recursive resolution trace from root", mutating: false, platform: "linux" },
 
     // ── Tier 2: Config inspection and mapped drive management ───────────
     { match: ["route", "print"], tier: "tier2", description: "Display the IP routing table", mutating: false, platform: "win" },
@@ -63,6 +66,10 @@ const NETWORK_COMMANDS: readonly NetworkCommandDef[] = [
     { match: ["net", "localgroup"], tier: "tier2", description: "View local group memberships", mutating: false, platform: "win" },
     { match: ["net", "config"], tier: "tier2", description: "Display workstation or server configuration", mutating: false, platform: "win" },
     { match: ["netsh"], tier: "tier2", description: "Network shell \u2014 show and configure network settings", mutating: false, platform: "win" },
+    { match: ["ftp"], tier: "tier2", description: "FTP client for file transfer protocol operations", mutating: false, platform: "both" },
+    { match: ["sftp"], tier: "tier2", description: "Secure FTP client (SSH-based file transfer)", mutating: false, platform: "both" },
+    { match: ["wscat"], tier: "tier2", description: "WebSocket protocol connection and message testing", mutating: false, platform: "both" },
+    { match: ["ssh", "-V"], tier: "tier2", description: "Display SSH client version", mutating: false, platform: "both" },
 
     // ── Tier 3: Mutating network configuration (approval-gated) ─────────
     { match: ["netsh", "interface", "set"], tier: "tier3", description: "Modify network interface settings", mutating: true, platform: "win" },
@@ -90,7 +97,7 @@ const BLOCKED_PATTERNS: readonly string[] = [
     "netsh winsock reset",
     "netsh int ip reset",
     "net stop /y",
-    "iptables -F",
+    "iptables -f",
     "iptables --flush",
     "ip link set dev",
 ];

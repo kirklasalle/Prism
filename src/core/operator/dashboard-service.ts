@@ -1,8 +1,13 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+﻿import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve as resolvePath, sep as pathSep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
+import { homedir } from "node:os";
+import { get as httpGet } from "node:http";
+import https from "node:https";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
 import { SqliteActivityStore } from "../activity/sqlite-store.js";
@@ -13,6 +18,7 @@ import type { AgentTelemetryCollector } from "../agents/agent-telemetry-collecto
 import type { SwarmCoordinator } from "../agents/swarm-coordinator.js";
 import type { AgentPool } from "../agents/agent-pool.js";
 import type { AgentRouter } from "../agents/agent-router.js";
+import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
 import {
   ChatSessionStore,
   type ProviderSettingsInput,
@@ -27,8 +33,10 @@ import {
   type PrismLlmProviderId,
   type RoutingConfig,
 } from "./llm-provider-manager.js";
+import { resolveProfile } from "./model-capability-matrix.js";
 import {
   WindowsProtectedFileProviderSecretStore,
+  InMemoryProviderSecretStore,
   type ProviderSecretStore,
 } from "./provider-secret-store.js";
 import { SessionTraceExplorer, type SessionTraceBundle } from "./session-trace-explorer.js";
@@ -38,9 +46,55 @@ import type { RetrievalMetricsCollector } from "../memory/retrieval-metrics.js";
 import type { RetrievalDashboardStore } from "../memory/retrieval-dashboard-store.js";
 import type { Tool } from "../tools/types.js";
 import type { ToolRegistry } from "../tools/registry.js";
-import { workspacePath, resolveWorkspaceRoot, setWorkspaceRoot, ensureWorkspaceStructure, workspaceFramebufferDir } from "../config/workspace-resolver.js";
+import { workspacePath, resolveWorkspaceRoot, setWorkspaceRoot, ensureWorkspaceStructure, workspaceFramebufferDir, readPreferences, writePreferences, getWorkspaceHub, setWorkspaceHub, seedDefaultCharacters } from "../config/workspace-resolver.js";
 import { FramebufferCapture } from "./framebuffer-capture.js";
+import { BrowserControlTool } from "../../adapters/system/browser-control-tool.js";
 import { AgenticChatExecutor, type AgenticTurnEvent, type AgenticResult } from "./agentic-chat-executor.js";
+import { CharacterAccountabilityStore, type CharacterAssignmentFilter } from "../accountability/character-accountability-store.js";
+import { CharacterAccountabilityManager } from "../accountability/character-accountability-manager.js";
+import { workspaceCharactersDir, workspaceDbPath } from "../config/workspace-resolver.js";
+import { importCharacter as importCharacterAdapter } from "../characters/character-import-adapter.js";
+import { UsageMeteringService, type UsageWindow } from "./usage-metering-service.js";
+import { LlamaCppSupervisor } from "./llama-cpp-supervisor.js";
+import { GuardianAgent } from "../agents/guardian-agent.js";
+import type { McpClientAdapter } from "../../adapters/protocol/mcp-client-tool.js";
+import type { ConsoleInterceptor, ConsoleLine } from "../logging/console-interceptor.js";
+import { DashboardControlTool } from "../tools/dashboard-control-tool.js";
+import { ComputerUseTool } from "../../adapters/system/computer-use-tool.js";
+import { SchedulerEngine, parseCronExpression, getNextNCronOccurrences } from "./scheduler-engine.js";
+
+import { AuthGate } from "../security/auth.js";
+import { RateLimiter } from "../security/rate-limiter.js";
+import { applyCorsAndCsrf, resolveAllowedOrigins, type CorsCsrfConfig } from "../security/cors-csrf.js";
+import { loadPluginPack } from "../plugins/plugin-pack-loader.js";
+import type { PluginPackManifest } from "../plugins/plugin-pack-validator.js";
+import { deriveSessionTitle, parseEventFilters, buildSessionConfigDiff, normalizeSessionPackageStatus, normalizePrompt, parseMultipartParts, sanitizeFileName } from "./utils/http-helpers.js";
+import { dashboardHtml, simpleModeHtml, setupWizardHtml, setupWizardAdvancedHtml } from "./templates/index.js";
+
+import { Router } from "./routes/index.js";
+import { TooltipsRegistry } from "./tooltips-registry.js";
+import { generateOpenApiSpec } from "./openapi-generator.js";
+
+import sqlite3 from "sqlite3";
+
+import { ToolContractExtractor, type ExtractionRequest } from "../tools/tool-contract-extractor.js";
+import { PolicyEngine } from "../policy/engine.js";
+import { classifyChatTier } from "./chat-tier-classifier.js";
+import { A2ATaskAdapter } from "../../adapters/application/a2a-task-adapter.js";
+import { GovernanceHooksAdapter } from "../../adapters/application/governance-hooks-adapter.js";
+import { MetricsStore, HistogramSnapshot } from "../activity/metrics-store.js";
+import { OtelExporter } from "../activity/otel-exporter.js";
+import { ActivityRetentionPolicy, resolveRetentionConfigFromEnv } from "../activity/retention-policy.js";
+import { Soc2EvidenceExporter } from "../compliance/soc2-exporter.js";
+import { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
+import { OutlookOAuthAdapter } from "../../adapters/application/outlook-oauth-adapter.js";
+import { createOAuthTokenStore } from "../operator/oauth-token-store.js";
+import { TerminalSessionAdapter } from "../../adapters/application/terminal-session-adapter.js";
+import { ContainerSandboxAdapter } from "../../adapters/application/container-sandbox-adapter.js";
+import { UtilityRegistry, registerBuiltInUtilities } from "./utility-registry.js";
+import { RiskOverrideStore, type RiskTier } from "./risk-override-store.js";
+import { IncidentTrendStore } from "../memory/incident-trend-store.js";
+import { tuneFromIncidentTrends, withRetrievalAlertPolicy } from "../memory/retrieval-alert-policy.js";
 
 export interface DashboardRuntimeStatus {
   sessionId: string;
@@ -406,6 +460,97 @@ function computeTelemetrySummary(
   };
 }
 
+// ── SLO Types & Computation ───────────────────────────────────────────────────
+
+export type SloStatus = "green" | "yellow" | "red" | "no_data";
+
+export interface SloMetric {
+  name: string;
+  label: string;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  p99Ms: number | null;
+  targetP95Ms: number;
+  targetP99Ms: number;
+  status: SloStatus;
+}
+
+export interface SloSummary {
+  generatedAt: string;
+  metrics: SloMetric[];
+}
+
+const SLO_TARGETS: ReadonlyArray<{ histName: string; label: string; targetP95Ms: number; targetP99Ms: number }> = [
+  { histName: "prism_operation_duration_ms", label: "Operation Latency", targetP95Ms: 500, targetP99Ms: 1000 },
+  { histName: "prism_policy_latency_ms", label: "Policy Check Latency", targetP95Ms: 250, targetP99Ms: 500 },
+  { histName: "prism_llm_latency_ms", label: "LLM Latency", targetP95Ms: 5000, targetP99Ms: 10000 },
+];
+
+/**
+ * Compute a percentile value from a histogram snapshot using linear interpolation.
+ * Returns null if no observations are present.
+ */
+function histogramPercentile(snap: HistogramSnapshot, p: number): number | null {
+  if (snap.totalObservations === 0) return null;
+  const target = p * snap.totalObservations;
+  for (let i = 0; i < snap.buckets.length; i++) {
+    if (snap.counts[i] >= target) {
+      // Linear interpolation between lower and upper bound
+      const lower = i === 0 ? 0 : snap.buckets[i - 1];
+      const upper = snap.buckets[i];
+      const lowerCount = i === 0 ? 0 : snap.counts[i - 1];
+      const upperCount = snap.counts[i];
+      if (upperCount === lowerCount) return upper;
+      return lower + (upper - lower) * ((target - lowerCount) / (upperCount - lowerCount));
+    }
+  }
+  // All observations in +Inf bucket
+  return snap.buckets[snap.buckets.length - 1] ?? null;
+}
+
+function computeSloSummary(store: MetricsStore): SloSummary {
+  const snapshots = store.getHistogramSnapshot();
+  const metrics: SloMetric[] = SLO_TARGETS.map(({ histName, label, targetP95Ms, targetP99Ms }) => {
+    // Aggregate all label combinations for this histogram
+    const matching = snapshots.filter(s => s.name === histName);
+    let totalObs = 0;
+    let totalSum = 0;
+    // Merge bucket counts (they share the same bucket boundaries)
+    let mergedCounts: number[] | null = null;
+    let buckets: number[] = [];
+    for (const snap of matching) {
+      totalObs += snap.totalObservations;
+      totalSum += snap.sum;
+      if (mergedCounts === null) {
+        mergedCounts = [...snap.counts];
+        buckets = snap.buckets;
+      } else {
+        for (let i = 0; i < mergedCounts.length && i < snap.counts.length; i++) {
+          mergedCounts[i] += snap.counts[i];
+        }
+      }
+    }
+    if (mergedCounts === null || totalObs === 0) {
+      return { name: histName, label, p50Ms: null, p95Ms: null, p99Ms: null, targetP95Ms, targetP99Ms, status: "no_data" };
+    }
+    const merged: HistogramSnapshot = { name: histName, labels: {}, buckets, counts: mergedCounts, sum: totalSum, totalObservations: totalObs };
+    const p50Ms = histogramPercentile(merged, 0.50);
+    const p95Ms = histogramPercentile(merged, 0.95);
+    const p99Ms = histogramPercentile(merged, 0.99);
+
+    let status: SloStatus = "green";
+    if (p95Ms !== null) {
+      const ratio = p95Ms / targetP95Ms;
+      if (ratio >= 1.0) status = "red";
+      else if (ratio >= 0.75) status = "yellow";
+    }
+
+    return { name: histName, label, p50Ms, p95Ms, p99Ms, targetP95Ms, targetP99Ms, status };
+  });
+
+  return { generatedAt: new Date().toISOString(), metrics };
+}
+
 function classifyAlertSeverity(message: string): AlertSeverity {
   const lower = message.toLowerCase();
   if (
@@ -635,10 +780,27 @@ function computeRuntimeExcellenceSnapshot(
   };
 }
 
+export interface DownloadProgress {
+  id: string;
+  url: string;
+  fileName: string;
+  status: "pending" | "downloading" | "completed" | "error";
+  progress: number;
+  downloadedBytes: number;
+  totalBytes: number;
+  error?: string;
+  startTime: string;
+}
+
 export class DashboardService {
+  private static readonly publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
   private readonly server: Server;
   private readonly llmProviders: LlmProviderManager;
   private readonly providerSecretStore: ProviderSecretStore;
+  private readonly authGate: AuthGate;
+  private readonly rateLimiter: RateLimiter;
+  private readonly corsCsrfConfig: CorsCsrfConfig;
+  private tlsEnabled = false;
   private readonly actionsByName = new Map<string, DashboardAction>();
   private readonly actionStates = new Map<string, DashboardActionState>();
   private readonly actionHistory: DashboardActionHistoryEntry[] = [];
@@ -652,11 +814,23 @@ export class DashboardService {
   private readonly traceExplorer?: SessionTraceExplorer;
   private readonly policyAuditExporter?: PolicyAuditExporter;
   private readonly toolRegistry: ToolRegistry | null;
+  private toolContractExtractor: ToolContractExtractor | null = null;
+  private readonly llamaSupervisor: LlamaCppSupervisor;
+  private readonly bitnetSupervisor: LlamaCppSupervisor;
+  private readonly guardianAgent: GuardianAgent;
   private readonly agenticExecutor: AgenticChatExecutor | null;
+  private readonly dashboardControlTool: DashboardControlTool;
   private readonly tools: Tool[];
   private readonly framebufferCapture = new FramebufferCapture();
   private readonly wsServer: WebSocketServer;
   private readonly wsClients = new Set<WebSocket>();
+  /** Optional MCP adapter for /api/mcp/servers and Guardian self-heal task. */
+  private mcpAdapter: McpClientAdapter | null = null;
+  /** Optional console interceptor for /api/debug/console + live WS stream. */
+  private consoleInterceptor: ConsoleInterceptor | null = null;
+  /** Unsubscribe handle for the console-line listener. */
+  private consoleUnsubscribe: (() => void) | null = null;
+  private readonly openSockets = new Set<Socket>();
   private readonly sseClients = new Map<string, ServerResponse>();
   private readonly networkCommandHistory: Array<{ command: string; tier?: string; ok: boolean; timestamp: string }> = [];
   private toolStates: Record<string, { enabled: boolean; invocations: number; successes: number; failures: number; avgLatencyMs: number; lastInvoked: string | null; lastError: string | null }> = {};
@@ -669,6 +843,42 @@ export class DashboardService {
   private agentPool: AgentPool | null = null;
   private agentRouter: AgentRouter | null = null;
   private importHistory: Array<{ id: string; timestamp: string; mode: string; fileName: string; targetDir: string; registeredType: string | null; status: string; message: string; size: number }> = [];
+  private diagnosticsRunning = false;
+  private diagnosticsLastRunAt: string | null = null;
+  private agentDiagnosticsRunning = false;
+  private agentDiagnosticsLastRunAt: string | null = null;
+  private computerDiagnosticsRunning = false;
+  private computerDiagnosticsLastRunAt: string | null = null;
+  private knowledgeGraphDiagnosticsRunning = false;
+  private knowledgeGraphDiagnosticsLastRunAt: string | null = null;
+  private workspaceDiagnosticsRunning = false;
+  private workspaceDiagnosticsLastRunAt: string | null = null;
+  private networkDiagnosticsRunning = false;
+  private networkDiagnosticsLastRunAt: string | null = null;
+  private telemetryDiagnosticsRunning = false;
+  private telemetryDiagnosticsLastRunAt: string | null = null;
+  private logsDiagnosticsRunning = false;
+  private logsDiagnosticsLastRunAt: string | null = null;
+  private schedulerDiagnosticsRunning = false;
+  private schedulerDiagnosticsLastRunAt: string | null = null;
+  private demoDiagnosticsRunning = false;
+  private demoDiagnosticsLastRunAt: string | null = null;
+  private readonly characterAccountabilityStore: CharacterAccountabilityStore;
+  private readonly characterAccountabilityManager: CharacterAccountabilityManager;
+  private readonly utilityRegistry!: UtilityRegistry;
+  private readonly riskOverrideStore!: RiskOverrideStore;
+  private readonly incidentTrendStore!: IncidentTrendStore;
+  // ── Phase H: Novel Systems Incubation (CCC + DLMA + SHWS) ──────────
+  // Lazy-initialized to keep the dashboard fast when PRISM_INCUBATION=off.
+  private incubation?: {
+    enabled: boolean;
+    compiler: import("../incubation/ccc/compiler.js").CausalCompiler;
+    arbiter: import("../incubation/dlma/arbiter.js").DualLensArbiter;
+    synthesizer: import("../incubation/shws/synthesizer.js").WorkflowSynthesizer;
+    history: import("../incubation/shws/history-index.js").WorkflowHistoryIndex;
+    constitution: import("../incubation/ccc/types.js").Constitution;
+  };
+  private usageMetering?: UsageMeteringService;
   private runtimeSettings: Record<string, unknown> = {
     approvalTimeoutMs: 30000,
     selfReviewDailyMs: 86400000,
@@ -682,6 +892,32 @@ export class DashboardService {
     mcpTimeoutMs: 30000,
     telemetryWindow: "1d",
   };
+  private readonly downloadStatus = new Map<string, DownloadProgress>();
+  private readonly router = new Router();
+  private readonly tooltipsRegistry: TooltipsRegistry = new TooltipsRegistry(resolvePath(process.cwd(), "docs", "tooltips"));
+  private customRecommendedModels: Array<{ name: string; fileName: string; size: string; path: string; source: string; addedAt: string }> = [];
+
+
+  /* ── A2A Protocol adapters (Phase F) ───────────────────────────────── */
+  private a2aTaskAdapter: A2ATaskAdapter | null = null;
+  private governanceHooksAdapter: GovernanceHooksAdapter | null = null;
+  private readonly terminalAdapter: TerminalSessionAdapter | null = null;
+  private readonly containerAdapter: ContainerSandboxAdapter | null = null;
+
+  /* ── Observability (Phase E6) ───────────────────────────────────────── */
+  private readonly metricsStore: MetricsStore;
+  private readonly otelExporter: OtelExporter;
+  private readonly soc2Exporter: Soc2EvidenceExporter;
+  private readonly activityRetentionPolicy: ActivityRetentionPolicy | null;
+
+  /* ── OAuth adapters (Phase E2) ──────────────────────────────────────── */
+  private readonly gmailOAuth: GmailOAuthAdapter;
+  private readonly outlookOAuth: OutlookOAuthAdapter;
+
+  /* ── Scheduler in-memory stores ────────────────────────────────────── */
+  private readonly schedulerEvents = new Map<string, { id: string; title: string; start: string; end?: string; description?: string; createdAt: string }>();
+  private readonly schedulerProjects = new Map<string, { id: string; name: string; description?: string; tasks: Array<{ id: string; title: string; status: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string; createdAt: string }>; milestones: Array<{ title: string; dueDate?: string }>; createdAt: string }>();
+  private readonly schedulerEngine: SchedulerEngine;
 
   constructor(
     private readonly queue: ApprovalQueue,
@@ -697,23 +933,307 @@ export class DashboardService {
     sessionPackageStorePath: string = workspacePath("state", "dashboard-session-packages.json"),
     sessionPackageExportDir: string = workspacePath("artifacts", "packages"),
     toolRegistry?: ToolRegistry,
+    usageMetering?: UsageMeteringService,
+    gmailOAuth?: GmailOAuthAdapter,
+    outlookOAuth?: OutlookOAuthAdapter,
+    terminalAdapter?: TerminalSessionAdapter,
+    containerAdapter?: ContainerSandboxAdapter,
   ) {
-    this.providerSecretStore = providerSecretStore ?? new WindowsProtectedFileProviderSecretStore();
-    this.llmProviders = new LlmProviderManager(process.env, this.chatStore.listProviderSettings(), this.providerSecretStore);
+    this.providerSecretStore = providerSecretStore ?? (process.platform === "win32"
+      ? new WindowsProtectedFileProviderSecretStore()
+      : new InMemoryProviderSecretStore());
+
+    // ── Security: Auth gate & rate limiter ──────────────────────────────
+    const authDisabled = process.env.PRISM_AUTH_DISABLED === "true";
+    if (authDisabled && process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[SECURITY] PRISM_AUTH_DISABLED=true is not permitted when NODE_ENV=production. " +
+        "Remove this environment variable before deploying."
+      );
+    }
+    this.authGate = new AuthGate({
+      tokenFilePath: workspacePath("state", "admin-token"),
+      disabled: authDisabled,
+      publicRoutes: ["/health", "/api/health", "/favicon.ico", "/.well-known/agent.json", "/metrics", "/api/v1/openapi.json", "/api/openapi.json"],
+      publicPrefixes: ["/public/", "/setup", "/api/auth/", "/api/iam/sso/", "/scim/v2/"],
+    });
+    this.rateLimiter = new RateLimiter({
+      maxRequests: Number(process.env.PRISM_RATE_LIMIT ?? 200),
+      windowMs: 60_000,
+    });
+
+    // ── R2: CORS allowlist + Origin/Referer CSRF guard ─────────────────
+    // Loopback variants of the dashboard's own port are always allowed;
+    // additional origins are added via PRISM_CORS_ORIGINS (comma-sep).
+    // Wildcards are rejected by resolveAllowedOrigins().
+    this.corsCsrfConfig = {
+      allowedOrigins: resolveAllowedOrigins(this.port, process.env),
+      logRejections: process.env.PRISM_SECURITY_QUIET !== "true",
+    };
+
+    // ── Observability (Phase E6) — initialize early so all events are counted ─
+    this.metricsStore = new MetricsStore();
+    this.otelExporter = new OtelExporter(this.activityBus, this.metricsStore, {
+      serviceName: "prism",
+      serviceVersion: "0.2.0",
+      endpoint: process.env.PRISM_OTEL_ENDPOINT,
+      consoleExport: process.env.PRISM_OTEL_CONSOLE === "true",
+    });
+    this.otelExporter.start();
+
+    // ── SOC 2 evidence exporter (Phase SOC2-1) ─ default off ───────────────
+    this.soc2Exporter = new Soc2EvidenceExporter(this.activityBus);
+    if (this.soc2Exporter.isEnabled()) {
+      this.soc2Exporter.start();
+    }
+
+    // ── Activity-events retention policy (W6) ─ default off ────────────────
+    // Activated when PRISM_ACTIVITY_RETENTION_DAYS is a positive integer.
+    // Periodically deletes rows from activity_events older than the configured
+    // window and emits an `activity.retention.swept` governance event.
+    {
+      const retentionCfg = activityStore
+        ? resolveRetentionConfigFromEnv(activityStore.dbPath)
+        : null;
+      if (retentionCfg) {
+        this.activityRetentionPolicy = new ActivityRetentionPolicy(retentionCfg, this.activityBus);
+        this.activityRetentionPolicy.start();
+      } else {
+        this.activityRetentionPolicy = null;
+      }
+    }
+
+    // ── OAuth adapters (Phase E2) ─────────────────────────────────────────────
+    const oauthTokenStore = createOAuthTokenStore();
+    this.gmailOAuth = gmailOAuth ?? new GmailOAuthAdapter(oauthTokenStore);
+    this.outlookOAuth = outlookOAuth ?? new OutlookOAuthAdapter(oauthTokenStore);
+    this.terminalAdapter = terminalAdapter ?? null;
+    this.containerAdapter = containerAdapter ?? null;
+
+    this.llamaSupervisor = new LlamaCppSupervisor({
+      binaryPath: process.env.PRISM_LLAMACPP_BIN || "llama-server",
+      basePort: 8081,
+      maxSlots: 5,
+      defaultContext: 4096,
+      modelsDir: join(process.cwd(), "models"),
+    });
+
+    this.bitnetSupervisor = new LlamaCppSupervisor({
+      binaryPath: process.env.PRISM_BITNET_BIN || "bitnet-server",
+      basePort: 8082,
+      maxSlots: 2,
+      defaultContext: 4096,
+      modelsDir: join(process.cwd(), "models"),
+    });
+
+    this.llmProviders = new LlmProviderManager(process.env, this.chatStore.listProviderSettings(), this.providerSecretStore, this.llamaSupervisor, this.bitnetSupervisor, this.activityBus);
+    this.llmProviders.loadPersistedProfiles(this.chatStore.listModelProfiles());
+    this.characterAccountabilityStore = new CharacterAccountabilityStore(workspaceDbPath());
+    this.characterAccountabilityManager = new CharacterAccountabilityManager(this.characterAccountabilityStore, this.activityBus);
     this.sessionPackageStorePath = sessionPackageStorePath;
     this.sessionPackageExportDir = sessionPackageExportDir;
     this.traceExplorer = activityStore ? new SessionTraceExplorer(activityStore) : undefined;
     this.policyAuditExporter = activityStore ? new PolicyAuditExporter(activityStore) : undefined;
     this.pkgStore = activityStore ? new SessionPackageSqliteStore(activityStore.dbPath) : undefined;
     this.toolRegistry = toolRegistry ?? null;
-    this.agenticExecutor = toolRegistry ? new AgenticChatExecutor(toolRegistry) : null;
+    if (this.toolRegistry) {
+      this.toolRegistry.register({
+        name: "ask_reasoning_model",
+        contract: {
+          version: "1.0.0",
+          args: {
+            prompt: { type: "string", required: true }
+          }
+        },
+        execute: async (request: any) => {
+          const prompt = request.args.prompt as string;
+          if (!prompt) return { ok: false, output: { error: "Missing prompt." } };
+          const result = await this.llmProviders.generateForRole("reasoning", {
+            message: prompt,
+            conversation: [],
+            systemPrompt: "You are the primary reasoning model for PRISM. A smaller agent has delegated a complex task to you. Provide the best possible answer or analysis based on the prompt."
+          });
+          if (!result) return { ok: false, output: { error: "Reasoning model failed to produce a response." } };
+          return { ok: true, output: { response: result.content } };
+        }
+      });
+    }
+    this.agenticExecutor = this.toolRegistry ? new AgenticChatExecutor(this.toolRegistry) : null;
     this.tools = toolRegistry ? toolRegistry.list() : [];
+    if (usageMetering) this.usageMetering = usageMetering;
+
+    // Guardian Agent — permanent autonomous agent powered by llama.cpp
+    this.guardianAgent = new GuardianAgent(this.activityBus, this.llamaSupervisor, this.tools, {
+      modelAlias: process.env.PRISM_GUARDIAN_MODEL_ALIAS || "guardian",
+      modelPath: process.env.PRISM_GUARDIAN_MODEL_PATH || "",
+      authorityTier: (process.env.PRISM_GUARDIAN_AUTHORITY as "tier1_autonomous" | "tier2_conditional") || "tier2_conditional",
+      autoStart: process.env.PRISM_GUARDIAN_AUTOSTART !== "false",
+      contextSize: parseInt(process.env.PRISM_GUARDIAN_CTX_SIZE || "4096", 10),
+      draftModelPath: process.env.PRISM_GUARDIAN_DRAFT_MODEL || undefined,
+      gpuLayers: process.env.PRISM_GUARDIAN_GPU_LAYERS ? parseInt(process.env.PRISM_GUARDIAN_GPU_LAYERS, 10) : undefined,
+      flashAttn: process.env.PRISM_GUARDIAN_FLASH_ATTN !== "false",
+      dashboardBaseUrl: `http://127.0.0.1:${this.port}`,
+    });
+
+    this.dashboardControlTool = new DashboardControlTool(this.activityBus);
+    if (this.toolRegistry) {
+      this.toolRegistry.register(this.dashboardControlTool);
+    }
+    this.tools.push(this.dashboardControlTool);
+
+    const computerUseTool = new ComputerUseTool(this.framebufferCapture);
+    if (this.toolRegistry) {
+      this.toolRegistry.register(computerUseTool);
+    }
+    this.tools.push(computerUseTool);
+
+
+    // Forward Guardian events and UI actions to WebSocket clients
+    this.guardianAgent.on("guardian_event", (evt: { operation: string; detail: string }) => {
+      for (const ws of this.wsClients) {
+        try {
+          ws.send(JSON.stringify({ type: "guardian_event", ...evt, timestamp: new Date().toISOString() }));
+        } catch { /* client may have disconnected */ }
+      }
+    });
+
+    this.activityBus.subscribe({
+      onEvent: (event) => {
+        if (event.operation.startsWith("ui.")) {
+          for (const ws of this.wsClients) {
+            try {
+              ws.send(JSON.stringify({ type: "ui_action", ...event.details, timestamp: new Date().toISOString() }));
+            } catch { /* client may have disconnected */ }
+          }
+        }
+      }
+    });
+    // Auto-start Guardian if configured and model path is set
+    if (this.guardianAgent.getConfig().autoStart && this.guardianAgent.getConfig().modelPath) {
+      void this.guardianAgent.start();
+    }
+    // Inject agent-list resolver so guardian tasks can inspect agent state
+    if (this.agentLifecycle) {
+      const lifecycle = this.agentLifecycle;
+      this.guardianAgent.setAgentListFn(() => {
+        const agents = lifecycle.list().map(a => ({ id: a.agentId, state: a.state, role: a.role, lifecycle: a.lifecycle }));
+        return { agents };
+      });
+    }
+
     for (const t of this.tools) {
       if (!this.toolStates[t.name]) {
         this.toolStates[t.name] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
       }
     }
+    // Load persisted runtime settings from preferences file
+    try {
+      const prefs = readPreferences();
+      if (prefs?.runtimeSettings && typeof prefs.runtimeSettings === 'object') {
+        const persisted = prefs.runtimeSettings;
+        for (const [k, v] of Object.entries(persisted)) {
+          if (k in this.runtimeSettings) {
+            this.runtimeSettings[k] = v;
+          }
+        }
+      }
+    } catch {
+      // Preferences file missing or malformed — use defaults
+    }
     this.loadSessionPackageStore();
+    this.loadCustomRecommendedModels();
+
+    // ── A2A Protocol adapters (Phase F) ──────────────────────────────────
+    // Use the workspace's persistent SQLite DB so A2A tasks survive restarts.
+    try {
+      const a2aDb = new sqlite3.Database(workspaceDbPath());
+      this.a2aTaskAdapter = new A2ATaskAdapter(a2aDb, this.activityBus);
+      this.governanceHooksAdapter = new GovernanceHooksAdapter(this.activityBus);
+    } catch {
+      // Graceful degradation — A2A endpoints will return 503 if adapter failed to init.
+    }
+
+    // ── Operator surfaces (Phase E3 follow-on) ───────────────────────────
+    this.riskOverrideStore = new RiskOverrideStore(
+      workspacePath("state", "risk-overrides.json"),
+      this.activityBus,
+    );
+    this.incidentTrendStore = new IncidentTrendStore(this.activityBus);
+    this.utilityRegistry = new UtilityRegistry(this.activityBus);
+    registerBuiltInUtilities(this.utilityRegistry, {
+      runContractDiffGate: async () => {
+        // Lightweight wrapper — runs the gate script in-process.
+        const cp = await import("node:child_process");
+        const out = await new Promise<{ code: number; stdout: string; stderr: string }>((resolveCp) => {
+          const child = cp.spawn(process.execPath, ["scripts/contract-diff-gate.cjs"], {
+            cwd: process.cwd(), env: process.env,
+          });
+          let stdout = ""; let stderr = "";
+          child.stdout.on("data", (b) => { stdout += b.toString(); });
+          child.stderr.on("data", (b) => { stderr += b.toString(); });
+          child.on("close", (code) => resolveCp({ code: code ?? 0, stdout, stderr }));
+        });
+        return {
+          summary: out.code === 0
+            ? "Contract diff gate passed."
+            : `Contract diff gate failed (exit ${out.code}).`,
+          details: { exitCode: out.code, stdout: out.stdout.slice(-2000), stderr: out.stderr.slice(-2000) },
+        };
+      },
+      exportPolicyAudit: async () => {
+        if (!this.policyAuditExporter) {
+          return { summary: "Policy audit exporter not available.", details: { available: false } };
+        }
+        const bundle = this.policyAuditExporter.exportBundle({ sessionId: this.status.sessionId });
+        return { summary: `Exported policy audit bundle (${bundle.recordCount} decisions).`, details: { bundle } };
+      },
+      exportSessionTrace: async () => {
+        if (!this.traceExplorer) {
+          return { summary: "Session trace explorer not available.", details: { available: false } };
+        }
+        const bundle = this.traceExplorer.exportBundle({ sessionId: this.status.sessionId });
+        return { summary: `Exported session trace bundle (${bundle.eventCount} events).`, details: { bundle } };
+      },
+      runRetrievalTrends: async () => {
+        if (!this.retrievalDashboardStore) {
+          return { summary: "Retrieval dashboard store not configured.", details: { available: false } };
+        }
+        const report = this.retrievalDashboardStore.getTrendReport(this.status.sessionId);
+        return { summary: report ? `Trend report ready (${report.snapshotsCompared} snapshots).` : "No trend data yet.", details: { report } };
+      },
+      runPerfTrendReport: async () => {
+        const cp = await import("node:child_process");
+        const out = await new Promise<{ code: number; stdout: string; stderr: string }>((resolveCp) => {
+          const child = cp.spawn(process.execPath, ["scripts/perf-trend-report.cjs"], {
+            cwd: process.cwd(), env: process.env,
+          });
+          let stdout = ""; let stderr = "";
+          child.stdout.on("data", (b) => { stdout += b.toString(); });
+          child.stderr.on("data", (b) => { stderr += b.toString(); });
+          child.on("close", (code) => resolveCp({ code: code ?? 0, stdout, stderr }));
+        });
+        return {
+          summary: out.code === 0 ? "Perf trend report generated." : `Perf trend report failed (exit ${out.code}).`,
+          details: { exitCode: out.code, stdout: out.stdout.slice(-2000), stderr: out.stderr.slice(-2000) },
+        };
+      },
+    });
+
+    this.schedulerEngine = new SchedulerEngine({
+      activityBus: this.activityBus,
+      sessionId: this.status.sessionId,
+      onAction: (entry) => {
+        this.broadcastEvent({
+          type: "scheduler:action-fired",
+          id: entry.id,
+          label: entry.label,
+          action: entry.action,
+          entryType: entry.type,
+          payload: entry.payload,
+          firedAt: new Date().toISOString(),
+        });
+      },
+    });
     for (const action of actions) {
       this.actionsByName.set(action.name, action);
       this.actionStates.set(action.name, {
@@ -727,12 +1247,36 @@ export class DashboardService {
         lastError: null,
       });
     }
-    this.server = createServer((req, res) => {
-      void this.handle(req, res);
-    });
+    // ── Server creation (HTTPS when cert/key provided, else HTTP) ─────
+    const tlsCert = process.env.PRISM_TLS_CERT;
+    const tlsKey = process.env.PRISM_TLS_KEY;
+    if (tlsCert && tlsKey && existsSync(tlsCert) && existsSync(tlsKey)) {
+      this.server = https.createServer(
+        { cert: readFileSync(tlsCert), key: readFileSync(tlsKey) },
+        (req, res) => { void this.handle(req, res); },
+      );
+      this.tlsEnabled = true;
+    } else {
+      this.server = createServer((req, res) => {
+        void this.handle(req, res);
+      });
+      this.tlsEnabled = false;
+    }
     this.wsServer = new WebSocketServer({ noServer: true });
+    // Track all open sockets so stop() can destroy them immediately.
+    this.server.on("connection", (socket: Socket) => {
+      this.openSockets.add(socket);
+      socket.on("close", () => this.openSockets.delete(socket));
+    });
     this.server.on("upgrade", (req, socket, head) => {
-      if (req.url === "/ws" || req.url === "/ws/chat") {
+      // Authenticate WebSocket upgrade (token via query param or Authorization header)
+      const authResult = this.authGate.check(req);
+      if (!authResult.authenticated) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      if (req.url?.startsWith("/ws") || req.url?.startsWith("/ws/chat")) {
         this.wsServer.handleUpgrade(req, socket, head, (ws) => {
           this.wsClients.add(ws);
           ws.on("close", () => this.wsClients.delete(ws));
@@ -1170,6 +1714,19 @@ export class DashboardService {
     };
   }
 
+  private getOrCreateToolContractExtractor(): ToolContractExtractor {
+    if (!this.toolContractExtractor) {
+      const db = new sqlite3.Database(":memory:");
+      const policyEngine = new PolicyEngine();
+      this.toolContractExtractor = new ToolContractExtractor(db, policyEngine, this.activityBus);
+      if (this.toolRegistry) {
+        this.toolContractExtractor.setToolRegistry(this.toolRegistry);
+      }
+      this.toolContractExtractor.addManifestPath(join(process.cwd(), "prism-output"));
+    }
+    return this.toolContractExtractor;
+  }
+
   private loadSessionPackageStore(): void {
     if (this.pkgStore) {
       this.sessionPackages = this.pkgStore.listPackages().map((row) => this.normalizeSessionPackageRecord(row as Partial<SessionPackageRecord>));
@@ -1325,8 +1882,136 @@ export class DashboardService {
     }
   }
 
-  createChatSession(title?: string): ChatSessionSummary {
-    return this.chatStore.createSession(title);
+  /**
+   * Phase E3b: create a chat session bound to a character + CAC identity.
+   *
+   * Governance contract:
+   *   - If `input.characterId` is omitted, resolve from `PrismPreferences.defaultCharacterId`.
+   *   - If there is still no character and `input.allowUnbound !== true`, throw a tagged
+   *     Error with `.code = "no_default_character"` so the caller can return 409 +
+   *     `{ action: "run_wizard" }`.
+   *   - If `input.cacAssignmentId` is omitted, auto-create one via `AccountabilityManager`
+   *     using workspace defaults (placeholder emails accepted; runtime enforces tier caps).
+   *   - The session row records the character, CAC assignment id, and execution-profile
+   *     snapshot so downstream policy / UI can render the governance state without
+   *     re-reading preferences.
+   *
+   * The `allowUnbound` branch exists for internal bootstrap (`start()`) and for the
+   * initialization-certificate seed where no character yet exists; those sessions are
+   * displayed with a "no character bound" banner until reassigned.
+   */
+  createChatSession(input?: string | {
+    title?: string;
+    characterId?: string | null;
+    cacAssignmentId?: string | null;
+    operatorEmail?: string | null;
+    assistantEmail?: string | null;
+    allowUnbound?: boolean;
+  }): ChatSessionSummary {
+    const opts = typeof input === "string" || input === undefined
+      ? { title: typeof input === "string" ? input : undefined }
+      : input;
+
+    const prefs = readPreferences() ?? undefined;
+    const executionProfile = (this.status.executionProfileSegment || prefs?.executionProfileSegment || "individual").toString().toLowerCase();
+
+    // Resolve character id: explicit > workspace default > auto-pick from workspace characters.
+    let characterId = (opts.characterId ?? prefs?.defaultCharacterId ?? "").toString().trim() || null;
+
+    if (!characterId && !opts.allowUnbound) {
+      // Auto-pick the first character matching the execution profile so sessions can be
+      // created without requiring the setup wizard when characters are already available.
+      const available = this.listWorkspaceCharacters();
+      const profileMatch =
+        available.find(
+          (c) => !c.executionProfile || c.executionProfile.toLowerCase() === executionProfile,
+        ) ?? available[0] ?? null;
+      if (profileMatch) {
+        characterId = profileMatch.id;
+        // Persist as default so subsequent sessions resolve without re-scanning.
+        try {
+          writePreferences({ defaultCharacterId: characterId, lastUsedCharacterId: characterId });
+        } catch (_) {
+          /* non-fatal — preferences write failure must not block session creation */
+        }
+      } else {
+        const err = new Error("no_default_character") as Error & { code?: string };
+        err.code = "no_default_character";
+        throw err;
+      }
+    }
+
+    // Validate character exists when one was resolved.
+    if (characterId) {
+      const available = this.listWorkspaceCharacters();
+      if (!available.some((c) => c.id === characterId)) {
+        const err = new Error(`character_not_found: ${characterId}`) as Error & { code?: string };
+        err.code = "character_not_found";
+        throw err;
+      }
+    }
+
+    // Create session row first so CAC auto-assignment can reference its id.
+    const session = this.chatStore.createSession({
+      title: opts.title ?? "New Session",
+      characterId,
+      executionProfile,
+      operatorEmail: opts.operatorEmail ?? null,
+      assistantEmail: opts.assistantEmail ?? null,
+    });
+
+    // If a CAC assignment id was supplied, bind it. Otherwise, when we have a character,
+    // auto-create an assignment with workspace-default identities (placeholders OK).
+    let cacAssignmentId = opts.cacAssignmentId ?? null;
+    let operatorEmailFinal = opts.operatorEmail ?? null;
+    let assistantEmailFinal = opts.assistantEmail ?? null;
+
+    if (!cacAssignmentId && characterId) {
+      const operatorEmail = (opts.operatorEmail ?? `operator@prism.local`).toString().trim();
+      const assistantEmail = (opts.assistantEmail ?? `${characterId}@prism.local`).toString().trim();
+      try {
+        const assignment = this.characterAccountabilityManager.assign({
+          characterId,
+          prismUserId: "prism-user",
+          prismUserEmail: operatorEmail,
+          operatorId: "operator",
+          operatorEmail,
+          clientId: "dashboard",
+          sessionId: session.sessionId,
+          executionProfile,
+          workspaceHub: getWorkspaceHub(),
+        });
+        cacAssignmentId = assignment.assignmentId;
+        operatorEmailFinal = assignment.operatorEmail;
+        assistantEmailFinal = assistantEmail;
+      } catch (err) {
+        // Business-segment domain-mismatch is the usual failure. We surface via session
+        // metadata as unbound-CAC; runtime policy will block tier-2+ until reassigned.
+        void err;
+      }
+    }
+
+    if (cacAssignmentId || operatorEmailFinal || assistantEmailFinal) {
+      const rebound = this.chatStore.bindSessionCharacter(session.sessionId, {
+        characterId: characterId ?? "",
+        cacAssignmentId,
+        executionProfile,
+        operatorEmail: operatorEmailFinal,
+        assistantEmail: assistantEmailFinal,
+      });
+      if (rebound) {
+        return rebound;
+      }
+    }
+
+    // Persist last-used character so the next session picker prefills correctly.
+    if (characterId) {
+      try {
+        writePreferences({ lastUsedCharacterId: characterId });
+      } catch { /* non-fatal */ }
+    }
+
+    return session;
   }
 
   deleteChatSession(sessionId: string): void {
@@ -1734,7 +2419,7 @@ export class DashboardService {
     };
   }
 
-  triggerAction(actionName: string): { accepted: true; action: string } {
+  triggerAction(actionName: string, chatSessionId?: string): { accepted: true; action: string } {
     const action = this.actionsByName.get(actionName);
     if (!action) {
       throw new Error(`Unknown action: ${actionName}`);
@@ -1812,11 +2497,56 @@ export class DashboardService {
           layer: "causal",
           operation: `dashboard.action.${action.name}`,
           status: "failed",
-          details: { correlationId, error: errorMessage },
+          details: { correlationId, chatSessionId, error: errorMessage },
         });
       });
 
     return { accepted: true, action: action.name };
+  }
+
+  /**
+   * Attach the MCP client adapter so the dashboard can expose
+   * /api/mcp/servers and the Guardian agent can drive self-heal.
+   */
+  setMcpAdapter(adapter: McpClientAdapter): void {
+    this.mcpAdapter = adapter;
+    // Wire Guardian's self-heal hook so mcp_health_recovery has a live adapter.
+    this.guardianAgent.setMcpAdapterFn(() => this.mcpAdapter);
+  }
+
+  /** True if an MCP adapter is currently attached. */
+  hasMcpAdapter(): boolean {
+    return this.mcpAdapter !== null;
+  }
+
+  /** Return the attached MCP adapter, if any. */
+  getMcpAdapter(): McpClientAdapter | null {
+    return this.mcpAdapter;
+  }
+
+  /**
+   * Attach a ConsoleInterceptor so the dashboard can broadcast captured
+   * stdout/stderr lines to WebSocket clients and serve /api/debug/console.
+   * Idempotent.
+   */
+  setConsoleInterceptor(interceptor: ConsoleInterceptor): void {
+    if (this.consoleInterceptor === interceptor) return;
+    if (this.consoleUnsubscribe) {
+      this.consoleUnsubscribe();
+      this.consoleUnsubscribe = null;
+    }
+    this.consoleInterceptor = interceptor;
+    this.consoleUnsubscribe = interceptor.onLine((entry: ConsoleLine) => {
+      const payload = JSON.stringify({
+        type: "console",
+        ts: entry.ts,
+        stream: entry.stream,
+        line: entry.line,
+      });
+      for (const ws of this.wsClients) {
+        try { ws.send(payload); } catch { /* ignore broken clients */ }
+      }
+    });
   }
 
   /**
@@ -1850,8 +2580,80 @@ export class DashboardService {
   }
 
   start(): void {
+    if (this.chatStore.listSessions().length === 0) {
+      const segment = (this.status.executionProfileSegment || "individual").toLowerCase();
+      const newSession = this.chatStore.createSession();
+      this.chatStore.updateSessionTitle(newSession.sessionId, "New Session");
+      if (segment === "individual") {
+        this.activityBus.emit({
+          sessionId: this.status.sessionId,
+          layer: "causal",
+          operation: "prism.accountability.init",
+          status: "started",
+          details: { message: "Auto-created initial session for individual segment.", chatSessionId: newSession.sessionId }
+        });
+      } else {
+        this.activityBus.emit({
+          sessionId: this.status.sessionId,
+          layer: "causal",
+          operation: "prism.accountability.init",
+          status: "started",
+          details: {
+            message: "Accountability systems initiated for enterprise segment with initial session context.",
+            chatSessionId: newSession.sessionId,
+          }
+        });
+      }
+    }
+
+    // ── Permanent Active Directives Integrity Verification ──────────────
+    const padResult = verifyDirectiveIntegrity();
+    if (padResult.valid) {
+      console.log(`[SECURITY] Directive integrity verified (SHA-256: ${padResult.currentHash.slice(0, 12)}…)`);
+      this.activityBus.emit({
+        sessionId: this.status.sessionId,
+        layer: "causal",
+        operation: "directive.integrity_check",
+        status: "succeeded",
+        details: {
+          currentHash: padResult.currentHash,
+          expectedHash: padResult.expectedHash,
+          filePath: padResult.filePath,
+          verifiedAt: padResult.verifiedAt,
+        },
+      });
+    } else {
+      console.error(`[SECURITY] ⚠ DIRECTIVE INTEGRITY VIOLATION — PAD hash mismatch or file missing.`);
+      console.error(`[SECURITY]   Expected: ${padResult.expectedHash}`);
+      console.error(`[SECURITY]   Got:      ${padResult.currentHash || "(unreadable)"}`);
+      if (padResult.error) console.error(`[SECURITY]   Error: ${padResult.error}`);
+      this.activityBus.emit({
+        sessionId: this.status.sessionId,
+        layer: "causal",
+        operation: "directive.integrity_check",
+        status: "failed",
+        details: {
+          currentHash: padResult.currentHash,
+          expectedHash: padResult.expectedHash,
+          filePath: padResult.filePath,
+          verifiedAt: padResult.verifiedAt,
+          error: padResult.error,
+          severity: "critical",
+          reasonCode: "DIRECTIVE_INTEGRITY_VIOLATION",
+        },
+      });
+    }
+
     this.server.listen(this.port, "127.0.0.1", () => {
-      console.log(`[DASHBOARD] Listening at http://localhost:${this.port}`);
+      const proto = this.tlsEnabled ? "https" : "http";
+      console.log(`[DASHBOARD] Listening at ${proto}://localhost:${this.port}`);
+      if (this.tlsEnabled) console.log(`[SECURITY] TLS enabled`);
+      if (!this.authGate.check({ headers: {}, url: "/" } as any).authenticated) {
+        const token = this.authGate.getToken();
+        console.log(`[AUTH] Admin token: ${token}`);
+        console.log(`[AUTH] Access: ${proto}://localhost:${this.port}/dashboard?token=${token}`);
+        console.log(`[AUTH] Set PRISM_AUTH_DISABLED=true to bypass auth (dev only).`);
+      }
       void this.getReadinessSnapshot()
         .then((snapshot) => this.emitReadinessAudit("startup", snapshot))
         .catch((error) => {
@@ -1873,6 +2675,7 @@ export class DashboardService {
 
   stop(): Promise<void> {
     this.pkgStore?.close();
+    this.characterAccountabilityStore.close();
     for (const ws of this.wsClients) {
       ws.close();
     }
@@ -1881,13 +2684,19 @@ export class DashboardService {
       res.end();
     }
     this.sseClients.clear();
+    // Force-destroy all tracked sockets so server.close() resolves promptly
+    // instead of waiting for keep-alive connections to drain on their own.
+    for (const socket of this.openSockets) {
+      socket.destroy();
+    }
+    this.openSockets.clear();
     return new Promise((resolve, reject) => {
       this.server.close((err) => (err ? reject(err) : resolve()));
     });
   }
 
   /** Broadcast a JSON event to all connected WebSocket and SSE clients. */
-  private broadcastEvent(event: Record<string, unknown>): void {
+  public broadcastEvent(event: Record<string, unknown>): void {
     const data = JSON.stringify(event);
     for (const ws of this.wsClients) {
       if (ws.readyState === WebSocket.OPEN) {
@@ -1899,24 +2708,285 @@ export class DashboardService {
     }
   }
 
+  private async fetchOllamaTags(): Promise<Array<{ name: string; source: string }>> {
+    return new Promise((resolve) => {
+      const req = httpGet("http://localhost:11434/api/tags", (res) => {
+        let body = "";
+        res.on("data", chunk => body += chunk);
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(body);
+            resolve((data.models || []).map((m: any) => ({ name: m.name, source: "ollama" })));
+          } catch { resolve([]); }
+        });
+      });
+      req.on("error", () => resolve([]));
+      req.setTimeout(2000, () => { req.destroy(); resolve([]); });
+    });
+  }
+
+  private async downloadFile(id: string, url: string, targetPath: string): Promise<void> {
+    const status = this.downloadStatus.get(id);
+    if (!status) return;
+
+    return new Promise((resolve, reject) => {
+      const parsed = new URL(url);
+      const isHttps = parsed.protocol === "https:";
+      const options = {
+        hostname: parsed.hostname,
+        port: parsed.port || (isHttps ? 443 : 80),
+        path: parsed.pathname + parsed.search,
+        headers: {
+          "User-Agent": "prism/1.0",
+          "Accept": "*/*",
+        },
+      };
+      const client = isHttps ? https : { get: httpGet };
+      client.get(options, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          return this.downloadFile(id, res.headers.location!, targetPath).then(resolve).catch(reject);
+        }
+        if (res.statusCode !== 200) {
+          status.status = "error";
+          status.error = `HTTP ${res.statusCode}`;
+          return reject(new Error(status.error));
+        }
+
+        const total = parseInt(res.headers["content-length"] || "0", 10);
+        status.totalBytes = total;
+        status.status = "downloading";
+
+        const file = createWriteStream(targetPath);
+        res.pipe(file);
+
+        let dl = 0;
+        res.on("data", (chunk) => {
+          dl += chunk.length;
+          status.downloadedBytes = dl;
+          status.progress = total > 0 ? (dl / total) * 100 : 0;
+        });
+
+        file.on("finish", () => {
+          file.close();
+          status.status = "completed";
+          status.progress = 100;
+          resolve();
+        });
+
+        file.on("error", (err) => {
+          status.status = "error";
+          status.error = err.message;
+          reject(err);
+        });
+      }).on("error", (err) => {
+        status.status = "error";
+        status.error = err.message;
+        reject(err);
+      });
+    });
+  }
+
+  private async readBody(req: IncomingMessage): Promise<string> {
+    const MAX_BODY_SIZE = parseInt(process.env.PRISM_MAX_BODY_SIZE ?? "10485760", 10); // 10 MB default
+    return new Promise((resolve, reject) => {
+      let body = "";
+      let size = 0;
+      req.on("data", (chunk: Buffer | string) => {
+        const bytes = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk as string);
+        size += bytes;
+        if (size > MAX_BODY_SIZE) {
+          req.destroy();
+          reject(Object.assign(new Error("Request body too large"), { statusCode: 413 }));
+          return;
+        }
+        body += chunk.toString();
+      });
+      req.on("end", () => resolve(body));
+      req.on("error", () => resolve(""));
+    });
+  }
+
+  private scanForGgufs(dir: string, source: string, models: Array<{ name: string; path: string; source: string }>): void {
+    if (!existsSync(dir)) return;
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          // Avoid deep recursion, just one level for models/ or similar
+          if (entry.name !== "node_modules" && entry.name !== ".git") {
+            this.scanForGgufs(fullPath, source, models);
+          }
+        } else if (entry.name.endsWith(".gguf")) {
+          models.push({
+            name: entry.name,
+            path: fullPath,
+            source,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`[dashboard] failed to scan ${dir}`, err);
+    }
+  }
+
+  private loadCustomRecommendedModels(): void {
+    try {
+      const filePath = join(process.cwd(), "prism-output", "custom-recommended-models.json");
+      if (existsSync(filePath)) {
+        const data = JSON.parse(readFileSync(filePath, "utf8"));
+        if (Array.isArray(data)) this.customRecommendedModels = data;
+      }
+    } catch { /* best-effort — use empty list */ }
+  }
+
+  private saveCustomRecommendedModels(): void {
+    try {
+      const dir = join(process.cwd(), "prism-output");
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "custom-recommended-models.json"), JSON.stringify(this.customRecommendedModels, null, 2));
+    } catch (err) {
+      console.error("[dashboard] failed to save custom recommended models", err);
+    }
+  }
+
+  getPort(): number { return this.port; }
+  getChatStore(): ChatSessionStore { return this.chatStore; }
+  getLlmProviders(): LlmProviderManager { return this.llmProviders; }
+  getActivityBus(): ActivityBus { return this.activityBus; }
+  getApprovalQueue(): ApprovalQueue { return this.queue; }
+  getAuthGate(): AuthGate { return this.authGate; }
+  getRateLimiter(): RateLimiter { return this.rateLimiter; }
+  getRuntimeStatus(): DashboardRuntimeStatus { return this.status; }
+  getDownloadStatus(): Map<string, DownloadProgress> { return this.downloadStatus; }
+  getCharacterAccountabilityStore(): CharacterAccountabilityStore { return this.characterAccountabilityStore; }
+  getCharacterAccountabilityManager(): CharacterAccountabilityManager { return this.characterAccountabilityManager; }
+  getSchedulerEngine(): SchedulerEngine { return this.schedulerEngine; }
+  getSchedulerEvents(): Map<string, { id: string; title: string; start: string; end?: string; description?: string; createdAt: string }> { return this.schedulerEvents; }
+  getSchedulerProjects(): Map<string, any> { return this.schedulerProjects; }
+  getImportHistory(): Array<{ id: string; timestamp: string; mode: string; fileName: string; targetDir: string; registeredType: string | null; status: string; message: string; size: number }> { return this.importHistory; }
+  public listWorkspaceCharacters(): Array<{ id: string; name: string; displayName: string; executionProfile: string | null; persona: string | null; greeting: string | null; systemPrompt: string | null; tags: string[]; maxRiskTier: number | null; allowedTools: string[]; deniedTools: string[]; defaultEmail: string | null; sourcePath: string; tooltipTips: string[] }> {
+    const dir = workspaceCharactersDir();
+    if (!existsSync(dir)) { return []; }
+    const files = readdirSync(dir).filter((entry) => entry.toLowerCase().endsWith(".json")).sort((left, right) => left.localeCompare(right));
+    const characters: Array<{ id: string; name: string; displayName: string; executionProfile: string | null; persona: string | null; greeting: string | null; systemPrompt: string | null; tags: string[]; maxRiskTier: number | null; allowedTools: string[]; deniedTools: string[]; defaultEmail: string | null; sourcePath: string; tooltipTips: string[] }> = [];
+    for (const fileName of files) {
+      const fullPath = join(dir, fileName);
+      try {
+        const parsed = JSON.parse(readFileSync(fullPath, "utf-8")) as Record<string, unknown>;
+        const toolPermissions = (parsed.toolPermissions ?? {}) as Record<string, unknown>;
+        const allow = Array.isArray(toolPermissions.allow) ? toolPermissions.allow.map((entry) => String(entry)) : [];
+        const deny = Array.isArray(toolPermissions.deny) ? toolPermissions.deny.map((entry) => String(entry)) : [];
+        const name = String(parsed.name ?? fileName.replace(/\.json$/i, "")).trim();
+        const tooltipTips = Array.isArray(parsed.tooltipTips)
+          ? parsed.tooltipTips.map((entry) => String(entry)).filter((entry) => entry.trim().length > 0)
+          : [];
+        characters.push({ id: name, name, displayName: String(parsed.displayName ?? name).trim() || name, executionProfile: parsed.executionProfile != null ? String(parsed.executionProfile) : null, persona: parsed.persona != null ? String(parsed.persona) : null, greeting: parsed.greeting != null ? String(parsed.greeting) : null, systemPrompt: parsed.systemPrompt != null ? String(parsed.systemPrompt) : null, tags: Array.isArray(parsed.tags) ? parsed.tags.map((entry) => String(entry)) : [], maxRiskTier: Number.isFinite(Number(parsed.maxRiskTier)) ? Number(parsed.maxRiskTier) : null, allowedTools: allow, deniedTools: deny, defaultEmail: parsed.defaultEmail != null ? String(parsed.defaultEmail) : null, sourcePath: fullPath, tooltipTips });
+      } catch { /* Ignore malformed character documents. */ }
+    }
+    return characters;
+  }
+  getToolRegistry(): ToolRegistry | null { return this.toolRegistry; }
+  getContainerAdapter(): ContainerSandboxAdapter | null { return this.containerAdapter; }
+  getTerminalAdapter(): TerminalSessionAdapter | null { return this.terminalAdapter; }
+  getGmailOAuth(): GmailOAuthAdapter { return this.gmailOAuth; }
+  getOutlookOAuth(): OutlookOAuthAdapter { return this.outlookOAuth; }
+  public getTooltipsRegistry(): TooltipsRegistry { return this.tooltipsRegistry; }
+  /** Broadcast a Guardian-curated tooltip insight to all connected clients. */
+  public emitTooltipInsight(tipId: string, message: string, kind: string = "guardian"): void {
+    if (!tipId) return;
+    this.broadcastEvent({ type: "guardian_tip", tipId, kind, message: String(message ?? "") });
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = req.url ?? "";
+
+    // Normalize /api/v1/* → /api/* so all inline handlers match regardless of version prefix.
+    const rawUrl = req.url ?? "";
+    const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
     const method = req.method?.toUpperCase() ?? "GET";
 
-    if (method === "GET" && (url === "/" || url === "/dashboard")) {
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
-      });
-      res.end(dashboardHtml(this.port));
+    // ── Security headers (applied to every response) ──────────────────
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+    // ── R2: CORS allowlist + Origin/Referer CSRF guard ────────────────
+    // Runs before rate-limit / auth so that a misconfigured cross-origin
+    // page never burns the IP's rate-limit budget and never gets a hint
+    // about whether a route is auth-gated. Preflights are answered here
+    // and short-circuit the rest of the pipeline.
+    const corsResult = applyCorsAndCsrf(req, res, this.corsCsrfConfig);
+    if (corsResult.responseSent) return;
+    if (!corsResult.allowed) return;
+
+    // ── Request body size guard (Content-Length fast-path) ───────────
+    const contentLengthHeader = req.headers["content-length"];
+    if (contentLengthHeader) {
+      const MAX_BODY_SIZE = parseInt(process.env.PRISM_MAX_BODY_SIZE ?? "10485760", 10);
+      const declaredSize = parseInt(contentLengthHeader, 10);
+      if (!isNaN(declaredSize) && declaredSize > MAX_BODY_SIZE) {
+        return this.json(res, 413, { error: "Request body too large", maxBytes: MAX_BODY_SIZE });
+      }
+    }
+
+    // ── Rate limiting ─────────────────────────────────────────────────
+    const rateResult = this.rateLimiter.check(req);
+    res.setHeader("X-RateLimit-Remaining", String(rateResult.remaining));
+    if (!rateResult.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rateResult.retryAfterMs ?? 60000) / 1000)));
+      return this.json(res, 429, { error: "Too many requests", retryAfterMs: rateResult.retryAfterMs });
+    }
+
+    // ── Authentication ────────────────────────────────────────────────
+    const authResult = this.authGate.check(req);
+    if (!authResult.authenticated) {
+      res.setHeader("WWW-Authenticate", 'Bearer realm="PRISM Dashboard"');
+      return this.json(res, 401, { error: "Unauthorized", reason: authResult.reason });
+    }
+
+    // ── Modular Routing ───────────────────────────────────────────────
+    const routed = await this.router.handle(req, res, this);
+    if (routed) return;
+
+    // ── OpenAPI Specification ──────────────────────────────────────────
+    if (method === "GET" && (rawUrl === "/api/v1/openapi.json" || url === "/api/openapi.json")) {
+      return this.json(res, 200, generateOpenApiSpec(this.port));
+    }
+
+
+    // ── Favicon (suppress 404 / browser probe) ────────────────────────
+    if (method === "GET" && (url === "/favicon.ico" || url.startsWith("/favicon.ico?"))) {
+      res.writeHead(204);
+      res.end();
       return;
     }
 
-    if (method === "GET" && (url === "/health" || url === "/api/health")) {
-      return this.json(res, 200, { status: "ok" });
+    if (method === "GET" && url.startsWith("/public/") && (url.endsWith(".js") || url.endsWith(".css") || url.endsWith(".html"))) {
+      const safeFile = url.slice("/public/".length).replace(/\.\./g, "");
+      if (!safeFile) {
+        return this.json(res, 404, { error: "Not found" });
+      }
+      const publicRoot = resolvePath(DashboardService.publicDir);
+      const filePath = resolvePath(publicRoot, safeFile);
+      // Containment check: reject any resolved path that escapes publicDir (defence-in-depth over the `..` strip above).
+      if (filePath !== publicRoot && !filePath.startsWith(publicRoot + pathSep)) {
+        return this.json(res, 404, { error: "Not found" });
+      }
+      if (!existsSync(filePath)) { return this.json(res, 404, { error: "Not found" }); }
+      const content = readFileSync(filePath);
+      const contentType = url.endsWith(".css") ? "text/css; charset=utf-8" : url.endsWith(".html") ? "text/html; charset=utf-8" : "application/javascript; charset=utf-8";
+      res.writeHead(200, {
+        "Content-Type": contentType,
+        "Cache-Control": "no-store",
+      });
+      res.end(content);
+      return;
     }
+
+    // (Modular Routing already handled dashboard, setup, etc.)
+
+
+
 
     if (method === "GET" && url.startsWith("/api/chat/stream")) {
       const sseId = randomUUID();
@@ -1934,8 +3004,265 @@ export class DashboardService {
       return;
     }
 
-    if (method === "GET" && (url === "/pending" || url === "/api/pending")) {
+    // ── PTAC-aligned /api/chat — tier-classified contract endpoint ──────────
+    //
+    // This is a thin, governance-first entry point that classifies a free-text
+    // prompt into Tier 1 / 2 / 3 and returns the contract shape that PTAC
+    // scenarios s03 (tier-1 capability), s05 (tier-2 approval), and s06
+    // (tier-3 deny) assert against. It complements — does NOT replace — the
+    // session-scoped chat surface at `/api/chat/sessions/:id/messages`, which
+    // remains the path used by the dashboard UI for full LLM round-trips.
+    //
+    // Response shapes:
+    //   - Tier 1: 200 { tier: 1, accepted: true, reason_code, response, session_id }
+    //   - Tier 2: 202 { tier: 2, approval_pending_ids: [id], reason_code, session_id }
+    //   - Tier 3: 200 { tier: 3, denied: true, reason_code, matched_pattern, session_id }
+    //
+    // Tier-2 entries are enqueued fire-and-forget into ApprovalQueue with a
+    // 120s timeout. Operators resolve them via POST /api/approval/approve/:id
+    // or POST /api/approval/deny/:id (existing routes).
+    if (method === "POST" && url === "/api/chat") {
+      let body: { prompt?: unknown; sessionId?: unknown };
+      try {
+        body = await this.readJsonBody<{ prompt?: unknown; sessionId?: unknown }>(req);
+      } catch (err) {
+        return this.json(res, 400, { error: "invalid_json", message: String((err as Error).message) });
+      }
+      const prompt = typeof body.prompt === "string" ? body.prompt : "";
+      const sessionId = typeof body.sessionId === "string" && body.sessionId.length > 0
+        ? body.sessionId
+        : `ptac-${randomUUID().slice(0, 8)}`;
+      if (prompt.trim().length === 0) {
+        return this.json(res, 400, {
+          error: "missing_prompt",
+          message: "Request body must include a non-empty 'prompt' field.",
+        });
+      }
+      const classification = classifyChatTier(prompt);
+
+      // Audit every classification decision through the activity bus so the
+      // accountability chain captures both allowed and refused requests.
+      this.activityBus.emit({
+        sessionId,
+        layer: "governance",
+        operation: "chat.tier_classified",
+        status: "succeeded",
+        details: {
+          tier: classification.tier,
+          reason_code: classification.reasonCode,
+          matched_pattern: classification.matchedPattern,
+          prompt_length: prompt.length,
+        },
+      });
+
+      if (classification.tier === 3) {
+        return this.json(res, 200, {
+          tier: 3,
+          denied: true,
+          reason_code: classification.reasonCode,
+          matched_pattern: classification.matchedPattern,
+          session_id: sessionId,
+        });
+      }
+
+      if (classification.tier === 2) {
+        // Enqueue an approval request. ApprovalQueue assigns the id internally;
+        // we snapshot the queue before/after to recover the new id without
+        // changing the queue API. Promise is intentionally fire-and-forget —
+        // the operator resolves it later via the approval endpoints.
+        const before = new Set(this.queue.list().map((entry) => entry.id));
+        void this.queue.request(
+          sessionId,
+          "chat.tier2",
+          { prompt, reason_code: classification.reasonCode, matched_pattern: classification.matchedPattern },
+          120_000,
+        );
+        const after = this.queue.list().map((entry) => entry.id);
+        const newIds = after.filter((id) => !before.has(id));
+        return this.json(res, 202, {
+          tier: 2,
+          approval_pending_ids: newIds,
+          reason_code: classification.reasonCode,
+          matched_pattern: classification.matchedPattern,
+          session_id: sessionId,
+        });
+      }
+
+      // Tier 1 — autonomous capability response. The intentional minimal body
+      // here lets PTAC self-drive scenarios assert end-to-end without pulling
+      // a live LLM provider into the test path. Real conversational chat
+      // continues to flow through /api/chat/sessions/:id/messages.
+      return this.json(res, 200, {
+        tier: 1,
+        accepted: true,
+        reason_code: classification.reasonCode,
+        response:
+          "Acknowledged. Tier-1 capability prompt accepted by the governance layer; "
+          + "for a full conversational reply, post to /api/chat/sessions/:id/messages.",
+        session_id: sessionId,
+      });
+    }
+    // ── End PTAC-aligned /api/chat ──────────────────────────────────────────
+
+    if (method === "GET" && (url === "/pending" || url === "/api/pending" || url === "/api/approval/pending")) {
       return this.json(res, 200, this.queue.list());
+    }
+
+    if (method === "GET" && url === "/api/models/gguf") {
+      try {
+        const models: Array<{ name: string; path: string; source: string }> = [];
+        const searchPaths = [
+          { path: process.cwd(), source: "workspace" },
+          { path: join(process.cwd(), "models"), source: "workspace-models" },
+          { path: join(homedir(), ".ollama", "models"), source: "ollama" },
+        ];
+
+        for (const entry of searchPaths) {
+          this.scanForGgufs(entry.path, entry.source, models);
+        }
+
+        // Add Ollama API results
+        const ollamaModels = await this.fetchOllamaTags();
+        for (const om of ollamaModels) {
+          models.push({ name: om.name, path: om.name, source: om.source });
+        }
+
+        return this.json(res, 200, { models });
+      } catch (err: any) {
+        return this.json(res, 500, { error: err.message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/models/download/status") {
+      return this.json(res, 200, { downloads: Array.from(this.downloadStatus.values()) });
+    }
+
+    if (method === "POST" && url === "/api/models/download") {
+      const body = await this.readBody(req);
+      const { url: dlUrl, name, mmprojUrl, mmprojName } = JSON.parse(body);
+      if (!dlUrl || !name) return this.json(res, 400, { error: "Missing url or name" });
+
+      const modelsDir = join(process.cwd(), "models");
+      if (!existsSync(modelsDir)) mkdirSync(modelsDir, { recursive: true });
+
+      const modelId = randomUUID();
+      this.downloadStatus.set(modelId, {
+        id: modelId,
+        url: dlUrl,
+        fileName: name,
+        status: "pending",
+        progress: 0,
+        downloadedBytes: 0,
+        totalBytes: 0,
+        startTime: new Date().toISOString()
+      });
+
+      // Start model download
+      this.downloadFile(modelId, dlUrl, join(modelsDir, name)).catch(() => { });
+
+      // Optional mmproj download
+      if (mmprojUrl && mmprojName) {
+        const mmId = randomUUID();
+        this.downloadStatus.set(mmId, {
+          id: mmId,
+          url: mmprojUrl,
+          fileName: mmprojName,
+          status: "pending",
+          progress: 0,
+          downloadedBytes: 0,
+          totalBytes: 0,
+          startTime: new Date().toISOString()
+        });
+        this.downloadFile(mmId, mmprojUrl, join(modelsDir, mmprojName)).catch(() => { });
+      }
+
+      return this.json(res, 200, { message: "Downloads initiated", modelId });
+    }
+
+    if (method === "POST" && url === "/api/models/pull") {
+      try {
+        const body = await this.readJsonBody<{ tag: string }>(req);
+        const tag = body?.tag;
+        if (!tag || typeof tag !== "string" || !/^[\w.:\/-]+$/.test(tag)) {
+          return this.json(res, 400, { error: "Invalid or missing Ollama tag" });
+        }
+        const pullId = randomUUID();
+        this.downloadStatus.set(pullId, {
+          id: pullId,
+          url: `ollama://${tag}`,
+          fileName: tag,
+          status: "downloading",
+          progress: 0,
+          downloadedBytes: 0,
+          totalBytes: 0,
+          startTime: new Date().toISOString(),
+        });
+        const { exec: execCb } = await import("node:child_process");
+        execCb(`ollama pull ${tag}`, { timeout: 600000 }, (err, stdout, stderr) => {
+          const status = this.downloadStatus.get(pullId);
+          if (!status) return;
+          if (err) {
+            status.status = "error";
+            status.error = stderr?.trim() || err.message;
+          } else {
+            status.status = "completed";
+            status.progress = 100;
+          }
+        });
+        return this.json(res, 200, { message: "Ollama pull initiated", pullId });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Custom Recommended Models API ────────────────────────────────────
+
+    if (method === "GET" && url === "/api/models/recommended") {
+      return this.json(res, 200, { custom: this.customRecommendedModels });
+    }
+
+    if (method === "POST" && url === "/api/models/recommended") {
+      try {
+        const body = await this.readJsonBody<{ name: string; fileName: string; path: string; source: string }>(req);
+        if (!body?.fileName || !body?.path) {
+          return this.json(res, 400, { error: "Missing fileName or path" });
+        }
+        // Dedupe by fileName
+        if (this.customRecommendedModels.some(m => m.fileName === body.fileName)) {
+          return this.json(res, 409, { error: "Model already in recommended list" });
+        }
+        // Compute file size
+        let sizeStr = "unknown";
+        try {
+          const st = statSync(body.path);
+          const gb = st.size / (1024 * 1024 * 1024);
+          sizeStr = gb >= 1 ? gb.toFixed(1) + " GB" : (st.size / (1024 * 1024)).toFixed(0) + " MB";
+        } catch { /* file may be remote/ollama */ }
+        this.customRecommendedModels.push({
+          name: body.name || body.fileName.replace(/\.gguf$/i, ""),
+          fileName: body.fileName,
+          size: sizeStr,
+          path: body.path,
+          source: body.source || "workspace",
+          addedAt: new Date().toISOString(),
+        });
+        this.saveCustomRecommendedModels();
+        return this.json(res, 200, { custom: this.customRecommendedModels });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "DELETE" && url === "/api/models/recommended") {
+      try {
+        const body = await this.readJsonBody<{ fileName: string }>(req);
+        if (!body?.fileName) return this.json(res, 400, { error: "Missing fileName" });
+        this.customRecommendedModels = this.customRecommendedModels.filter(m => m.fileName !== body.fileName);
+        this.saveCustomRecommendedModels();
+        return this.json(res, 200, { custom: this.customRecommendedModels });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
     }
 
     if (method === "GET" && url.startsWith("/api/events")) {
@@ -1976,18 +3303,7 @@ export class DashboardService {
       return this.json(res, 200, payload);
     }
 
-    if (method === "GET" && url === "/api/status") {
-      const events = this.activityBus.listEvents();
-      return this.json(res, 200, {
-        ...this.status,
-        uptimeSeconds: Math.floor((Date.now() - Date.parse(this.status.startedAt)) / 1000),
-        pendingApprovals: this.queue.list().length,
-        chatSessionCount: this.chatStore.listSessions().length,
-        eventCount: events.length,
-        lastEvent: events[events.length - 1] ?? null,
-        workspaceRoot: resolveWorkspaceRoot(),
-      });
-    }
+
 
     if (method === "GET" && url.startsWith("/api/readiness")) {
       try {
@@ -2012,12 +3328,387 @@ export class DashboardService {
       }
     }
 
+    // ── Setup Wizard API ─────────────────────────────────────────────────
+    if (method === "GET" && url === "/api/setup/status") {
+      const prefs = readPreferences();
+      return this.json(res, 200, {
+        setupComplete: prefs?.setupComplete ?? false,
+        executionProfileSegment: prefs?.executionProfileSegment ?? this.status.executionProfileSegment ?? "individual",
+        workspaceRoot: resolveWorkspaceRoot(),
+      });
+    }
+
+    if (method === "GET" && url === "/api/setup/prerequisites") {
+      const nodeVersion = process.version;
+      const nodeMajor = parseInt(nodeVersion.slice(1), 10);
+      const checks = [
+        {
+          id: "node-version",
+          label: "Node.js 22+",
+          passed: nodeMajor >= 22,
+          detail: nodeMajor >= 22 ? `Node.js ${nodeVersion} detected.` : `Node.js ${nodeVersion} detected — version 22+ is required.`,
+        },
+        {
+          id: "workspace-exists",
+          label: "Workspace directory exists",
+          passed: existsSync(resolveWorkspaceRoot()),
+          detail: existsSync(resolveWorkspaceRoot()) ? `Workspace at ${resolveWorkspaceRoot()}` : `Workspace directory does not yet exist at ${resolveWorkspaceRoot()}`,
+        },
+      ];
+      return this.json(res, 200, { checks });
+    }
+
+    if (method === "POST" && url === "/api/setup/profile") {
+      try {
+        const body = await this.readJsonBody<{ executionProfileSegment?: string }>(req);
+        const segment = body.executionProfileSegment?.trim().toLowerCase();
+        if (segment !== "individual" && segment !== "business") {
+          return this.json(res, 400, { error: "executionProfileSegment must be 'individual' or 'business'." });
+        }
+        writePreferences({ executionProfileSegment: segment });
+        this.status.executionProfileSegment = segment;
+        return this.json(res, 200, { executionProfileSegment: segment });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/setup/workspace") {
+      try {
+        const body = await this.readJsonBody<{ workspaceRoot?: string }>(req);
+        const root = body.workspaceRoot?.trim();
+        if (!root) {
+          return this.json(res, 400, { error: "workspaceRoot is required." });
+        }
+        if (!join(root, "").startsWith(root)) {
+          return this.json(res, 400, { error: "Invalid workspace path." });
+        }
+        setWorkspaceRoot(root);
+        ensureWorkspaceStructure();
+        return this.json(res, 200, { workspaceRoot: resolveWorkspaceRoot() });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // Phase E3b — wizard: persist workspace default character. Called from step 4.
+    if (method === "POST" && url === "/api/setup/character") {
+      try {
+        const body = await this.readJsonBody<{ characterId?: string }>(req);
+        const characterId = String(body.characterId ?? "").trim();
+        if (!characterId) {
+          return this.json(res, 400, { error: "characterId is required." });
+        }
+        const available = this.listWorkspaceCharacters();
+        if (!available.some((c) => c.id === characterId)) {
+          return this.json(res, 404, { error: `character_not_found: ${characterId}` });
+        }
+        writePreferences({ defaultCharacterId: characterId, lastUsedCharacterId: characterId });
+        return this.json(res, 200, { ok: true, defaultCharacterId: characterId });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // Phase E3b — wizard: bootstrap the first CAC assignment + seed session. Called from step 5.
+    if (method === "POST" && url === "/api/setup/cac") {
+      try {
+        const body = await this.readJsonBody<{
+          characterId?: string;
+          operatorEmail?: string;
+          assistantEmail?: string;
+          title?: string;
+        }>(req);
+        const prefs = readPreferences();
+        const characterId = String(body.characterId ?? prefs?.defaultCharacterId ?? "").trim();
+        if (!characterId) {
+          return this.json(res, 400, {
+            error: "no_default_character",
+            message: "Run POST /api/setup/character first or provide characterId.",
+          });
+        }
+        const available = this.listWorkspaceCharacters();
+        if (!available.some((c) => c.id === characterId)) {
+          return this.json(res, 404, { error: `character_not_found: ${characterId}` });
+        }
+        const operatorEmail = String(body.operatorEmail ?? `operator@prism.local`).trim();
+        const assistantEmail = String(body.assistantEmail ?? `${characterId}@prism.local`).trim();
+
+        // Seed an initial session and auto-create the CAC assignment.
+        const session = this.createChatSession({
+          title: body.title ?? "First session",
+          characterId,
+          operatorEmail,
+          assistantEmail,
+        });
+        try {
+          writePreferences({
+            cacBootstrapAssignmentId: session.cacAssignmentId ?? undefined,
+            lastUsedCharacterId: characterId,
+          });
+        } catch { /* non-fatal */ }
+        return this.json(res, 201, {
+          ok: true,
+          session,
+          cacAssignmentId: session.cacAssignmentId,
+        });
+      } catch (error) {
+        const tagged = error as Error & { code?: string };
+        return this.json(res, 400, { error: tagged.message ?? String(error), code: tagged.code });
+      }
+    }
+
+    if (method === "POST" && url === "/api/setup/complete") {
+      try {
+        writePreferences({ setupComplete: true });
+        const snapshot = await this.getReadinessSnapshot();
+        this.emitReadinessAudit("setup_wizard_complete", snapshot);
+        this.activityBus.emit({
+          sessionId: this.status.sessionId,
+          layer: "causal",
+          operation: "prism.setup_wizard.complete",
+          status: "succeeded",
+          details: {
+            executionProfileSegment: this.status.executionProfileSegment,
+            workspaceRoot: resolveWorkspaceRoot(),
+            ready: snapshot.ready,
+          },
+        });
+        return this.json(res, 200, { setupComplete: true, readiness: snapshot });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // ── Advanced Setup Wizard API ──────────────────────────────────────────
+    if (method === "GET" && url === "/api/setup/advanced/status") {
+      try {
+        const prefs = readPreferences();
+        const wsRoot = resolveWorkspaceRoot();
+
+        // Gather routing config
+        let routingConfig = null;
+        try {
+          const routingPath = join(wsRoot, "state", "routing-config.json");
+          if (existsSync(routingPath)) {
+            routingConfig = JSON.parse(readFileSync(routingPath, "utf-8"));
+          }
+        } catch { /* ignore */ }
+
+        // Gather guardian status
+        let guardianStatus = null;
+        try {
+          guardianStatus = (this as any).guardianAgent?.getStatus?.() ?? null;
+        } catch { /* ignore */ }
+
+        // Gather character assignments
+        let characterAssignments: unknown[] = [];
+        try {
+          characterAssignments = (this as any).characterAssignments ?? [];
+        } catch { /* ignore */ }
+
+        // Gather browser profiles
+        let browserProfiles: unknown[] = [];
+        try {
+          browserProfiles = (this as any).browserProfiles ?? [];
+        } catch { /* ignore */ }
+
+        // Gather scheduled jobs
+        let scheduledJobs: unknown[] = [];
+        try {
+          scheduledJobs = (this as any).schedulerEngine?.listSchedules?.() ?? [];
+        } catch { /* ignore */ }
+
+        // Gather available characters
+        let characters: unknown[] = [];
+        try {
+          characters = (this as any).getAvailableCharacters?.() ?? [];
+        } catch { /* ignore */ }
+
+        // Gather GGUF models
+        let ggufModels: Array<{ name: string; path: string; source: string }> = [];
+        try {
+          const modelsDir = join(process.cwd(), "models");
+          if (existsSync(modelsDir)) {
+            const files = readdirSync(modelsDir).filter((f: string) => f.endsWith(".gguf"));
+            ggufModels = files.map((f: string) => ({
+              name: f.replace(/\.gguf$/, ""),
+              path: join(modelsDir, f),
+              source: "workspace-models",
+            }));
+          }
+        } catch { /* ignore */ }
+
+        return this.json(res, 200, {
+          setupComplete: prefs?.setupComplete ?? false,
+          executionProfileSegment: prefs?.executionProfileSegment ?? this.status.executionProfileSegment ?? "individual",
+          workspaceRoot: wsRoot,
+          routingConfig,
+          guardianStatus,
+          characterAssignments,
+          browserProfiles,
+          scheduledJobs,
+          characters,
+          ggufModels,
+        });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/setup/initialization-session") {
+      try {
+        const body = await this.readJsonBody<{ certificate: Record<string, unknown> }>(req);
+        const cert = body.certificate ?? {};
+        const timestamp = new Date().toISOString();
+
+        // 1. Create a dedicated chat session
+        const session = this.createChatSession({
+          title: "PRISM Initialization Certificate \u2014 " + timestamp,
+          allowUnbound: true,
+        });
+
+        // 2. Build certificate content
+        const certLines: string[] = [
+          "# PRISM Initialization Certificate",
+          "**Generated:** " + timestamp,
+          "**Session:** " + session.sessionId,
+          "",
+          "## Configuration Summary",
+        ];
+
+        const sections: Array<[string, unknown]> = [
+          ["Execution Profile", cert.profile],
+          ["Workspace", cert.workspace],
+          ["Primary LLM Provider", cert.provider],
+          ["Model Routing", cert.routing],
+          ["Guardian Agent", cert.guardian],
+          ["Agentic Control", cert.agents],
+          ["Character Accountability (CAC)", cert.cac],
+          ["Browser Profile", cert.browserProfile],
+          ["Scheduler", cert.scheduler],
+          ["Readiness", cert.readiness],
+        ];
+
+        for (const [title, data] of sections) {
+          certLines.push("");
+          certLines.push("### " + title);
+          if (data && typeof data === "object") {
+            for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+              const val = typeof v === "object" ? JSON.stringify(v) : String(v ?? "N/A");
+              certLines.push("- **" + k + ":** " + val);
+            }
+          } else {
+            certLines.push("- " + String(data ?? "Not configured"));
+          }
+        }
+
+        certLines.push("");
+        certLines.push("---");
+        certLines.push("*This certificate is an immutable provenance record of the initial PRISM system configuration.*");
+
+        const certContent = certLines.join("\n");
+
+        // 3. Add certificate as a system message to the session
+        this.chatStore.appendMessage(
+          session.sessionId,
+          "assistant",
+          certContent,
+          { source: "initialization_certificate", type: "certificate" },
+        );
+
+        // 4. Package the session as a complete initialization certificate
+        const pkg = this.createSessionPackage({
+          title: "Initialization Certificate v1.0 \u2014 " + timestamp,
+          areaOfInterest: "System Initialization",
+          objective: "Immutable provenance record of initial PRISM system configuration",
+          successCriteria: "All configuration steps completed and validated",
+          sessionIds: [session.sessionId],
+          status: "complete" as SessionPackageStatus,
+          source: "setup_wizard_advanced",
+        });
+
+        // 5. Emit activity event
+        this.activityBus.emit({
+          sessionId: session.sessionId,
+          layer: "causal",
+          operation: "prism.initialization_certificate.created",
+          status: "succeeded",
+          details: {
+            packageId: pkg.packageId,
+            sessionId: session.sessionId,
+            timestamp,
+          },
+        });
+
+        return this.json(res, 201, {
+          sessionId: session.sessionId,
+          packageId: pkg.packageId,
+          title: session.title,
+          timestamp,
+        });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
     if (method === "GET" && url === "/api/actions") {
       return this.json(res, 200, this.listActions());
     }
 
     if (method === "GET" && url === "/api/action-history") {
       return this.json(res, 200, this.listActionHistory());
+    }
+
+    if (method === "GET" && url.startsWith("/api/logs")) {
+      const filters = parseEventFilters(url, 500);
+      const limit = Math.max(1, Math.min(2000, filters.limit));
+      const events = this.activityBus.listEvents();
+      const logs = events.slice(-limit).reverse().map((e) => ({
+        type: "log_entry",
+        timestamp: e.timestamp,
+        source: e.layer || "system",
+        operation: e.operation,
+        severity: e.status === "failed" ? "error" : "info",
+        summary: typeof e.details?.summary === "string" ? e.details.summary : e.operation,
+      }));
+      return this.json(res, 200, logs);
+    }
+
+    if (method === "GET" && url === "/api/mcp/servers") {
+      if (!this.mcpAdapter) {
+        return this.json(res, 200, { servers: [], attached: false });
+      }
+      return this.json(res, 200, {
+        servers: this.mcpAdapter.getServerStates(),
+        attached: true,
+      });
+    }
+
+    if (method === "POST" && /^\/api\/mcp\/servers\/[^/]+\/reconnect$/.test(url)) {
+      if (!this.mcpAdapter) {
+        return this.json(res, 503, { error: "MCP adapter not attached" });
+      }
+      const name = decodeURIComponent(url.split("/")[4] ?? "");
+      if (!name) return this.json(res, 400, { error: "Missing server name" });
+      const result = await this.mcpAdapter.forceReconnect(name);
+      return this.json(res, result.ok ? 200 : 502, result);
+    }
+
+    if (method === "GET" && url.startsWith("/api/debug/console")) {
+      if (!this.consoleInterceptor) {
+        return this.json(res, 200, { lines: [], attached: false });
+      }
+      let limit = 500;
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const raw = Number(parsed.searchParams.get("limit") ?? 500);
+        if (Number.isFinite(raw)) limit = Math.max(1, Math.min(5000, raw));
+      } catch { /* keep default */ }
+      return this.json(res, 200, {
+        lines: this.consoleInterceptor.getTail(limit),
+        attached: true,
+      });
     }
 
     if (method === "GET" && url === "/api/chat/sessions") {
@@ -2226,6 +3917,25 @@ export class DashboardService {
       }
     }
 
+    if (method === "GET" && url === "/api/llm/provider-health") {
+      try {
+        const results = await this.llmProviders.testAllProviders();
+        return this.json(res, 200, { providers: results, timestamp: new Date().toISOString() });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Session-independent provider catalog (for settings tab, no session required) ──
+    if (method === "GET" && url === "/api/llm/catalog") {
+      try {
+        const catalog = await this.llmProviders.getCatalog();
+        return this.json(res, 200, catalog);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
     if (method === "GET" && url.startsWith("/api/llm/providers")) {
       try {
         const parsed = new URL(`http://localhost${url}`);
@@ -2365,9 +4075,11 @@ export class DashboardService {
       }
     }
 
-    if (method === "GET" && url === "/api/llm/routing/suggest") {
+    if (method === "GET" && url.startsWith("/api/llm/routing/suggest")) {
       try {
-        const suggestions = await this.llmProviders.suggestRoutingForAllRoles();
+        const parsedUrl = new URL(url, "http://localhost");
+        const providerId = parsedUrl.searchParams.get("providerId") || "";
+        const suggestions = await this.llmProviders.suggestRoutingForAllRoles(providerId);
         return this.json(res, 200, { suggestions });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
@@ -2378,6 +4090,421 @@ export class DashboardService {
       try {
         const profiles = await this.llmProviders.getModelProfiles();
         return this.json(res, 200, { profiles });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Spectrum Refraction (Prism SR) API ───────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/sr/status")) {
+      try {
+        const parsedUrl = new URL(url, "http://localhost");
+        const sessionId = parsedUrl.searchParams.get("sessionId") || "";
+        if (!sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const config = this.chatStore.getSRConfig(sessionId);
+        const candidates = await this.llmProviders.getSRModelCandidates();
+        const validation = config
+          ? this.llmProviders.validateSRModels(config.leftModel, config.rightModel)
+          : { left: null, right: null };
+
+        // Compute isolation level when both hemispheres are configured
+        const triad = (config?.leftProviderId && config?.leftModel && config?.rightProviderId && config?.rightModel)
+          ? this.llmProviders.validateSRTriadConfig(config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel)
+          : null;
+
+        return this.json(res, 200, {
+          config: config ?? { enabled: false, leftProviderId: null, leftModel: null, rightProviderId: null, rightModel: null },
+          candidates,
+          validation,
+          isolationLevel: triad?.isolationLevel ?? null,
+          isolationAdvisory: triad?.advisory ?? null,
+          circuitBreakerState: this.llmProviders.getSRCircuitBreakerState(),
+        });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/configure") {
+      try {
+        const body = await this.readJsonBody<{
+          sessionId: string;
+          leftProviderId: string | null;
+          leftModel: string | null;
+          rightProviderId: string | null;
+          rightModel: string | null;
+          leftSlot?: string | null;
+          rightSlot?: string | null;
+          leftTimeoutMs?: number | null;
+          rightTimeoutMs?: number | null;
+          circuitBreakerEnabled?: boolean;
+          showHemispheres?: boolean;
+        }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+
+        // Validate selections against capability matrix (advisory only — non-qualified models are allowed)
+        const validation = this.llmProviders.validateSRModels(body.leftModel, body.rightModel);
+
+        // Instance isolation enforcement: Left ≠ Right (mandatory)
+        let isolationLevel: string | null = null;
+        if (body.leftProviderId && body.leftModel && body.rightProviderId && body.rightModel) {
+          const triad = this.llmProviders.validateSRTriadConfig(body.leftProviderId, body.leftModel, body.rightProviderId, body.rightModel);
+          if (!triad.valid) {
+            return this.json(res, 400, { error: triad.advisory, validation, isolationLevel: triad.isolationLevel });
+          }
+          isolationLevel = triad.isolationLevel;
+        }
+
+        const existingConfig = this.chatStore.getSRConfig(body.sessionId);
+        const enabled = existingConfig?.enabled ?? false;
+        this.chatStore.saveSRConfig(body.sessionId, enabled, body.leftProviderId, body.leftModel, body.rightProviderId, body.rightModel, {
+          leftSlot: body.leftSlot ?? existingConfig?.leftSlot,
+          rightSlot: body.rightSlot ?? existingConfig?.rightSlot,
+          leftTimeoutMs: body.leftTimeoutMs ?? existingConfig?.leftTimeoutMs,
+          rightTimeoutMs: body.rightTimeoutMs ?? existingConfig?.rightTimeoutMs,
+          circuitBreakerEnabled: body.circuitBreakerEnabled ?? existingConfig?.circuitBreakerEnabled,
+          showHemispheres: body.showHemispheres ?? existingConfig?.showHemispheres,
+        });
+        const updated = this.chatStore.getSRConfig(body.sessionId);
+
+        return this.json(res, 200, { config: updated, validation, isolationLevel });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/activate") {
+      try {
+        const body = await this.readJsonBody<{ sessionId: string }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const config = this.chatStore.getSRConfig(body.sessionId);
+        if (!config || !config.leftModel || !config.rightModel) {
+          return this.json(res, 400, { error: "Configure Left and Right models before activating SR." });
+        }
+
+        // Instance isolation enforcement on activation
+        const triad = this.llmProviders.validateSRTriadConfig(config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel);
+        if (!triad.valid) {
+          return this.json(res, 400, { error: triad.advisory, isolationLevel: triad.isolationLevel });
+        }
+
+        // Auto-start local models that aren't running yet
+        const autoStartPromises: Promise<unknown>[] = [];
+        for (const side of [{ pid: config.leftProviderId, model: config.leftModel }, { pid: config.rightProviderId, model: config.rightModel }] as const) {
+          const supervisor = side.pid === "llamacpp" ? this.llamaSupervisor : side.pid === "bitnetcpp" ? this.bitnetSupervisor : null;
+          if (supervisor && side.model) {
+            const running = supervisor.getSnapshot().find(s => s.modelAlias === side.model && s.status === "ready");
+            if (!running) {
+              const modelPath = supervisor.getModelPath(side.model);
+              if (modelPath) {
+                autoStartPromises.push(supervisor.loadModel(modelPath, side.model));
+              }
+            }
+          }
+        }
+        if (autoStartPromises.length > 0) {
+          await Promise.all(autoStartPromises);
+        }
+
+        this.chatStore.saveSRConfig(body.sessionId, true, config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel, {
+          leftSlot: config.leftSlot,
+          rightSlot: config.rightSlot,
+          leftTimeoutMs: config.leftTimeoutMs,
+          rightTimeoutMs: config.rightTimeoutMs,
+          circuitBreakerEnabled: config.circuitBreakerEnabled,
+          showHemispheres: config.showHemispheres,
+        });
+        return this.json(res, 200, { activated: true, config: this.chatStore.getSRConfig(body.sessionId), isolationLevel: triad.isolationLevel });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/deactivate") {
+      try {
+        const body = await this.readJsonBody<{ sessionId: string }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const config = this.chatStore.getSRConfig(body.sessionId);
+        if (config) {
+          this.chatStore.saveSRConfig(body.sessionId, false, config.leftProviderId, config.leftModel, config.rightProviderId, config.rightModel, {
+            leftSlot: config.leftSlot,
+            rightSlot: config.rightSlot,
+            leftTimeoutMs: config.leftTimeoutMs,
+            rightTimeoutMs: config.rightTimeoutMs,
+            circuitBreakerEnabled: config.circuitBreakerEnabled,
+            showHemispheres: config.showHemispheres,
+          });
+        }
+        return this.json(res, 200, { activated: false, config: this.chatStore.getSRConfig(body.sessionId) });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // ── SR Presets API ────────────────────────────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/sr/presets")) {
+      try {
+        const parsedUrl = new URL(url, "http://localhost");
+        const scope = (parsedUrl.searchParams.get("scope") || "global") as "global" | "session";
+        const scopeId = parsedUrl.searchParams.get("sessionId") || undefined;
+        const presets = this.chatStore.listSRPresets(scope, scopeId);
+        return this.json(res, 200, { presets });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/sr/presets") {
+      try {
+        const body = await this.readJsonBody<{
+          name: string;
+          scope?: "global" | "session";
+          sessionId?: string;
+          leftProviderId: string | null;
+          leftModel: string | null;
+          rightProviderId: string | null;
+          rightModel: string | null;
+        }>(req);
+        if (!body.name?.trim()) return this.json(res, 400, { error: "Missing preset name" });
+        const id = randomUUID();
+        const scope = body.scope || "global";
+        const scopeId = scope === "session" ? (body.sessionId || null) : null;
+        this.chatStore.saveSRPreset(id, body.name, scope, scopeId, body.leftProviderId, body.leftModel, body.rightProviderId, body.rightModel);
+        const preset = this.chatStore.getSRPreset(id);
+        return this.json(res, 201, { preset });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "DELETE" && url.startsWith("/api/sr/presets/")) {
+      try {
+        const presetId = url.slice("/api/sr/presets/".length).split("?")[0];
+        if (!presetId) return this.json(res, 400, { error: "Missing preset ID" });
+        const deleted = this.chatStore.deleteSRPreset(presetId);
+        return this.json(res, deleted ? 200 : 404, deleted ? { deleted: true } : { error: "Preset not found" });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url.startsWith("/api/sr/presets/") && url.endsWith("/load")) {
+      try {
+        const presetId = url.slice("/api/sr/presets/".length).replace(/\/load$/, "");
+        if (!presetId) return this.json(res, 400, { error: "Missing preset ID" });
+        const body = await this.readJsonBody<{ sessionId: string }>(req);
+        if (!body.sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const preset = this.chatStore.getSRPreset(presetId);
+        if (!preset) return this.json(res, 404, { error: "Preset not found" });
+        const existingConfig = this.chatStore.getSRConfig(body.sessionId);
+        const enabled = existingConfig?.enabled ?? false;
+        // Preserve advanced config opts when loading a preset (presets only store model selection)
+        this.chatStore.saveSRConfig(body.sessionId, enabled, preset.leftProviderId, preset.leftModel, preset.rightProviderId, preset.rightModel, {
+          leftSlot: existingConfig?.leftSlot,
+          rightSlot: existingConfig?.rightSlot,
+          leftTimeoutMs: existingConfig?.leftTimeoutMs,
+          rightTimeoutMs: existingConfig?.rightTimeoutMs,
+          circuitBreakerEnabled: existingConfig?.circuitBreakerEnabled,
+          showHemispheres: existingConfig?.showHemispheres,
+        });
+        const config = this.chatStore.getSRConfig(body.sessionId);
+        const validation = this.llmProviders.validateSRModels(preset.leftModel, preset.rightModel);
+        const triad = (preset.leftProviderId && preset.leftModel && preset.rightProviderId && preset.rightModel)
+          ? this.llmProviders.validateSRTriadConfig(preset.leftProviderId, preset.leftModel, preset.rightProviderId, preset.rightModel)
+          : null;
+        return this.json(res, 200, { config, validation, isolationLevel: triad?.isolationLevel ?? null, isolationAdvisory: triad?.advisory ?? null });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // ── SR Suggest (heuristic model selection) ────────────────────────
+
+    if (method === "GET" && url === "/api/sr/suggest") {
+      try {
+        const candidates = await this.llmProviders.getSRModelCandidates();
+        if (candidates.left.length === 0 && candidates.right.length === 0) {
+          return this.json(res, 200, { left: null, right: null, reasoning: "No qualified SR models available. Configure providers with API keys and ensure models meet SR tier requirements." });
+        }
+        const bestLeft = candidates.left.length > 0 ? candidates.left[0] : null;
+        let bestRight = candidates.right.length > 0 ? candidates.right[0] : null;
+        // Enforce isolation: if top left and right are same provider+model, pick next-best right
+        if (bestLeft && bestRight && bestLeft.providerId === bestRight.providerId && bestLeft.model === bestRight.model) {
+          bestRight = candidates.right.length > 1 ? candidates.right[1] : null;
+        }
+        const parts: string[] = [];
+        if (bestLeft) parts.push(`Left: ${bestLeft.providerId}/${bestLeft.model} (T${bestLeft.tier} ${bestLeft.level})`);
+        else parts.push("Left: no qualified logic models available");
+        if (bestRight) parts.push(`Right: ${bestRight.providerId}/${bestRight.model} (T${bestRight.tier} ${bestRight.level})`);
+        else parts.push("Right: no qualified creative models available");
+        if (bestLeft && bestRight) {
+          const iso = bestLeft.providerId !== bestRight.providerId ? "full" : "model";
+          parts.push(`Isolation: ${iso}`);
+        }
+        return this.json(res, 200, { left: bestLeft, right: bestRight, reasoning: parts.join(" · ") });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── SR Cost Estimation ────────────────────────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/sr/cost-estimate")) {
+      try {
+        const parsedUrl = new URL(url, "http://localhost");
+        const sessionId = parsedUrl.searchParams.get("sessionId") || "";
+        if (!sessionId) return this.json(res, 400, { error: "Missing sessionId" });
+        const inputTokens = parseInt(parsedUrl.searchParams.get("inputTokens") ?? "2000", 10);
+        const outputTokens = parseInt(parsedUrl.searchParams.get("outputTokens") ?? "1000", 10);
+        const config = this.chatStore.getSRConfig(sessionId);
+        if (!config || !config.leftModel || !config.rightModel) {
+          return this.json(res, 400, { error: "SR not configured for this session." });
+        }
+        const estimate = this.llmProviders.estimateSRCost(
+          {
+            enabled: true,
+            leftModel: { providerId: config.leftProviderId!, model: config.leftModel },
+            rightModel: { providerId: config.rightProviderId!, model: config.rightModel },
+          },
+          isNaN(inputTokens) ? 2_000 : inputTokens,
+          isNaN(outputTokens) ? 1_000 : outputTokens,
+        );
+        return this.json(res, 200, estimate);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── SR Catalog (all providers + models with qualification) ────────
+
+    if (method === "GET" && url === "/api/sr/catalog") {
+      try {
+        const catalog = await this.llmProviders.getCatalog();
+        const providers = catalog.providers
+          .filter(p => p.enabled)
+          .map(p => ({
+            id: p.id,
+            label: p.label,
+            kind: p.kind,
+            hasApiKey: p.hasApiKey,
+            models: p.models,
+          }));
+        return this.json(res, 200, { providers });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Local Hardware Swarm API ───────────────────────────────────────
+
+    if (method === "GET" && url === "/api/hardware/swarm") {
+      try {
+        if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        return this.json(res, 200, this.llamaSupervisor.getSnapshot());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/hardware/swarm/load") {
+      try {
+        if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        const body = await this.readJsonBody<{ modelPath: string; modelAlias: string; ctxSize?: number }>(req);
+        if (!body.modelPath || !body.modelAlias) return this.json(res, 400, { error: "Missing required fields." });
+        const slot = await this.llamaSupervisor.loadModel(body.modelPath, body.modelAlias, body.ctxSize);
+        return this.json(res, 200, slot);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/hardware/swarm/unload") {
+      try {
+        if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        const body = await this.readJsonBody<{ modelAlias: string }>(req);
+        if (!body.modelAlias) return this.json(res, 400, { error: "Missing modelAlias." });
+        await this.llamaSupervisor.unloadModel(body.modelAlias);
+        return this.json(res, 200, { unloaded: true });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Guardian Agent API ─────────────────────────────────────────────
+
+    if (method === "GET" && url === "/api/guardian/status") {
+      try {
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/guardian/start") {
+      try {
+        const status = this.guardianAgent.getStatus();
+        if (!status.modelPath) {
+          return this.json(res, 400, {
+            error: "No local model path configured for Guardian Agent.",
+            suggestion: "Please select a GGUF model from the dropdown in the Guardian panel before starting."
+          });
+        }
+        await this.guardianAgent.start();
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/guardian/stop") {
+      try {
+        this.guardianAgent.stop();
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/guardian/configure") {
+      try {
+        const body = await this.readJsonBody<Record<string, unknown>>(req);
+        this.guardianAgent.configure(body as any);
+        return this.json(res, 200, this.guardianAgent.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // ── Guardian Task API ──────────────────────────────────────────────
+
+    if (method === "GET" && url === "/api/guardian/tasks") {
+      return this.json(res, 200, { tasks: this.guardianAgent.getTaskStatus() });
+    }
+
+    if (method === "POST" && url?.startsWith("/api/guardian/tasks/") && url?.endsWith("/run")) {
+      const taskId = url.replace("/api/guardian/tasks/", "").replace("/run", "");
+      try {
+        const result = await this.guardianAgent.runTask(taskId);
+        if (!result) return this.json(res, 404, { error: `Task not found: ${taskId}` });
+        return this.json(res, 200, result);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url?.startsWith("/api/guardian/tasks/") && url?.endsWith("/toggle")) {
+      const taskId = url.replace("/api/guardian/tasks/", "").replace("/toggle", "");
+      const result = this.guardianAgent.toggleTask(taskId);
+      if (!result) return this.json(res, 404, { error: `Task not found: ${taskId}` });
+      return this.json(res, 200, result);
+    }
+
+    if (method === "POST" && url === "/api/guardian/tasks/run-all") {
+      try {
+        await this.guardianAgent.runAllTasks();
+        return this.json(res, 200, { tasks: this.guardianAgent.getTaskStatus() });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
       }
@@ -2408,14 +4535,38 @@ export class DashboardService {
 
     if (method === "PUT" && url === "/api/models/matrix") {
       try {
-        const body = await this.readJsonBody<{ pattern: string; label?: string; tier?: number; modalities?: string[]; strengths?: string[]; locality?: string; contextWindow?: number; parametersBillions?: number; parameterSize?: string; estimatedVramMb?: number; maxOutputTokens?: number; adaptivePromptBudget?: number }>(req);
+        const body = await this.readJsonBody<{ pattern: string; label?: string; tier?: number; modalities?: string[]; strengths?: string[]; locality?: string; contextWindow?: number; parametersBillions?: number; parameterSize?: string; estimatedVramMb?: number; maxOutputTokens?: number; adaptivePromptBudget?: number; deprecated?: boolean; deprecatedAt?: string; sunsetDate?: string; successor?: string; deprecationReason?: string }>(req);
         if (!body.pattern?.trim()) {
           return this.json(res, 400, { error: "pattern is required." });
         }
         this.llmProviders.registerModel(body as any);
+        this.chatStore.upsertModelProfile(body as any);
         return this.json(res, 200, { registered: body.pattern });
       } catch (error) {
         return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "POST" && url === "/api/models/matrix/refresh") {
+      try {
+        const catalog = await this.llmProviders.getCatalog();
+        const enabledProviders = catalog.providers.filter((p) => p.enabled);
+        const results: Array<{ providerId: string; known: string[]; unknown: string[]; suggested: number }> = [];
+        for (const provider of enabledProviders) {
+          try {
+            const disc = await this.llmProviders.discoverProviderModels(provider.id);
+            for (const profile of disc.suggested) {
+              this.chatStore.upsertModelProfile(profile);
+            }
+            results.push({ providerId: provider.id, known: disc.known, unknown: disc.unknown, suggested: disc.suggested.length });
+          } catch {
+            results.push({ providerId: provider.id, known: [], unknown: [], suggested: 0 });
+          }
+        }
+        const matrix = this.llmProviders.getFullModelMatrix();
+        return this.json(res, 200, { refreshed: true, providers: results, matrix });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
       }
     }
 
@@ -2423,6 +4574,7 @@ export class DashboardService {
       try {
         const pattern = decodeURIComponent(url.slice("/api/models/matrix/".length));
         const removed = this.llmProviders.removeModel(pattern);
+        this.chatStore.removeModelProfile(pattern);
         return this.json(res, 200, { removed, pattern });
       } catch (error) {
         return this.json(res, 400, { error: String(error) });
@@ -2434,6 +4586,24 @@ export class DashboardService {
         const providerId = decodeURIComponent(url.slice("/api/models/discover/".length));
         const result = await this.llmProviders.discoverProviderModels(providerId);
         return this.json(res, 200, result);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "GET" && url === "/api/models/deprecated") {
+      try {
+        const matrix = this.llmProviders.getFullModelMatrix();
+        return this.json(res, 200, { deprecated: matrix.deprecated });
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "GET" && url === "/api/models/prompt-strategies") {
+      try {
+        const matrix = this.llmProviders.getFullModelMatrix();
+        return this.json(res, 200, { strategies: matrix.promptStrategies });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
       }
@@ -2463,18 +4633,21 @@ export class DashboardService {
       return this.json(res, 200, { plugins: this.pluginStates || {} });
     }
 
-    const pluginToggleMatch = /^\/api\/plugins\/([^/]+)\/toggle$/.exec(url);
+    const pluginToggleMatch = /^\/api\/(v1\/)?plugins\/([^/]+)\/toggle$/.exec(url);
     if (pluginToggleMatch && method === "POST") {
-      const pluginName = decodeURIComponent(pluginToggleMatch[1]!);
-      const body = await this.readJsonBody<{ enabled: boolean }>(req);
+      const pluginName = decodeURIComponent(pluginToggleMatch[2]!);
       if (!this.pluginStates[pluginName]) this.pluginStates[pluginName] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, lastChecked: null };
-      this.pluginStates[pluginName].enabled = body.enabled;
-      return this.json(res, 200, { plugin: pluginName, enabled: body.enabled });
+      // If body contains explicit enabled value use it; otherwise flip current state
+      let body: { enabled?: boolean } = {};
+      try { body = await this.readJsonBody<{ enabled?: boolean }>(req); } catch { /* no body — flip */ }
+      const newEnabled = typeof body.enabled === "boolean" ? body.enabled : !this.pluginStates[pluginName].enabled;
+      this.pluginStates[pluginName].enabled = newEnabled;
+      return this.json(res, 200, { plugin: pluginName, enabled: newEnabled });
     }
 
-    const pluginHealthMatch = /^\/api\/plugins\/([^/]+)\/health$/.exec(url);
+    const pluginHealthMatch = /^\/api\/(v1\/)?plugins\/([^/]+)\/health$/.exec(url);
     if (pluginHealthMatch && method === "POST") {
-      const pluginName = decodeURIComponent(pluginHealthMatch[1]!);
+      const pluginName = decodeURIComponent(pluginHealthMatch[2]!);
       return this.json(res, 200, { plugin: pluginName, healthy: true, message: "Health check passed" });
     }
 
@@ -2488,9 +4661,151 @@ export class DashboardService {
       return this.json(res, 201, { tool: body.name, registered: true });
     }
 
+    if (method === "POST" && url === "/api/tools/stage") {
+      try {
+        const body = await this.readJsonBody<{
+          sources: Array<"manifest" | "decorator" | "dynamic">;
+          tool_ids?: string[];
+          baseline_comparison?: boolean;
+          risk_assessment?: boolean;
+          approval_routing?: boolean;
+        }>(req);
+        if (!body.sources || !Array.isArray(body.sources) || body.sources.length === 0) {
+          return this.json(res, 400, { error: "sources array is required and must not be empty" });
+        }
+        const validSources = ["manifest", "decorator", "dynamic"];
+        for (const s of body.sources) {
+          if (!validSources.includes(s)) {
+            return this.json(res, 400, { error: `Invalid source: ${s}. Must be one of: ${validSources.join(", ")}` });
+          }
+        }
+        const extractor = this.getOrCreateToolContractExtractor();
+        const request: ExtractionRequest = {
+          request_id: randomUUID(),
+          sources: body.sources,
+          tool_ids: body.tool_ids,
+          baseline_comparison: body.baseline_comparison ?? true,
+          risk_assessment: body.risk_assessment ?? true,
+          approval_routing: body.approval_routing ?? false,
+          created_at: new Date().toISOString(),
+        };
+        const result = await extractor.extractContracts(request);
+
+        // Wire approval_routing: enqueue Tier 3 contracts into the approval queue
+        const approvalIds: string[] = [];
+        if (body.approval_routing && result.extracted_contracts) {
+          for (const contract of result.extracted_contracts) {
+            if (contract.risk_tier === "tier3") {
+              const toolId = contract.tool_id;
+              // Fire-and-forget: enqueue for operator review, do not block response.
+              // On resolution (approve / deny / timeout) feed the decision back
+              // into the extractor so contract_changes is updated and pollers
+              // (GET /api/tools/stage/status) see the final state.
+              const enqueuedAt = Date.now();
+              void this.queue.request(
+                "system",
+                `tool.stage.${toolId}`,
+                { tool_name: contract.tool_name, version: contract.version, risk_tier: contract.risk_tier },
+                300_000, // 5-minute approval window
+              ).then(async (approved) => {
+                const elapsed = Date.now() - enqueuedAt;
+                // ApprovalQueue resolves false on both deny and timeout; treat
+                // ~window-elapsed false as timeout, otherwise as deny.
+                const decision: "approved" | "denied" | "timeout" = approved
+                  ? "approved"
+                  : (elapsed >= 295_000 ? "timeout" : "denied");
+                try {
+                  await extractor.consumeApprovalDecision(toolId, decision, {
+                    decisionSource: "approval_queue",
+                    decidedAt: new Date().toISOString(),
+                  });
+                } catch (err) {
+                  this.activityBus.emit({
+                    operation: "tool.stage.approval_resolved",
+                    status: "failed",
+                    sessionId: "system",
+                    layer: "governance",
+                    details: { tool_id: toolId, decision, error: String(err) },
+                  });
+                }
+              });
+              approvalIds.push(toolId);
+            }
+          }
+        }
+
+        return this.json(res, 200, { ...result, approval_pending_ids: approvalIds });
+      } catch (error) {
+        return this.json(res, 500, { error: `Tool staging failed: ${String(error)}` });
+      }
+    }
+
+    if (method === "GET" && url.startsWith("/api/tools/stage/status")) {
+      try {
+        const u = new URL(url, "http://localhost");
+        const toolId = u.searchParams.get("tool_id");
+        if (!toolId) {
+          return this.json(res, 400, { error: "tool_id query parameter is required" });
+        }
+        const extractor = this.getOrCreateToolContractExtractor();
+        const status = await extractor.getContractChangeStatus(toolId);
+        if (!status) {
+          return this.json(res, 404, { tool_id: toolId, approval_status: "unknown" });
+        }
+        return this.json(res, 200, status);
+      } catch (error) {
+        return this.json(res, 500, { error: `Status lookup failed: ${String(error)}` });
+      }
+    }
+
+    if (method === "POST" && url === "/api/tools/stage/resolve") {
+      try {
+        const body = await this.readJsonBody<{ request_id: string; approved: boolean }>(req);
+        if (!body.request_id) {
+          return this.json(res, 400, { error: "request_id is required" });
+        }
+        if (typeof body.approved !== "boolean") {
+          return this.json(res, 400, { error: "approved must be a boolean" });
+        }
+        const extractor = this.getOrCreateToolContractExtractor();
+        const result = await extractor.resolveApproval(body.request_id, body.approved);
+        return this.json(res, 200, result);
+      } catch (error) {
+        return this.json(res, 500, { error: `Approval resolution failed: ${String(error)}` });
+      }
+    }
+
     if (method === "POST" && url === "/api/plugins/install") {
-      const body = await this.readJsonBody<{ name: string; type?: string; url?: string; port?: number; description?: string }>(req);
+      const body = await this.readJsonBody<{ name: string; type?: string; url?: string; port?: number; description?: string; manifest?: PluginPackManifest; packPath?: string }>(req);
       if (!body.name) return this.json(res, 400, { error: "Plugin name is required" });
+
+      // If a full manifest is provided, run load-time validation pipeline
+      if (body.manifest) {
+        const prefs = readPreferences();
+        const profile = (prefs?.executionProfileSegment === "business" ? "business" : "individual") as "individual" | "business";
+        const result = loadPluginPack(
+          body.manifest,
+          body.packPath ?? ".",
+          this.activityBus,
+          { executionProfile: profile },
+        );
+        if (!result.accepted) {
+          return this.json(res, 422, {
+            plugin: body.name,
+            installed: false,
+            reason: result.summary,
+            errors: result.manifestValidation.errors,
+            trustValidation: result.trustValidation,
+          });
+        }
+        return this.json(res, 201, {
+          plugin: body.name,
+          installed: true,
+          summary: result.summary,
+          warnings: result.manifestValidation.warnings,
+        });
+      }
+
       return this.json(res, 201, { plugin: body.name, installed: true });
     }
 
@@ -2507,6 +4822,12 @@ export class DashboardService {
           this.runtimeSettings[k] = v;
           changes[k] = v;
         }
+      }
+      // Persist settings to disk so they survive server restarts
+      try {
+        writePreferences({ runtimeSettings: this.runtimeSettings });
+      } catch (err: unknown) {
+        console.warn(`[PRISM][settings] Failed to persist settings: ${String(err)}`);
       }
       return this.json(res, 200, { updated: changes, settings: this.runtimeSettings });
     }
@@ -2698,7 +5019,22 @@ export class DashboardService {
       }
     }
 
+    if (method === "POST" && url === "/api/agentic/action") {
+      const body = await this.readJsonBody<{ operation: string; args: any }>(req);
+      const { operation, args } = body;
+      if (!operation) return this.json(res, 400, { error: "Operation is required" });
+      if (!this.toolRegistry) return this.json(res, 503, { error: "Tool registry not available" });
+      try {
+        const tool = this.toolRegistry.get(operation);
+        const result = await tool.execute({ operation, args, risk: "low", mutatesState: false });
+        return this.json(res, 200, result);
+      } catch (error: unknown) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
     // ── Vision Framebuffer Screengrab Endpoints ──────────────────────────
+
 
     if (method === "GET" && url === "/api/computer/screengrab/latest") {
       const latestPath = this.framebufferCapture.getLatestPath();
@@ -2731,11 +5067,43 @@ export class DashboardService {
     }
 
     if (method === "GET" && url === "/api/computer/screengrab/list") {
-      return this.json(res, 200, { files: this.framebufferCapture.listScreengrabs() });
+      return this.json(res, 200, {
+        galleryItems: this.framebufferCapture.listGalleryItems(),
+        files: this.framebufferCapture.listScreengrabs(),
+        directory: workspaceFramebufferDir(),
+      });
+    }
+
+    if (method === "POST" && url === "/api/computer/reveal-file") {
+      const body = await this.readJsonBody<{ filename?: string }>(req);
+      const fname = body?.filename ? String(body.filename).replace(/[/\\:*?"<>|]/g, "") : "";
+      const revealPath = fname ? join(workspaceFramebufferDir(), fname) : workspaceFramebufferDir();
+      const { exec } = await import("node:child_process");
+      exec(`explorer.exe /select,"${revealPath}"`);
+      return this.json(res, 200, { ok: true });
+    }
+
+    if (method === "GET" && url === "/api/computer/screengrab/diagnostics") {
+      const fbDir = workspaceFramebufferDir();
+      const checks: { name: string; ok: boolean; detail: string }[] = [];
+      checks.push({ name: "Platform", ok: process.platform === "win32", detail: process.platform === "win32" ? "Windows \u2713" : `Non-Windows (${process.platform}) \u2014 PowerShell capture may not work` });
+      const dirExists = existsSync(fbDir);
+      checks.push({ name: "Capture directory", ok: dirExists, detail: dirExists ? fbDir : `Missing: ${fbDir}` });
+      if (dirExists) {
+        const allFiles = readdirSync(fbDir).filter(f => f.endsWith(".png") && f !== "latest.png");
+        const latestExists = existsSync(join(fbDir, "latest.png"));
+        checks.push({ name: "Stored frames", ok: allFiles.length > 0, detail: `${allFiles.length} PNG file(s) in framebuffer directory` });
+        checks.push({ name: "Latest frame", ok: latestExists, detail: latestExists ? "latest.png present" : "No latest.png \u2014 capture has not run yet" });
+      }
+      return this.json(res, 200, { ok: checks.every(c => c.ok), checks });
     }
 
     if (method === "GET" && url?.startsWith("/api/computer/screengrab/file/")) {
-      const name = decodeURIComponent(url.slice("/api/computer/screengrab/file/".length));
+      // Strip query string (e.g. ?token=... cache-buster ?t=...) before
+      // validating the filename so authed <img> requests don't 400 out.
+      const rawTail = url.slice("/api/computer/screengrab/file/".length);
+      const queryIdx = rawTail.indexOf("?");
+      const name = decodeURIComponent(queryIdx >= 0 ? rawTail.slice(0, queryIdx) : rawTail);
       if (!/^[\w\-.]+\.png$/.test(name)) return this.json(res, 400, { error: "Invalid filename" });
       const filePath = join(workspaceFramebufferDir(), name);
       if (!existsSync(filePath)) return this.json(res, 404, { error: "File not found" });
@@ -2763,22 +5131,1423 @@ export class DashboardService {
     }
 
     if (method === "GET" && url === "/api/computer/devices") {
-      const osModule = await import("node:os");
-      const cpus = osModule.cpus();
-      const nets = osModule.networkInterfaces();
-      const devices: Record<string, string[]> = {
-        "Display Adapters": [],
-        "Network Adapters": Object.keys(nets),
-        "Disk Drives": [],
-        "Processors": cpus.length > 0 ? [cpus[0]!.model + " (" + cpus.length + " cores)"] : [],
-      };
-      return this.json(res, 200, { devices });
+      const { exec: execCb } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execAsync = promisify(execCb);
+      // Single PowerShell script queries all 11 WMI classes via Get-CimInstance
+      const ps = `
+$ErrorActionPreference='SilentlyContinue'
+$r=@{}
+function q($cls,$cat,$fmt){
+  $items=@()
+  try{
+    Get-CimInstance -ClassName $cls | ForEach-Object {
+      $props=@{}
+      $_.CimInstanceProperties | Where-Object { $_.Value -ne $null } | ForEach-Object { $props[$_.Name]=[string]$_.Value }
+      $items+=@{name=(&$fmt $_);status=if($props['Status']){$props['Status']}else{'OK'};props=$props}
     }
+  }catch{ $items+=@{name="Detection failed: $_";status='Error';props=@{}} }
+  $r[$cat]=$items
+}
+q 'Win32_Processor' 'Processors' { param($p) "$($p.Name.Trim()) ($($p.NumberOfCores) cores, $($p.NumberOfLogicalProcessors) threads)" }
+q 'Win32_BaseBoard' 'Motherboard' { param($b) "$($b.Manufacturer) $($b.Product)".Trim() }
+q 'Win32_PhysicalMemory' 'Memory' { param($m) "$($m.Manufacturer) $([math]::Round([long]$m.Capacity/1GB,2))GB $($m.Speed)MHz".Trim() }
+q 'Win32_VideoController' 'Display Adapters' { param($d) if($d.AdapterRAM){("$($d.Name.Trim()) ($([math]::Round($d.AdapterRAM/1GB,2))GB)")}else{$d.Name.Trim()} }
+q 'Win32_DiskDrive' 'Disk Drives' { param($d) "$($d.Caption.Trim()) ($([math]::Round([long]$d.Size/1GB,2))GB $($d.InterfaceType))" }
+q 'Win32_NetworkAdapter' 'Network Adapters' { param($n) "$($n.Name.Trim()) ($($n.AdapterType))" }
+$r['Network Adapters']=$r['Network Adapters'] | Where-Object { $_.props['PhysicalAdapter'] -eq 'True' }
+if(-not $r['Network Adapters']){$r['Network Adapters']=@()}
+q 'Win32_SoundDevice' 'Sound Devices' { param($s) $s.Name.Trim() }
+q 'Win32_USBController' 'USB Controllers' { param($u) $u.Name.Trim() }
+q 'Win32_USBHub' 'USB Devices' { param($u) $u.Name.Trim() }
+q 'Win32_BIOS' 'BIOS' { param($b) "$($b.Manufacturer) $($b.Name)".Trim() }
+q 'Win32_CDROMDrive' 'Optical Drives' { param($c) $c.Name.Trim() }
+$r | ConvertTo-Json -Depth 4 -Compress
+`;
+      try {
+        const result = await execAsync(`powershell -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"').replace(/\n/g, " ")}"`, { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+        const parsed = JSON.parse(result.stdout.trim());
+        // Normalize: PowerShell may return single-item arrays as objects
+        const devices: Record<string, Array<{ name: string; status: string; props: Record<string, string> }>> = {};
+        for (const [cat, items] of Object.entries(parsed)) {
+          devices[cat] = Array.isArray(items) ? items as Array<{ name: string; status: string; props: Record<string, string> }> : items ? [items as { name: string; status: string; props: Record<string, string> }] : [];
+        }
+        return this.json(res, 200, { devices });
+      } catch (e: unknown) {
+        // Fallback to Node.js os module if PowerShell fails
+        const osModule = await import("node:os");
+        const cpus = osModule.cpus();
+        const nets = osModule.networkInterfaces();
+        const devices: Record<string, Array<{ name: string; status: string; props: Record<string, string> }>> = {
+          "Processors": cpus.length > 0 ? [{ name: cpus[0]!.model + " (" + cpus.length + " cores)", status: "OK", props: { model: cpus[0]!.model, cores: String(cpus.length), speed: cpus[0]!.speed + " MHz" } }] : [],
+          "Network Adapters": Object.entries(nets).map(([name, addrs]) => ({ name, status: "OK", props: { addresses: (addrs || []).map(a => a.address).join(", ") } })),
+          "Display Adapters": [],
+          "Disk Drives": [],
+        };
+        return this.json(res, 200, { devices, fallback: true, error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url.startsWith("/api/computer/devices/properties/")) {
+      const parts = url.replace("/api/computer/devices/properties/", "").split("/");
+      const category = decodeURIComponent(parts[0] || "");
+      const index = parseInt(parts[1] || "0", 10);
+      const wmiMapping: Record<string, string> = {
+        "Processors": "Win32_Processor",
+        "Motherboard": "Win32_BaseBoard",
+        "Memory": "Win32_PhysicalMemory",
+        "Display Adapters": "Win32_VideoController",
+        "Disk Drives": "Win32_DiskDrive",
+        "Network Adapters": "Win32_NetworkAdapter",
+        "Sound Devices": "Win32_SoundDevice",
+        "USB Controllers": "Win32_USBController",
+        "USB Devices": "Win32_USBHub",
+        "BIOS": "Win32_BIOS",
+        "Optical Drives": "Win32_CDROMDrive",
+      };
+      const wmiClass = wmiMapping[category];
+      if (!wmiClass) return this.json(res, 400, { error: "Unknown category" });
+      try {
+        const { exec: execCb2 } = await import("node:child_process");
+        const { promisify: promisify2 } = await import("node:util");
+        const execAsync2 = promisify2(execCb2);
+        const ps2 = `Get-CimInstance -ClassName ${wmiClass} | Select-Object -Index ${index} | ForEach-Object { $h=@{}; $_.CimInstanceProperties | Where-Object { $_.Value -ne $null } | ForEach-Object { $h[$_.Name]=[string]$_.Value }; $h } | ConvertTo-Json -Compress`;
+        const r2 = await execAsync2(`powershell -NoProfile -NonInteractive -Command "${ps2}"`, { timeout: 15000, maxBuffer: 512 * 1024 });
+        const props = JSON.parse(r2.stdout.trim() || "{}");
+        return this.json(res, 200, { category, index, properties: props });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "POST" && url === "/api/computer/devices/report") {
+      const body = await this.readJsonBody<{ categories?: string[] }>(req);
+      const cats = body.categories || [];
+      const wmiMapping: Record<string, string> = {
+        "Processors": "Win32_Processor", "Motherboard": "Win32_BaseBoard", "Memory": "Win32_PhysicalMemory",
+        "Display Adapters": "Win32_VideoController", "Disk Drives": "Win32_DiskDrive", "Network Adapters": "Win32_NetworkAdapter",
+        "Sound Devices": "Win32_SoundDevice", "USB Controllers": "Win32_USBController", "USB Devices": "Win32_USBHub",
+        "BIOS": "Win32_BIOS", "Optical Drives": "Win32_CDROMDrive",
+      };
+      const lines: string[] = ["PRISM Device Manager — Hardware Report", "Generated: " + new Date().toISOString(), "═".repeat(60), ""];
+      try {
+        const { exec: execCb3 } = await import("node:child_process");
+        const { promisify: promisify3 } = await import("node:util");
+        const execAsync3 = promisify3(execCb3);
+        for (const cat of cats) {
+          const cls = wmiMapping[cat];
+          if (!cls) continue;
+          lines.push("── " + cat + " ──");
+          try {
+            const ps3 = `Get-CimInstance -ClassName ${cls} | ForEach-Object { $h=@{}; $_.CimInstanceProperties | Where-Object { $_.Value -ne $null } | ForEach-Object { $h[$_.Name]=[string]$_.Value }; $h } | ConvertTo-Json -Depth 3 -Compress`;
+            const r3 = await execAsync3(`powershell -NoProfile -NonInteractive -Command "${ps3}"`, { timeout: 15000, maxBuffer: 1024 * 1024 });
+            const items = JSON.parse("[" + r3.stdout.trim().replace(/}\s*{/g, "},{") + "]");
+            const arr = Array.isArray(items) ? items : [items];
+            for (let i = 0; i < arr.length; i++) {
+              lines.push("  Device " + (i + 1) + ":");
+              for (const [k, v] of Object.entries(arr[i] as Record<string, string>)) {
+                lines.push("    " + k + ": " + v);
+              }
+              lines.push("");
+            }
+          } catch { lines.push("  (query failed)"); lines.push(""); }
+        }
+        return this.json(res, 200, { report: lines.join("\\n") });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    // ── Browser Control API ──────────────────────────────────────────────
+    {
+      const browserTool = this.tools.find(t => t.name === "browser_control") as BrowserControlTool | undefined;
+      const mgr = browserTool?.getManager();
+      const profMgr = browserTool?.getProfileManager();
+
+      if (method === "GET" && url === "/api/browser/sessions") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const sessions = mgr.listSessions();
+        return this.json(res, 200, { sessions: sessions.map(s => ({ ...s, sessionId: s.id } as Record<string, unknown>)) });
+      }
+
+      if (method === "GET" && url === "/api/browser/profiles") {
+        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
+        return this.json(res, 200, { profiles: profMgr.listProfiles() });
+      }
+
+      if (method === "POST" && url === "/api/browser/profiles") {
+        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
+        try {
+          const body = await this.readJsonBody<{
+            email?: string;
+            prismUserEmail?: string;
+            segment?: string;
+            executionProfileSegment?: string;
+            displayName?: string;
+            assignmentId?: string;
+          }>(req);
+          const email = (body.email || body.prismUserEmail || "").trim();
+          const segment = (body.segment || body.executionProfileSegment || "individual").trim();
+          if (!email) return this.json(res, 400, { error: "email is required." });
+          if (segment !== "individual" && segment !== "business") {
+            return this.json(res, 400, { error: "segment must be 'individual' or 'business'." });
+          }
+          const profile = profMgr.createProfile({
+            prismUserEmail: email,
+            executionProfileSegment: segment as "individual" | "business",
+            displayName: body.displayName || undefined,
+            assignmentId: body.assignmentId || undefined,
+          });
+          return this.json(res, 201, { ok: true, profile });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "GET" && url === "/api/browser/diagnostics") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const diag = await mgr.diagnostics();
+        return this.json(res, 200, diag);
+      }
+
+      if (method === "POST" && url === "/api/browser/launch") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ headless?: boolean; profileId?: string; sessionId?: string }>(req);
+          const session = await mgr.launch(body);
+          return this.json(res, 200, { session: { ...session, sessionId: session.id } });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const sessionsDeleteMatch = /^\/api\/browser\/sessions\/([^/]+)$/.exec(url);
+      if (sessionsDeleteMatch && method === "DELETE") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const sessionId = decodeURIComponent(sessionsDeleteMatch[1]!);
+          await mgr.closeSession(sessionId);
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/navigate") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; url: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.url) return this.json(res, 400, { error: "url required." });
+          const result = await mgr.navigate(body.sessionId, body.url);
+          return this.json(res, 200, result);
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const screenshotMatch = /^\/api\/browser\/screenshot\/([^/]+)$/.exec(url);
+      if (screenshotMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const sessionId = decodeURIComponent(screenshotMatch[1]!);
+          const buf = await mgr.screenshot(sessionId);
+          res.writeHead(200, { "Content-Type": "image/png", "Content-Length": buf.length });
+          res.end(buf);
+          return;
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/click") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; selector: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.selector) return this.json(res, 400, { error: "selector required." });
+          await mgr.click(body.sessionId, body.selector);
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/type") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; selector: string; text: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.selector) return this.json(res, 400, { error: "selector required." });
+          await mgr.type(body.sessionId, body.selector, body.text ?? "");
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      if (method === "POST" && url === "/api/browser/evaluate") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const body = await this.readJsonBody<{ sessionId: string; expression: string }>(req);
+          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+          if (!body.expression) return this.json(res, 400, { error: "expression required." });
+          const value = await mgr.evaluate(body.sessionId, body.expression);
+          return this.json(res, 200, { result: value });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const consoleMatch = /^\/api\/browser\/console-logs\/([^/]+)$/.exec(url);
+      if (consoleMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const sessionId = decodeURIComponent(consoleMatch[1]!);
+        return this.json(res, 200, { logs: mgr.getConsoleLogs(sessionId) });
+      }
+
+      const networkMatch = /^\/api\/browser\/network-log\/([^/]+)$/.exec(url);
+      if (networkMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        const sessionId = decodeURIComponent(networkMatch[1]!);
+        return this.json(res, 200, { log: mgr.getNetworkLog(sessionId) });
+      }
+
+      const domMatch = /^\/api\/browser\/dom-snapshot\/([^/]+)$/.exec(url);
+      if (domMatch && method === "GET") {
+        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+        try {
+          const sessionId = decodeURIComponent(domMatch[1]!);
+          const html = await mgr.domSnapshot(sessionId);
+          return this.json(res, 200, { dom: html });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+
+      const profilesDeleteMatch = /^\/api\/browser\/profiles\/([^/]+)$/.exec(url);
+      if (profilesDeleteMatch && method === "DELETE") {
+        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
+        try {
+          const profileId = decodeURIComponent(profilesDeleteMatch[1]!);
+          profMgr.deleteProfile(profileId);
+          return this.json(res, 200, { ok: true });
+        } catch (err) {
+          return this.json(res, 500, { error: String(err) });
+        }
+      }
+    }
+    // ── End Browser Control API ──────────────────────────────────────────
+
+    // ── Diagnostics API ──────────────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/browser/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "browser-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/browser/status") {
+      return this.json(res, 200, {
+        running: this.diagnosticsRunning,
+        lastRunAt: this.diagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/browser/run") {
+      if (this.diagnosticsRunning) {
+        return this.json(res, 409, { error: "Diagnostics already running." });
+      }
+      this.diagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-browser-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try {
+                  ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
+                } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.diagnosticsRunning = false;
+          this.diagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.diagnosticsRunning = false;
+      });
+
+      return; // response already sent
+    }
+    // ── End Diagnostics API ──────────────────────────────────────────────
+
+    // ── Agent Diagnostics API ────────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/agent/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "agent-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/agent/status") {
+      return this.json(res, 200, {
+        running: this.agentDiagnosticsRunning,
+        lastRunAt: this.agentDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/agent/run") {
+      if (this.agentDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Agent diagnostics already running." });
+      }
+      this.agentDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-agent-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "agent_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "agent_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.agentDiagnosticsRunning = false;
+          this.agentDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "agent_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.agentDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Agent Diagnostics API ────────────────────────────────────────
+
+    // ── Computer Diagnostics API ─────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/computer/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "computer-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/computer/status") {
+      return this.json(res, 200, {
+        running: this.computerDiagnosticsRunning,
+        lastRunAt: this.computerDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/computer/run") {
+      if (this.computerDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Computer diagnostics already running." });
+      }
+      this.computerDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-computer-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "computer_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "computer_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.computerDiagnosticsRunning = false;
+          this.computerDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "computer_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.computerDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Computer Diagnostics API ──────────────────────────────────────
+
+    // ── Knowledge Graph Diagnostics API ──────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/knowledge-graph/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "knowledge-graph-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/knowledge-graph/status") {
+      return this.json(res, 200, {
+        running: this.knowledgeGraphDiagnosticsRunning,
+        lastRunAt: this.knowledgeGraphDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/knowledge-graph/run") {
+      if (this.knowledgeGraphDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Knowledge Graph diagnostics already running." });
+      }
+      this.knowledgeGraphDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-knowledge-graph-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "knowledge_graph_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "knowledge_graph_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.knowledgeGraphDiagnosticsRunning = false;
+          this.knowledgeGraphDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "knowledge_graph_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.knowledgeGraphDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Knowledge Graph Diagnostics API ───────────────────────────────
+
+    // ── Workspace Diagnostics API ─────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/workspace/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "workspace-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/workspace/status") {
+      return this.json(res, 200, {
+        running: this.workspaceDiagnosticsRunning,
+        lastRunAt: this.workspaceDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/workspace/run") {
+      if (this.workspaceDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Workspace diagnostics already running." });
+      }
+      this.workspaceDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-workspace-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "workspace_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "workspace_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.workspaceDiagnosticsRunning = false;
+          this.workspaceDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "workspace_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.workspaceDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Workspace Diagnostics API ──────────────────────────────────────
+
+    // ── Network Diagnostics API ───────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/network/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "network-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/network/status") {
+      return this.json(res, 200, {
+        running: this.networkDiagnosticsRunning,
+        lastRunAt: this.networkDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/network/run") {
+      if (this.networkDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Network diagnostics already running." });
+      }
+      this.networkDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-network-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "network_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "network_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON \u2014 ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.networkDiagnosticsRunning = false;
+          this.networkDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "network_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.networkDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+
+    // ── VRGC Network Intelligence API ──────────────────────────────────────
+    if (method === "GET" && url === "/api/network/vrgc/status") {
+      try {
+        const { checkVrgcAvailability } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const available = await checkVrgcAvailability();
+        return this.json(res, 200, { available });
+      } catch {
+        return this.json(res, 200, { available: false });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/research") {
+      try {
+        const body = await this.readJsonBody<{ topic?: string; depth?: string; sourceTypes?: string[] }>(req);
+        if (!body.topic) return this.json(res, 400, { error: "Missing 'topic' field." });
+        const { fetchNetworkResearch } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await fetchNetworkResearch(body.topic, {
+          depth: (body.depth as "quick" | "standard" | "comprehensive") ?? "standard",
+          sourceTypes: body.sourceTypes,
+        });
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC research failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/security-scan") {
+      try {
+        const body = await this.readJsonBody<{ target?: string; scanType?: string }>(req);
+        if (!body.target) return this.json(res, 400, { error: "Missing 'target' field." });
+        const { runSecurityScan } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await runSecurityScan(body.target, (body.scanType as any) ?? "comprehensive");
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC security scan failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/performance") {
+      try {
+        const body = await this.readJsonBody<{ url?: string; testType?: string; device?: string }>(req);
+        if (!body.url) return this.json(res, 400, { error: "Missing 'url' field." });
+        const { testPerformance } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await testPerformance(body.url, {
+          testType: body.testType,
+          device: (body.device as "desktop" | "mobile" | "tablet") ?? "desktop",
+        });
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC performance test failed" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/network/vrgc/ftp") {
+      try {
+        const body = await this.readJsonBody<{ server?: string; path?: string; passiveMode?: boolean }>(req);
+        if (!body.server) return this.json(res, 400, { error: "Missing 'server' field." });
+        const { fetchFtpListing } = await import("../../adapters/network/vrgc-network-bridge.js");
+        const result = await fetchFtpListing(body.server, body.path ?? "/", body.passiveMode ?? true);
+        return this.json(res, result.ok ? 200 : 502, result);
+      } catch (err: unknown) {
+        return this.json(res, 500, { ok: false, error: (err as Error).message ?? "VRGC FTP access failed" });
+      }
+    }
+    // ── End Network Diagnostics API ────────────────────────────────────────
+
+    // ── Telemetry Diagnostics API ──────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/telemetry/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "telemetry-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/telemetry/status") {
+      return this.json(res, 200, {
+        running: this.telemetryDiagnosticsRunning,
+        lastRunAt: this.telemetryDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/telemetry/run") {
+      if (this.telemetryDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Telemetry diagnostics already running." });
+      }
+      this.telemetryDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-telemetry-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "telemetry_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "telemetry_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON \u2014 ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.telemetryDiagnosticsRunning = false;
+          this.telemetryDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "telemetry_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.telemetryDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Telemetry Diagnostics API ──────────────────────────────────────
+
+    // ── Logs & Debug Diagnostics API ──────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/logs/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "logs-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/logs/status") {
+      return this.json(res, 200, {
+        running: this.logsDiagnosticsRunning,
+        lastRunAt: this.logsDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/logs/run") {
+      if (this.logsDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Logs diagnostics already running." });
+      }
+      this.logsDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-logs-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "logs_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "logs_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try { ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() })); } catch { /* client gone */ }
+              }
+            } catch { /* not JSON \u2014 ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.logsDiagnosticsRunning = false;
+          this.logsDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "logs_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.logsDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Logs Diagnostics API ──────────────────────────────────────
+
+    // ── Scheduler Diagnostics API ────────────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/scheduler/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "scheduler-diagnostics-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/scheduler/status") {
+      return this.json(res, 200, {
+        running: this.schedulerDiagnosticsRunning,
+        lastRunAt: this.schedulerDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/scheduler/run") {
+      if (this.schedulerDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Scheduler diagnostics already running." });
+      }
+      this.schedulerDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-scheduler-tests.cjs", "--no-build"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "scheduler_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "scheduler_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try {
+                  ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
+                } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.schedulerDiagnosticsRunning = false;
+          this.schedulerDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "scheduler_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.schedulerDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Scheduler Diagnostics API ────────────────────────────────────
+
+    // ── Demo Scenarios Diagnostics API ───────────────────────────────────
+    if (method === "GET" && url === "/api/diagnostics/demo/report") {
+      try {
+        const reportPath = join(process.cwd(), "prism-output", "demo-scenario-report.json");
+        if (existsSync(reportPath)) {
+          const raw = readFileSync(reportPath, "utf8");
+          return this.json(res, 200, JSON.parse(raw));
+        }
+        return this.json(res, 200, { report: null });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/diagnostics/demo/status") {
+      return this.json(res, 200, {
+        running: this.demoDiagnosticsRunning,
+        lastRunAt: this.demoDiagnosticsLastRunAt,
+      });
+    }
+
+    if (method === "POST" && url === "/api/diagnostics/demo/run") {
+      if (this.demoDiagnosticsRunning) {
+        return this.json(res, 409, { error: "Demo diagnostics already running." });
+      }
+      this.demoDiagnosticsRunning = true;
+      this.json(res, 200, { status: "started" });
+
+      const { spawn: spawnChild } = await import("node:child_process");
+      const child = spawnChild("node", ["scripts/run-demo-scenarios.cjs", "--no-build", "--profile=all"], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let gotStdoutComplete = false;
+      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
+
+      let stderrBuf = "";
+      child.stderr!.on("data", (chunk: Buffer) => {
+        try {
+          stderrBuf += chunk.toString();
+          const lines = stderrBuf.split("\n");
+          stderrBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (stderrNoiseRe.test(line)) continue;
+            const msg = { type: "demo_diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
+            for (const ws of this.wsClients) {
+              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      let stdoutBuf = "";
+      child.stdout!.on("data", (chunk: Buffer) => {
+        try {
+          stdoutBuf += chunk.toString();
+          const lines = stdoutBuf.split("\n");
+          stdoutBuf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "demo_diagnostics_complete") gotStdoutComplete = true;
+              for (const ws of this.wsClients) {
+                try {
+                  ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
+                } catch { /* client gone */ }
+              }
+            } catch { /* not JSON — ignore */ }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("close", () => {
+        try {
+          this.demoDiagnosticsRunning = false;
+          this.demoDiagnosticsLastRunAt = new Date().toISOString();
+          if (!gotStdoutComplete) {
+            for (const ws of this.wsClients) {
+              try {
+                ws.send(JSON.stringify({ type: "demo_diagnostics_complete", timestamp: new Date().toISOString() }));
+              } catch { /* client gone */ }
+            }
+          }
+        } catch { /* defensive */ }
+      });
+
+      child.on("error", () => {
+        this.demoDiagnosticsRunning = false;
+      });
+
+      return;
+    }
+    // ── End Demo Scenarios Diagnostics API ───────────────────────────────
 
     if (method === "POST" && url === "/api/chat/sessions") {
       try {
-        const body = await this.readJsonBody<{ title?: string }>(req);
-        return this.json(res, 201, { session: this.createChatSession(body.title) });
+        const body = await this.readJsonBody<{
+          title?: string;
+          characterId?: string;
+          cacAssignmentId?: string;
+          operatorEmail?: string;
+          assistantEmail?: string;
+        }>(req);
+        const session = this.createChatSession({
+          title: body.title,
+          characterId: body.characterId,
+          cacAssignmentId: body.cacAssignmentId,
+          operatorEmail: body.operatorEmail,
+          assistantEmail: body.assistantEmail,
+        });
+        return this.json(res, 201, { session });
+      } catch (error) {
+        const tagged = error as Error & { code?: string };
+        if (tagged?.code === "no_default_character") {
+          return this.json(res, 409, {
+            error: "no_default_character",
+            action: "run_wizard",
+            message: "No character is bound to this workspace. Run the setup wizard or pass characterId.",
+          });
+        }
+        if (tagged?.code === "character_not_found") {
+          return this.json(res, 404, { error: tagged.message });
+        }
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    // Phase E3b: (re)bind an existing chat session to a character + CAC identity.
+    const sessionCharacterMatch = /^\/api\/session\/([^/]+)\/character$/.exec(url);
+    if (sessionCharacterMatch && method === "POST") {
+      try {
+        const sessionId = decodeURIComponent(sessionCharacterMatch[1]!);
+        const body = await this.readJsonBody<{
+          characterId?: string;
+          cacAssignmentId?: string;
+          operatorEmail?: string;
+          assistantEmail?: string;
+        }>(req);
+        const characterId = String(body.characterId ?? "").trim();
+        if (!characterId) {
+          return this.json(res, 400, { error: "characterId is required." });
+        }
+        const available = this.listWorkspaceCharacters();
+        if (!available.some((c) => c.id === characterId)) {
+          return this.json(res, 404, { error: `character_not_found: ${characterId}` });
+        }
+        const executionProfile = (this.status.executionProfileSegment || "individual").toLowerCase();
+        let cacAssignmentId = (body.cacAssignmentId ?? "").toString().trim() || null;
+        let operatorEmailFinal = body.operatorEmail ?? null;
+        let assistantEmailFinal = body.assistantEmail ?? null;
+
+        if (!cacAssignmentId) {
+          const operatorEmail = (body.operatorEmail ?? `operator@prism.local`).toString().trim();
+          const assistantEmail = (body.assistantEmail ?? `${characterId}@prism.local`).toString().trim();
+          try {
+            const assignment = this.characterAccountabilityManager.assign({
+              characterId,
+              prismUserId: "prism-user",
+              prismUserEmail: operatorEmail,
+              operatorId: "operator",
+              operatorEmail,
+              clientId: "dashboard",
+              sessionId,
+              executionProfile,
+              workspaceHub: getWorkspaceHub(),
+            });
+            cacAssignmentId = assignment.assignmentId;
+            operatorEmailFinal = assignment.operatorEmail;
+            assistantEmailFinal = assistantEmail;
+          } catch (err) {
+            const e = err as { message?: string };
+            return this.json(res, 400, { error: e.message ?? "CAC assignment failed" });
+          }
+        } else {
+          // Existing assignment provided — record a dispatch so the chain reflects the rebind.
+          this.characterAccountabilityManager.recordDispatch(cacAssignmentId);
+        }
+
+        const session = this.chatStore.bindSessionCharacter(sessionId, {
+          characterId,
+          cacAssignmentId,
+          executionProfile,
+          operatorEmail: operatorEmailFinal,
+          assistantEmail: assistantEmailFinal,
+        });
+        if (!session) {
+          return this.json(res, 404, { error: "session_not_found" });
+        }
+        try {
+          writePreferences({ lastUsedCharacterId: characterId });
+        } catch { /* non-fatal */ }
+        return this.json(res, 200, { session });
       } catch (error) {
         return this.json(res, 400, { error: String(error) });
       }
@@ -2797,7 +6566,21 @@ export class DashboardService {
     if (chatMessagesMatch && method === "POST") {
       try {
         const sessionId = decodeURIComponent(chatMessagesMatch[1]!);
-        const body = await this.readJsonBody<{ content?: string }>(req);
+        const body = await this.readJsonBody<{ content?: string; override?: boolean }>(req);
+
+        // Soft-block cap check — skip when client explicitly confirms override
+        if (!body.override && this.usageMetering) {
+          const capCheck = this.usageMetering.checkCap();
+          if (!capCheck.allowed) {
+            return this.json(res, 200, {
+              softBlock: true,
+              capType: capCheck.capType,
+              remainingUsd: capCheck.remainingUsd,
+              message: `You have reached your ${capCheck.capType} spending cap. Send with override to proceed anyway.`,
+            });
+          }
+        }
+
         const turn = await this.submitChatMessage(sessionId, body.content ?? "");
         return this.json(res, 201, turn);
       } catch (error) {
@@ -2939,6 +6722,70 @@ export class DashboardService {
       }
     }
 
+    // ── SLO Gauge API ─────────────────────────────────────────────────────────
+    if (method === "GET" && url === "/api/telemetry/slo-summary") {
+      return this.json(res, 200, computeSloSummary(this.metricsStore));
+    }
+
+    // ── CAC Identity Chain API ────────────────────────────────────────────────
+    if (method === "GET" && url.startsWith("/api/cac/chain")) {
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const sessionId = parsed.searchParams.get("sessionId") || this.status.sessionId;
+        const assignments = this.characterAccountabilityManager.queryBySession(sessionId);
+
+        // Include events for the assignments
+        const chains = assignments.map(assignment => {
+          const events = this.activityBus.listEvents().filter(e => e.details?.assignmentId === assignment.assignmentId || e.assignmentId === assignment.assignmentId);
+          return {
+            assignment,
+            events: events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+          };
+        });
+
+        return this.json(res, 200, { chains });
+      } catch (err) {
+        return this.json(res, 400, { error: String(err) });
+      }
+    }
+
+    // ── Usage / Cost API ──────────────────────────────────────────────────────
+    if (method === "GET" && url.startsWith("/api/usage/summary")) {
+      if (!this.usageMetering) return this.json(res, 200, { byModel: [], totalCostUsd: 0, totalRequests: 0, totalInputTokens: 0, totalOutputTokens: 0, caps: { sessionCap: null, dailyCap: null, monthlyCap: null }, sessionCostUsd: 0, dailyCostUsd: 0, monthlyCostUsd: 0, window: "1d" });
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const win = (parsed.searchParams.get("window") ?? "1d") as UsageWindow;
+        return this.json(res, 200, this.usageMetering.getSummary(win));
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
+    if (method === "GET" && url === "/api/usage/caps") {
+      if (!this.usageMetering) return this.json(res, 200, { sessionCap: null, dailyCap: null, monthlyCap: null });
+      return this.json(res, 200, this.usageMetering.getCaps());
+    }
+
+    if (method === "POST" && url === "/api/usage/caps") {
+      if (!this.usageMetering) return this.json(res, 501, { error: "Usage metering not initialized." });
+      try {
+        const body = await this.readJsonBody<{ sessionCap?: number | null; dailyCap?: number | null; monthlyCap?: number | null }>(req);
+        const toNum = (v: unknown): number | null => {
+          if (v === null || v === undefined || v === "") return null;
+          const n = parseFloat(String(v));
+          return isFinite(n) && n > 0 ? n : null;
+        };
+        this.usageMetering.setCaps({
+          sessionCap: toNum(body.sessionCap),
+          dailyCap: toNum(body.dailyCap),
+          monthlyCap: toNum(body.monthlyCap),
+        });
+        return this.json(res, 200, { saved: true, caps: this.usageMetering.getCaps() });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
     if (method === "GET" && url.startsWith("/api/runtime/excellence")) {
       try {
         const parsed = new URL(`http://localhost${url}`);
@@ -3071,18 +6918,27 @@ export class DashboardService {
       if (currentState?.status === "running") {
         return this.json(res, 409, { error: `Action already running: ${actionName}` });
       }
-      return this.json(res, 202, this.triggerAction(actionName));
+      try {
+        const payload = await this.readJsonBody<{ sessionId?: string }>(req).catch(() => ({ sessionId: undefined }));
+        return this.json(res, 202, this.triggerAction(actionName, payload.sessionId));
+      } catch (error) {
+        return this.json(res, 202, this.triggerAction(actionName));
+      }
     }
 
     const approveMatch = /^\/(approve|api\/approve)\/([^/]+)$/.exec(url);
-    if (method === "POST" && approveMatch) {
-      const ok = this.queue.approve(approveMatch[2]!);
+    const approveMatchRest = /^\/api\/approval\/([^/]+)\/approve$/.exec(url);
+    if (method === "POST" && (approveMatch || approveMatchRest)) {
+      const id = approveMatch ? approveMatch[2]! : approveMatchRest![1]!;
+      const ok = this.queue.approve(id);
       return this.json(res, ok ? 200 : 404, { approved: ok });
     }
 
     const denyMatch = /^\/(deny|api\/deny)\/([^/]+)$/.exec(url);
-    if (method === "POST" && denyMatch) {
-      const ok = this.queue.deny(denyMatch[2]!);
+    const denyMatchRest = /^\/api\/approval\/([^/]+)\/deny$/.exec(url);
+    if (method === "POST" && (denyMatch || denyMatchRest)) {
+      const id = denyMatch ? denyMatch[2]! : denyMatchRest![1]!;
+      const ok = this.queue.deny(id);
       return this.json(res, ok ? 200 : 404, { denied: ok });
     }
 
@@ -3169,348 +7025,686 @@ export class DashboardService {
         lastCommand: last?.command ?? null,
       });
     }
-
-    // ── Workspace API endpoints ────────────────────────────────────────
-    if (method === "GET" && url === "/api/workspace/info") {
-      const root = resolveWorkspaceRoot();
-      const manifestPath = join(root, "prism-workspace.json");
-      let manifest = null;
-      if (existsSync(manifestPath)) {
-        try { manifest = JSON.parse(readFileSync(manifestPath, "utf-8")); } catch { /* ignore */ }
-      }
+    // ── A2A Protocol routes (Phase F) ─────────────────────────────────────
+    // GET /.well-known/agent.json — Agent Card (publicly accessible)
+    if (method === "GET" && url === "/.well-known/agent.json") {
+      const characters = [
+        "aria-individual", "aria-business",
+        "phoenix-individual", "phoenix-business",
+        "sentinel-individual", "sentinel-business",
+      ];
       return this.json(res, 200, {
-        workspaceRoot: root,
-        exists: existsSync(root),
-        manifest,
+        name: "PRISM",
+        description:
+          "PRISM governed agent platform — constitutional AI with SHA-256 audit trails, " +
+          "3-tier policy enforcement, and immutable activity logs. " +
+          "Characters: " + characters.join(", "),
+        url: `http://localhost:${this.port}/a2a`,
+        version: "0.2.0",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: true,
+        },
+        authentication: { schemes: ["Bearer"] },
+        defaultInputModes: ["text/plain", "application/json"],
+        defaultOutputModes: ["text/plain", "application/json"],
+        skills: characters.map((id) => ({
+          id,
+          name: id,
+          description: `PRISM character agent: ${id}`,
+          tags: ["governance", "audit", "prism"],
+          examples: [`Ask ${id} to analyze a task with governance enforced`],
+        })),
       });
     }
 
-    if (method === "GET" && url === "/api/workspace/files") {
-      const root = resolveWorkspaceRoot();
-      if (!existsSync(root)) {
-        return this.json(res, 200, { root, entries: [] });
+    // POST /a2a/tasks/send — Submit a task to a PRISM character agent
+    if (method === "POST" && url === "/a2a/tasks/send") {
+      if (!this.a2aTaskAdapter) return this.json(res, 503, { error: "A2A adapter not initialized" });
+      let body: string;
+      try { body = await this.readBody(req); } catch { return this.json(res, 413, { error: "Request body too large" }); }
+      let request: Record<string, unknown>;
+      try { request = JSON.parse(body); } catch { return this.json(res, 400, { error: "Invalid JSON" }); }
+      if (!request.message || typeof request.message !== "object") {
+        return this.json(res, 400, { error: "Missing required field: message" });
       }
-      const walkDir = (dir: string, prefix: string): Array<{ name: string; path: string; type: "file" | "dir"; size: number }> => {
-        const results: Array<{ name: string; path: string; type: "file" | "dir"; size: number }> = [];
-        let items: string[];
-        try { items = readdirSync(dir); } catch { return results; }
-        for (const item of items) {
-          const fullPath = join(dir, item);
-          const relPath = prefix ? prefix + "/" + item : item;
-          try {
-            const st = statSync(fullPath);
-            if (st.isDirectory()) {
-              results.push({ name: item, path: relPath, type: "dir", size: 0 });
-              results.push(...walkDir(fullPath, relPath));
-            } else {
-              results.push({ name: item, path: relPath, type: "file", size: st.size });
-            }
-          } catch { /* skip inaccessible */ }
-        }
-        return results;
-      };
-      const entries = walkDir(root, "");
-      return this.json(res, 200, { root, entries });
-    }
-
-    if (method === "POST" && url === "/api/workspace/open-explorer") {
-      const root = resolveWorkspaceRoot();
-      try {
-        const { exec: execCb } = await import("node:child_process");
-        const { platform: osPlatform } = await import("node:os");
-        const p = osPlatform();
-        const cmd = p === "win32" ? `explorer "${root}"` : p === "darwin" ? `open "${root}"` : `xdg-open "${root}"`;
-        execCb(cmd, { timeout: 10_000 }, () => { });
-        return this.json(res, 200, { ok: true, path: root });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 500, { error: e.message ?? "Failed to open explorer" });
+      const msg = request.message as Record<string, unknown>;
+      if (!Array.isArray(msg.parts) || msg.parts.length === 0) {
+        return this.json(res, 400, { error: "message.parts must be a non-empty array" });
       }
-    }
-
-    if (method === "POST" && url === "/api/workspace/relocate") {
       try {
-        const payload = await this.readJsonBody<{ path?: string }>(req);
-        const newPath = (payload.path ?? "").trim();
-        if (!newPath) {
-          return this.json(res, 400, { error: "Path is required." });
-        }
-        const { isAbsolute } = await import("node:path");
-        if (!isAbsolute(newPath)) {
-          return this.json(res, 400, { error: "Path must be absolute (e.g. C:\\Users\\you\\Documents\\MyWorkspace)." });
-        }
-        setWorkspaceRoot(newPath);
-        ensureWorkspaceStructure();
-        return this.json(res, 200, { ok: true, workspaceRoot: resolveWorkspaceRoot() });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 500, { error: e.message ?? "Failed to relocate workspace" });
-      }
-    }
-
-    if (method === "POST" && url === "/api/workspace/import") {
-      try {
-        const payload = await this.readJsonBody<{
-          mode?: string; fileName?: string; content?: string;
-          targetDir?: string; registeredType?: string;
-          files?: Array<{ name: string; content: string; relativePath?: string }>;
-        }>(req);
-        const mode = (payload.mode ?? "").trim();
-        if (!mode || !["general", "registered", "folder"].includes(mode)) {
-          return this.json(res, 400, { error: "mode must be 'general', 'registered', or 'folder'." });
-        }
-        const root = resolveWorkspaceRoot();
-        const profile = this.status.executionProfileSegment || "individual";
-        const blockedExtensions = [".exe", ".bat", ".cmd", ".ps1", ".sh", ".msi", ".dll", ".sys"];
-        const VALID_TARGET_DIRS = ["config", "artifacts", "data", "data/tasks", "data/notes", "data/email", "data/calendar", "characters", "logs", "workspace", "state"];
-        const REGISTERED_TYPES: Record<string, { targetDir: string; validate: (parsed: unknown) => string | null }> = {
-          character: {
-            targetDir: "characters",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.name || typeof o.name !== "string") return "Character must have a 'name' field.";
-              if (!o.systemPrompt && !o.persona) return "Character must have a 'systemPrompt' or 'persona' field.";
-              return null;
-            },
-          },
-          "mcp-config": {
-            targetDir: "config",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.mcpServers || typeof o.mcpServers !== "object") return "MCP config must have a 'mcpServers' object.";
-              return null;
-            },
-          },
-          "session-package": {
-            targetDir: "artifacts/packages",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.exportedAt && !o.package) return "Session package must have 'exportedAt' or 'package' field.";
-              return null;
-            },
-          },
-          "tool-contract": {
-            targetDir: "artifacts/contracts",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!Array.isArray(o.tools)) return "Tool contract must have a 'tools' array.";
-              return null;
-            },
-          },
-          "self-review": {
-            targetDir: "artifacts/self-review",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.generatedAt) return "Self-review report must have a 'generatedAt' field.";
-              return null;
-            },
-          },
-          "task-timeline": {
-            targetDir: "data/tasks",
-            validate: (p: unknown) => {
-              const o = p as Record<string, unknown>;
-              if (!o.timelineId || !Array.isArray(o.tasks)) return "Task timeline must have 'timelineId' and 'tasks' array.";
-              return null;
-            },
-          },
-          note: {
-            targetDir: "data/notes",
-            validate: () => null,
-          },
-        };
-
-        // ── Folder import ──
-        if (mode === "folder") {
-          const targetDir = (payload.targetDir ?? "").trim();
-          if (!targetDir || !VALID_TARGET_DIRS.includes(targetDir)) {
-            return this.json(res, 400, { error: "targetDir must be one of: " + VALID_TARGET_DIRS.join(", ") });
-          }
-          const files = payload.files;
-          if (!Array.isArray(files) || files.length === 0) {
-            return this.json(res, 400, { error: "No files provided for folder import." });
-          }
-          if (files.length > 500) {
-            return this.json(res, 400, { error: "Folder import limited to 500 files at a time." });
-          }
-          const results: Array<{ name: string; status: string; message: string }> = [];
-          for (const file of files) {
-            const relPath = (file.relativePath ?? file.name).replace(/\\/g, "/");
-            if (relPath.includes("..")) {
-              results.push({ name: relPath, status: "rejected", message: "Path traversal not allowed." });
-              continue;
-            }
-            const ext = "." + relPath.split(".").pop()?.toLowerCase();
-            if (profile === "business" && blockedExtensions.includes(ext)) {
-              results.push({ name: relPath, status: "rejected", message: "Executable blocked by business profile." });
-              continue;
-            }
-            try {
-              const buf = Buffer.from(file.content, "base64");
-              if (buf.length > 10 * 1024 * 1024) {
-                results.push({ name: relPath, status: "rejected", message: "File exceeds 10 MB limit." });
-                continue;
-              }
-              const fullPath = join(root, targetDir, relPath);
-              const dir = dirname(fullPath);
-              if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-              writeFileSync(fullPath, buf);
-              results.push({ name: relPath, status: "imported", message: "OK" });
-            } catch (fe: unknown) {
-              results.push({ name: relPath, status: "error", message: (fe as { message?: string }).message ?? "Write failed" });
-            }
-          }
-          const imported = results.filter(r => r.status === "imported").length;
-          const entry = {
-            id: Date.now().toString(36),
-            timestamp: new Date().toISOString(),
-            mode: "folder",
-            fileName: imported + " files into " + targetDir,
-            targetDir,
-            registeredType: null,
-            status: imported === files.length ? "success" : "partial",
-            message: imported + "/" + files.length + " files imported",
-            size: 0,
-          };
-          this.importHistory.unshift(entry);
-          if (this.importHistory.length > 100) this.importHistory.length = 100;
-          return this.json(res, 200, { ok: true, results, summary: entry });
-        }
-
-        // ── General + Registered single-file import ──
-        const fileName = (payload.fileName ?? "").trim();
-        const content = (payload.content ?? "").trim();
-        if (!fileName) return this.json(res, 400, { error: "fileName is required." });
-        if (!content) return this.json(res, 400, { error: "content (base64) is required." });
-        if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
-          return this.json(res, 400, { error: "fileName must not contain path separators or '..'." });
-        }
-        const buf = Buffer.from(content, "base64");
-        if (buf.length > 10 * 1024 * 1024) {
-          return this.json(res, 400, { error: "File exceeds 10 MB size limit." });
-        }
-        const ext = "." + fileName.split(".").pop()?.toLowerCase();
-        if (profile === "business" && blockedExtensions.includes(ext)) {
-          return this.json(res, 400, { error: "Executable file types are blocked under Business profile policy." });
-        }
-
-        if (mode === "registered") {
-          const rType = (payload.registeredType ?? "").trim();
-          if (!rType || !REGISTERED_TYPES[rType]) {
-            return this.json(res, 400, { error: "registeredType must be one of: " + Object.keys(REGISTERED_TYPES).join(", ") });
-          }
-          const spec = REGISTERED_TYPES[rType];
-          let parsed: unknown = null;
-          const isJson = ext === ".json";
-          if (isJson) {
-            try { parsed = JSON.parse(buf.toString("utf-8")); } catch {
-              return this.json(res, 400, { error: "File is not valid JSON." });
-            }
-            const vErr = spec.validate(parsed);
-            if (vErr) return this.json(res, 400, { error: "Validation failed: " + vErr });
-          }
-          const destDir = join(root, spec.targetDir);
-          if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
-          let destName = rType === "mcp-config" ? "mcp-settings.json" : fileName;
-          const destPath = join(destDir, destName);
-          if (existsSync(destPath)) {
-            const ts = Date.now().toString(36);
-            const parts = destName.split(".");
-            if (parts.length > 1) {
-              parts[parts.length - 2] += "-" + ts;
-              destName = parts.join(".");
-            } else {
-              destName = destName + "-" + ts;
-            }
-          }
-          writeFileSync(join(destDir, destName), buf);
-          const entry = {
-            id: Date.now().toString(36),
-            timestamp: new Date().toISOString(),
-            mode: "registered",
-            fileName: destName,
-            targetDir: spec.targetDir,
-            registeredType: rType,
-            status: "success",
-            message: "Imported as " + rType + " to " + spec.targetDir + "/" + destName,
-            size: buf.length,
-          };
-          this.importHistory.unshift(entry);
-          if (this.importHistory.length > 100) this.importHistory.length = 100;
-          return this.json(res, 200, { ok: true, entry });
-        }
-
-        // ── General import ──
-        const targetDir = (payload.targetDir ?? "").trim();
-        if (!targetDir || !VALID_TARGET_DIRS.includes(targetDir)) {
-          return this.json(res, 400, { error: "targetDir must be one of: " + VALID_TARGET_DIRS.join(", ") });
-        }
-        const destDir = join(root, targetDir);
-        if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
-        let destName = fileName;
-        if (existsSync(join(destDir, destName))) {
-          const ts = Date.now().toString(36);
-          const parts = destName.split(".");
-          if (parts.length > 1) {
-            parts[parts.length - 2] += "-" + ts;
-            destName = parts.join(".");
-          } else {
-            destName = destName + "-" + ts;
-          }
-        }
-        writeFileSync(join(destDir, destName), buf);
-        const entry = {
-          id: Date.now().toString(36),
-          timestamp: new Date().toISOString(),
-          mode: "general",
-          fileName: destName,
-          targetDir,
-          registeredType: null,
-          status: "success",
-          message: "Imported to " + targetDir + "/" + destName,
-          size: buf.length,
-        };
-        this.importHistory.unshift(entry);
-        if (this.importHistory.length > 100) this.importHistory.length = 100;
-        return this.json(res, 200, { ok: true, entry });
-      } catch (err: unknown) {
-        const e = err as { message?: string };
-        return this.json(res, 500, { error: e.message ?? "Import failed" });
-      }
-    }
-
-    if (method === "GET" && url === "/api/workspace/import/history") {
-      return this.json(res, 200, { history: this.importHistory });
-    }
-
-    if (method === "GET" && url === "/api/workspace/git-status") {
-      const root = resolveWorkspaceRoot();
-      try {
-        const { exec: execCb } = await import("node:child_process");
-        const { promisify } = await import("node:util");
-        const exec = promisify(execCb);
-        const gitResult = await exec("git status --porcelain", { cwd: root, timeout: 10_000 }).catch(() => null);
-        const branchResult = await exec("git rev-parse --abbrev-ref HEAD", { cwd: root, timeout: 5_000 }).catch(() => null);
-        const remoteResult = await exec("git remote -v", { cwd: root, timeout: 5_000 }).catch(() => null);
+        const task = await this.a2aTaskAdapter.submitTask(request as any);
         return this.json(res, 200, {
-          isGitRepo: gitResult !== null,
-          branch: branchResult?.stdout?.trim() ?? null,
-          remote: remoteResult?.stdout?.trim() ?? null,
-          changedFiles: gitResult?.stdout?.trim()?.split("\n").filter(Boolean).length ?? 0,
+          id: task.task_id,
+          sessionId: task.session_id,
+          status: {
+            state: task.status,
+            message: task.status === "submitted"
+              ? { role: "agent", parts: [{ text: "Task submitted for governance approval." }] }
+              : { role: "agent", parts: [{ text: "Task received and queued for processing." }] },
+          },
+          metadata: { policy_tier: task.policy_tier, character_id: task.character_id },
         });
-      } catch {
-        return this.json(res, 200, { isGitRepo: false, branch: null, remote: null, changedFiles: 0 });
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to submit task", detail: msg2 });
       }
     }
+
+    // GET /a2a/tasks/:taskId — Poll task status
+    const a2aTaskGetMatch = /^\/a2a\/tasks\/([^/]+)$/.exec(url);
+    if (method === "GET" && a2aTaskGetMatch) {
+      if (!this.a2aTaskAdapter) return this.json(res, 503, { error: "A2A adapter not initialized" });
+      const taskId = decodeURIComponent(a2aTaskGetMatch[1]);
+      try {
+        const task = await this.a2aTaskAdapter.getTask(taskId);
+        if (!task) return this.json(res, 404, { error: "Task not found" });
+        return this.json(res, 200, {
+          id: task.task_id,
+          sessionId: task.session_id,
+          status: {
+            state: task.status,
+            message: task.output_text
+              ? { role: "agent", parts: [{ text: task.output_text }] }
+              : undefined,
+          },
+          metadata: { policy_tier: task.policy_tier, character_id: task.character_id },
+          created_at: task.created_at,
+          completed_at: task.completed_at,
+        });
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to retrieve task", detail: msg2 });
+      }
+    }
+
+    // DELETE /a2a/tasks/:taskId — Cancel task
+    const a2aTaskDeleteMatch = /^\/a2a\/tasks\/([^/]+)$/.exec(url);
+    if (method === "DELETE" && a2aTaskDeleteMatch) {
+      if (!this.a2aTaskAdapter) return this.json(res, 503, { error: "A2A adapter not initialized" });
+      const taskId = decodeURIComponent(a2aTaskDeleteMatch[1]);
+      try {
+        const task = await this.a2aTaskAdapter.cancelTask(taskId);
+        if (!task) return this.json(res, 404, { error: "Task not found" });
+        return this.json(res, 200, {
+          id: task.task_id,
+          status: { state: task.status },
+        });
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to cancel task", detail: msg2 });
+      }
+    }
+
+    // ── Governance Hook routes (Phase F — Docker Agent sidecar) ──────────
+    // POST /governance/hooks/pre-tool-use
+    if (method === "POST" && url === "/governance/hooks/pre-tool-use") {
+      if (!this.governanceHooksAdapter) return this.json(res, 503, { error: "Governance hooks adapter not initialized" });
+      let body: string;
+      try { body = await this.readBody(req); } catch { return this.json(res, 413, { error: "Request body too large" }); }
+      let request: Record<string, unknown>;
+      try { request = JSON.parse(body); } catch { return this.json(res, 400, { error: "Invalid JSON" }); }
+      if (!request.tool_name || typeof request.tool_name !== "string") {
+        return this.json(res, 400, { error: "Missing required field: tool_name" });
+      }
+      try {
+        const result = await this.governanceHooksAdapter.handlePreToolUse({
+          tool_name: request.tool_name as string,
+          tool_input: (request.tool_input as Record<string, unknown>) ?? {},
+          agent_name: request.agent_name as string | undefined,
+        });
+        return this.json(res, 200, result);
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Governance evaluation failed", detail: msg2 });
+      }
+    }
+
+    // POST /governance/hooks/post-tool-use
+    if (method === "POST" && url === "/governance/hooks/post-tool-use") {
+      if (!this.governanceHooksAdapter) return this.json(res, 503, { error: "Governance hooks adapter not initialized" });
+      let body: string;
+      try { body = await this.readBody(req); } catch { return this.json(res, 413, { error: "Request body too large" }); }
+      let request: Record<string, unknown>;
+      try { request = JSON.parse(body); } catch { return this.json(res, 400, { error: "Invalid JSON" }); }
+      if (!request.tool_name || typeof request.tool_name !== "string") {
+        return this.json(res, 400, { error: "Missing required field: tool_name" });
+      }
+      try {
+        const result = await this.governanceHooksAdapter.handlePostToolUse({
+          tool_name: request.tool_name as string,
+          tool_input: request.tool_input as Record<string, unknown> | undefined,
+          tool_output: request.tool_output as Record<string, unknown> | undefined,
+          agent_name: request.agent_name as string | undefined,
+        });
+        return this.json(res, 200, result);
+      } catch (err: unknown) {
+        const msg2 = err instanceof Error ? err.message : "Unknown error";
+        return this.json(res, 500, { error: "Failed to record tool use", detail: msg2 });
+      }
+    }
+
+    // ── Operator Utilities (Phase E3): list, execute, fetch run status ───
+    // NOTE: route literals match the post-normalization `url` (`/api/v1/*` → `/api/*`).
+    if (method === "GET" && url === "/api/utilities") {
+      return this.json(res, 200, { utilities: this.utilityRegistry.list() });
+    }
+    if (method === "POST" && /^\/api\/utilities\/[^/]+\/execute$/.test(url)) {
+      const id = decodeURIComponent(url.split("/")[4]!);
+      const desc = this.utilityRegistry.get(id);
+      if (!desc) return this.json(res, 404, { error: "Unknown utility", utilityId: id });
+      try {
+        const body = await this.readJsonBody<{ params?: Record<string, unknown>; reason?: string }>(req).catch(() => ({} as { params?: Record<string, unknown>; reason?: string }));
+        const params = body && "params" in body ? (body as { params?: Record<string, unknown> }).params : undefined;
+        const reason = body && "reason" in body ? (body as { reason?: string }).reason : undefined;
+        const run = await this.utilityRegistry.execute(id, params ?? {}, reason);
+        return this.json(res, run.status === "failed" ? 500 : 200, { run });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Utility execution failed";
+        return this.json(res, 500, { error: "Utility execution failed", detail: msg });
+      }
+    }
+    if (method === "GET" && /^\/api\/utilities\/runs\/[^/]+$/.test(url)) {
+      const runId = decodeURIComponent(url.split("/").pop()!);
+      const run = this.utilityRegistry.getRun(runId);
+      if (!run) return this.json(res, 404, { error: "Unknown run", runId });
+      return this.json(res, 200, { run });
+    }
+    if (method === "GET" && url === "/api/utilities/runs") {
+      return this.json(res, 200, { runs: this.utilityRegistry.listRuns() });
+    }
+
+    // ── Tool Risk Overrides (Phase E3) ───────────────────────────────────
+    if (method === "GET" && url === "/api/tools/risk-overrides") {
+      return this.json(res, 200, { overrides: this.riskOverrideStore.list() });
+    }
+    if (method === "GET" && /^\/api\/tools\/[^/]+\/risk$/.test(url)) {
+      const toolId = decodeURIComponent(url.split("/")[4]!);
+      const ov = this.riskOverrideStore.get(toolId);
+      return this.json(res, 200, { toolId, override: ov ?? null });
+    }
+    if (method === "PATCH" && /^\/api\/tools\/[^/]+\/risk$/.test(url)) {
+      const toolId = decodeURIComponent(url.split("/")[4]!);
+      try {
+        const body = await this.readJsonBody<{ tier?: RiskTier; reason?: string; expiresAt?: string | null; setBy?: string }>(req);
+        if (!body?.tier || !body?.reason) {
+          return this.json(res, 400, { error: "Missing required fields", required: ["tier", "reason"] });
+        }
+        const ov = this.riskOverrideStore.set({
+          toolId,
+          overrideTier: body.tier,
+          reason: body.reason,
+          expiresAt: body.expiresAt ?? null,
+          setBy: body.setBy ?? "operator",
+        });
+        return this.json(res, 200, { override: ov });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to set override";
+        return this.json(res, 400, { error: "Failed to set override", detail: msg });
+      }
+    }
+    if (method === "DELETE" && /^\/api\/tools\/[^/]+\/risk$/.test(url)) {
+      const toolId = decodeURIComponent(url.split("/")[4]!);
+      const cleared = this.riskOverrideStore.clear(toolId, "operator");
+      return this.json(res, cleared ? 200 : 404, { toolId, cleared: !!cleared, override: cleared });
+    }
+
+    // ── CAC Identity Panel (Phase E3) ────────────────────────────────────
+    if (method === "GET" && url === "/api/cac/assignments") {
+      const audit = this.characterAccountabilityManager.exportAudit({});
+      return this.json(res, 200, { assignments: audit });
+    }
+    if (method === "GET" && /^\/api\/cac\/assignments\/[^/]+\/chain$/.test(url)) {
+      const assignmentId = decodeURIComponent(url.split("/")[5]!);
+      const chain = this.characterAccountabilityManager.getAssignmentChain(assignmentId);
+      if (!chain) return this.json(res, 404, { error: "Unknown assignment", assignmentId });
+      return this.json(res, 200, chain);
+    }
+    if (method === "GET" && url.startsWith("/api/cac/export")) {
+      const isCsv = /[?&]format=csv\b/.test(rawUrl);
+      const audit = this.characterAccountabilityManager.exportAudit({});
+      if (isCsv) {
+        const headers = [
+          "assignmentId", "characterId", "operatorId", "operatorEmail", "prismUserEmail",
+          "executionProfileSegment", "state", "assignedAt", "updatedAt", "dispatchCount",
+          "scopesActive", "scopesExpired", "emailVerifiedAt", "emailVerifiedProvider",
+        ];
+        const escape = (v: unknown) => {
+          const s = v == null ? "" : String(v);
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const lines = [headers.join(",")];
+        for (const row of audit) {
+          lines.push(headers.map((h) => escape((row as Record<string, unknown>)[h])).join(","));
+        }
+        res.writeHead(200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="cac-audit-${Date.now()}.csv"`,
+        });
+        res.end(lines.join("\n"));
+        return;
+      }
+      return this.json(res, 200, { assignments: audit, exportedAt: new Date().toISOString() });
+    }
+    if (method === "POST" && /^\/api\/cac\/[^/]+\/verify-email$/.test(url)) {
+      const assignmentId = decodeURIComponent(url.split("/")[4]!);
+      try {
+        const body = await this.readJsonBody<{ provider?: "gmail" | "outlook"; verifiedEmail?: string }>(req);
+        const provider = body?.provider;
+        const email = body?.verifiedEmail;
+        if (!provider || !email) {
+          return this.json(res, 400, { error: "Missing required fields", required: ["provider", "verifiedEmail"] });
+        }
+        const updated = this.characterAccountabilityManager.markEmailVerified(assignmentId, email, provider);
+        if (!updated) return this.json(res, 409, { error: "Verification rejected (assignment missing/revoked or email mismatch)" });
+        return this.json(res, 200, { assignment: updated });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Verification failed";
+        return this.json(res, 400, { error: "Verification failed", detail: msg });
+      }
+    }
+
+    // ── Incident Trend Tuning (Phase E5) ─────────────────────────────────
+    if (method === "GET" && url.startsWith("/api/retrieval/incident-trends")) {
+      const profile = /[?&]profile=(individual|business|unknown)/.exec(rawUrl)?.[1] ?? "unknown";
+      const windowMatch = /[?&]windowDays=(\d+)/.exec(rawUrl)?.[1];
+      const windowDays = windowMatch ? Math.max(1, Math.min(60, parseInt(windowMatch, 10))) : 7;
+      const report = this.incidentTrendStore.getReport(profile as "individual" | "business" | "unknown", windowDays);
+      const base = withRetrievalAlertPolicy({});
+      const tuned = tuneFromIncidentTrends(base, {
+        profile: report.profile,
+        windowDays: report.windowDays,
+        dailyAverage: report.dailyAverage,
+      });
+      return this.json(res, 200, { report, tuning: tuned });
+    }
+
+    // ── Phase H: Novel Systems Incubation (CCC + DLMA + SHWS) ────────────
+    // All endpoints carry `prototype: true` and are gated by PRISM_INCUBATION.
+    // NOTE: gate matches the post-normalization `url` (`/api/v1/*` → `/api/*`).
+    if (url.startsWith("/api/incubation/")) {
+      const inc = await this.getIncubation();
+      if (!inc.enabled) {
+        this.json(res, 503, {
+          error: "incubation_disabled",
+          message: "Set PRISM_INCUBATION=on to enable Novel Systems prototypes.",
+          prototype: true,
+        });
+        return;
+      }
+
+      // POST /api/v1/incubation/ccc/compile (matches normalized /api/incubation/...)
+      if (method === "POST" && url === "/api/incubation/ccc/compile") {
+        const body = await this.readJsonBody<{
+          dag?: { id?: string; name?: string; steps?: unknown[]; fallbacks?: unknown[] };
+          profileSegment?: "individual" | "business";
+        }>(req);
+        if (!body.dag || !Array.isArray(body.dag.steps)) {
+          this.json(res, 400, { error: "dag.steps required", prototype: true });
+          return;
+        }
+        const { INDIVIDUAL_PROFILE: ind, BUSINESS_PROFILE: biz } = await import("../policy/execution-profiles.js");
+        const profile = body.profileSegment === "business" ? biz : ind;
+        const dag = {
+          id: body.dag.id ?? "ad-hoc",
+          name: body.dag.name ?? "ad-hoc",
+          steps: body.dag.steps as Array<import("../runtime/workflow.js").WorkflowStep>,
+          fallbacks: (body.dag.fallbacks ?? []) as Array<import("../runtime/workflow.js").WorkflowFallback>,
+        };
+        const plan = inc.compiler.compile(dag, { profile, constitution: inc.constitution });
+        this.json(res, 200, { plan, prototype: true });
+        return;
+      }
+
+      // GET /api/v1/incubation/ccc/constitutions
+      if (method === "GET" && url === "/api/incubation/ccc/constitutions") {
+        this.json(res, 200, { constitutions: [inc.constitution], prototype: true });
+        return;
+      }
+
+      // POST /api/v1/incubation/dlma/query
+      if (method === "POST" && url === "/api/incubation/dlma/query") {
+        const body = await this.readJsonBody<{ text?: string; k?: number }>(req);
+        if (!body.text) {
+          this.json(res, 400, { error: "text required", prototype: true });
+          return;
+        }
+        const result = inc.arbiter.query(body.text, body.k ?? 5);
+        this.json(res, 200, { ...result, prototype: true });
+        return;
+      }
+
+      // GET /api/v1/incubation/dlma/weights
+      if (method === "GET" && url === "/api/incubation/dlma/weights") {
+        this.json(res, 200, { weights: inc.arbiter.getWeights(), prototype: true });
+        return;
+      }
+
+      // POST /api/v1/incubation/shws/propose
+      if (method === "POST" && url === "/api/incubation/shws/propose") {
+        const body = await this.readJsonBody<{
+          failedStepId?: string;
+          dag?: { id?: string; name?: string; steps?: unknown[]; fallbacks?: unknown[] };
+          profileSegment?: "individual" | "business";
+        }>(req);
+        if (!body.failedStepId || !body.dag || !Array.isArray(body.dag.steps)) {
+          this.json(res, 400, { error: "failedStepId and dag.steps required", prototype: true });
+          return;
+        }
+        const { INDIVIDUAL_PROFILE: ind, BUSINESS_PROFILE: biz } = await import("../policy/execution-profiles.js");
+        const profile = body.profileSegment === "business" ? biz : ind;
+        const candidate = inc.synthesizer.proposeFallback({
+          failedStepId: body.failedStepId,
+          dag: {
+            id: body.dag.id ?? "ad-hoc",
+            name: body.dag.name ?? "ad-hoc",
+            steps: body.dag.steps as Array<import("../runtime/workflow.js").WorkflowStep>,
+            fallbacks: (body.dag.fallbacks ?? []) as Array<import("../runtime/workflow.js").WorkflowFallback>,
+          },
+          profile,
+          constitution: inc.constitution,
+        });
+        this.json(res, 200, { candidate, prototype: true });
+        return;
+      }
+
+      // GET /api/v1/incubation/shws/recent-syntheses
+      if (method === "GET" && url === "/api/incubation/shws/recent-syntheses") {
+        this.json(res, 200, {
+          recent: inc.synthesizer.getRecentCandidates(20),
+          stats: inc.synthesizer.getStats(),
+          prototype: true,
+        });
+        return;
+      }
+
+      this.json(res, 404, { error: "incubation route not found", prototype: true });
+      return;
+    }
+
+    // ── Observability: Prometheus /metrics endpoint (Phase E6) ────────────
+    // Standard Prometheus scrape endpoint — returns text/plain exposition format.
+    // Add to publicRoutes so scraping agents don't need Bearer token (standard practice).
+    if (method === "GET" && url === "/metrics") {
+      // Inject live gauges that change over time (can't be tracked via events alone)
+      const sessionCount = this.chatStore.listSessions().length;
+      const pendingApprovals = this.queue.list().length;
+      this.metricsStore.set("prism_active_sessions", sessionCount);
+      this.metricsStore.set("prism_approval_queue_depth", pendingApprovals);
+      this.metricsStore.set("prism_uptime_seconds", Math.floor(process.uptime()));
+
+      const body = this.metricsStore.render();
+      res.writeHead(200, {
+        "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+      });
+      res.end(body);
+      return;
+    }
+
+    // ── UI mode preference ────────────────────────────────────────────────────
+    if (method === "POST" && url === "/api/preferences/ui-mode") {
+      const body = await this.readJsonBody<{ mode?: string }>(req);
+      const mode = body.mode;
+      if (mode !== "simple" && mode !== "advanced") {
+        this.json(res, 400, { error: "mode must be 'simple' or 'advanced'" });
+        return;
+      }
+      writePreferences({ uiMode: mode as "simple" | "advanced" });
+      this.json(res, 200, { updated: true, mode });
+      return;
+    }
+
+    // ── E3e-3/E3e-4: GET /api/openapi.json — OpenAPI 3.0 spec ────────────
+    if (method === "GET" && url === "/api/openapi.json") {
+      const spec = {
+        openapi: "3.0.3",
+        info: {
+          title: "PRISM Operator API",
+          version: "1.0.0",
+          description: "PRISM Agents as a Service — Operator Dashboard API",
+        },
+        servers: [{ url: "/api/v1", description: "Current version" }],
+        paths: {
+          "/telemetry/slo-summary": {
+            get: {
+              summary: "SLO summary for all tracked histograms",
+              operationId: "getSloSummary",
+              responses: { "200": { description: "SLO summary object" } },
+            },
+          },
+          "/plugins/{name}/toggle": {
+            post: {
+              summary: "Toggle a plugin enabled/disabled",
+              operationId: "togglePlugin",
+              parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
+              responses: { "200": { description: "Plugin toggle result with enabled field" } },
+            },
+          },
+          "/plugins/{name}/health": {
+            post: {
+              summary: "Check plugin health",
+              operationId: "checkPluginHealth",
+              parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
+              responses: { "200": { description: "Plugin health result" } },
+            },
+          },
+          "/preferences/ui-mode": {
+            post: {
+              summary: "Set UI mode (simple or advanced)",
+              operationId: "setUiMode",
+              requestBody: { content: { "application/json": { schema: { type: "object", properties: { mode: { type: "string", enum: ["simple", "advanced"] } } } } } },
+              responses: { "200": { description: "Mode updated" }, "400": { description: "Invalid mode" } },
+            },
+          },
+        },
+      };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(spec, null, 2));
+      return;
+    }
+
+    // ── E2: Incident Triage Bundle ────────────────────────────────────────────
+    // POST /api/incidents/bundle  → returns a JSON evidence bundle with:
+    //   - last 500 activity events (with integrity hashes)
+    //   - all active sessions (id, createdAt, characterId, model)
+    //   - current health snapshot
+    //   - system metadata (version, uptime, OS, Node)
+    // Callers can pipe to a ZIP with standard tools; we return JSON directly.
+    if (method === "POST" && url === "/api/incidents/bundle") {
+      const allEvents = this.activityBus.listEvents();
+      const last500 = allEvents.slice(-500);
+      const sessions = this.chatStore.listSessions().map((s) => ({
+        sessionId: s.sessionId,
+        title: s.title,
+        createdAt: s.createdAt,
+        llmProviderId: s.llmProviderId ?? null,
+        llmModel: s.llmModel ?? null,
+        messageCount: s.messageCount,
+      }));
+      const health = {
+        status: "ok",
+        uptime: process.uptime(),
+        memoryUsageMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        activeSessionCount: sessions.length,
+        approvalQueueDepth: this.queue.list().length,
+        sloSummary: computeSloSummary(this.metricsStore),
+      };
+      const bundle = {
+        bundleId: randomUUID(),
+        generatedAt: new Date().toISOString(),
+        prismVersion: "0.2.0",
+        nodeVersion: process.version,
+        platform: process.platform,
+        events: { count: last500.length, items: last500 },
+        sessions: { count: sessions.length, items: sessions },
+        health,
+        readinessSnapshot: null,
+      };
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="prism-incident-bundle-${Date.now()}.json"`,
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify(bundle, null, 2));
+      return;
+    }
+
+    // ── E2: Gmail OAuth routes ────────────────────────────────────────────────
+    // GET  /api/auth/gmail/authorize  → returns { authUrl }
+    // GET  /api/auth/gmail/callback   → exchanges code, redirects to /settings
+    // GET  /api/auth/gmail/status     → returns GmailAdapterStatus
+    // DELETE /api/auth/gmail/disconnect → clears stored tokens
+
+    if (method === "GET" && url === "/api/auth/gmail/authorize") {
+      try {
+        const authUrl = await this.gmailOAuth.getAuthorizationUrl();
+        this.json(res, 200, { authUrl });
+      } catch (err: unknown) {
+        this.json(res, 503, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    if (method === "GET" && url.startsWith("/api/auth/gmail/callback")) {
+      const parsed = new URL(url, "http://localhost");
+      const code = parsed.searchParams.get("code");
+      if (!code) {
+        this.json(res, 400, { error: "Missing code parameter" });
+        return;
+      }
+      const result = await this.gmailOAuth.exchangeCode(code);
+      // Redirect browser back to settings OAuth tab
+      res.writeHead(302, { Location: "/settings?tab=oauth&provider=gmail&connected=" + result.connected });
+      res.end();
+      return;
+    }
+
+    if (method === "GET" && url === "/api/auth/gmail/status") {
+      const status = await this.gmailOAuth.getStatus();
+      this.json(res, 200, status);
+      return;
+    }
+
+    if (method === "DELETE" && url === "/api/auth/gmail/disconnect") {
+      await this.gmailOAuth.disconnect();
+      this.json(res, 200, { disconnected: true });
+      return;
+    }
+
+    // ── E2: Outlook OAuth routes ──────────────────────────────────────────────
+    // GET    /api/auth/outlook/authorize  → returns { authUrl }
+    // GET    /api/auth/outlook/callback   → exchanges code, redirects to /settings
+    // GET    /api/auth/outlook/status     → returns OutlookAdapterStatus
+    // DELETE /api/auth/outlook/disconnect → clears stored tokens
+
+    if (method === "GET" && url === "/api/auth/outlook/authorize") {
+      try {
+        const authUrl = await this.outlookOAuth.getAuthorizationUrl();
+        this.json(res, 200, { authUrl });
+      } catch (err: unknown) {
+        this.json(res, 503, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    if (method === "GET" && url.startsWith("/api/auth/outlook/callback")) {
+      const parsed = new URL(url, "http://localhost");
+      const code = parsed.searchParams.get("code");
+      if (!code) {
+        this.json(res, 400, { error: "Missing code parameter" });
+        return;
+      }
+      const result = await this.outlookOAuth.exchangeCode(code);
+      res.writeHead(302, { Location: "/settings?tab=oauth&provider=outlook&connected=" + result.connected });
+      res.end();
+      return;
+    }
+
+    if (method === "GET" && url === "/api/auth/outlook/status") {
+      const status = await this.outlookOAuth.getStatus();
+      this.json(res, 200, status);
+      return;
+    }
+
+    if (method === "DELETE" && url === "/api/auth/outlook/disconnect") {
+      await this.outlookOAuth.disconnect();
+      this.json(res, 200, { disconnected: true });
+      return;
+    }
+
+    // ── E2: No backward-compat redirect ─────────────────────────────────────
+    // Removed: the redirect /api/<path> → /api/v1/<path> was creating ERR_TOO_MANY_REDIRECTS
+    // loops when browsers had cached old 301s in the opposite direction (/api/v1/* → /api/*).
+    // The client-side request() function already rewrites /api/ → /api/v1/ before fetch,
+    // and all inline handlers accept both normalized (/api/) paths natively.
 
     this.json(res, 404, { error: "Not found" });
   }
 
-  private json(res: ServerResponse, status: number, body: unknown): void {
-    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify(body, null, 2));
+  private extractBearerToken(req: IncomingMessage): string | null {
+    const authHeader = req.headers["authorization"];
+    if (!authHeader) return null;
+    const parts = authHeader.split(" ");
+    if (parts.length === 2 && parts[0].toLowerCase() === "bearer") return parts[1];
+    return null;
   }
 
-  private async readJsonBody<T extends object>(req: IncomingMessage): Promise<T> {
+  /**
+   * Phase H — Novel Systems Incubation. Lazy-initialized on first use, gated
+   * by the PRISM_INCUBATION env flag (defaults to "on" in dev, "off" in prod).
+   * All endpoints under /api/v1/incubation/* explicitly mark `prototype: true`.
+   */
+  private async getIncubation(): Promise<NonNullable<DashboardService["incubation"]>> {
+    if (this.incubation) return this.incubation;
+    const envFlag = process.env.PRISM_INCUBATION;
+    const enabled = envFlag === undefined
+      ? process.env.NODE_ENV !== "production"
+      : envFlag.toLowerCase() === "on";
+
+    const { CausalCompiler } = await import("../incubation/ccc/compiler.js");
+    const { DualLensArbiter } = await import("../incubation/dlma/arbiter.js");
+    const { CausalLens } = await import("../incubation/dlma/causal-lens.js");
+    const { WorkflowSynthesizer } = await import("../incubation/shws/synthesizer.js");
+    const { WorkflowHistoryIndex } = await import("../incubation/shws/history-index.js");
+    const { PolicyValidator } = await import("../incubation/shws/policy-validator.js");
+    const { loadConstitution } = await import("../incubation/ccc/constitution.js");
+    const { EpisodicMemory } = await import("../memory/episodic-memory.js");
+    const { SemanticMemoryIndex } = await import("../memory/semantic-memory.js");
+    const { resolve } = await import("node:path");
+
+    const policyEngine = new PolicyEngine();
+    const compiler = new CausalCompiler(policyEngine);
+    const validator = new PolicyValidator(compiler);
+    const history = new WorkflowHistoryIndex(200);
+    const synthesizer = new WorkflowSynthesizer(history, validator, this.queue, this.activityBus);
+
+    // Dedicated memories subscribed to the live dashboard ActivityBus
+    const ep = new EpisodicMemory(600);
+    const sem = new SemanticMemoryIndex();
+    this.activityBus.subscribe(ep);
+    this.activityBus.subscribe(sem);
+    const causal = new CausalLens(ep);
+    const arbiter = new DualLensArbiter(sem, causal, this.activityBus);
+
+    const constitution = loadConstitution(resolve(process.cwd(), "examples", "constitutions", "business-default.json"));
+
+    this.incubation = { enabled, compiler, arbiter, synthesizer, history, constitution };
+    return this.incubation;
+  }
+
+  private json(res: ServerResponse, status: number, body: unknown): void {
+    // Inject a requestId into all error responses (4xx / 5xx) so callers can
+    // correlate failures in logs and support tickets.
+    const responseBody = (status >= 400 && body !== null && typeof body === "object")
+      ? { ...body as object, requestId: randomUUID() }
+      : body;
+    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(JSON.stringify(responseBody, null, 2));
+  }
+
+  public async readJsonBody<T extends object>(req: IncomingMessage): Promise<T> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
       chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
@@ -3574,7 +7768,7 @@ export class DashboardService {
     const actionName = this.resolveActionIntent(normalized);
     if (actionName) {
       try {
-        this.triggerAction(actionName);
+        this.triggerAction(actionName, sessionId);
         const action = this.actionStates.get(actionName)!;
         return {
           content: `Started ${action.label}. Track progress in Quick Actions and Recent Action History.`,
@@ -3601,7 +7795,77 @@ export class DashboardService {
         ? { providerId: session.llmProviderId ?? undefined, model: session.llmModel ?? undefined }
         : undefined;
 
+      // Figure out the active model and its tier to constrain the orchestrator
+      const catalogInfo = await this.llmProviders.getCatalog(selection);
+      const activeModelName = catalogInfo.activeModel;
+      let modelTier = 3;
+      if (activeModelName) {
+        const profile = resolveProfile(activeModelName);
+        modelTier = profile.tier;
+      }
+
+      // If we are using a local agent (often T1/T2), explicitly prefer "orchestrator" for agentic loops, else "chat"
+      const agentRole = (hasSessionOverride && selection?.providerId === "local") ? "orchestrator" : "chat";
+
       const systemPrompt = this.buildAgenticSystemPrompt();
+
+      // ── Spectrum Refraction (Prism SR) — check if SR is active for this session ──
+      const srConfig = this.chatStore.getSRConfig(sessionId);
+      if (srConfig?.enabled && srConfig.leftProviderId && srConfig.leftModel && srConfig.rightProviderId && srConfig.rightModel) {
+        const srResult = await this.llmProviders.generateSR(
+          {
+            message: content,
+            conversation: conversationHistory,
+            systemPrompt,
+          },
+          {
+            enabled: true,
+            leftModel: { providerId: srConfig.leftProviderId, model: srConfig.leftModel },
+            rightModel: { providerId: srConfig.rightProviderId, model: srConfig.rightModel },
+            leftSlot: srConfig.leftSlot ?? undefined,
+            rightSlot: srConfig.rightSlot ?? undefined,
+            leftTimeoutMs: srConfig.leftTimeoutMs ?? undefined,
+            rightTimeoutMs: srConfig.rightTimeoutMs ?? undefined,
+            circuitBreakerEnabled: srConfig.circuitBreakerEnabled,
+            showHemispheres: srConfig.showHemispheres,
+          },
+          selection,
+        );
+        if (srResult?.content?.trim()) {
+          return {
+            content: srResult.content,
+            metadata: {
+              intent: "llm_sr",
+              srEnabled: true,
+              leftModel: srConfig.leftModel,
+              rightModel: srConfig.rightModel,
+              leftProvider: srConfig.leftProviderId,
+              rightProvider: srConfig.rightProviderId,
+              timing: srResult.timing,
+              isolationLevel: srResult.isolationLevel,
+              mediaArtifactCount: srResult.mediaArtifacts.length,
+              showHemispheres: srConfig.showHemispheres,
+              hemispheres: {
+                left: srResult.hemispheres.left ? {
+                  provider: srResult.hemispheres.left.providerId,
+                  model: srResult.hemispheres.left.model,
+                  content: srConfig.showHemispheres ? srResult.hemispheres.left.content : undefined,
+                } : null,
+                right: srResult.hemispheres.right ? {
+                  provider: srResult.hemispheres.right.providerId,
+                  model: srResult.hemispheres.right.model,
+                  content: srConfig.showHemispheres ? srResult.hemispheres.right.content : undefined,
+                } : null,
+                main: srResult.hemispheres.main ? {
+                  provider: srResult.hemispheres.main.providerId,
+                  model: srResult.hemispheres.main.model,
+                  content: srConfig.showHemispheres ? srResult.hemispheres.main.content : undefined,
+                } : null,
+              },
+            },
+          };
+        }
+      }
 
       // Use agentic executor if available — enables tool calling loop
       if (this.agenticExecutor) {
@@ -3612,7 +7876,7 @@ export class DashboardService {
           async (input, sel) => {
             const result = hasSessionOverride
               ? await this.llmProviders.generate(input, sel)
-              : await this.llmProviders.generateForRole("chat", input);
+              : await this.llmProviders.generateForRole(agentRole, input);
             if (!result) return null;
             return {
               content: result.content,
@@ -3698,6 +7962,10 @@ export class DashboardService {
                 .map((e) => ({
                   type: e.type,
                   tool: e.toolCall?.name ?? e.toolResult?.name,
+                  arguments: e.toolCall?.arguments,
+                  output: e.toolResult?.output
+                    ? (typeof e.toolResult.output === "string" ? e.toolResult.output.slice(0, 4000) : JSON.stringify(e.toolResult.output).slice(0, 4000))
+                    : undefined,
                   ok: e.toolResult?.ok,
                 })),
             },
@@ -3741,6 +8009,18 @@ export class DashboardService {
           message: content,
           conversation: conversationHistory,
           systemPrompt: "", // adaptive prompt builder will replace this
+        });
+      }
+
+      // Record token usage for cost tracking
+      if (generated?.tokensUsed && this.usageMetering) {
+        this.usageMetering.record({
+          provider: generated.providerId,
+          model: generated.model,
+          sessionId,
+          inputTokens: generated.tokensUsed.input,
+          outputTokens: generated.tokensUsed.output,
+          costUsd: generated.tokensUsed.costUsd,
         });
       }
 
@@ -4204,7 +8484,7 @@ export class DashboardService {
         passed: Boolean(activeSessionId),
         detail: activeSessionId
           ? "Session context is active."
-          : "Create a chat session before sending messages.",
+          : "There is no session. Auto-create enabled for individual profile, else initiate Prism's accountability systems.",
       },
       {
         id: "provider-model-selected",
@@ -4284,6973 +8564,3 @@ function parseLimit(url: string, fallback: number): number {
   }
 }
 
-function dashboardHtml(port: number): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PRISM Frontier Console</title>
-  <style>
-    :root {
-      --bg: #07111f;
-      --panel: rgba(7, 19, 36, 0.82);
-      --panel-strong: rgba(10, 24, 45, 0.94);
-      --border: rgba(148, 163, 184, 0.16);
-      --text: #edf3ff;
-      --muted: #98a6bc;
-      --accent: #69d2ff;
-      --accent-2: #7cf1c8;
-      --danger: #ff8d8d;
-      --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
-      --radius: 22px;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--text);
-      font-family: Aptos, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(105, 210, 255, 0.16), transparent 28%),
-        radial-gradient(circle at top right, rgba(124, 241, 200, 0.12), transparent 24%),
-        linear-gradient(180deg, #06101d 0%, #091728 44%, #07111f 100%);
-    }
-    button, textarea, select { font: inherit; }
-    .app {
-      display: grid;
-      grid-template-columns: var(--sidebar-width, 340px) auto minmax(0, 1fr);
-      gap: 0;
-      padding: 18px;
-      min-height: 100vh;
-    }
-    .resize-handle {
-      width: 6px;
-      cursor: col-resize;
-      background: transparent;
-      position: relative;
-      z-index: 10;
-      transition: background 0.15s;
-    }
-    .resize-handle:hover,
-    .resize-handle.active {
-      background: rgba(105, 210, 255, 0.25);
-    }
-    .resize-handle::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 2px;
-      height: 32px;
-      border-radius: 2px;
-      background: rgba(148, 163, 184, 0.25);
-      transition: background 0.15s, height 0.15s;
-    }
-    .resize-handle:hover::after,
-    .resize-handle.active::after {
-      background: rgba(105, 210, 255, 0.5);
-      height: 48px;
-    }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(18px);
-    }
-    .sidebar {
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      overflow: hidden;
-      min-width: 200px;
-    }
-    .workspace {
-      min-width: 0;
-      display: flex;
-      margin-left: 12px;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      padding: 10px;
-      border-radius: 18px;
-      min-height: 68px;
-      background: linear-gradient(180deg, rgba(9,17,31,0.92), rgba(9,17,31,0.84));
-      border: 1px solid rgba(105,210,255,0.20);
-      align-items: stretch;
-    }
-    .tab-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex: 1 1 180px;
-      min-height: 46px;
-      border: 1px solid rgba(148,163,184,0.28);
-      border-radius: 12px;
-      background: rgba(14, 25, 43, 0.92);
-      color: var(--text);
-      cursor: pointer;
-      padding: 12px 14px;
-      font-weight: 700;
-      transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
-    }
-    .tab-button:hover {
-      border-color: rgba(105,210,255,0.42);
-      transform: translateY(-1px);
-    }
-    .tab-button:focus-visible {
-      outline: 2px solid rgba(105,210,255,0.7);
-      outline-offset: 2px;
-    }
-    .tab-button.active {
-      color: #04111f;
-      border-color: rgba(105,210,255,0.18);
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 10px 24px rgba(105,210,255,0.16);
-    }
-    .tab-panel { display: block; }
-    body.js-ready .tab-panel { display: none; }
-    body.js-ready .tab-panel.active { display: block; }
-    .tab-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-      align-items: start;
-    }
-    .brand {
-      padding: 16px;
-      border-radius: 18px;
-      background: linear-gradient(135deg, rgba(105, 210, 255, 0.16), rgba(124, 241, 200, 0.08));
-      border: 1px solid rgba(105, 210, 255, 0.18);
-    }
-    .eyebrow { color: var(--accent-2); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; }
-    .brand h1 { margin: 8px 0 6px; font-size: 28px; }
-    .muted { color: var(--muted); }
-    .session-list { display: flex; flex-direction: column; gap: 10px; overflow: auto; }
-    .session-card {
-      width: 100%;
-      text-align: left;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(148,163,184,0.12);
-      color: var(--text);
-      padding: 14px;
-      border-radius: 16px;
-      cursor: pointer;
-    }
-    .session-card.active { border-color: rgba(105, 210, 255, 0.48); background: rgba(105, 210, 255, 0.10); }
-    .session-title { font-weight: 700; margin-bottom: 6px; }
-    .session-preview { font-size: 12px; color: var(--muted); line-height: 1.45; }
-    .session-meta { margin-top: 8px; font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; }
-    .session-package-card {
-      border: 1px solid rgba(124, 241, 200, 0.24);
-      background: rgba(124, 241, 200, 0.05);
-    }
-    .session-package-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-    }
-    .session-package-badge {
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--accent-2);
-    }
-    .pkg-status-badge {
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      border-radius: 8px;
-      padding: 2px 9px;
-      font-weight: 700;
-      cursor: pointer;
-      border: none;
-      line-height: 1.6;
-    }
-    .pkg-status-badge.planned  { background: rgba(148,163,184,0.15); color: #94a3b8; }
-    .pkg-status-badge.running  { background: rgba(105,210,255,0.20); color: #69d2ff; }
-    .pkg-status-badge.blocked  { background: rgba(255,170,50,0.22);  color: #ffaa32; }
-    .pkg-status-badge.complete { background: rgba(124,241,200,0.22); color: #7cf1c8; }
-    .session-package-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-top: 10px;
-    }
-    .session-package-actions .secondary-button,
-    .session-package-actions .primary-button,
-    .session-package-actions .danger-button {
-      width: 100%;
-      box-sizing: border-box;
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      padding: 8px 12px;
-      font-size: 12px;
-    }
-    .session-package-children {
-      margin-top: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding-left: 10px;
-      border-left: 1px solid rgba(148,163,184,0.22);
-    }
-    .session-card.session-chapter {
-      padding: 10px;
-      border-radius: 12px;
-      background: rgba(255,255,255,0.01);
-    }
-    .primary-button, .secondary-button, .danger-button {
-      border: none;
-      border-radius: 14px;
-      cursor: pointer;
-      padding: 10px 14px;
-      color: #04111f;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      font-weight: 700;
-    }
-    .secondary-button {
-      background: rgba(255,255,255,0.06);
-      color: var(--text);
-      border: 1px solid rgba(148,163,184,0.14);
-    }
-    .danger-button {
-      color: #fff;
-      background: rgba(255, 77, 77, 0.18);
-      border: 1px solid rgba(255, 141, 141, 0.28);
-    }
-    .primary-button[disabled], .secondary-button[disabled], .danger-button[disabled] {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    .chat {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      height: calc(100vh - 118px);
-      overflow: hidden;
-    }
-    .chat-header {
-      flex-shrink: 0;
-      padding: 22px 24px 16px;
-      border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
-    }
-    .chat-header h2 { margin: 8px 0 6px; font-size: 26px; }
-    .header-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .chip {
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 12px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(148,163,184,0.12);
-      color: var(--muted);
-    }
-    .messages {
-      padding: 22px 24px 200px 24px;
-      overflow-y: auto;
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .message {
-      max-width: 86%;
-      padding: 16px 18px;
-      border-radius: 22px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .message.user {
-      margin-left: auto;
-      background: linear-gradient(135deg, rgba(105, 210, 255, 0.18), rgba(105, 210, 255, 0.08));
-      border: 1px solid rgba(105, 210, 255, 0.18);
-    }
-    .message.assistant {
-      margin-right: auto;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(148,163,184,0.12);
-    }
-    .message-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-    .message-time { margin-top: 10px; font-size: 11px; color: var(--muted); }
-    .empty-state {
-      margin: auto;
-      max-width: 520px;
-      text-align: center;
-      color: var(--muted);
-      border: 1px dashed rgba(148,163,184,0.18);
-      border-radius: 22px;
-      padding: 28px;
-      background: rgba(255,255,255,0.02);
-    }
-    .composer {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 18px 24px 24px;
-      border-top: 1px solid var(--border);
-      background: rgba(10, 24, 45, 0.95);
-      border-bottom-left-radius: var(--radius);
-      border-bottom-right-radius: var(--radius);
-      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
-      z-index: 10;
-      backdrop-filter: blur(12px);
-    }
-    .composer-shell {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 12px;
-      align-items: end;
-    }
-    .composer-toolbar {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding-bottom: 8px;
-    }
-    .toolbar-btn {
-      background: rgba(148,163,184,0.08);
-      border: 1px solid rgba(148,163,184,0.16);
-      color: var(--text);
-      border-radius: 8px;
-      width: 34px;
-      height: 34px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s;
-    }
-    .toolbar-btn:hover { background: rgba(105,210,255,0.15); }
-    .attachment-preview-strip {
-      display: flex;
-      gap: 8px;
-      padding: 0 4px;
-      flex-wrap: wrap;
-    }
-    .attachment-preview-strip:empty { display: none; }
-    .attachment-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      background: rgba(105,210,255,0.08);
-      border: 1px solid rgba(105,210,255,0.24);
-      border-radius: 12px;
-      font-size: 12px;
-      color: var(--accent);
-    }
-    .attachment-chip .remove-btn {
-      cursor: pointer;
-      opacity: 0.6;
-      font-size: 14px;
-    }
-    .attachment-chip .remove-btn:hover { opacity: 1; }
-    /* Markdown rendering in chat */
-    .message pre {
-      background: rgba(2,8,18,0.8);
-      border: 1px solid rgba(148,163,184,0.12);
-      border-radius: 8px;
-      padding: 12px 14px;
-      overflow-x: auto;
-      font-size: 13px;
-      line-height: 1.5;
-      margin: 8px 0;
-    }
-    .message code {
-      background: rgba(148,163,184,0.1);
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-size: 13px;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    }
-    .message pre code {
-      background: none;
-      padding: 0;
-    }
-    .message p { margin: 6px 0; }
-    .message ul, .message ol { margin: 6px 0; padding-left: 24px; }
-    .message li { margin: 2px 0; }
-    .message h1, .message h2, .message h3, .message h4 {
-      margin: 12px 0 6px;
-      font-weight: 600;
-    }
-    .message a { color: var(--accent); text-decoration: underline; }
-    .message blockquote {
-      border-left: 3px solid var(--accent);
-      margin: 8px 0;
-      padding: 4px 12px;
-      opacity: 0.85;
-    }
-    .message table { border-collapse: collapse; margin: 8px 0; width: 100%; }
-    .message th, .message td { border: 1px solid rgba(148,163,184,0.2); padding: 6px 10px; text-align: left; }
-    .message th { background: rgba(148,163,184,0.06); font-weight: 600; }
-    /* Tool execution blocks */
-    .tool-block {
-      margin: 8px 0;
-      border: 1px solid rgba(148,163,184,0.15);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .tool-block-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      background: rgba(148,163,184,0.06);
-      cursor: pointer;
-      font-size: 13px;
-      user-select: none;
-    }
-    .tool-block-header:hover { background: rgba(148,163,184,0.1); }
-    .tool-block-icon { font-size: 14px; }
-    .tool-block-name { font-weight: 600; color: var(--accent); }
-    .tool-block-status { margin-left: auto; font-size: 12px; }
-    .tool-block-status.ok { color: #4caf50; }
-    .tool-block-status.fail { color: #f44336; }
-    .tool-block-body {
-      padding: 10px 12px;
-      font-size: 12px;
-      max-height: 200px;
-      overflow-y: auto;
-      display: none;
-      background: rgba(2,8,18,0.5);
-    }
-    .tool-block.expanded .tool-block-body { display: block; }
-    /* Streaming indicator */
-    .streaming-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-      animation: pulse 1s infinite;
-      margin-left: 6px;
-    }
-    @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
-    .message .attachment-inline {
-      margin: 6px 0;
-      display: inline-block;
-    }
-    .message .attachment-inline img {
-      max-width: 300px;
-      max-height: 200px;
-      border-radius: 8px;
-      border: 1px solid rgba(148,163,184,0.2);
-    }
-    .message .attachment-inline .file-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      background: rgba(148,163,184,0.06);
-      border: 1px solid rgba(148,163,184,0.15);
-      border-radius: 8px;
-      font-size: 12px;
-      color: var(--accent);
-      text-decoration: none;
-    }
-    textarea {
-      width: 100%;
-      min-height: 92px;
-      max-height: 60vh;
-      resize: vertical;
-      border-radius: 18px;
-      padding: 14px 16px;
-      border: 1px solid rgba(148,163,184,0.16);
-      background: rgba(2, 8, 18, 0.66);
-      color: var(--text);
-    }
-    textarea:focus { outline: 1px solid rgba(105, 210, 255, 0.42); }
-    .control-select {
-      width: 100%;
-      text-align: left;
-      border-radius: 14px;
-      padding: 10px 14px;
-      border: 1px solid rgba(148,163,184,0.18);
-      background: rgba(6, 16, 29, 0.96);
-      color: var(--text);
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-    }
-    .control-select:focus {
-      outline: 1px solid rgba(105, 210, 255, 0.42);
-      border-color: rgba(105, 210, 255, 0.34);
-    }
-    .control-select option,
-    .control-select optgroup {
-      background: #0b1728;
-      color: var(--text);
-    }
-    select option, select optgroup { background: #0b1728; color: var(--text); }
-    .composer-hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
-    .rail-section {
-      border: 1px solid rgba(148,163,184,0.12);
-      border-radius: 18px;
-      padding: 16px;
-      background: rgba(255,255,255,0.03);
-    }
-    .rail-section h3 { margin: 0 0 12px; font-size: 15px; }
-    .stack { display: flex; flex-direction: column; gap: 10px; }
-    .metric { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 11px;
-      border: 1px solid rgba(148,163,184,0.14);
-      color: var(--muted);
-    }
-    .badge-running { color: #8dd8ff; border-color: rgba(105,210,255,0.34); }
-    .badge-succeeded { color: #8ff3c8; border-color: rgba(124,241,200,0.30); }
-    .badge-failed { color: #ff9f9f; border-color: rgba(255,141,141,0.30); }
-    .action-card, .approval-card {
-      border: 1px solid rgba(148,163,184,0.12);
-      border-radius: 16px;
-      padding: 14px;
-      background: rgba(255,255,255,0.025);
-    }
-    .action-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
-    .action-buttons { display: flex; gap: 8px; margin-top: 12px; }
-    .history-table, .events-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .history-table th, .history-table td, .events-table th, .events-table td {
-      text-align: left;
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(148,163,184,0.10);
-      vertical-align: top;
-    }
-    .notice {
-      margin-bottom: 12px;
-      padding: 10px 12px;
-      border-radius: 14px;
-      background: rgba(255, 141, 141, 0.10);
-      border: 1px solid rgba(255, 141, 141, 0.18);
-      color: #ffc1c1;
-      font-size: 12px;
-    }
-    .onboarding {
-      margin: 12px 24px 0;
-      padding: 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(148,163,184,0.16);
-      background: rgba(255,255,255,0.03);
-    }
-    .onboarding-title {
-      font-size: 13px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .onboarding-list {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .onboarding-list .passed {
-      color: var(--accent-2);
-    }
-    .onboarding-list .failed {
-      color: #ffc1c1;
-    }
-    .mono { font-family: "Cascadia Code", Consolas, monospace; }
-    .collapsible-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; padding: 0; margin: 0; }
-    .collapsible-header:hover { opacity: 0.85; }
-    .collapsible-header h3 { margin: 0; }
-    .collapse-chevron { font-size: 14px; color: var(--muted); transition: transform 0.2s ease; margin-left: 8px; }
-    .collapsible-body { overflow: hidden; }
-    .collapsible-body.collapsed { display: none; }
-    .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-    .settings-item { display: flex; flex-direction: column; gap: 2px; }
-    .settings-item-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-    .settings-item-value { font-size: 13px; color: var(--fg); font-family: "Cascadia Code", Consolas, monospace; word-break: break-all; }
-    .stg-section { margin-bottom: 16px; border: 1px solid rgba(148,163,184,0.10); border-radius: 12px; background: rgba(255,255,255,0.015); overflow: hidden; }
-    .stg-section-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--accent-2); }
-    .stg-section-header:hover { background: rgba(255,255,255,0.025); }
-    .stg-section-body { padding: 0 14px 14px; }
-    .stg-section-body.stg-collapsed { display: none; }
-    .stg-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(148,163,184,0.06); gap: 12px; }
-    .stg-row:last-child { border-bottom: none; }
-    .stg-label { font-size: 12px; color: var(--fg); flex: 1; }
-    .stg-hint { font-size: 10px; color: var(--muted); font-family: "Cascadia Code", Consolas, monospace; margin-left: 6px; }
-    .stg-value { font-size: 12px; color: var(--fg); font-family: "Cascadia Code", Consolas, monospace; text-align: right; max-width: 55%; word-break: break-all; }
-    .stg-input { padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(148,163,184,0.18); background: rgba(0,0,0,0.25); color: var(--fg); font-size: 12px; font-family: "Cascadia Code", Consolas, monospace; width: 120px; text-align: right; }
-    .stg-input:focus { outline: none; border-color: var(--accent); }
-    .stg-select { padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(148,163,184,0.18); background: #0b1728; color: var(--fg); font-size: 12px; cursor: pointer; }
-    .stg-select:focus { outline: none; border-color: var(--accent); }
-    .stg-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-    .stg-badge-green { background: rgba(126,207,126,0.15); color: #7ecf7e; }
-    .stg-badge-blue { background: rgba(105,210,255,0.15); color: #69d2ff; }
-    .stg-badge-amber { background: rgba(255,200,80,0.12); color: #ffd17a; }
-    .stg-badge-red { background: rgba(255,141,141,0.12); color: #ff8d8d; }
-    .stg-badge-muted { background: rgba(148,163,184,0.10); color: var(--muted); }
-    .stg-save-btn { padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(126,207,126,0.3); background: rgba(126,207,126,0.1); color: #7ecf7e; font-size: 11px; font-weight: 600; cursor: pointer; margin-left: 6px; }
-    .stg-save-btn:hover { background: rgba(126,207,126,0.2); }
-    .stg-recheck-btn { padding: 5px 14px; border-radius: 8px; border: 1px solid rgba(105,210,255,0.3); background: rgba(105,210,255,0.08); color: #69d2ff; font-size: 11px; font-weight: 600; cursor: pointer; }
-    .stg-recheck-btn:hover { background: rgba(105,210,255,0.18); }
-    .stg-req-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
-    .stg-req-met { color: #7ecf7e; }
-    .stg-req-unmet { color: #ff8d8d; }
-    .ps-card { border: 1px solid rgba(148,163,184,0.12); border-radius: 14px; background: rgba(255,255,255,0.02); overflow: hidden; margin-bottom: 8px; }
-    .ps-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; gap: 10px; }
-    .ps-card-header:hover { background: rgba(255,255,255,0.03); }
-    .ps-card-title { font-weight: 600; font-size: 13px; }
-    .ps-card-badges { display: flex; gap: 6px; align-items: center; }
-    .ps-badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-    .ps-badge-ok { background: rgba(126,207,126,0.15); color: #7ecf7e; }
-    .ps-badge-warn { background: rgba(255,200,80,0.12); color: #ffd17a; }
-    .ps-badge-off { background: rgba(148,163,184,0.10); color: var(--muted); }
-    .ps-badge-local { background: rgba(80,160,255,0.10); color: #7eb8ff; }
-    .ps-badge-remote { background: rgba(200,160,255,0.10); color: #c8a0ff; }
-    .ps-card-body { padding: 0 16px 16px; border-top: 1px solid rgba(148,163,184,0.08); }
-    .ps-field { margin-top: 10px; }
-    .ps-field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
-    .ps-field input, .ps-field textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(148,163,184,0.18); background: rgba(0,0,0,0.25); color: var(--fg); font-size: 12px; font-family: inherit; box-sizing: border-box; }
-    .ps-field input:focus, .ps-field textarea:focus { outline: none; border-color: var(--accent); }
-    .ps-key-row { display: flex; gap: 8px; align-items: center; }
-    .ps-key-row input { flex: 1; }
-    .ps-test-result { margin-top: 8px; font-size: 12px; padding: 6px 10px; border-radius: 8px; }
-    .ps-test-ok { background: rgba(126,207,126,0.10); color: #7ecf7e; }
-    .ps-test-fail { background: rgba(255,141,141,0.10); color: #ffc1c1; }
-    @media (max-width: 1280px) {
-      .app { grid-template-columns: var(--sidebar-width, 310px) auto minmax(0, 1fr); }
-      .tab-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 900px) {
-      .app { grid-template-columns: 1fr !important; }
-      .resize-handle { display: none; }
-      .chat { min-height: auto; }
-      .sidebar { order: 2; min-width: unset; }
-      .workspace { margin-left: 0; }
-      .tabs { gap: 8px; }
-      .tab-button { flex-basis: calc(50% - 4px); }
-    }
-
-    /* ═══ Tooltip System ═══ */
-    [data-tooltip] { position: relative; }
-    [data-tooltip]::after {
-      content: attr(data-tooltip);
-      position: absolute;
-      bottom: calc(100% + 8px);
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 8px 12px;
-      background: rgba(15,20,35,0.95);
-      color: #e2e8f0;
-      font-size: 11px;
-      line-height: 1.5;
-      border-radius: 8px;
-      border: 1px solid rgba(148,163,184,0.18);
-      white-space: pre-line;
-      max-width: 320px;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-      z-index: 9999;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-      backdrop-filter: blur(8px);
-    }
-    [data-tooltip]:hover::after { opacity: 1; }
-
-    /* ═══ Tools & Plugins Interactive Cards ═══ */
-    .tp-card { border: 1px solid rgba(148,163,184,0.12); border-radius: 14px; background: rgba(255,255,255,0.02); margin-bottom: 6px; overflow: hidden; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
-    .tp-card:hover { border-color: rgba(148,163,184,0.22); }
-    .tp-card.tp-expanded { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(0,0,0,0.15); }
-    .tp-card-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer; gap: 8px; user-select: none; }
-    .tp-card-head:hover { background: rgba(255,255,255,0.03); }
-    .tp-card-name { font-weight: 600; font-size: 13px; }
-    .tp-card-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .tp-card-badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-    .tp-card-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
-    .tp-meta-tag { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
-    .tp-card-body { padding: 0 14px 14px; border-top: 1px solid rgba(148,163,184,0.08); display: none; }
-    .tp-card.tp-expanded .tp-card-body { display: block; }
-
-    .tp-section { margin-top: 12px; }
-    .tp-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-    .tp-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-    .tp-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; gap: 8px; font-size: 12px; color: var(--fg); }
-    .tp-toggle input { display: none; }
-    .tp-toggle-track { width: 34px; height: 18px; border-radius: 9px; background: rgba(148,163,184,0.25); transition: background 0.2s ease; position: relative; flex-shrink: 0; }
-    .tp-toggle input:checked + .tp-toggle-track { background: var(--accent); }
-    .tp-toggle-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.2s ease; }
-    .tp-toggle input:checked + .tp-toggle-track::after { transform: translateX(16px); }
-
-    .tp-stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
-    .tp-stat { display: flex; flex-direction: column; gap: 1px; min-width: 80px; }
-    .tp-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-    .tp-stat-value { font-size: 14px; font-weight: 600; color: var(--fg); font-family: "Cascadia Code", Consolas, monospace; }
-
-    .tp-review-stars { display: inline-flex; gap: 2px; cursor: pointer; }
-    .tp-star { font-size: 16px; color: rgba(148,163,184,0.25); transition: color 0.15s; }
-    .tp-star.active { color: #ffd17a; }
-    .tp-star:hover { color: #ffd17a; }
-
-    .tp-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-    .tp-status-dot.green { background: #7ecf7e; box-shadow: 0 0 4px rgba(126,207,126,0.5); }
-    .tp-status-dot.yellow { background: #ffd17a; box-shadow: 0 0 4px rgba(255,209,122,0.5); }
-    .tp-status-dot.red { background: #ff8d8d; box-shadow: 0 0 4px rgba(255,141,141,0.5); }
-
-    .tp-approval-badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-    .tp-approval-approved { background: rgba(126,207,126,0.15); color: #7ecf7e; }
-    .tp-approval-review { background: rgba(255,200,80,0.12); color: #ffd17a; }
-    .tp-approval-flagged { background: rgba(255,141,141,0.12); color: #ff8d8d; }
-    .tp-approval-blocked { background: rgba(148,163,184,0.15); color: var(--muted); }
-
-    .tp-overview-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(148,163,184,0.10); margin-bottom: 12px; flex-wrap: wrap; }
-    .tp-overview-stat { font-size: 12px; color: var(--fg); font-weight: 600; }
-    .tp-overview-stat .muted { font-weight: 400; }
-    .tp-filter-input { padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(148,163,184,0.18); background: rgba(0,0,0,0.25); color: var(--fg); font-size: 12px; min-width: 160px; }
-    .tp-filter-input:focus { outline: none; border-color: var(--accent); }
-    .tp-filter-input::placeholder { color: var(--muted); }
-
-    .brand-profile-badge { display: inline-block; padding: 4px 14px; border-radius: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 8px; }
-    .brand-profile-badge.individual { background: rgba(105,210,255,0.18); color: #69d2ff; }
-    .brand-profile-badge.business { background: rgba(168,130,255,0.18); color: #c9a0ff; }
-    .brand-profile-badge.demo { background: rgba(255,200,80,0.18); color: #ffd17a; }
-    .brand-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 10px; }
-    .brand-info-item { font-size: 11px; }
-    .brand-info-label { color: var(--muted); font-weight: 400; }
-    .brand-info-value { color: var(--fg); font-weight: 600; }
-    .brand-env-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 4px; vertical-align: middle; }
-    .brand-env-dot.dev { background: #69d2ff; }
-    .brand-env-dot.staging { background: #ffd17a; }
-    .brand-env-dot.prod { background: #7ecf7e; }
-    .brand-approvals-badge { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 8px; font-size: 10px; font-weight: 600; background: rgba(255,200,80,0.15); color: #ffd17a; }
-    .usage-bar { position: relative; height: 22px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); overflow: hidden; }
-    .usage-bar-fill { position: absolute; top: 0; left: 0; height: 100%; border-radius: 5px; transition: width 0.6s ease; }
-    .usage-bar-fill.ram { background: linear-gradient(90deg, #69d2ff 0%, #3b82f6 100%); box-shadow: 0 0 8px rgba(105,210,255,0.3); }
-    .usage-bar-fill.vram { background: linear-gradient(90deg, #7cf1c8 0%, #10b981 100%); box-shadow: 0 0 8px rgba(124,241,200,0.3); }
-    .usage-bar-label { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); pointer-events: none; }
-    .sparkline-wrap { display: inline-block; vertical-align: middle; }
-    .gpu-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(124,241,200,0.12); color: #7cf1c8; margin-left: 6px; }
-    .framebuffer-viewer { position: relative; background: #0a0e17; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; min-height: 200px; display: flex; align-items: center; justify-content: center; }
-    .framebuffer-viewer img { max-width: 100%; max-height: 480px; object-fit: contain; display: block; }
-    .framebuffer-viewer .fb-placeholder { color: var(--muted); font-size: 13px; text-align: center; padding: 40px; }
-    .framebuffer-controls { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
-    .framebuffer-controls button { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 12px; transition: background 0.15s, border-color 0.15s; }
-    .framebuffer-controls button:hover { background: rgba(124,241,200,0.08); border-color: var(--accent); }
-    .framebuffer-controls .fb-toggle-active { background: rgba(124,241,200,0.15); border-color: #7cf1c8; color: #7cf1c8; }
-    .framebuffer-gallery { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; }
-    .framebuffer-thumb { width: 80px; height: 50px; object-fit: cover; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; opacity: 0.7; transition: opacity 0.15s, border-color 0.15s; flex-shrink: 0; }
-    .framebuffer-thumb:hover { opacity: 1; border-color: var(--accent); }
-    .framebuffer-meta { font-size: 11px; color: var(--muted); margin-top: 6px; }
-  </style>
-</head>
-<body>
-  <div class="app" id="app">
-    <aside class="sidebar panel" id="sidebar">
-      <div class="brand" id="brand-panel">
-        <div class="eyebrow">Frontier Operator Console</div>
-        <h1>PRISM Chat</h1>
-        <a href="http://localhost:${port}" target="_blank" rel="noopener" class="muted" style="display:block;margin-top:0;text-decoration:none;color:var(--muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">http://localhost:${port} \u2197</a>
-      </div>
-      <div style="display:flex;gap:6px;margin-bottom:6px;">
-        <button class="secondary-button" onclick="exportSession()" style="flex:1;">Export Session</button>
-        <button class="secondary-button" onclick="importSession()" style="flex:1;">Import Session</button>
-      </div>
-      <button class="secondary-button" onclick="packageSessions()">Package Sessions</button>
-      <button class="primary-button" onclick="createSession()">New Session</button>
-      <div id="session-list" class="session-list"></div>
-    </aside>
-    <div class="resize-handle" id="resize-handle"></div>
-
-    <main class="workspace">
-      <section class="tabs panel" id="tabs" role="tablist" aria-label="Dashboard sections">
-        <button id="tab-button-chat" type="button" class="tab-button active" data-tab-id="chat" role="tab" aria-selected="true" aria-controls="tab-chat" tabindex="0" onclick="setActiveTab(this.dataset.tabId)">Chat Interface</button>
-        <button id="tab-button-settings" type="button" class="tab-button" data-tab-id="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Provider &amp; Settings</button>
-        <button id="tab-button-tools" type="button" class="tab-button" data-tab-id="tools" role="tab" aria-selected="false" aria-controls="tab-tools" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Tools &amp; Plugins</button>
-        <button id="tab-button-agentic" type="button" class="tab-button" data-tab-id="agentic" role="tab" aria-selected="false" aria-controls="tab-agentic" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Agentic Control</button>
-        <button id="tab-button-computer" type="button" class="tab-button" data-tab-id="computer" role="tab" aria-selected="false" aria-controls="tab-computer" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Computer Control</button>
-        <button id="tab-button-workspace" type="button" class="tab-button" data-tab-id="workspace" role="tab" aria-selected="false" aria-controls="tab-workspace" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Workspace</button>
-        <button id="tab-button-network" type="button" class="tab-button" data-tab-id="network" role="tab" aria-selected="false" aria-controls="tab-network" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Network</button>
-        <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Telemetry</button>
-        <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)">Logs &amp; Debug</button>
-      </section>
-
-      <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat" aria-hidden="false">
-        <div class="chat panel">
-          <div class="chat-header">
-            <div class="eyebrow">Persistent Runtime Session</div>
-            <h2 id="active-session-title">Loading...</h2>
-            <div id="active-session-meta" class="muted"></div>
-            <div id="header-chips" class="header-chips" style="margin-top:12px;"></div>
-          </div>
-          <div id="onboarding" class="onboarding"></div>
-          <section id="messages" class="messages"></section>
-          <div class="composer">
-            <div id="attachment-preview" class="attachment-preview-strip"></div>
-            <div class="composer-shell">
-              <div class="composer-toolbar">
-                <button type="button" class="toolbar-btn" onclick="document.getElementById('file-attach-input').click()" title="Attach file">&#x1F4CE;</button>
-                <input type="file" id="file-attach-input" multiple accept="image/*,audio/*,video/*,text/*,application/pdf,.md,.json,.csv,.xml,.yaml,.yml,.ts,.js,.py,.html,.css" style="display:none" onchange="handleFileSelect(this)" />
-                <button type="button" class="toolbar-btn" onclick="pasteFromClipboard()" title="Paste from clipboard">&#x1F4CB;</button>
-              </div>
-              <textarea id="composer" placeholder="Ask PRISM to create files, run commands, or answer questions. Tools will be executed automatically."></textarea>
-              <button id="send-button" class="primary-button" onclick="sendMessage()">Send</button>
-            </div>
-            <div class="composer-hint">Enter sends. Shift+Enter inserts a newline. Attach files with \u{1F4CE} or drag &amp; drop. Sessions persist in SQLite.</div>
-          </div>
-        </div>
-      </section>
-
-      <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true">
-        <div class="tab-grid" style="grid-template-columns:1fr;">
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('sessionProvider')">
-              <h3>Session Provider Assignment</h3>
-              <span class="collapse-chevron" id="chevron-sessionProvider">\u25BC</span>
-            </div>
-            <div class="collapsible-body" id="body-sessionProvider">
-              <div id="llm-provider" class="stack"></div>
-            </div>
-          </section>
-          
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('modelRouting')">
-              <h3>\u{1F500} Model Routing</h3>
-              <span class="collapse-chevron" id="chevron-modelRouting">\u25B6</span>
-            </div>
-            <div class="collapsible-body collapsed" id="body-modelRouting">
-              <div class="muted" style="margin-bottom:8px;">Configure how PRISM routes tasks to models. Single-provider uses the active provider for all roles. Multi-provider enables per-role and per-agent model assignment.</div>
-              <div id="model-routing-container" class="stack"></div>
-            </div>
-          </section>
-
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
-            <section class="rail-section panel" style="flex:1;">
-              <div class="collapsible-header" onclick="togglePanelCollapse('providerConfig')">
-                <h3>Provider Configuration</h3>
-                <span class="collapse-chevron" id="chevron-providerConfig">\u25B6</span>
-              </div>
-              <div class="collapsible-body collapsed" id="body-providerConfig">
-                <div class="muted" style="margin-bottom:12px;">Configure API keys and settings for each provider. Expand a card to manage.</div>
-                <div id="provider-cards-container" class="stack"></div>
-              </div>
-              <div id="providerConfig-summary" style="padding:8px 12px;"></div>
-            </section>
-            <section class="rail-section panel" style="flex:1;">
-              <div class="collapsible-header" onclick="togglePanelCollapse('modelMatrix')">
-                <h3>Model Capability Matrix</h3>
-                <span class="collapse-chevron" id="chevron-modelMatrix">\u25BC</span>
-              </div>
-              <div class="collapsible-body" id="body-modelMatrix">
-                <div class="muted" style="margin-bottom:8px;">Available models scored by capability tier (T1 Minimal \u2192 T5 Frontier). Role routing selects the best model for each task.</div>
-                <div id="capability-matrix" class="stack"></div>
-              </div>
-            </section>
-          </div>
-
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('settingsPanel')">
-              <h3>Settings</h3>
-              <span class="collapse-chevron" id="chevron-settingsPanel">\u25BC</span>
-            </div>
-            <div class="collapsible-body" id="body-settingsPanel">
-              <div id="settings-panel" class="stack"></div>
-            </div>
-          </section>
-
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('llmAudit')">
-              <h3>LLM Audit Trail</h3>
-              <span class="collapse-chevron" id="chevron-llmAudit">\u25BC</span>
-            </div>
-            <div class="collapsible-body" id="body-llmAudit">
-              <div id="llm-audit"></div>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <section id="tab-tools" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-tools" aria-hidden="true">
-        <div class="tab-grid" style="grid-template-columns:1fr;">
-          <div id="tools-overview-bar"></div>
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('toolsPanel')">
-              <h3>Tools</h3>
-              <span class="collapse-chevron" id="chevron-toolsPanel">\u25BC</span>
-            </div>
-            <div class="collapsible-body" id="body-toolsPanel">
-              <div id="tools-panel" class="stack"></div>
-            </div>
-          </section>
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('pluginsPanel')">
-              <h3>Plugins</h3>
-              <span class="collapse-chevron" id="chevron-pluginsPanel">\u25BC</span>
-            </div>
-            <div class="collapsible-body" id="body-pluginsPanel">
-              <div id="plugins-panel" class="stack"></div>
-            </div>
-          </section>
-          <section class="rail-section panel">
-            <div class="collapsible-header" onclick="togglePanelCollapse('utilitiesPanel')">
-              <h3>Utilities</h3>
-              <span class="collapse-chevron" id="chevron-utilitiesPanel">\u25BC</span>
-            </div>
-            <div class="collapsible-body" id="body-utilitiesPanel">
-              <div id="utilities-panel" class="stack"></div>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <!-- ═══════════════ AGENTIC CONTROL TAB ═══════════════ -->
-      <section id="tab-agentic" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-agentic" aria-hidden="true">
-        <div class="tab-grid">
-          <!-- Agent Management Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('agentMgmt')">
-              <h3>\u{1F916} Agent Management</h3>
-              <span id="agentMgmt-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="agentMgmt-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">List, start, stop, and monitor individual agents.</div>
-              <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-                <button class="primary-button" onclick="refreshAgentList()" style="font-size:12px;">\u{1F504} Refresh Agents</button>
-                <button class="primary-button" onclick="launchNewAgent()" style="font-size:12px;">\u2795 Launch Agent</button>
-              </div>
-              <div id="agent-list-container" class="stack">
-                <div class="muted" style="text-align:center;padding:24px;">No agents running. Launch an agent to get started.</div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Sub-Agent Control Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('subAgent')">
-              <h3>\u{1F517} Sub-Agent Control</h3>
-              <span id="subAgent-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="subAgent-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">View agent hierarchy, parent-child relationships, and delegation chains.</div>
-              <div id="sub-agent-tree-container" class="stack">
-                <div class="muted" style="text-align:center;padding:24px;">Agent hierarchy will appear here when agents are active.</div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Swarm Control Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('swarmControl')">
-              <h3>\u{1F41D} Swarm Control</h3>
-              <span id="swarmControl-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="swarmControl-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Orchestrate agent swarms \u2014 topology, scaling, and task distribution.</div>
-              <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-                <button class="primary-button" onclick="createSwarm()" style="font-size:12px;">\u{1F41D} Create Swarm</button>
-                <button class="primary-button" onclick="refreshSwarmStatus()" style="font-size:12px;">\u{1F504} Refresh Status</button>
-              </div>
-              <div id="swarm-topology-container" class="stack">
-                <div class="muted" style="text-align:center;padding:24px;">No swarms configured. Create a swarm to begin orchestration.</div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Agent Telemetry Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('agentTelemetry')">
-              <h3>\u{1F4CA} Agent Telemetry</h3>
-              <span id="agentTelemetry-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="agentTelemetry-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Agent performance metrics, task throughput, and error rates.</div>
-              <div id="agent-telemetry-container" class="stack">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
-                  <div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Active Agents</div><div style="font-size:24px;font-weight:700;color:var(--accent);">0</div></div>
-                  <div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Tasks Completed</div><div style="font-size:24px;font-weight:700;color:var(--accent);">0</div></div>
-                  <div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Error Rate</div><div style="font-size:24px;font-weight:700;color:var(--accent);">0%</div></div>
-                  <div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Avg Response</div><div style="font-size:24px;font-weight:700;color:var(--accent);">\u2014</div></div>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <!-- ═══════════════ COMPUTER CONTROL TAB ═══════════════ -->
-      <section id="tab-computer" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-computer" aria-hidden="true">
-        <div class="tab-grid">
-          <!-- Local Computer Control Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('localControl')">
-              <h3>\u{1F5A5}\uFE0F Local Computer Control</h3>
-              <span id="localControl-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="localControl-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">System information, telemetry overview, and quick actions.</div>
-              <div id="local-system-info" class="stack">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
-                  <div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Operating System</div><div id="sys-os" style="font-size:14px;font-weight:600;">Detecting...</div></div>
-                  <div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Hostname</div><div id="sys-hostname" style="font-size:14px;font-weight:600;">Detecting...</div></div>
-                  <div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Platform</div><div id="sys-platform" style="font-size:14px;font-weight:600;">Detecting...</div></div>
-                  <div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Uptime</div><div id="sys-uptime" style="font-size:14px;font-weight:600;">Detecting...</div></div>
-                </div>
-              </div>
-              <div id="usage-metrics" style="margin-top:12px;"></div>
-            </div>
-          </section>
-
-          <!-- Console View Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('consoleView')">
-              <h3>\u{1F4DF} Console View</h3>
-              <span id="consoleView-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="consoleView-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Execute local system commands.</div>
-              <div style="display:flex;gap:6px;margin-bottom:8px;">
-                <input id="computer-console-input" type="text" placeholder="Enter system command (e.g. systeminfo, dir, tasklist)" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:13px;" onkeydown="if(event.key==='Enter')runLocalCommand()" />
-                <button onclick="runLocalCommand()" style="padding:6px 14px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;">\u25B6 Run</button>
-              </div>
-              <pre id="computer-console-output" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;max-height:400px;overflow:auto;font-size:12px;white-space:pre-wrap;color:var(--text-muted);">Ready \u2014 enter a system command above.</pre>
-            </div>
-          </section>
-
-          <!-- Vision Framebuffer Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('visionFramebuffer')">
-              <h3>\u{1F441}\uFE0F Vision Framebuffer</h3>
-              <span id="visionFramebuffer-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="visionFramebuffer-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Agentic computer-use vision \u2014 shows the latest screengrab from the framebuffer. Captures occur automatically during agentic <code>computer use</code> actions.</div>
-              <div class="framebuffer-controls">
-                <button onclick="captureScreengrab()" title="Capture a single screenshot now">\u{1F4F7} Capture</button>
-                <button onclick="burstCapture()" title="Burst capture 8 FPS for 2 seconds">\u{1F4F9} Burst (8 FPS)</button>
-                <button onclick="refreshFramebufferViewer()" title="Refresh the viewer with the latest image">\u{1F504} Refresh</button>
-                <button id="fb-auto-toggle" onclick="toggleFramebufferAutoRefresh()" title="Auto-refresh the viewer every 2 seconds">Auto-Refresh: OFF</button>
-                <span class="framebuffer-meta" id="fb-meta"></span>
-              </div>
-              <div class="framebuffer-viewer" id="framebuffer-viewer">
-                <div class="fb-placeholder" id="fb-placeholder">No screengrab captured yet.<br/>Use <strong>Capture</strong> or trigger an agentic action to begin.</div>
-                <img id="framebuffer-preview" style="display:none;" alt="Latest screengrab" onclick="window.open(this.src, \\'_blank\\')" title="Click to open full size" />
-              </div>
-              <div class="framebuffer-gallery" id="framebuffer-gallery"></div>
-            </div>
-          </section>
-
-          <!-- Configuration & Settings Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('computerConfig')">
-              <h3>\u2699\uFE0F Configuration &amp; Settings</h3>
-              <span id="computerConfig-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="computerConfig-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">System configuration, environment variables, and editor settings.</div>
-              <div id="computer-config-container" class="stack">
-                <div style="margin-bottom:12px;">
-                  <h4 style="margin:0 0 6px 0;font-size:13px;">Environment Variables</h4>
-                  <div id="env-vars-list" class="muted" style="font-family:monospace;font-size:12px;max-height:200px;overflow:auto;">Click Refresh to load environment variables.</div>
-                  <button class="primary-button" onclick="refreshEnvVars()" style="font-size:11px;margin-top:6px;">\u{1F504} Refresh</button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Policy Control Panel (Windows Only) -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('policyControl')">
-              <h3>\u{1F4CB} Policy Control</h3>
-              <span id="policyControl-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="policyControl-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Windows Group Policy viewer and local security policy access. <strong>(Windows only)</strong></div>
-              <div id="policy-control-container" class="stack">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
-                  <button class="primary-button" onclick="openPolicyEditor('gpedit')" style="font-size:12px;">\u{1F4DC} Group Policy Editor</button>
-                  <button class="primary-button" onclick="openPolicyEditor('secpol')" style="font-size:12px;">\u{1F512} Local Security Policy</button>
-                  <button class="primary-button" onclick="refreshPolicyStatus()" style="font-size:12px;">\u{1F504} Refresh Policy Status</button>
-                </div>
-                <div id="policy-status-output" class="muted" style="margin-top:10px;font-size:12px;">Policy status not yet loaded.</div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Browser Control Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('browserControl')">
-              <h3>\u{1F310} Browser Control</h3>
-              <span id="browserControl-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="browserControl-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Browser settings, preview control, and launch options.</div>
-              <div id="browser-control-container" class="stack">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-                  <div class="panel" style="padding:12px;">
-                    <div class="muted" style="font-size:11px;">Default Browser</div>
-                    <div id="browser-default" style="font-size:13px;font-weight:600;">Detecting...</div>
-                  </div>
-                  <div class="panel" style="padding:12px;">
-                    <div class="muted" style="font-size:11px;">Preview Mode</div>
-                    <div id="browser-preview-mode" style="font-size:13px;font-weight:600;">Embedded</div>
-                  </div>
-                </div>
-                <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-                  <button class="primary-button" onclick="launchBrowserPreview()" style="font-size:12px;">\u{1F680} Launch Preview</button>
-                  <button class="primary-button" onclick="openBrowserDevTools()" style="font-size:12px;">\u{1F527} Dev Tools</button>
-                  <button class="primary-button" onclick="refreshBrowserInfo()" style="font-size:12px;">\u{1F504} Refresh</button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Device Manager Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('deviceManager')">
-              <h3>\u{1F527} Device Manager</h3>
-              <span id="deviceManager-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="deviceManager-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Quick-access view of local hardware devices (mirrors Windows Device Manager).</div>
-              <div style="margin-bottom:10px;">
-                <button class="primary-button" onclick="refreshDeviceManager()" style="font-size:12px;">\u{1F504} Scan Devices</button>
-                <button class="primary-button" onclick="openSystemDeviceManager()" style="font-size:12px;margin-left:6px;">\u{1F5A5}\uFE0F Open System Device Manager</button>
-              </div>
-              <div id="device-tree-container" class="stack" style="font-size:13px;">
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4BB} Display Adapters</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F50A} Sound, Video &amp; Game Controllers</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4F6} Network Adapters</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4BE} Disk Drives</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F50C} USB Controllers</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u2328\uFE0F Keyboards</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F5B1}\uFE0F Mice &amp; Pointing Devices</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F50B} Batteries</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4F7} Imaging Devices</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-                <details class="panel" style="padding:8px 12px;margin-bottom:4px;">
-                  <summary style="cursor:pointer;font-weight:600;">\u{1F4E1} Bluetooth</summary>
-                  <div class="muted" style="padding:6px 0 0 18px;font-size:12px;">Click Scan Devices to enumerate.</div>
-                </details>
-              </div>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <!-- ═══════════════ WORKSPACE TAB ═══════════════ -->
-      <section id="tab-workspace" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-workspace" aria-hidden="true">
-        <div class="tab-grid">
-          <!-- Workspace Location Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('workspaceLocation')">
-              <h3>\u{1F4C2} Workspace Location</h3>
-              <span id="workspaceLocation-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="workspaceLocation-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Current workspace path and relocation controls.</div>
-              <div id="workspace-location-container" class="stack">
-                <div class="panel" style="padding:12px;display:flex;align-items:center;gap:12px;">
-                  <div style="flex:1;">
-                    <div class="muted" style="font-size:11px;">Current Workspace</div>
-                    <div id="workspace-path" style="font-size:14px;font-weight:600;font-family:monospace;word-break:break-all;">Loading...</div>
-                  </div>
-                </div>
-                <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-                  <button class="primary-button" onclick="changeWorkspaceLocation()" style="font-size:12px;">\u{1F4C1} Change Location</button>
-                  <button class="primary-button" onclick="openWorkspaceInExplorer()" style="font-size:12px;">\u{1F4C2} Open in Explorer</button>
-                  <button class="primary-button" onclick="refreshWorkspaceInfo()" style="font-size:12px;">\u{1F504} Refresh</button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Workspace Files Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('workspaceFiles')">
-              <h3>\u{1F4C1} Workspace Files</h3>
-              <span id="workspaceFiles-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="workspaceFiles-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Browse and manage files in the current workspace.</div>
-              <div style="display:flex;gap:8px;margin-bottom:10px;">
-                <input id="workspace-file-filter" type="text" placeholder="Filter files..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:13px;" oninput="filterWorkspaceFiles(this.value)" />
-                <button class="primary-button" onclick="refreshWorkspaceFiles()" style="font-size:12px;">\u{1F504} Refresh</button>
-              </div>
-              <div id="workspace-file-tree" class="stack" style="max-height:500px;overflow:auto;font-family:monospace;font-size:12px;">
-                <div class="muted" style="text-align:center;padding:24px;">Click Refresh to load workspace files.</div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Import Manager Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('importManager')">
-              <h3>\u{1F4E5} Import Manager</h3>
-              <span id="importManager-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="importManager-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Import files and resources into the workspace. Imports are vetted based on your execution profile (Individual or Business).</div>
-              <div id="import-manager-container" class="stack">
-                <!-- Three import mode cards -->
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
-                  <div class="panel" style="padding:16px;text-align:center;cursor:pointer;border:2px dashed var(--border);" onclick="triggerGeneralImport()">
-                    <div style="font-size:24px;margin-bottom:4px;">\u{1F4C4}</div>
-                    <div style="font-size:13px;font-weight:700;">Import File</div>
-                    <div class="muted" style="font-size:11px;margin-top:4px;">Copy any file into a workspace directory.</div>
-                  </div>
-                  <div class="panel" style="padding:16px;text-align:center;cursor:pointer;border:2px dashed var(--border);" onclick="triggerRegisteredImport()">
-                    <div style="font-size:24px;margin-bottom:4px;">\u{1F9E9}</div>
-                    <div style="font-size:13px;font-weight:700;">Import Registered Item</div>
-                    <div class="muted" style="font-size:11px;margin-top:4px;">Import a PRISM-recognized item (character, config, package, etc.).</div>
-                  </div>
-                  <div class="panel" style="padding:16px;text-align:center;cursor:pointer;border:2px dashed var(--border);" onclick="triggerFolderImport()">
-                    <div style="font-size:24px;margin-bottom:4px;">\u{1F4C1}</div>
-                    <div style="font-size:13px;font-weight:700;">Import Folder</div>
-                    <div class="muted" style="font-size:11px;margin-top:4px;">Copy an entire folder structure into the workspace.</div>
-                  </div>
-                </div>
-                <!-- Hidden file inputs -->
-                <input type="file" id="import-file-input" style="display:none;" />
-                <input type="file" id="import-registered-input" style="display:none;" />
-                <input type="file" id="import-folder-input" style="display:none;" multiple webkitdirectory />
-                <!-- Import status -->
-                <div id="import-status" style="display:none;margin-top:10px;padding:10px;border-radius:6px;font-size:12px;"></div>
-                <!-- Import history -->
-                <div style="margin-top:12px;">
-                  <h4 style="margin:0 0 6px 0;font-size:13px;">Import History</h4>
-                  <div id="import-history-list" class="muted" style="font-size:12px;">No imports yet.</div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Workspace Settings Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('workspaceSettings')">
-              <h3>\u2699\uFE0F Workspace Settings</h3>
-              <span id="workspaceSettings-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="workspaceSettings-collapsible" class="collapsible-body">
-              <div class="muted" style="margin-bottom:8px;">Workspace-level configuration and preferences.</div>
-              <div id="workspace-settings-container" class="stack">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
-                  <div class="panel" style="padding:12px;">
-                    <div class="muted" style="font-size:11px;">Active Profile</div>
-                    <div id="ws-active-profile" style="font-size:14px;font-weight:600;">Individual</div>
-                  </div>
-                  <div class="panel" style="padding:12px;">
-                    <div class="muted" style="font-size:11px;">Auto-Save</div>
-                    <div id="ws-auto-save" style="font-size:14px;font-weight:600;">Enabled</div>
-                  </div>
-                  <div class="panel" style="padding:12px;">
-                    <div class="muted" style="font-size:11px;">Git Integration</div>
-                    <div id="ws-git-status" style="font-size:14px;font-weight:600;">Detecting...</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <section id="tab-network" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-network" aria-hidden="true">
-        <div class="tab-grid">
-          <!-- Network Tools Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkTools')">
-              <h3>\u{1F4E1} Network Tools</h3>
-              <span id="networkTools-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="networkTools-collapsible" class="collapsible-body">
-              <div id="network-tools-panel" class="stack"></div>
-            </div>
-          </section>
-
-          <!-- Network Settings Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkSettings')">
-              <h3>\u2699\uFE0F Network Settings</h3>
-              <span id="networkSettings-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="networkSettings-collapsible" class="collapsible-body">
-              <div id="network-settings-panel" class="stack"></div>
-            </div>
-          </section>
-
-          <!-- Network Telemetry Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkTelemetry')">
-              <h3>\u{1F4CA} Network Telemetry</h3>
-              <span id="networkTelemetry-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="networkTelemetry-collapsible" class="collapsible-body">
-              <div id="network-telemetry-panel" class="stack"></div>
-            </div>
-          </section>
-
-          <!-- Network Console Panel -->
-          <section class="rail-section panel" style="grid-column:1/-1;">
-            <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkConsole')">
-              <h3>\u{1F5A5}\uFE0F Network Console</h3>
-              <span id="networkConsole-collapse-icon" class="collapse-icon">\u25BC</span>
-            </div>
-            <div id="networkConsole-collapsible" class="collapsible-body">
-              <div style="display:flex;gap:6px;margin-bottom:8px;">
-                <input id="network-console-input" type="text" placeholder="Enter network command (e.g. ipconfig, ping 8.8.8.8)" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:13px;" onkeydown="if(event.key==='Enter')runNetworkCommand()" />
-                <button onclick="runNetworkCommand()" style="padding:6px 14px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;">\u25B6 Run</button>
-              </div>
-              <pre id="network-console-output" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;max-height:400px;overflow:auto;font-size:12px;white-space:pre-wrap;color:var(--text-muted);">Ready \u2014 enter a network command above.</pre>
-              <div id="network-history-list" style="margin-top:8px;"></div>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <section id="tab-telemetry" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-telemetry" aria-hidden="true">
-        <div class="tab-grid">
-          <section class="rail-section panel" style="grid-column:1/-1;padding-bottom:4px;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span class="muted" style="font-size:12px;">Change window:</span>
-              <button class="tab-button" id="tw-1h" onclick="setTelemetryWindow('1h')">1 hour</button>
-              <button class="tab-button" id="tw-1d" onclick="setTelemetryWindow('1d')">1 day</button>
-              <button class="tab-button" id="tw-7d" onclick="setTelemetryWindow('7d')">7 days</button>
-            </div>
-          </section>
-          <section class="rail-section panel">
-            <h3>What Changed</h3>
-            <div id="telemetry-what-changed"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Runtime Overview</h3>
-            <div id="runtime-overview" class="stack"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Runtime Excellence</h3>
-            <div id="runtime-excellence"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Release Readiness</h3>
-            <div id="release-readiness"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Package History</h3>
-            <div id="package-history"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Self Review</h3>
-            <div id="self-review"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Retrieval Alerts</h3>
-            <div id="retrieval-alerts"></div>
-          </section>
-        </div>
-      </section>
-
-      <section id="tab-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-logs" aria-hidden="true">
-        <div class="tab-grid">
-          <section class="rail-section panel">
-            <h3>Quick Actions</h3>
-            <div id="actions" class="stack"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Pending Approvals</h3>
-            <div id="pending" class="stack"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Recent Action History</h3>
-            <div id="action-history"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Chat Telemetry</h3>
-            <div id="chat-telemetry"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Correlated Traces</h3>
-            <div id="trace-view"></div>
-          </section>
-          <section class="rail-section panel">
-            <h3>Recent Events</h3>
-            <div id="events"></div>
-          </section>
-        </div>
-      </section>
-    </main>
-  </div>
-  <script>
-    const state = {
-      activeTab: 'chat',
-      sessions: [],
-      selectedSessionId: null,
-      messages: [],
-      status: null,
-      readiness: null,
-      llmCatalog: null,
-      llmConfig: null,
-      llmAuditEvents: [],
-      actions: [],
-      pending: [],
-      actionHistory: [],
-      selfReviewLatest: null,
-      selfReviewHistory: [],
-      retrievalAlerts: [],
-      prioritizedAlerts: null,
-      telemetrySummary: null,
-      telemetryWindow: '1d',
-      runtimeExcellence: null,
-      releaseValidation: null,
-      releaseDecision: null,
-      traceData: null,
-      selectedTraceId: null,
-      events: [],
-      busy: false,
-      notice: null,
-      providerSettingsCache: {},
-      expandedProviderId: null,
-      providerTestResults: {},
-      providerApiKeyVisible: {},
-      localLlmSelectionBySession: {},
-      sessionPackages: [],
-      sessionPackageHistory: [],
-      packageReleaseSnapshot: null,
-      expandedSessionPackages: {},
-      matrixSortCol: 'tier',
-      matrixSortAsc: false,
-      matrixFilterProvider: '',
-      matrixFilterTier: '',
-      matrixFilterLocality: '',
-      matrixFilterText: '',
-      sessionProviderCollapsed: false,
-      providerConfigCollapsed: true,
-      modelMatrixCollapsed: false,
-      modelRoutingCollapsed: true,
-      routingStrategy: 'single',
-      routingRoleOverrides: {},
-      routingAgentOverrides: {},
-      routingModalityOverrides: {},
-      routingPreferredModality: null,
-      routingSuggestions: null,
-      routingModalitySuggestions: null,
-      availableModalities: [],
-      selectedModalityFilter: null,
-      modalityFilterEnabled: false,
-      sessionRoutingStrategy: 'direct',
-      modelProfiles: null,
-      settingsPanelCollapsed: false,
-      llmAuditCollapsed: false,
-      toolsPanelCollapsed: false,
-      pluginsPanelCollapsed: false,
-      utilitiesPanelCollapsed: false,
-      networkToolsCollapsed: false,
-      networkSettingsCollapsed: false,
-      networkTelemetryCollapsed: false,
-      networkConsoleCollapsed: false,
-      networkCommandHistory: [],
-      networkTelemetryData: { totalCommands: 0, tier1Count: 0, tier2Count: 0, tier3Count: 0, lastCommand: null, errorCount: 0 },
-      agentMgmtCollapsed: false,
-      subAgentCollapsed: false,
-      swarmControlCollapsed: false,
-      agentTelemetryCollapsed: false,
-      localControlCollapsed: false,
-      consoleViewCollapsed: false,
-      computerConfigCollapsed: false,
-      policyControlCollapsed: false,
-      browserControlCollapsed: false,
-      deviceManagerCollapsed: false,
-      workspaceLocationCollapsed: false,
-      workspaceFilesCollapsed: false,
-      importManagerCollapsed: false,
-      workspaceSettingsCollapsed: false,
-      expandedToolId: null,
-      expandedPluginId: null,
-      expandedUtilityId: null,
-      toolStates: {},
-      toolCatalog: [],
-      pluginStates: {},
-      utilityStates: {},
-      llmModalitySummary: null,
-      modelMatrixEntries: [],
-      toolReviews: {},
-      pluginReviews: {},
-      utilityReviews: {},
-      toolsFilterText: '',
-      runtimeSettings: null,
-      settingsSaving: false,
-      settingsSections: { runtime: true, llm: false, approval: true, selfReview: true, retrieval: false, timeouts: true, prefs: true, paths: false, readiness: true },
-      agentData: null,
-      computerSystemInfo: null,
-      computerConsoleHistory: [],
-      computerEnvVars: null,
-      computerDevices: null,
-      ramHistory: [],
-      vramHistory: [],
-      computerPollInterval: null,
-      importHistory: [],
-      framebufferAutoRefresh: false,
-      framebufferPollInterval: null,
-      agenticStream: [],
-      chatTelemetry: []
-    };
-
-    const tabs = [
-      { id: 'chat', label: 'Chat Interface' },
-      { id: 'settings', label: 'Provider & Settings' },
-      { id: 'tools', label: 'Tools & Plugins' },
-      { id: 'agentic', label: 'Agentic Control' },
-      { id: 'computer', label: 'Computer Control' },
-      { id: 'workspace', label: 'Workspace' },
-      { id: 'network', label: 'Network' },
-      { id: 'telemetry', label: 'Telemetry' },
-      { id: 'logs', label: 'Logs & Debug' }
-    ];
-
-    async function request(url, options) {
-      const response = await fetch(url, options);
-      const text = await response.text();
-      const payload = text ? JSON.parse(text) : {};
-      if (!response.ok) {
-        throw new Error(payload.error || ('Request failed with status ' + response.status));
-      }
-      return payload;
-    }
-
-    function escapeHtml(value) {
-      return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    function renderMarkdown(text) {
-      if (!text) return '';
-      var s = String(text);
-      // Fenced code blocks
-      s = s.replace(/\`\`\`(\\w*?)\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
-        return '<pre><code class="lang-' + escapeHtml(lang || 'text') + '">' + escapeHtml(code) + '</code></pre>';
-      });
-      // Inline code
-      s = s.replace(/\`([^\`]+?)\`/g, function(_, code) {
-        return '<code>' + escapeHtml(code) + '</code>';
-      });
-      // Blockquotes
-      s = s.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-      // Headers (process after escaping so # still works in source)
-      s = s.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
-      s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-      s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-      s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-      // Bold & italic
-      s = s.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
-      s = s.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
-      s = s.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
-      // Links
-      s = s.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(_, label, href) {
-        var safeHref = escapeHtml(href);
-        if (!/^https?:\\/\\//i.test(href)) return escapeHtml(label);
-        return '<a href="' + safeHref + '" target="_blank" rel="noopener">' + escapeHtml(label) + '</a>';
-      });
-      // Unordered lists
-      s = s.replace(/(^|\\n)([-*] .+(?:\\n[-*] .+)*)/g, function(_, pre, block) {
-        var items = block.split('\\n').map(function(line) {
-          return '<li>' + line.replace(/^[-*] /, '') + '</li>';
-        }).join('');
-        return pre + '<ul>' + items + '</ul>';
-      });
-      // Ordered lists
-      s = s.replace(/(^|\\n)(\\d+\\. .+(?:\\n\\d+\\. .+)*)/g, function(_, pre, block) {
-        var items = block.split('\\n').map(function(line) {
-          return '<li>' + line.replace(/^\\d+\\.\\s/, '') + '</li>';
-        }).join('');
-        return pre + '<ol>' + items + '</ol>';
-      });
-      // Paragraphs: double newlines
-      s = s.replace(/\\n\\n+/g, '</p><p>');
-      // Single newlines to <br>
-      s = s.replace(/\\n/g, '<br>');
-      return '<p>' + s + '</p>';
-    }
-
-    function formatRelativeTime(value) {
-      if (!value) {
-        return '-';
-      }
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) {
-        return value;
-      }
-      return date.toLocaleString();
-    }
-
-    function safeIso(value) {
-      const date = new Date(value || 0);
-      if (Number.isNaN(date.getTime())) {
-        return new Date(0).toISOString();
-      }
-      return date.toISOString();
-    }
-
-    function reconcileExpandedSessionPackages() {
-      const validPackageIds = new Set((state.sessionPackages || []).map(pkg => pkg.packageId));
-      for (const packageId of Object.keys(state.expandedSessionPackages || {})) {
-        if (!validPackageIds.has(packageId)) {
-          delete state.expandedSessionPackages[packageId];
-        }
-      }
-    }
-
-    async function loadSessionPackages() {
-      const payload = await request('/api/session-packages');
-      state.sessionPackages = Array.isArray(payload.packages) ? payload.packages : [];
-      state.packageReleaseSnapshot = payload.releaseSnapshot || null;
-      reconcileExpandedSessionPackages();
-    }
-
-    async function loadSessionPackageHistory() {
-      const payload = await request('/api/session-packages/history?limit=12').catch(() => ({ history: [] }));
-      state.sessionPackageHistory = Array.isArray(payload.history) ? payload.history : [];
-    }
-
-    async function mutateSessionPackage(packageId, patch, noticeText) {
-      await request('/api/session-packages/' + encodeURIComponent(packageId), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch || {})
-      });
-      await Promise.all([loadSessionPackages(), loadSessionPackageHistory()]);
-      if (noticeText) {
-        state.notice = noticeText;
-      }
-    }
-
-    function getPackagedSessionIdSet() {
-      const packaged = new Set();
-      for (const pkg of state.sessionPackages || []) {
-        for (const sessionId of pkg.sessionIds || []) {
-          packaged.add(sessionId);
-        }
-      }
-      return packaged;
-    }
-
-    function buildSessionTimeline() {
-      const bySessionId = new Map(state.sessions.map(session => [session.sessionId, session]));
-      const packagedSessionIds = getPackagedSessionIdSet();
-      const timeline = [];
-
-      for (const session of state.sessions) {
-        if (!packagedSessionIds.has(session.sessionId)) {
-          timeline.push({ type: 'session', timestamp: safeIso(session.updatedAt), session });
-        }
-      }
-
-      for (const pkg of state.sessionPackages || []) {
-        const sessions = (pkg.sessionIds || [])
-          .map(sessionId => bySessionId.get(sessionId))
-          .filter(Boolean)
-          .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
-        if (!sessions.length) {
-          continue;
-        }
-        const latestTimestamp = sessions.reduce((latest, session) => {
-          const updated = safeIso(session.updatedAt);
-          return updated > latest ? updated : latest;
-        }, safeIso(pkg.updatedAt || pkg.createdAt));
-        timeline.push({
-          type: 'package',
-          timestamp: latestTimestamp,
-          pkg,
-          sessions,
-        });
-      }
-
-      return timeline.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
-    }
-
-    async function exportSession() {
-      if (!state.selectedSessionId) {
-        state.notice = { type: 'error', message: 'No session selected to export.' };
-        render();
-        return;
-      }
-      try {
-        var messages = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages');
-        var session = state.sessions.find(function(s) { return s.sessionId === state.selectedSessionId; });
-        var exportData = {
-          format: 'prism-session-v1',
-          exportedAt: new Date().toISOString(),
-          session: {
-            title: session ? session.title : 'Untitled',
-            messageCount: messages.length,
-            createdAt: session ? session.createdAt : null,
-          },
-          messages: messages
-        };
-        var blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'prism-session-' + (session ? session.title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40) : 'export') + '.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        state.notice = 'Session exported successfully.';
-        render();
-      } catch (err) {
-        state.notice = { type: 'error', message: 'Export failed: ' + String(err) };
-        render();
-      }
-    }
-
-    function importSession() {
-      var input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
-      input.onchange = async function(e) {
-        var file = e.target.files[0];
-        if (!file) return;
-        try {
-          var text = await file.text();
-          var data = JSON.parse(text);
-          if (!data.format || data.format !== 'prism-session-v1' || !Array.isArray(data.messages)) {
-            state.notice = { type: 'error', message: 'Invalid session file. Expected prism-session-v1 format.' };
-            render();
-            return;
-          }
-          var title = (data.session && data.session.title) ? data.session.title + ' (imported)' : 'Imported Session';
-          var result = await request('/api/chat/sessions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: title })
-          });
-          var newSessionId = result.session.sessionId;
-          for (var i = 0; i < data.messages.length; i++) {
-            var msg = data.messages[i];
-            await request('/api/chat/sessions/' + encodeURIComponent(newSessionId) + '/messages', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ role: msg.role, content: msg.content })
-            });
-          }
-          await loadSessions();
-          state.selectedSessionId = newSessionId;
-          await loadMessages();
-          state.notice = 'Imported ' + data.messages.length + ' messages into \"' + title + '\".';
-          render();
-        } catch (err) {
-          state.notice = { type: 'error', message: 'Import failed: ' + String(err) };
-          render();
-        }
-      };
-      input.click();
-    }
-
-    async function packageSessions() {
-      const packagedSessionIds = getPackagedSessionIdSet();
-      const candidates = state.sessions
-        .filter(session => !packagedSessionIds.has(session.sessionId))
-        .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
-
-      if (candidates.length === 0) {
-        state.notice = 'No un-packaged sessions available.';
-        render();
-        return;
-      }
-
-      const packageId = 'pkg-' + Date.now();
-      const createdAt = new Date().toISOString();
-      const suggestedTitle = 'Session Package • ' + formatRelativeTime(createdAt);
-      const packageTitleInput = prompt('Package title:', suggestedTitle);
-      if (packageTitleInput === null) {
-        return;
-      }
-      const areaOfInterestInput = prompt('Area of interest (optional):', '');
-      if (areaOfInterestInput === null) {
-        return;
-      }
-      const objectiveInput = prompt('Package objective (optional):', '');
-      if (objectiveInput === null) {
-        return;
-      }
-      const successCriteriaInput = prompt('Success criteria (optional):', '');
-      if (successCriteriaInput === null) {
-        return;
-      }
-      const dependenciesInput = prompt('Dependencies (comma separated, optional):', '');
-      if (dependenciesInput === null) {
-        return;
-      }
-      const dependencies = dependenciesInput
-        .split(',')
-        .map(item => item.trim())
-        .filter(Boolean);
-
-      await request('/api/session-packages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: (packageTitleInput || '').trim() || suggestedTitle,
-          areaOfInterest: (areaOfInterestInput || '').trim() || null,
-          objective: (objectiveInput || '').trim() || null,
-          successCriteria: (successCriteriaInput || '').trim() || null,
-          dependencies,
-          status: 'planned',
-          sessionIds: candidates.map(session => session.sessionId)
-        })
-      });
-      await Promise.all([loadSessionPackages(), loadSessionPackageHistory()]);
-      if (state.sessionPackages[0]) {
-        state.expandedSessionPackages[state.sessionPackages[0].packageId] = true;
-      }
-      state.notice = 'Packaged ' + candidates.length + ' sessions into a binder.';
-      render();
-    }
-
-    function toggleSessionPackage(packageId) {
-      const current = Boolean(state.expandedSessionPackages[packageId]);
-      state.expandedSessionPackages[packageId] = !current;
-      render();
-    }
-
-    function getSessionsForPackage(pkg) {
-      const bySessionId = new Map(state.sessions.map(session => [session.sessionId, session]));
-      return (pkg.sessionIds || [])
-        .map(sessionId => bySessionId.get(sessionId))
-        .filter(Boolean)
-        .sort((a, b) => (safeIso(b.updatedAt) < safeIso(a.updatedAt) ? -1 : 1));
-    }
-
-    async function runPackageWorkflow(event, packageId) {
-      event.stopPropagation();
-      const pkg = (state.sessionPackages || []).find(item => item.packageId === packageId);
-      if (!pkg) {
-        return;
-      }
-
-      const sessions = getSessionsForPackage(pkg);
-      if (!sessions.length) {
-        state.notice = 'Package has no active session chapters.';
-        render();
-        return;
-      }
-
-      const targetSession = sessions[0];
-      state.selectedSessionId = targetSession.sessionId;
-
-      if (!state.readiness || !state.readiness.ready) {
-        state.notice = 'Complete provider readiness before running package workflow.';
-        state.activeTab = 'settings';
-        render();
-        return;
-      }
-
-      const orchestrationPrompt = [
-        'Execute multi-session package workflow orchestration for this binder.',
-        'Package title: ' + (pkg.title || 'Session Package'),
-        'Area of interest: ' + (pkg.areaOfInterest || 'unspecified'),
-        'Objective: ' + (pkg.objective || 'unspecified'),
-        'Success criteria: ' + (pkg.successCriteria || 'unspecified'),
-        'Dependencies: ' + ((pkg.dependencies || []).length ? pkg.dependencies.join(', ') : 'none'),
-        'Session chapters in scope: ' + sessions.map(session => session.title).join(' | '),
-        'Produce an execution plan with ordered phases, required approvals, and data orchestration checkpoints.'
-      ].join('\\n');
-
-      const previousStatus = pkg.status || 'planned';
-      state.busy = true;
-      state.notice = null;
-      render();
-      try {
-        await mutateSessionPackage(packageId, {
-          status: 'running',
-          lastRunAt: new Date().toISOString(),
-          historyAction: 'workflow_started',
-          message: 'Workflow launched from package controls.',
-          targetSessionId: targetSession.sessionId
-        });
-        await request('/api/chat/sessions/' + encodeURIComponent(targetSession.sessionId) + '/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: orchestrationPrompt })
-        });
-        await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
-        state.notice = 'Package workflow started in chapter session "' + targetSession.title + '".';
-      } catch (error) {
-        await mutateSessionPackage(packageId, {
-          status: previousStatus,
-          historyAction: 'status_changed',
-          message: 'Workflow launch failed; restored previous status.',
-          targetSessionId: targetSession.sessionId
-        }).catch(() => null);
-        state.notice = String(error);
-      } finally {
-        state.busy = false;
-        render();
-      }
-    }
-
-    async function setPackageStatus(event, packageId, nextStatus, actionLabel) {
-      event.stopPropagation();
-      const pkg = (state.sessionPackages || []).find(p => p.packageId === packageId);
-      if (!pkg) {
-        return;
-      }
-      const actionMap = {
-        planned: 'workflow_paused',
-        running: 'workflow_started',
-        blocked: 'workflow_blocked',
-        complete: 'workflow_completed'
-      };
-      await mutateSessionPackage(packageId, {
-        status: nextStatus,
-        historyAction: actionMap[nextStatus] || 'status_changed',
-        message: actionLabel || ('Package status set to ' + nextStatus + '.')
-      }, 'Package marked ' + nextStatus + '.');
-      render();
-    }
-
-    async function cyclePackageStatus(event, packageId) {
-      event.stopPropagation();
-      const pkg = (state.sessionPackages || []).find(p => p.packageId === packageId);
-      if (!pkg) {
-        return;
-      }
-      const cycle = ['planned', 'running', 'blocked', 'complete'];
-      const idx = cycle.indexOf(pkg.status || 'planned');
-      await setPackageStatus(event, packageId, cycle[(idx + 1) % cycle.length], 'Status advanced from package badge.');
-    }
-
-    async function exportPackageTrace(event, packageId) {
-      event.stopPropagation();
-      state.busy = true;
-      state.notice = null;
-      render();
-      try {
-        const payload = await request('/api/session-packages/' + encodeURIComponent(packageId) + '/export', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = packageId + '-trace-export.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
-        state.notice = 'Package trace export generated.';
-      } catch (error) {
-        state.notice = String(error);
-      } finally {
-        state.busy = false;
-        render();
-      }
-    }
-
-    async function unpackageSessionPackage(event, packageId) {
-      event.stopPropagation();
-      const existing = (state.sessionPackages || []).find(pkg => pkg.packageId === packageId);
-      if (!existing) {
-        return;
-      }
-
-      const confirmed = confirm('Unpackage "' + existing.title + '" and restore all chapters to top-level history?');
-      if (!confirmed) {
-        return;
-      }
-
-      await request('/api/session-packages/' + encodeURIComponent(packageId), {
-        method: 'DELETE'
-      });
-      state.sessionPackages = state.sessionPackages.filter(pkg => pkg.packageId !== packageId);
-      if (state.expandedSessionPackages[packageId]) {
-        delete state.expandedSessionPackages[packageId];
-      }
-      await loadSessionPackageHistory();
-      state.notice = 'Unpackaged "' + existing.title + '".';
-      render();
-    }
-
-    function statusBadge(action) {
-      const badgeClass = action.status === 'running'
-        ? 'badge badge-running'
-        : action.status === 'succeeded'
-          ? 'badge badge-succeeded'
-          : action.status === 'failed'
-            ? 'badge badge-failed'
-            : 'badge';
-      return '<span class="' + badgeClass + '">' + escapeHtml(action.status) + '</span>';
-    }
-
-    function getLocalLlmSelection(sessionId) {
-      if (!sessionId) {
-        return null;
-      }
-      return state.localLlmSelectionBySession[sessionId] || null;
-    }
-
-    function setLocalLlmSelection(sessionId, providerId, model) {
-      if (!sessionId || !providerId) {
-        return;
-      }
-      state.localLlmSelectionBySession[sessionId] = {
-        providerId,
-        model: model || ''
-      };
-    }
-
-    function clearLocalLlmSelection(sessionId) {
-      if (!sessionId) {
-        return;
-      }
-      if (state.localLlmSelectionBySession[sessionId]) {
-        delete state.localLlmSelectionBySession[sessionId];
-      }
-    }
-
-    async function loadSessions() {
-      const payload = await request('/api/chat/sessions');
-      state.sessions = payload;
-      const validSessionIds = new Set(state.sessions.map(session => session.sessionId));
-      for (const sessionId of Object.keys(state.localLlmSelectionBySession)) {
-        if (!validSessionIds.has(sessionId)) {
-          delete state.localLlmSelectionBySession[sessionId];
-        }
-      }
-      if (!state.selectedSessionId && state.sessions.length > 0) {
-        state.selectedSessionId = state.sessions[0].sessionId;
-      }
-      if (state.selectedSessionId && !state.sessions.some(session => session.sessionId === state.selectedSessionId)) {
-        state.selectedSessionId = state.sessions[0] ? state.sessions[0].sessionId : null;
-      }
-    }
-
-    async function createSession() {
-      const payload = await request('/api/chat/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
-      state.selectedSessionId = payload.session.sessionId;
-      await loadSessions();
-      await loadMessages();
-      await Promise.all([loadSessionPackages(), loadSessionPackageHistory(), refreshChrome()]);
-      render();
-    }
-
-    async function loadMessages() {
-      if (!state.selectedSessionId) {
-        state.messages = [];
-        return;
-      }
-      const payload = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages');
-      state.messages = payload.messages;
-    }
-
-    async function refreshChrome() {
-      const llmUrl = state.selectedSessionId
-        ? '/api/llm/providers?sessionId=' + encodeURIComponent(state.selectedSessionId)
-        : null;
-      const llmConfigUrl = state.selectedSessionId
-        ? '/api/llm/config?sessionId=' + encodeURIComponent(state.selectedSessionId)
-        : null;
-      const readinessUrl = '/api/readiness'
-        + (state.selectedSessionId ? '?sessionId=' + encodeURIComponent(state.selectedSessionId) : '');
-      const llmAuditUrl = '/api/events?limit=10&operation=dashboard.llm_selection'
-        + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '');
-      const tracesUrl = '/api/traces?limit=10'
-        + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '')
-        + (state.selectedTraceId ? '&correlationId=' + encodeURIComponent(state.selectedTraceId) : '');
-      const chatTelemetryUrl = '/api/events?limit=25'
-        + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '');
-      const [status, readiness, llmCatalog, llmConfig, llmAuditEvents, chatTelemetryPayload, pending, actions, actionHistory, traceData, events, retrievalData, prioritizedAlertsData, telemetrySummaryData, runtimeExcellenceData, releaseValidationData, releaseDecisionData, selfReviewLatest, selfReviewHistory, packagePayload, packageHistoryPayload, settingsPayload, agentDataPayload, computerSystemInfoPayload, toolsStatusPayload, pluginsStatusPayload, llmModalitiesPayload, modelMatrixPayload] = await Promise.all([
-        request('/api/status'),
-        request(readinessUrl).catch(() => null),
-        llmUrl ? request(llmUrl) : Promise.resolve(null),
-        llmConfigUrl ? request(llmConfigUrl).catch(() => null) : Promise.resolve(null),
-        request(llmAuditUrl),
-        request(chatTelemetryUrl).catch(function() { return []; }),
-        request('/api/pending'),
-        request('/api/actions'),
-        request('/api/action-history'),
-        request(tracesUrl).catch(() => ({ traces: [], selectedTraceEvents: [] })),
-        request('/api/events?limit=8'),
-        request('/api/retrieval/alerts').catch(() => ({ alerts: [] })),
-        request('/api/retrieval/prioritized-alerts').catch(() => null),
-        request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
-        request('/api/runtime/excellence?window=' + state.telemetryWindow).catch(() => null),
-        request('/api/release/validation/latest').catch(() => ({ report: null })),
-        request('/api/release/decision/latest').catch(() => ({ report: null })),
-        request('/api/self-review/latest').catch(() => ({ report: null })),
-        request('/api/self-review/history?limit=5').catch(() => ({ reports: [] })),
-        request('/api/session-packages').catch(() => ({ packages: [], releaseSnapshot: null })),
-        request('/api/session-packages/history?limit=12').catch(() => ({ history: [] })),
-        request('/api/settings').catch(() => ({ settings: null })),
-        request('/api/agents').catch(() => ({ agents: [], swarms: [], telemetry: null })),
-        request('/api/computer/system-info').catch(() => null),
-        request('/api/tools/status').catch(function() { return { tools: {} }; }),
-        request('/api/plugins/status').catch(function() { return { plugins: {} }; }),
-        request('/api/llm/modalities').catch(function() { return { modalities: [] }; }),
-        request('/api/models/matrix').catch(function() { return { models: [] }; })
-      ]);
-      state.agentData = agentDataPayload || null;
-      state.computerSystemInfo = computerSystemInfoPayload || null;
-      var serverTools = (toolsStatusPayload && toolsStatusPayload.tools) || {};
-      state.toolCatalog = Array.isArray(toolsStatusPayload && toolsStatusPayload.catalog)
-        ? toolsStatusPayload.catalog
-        : [];
-      for (var tk in serverTools) {
-        if (!state.toolStates[tk]) state.toolStates[tk] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
-        var st = serverTools[tk];
-        state.toolStates[tk].invocations = st.invocations || 0;
-        state.toolStates[tk].successes = st.successes || 0;
-        state.toolStates[tk].failures = st.failures || 0;
-        state.toolStates[tk].avgLatencyMs = st.avgLatencyMs || 0;
-        state.toolStates[tk].lastInvoked = st.lastInvoked || null;
-        state.toolStates[tk].lastError = st.lastError || null;
-        if (typeof st.enabled === 'boolean') state.toolStates[tk].enabled = st.enabled;
-      }
-      var serverPlugins = (pluginsStatusPayload && pluginsStatusPayload.plugins) || {};
-      for (var pk in serverPlugins) {
-        if (!state.pluginStates[pk]) state.pluginStates[pk] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, uptime: 100, lastChecked: null };
-        var sp = serverPlugins[pk];
-        state.pluginStates[pk].requests = sp.requests || 0;
-        state.pluginStates[pk].errors = sp.errors || 0;
-        state.pluginStates[pk].avgResponseMs = sp.avgResponseMs || 0;
-        state.pluginStates[pk].lastChecked = sp.lastChecked || null;
-        if (typeof sp.enabled === 'boolean') state.pluginStates[pk].enabled = sp.enabled;
-        if (typeof sp.healthy === 'boolean') state.pluginStates[pk].healthy = sp.healthy;
-      }
-      var modalitySummary = llmModalitiesPayload || null;
-      state.llmModalitySummary = modalitySummary;
-      if (modalitySummary && Array.isArray(modalitySummary.modalities) && modalitySummary.modalities.length > 0) {
-        state.availableModalities = modalitySummary.modalities;
-      }
-      state.modelMatrixEntries = Array.isArray(modelMatrixPayload && modelMatrixPayload.models)
-        ? modelMatrixPayload.models
-        : [];
-      state.status = status;
-      state.readiness = readiness;
-      state.llmCatalog = llmCatalog;
-      state.llmConfig = llmConfig;
-      state.llmAuditEvents = llmAuditEvents;
-      state.chatTelemetry = (Array.isArray(chatTelemetryPayload) ? chatTelemetryPayload : []).filter(function(e) { return e.operation && (e.operation.startsWith('chat.') || e.operation.startsWith('llm.')); });
-      state.pending = pending;
-      state.actions = actions;
-      state.actionHistory = actionHistory;
-      state.traceData = traceData;
-      state.events = events;
-      state.selfReviewLatest = selfReviewLatest.report || null;
-      state.selfReviewHistory = selfReviewHistory.reports || [];
-      state.retrievalAlerts = retrievalData.alerts || [];
-      state.prioritizedAlerts = prioritizedAlertsData || null;
-      state.telemetrySummary = telemetrySummaryData || null;
-      state.runtimeExcellence = runtimeExcellenceData || null;
-      state.releaseValidation = releaseValidationData ? (releaseValidationData.report || null) : null;
-      state.releaseDecision = releaseDecisionData ? (releaseDecisionData.report || null) : null;
-      state.sessionPackages = Array.isArray(packagePayload.packages) ? packagePayload.packages : [];
-      state.packageReleaseSnapshot = packagePayload.releaseSnapshot || null;
-      state.sessionPackageHistory = Array.isArray(packageHistoryPayload.history) ? packageHistoryPayload.history : [];
-      state.runtimeSettings = settingsPayload.settings || null;
-      reconcileExpandedSessionPackages();
-      if (state.selectedTraceId && (!traceData || !traceData.traces || !traceData.traces.some(trace => trace.correlationId === state.selectedTraceId))) {
-        state.selectedTraceId = null;
-      }
-    }
-
-    async function bootstrap() {
-      try {
-        await loadSessions();
-        if (state.sessions.length === 0) {
-          await createSession();
-        } else {
-          await Promise.all([refreshChrome(), loadMessages()]);
-        }
-        // Load model profiles and routing config in background
-        fetchModelProfiles();
-        fetchRoutingState();
-      } catch (error) {
-        state.notice = String(error);
-      } finally {
-        render();
-      }
-    }
-
-    function renderSessions() {
-      const container = document.getElementById('session-list');
-      if (!state.sessions.length) {
-        container.innerHTML = '<div class="empty-state">No saved sessions yet.</div>';
-        return;
-      }
-
-      const renderSessionCard = function(session, extraClass) {
-        const preview = session.lastMessagePreview || 'Start a new conversation.';
-        const activeClass = state.selectedSessionId === session.sessionId ? ' active' : '';
-        const className = (extraClass ? ' ' + extraClass : '');
-        const onClick = extraClass === 'session-chapter'
-          ? 'event.stopPropagation(); selectSession(this.dataset.sessionId)'
-          : 'selectSession(this.dataset.sessionId)';
-        return '<div class="session-card' + activeClass + className + '" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="' + onClick + '">'
-          + '<div class="session-title">' + escapeHtml(session.title) + '</div>'
-          + '<div class="session-preview">' + escapeHtml(preview) + '</div>'
-          + '<div class="session-meta"><span>' + escapeHtml(String(session.messageCount)) + ' msgs</span><span>' + escapeHtml(formatRelativeTime(session.updatedAt)) + '</span></div>'
-          + '<div class="action-buttons">'
-          + '<button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button>'
-          + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="renameSession(event, this.dataset.sessionId)">Rename</button>'
-          + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="copySession(event, this.dataset.sessionId)">Copy Session</button>'
-          + '</div>'
-          + '</div>';
-      };
-
-      const timeline = buildSessionTimeline();
-      container.innerHTML = timeline.map(entry => {
-        if (entry.type === 'session') {
-          return renderSessionCard(entry.session);
-        }
-
-        const expanded = Boolean(state.expandedSessionPackages[entry.pkg.packageId]);
-        const childHtml = expanded
-          ? '<div class="session-package-children">'
-            + entry.sessions.map(session => renderSessionCard(session, 'session-chapter')).join('')
-            + '</div>'
-          : '';
-
-        const pkgStatus = entry.pkg.status || 'planned';
-        const summary = entry.pkg.summary || {};
-        const canPause = pkgStatus === 'running';
-        const canResume = pkgStatus === 'planned' || pkgStatus === 'blocked';
-        return '<div class="session-card session-package-card" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="toggleSessionPackage(this.dataset.packageId)">'
-          + '<div class="session-package-head">'
-          + '<div class="session-title">' + escapeHtml(entry.pkg.title) + '</div>'
-          + '<div style="display:flex;align-items:center;gap:8px;">'
-          + '<button class="pkg-status-badge ' + escapeHtml(pkgStatus) + '" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="cyclePackageStatus(event, this.dataset.packageId)" title="Click to advance status">' + escapeHtml(pkgStatus.toUpperCase()) + '</button>'
-          + '<div class="session-package-badge">' + (expanded ? 'Collapse' : 'Expand') + '</div>'
-          + '</div>'
-          + '</div>'
-          + (entry.pkg.areaOfInterest
-            ? '<div class="session-preview">Area: ' + escapeHtml(entry.pkg.areaOfInterest) + '</div>'
-            : '')
-          + (entry.pkg.objective
-            ? '<div class="session-preview">Objective: ' + escapeHtml(entry.pkg.objective) + '</div>'
-            : '')
-          + (entry.pkg.successCriteria
-            ? '<div class="session-preview">Success: ' + escapeHtml(entry.pkg.successCriteria) + '</div>'
-            : '')
-          + ((entry.pkg.dependencies || []).length
-            ? '<div class="session-preview">Dependencies: ' + escapeHtml(entry.pkg.dependencies.join(', ')) + '</div>'
-            : '')
-          + '<div class="session-preview">Session chapters: ' + escapeHtml(String(entry.sessions.length)) + '</div>'
-          + (summary.lastActiveSessionTitle
-            ? '<div class="session-preview">Last active: ' + escapeHtml(summary.lastActiveSessionTitle) + ' · ' + escapeHtml(formatRelativeTime(summary.lastActiveAt)) + '</div>'
-            : '')
-          + '<div class="session-preview">Progress: ' + escapeHtml(String(summary.completedChapterCount || 0)) + '/' + escapeHtml(String(summary.chapterCount || entry.sessions.length)) + ' chapters active (' + escapeHtml(String(summary.completionPct || 0)) + '%)</div>'
-          + '<div class="session-preview">Policy: ' + escapeHtml(summary.latestPolicyDecision || 'none') + ' · Pending approvals: ' + escapeHtml(String(summary.pendingApprovalCount || 0)) + '</div>'
-          + '<div class="session-meta"><span>Package</span><span>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</span></div>'
-          + '<div class="session-package-actions">'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="runPackageWorkflow(event, this.dataset.packageId)">Run Package Workflow</button>'
-          + (canResume
-            ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;running&quot;, &quot;Package resumed from controls.&quot;)">Resume</button>'
-            : '')
-          + (canPause
-            ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;planned&quot;, &quot;Package paused from controls.&quot;)">Pause</button>'
-            : '')
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;blocked&quot;, &quot;Package marked blocked from controls.&quot;)">Mark Blocked</button>'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;complete&quot;, &quot;Package marked complete from controls.&quot;)">Complete</button>'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="exportPackageTrace(event, this.dataset.packageId)">Export Trace</button>'
-          + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="unpackageSessionPackage(event, this.dataset.packageId)">Unpackage</button>'
-          + '</div>'
-          + childHtml
-          + '</div>';
-      }).join('');
-    }
-
-    function renderTabs() {
-      const tabsContainer = document.getElementById('tabs');
-      if (!tabsContainer) {
-        return;
-      }
-
-      const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-id]'));
-      if (buttons.length !== tabs.length) {
-        console.error('[dashboard-render] tabs', 'expected ' + tabs.length + ' buttons, found ' + buttons.length);
-        state.notice = state.notice || 'Dashboard navigation is incomplete. Refresh the page or restart Prism.';
-        return;
-      }
-
-      const missingPanels = [];
-      tabs.forEach(tab => {
-        if (!document.getElementById('tab-' + tab.id)) {
-          missingPanels.push(tab.id);
-        }
-      });
-      if (missingPanels.length > 0) {
-        console.error('[dashboard-render] tabs', 'missing panels', missingPanels.join(','));
-        state.notice = state.notice || 'Dashboard content panels failed to initialize. Refresh the page or restart Prism.';
-        return;
-      }
-
-      buttons.forEach(button => {
-        const tabId = button.dataset.tabId;
-        const isActive = state.activeTab === tabId;
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-        button.setAttribute('tabindex', isActive ? '0' : '-1');
-      });
-
-      tabs.forEach(tab => {
-        const panel = document.getElementById('tab-' + tab.id);
-        if (!panel) {
-          return;
-        }
-        const isActive = state.activeTab === tab.id;
-        panel.classList.toggle('active', isActive);
-        panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-      });
-
-      if (document.body) {
-        document.body.classList.add('js-ready');
-      }
-    }
-
-    async function fetchReadinessAndRefresh() {
-      try {
-        const readiness = await request('/api/readiness/recheck', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId || '' })
-        });
-        state.readiness = readiness;
-        safeRenderStep('onboarding', renderOnboarding);
-        safeRenderStep('header', renderHeader);
-      } catch (err) {
-        state.notice = { type: 'error', message: String(err) };
-        safeRenderStep('notice', renderNotice);
-      }
-    }
-
-    async function onHeaderProviderChanged(providerId) {
-      if (!providerId || !state.selectedSessionId || !state.llmCatalog) return;
-      const provider = state.llmCatalog.providers.find(entry => entry.id === providerId);
-      const model = provider?.defaultModel || provider?.models[0] || '';
-      try {
-        state.llmCatalog = await request('/api/llm/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: providerId, model })
-        });
-        clearLocalLlmSelection(state.selectedSessionId);
-        safeRenderStep('header', renderHeader);
-        safeRenderStep('llm', renderLlm);
-        await fetchReadinessAndRefresh();
-        state.notice = 'Provider switched to ' + providerId + ' / ' + (model || 'default') + '.';
-        safeRenderStep('notice', renderNotice);
-      } catch (err) {
-        console.error(err);
-        state.notice = { type: 'error', message: 'Failed to switch provider: ' + String(err) };
-        safeRenderStep('notice', renderNotice);
-      }
-    }
-
-    async function onHeaderModelChanged(model) {
-      if (!model || !state.selectedSessionId || !state.llmCatalog) return;
-      try {
-        state.llmCatalog = await request('/api/llm/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: state.llmCatalog.activeProviderId, model })
-        });
-        clearLocalLlmSelection(state.selectedSessionId);
-        safeRenderStep('header', renderHeader);
-        safeRenderStep('llm', renderLlm);
-        await fetchReadinessAndRefresh();
-        state.notice = 'Model switched to ' + model + '.';
-        safeRenderStep('notice', renderNotice);
-      } catch (err) {
-        console.error(err);
-        state.notice = { type: 'error', message: 'Failed to switch model: ' + String(err) };
-        safeRenderStep('notice', renderNotice);
-      }
-    }
-
-    function renderHeader() {
-      const activeSession = state.sessions.find(session => session.sessionId === state.selectedSessionId);
-      document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Chat';
-      document.getElementById('active-session-meta').textContent = activeSession
-        ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' • ' + activeSession.messageCount + ' messages'
-        : 'Persistent runtime session';
-
-      const chips = [];
-      if (state.status) {
-        chips.push('<span class="chip">Mode: ' + escapeHtml(state.status.mode) + '</span>');
-        chips.push('<span class="chip">Environment: ' + escapeHtml(state.status.environmentProfile) + '</span>');
-        chips.push('<span class="chip">Pending approvals: ' + escapeHtml(String(state.status.pendingApprovals)) + '</span>');
-        chips.push('<span class="chip">Sessions: ' + escapeHtml(String(state.status.chatSessionCount)) + '</span>');
-      }
-      if (state.llmCatalog && state.llmCatalog.activeProviderId) {
-        let isError = false;
-        let isReady = state.readiness && state.readiness.ready;
-        const messagesArr = state.messages || [];
-        const lastError = messagesArr.slice().reverse().find(m => m.metadata && m.metadata.intent === 'llm_error');
-        if (lastError && (Date.now() - new Date(lastError.createdAt).getTime() < 300000)) {
-           isError = true;
-        }
-
-        let hueStyle = '';
-        if (isError) {
-          hueStyle = 'color: #ff8d8d; border-color: rgba(255, 141, 141, 0.4); background: rgba(255, 141, 141, 0.1);';
-        } else if (isReady) {
-          hueStyle = 'color: #7cf1c8; border-color: rgba(124, 241, 200, 0.4); background: rgba(124, 241, 200, 0.1);';
-        } else {
-          hueStyle = 'color: #f5cf6c; border-color: rgba(245, 207, 108, 0.4); background: rgba(245, 207, 108, 0.1);';
-        }
-
-        const selectBaseStyle = 'appearance: none; -moz-appearance: none; -webkit-appearance: none; outline: none; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all 0.2s ease; border-style: solid; border-width: 1px;';
-        const optionStyle = ' style="background: #1e293b; color: #edf3ff;"';
-
-        const providers = state.llmCatalog.providers || [];
-        if (providers.length > 0) {
-          let pSelect = '<select style="' + selectBaseStyle + hueStyle + '" onchange="onHeaderProviderChanged(this.value)" title="Fast switch provider">';
-          providers.forEach(p => {
-            const sel = p.id === state.llmCatalog.activeProviderId ? ' selected' : '';
-            pSelect += '<option value="' + escapeHtml(p.id) + '"' + sel + optionStyle + '>Provider: ' + escapeHtml(p.id) + '</option>';
-          });
-          pSelect += '</select>';
-          chips.push(pSelect);
-          
-          const activeP = providers.find(p => p.id === state.llmCatalog.activeProviderId);
-          if (activeP && activeP.models && activeP.models.length > 0) {
-            let mSelect = '<select style="' + selectBaseStyle + hueStyle + '" onchange="onHeaderModelChanged(this.value)" title="Fast switch model">';
-            activeP.models.forEach(m => {
-              const sel = m === state.llmCatalog.activeModel ? ' selected' : '';
-              mSelect += '<option value="' + escapeHtml(m) + '"' + sel + optionStyle + '>Model: ' + escapeHtml(m) + '</option>';
-            });
-            mSelect += '</select>';
-            chips.push(mSelect);
-          }
-        } else {
-           chips.push('<span class="chip" style="' + hueStyle + '">Provider: ' + escapeHtml(state.llmCatalog.activeProviderId) + '</span>');
-           chips.push('<span class="chip" style="' + hueStyle + '">Model: ' + escapeHtml(state.llmCatalog.activeModel || '-') + '</span>');
-        }
-      }
-      document.getElementById('header-chips').innerHTML = chips.join('');
-    }
-
-    function renderOnboarding() {
-      const container = document.getElementById('onboarding');
-      if (!state.readiness) {
-        container.innerHTML = '<div class="muted">Checking readiness...</div>';
-        return;
-      }
-
-      const checklist = state.readiness.requirements || [];
-      if (state.readiness.ready) {
-        container.innerHTML = '<div class="onboarding-title">System ready</div>'
-          + '<div class="muted">Provider and model are configured for this session.</div>';
-        return;
-      }
-
-      const recommendations = (state.readiness.recommendations || []).map(item =>
-        '<li>' + escapeHtml(String(item)) + '</li>'
-      ).join('');
-
-      container.innerHTML = '<div class="onboarding-title">First-run checklist</div>'
-        + '<div class="onboarding-list">'
-        + checklist.map(item =>
-          '<div class="' + (item.passed ? 'passed' : 'failed') + '">'
-          + (item.passed ? '✓ ' : '✗ ')
-          + escapeHtml(item.label)
-          + ' — ' + escapeHtml(item.detail || '')
-          + '</div>'
-        ).join('')
-        + '</div>'
-        + '<div class="action-buttons" style="margin-top:10px;">'
-        + '<button class="secondary-button" onclick="setActiveTab(&quot;settings&quot;)">Open Provider & Settings</button>'
-        + '</div>'
-        + (recommendations ? '<ul class="muted" style="margin:10px 0 0 18px; padding:0;">' + recommendations + '</ul>' : '');
-    }
-
-    function renderToolBlocks(metadata) {
-      if (!metadata || !metadata.events || !metadata.events.length) return '';
-      var toolEvents = metadata.events.filter(function(e) { return e.type === 'tool_call' || e.type === 'tool_result'; });
-      if (!toolEvents.length) return '';
-      var blocks = [];
-      for (var i = 0; i < toolEvents.length; i += 2) {
-        var call = toolEvents[i];
-        var result = toolEvents[i + 1];
-        var name = call ? (call.tool || call.name || 'tool') : 'tool';
-        var ok = result && result.type === 'tool_result' && (result.ok !== false);
-        var statusClass = ok ? 'ok' : 'fail';
-        var statusText = ok ? '\\u2713' : '\\u2717';
-        blocks.push(
-          '<div class="tool-block" onclick="this.classList.toggle(&quot;expanded&quot;)">'
-          + '<div class="tool-block-header">'
-          + '<span class="tool-block-icon">\\u{1F527}</span>'
-          + '<span class="tool-block-name">' + escapeHtml(name) + '</span>'
-          + '<span class="tool-block-status ' + statusClass + '">' + statusText + '</span>'
-          + '</div>'
-          + '</div>'
-        );
-      }
-      return blocks.join('');
-    }
-
-    function renderMessages() {
-      const container = document.getElementById('messages');
-      if (!state.messages.length) {
-        container.innerHTML = '<div class="empty-state"><strong>Persistent operator chat is ready.</strong><br><br>Ask for status, approvals, history, or trigger actions like <span class="mono">run workflow demo</span>.</div>';
-        return;
-      }
-
-      const rows = state.messages.map(message => {
-        const roleLabel = message.role === 'user' ? 'Operator' : message.role === 'assistant' ? 'PRISM' : 'System';
-        let extraHtml = '';
-        if (message.metadata && message.metadata.intent === 'llm_error') {
-            extraHtml = '<div style="margin-top: 14px;"><button class="secondary-button" style="font-size:12px; padding:8px 12px; display:inline-flex; align-items:center; gap:6px;" onclick="setActiveTab(&quot;logs&quot;)">&#x1F50D; Open Logs</button></div>';
-        }
-        // Tool execution blocks for agentic replies
-        if (message.metadata && message.metadata.intent === 'llm_agentic') {
-          extraHtml += renderToolBlocks(message.metadata);
-          if (message.metadata.toolCallsExecuted) {
-            extraHtml += '<div class="muted" style="font-size:11px;margin-top:6px;">\\u{1F527} '
-              + message.metadata.toolCallsExecuted + ' tool call(s) in '
-              + (message.metadata.iterations || '?') + ' iteration(s)</div>';
-          }
-        }
-
-        const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : escapeHtml(message.content);
-
-        return '<div class="message ' + escapeHtml(message.role) + '">'
-          + '<div class="message-label">' + escapeHtml(roleLabel) + '</div>'
-          + '<div>' + contentHtml + '</div>'
-          + extraHtml
-          + '<div class="message-time">' + escapeHtml(formatRelativeTime(message.createdAt)) + '</div>'
-          + '</div>';
-      }).join('');
-
-      const streamBlock = state.agenticStream && state.agenticStream.length
-        ? '<div class="message assistant"><div class="message-label">PRISM</div>'
-          + state.agenticStream.map(function(ev) {
-            if (ev.type === 'text') return '<div>' + renderMarkdown(ev.text || '') + '</div>';
-            if (ev.type === 'tool_call') { var tn = (ev.toolCall && ev.toolCall.name) || ''; return '<div class="tool-block"><div class="tool-block-header"><span class="tool-block-icon">\\u{1F527}</span><span class="tool-block-name">' + escapeHtml(tn) + '</span><span class="streaming-dot"></span></div></div>'; }
-            if (ev.type === 'tool_result') { var rn = (ev.toolResult && ev.toolResult.name) || 'tool'; return '<div class="muted" style="font-size:11px;">\\u2713 ' + escapeHtml(rn) + ' done</div>'; }
-            return '';
-          }).join('')
-          + '</div>'
-        : '';
-
-      const typing = state.busy && !state.agenticStream.length ? '<div class="message assistant"><div class="message-label">PRISM</div><div>Working...<span class="streaming-dot"></span></div></div>' : '';
-      container.innerHTML = rows + streamBlock + typing;
-      container.scrollTop = container.scrollHeight;
-    }
-
-    function renderOverview() {
-      const container = document.getElementById('runtime-overview');
-      if (!state.status) {
-        container.innerHTML = '<div class="muted">Loading runtime status...</div>';
-        return;
-      }
-      const lastEvent = state.status.lastEvent;
-      container.innerHTML = [
-        metricRow('Session', state.status.sessionId),
-        metricRow('Started', formatRelativeTime(state.status.startedAt)),
-        metricRow('Uptime', String(state.status.uptimeSeconds) + 's'),
-        metricRow('Events', String(state.status.eventCount)),
-        metricRow('Last event', lastEvent ? lastEvent.operation + ' (' + lastEvent.status + ')' : 'none')
-      ].join('');
-    }
-
-    function renderRoutingStrategyControls(providers, currentModel) {
-      var html = '';
-      var strategy = state.sessionRoutingStrategy || 'direct';
-
-      // ── Routing Strategy Section ──
-      html += '<div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(148,163,184,0.12);border-radius:8px;">';
-      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">';
-      html += '<span style="font-size:13px;font-weight:600;color:var(--fg);">\\u{1F9ED} Routing Strategy</span>';
-      html += '</div>';
-
-      // Strategy radio buttons
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">';
-      var strategies = [
-        { id: 'direct', label: '\\u{1F3AF} Direct', desc: 'Use selected model' },
-        { id: 'role', label: '\\u{1F465} Role-Based', desc: 'Route by task role' },
-        { id: 'modality', label: '\\u{1F9E0} Modality-Based', desc: 'Route by content type' }
-      ];
-      strategies.forEach(function(s) {
-        var selected = strategy === s.id;
-        html += '<button onclick="setSessionRoutingStrategy(&#39;' + s.id + '&#39;)" style="'
-          + 'padding:6px 12px;border-radius:8px;font-size:11px;cursor:pointer;border:1px solid '
-          + (selected ? 'rgba(99,179,237,0.5)' : 'rgba(148,163,184,0.15)') + ';'
-          + 'background:' + (selected ? 'rgba(99,179,237,0.12)' : 'rgba(255,255,255,0.03)') + ';'
-          + 'color:' + (selected ? '#63b3ed' : 'var(--fg-muted)') + ';'
-          + 'font-weight:' + (selected ? '600' : '400') + ';'
-          + 'transition:all 0.15s ease;">'
-          + s.label
-          + '</button>';
-      });
-      html += '</div>';
-
-      // Strategy description
-      if (strategy === 'direct') {
-        html += '<div class="muted" style="font-size:11px;padding:4px 0;">Requests go directly to the selected provider and model above.</div>';
-      } else if (strategy === 'role') {
-        html += '<div class="muted" style="font-size:11px;padding:4px 0;">Requests are routed by task role (chat, code, classification, etc.). Configure in the <strong>Model Routing</strong> panel below.</div>';
-      } else if (strategy === 'modality') {
-        // ── Modality Pills ──
-        html += '<div class="muted" style="font-size:11px;padding:4px 0;margin-bottom:6px;">Select a content modality to auto-route to the best matching model.</div>';
-        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">';
-
-        var modalities = state.availableModalities || [];
-        if (modalities.length === 0) {
-          // Fallback if modality data hasn't loaded yet
-          modalities = [
-            { id: 'text', label: 'Text', icon: '\\u{1F4DD}', modelCount: 0 },
-            { id: 'code', label: 'Code & Programming', icon: '\\u{1F4BB}', modelCount: 0 },
-            { id: 'image-understanding', label: 'Image Understanding', icon: '\\u{1F5BC}', modelCount: 0 },
-            { id: 'image-generation', label: 'Image Generation', icon: '\\u{1F3A8}', modelCount: 0 },
-            { id: 'video-understanding', label: 'Video Understanding', icon: '\\u{1F3AC}', modelCount: 0 },
-            { id: 'video-generation', label: 'Video Generation', icon: '\\u{1F3A5}', modelCount: 0 },
-            { id: 'voice-input', label: 'Voice Input', icon: '\\u{1F3A4}', modelCount: 0 },
-            { id: 'voice-output', label: 'Voice Output', icon: '\\u{1F50A}', modelCount: 0 },
-            { id: 'tts', label: 'Text-to-Speech', icon: '\\u{1F5E3}', modelCount: 0 },
-            { id: 'stt', label: 'Speech-to-Text', icon: '\\u{1F4AC}', modelCount: 0 },
-            { id: 'realtime', label: 'Realtime', icon: '\\u26A1', modelCount: 0 },
-            { id: 'embedding', label: 'Embedding', icon: '\\u{1F9E9}', modelCount: 0 },
-            { id: 'multimodal-reasoning', label: 'Multimodal Reasoning', icon: '\\u{1F9E0}', modelCount: 0 }
-          ];
-        }
-
-        modalities.forEach(function(m) {
-          var isSelected = state.selectedModalityFilter === m.id;
-          var hasModels = m.modelCount > 0;
-          html += '<button onclick="onModalitySelected(&#39;' + escapeHtml(m.id) + '&#39;)" '
-            + 'title="' + escapeHtml(m.label + (m.description ? ': ' + m.description : '') + ' (' + m.modelCount + ' models)') + '" '
-            + 'style="'
-            + 'display:inline-flex;align-items:center;gap:4px;'
-            + 'padding:4px 10px;border-radius:16px;font-size:10px;cursor:pointer;'
-            + 'border:1px solid ' + (isSelected ? 'rgba(99,179,237,0.6)' : hasModels ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.08)') + ';'
-            + 'background:' + (isSelected ? 'rgba(99,179,237,0.15)' : 'rgba(255,255,255,0.02)') + ';'
-            + 'color:' + (isSelected ? '#63b3ed' : hasModels ? 'var(--fg-muted)' : 'rgba(148,163,184,0.4)') + ';'
-            + 'font-weight:' + (isSelected ? '600' : '400') + ';'
-            + 'transition:all 0.15s ease;">'
-            + '<span style="font-size:13px;">' + m.icon + '</span>'
-            + '<span>' + escapeHtml(m.label) + '</span>'
-            + (m.modelCount > 0 ? '<span style="font-size:9px;opacity:0.6;">(' + m.modelCount + ')</span>' : '')
-            + '</button>';
-        });
-        html += '</div>';
-
-        // ── Selected modality details ──
-        if (state.selectedModalityFilter) {
-          var selectedMod = modalities.find(function(m) { return m.id === state.selectedModalityFilter; });
-          var suggestion = (state.routingModalitySuggestions || {})[state.selectedModalityFilter];
-          var override = (state.routingModalityOverrides || {})[state.selectedModalityFilter];
-
-          html += '<div style="padding:8px;background:rgba(99,179,237,0.05);border:1px solid rgba(99,179,237,0.15);border-radius:8px;margin-bottom:8px;">';
-          html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">';
-          html += '<span style="font-size:15px;">' + (selectedMod ? selectedMod.icon : '') + '</span>';
-          html += '<span style="font-size:12px;font-weight:600;color:#63b3ed;">' + escapeHtml(selectedMod ? selectedMod.label : state.selectedModalityFilter) + '</span>';
-          html += '</div>';
-
-          if (suggestion) {
-            var tierColors = { 1: '#ff6b6b', 2: '#ffa94d', 3: '#ffd43b', 4: '#69db7c', 5: '#4dabf7' };
-            var sColor = tierColors[suggestion.tier] || '#aaa';
-            html += '<div style="font-size:11px;margin-bottom:6px;">';
-            html += '<span class="muted">AI Suggested: </span>';
-            html += '<span class="mono" style="font-size:11px;">' + escapeHtml(suggestion.providerId + '/' + suggestion.model) + '</span>';
-            html += ' <span style="color:' + sColor + ';font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:' + sColor + '18;">T' + suggestion.tier + '</span>';
-            if (suggestion.degraded) html += ' <span style="color:#ffd43b;font-size:10px;">\\u26A0 Partial</span>';
-            html += '</div>';
-          }
-
-          // Modality override dropdown
-          var filteredModels = getModelsForModalityFilter(state.selectedModalityFilter, providers) || [];
-          if (filteredModels.length > 0) {
-            var overrideVal = override ? (override.providerId + '/' + override.model) : 'auto';
-            html += '<div style="display:flex;align-items:center;gap:6px;">';
-            html += '<span class="muted" style="font-size:11px;">Override:</span>';
-            html += '<select onchange="setModalityOverride(&#39;' + escapeHtml(state.selectedModalityFilter) + '&#39;, this.value)" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);flex:1;max-width:280px;">';
-            html += '<option value="auto"' + (!override ? ' selected' : '') + '>Auto (AI Suggested)</option>';
-            filteredModels.forEach(function(fm) {
-              var val = fm.providerId + '/' + fm.model;
-              html += '<option value="' + escapeHtml(val) + '"' + (overrideVal === val ? ' selected' : '') + '>' + escapeHtml(fm.label) + '</option>';
-            });
-            html += '</select>';
-            html += '</div>';
-          } else {
-            html += '<div class="muted" style="font-size:11px;color:#ffa94d;">No models available for this modality.</div>';
-          }
-
-          html += '</div>';
-
-          // Filter toggle
-          html += '<div style="display:flex;align-items:center;gap:6px;">';
-          html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--fg-muted);">';
-          html += '<input type="checkbox" ' + (state.modalityFilterEnabled ? 'checked' : '') + ' onchange="onModalityFilterToggle()" />';
-          html += 'Filter Model dropdown to ' + escapeHtml(selectedMod ? selectedMod.label : '') + ' models only';
-          html += '</label>';
-          html += '</div>';
-        }
-      }
-
-      html += '</div>';
-      return html;
-    }
-
-    function renderLlm() {
-      const container = document.getElementById('llm-provider');
-      if (!state.llmCatalog) {
-        container.innerHTML = '<div class="muted">Loading providers...</div>';
-        return;
-      }
-
-      const providers = state.llmCatalog.providers || [];
-      if (!providers.length) {
-        container.innerHTML = '<div class="muted">No providers configured.</div>';
-        return;
-      }
-
-      const activeProviderId = state.llmCatalog.activeProviderId || '';
-      const activeProvider = providers.find(provider => provider.id === activeProviderId) || null;
-      const activeModel = state.llmCatalog.activeModel || '';
-      const draft = state.llmConfig ? state.llmConfig.draft : null;
-      const draftProviderId = draft && draft.providerId ? draft.providerId : activeProviderId;
-      const draftProvider = providers.find(provider => provider.id === draftProviderId) || activeProvider;
-      const currentModel = (state.llmConfig && state.llmConfig.current ? state.llmConfig.current.model : activeModel) || '';
-      const draftModel = draft && draft.model ? draft.model : currentModel;
-      const localSelection = getLocalLlmSelection(state.selectedSessionId);
-      const displayProviderId = localSelection && localSelection.providerId ? localSelection.providerId : draftProviderId;
-      const displayProvider = providers.find(provider => provider.id === displayProviderId) || draftProvider;
-      const displayModels = displayProvider ? (displayProvider.models || []) : [];
-      let displayModel = localSelection && localSelection.model ? localSelection.model : draftModel;
-      if ((!displayModel || !displayModels.includes(displayModel)) && displayModels.length > 0) {
-        displayModel = (displayProvider && displayProvider.defaultModel && displayModels.includes(displayProvider.defaultModel))
-          ? displayProvider.defaultModel
-          : displayModels[0];
-      }
-
-      const hasUnsavedLocalSelection = Boolean(localSelection)
-        && (localSelection.providerId !== draftProviderId || (localSelection.model || '') !== (draftModel || ''));
-
-      const providerOptions = providers.map(provider =>
-        '<option value="' + escapeHtml(provider.id) + '" ' + (provider.id === displayProviderId ? 'selected' : '') + '>'
-        + escapeHtml(provider.label + (provider.enabled ? '' : ' (unavailable)'))
-        + '</option>'
-      ).join('');
-
-      const modelOptions = displayModels.length > 0
-        ? displayModels.map(model =>
-          '<option value="' + escapeHtml(model) + '" ' + (model === displayModel ? 'selected' : '') + '>' + escapeHtml(model) + '</option>'
-        ).join('')
-        : '<option value="">No models available</option>';
-
-      const reason = displayProvider && !displayProvider.enabled && displayProvider.reason
-        ? '<div class="muted" style="margin-top:8px;color:#ffc1c1;">' + escapeHtml(displayProvider.reason) + '</div>'
-        : '';
-
-      const localSelectionBanner = hasUnsavedLocalSelection
-        ? '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="muted">You changed provider/model locally. Click <strong>Save Draft</strong> then <strong>Apply Draft</strong> to persist for this session.</div>'
-          + '<div class="mono" style="margin-top:6px;">Pending: '
-          + escapeHtml((displayProviderId || '-') + ' / ' + (displayModel || '-'))
-          + '</div>'
-          + '</div>'
-        : '';
-
-      const diff = state.llmConfig && state.llmConfig.diff
-        ? state.llmConfig.diff
-        : null;
-      const diffHtml = diff && diff.changedFields && diff.changedFields.length > 0
-        ? '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="muted">Draft changes: ' + escapeHtml(diff.changedFields.join(', ')) + '</div>'
-          + '<div class="mono" style="margin-top:6px;">Current: ' + escapeHtml((diff.before.providerId || '-') + ' / ' + (diff.before.model || '-')) + '</div>'
-          + '<div class="mono">Draft: ' + escapeHtml((diff.after.providerId || '-') + ' / ' + (diff.after.model || '-')) + '</div>'
-          + '</div>'
-        : '<div class="muted" style="margin-top:8px;">No pending draft changes.</div>';
-
-      const history = state.llmConfig && state.llmConfig.history ? state.llmConfig.history : [];
-      const historyHtml = history.length > 0
-        ? '<div class="muted" style="margin-top:10px;">Recent applied config</div>'
-          + '<table class="events-table"><thead><tr><th>Time</th><th>Change</th><th>Source</th></tr></thead><tbody>'
-          + history.slice(0, 5).map(entry => '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(entry.appliedAt)) + '</td>'
-            + '<td><div class="mono">'
-            + escapeHtml((entry.previousProviderId || '-') + ' / ' + (entry.previousModel || '-'))
-            + ' → '
-            + escapeHtml((entry.nextProviderId || '-') + ' / ' + (entry.nextModel || '-'))
-            + '</div></td>'
-            + '<td>' + escapeHtml(entry.source || '-') + '</td>'
-            + '</tr>').join('')
-          + '</tbody></table>'
-        : '<div class="muted" style="margin-top:10px;">No config history yet.</div>';
-
-      const isLocal = displayProvider && displayProvider.kind === 'local';
-      const sessionNeedsBind = state.readiness && state.readiness.requirements
-        ? !state.readiness.requirements.find(function(r) { return r.id === 'provider-model-selected'; }).passed
-        : false;
-      const needsApply = hasUnsavedLocalSelection || (sessionNeedsBind && Boolean(displayProviderId));
-
-      // When rendering dynamically from onLlmProviderChanged we shouldn't block 
-      // rendering just because a select is focused, otherwise the model dropdown
-      // won't update when you pick a new provider.
-
-      container.innerHTML = ''
-        + '<label class="muted" for="provider-select">Provider</label>'
-        + '<select id="provider-select" class="control-select" onchange="onLlmProviderChanged()">' + providerOptions + '</select>'
-        + '<label class="muted" for="model-select" style="margin-top:8px;display:block;">Model</label>'
-        + '<select id="model-select" class="control-select" onchange="onLlmModelChanged()">' + modelOptions + '</select>'
-        + renderRoutingStrategyControls(providers, displayModel)
-        + '<div class="action-buttons" style="margin-top:10px;">'
-        + '<button class="primary-button" ' + (!needsApply ? 'disabled' : '') + ' onclick="quickApplyLlm()">Apply</button>'
-        + (isLocal ? '<button class="secondary-button" onclick="refreshOllamaModels()">Refresh Models</button>' : '')
-        + '<button class="secondary-button" ' + (!history.length ? 'disabled' : '') + ' onclick="rollbackLlmConfig()">Rollback</button>'
-        + '</div>'
-        + (needsApply
-          ? '<div class="action-card" style="margin-top:10px;"><div class="muted">Pending: <span class="mono">' + escapeHtml((displayProviderId || '-') + ' / ' + (displayModel || '-')) + '</span> — click <strong>Apply</strong> to save.</div></div>'
-          : '<div class="muted" style="margin-top:8px;">Active: <span class="mono">' + escapeHtml((draftProviderId || '-') + ' / ' + (draftModel || '-')) + '</span></div>')
-        + historyHtml
-        + reason;
-    }
-
-    function togglePanelCollapse(panelKey) {
-      var stateKey = panelKey + 'Collapsed';
-      state[stateKey] = !state[stateKey];
-      var chevron = document.getElementById('chevron-' + panelKey);
-      var body = document.getElementById('body-' + panelKey);
-      if (chevron) { chevron.textContent = state[stateKey] ? '\u25B6' : '\u25BC'; }
-      if (body) {
-        if (state[stateKey]) { body.classList.add('collapsed'); }
-        else { body.classList.remove('collapsed'); }
-      }
-      var summary = document.getElementById(panelKey + '-summary');
-      if (summary) {
-        summary.style.display = state[stateKey] ? '' : 'none';
-      }
-    }
-
-    function toggleCapabilityMatrix() {
-      state.capabilityMatrixExpanded = !state.capabilityMatrixExpanded;
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    function setMatrixSort(col) {
-      if (state.matrixSortCol === col) {
-        state.matrixSortAsc = !state.matrixSortAsc;
-      } else {
-        state.matrixSortCol = col;
-        state.matrixSortAsc = col === 'model' || col === 'provider';
-      }
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    function setMatrixFilter(field, value) {
-      state['matrixFilter' + field.charAt(0).toUpperCase() + field.slice(1)] = value;
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-    }
-
-    function renderCapabilityMatrix() {
-      const container = document.getElementById('capability-matrix');
-      if (!container) return;
-      if (!state.llmCatalog || !state.llmCatalog.providers) {
-        container.innerHTML = '<div class="muted">Waiting for provider catalog...</div>';
-        return;
-      }
-
-      if (state.capabilityMatrixExpanded === undefined) {
-        state.capabilityMatrixExpanded = false;
-      }
-
-      const isExpanded = state.capabilityMatrixExpanded;
-
-      const tierColors = { 1: '#ff6b6b', 2: '#ffa94d', 3: '#ffd43b', 4: '#69db7c', 5: '#4dabf7' };
-      const tierLabels = { 1: 'T1 Minimal', 2: 'T2 Basic', 3: 'T3 Standard', 4: 'T4 Advanced', 5: 'T5 Frontier' };
-      const roleRequirements = {
-        classification:  { min: 1, ideal: 2 },
-        chat:            { min: 2, ideal: 3 },
-        summarization:   { min: 2, ideal: 3 },
-        'tool-selection':  { min: 3, ideal: 4 },
-        'code-generation': { min: 3, ideal: 4 },
-        'memory-indexing':  { min: 1, ideal: 2 },
-      };
-
-      function guessTier(model, kind) {
-        var m = model.match(/:?(\\d+(?:\\.\\d+)?)\\s*[bB]/);
-        var b = m ? parseFloat(m[1]) : 0;
-        if (kind === 'local') {
-          if (b > 0 && b <= 2) return 1;
-          if (b > 2 && b <= 5) return 2;
-          if (b > 5 && b <= 15) return 3;
-          return 2;
-        }
-        if (/mini|flash|small|instant|haiku/i.test(model)) return 3;
-        if (/opus|5\\b|frontier/i.test(model)) return 5;
-        return 4;
-      }
-
-      var allRows = [];
-      var matrixEntries = Array.isArray(state.modelMatrixEntries) ? state.modelMatrixEntries : [];
-      function resolveMatrixEntry(modelName) {
-        var exact = null;
-        var wildcard = null;
-        for (var i = 0; i < matrixEntries.length; i++) {
-          var e = matrixEntries[i] || {};
-          var pattern = e.pattern || '';
-          if (!pattern) continue;
-          if (pattern === modelName) {
-            exact = e;
-            break;
-          }
-          if (pattern.endsWith('*')) {
-            var prefix = pattern.slice(0, -1);
-            if (prefix && modelName.indexOf(prefix) === 0) {
-              if (!wildcard || prefix.length > String(wildcard.pattern || '').length) {
-                wildcard = e;
-              }
-            }
-          }
-        }
-        return exact || wildcard;
-      }
-      var providerSet = {};
-      state.llmCatalog.providers.forEach(function(provider) {
-        if (!provider.models || !provider.models.length) return;
-        providerSet[provider.id] = provider.label;
-        provider.models.forEach(function(model) {
-          var matrixEntry = resolveMatrixEntry(model);
-          var tier = matrixEntry && typeof matrixEntry.tier === 'number' ? matrixEntry.tier : guessTier(model, provider.kind);
-          var locality = matrixEntry && matrixEntry.locality ? matrixEntry.locality : provider.kind;
-          var strengths = matrixEntry && Array.isArray(matrixEntry.strengths) ? matrixEntry.strengths : null;
-          allRows.push({ provider: provider.label, providerId: provider.id, model: model, tier: tier, kind: locality, enabled: provider.enabled, strengths: strengths });
-        });
-      });
-
-      var rows = allRows.filter(function(row) {
-        if (state.matrixFilterProvider && row.providerId !== state.matrixFilterProvider) return false;
-        if (state.matrixFilterTier && row.tier !== Number(state.matrixFilterTier)) return false;
-        if (state.matrixFilterLocality && row.kind !== state.matrixFilterLocality) return false;
-        if (state.matrixFilterText) {
-          var q = state.matrixFilterText.toLowerCase();
-          if (row.model.toLowerCase().indexOf(q) === -1 && row.provider.toLowerCase().indexOf(q) === -1) return false;
-        }
-        return true;
-      });
-
-      var sortCol = state.matrixSortCol || 'tier';
-      var sortAsc = state.matrixSortAsc;
-      rows.sort(function(a, b) {
-        var va, vb;
-        if (sortCol === 'model') { va = a.model.toLowerCase(); vb = b.model.toLowerCase(); }
-        else if (sortCol === 'provider') { va = a.provider.toLowerCase(); vb = b.provider.toLowerCase(); }
-        else if (sortCol === 'tier') { va = a.tier; vb = b.tier; }
-        else if (sortCol === 'locality') { va = a.kind; vb = b.kind; }
-        else { va = a.tier; vb = b.tier; }
-        if (va < vb) return sortAsc ? -1 : 1;
-        if (va > vb) return sortAsc ? 1 : -1;
-        if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
-        return 0;
-      });
-
-      function sortArrow(col) {
-        if (state.matrixSortCol !== col) return '';
-        return state.matrixSortAsc ? ' \u25B2' : ' \u25BC';
-      }
-
-      let html = '<div class="action-card" style="cursor:pointer;" onclick="toggleCapabilityMatrix()">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;">'
-        +   '<span class="muted" style="margin:0;">Model Capability Matrix</span>'
-        +   '<span class="muted" style="font-size:11px;">' + escapeHtml(rows.length + ' / ' + allRows.length + ' models') + '  ' + (isExpanded ? '&#x25B2;' : '&#x25BC;') + '</span>'
-        + '</div></div>';
-
-      if (!allRows.length) {
-        container.innerHTML = html + '<div class="muted" style="margin-top:10px;">No models found. Configure and test a provider to populate the matrix.</div>';
-        return;
-      }
-
-      html += '<div>';
-
-      var filterStyle = 'padding:5px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:11px;';
-      var providerIds = Object.keys(providerSet);
-      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">';
-      html += '<input type="text" placeholder="Search models\u2026" value="' + escapeHtml(state.matrixFilterText || '') + '" oninput="setMatrixFilter(&#39;text&#39;, this.value)" style="' + filterStyle + 'flex:1;min-width:120px;" />';
-      html += '<select onchange="setMatrixFilter(&#39;provider&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value="">All Providers</option>';
-      providerIds.forEach(function(id) {
-        var sel = state.matrixFilterProvider === id ? ' selected' : '';
-        html += '<option value="' + escapeHtml(id) + '"' + sel + '>' + escapeHtml(providerSet[id]) + '</option>';
-      });
-      html += '</select>';
-      html += '<select onchange="setMatrixFilter(&#39;tier&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value="">All Tiers</option>';
-      for (var t = 5; t >= 1; t--) {
-        var sel = state.matrixFilterTier === String(t) ? ' selected' : '';
-        html += '<option value="' + t + '"' + sel + '>' + tierLabels[t] + '</option>';
-      }
-      html += '</select>';
-      html += '<select onchange="setMatrixFilter(&#39;locality&#39;, this.value)" style="' + filterStyle + '">';
-      html += '<option value=""' + (!state.matrixFilterLocality ? ' selected' : '') + '>All</option>';
-      html += '<option value="local"' + (state.matrixFilterLocality === 'local' ? ' selected' : '') + '>Local</option>';
-      html += '<option value="remote"' + (state.matrixFilterLocality === 'remote' ? ' selected' : '') + '>Cloud</option>';
-      html += '</select>';
-      html += '</div>';
-
-      var thStyle = 'cursor:pointer;user-select:none;';
-      html += '<table class="events-table" style="margin-top:8px;"><thead><tr>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;model&#39;)">Model' + sortArrow('model') + '</th>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;provider&#39;)">Provider' + sortArrow('provider') + '</th>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;tier&#39;)">Tier' + sortArrow('tier') + '</th>'
-        + '<th style="' + thStyle + '" onclick="setMatrixSort(&#39;locality&#39;)">Locality' + sortArrow('locality') + '</th>'
-        + '<th>Proficiencies</th>'
-        + '</tr></thead><tbody>';
-
-      var displayRows = isExpanded ? rows : rows.slice(0, 5);
-      if (!displayRows.length) {
-        html += '<tr><td colspan="5" class="muted" style="text-align:center;">No models match the current filters.</td></tr>';
-      }
-      displayRows.forEach(function(row) {
-        var color = tierColors[row.tier] || '#aaa';
-        var dimStyle = row.enabled ? '' : ' style="opacity:0.5;"';
-        html += '<tr' + dimStyle + '>'
-          + '<td class="mono">' + escapeHtml(row.model) + '</td>'
-          + '<td>' + escapeHtml(row.provider) + (row.enabled ? '' : ' <span style="font-size:10px;color:var(--muted);">(unconfigured)</span>') + '</td>'
-          + '<td><span style="color:' + color + ';font-weight:600;">' + escapeHtml(tierLabels[row.tier] || 'T?') + '</span></td>'
-          + '<td>' + (row.kind === 'local' ? '🖥 Local' : '☁ Cloud') + '</td>'
-            + '<td>' + getModelProficiencyBadges(row.model, row.strengths) + '</td>'
-          + '</tr>';
-      });
-      html += '</tbody></table>';
-
-      if (!isExpanded && rows.length > 5) {
-         html += '<div class="muted" style="text-align:center;margin-top:8px;font-size:12px;cursor:pointer;" onclick="toggleCapabilityMatrix()">' 
-               + '... and ' + (rows.length - 5) + ' more models (Click to expand) ...</div>';
-      }
-
-      if (isExpanded) {
-        html += '<div class="muted" style="margin-top:12px;">Role Coverage</div>';
-        html += '<table class="events-table"><thead><tr><th>Task Role</th><th>Min Tier</th><th>Ideal</th><th>Status</th></tr></thead><tbody>';
-        Object.keys(roleRequirements).forEach(function(role) {
-          var req = roleRequirements[role];
-          var bestTier = 0;
-          rows.forEach(function(row) { if (row.enabled && row.tier > bestTier) bestTier = row.tier; });
-          var met = bestTier >= req.ideal;
-          var partial = !met && bestTier >= req.min;
-          var statusHtml = met
-            ? '<span style="color:#69db7c;">✓ Met</span>'
-            : partial
-              ? '<span style="color:#ffd43b;">⚠ Degraded</span>'
-              : '<span style="color:#ff6b6b;">✗ Unmet</span>';
-          html += '<tr><td>' + escapeHtml(role) + '</td><td>T' + req.min + '</td><td>T' + req.ideal + '</td><td>' + statusHtml + '</td></tr>';
-        });
-        html += '</tbody></table>';
-      }
-
-      html += '</div>';
-
-      container.innerHTML = html;
-    }
-
-    var STRENGTH_COLORS = {
-      'instruction-following': '#94a3b8',
-      'code': '#60a5fa',
-      'reasoning': '#c084fc',
-      'tool-use': '#4ade80',
-      'long-context': '#fb923c',
-      'fast': '#fbbf24',
-      'multilingual': '#2dd4bf',
-      'multimodal': '#f472b6',
-      'agentic': '#f87171'
-    };
-
-    function getModelProficiencyBadges(modelName, explicitStrengths) {
-      var strengths = explicitStrengths;
-      if (!strengths || !strengths.length) {
-        var profiles = state.modelProfiles || {};
-        var profile = profiles[modelName];
-        strengths = profile && profile.strengths ? profile.strengths : [];
-      }
-      if (!strengths || !strengths.length) {
-        return '<span class="muted" style="font-size:10px;">-</span>';
-      }
-      return strengths.map(function(s) {
-        var c = STRENGTH_COLORS[s] || '#94a3b8';
-        return '<span style="display:inline-block;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:600;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44;margin:1px 2px;">' + escapeHtml(s) + '</span>';
-      }).join('');
-    }
-
-    async function fetchModelProfiles() {
-      try {
-        var data = await request('/api/llm/model-profiles');
-        state.modelProfiles = data.profiles || {};
-        safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-      } catch (_) {}
-    }
-
-    async function fetchRoutingState() {
-      try {
-        var data = await request('/api/llm/routing');
-        state.routingStrategy = data.config.strategy || 'single';
-        state.routingRoleOverrides = data.config.roleOverrides || {};
-        state.routingAgentOverrides = data.config.agentOverrides || {};
-        state.routingModalityOverrides = data.config.modalityOverrides || {};
-        state.routingPreferredModality = data.config.preferredModality || null;
-        state.routingSuggestions = data.suggestions || {};
-        state.routingModalitySuggestions = data.modalitySuggestions || {};
-        state.availableModalities = data.modalities || [];
-        safeRenderStep('modelRouting', renderModelRouting);
-      } catch (_) {}
-    }
-
-    async function saveRoutingConfig() {
-      try {
-        await request('/api/llm/routing', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            strategy: state.routingStrategy,
-            roleOverrides: state.routingRoleOverrides,
-            agentOverrides: state.routingAgentOverrides,
-            modalityOverrides: state.routingModalityOverrides,
-            preferredModality: state.routingPreferredModality
-          })
-        });
-        state.notice = 'Routing configuration saved.';
-        render();
-      } catch (err) {
-        state.notice = { type: 'error', message: 'Failed to save routing: ' + String(err) };
-        render();
-      }
-    }
-
-    async function suggestOptimalRouting() {
-      try {
-        var data = await request('/api/llm/routing/suggest');
-        state.routingSuggestions = data.suggestions || {};
-        safeRenderStep('modelRouting', renderModelRouting);
-      } catch (err) {
-        state.notice = { type: 'error', message: 'Failed to get routing suggestions: ' + String(err) };
-        render();
-      }
-    }
-
-    function setRoutingStrategy(strategy) {
-      state.routingStrategy = strategy;
-      safeRenderStep('modelRouting', renderModelRouting);
-    }
-
-    function setSessionRoutingStrategy(strategy) {
-      state.sessionRoutingStrategy = strategy;
-      if (strategy !== 'modality') {
-        state.selectedModalityFilter = null;
-        state.modalityFilterEnabled = false;
-      }
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function onModalitySelected(modalityId) {
-      if (state.selectedModalityFilter === modalityId) {
-        state.selectedModalityFilter = null;
-      } else {
-        state.selectedModalityFilter = modalityId;
-      }
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function onModalityFilterToggle() {
-      state.modalityFilterEnabled = !state.modalityFilterEnabled;
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function setModalityOverride(modalityId, value) {
-      if (!value || value === 'auto') {
-        delete state.routingModalityOverrides[modalityId];
-      } else {
-        var parts = value.split('/', 2);
-        state.routingModalityOverrides[modalityId] = { providerId: parts[0], model: parts[1] || '' };
-      }
-      safeRenderStep('llm', renderLlm);
-    }
-
-    function getModelsForModalityFilter(modalityId, providers) {
-      if (!modalityId || !state.modelProfiles) return null;
-      var filtered = [];
-      providers.forEach(function(provider) {
-        if (!provider.enabled) return;
-        (provider.models || []).forEach(function(model) {
-          var profile = state.modelProfiles[model];
-          if (profile && profile.modalities && profile.modalities.indexOf(modalityId) >= 0) {
-            filtered.push({ providerId: provider.id, model: model, label: provider.label + ' / ' + model });
-          }
-        });
-      });
-      return filtered;
-    }
-
-    function setRoleOverride(role, value) {
-      if (!value || value === 'auto') {
-        delete state.routingRoleOverrides[role];
-      } else {
-        var parts = value.split('/', 2);
-        state.routingRoleOverrides[role] = { providerId: parts[0], model: parts[1] || '' };
-      }
-      safeRenderStep('modelRouting', renderModelRouting);
-    }
-
-    function renderModelRouting() {
-      var container = document.getElementById('model-routing-container');
-      if (!container) return;
-
-      var roles = ['classification', 'chat', 'summarization', 'tool-selection', 'code-generation', 'memory-indexing'];
-      var roleLabels = {
-        'classification': '\\u{1F3F7} Classification',
-        'chat': '\\u{1F4AC} Chat',
-        'summarization': '\\u{1F4DD} Summarization',
-        'tool-selection': '\\u{1F527} Tool Selection',
-        'code-generation': '\\u{1F4BB} Code Generation',
-        'memory-indexing': '\\u{1F4DA} Memory Indexing'
-      };
-      var roleRequirements = {
-        classification:    { min: 1, ideal: 2 },
-        chat:              { min: 2, ideal: 3 },
-        summarization:     { min: 2, ideal: 3 },
-        'tool-selection':  { min: 3, ideal: 4 },
-        'code-generation': { min: 3, ideal: 4 },
-        'memory-indexing':  { min: 1, ideal: 2 }
-      };
-      var tierColors = { 1: '#ff6b6b', 2: '#ffa94d', 3: '#ffd43b', 4: '#69db7c', 5: '#4dabf7' };
-
-      var html = '';
-
-      // Strategy toggle
-      html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">';
-      html += '<span class="muted" style="font-size:12px;font-weight:600;">Strategy:</span>';
-      html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">';
-      html += '<input type="radio" name="routing-strategy" value="single"' + (state.routingStrategy !== 'multi' ? ' checked' : '') + ' onchange="setRoutingStrategy(&#39;single&#39;)" /> Single Provider</label>';
-      html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">';
-      html += '<input type="radio" name="routing-strategy" value="multi"' + (state.routingStrategy === 'multi' ? ' checked' : '') + ' onchange="setRoutingStrategy(&#39;multi&#39;)" /> Multi-Provider</label>';
-      html += '<div style="flex:1;"></div>';
-      html += '<button class="secondary-button" onclick="suggestOptimalRouting()" style="font-size:11px;padding:4px 10px;">\\u{2728} Suggest Optimal</button>';
-      html += '<button class="secondary-button" onclick="saveRoutingConfig()" style="font-size:11px;padding:4px 10px;">\\u{1F4BE} Save</button>';
-      html += '</div>';
-
-      if (state.routingStrategy !== 'multi') {
-        html += '<div class="muted" style="padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;">';
-        html += 'All task roles use the <strong>active session provider</strong>';
-        if (state.llmCatalog && state.llmCatalog.activeProviderId) {
-          html += ' (' + escapeHtml(state.llmCatalog.activeProviderId);
-          if (state.llmCatalog.activeModel) html += ' / ' + escapeHtml(state.llmCatalog.activeModel);
-          html += ')';
-        }
-        html += '. Switch to <strong>Multi-Provider</strong> to assign models per task role and agent.</div>';
-        container.innerHTML = html;
-        return;
-      }
-
-      // Build available models list for dropdowns
-      var availableModels = [];
-      if (state.llmCatalog && state.llmCatalog.providers) {
-        state.llmCatalog.providers.forEach(function(p) {
-          if (!p.enabled) return;
-          (p.models || []).forEach(function(m) {
-            availableModels.push({ providerId: p.id, model: m, label: p.label + ' / ' + m });
-          });
-        });
-      }
-
-      // Role routing table
-      html += '<table class="events-table" style="margin-top:4px;"><thead><tr>';
-      html += '<th>Role</th><th>Tier Req</th><th>AI Suggested</th><th>Assignment</th><th>Status</th>';
-      html += '</tr></thead><tbody>';
-
-      roles.forEach(function(role) {
-        var req = roleRequirements[role] || { min: 2, ideal: 3 };
-        var suggestion = (state.routingSuggestions || {})[role];
-        var override = state.routingRoleOverrides[role] || null;
-
-        // Determine effective model
-        var effectiveProviderId = override ? override.providerId : (suggestion ? suggestion.providerId : null);
-        var effectiveModel = override ? override.model : (suggestion ? suggestion.model : null);
-        var effectiveTier = 0;
-        if (override && state.modelProfiles && state.modelProfiles[override.model]) {
-          effectiveTier = state.modelProfiles[override.model].tier;
-        } else if (suggestion) {
-          effectiveTier = suggestion.tier || 0;
-        }
-
-        var met = effectiveTier >= req.ideal;
-        var partial = !met && effectiveTier >= req.min;
-        var statusHtml = effectiveTier === 0
-          ? '<span class="muted">-</span>'
-          : met
-            ? '<span style="color:#69db7c;">\\u2713 Met</span>'
-            : partial
-              ? '<span style="color:#ffd43b;">\\u26A0 Degraded</span>'
-              : '<span style="color:#ff6b6b;">\\u2717 Unmet</span>';
-
-        var suggestionHtml = '-';
-        if (suggestion) {
-          var sColor = tierColors[suggestion.tier] || '#aaa';
-          suggestionHtml = '<span class="mono" style="font-size:11px;">' + escapeHtml(suggestion.providerId + '/' + suggestion.model) + '</span>';
-          suggestionHtml += ' <span style="color:' + sColor + ';font-size:10px;font-weight:600;">T' + suggestion.tier + '</span>';
-          if (suggestion.degraded) suggestionHtml += ' <span style="color:#ffd43b;font-size:10px;">\\u26A0</span>';
-        }
-
-        // Build dropdown
-        var selectVal = override ? (override.providerId + '/' + override.model) : 'auto';
-        var dropdownHtml = '<select onchange="setRoleOverride(&#39;' + escapeHtml(role) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);max-width:200px;">';
-        dropdownHtml += '<option value="auto"' + (!override ? ' selected' : '') + '>Auto (AI)</option>';
-        availableModels.forEach(function(am) {
-          var val = am.providerId + '/' + am.model;
-          dropdownHtml += '<option value="' + escapeHtml(val) + '"' + (selectVal === val ? ' selected' : '') + '>' + escapeHtml(am.label) + '</option>';
-        });
-        dropdownHtml += '</select>';
-
-        html += '<tr>';
-        html += '<td style="white-space:nowrap;font-size:12px;">' + (roleLabels[role] || escapeHtml(role)) + '</td>';
-        html += '<td style="font-size:11px;"><span style="color:' + (tierColors[req.min] || '#aaa') + ';">T' + req.min + '</span> / <span style="color:' + (tierColors[req.ideal] || '#aaa') + ';">T' + req.ideal + '</span></td>';
-        html += '<td style="font-size:11px;">' + suggestionHtml + '</td>';
-        html += '<td>' + dropdownHtml + '</td>';
-        html += '<td>' + statusHtml + '</td>';
-        html += '</tr>';
-      });
-
-      html += '</tbody></table>';
-
-      // Agents section
-      var agents = [
-        { id: 'classifier', role: 'classification', desc: 'Classifies inputs' },
-        { id: 'chat', role: 'chat', desc: 'General conversation' },
-        { id: 'summarizer', role: 'summarization', desc: 'Condenses content' },
-        { id: 'planner', role: 'tool-selection', desc: 'Plans tool use' },
-        { id: 'coder', role: 'code-generation', desc: 'Generates code' },
-        { id: 'indexer', role: 'memory-indexing', desc: 'Extracts knowledge' }
-      ];
-
-      html += '<div class="muted" style="margin-top:12px;margin-bottom:4px;font-size:12px;font-weight:600;">Agent Overrides</div>';
-      html += '<div class="muted" style="margin-bottom:8px;font-size:11px;">Override the model for specific agents. Defaults to the role assignment above.</div>';
-      html += '<table class="events-table"><thead><tr><th>Agent</th><th>Default Role</th><th>Override</th></tr></thead><tbody>';
-
-      agents.forEach(function(agent) {
-        var agentOverride = (state.routingAgentOverrides || {})[agent.id] || null;
-        var selectVal = agentOverride ? (agentOverride.providerId + '/' + agentOverride.model) : 'role-default';
-
-        var dropdownHtml = '<select onchange="setAgentOverride(&#39;' + escapeHtml(agent.id) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);max-width:200px;">';
-        dropdownHtml += '<option value="role-default"' + (!agentOverride ? ' selected' : '') + '>Use Role Default</option>';
-        availableModels.forEach(function(am) {
-          var val = am.providerId + '/' + am.model;
-          dropdownHtml += '<option value="' + escapeHtml(val) + '"' + (selectVal === val ? ' selected' : '') + '>' + escapeHtml(am.label) + '</option>';
-        });
-        dropdownHtml += '</select>';
-
-        html += '<tr>';
-        html += '<td style="font-size:12px;"><strong>' + escapeHtml(agent.id) + '</strong> <span class="muted" style="font-size:10px;">' + escapeHtml(agent.desc) + '</span></td>';
-        html += '<td style="font-size:11px;">' + escapeHtml(agent.role) + '</td>';
-        html += '<td>' + dropdownHtml + '</td>';
-        html += '</tr>';
-      });
-
-      html += '</tbody></table>';
-
-      container.innerHTML = html;
-    }
-
-    function setAgentOverride(agentId, value) {
-      if (!value || value === 'role-default') {
-        delete state.routingAgentOverrides[agentId];
-      } else {
-        var parts = value.split('/', 2);
-        state.routingAgentOverrides[agentId] = { providerId: parts[0], model: parts[1] || '' };
-      }
-      safeRenderStep('modelRouting', renderModelRouting);
-    }
-
-    function onLlmProviderChanged() {
-      const providerSelect = document.getElementById('provider-select');
-      const providerId = providerSelect ? providerSelect.value : '';
-      if (!providerId || !state.selectedSessionId || !state.llmCatalog || !state.llmCatalog.providers) {
-        return;
-      }
-
-      const provider = state.llmCatalog.providers.find(entry => entry.id === providerId) || null;
-      const providerModels = provider ? (provider.models || []) : [];
-      const model = provider && provider.defaultModel && providerModels.includes(provider.defaultModel)
-        ? provider.defaultModel
-        : (providerModels[0] || '');
-
-      setLocalLlmSelection(state.selectedSessionId, providerId, model);
-      
-      // Explicitly trigger a re-render of just the LLM panel so the newly selected 
-      // provider's correct models populate into the second dropdown immediately.
-      safeRenderStep('llm', renderLlm); 
-    }
-
-    function onLlmModelChanged() {
-      const providerSelect = document.getElementById('provider-select');
-      const modelSelect = document.getElementById('model-select');
-      const providerId = providerSelect ? providerSelect.value : '';
-      const model = modelSelect ? modelSelect.value : '';
-      if (!providerId || !state.selectedSessionId) {
-        return;
-      }
-
-      setLocalLlmSelection(state.selectedSessionId, providerId, model);
-      safeRenderStep('llm', renderLlm); 
-    }
-
-    const PROVIDER_META = {
-      openai: { icon: '\\u{1F7E2}', desc: 'OpenAI GPT models' },
-      anthropic: { icon: '\\u{1F7E0}', desc: 'Claude models' },
-      google: { icon: '\\u{1F535}', desc: 'Gemini models' },
-      mistral: { icon: '\\u{1F7E3}', desc: 'Mistral AI models' },
-      cohere: { icon: '\\u{1F7E4}', desc: 'Cohere Command models' },
-      groq: { icon: '\\u{26A1}', desc: 'Ultra-fast inference' },
-      together: { icon: '\\u{1F91D}', desc: 'Open-source model hosting' },
-      deepseek: { icon: '\\u{1F50D}', desc: 'DeepSeek models' },
-      perplexity: { icon: '\\u{1F310}', desc: 'Search-augmented models' },
-      fireworks: { icon: '\\u{1F386}', desc: 'Fast open-source inference' },
-      openrouter: { icon: '\\u{1F500}', desc: 'Multi-provider router' },
-      ollama: { icon: '\\u{1F999}', desc: 'Local Ollama server' },
-      lmstudio: { icon: '\\u{1F4BB}', desc: 'Local LM Studio server' },
-      custom: { icon: '\\u{1F527}', desc: 'Custom OpenAI-compatible endpoint' }
-    };
-
-    function renderProviderCards() {
-      const container = document.getElementById('provider-cards-container');
-      if (!container) return;
-      if (!state.llmCatalog || !state.llmCatalog.providers) {
-        container.innerHTML = '<div class="muted">Loading providers...</div>';
-        return;
-      }
-
-      const providers = state.llmCatalog.providers;
-      let html = '';
-      for (const provider of providers) {
-        const meta = PROVIDER_META[provider.id] || { icon: '', desc: '' };
-        const isExpanded = state.expandedProviderId === provider.id;
-        const statusBadge = provider.enabled
-          ? '<span class="ps-badge ps-badge-ok">enabled</span>'
-          : '<span class="ps-badge ps-badge-off">disabled</span>';
-        const kindBadge = provider.kind === 'local'
-          ? '<span class="ps-badge ps-badge-local">local</span>'
-          : '<span class="ps-badge ps-badge-remote">remote</span>';
-        const keyBadge = provider.requiresApiKey
-          ? (provider.hasApiKey
-            ? '<span class="ps-badge ps-badge-ok">key set</span>'
-            : '<span class="ps-badge ps-badge-warn">no key</span>')
-          : '';
-
-        html += '<div class="ps-card">';
-        html += '<div class="ps-card-header" onclick="toggleProviderCard(\\'' + escapeHtml(provider.id) + '\\')">';
-        html += '<span class="ps-card-title">' + meta.icon + ' ' + escapeHtml(provider.label) + '</span>';
-        html += '<div class="ps-card-badges">' + statusBadge + kindBadge + keyBadge + '<span class="muted" style="font-size:16px;">' + (isExpanded ? '\\u25B2' : '\\u25BC') + '</span></div>';
-        html += '</div>';
-
-        if (isExpanded) {
-          const testResult = state.providerTestResults[provider.id] || null;
-          const isKeyVisible = state.providerApiKeyVisible[provider.id] || false;
-          html += '<div class="ps-card-body">';
-          html += '<div class="muted" style="margin-bottom:8px;">' + escapeHtml(meta.desc) + '</div>';
-
-          if (provider.reason) {
-            html += '<div class="muted" style="color:#ffc1c1;margin-bottom:8px;">' + escapeHtml(provider.reason) + '</div>';
-          }
-
-          html += '<div class="ps-field"><label>Base URL</label>';
-          html += '<input type="text" id="ps-url-' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.baseUrl || '') + '" placeholder="https://..." /></div>';
-
-          if (provider.requiresApiKey) {
-            html += '<div class="ps-field"><label>API Key</label>';
-            html += '<div class="ps-key-row">';
-            html += '<input type="' + (isKeyVisible ? 'text' : 'password') + '" id="ps-key-' + escapeHtml(provider.id) + '" placeholder="' + (provider.hasApiKey ? 'Key is set (enter new to replace)' : 'Enter API key') + '" />';
-            html += '<button class="secondary-button" onclick="toggleApiKeyVisibility(\\'' + escapeHtml(provider.id) + '\\')" style="white-space:nowrap;">' + (isKeyVisible ? 'Hide' : 'Show') + '</button>';
-            html += '</div></div>';
-          }
-
-          html += '<div class="ps-field"><label>Models (comma-separated)</label>';
-          html += '<textarea id="ps-models-' + escapeHtml(provider.id) + '" rows="2" placeholder="model-1, model-2">' + escapeHtml((provider.models || []).join(', ')) + '</textarea></div>';
-
-          html += '<div class="ps-field"><label>Default Model</label>';
-          html += '<input type="text" id="ps-default-' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.defaultModel || '') + '" placeholder="Default model name" /></div>';
-
-          html += '<div class="action-buttons" style="flex-wrap:wrap;">';
-          html += '<button class="secondary-button" onclick="saveProviderCardSettings(\\'' + escapeHtml(provider.id) + '\\')">Save Settings</button>';
-
-          if (provider.requiresApiKey) {
-            html += '<button class="secondary-button" onclick="saveProviderCardApiKey(\\'' + escapeHtml(provider.id) + '\\')">Save API Key</button>';
-            if (provider.hasApiKey) {
-              html += '<button class="danger-button" onclick="removeProviderCardApiKey(\\'' + escapeHtml(provider.id) + '\\')">Remove Key</button>';
-            }
-          }
-
-          html += '<button class="secondary-button" onclick="testProviderConnection(\\'' + escapeHtml(provider.id) + '\\')">Test Connection</button>';
-          html += '<button class="secondary-button" onclick="discoverModels(\\'' + escapeHtml(provider.id) + '\\')">\uD83D\uDD0D Discover Models</button>';
-          html += '</div>';
-
-          if (testResult) {
-            const cls = testResult.ok ? 'ps-test-result ps-test-ok' : 'ps-test-result ps-test-fail';
-            html += '<div class="' + cls + '">' + escapeHtml(testResult.message) + '</div>';
-          }
-
-          html += '<div class="muted" style="margin-top:8px;font-size:11px;">Source: ' + escapeHtml(provider.settingsSource || 'environment') + '</div>';
-          html += '</div>';
-        }
-
-        html += '</div>';
-      }
-
-      // Preserve any unsaved form state for the currently expanded card before rebuilding
-      if (state.expandedProviderId) {
-        const eid = state.expandedProviderId;
-        const urlEl = document.getElementById('ps-url-' + eid);
-        const keyEl = document.getElementById('ps-key-' + eid);
-        const modelsEl = document.getElementById('ps-models-' + eid);
-        const defaultEl = document.getElementById('ps-default-' + eid);
-        if (urlEl || keyEl || modelsEl || defaultEl) {
-          state.providerSettingsCache[eid] = {
-            url: urlEl ? urlEl.value : null,
-            key: keyEl ? keyEl.value : null,
-            models: modelsEl ? modelsEl.value : null,
-            default: defaultEl ? defaultEl.value : null
-          };
-        }
-      }
-
-      // If the user is actively typing in any input inside this panel, skip the DOM
-      // rebuild entirely — destroying and recreating elements always kills focus even
-      // if values are restored afterwards.  We will pick up fresh server state on the
-      // next poll cycle once they move focus away.
-      const _activeEl = document.activeElement;
-      if (_activeEl && container.contains(_activeEl) &&
-          (_activeEl.tagName === 'INPUT' || _activeEl.tagName === 'TEXTAREA' || _activeEl.tagName === 'SELECT')) {
-        return;
-      }
-
-      container.innerHTML = html;
-
-      // Render collapsed summary showing top providers
-      var summaryEl = document.getElementById('providerConfig-summary');
-      if (summaryEl) {
-        summaryEl.style.display = state.providerConfigCollapsed ? '' : 'none';
-        var summaryHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">';
-        var topN = providers.slice(0, 5);
-        for (var si = 0; si < topN.length; si++) {
-          var sp = topN[si];
-          var sm = PROVIDER_META[sp.id] || { icon: '', desc: '' };
-          var sBadge = sp.enabled
-            ? '<span class="ps-badge ps-badge-ok" style="font-size:10px;">on</span>'
-            : '<span class="ps-badge ps-badge-off" style="font-size:10px;">off</span>';
-          summaryHtml += '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(148,163,184,0.15);border-radius:8px;padding:4px 10px;font-size:12px;">' + sm.icon + ' ' + escapeHtml(sp.label) + ' ' + sBadge + '</span>';
-        }
-        if (providers.length > 5) {
-          summaryHtml += '<span class="muted" style="font-size:11px;">+' + (providers.length - 5) + ' more</span>';
-        }
-        summaryHtml += '</div>';
-        summaryEl.innerHTML = summaryHtml;
-      }
-
-      // Restore preserved form state after innerHTML rebuild
-      if (state.expandedProviderId && state.providerSettingsCache[state.expandedProviderId]) {
-        const eid = state.expandedProviderId;
-        const cached = state.providerSettingsCache[eid];
-        const urlEl = document.getElementById('ps-url-' + eid);
-        const keyEl = document.getElementById('ps-key-' + eid);
-        const modelsEl = document.getElementById('ps-models-' + eid);
-        const defaultEl = document.getElementById('ps-default-' + eid);
-        if (urlEl && cached.url !== null) urlEl.value = cached.url;
-        if (keyEl && cached.key !== null) keyEl.value = cached.key;
-        if (modelsEl && cached.models !== null) modelsEl.value = cached.models;
-        if (defaultEl && cached.default !== null) defaultEl.value = cached.default;
-      }
-    }
-
-    function toggleProviderCard(providerId) {
-      state.expandedProviderId = state.expandedProviderId === providerId ? null : providerId;
-      render();
-    }
-
-    function toggleApiKeyVisibility(providerId) {
-      state.providerApiKeyVisible[providerId] = !state.providerApiKeyVisible[providerId];
-      render();
-    }
-
-    async function saveProviderCardSettings(providerId) {
-      const urlInput = document.getElementById('ps-url-' + providerId);
-      const modelsInput = document.getElementById('ps-models-' + providerId);
-      const defaultInput = document.getElementById('ps-default-' + providerId);
-      const baseUrl = urlInput ? urlInput.value.trim() : '';
-      const modelsRaw = modelsInput ? modelsInput.value : '';
-      const models = modelsRaw.split(',').map(function(m) { return m.trim(); }).filter(Boolean);
-      const defaultModel = defaultInput ? defaultInput.value.trim() : '';
-
-      state.notice = null;
-      try {
-        await request('/api/llm/provider-settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId: providerId, baseUrl: baseUrl, models: models, defaultModel: defaultModel })
-        });
-        delete state.providerSettingsCache[providerId];
-        await refreshChrome();
-        safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-        state.notice = 'Settings saved for ' + providerId + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function saveProviderCardApiKey(providerId) {
-      const keyInput = document.getElementById('ps-key-' + providerId);
-      const apiKey = keyInput ? keyInput.value.trim() : '';
-      if (!apiKey) {
-        state.notice = 'Enter an API key before saving.';
-        render();
-        return;
-      }
-      state.notice = null;
-      try {
-        await request('/api/llm/provider-secret', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerId: providerId, apiKey: apiKey })
-        });
-        if (state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId].key = null;
-        await refreshChrome();
-        state.notice = 'API key saved for ' + providerId + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function removeProviderCardApiKey(providerId) {
-      if (!confirm('Remove API key for ' + providerId + '?')) return;
-      state.notice = null;
-      try {
-        await request('/api/llm/provider-secret?providerId=' + encodeURIComponent(providerId), { method: 'DELETE' });
-        await refreshChrome();
-        state.notice = 'API key removed for ' + providerId + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function testProviderConnection(providerId) {
-      state.providerTestResults[providerId] = { ok: false, message: 'Testing...' };
-      render();
-      try {
-        const keyInput = document.getElementById('ps-key-' + providerId);
-        const apiKey = keyInput ? keyInput.value.trim() : '';
-        const result = await request('/api/llm/provider-test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(apiKey ? { providerId: providerId, apiKey: apiKey } : { providerId: providerId })
-        });
-        state.providerTestResults[providerId] = result;
-        if (result.ok && result.models && result.models.length > 0) {
-          // Update the models textarea in-place and persist in cache so it survives the next poll
-          const modelsInput = document.getElementById('ps-models-' + providerId);
-          const modelsText = result.models.join(', ');
-          if (modelsInput) modelsInput.value = modelsText;
-          if (!state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId] = {};
-          state.providerSettingsCache[providerId].models = modelsText;
-          // Clear the API key input from cache now that it has been saved server-side
-          if (apiKey) {
-            if (keyInput) keyInput.value = '';
-            if (state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId].key = null;
-          }
-          await refreshChrome();
-        }
-      } catch (error) {
-        state.providerTestResults[providerId] = { ok: false, message: String(error) };
-      }
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-      render();
-    }
-
-    async function discoverModels(providerId) {
-      state.providerTestResults[providerId] = { ok: false, message: 'Discovering models...' };
-      render();
-      try {
-        const result = await request('/api/models/discover/' + encodeURIComponent(providerId));
-        if (result && result.models && result.models.length > 0) {
-          const modelsInput = document.getElementById('ps-models-' + providerId);
-          const modelsText = result.models.join(', ');
-          if (modelsInput) modelsInput.value = modelsText;
-          if (!state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId] = {};
-          state.providerSettingsCache[providerId].models = modelsText;
-        }
-        const count = (result && result.models) ? result.models.length : 0;
-        state.providerTestResults[providerId] = {
-          ok: true,
-          message: 'Discovered ' + count + ' model' + (count === 1 ? '' : 's') + '.'
-        };
-      } catch (error) {
-        state.providerTestResults[providerId] = { ok: false, message: 'Discovery failed: ' + String(error) };
-      }
-      render();
-    }
-
-    function renderLlmAudit() {
-      const container = document.getElementById('llm-audit');
-      const events = state.llmAuditEvents || [];
-      if (!events.length) {
-        container.innerHTML = '<div class="muted">No provider switch events for this scope.</div>'
-          + '<div class="action-buttons">'
-          + '<button class="secondary-button" disabled>Export JSON</button>'
-          + '<button class="secondary-button" disabled>Copy JSON</button>'
-          + '<button class="secondary-button" disabled>Export CSV</button>'
-          + '</div>';
-        return;
-      }
-
-      const successCount = events.filter(event => event.status === 'succeeded').length;
-      const failedCount = events.filter(event => event.status === 'failed').length;
-
-      container.innerHTML = ''
-        + '<div class="metric"><span class="muted">Succeeded</span><span class="mono">' + escapeHtml(String(successCount)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Failed</span><span class="mono">' + escapeHtml(String(failedCount)) + '</span></div>'
-        + '<div class="action-buttons">'
-        + '<button class="secondary-button" onclick="exportLlmAuditJson()">Export JSON</button>'
-        + '<button class="secondary-button" onclick="copyLlmAuditJson()">Copy JSON</button>'
-        + '<button class="secondary-button" onclick="exportLlmAuditCsv()">Export CSV</button>'
-        + '</div>'
-        + '<table class="events-table"><thead><tr><th>Time</th><th>Selection</th><th>Status</th></tr></thead><tbody>'
-        + events.map(event => {
-          const details = event.details || {};
-          const requestedProviderId = details.requestedProviderId || '-';
-          const requestedModel = details.requestedModel || '-';
-          const selectedProviderId = details.selectedProviderId || '-';
-          const selectedModel = details.selectedModel || '-';
-          const reason = details.reason
-            ? ('<div class="muted">Reason: ' + escapeHtml(String(details.reason)) + '</div>')
-            : '';
-          return '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(event.timestamp)) + '</td>'
-            + '<td><div class="mono">req ' + escapeHtml(String(requestedProviderId)) + ' / ' + escapeHtml(String(requestedModel)) + '</div>'
-            + '<div class="mono">sel ' + escapeHtml(String(selectedProviderId)) + ' / ' + escapeHtml(String(selectedModel)) + '</div>'
-            + reason + '</td>'
-            + '<td>' + escapeHtml(event.status) + '</td>'
-            + '</tr>';
-        }).join('')
-        + '</tbody></table>';
-    }
-
-    function exportLlmAuditJson() {
-      const payload = buildLlmAuditPayload();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const safeSession = (state.selectedSessionId || 'all').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'prism-llm-audit-' + safeSession + '-' + timestamp + '.json';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }
-
-    async function copyLlmAuditJson() {
-      const payload = buildLlmAuditPayload();
-      const text = JSON.stringify(payload, null, 2);
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(text);
-          state.notice = 'LLM audit JSON copied to clipboard.';
-          render();
-          return;
-        }
-      } catch {
-      }
-
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      textarea.style.pointerEvents = 'none';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      try {
-        const copied = document.execCommand('copy');
-        state.notice = copied
-          ? 'LLM audit JSON copied to clipboard.'
-          : 'Clipboard permission denied. Use Export JSON instead.';
-      } catch {
-        state.notice = 'Clipboard copy failed. Use Export JSON instead.';
-      } finally {
-        document.body.removeChild(textarea);
-        render();
-      }
-    }
-
-    function buildLlmAuditPayload() {
-      const payload = {
-        exportedAt: new Date().toISOString(),
-        scope: {
-          sessionId: state.selectedSessionId || null,
-          operation: 'dashboard.llm_selection'
-        },
-        counts: {
-          total: state.llmAuditEvents.length,
-          succeeded: state.llmAuditEvents.filter(event => event.status === 'succeeded').length,
-          failed: state.llmAuditEvents.filter(event => event.status === 'failed').length
-        },
-        events: state.llmAuditEvents
-      };
-      return payload;
-    }
-
-    function exportLlmAuditCsv() {
-      const rows = [];
-      rows.push([
-        'timestamp',
-        'status',
-        'chatSessionId',
-        'source',
-        'requestedProviderId',
-        'requestedModel',
-        'previousProviderId',
-        'previousModel',
-        'selectedProviderId',
-        'selectedModel',
-        'reason'
-      ]);
-
-      for (const event of state.llmAuditEvents) {
-        const details = event.details || {};
-        rows.push([
-          event.timestamp || '',
-          event.status || '',
-          details.chatSessionId || '',
-          details.source || '',
-          details.requestedProviderId || '',
-          details.requestedModel || '',
-          details.previousProviderId || '',
-          details.previousModel || '',
-          details.selectedProviderId || '',
-          details.selectedModel || '',
-          details.reason || ''
-        ]);
-      }
-
-      const csv = rows.map(cols => cols.map(toCsvValue).join(',')).join('\\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const safeSession = (state.selectedSessionId || 'all').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'prism-llm-audit-' + safeSession + '-' + timestamp + '.csv';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }
-
-    function toCsvValue(value) {
-      const text = String(value ?? '');
-      if (/[",\\n]/.test(text)) {
-        return '"' + text.replace(/"/g, '""') + '"';
-      }
-      return text;
-    }
-
-    function metricRow(label, value) {
-      return '<div class="metric"><span class="muted">' + escapeHtml(label) + '</span><span class="mono">' + escapeHtml(value) + '</span></div>';
-    }
-
-    function renderSettingsPanel() {
-      var container = document.getElementById('settings-panel');
-      if (!container) return;
-      var s = state.status;
-      var rs = state.runtimeSettings;
-      var html = '';
-
-      /* ── helper: section wrapper ── */
-      function sec(id, title, contentFn) {
-        var open = state.settingsSections[id] !== false;
-        html += '<div class="stg-section">';
-        html += '<div class="stg-section-header" onclick="toggleSettingsSection(\\'' + id + '\\')">';
-        html += '<span>' + escapeHtml(title) + '</span>';
-        html += '<span>' + (open ? '\u25BC' : '\u25B6') + '</span>';
-        html += '</div>';
-        html += '<div class="stg-section-body' + (open ? '' : ' stg-collapsed') + '">';
-        contentFn();
-        html += '</div></div>';
-      }
-
-      function readonlyRow(label, value, hint) {
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label);
-        if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-        html += '</span>';
-        html += '<span class="stg-value">' + escapeHtml(String(value || '\u2014')) + '</span>';
-        html += '</div>';
-      }
-
-      function badgeRow(label, value, cls) {
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label) + '</span>';
-        html += '<span class="stg-badge ' + cls + '">' + escapeHtml(String(value)) + '</span>';
-        html += '</div>';
-      }
-
-      function numberRow(label, key, hint, suffix) {
-        var val = rs ? (rs[key] != null ? rs[key] : '') : '';
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label);
-        if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-        html += '</span>';
-        html += '<span style="display:flex;align-items:center;gap:4px;">';
-        html += '<input class="stg-input" type="number" id="stg-' + key + '" value="' + escapeHtml(String(val)) + '" onchange="markSettingDirty(\\'' + key + '\\')" />';
-        if (suffix) html += '<span class="muted" style="font-size:11px;">' + escapeHtml(suffix) + '</span>';
-        html += '</span>';
-        html += '</div>';
-      }
-
-      function selectRow(label, key, options, hint) {
-        var val = rs ? String(rs[key] || '') : '';
-        html += '<div class="stg-row">';
-        html += '<span class="stg-label">' + escapeHtml(label);
-        if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-        html += '</span>';
-        html += '<select class="stg-select" id="stg-' + key + '" onchange="markSettingDirty(\\'' + key + '\\')">';
-        for (var oi = 0; oi < options.length; oi++) {
-          var opt = options[oi];
-          html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === val ? ' selected' : '') + '>' + escapeHtml(opt.label) + '</option>';
-        }
-        html += '</select>';
-        html += '</div>';
-      }
-
-      /* ── Section 1: Runtime & Identity ── */
-      sec('runtime', 'Runtime & Identity', function() {
-        if (s) {
-          var segment = (s.executionProfileSegment || 'individual').toLowerCase();
-          var isDemo = s.mode === 'demo';
-          var segBadge = isDemo ? 'demo' : segment;
-          var segLabel = isDemo ? 'DEMO' : segment.toUpperCase();
-          var segClass = isDemo ? 'stg-badge-amber' : (segment === 'business' ? 'stg-badge-blue' : 'stg-badge-green');
-          badgeRow('Execution Profile', segLabel, segClass);
-          var envClass = s.environmentProfile === 'prod' ? 'stg-badge-green' : (s.environmentProfile === 'staging' ? 'stg-badge-amber' : 'stg-badge-blue');
-          badgeRow('Environment', s.environmentProfile || 'dev', envClass);
-          badgeRow('Mode', s.mode || 'server', s.mode === 'demo' ? 'stg-badge-amber' : 'stg-badge-green');
-          readonlyRow('Dashboard Port', location.port || '7070');
-          readonlyRow('Session ID', s.sessionId);
-          readonlyRow('Uptime', formatUptime(s.uptimeSeconds));
-          readonlyRow('Version', 'v0.2.0');
-          readonlyRow('Node', (s.nodeVersion || '\u2014'));
-          readonlyRow('Platform', (s.platform || '\u2014'));
-        } else {
-          html += '<div class="muted">Loading runtime information...</div>';
-        }
-      });
-
-      /* ── Section 2: LLM Summary ── */
-      sec('llm', 'LLM Configuration (Summary)', function() {
-        var provider = state.llmCatalog ? (state.llmCatalog.activeProviderId || 'none') : 'unknown';
-        var model = state.llmCatalog ? (state.llmCatalog.activeModel || 'none') : 'unknown';
-        readonlyRow('Active Provider', provider);
-        readonlyRow('Active Model', model);
-        readonlyRow('Routing Strategy', state.routingStrategy || 'single');
-        readonlyRow('Sessions', String((state.sessions || []).length));
-        html += '<div style="margin-top:8px;"><span class="muted" style="font-size:11px;">Configure providers, models, and routing in the sections above. \u2191</span></div>';
-      });
-
-      /* ── Section 3: Approval & Orchestration ── */
-      sec('approval', 'Approval & Orchestration', function() {
-        numberRow('Approval Timeout', 'approvalTimeoutMs', 'PRISM_APPROVAL_TIMEOUT_MS', 'ms');
-        if (s && s.pendingApprovals > 0) {
-          html += '<div class="stg-row"><span class="stg-label">Pending Approvals</span>';
-          html += '<span class="stg-badge stg-badge-amber">' + s.pendingApprovals + '</span></div>';
-        }
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'approvalTimeoutMs' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 4: Self-Review Intervals ── */
-      sec('selfReview', 'Self-Review Intervals', function() {
-        selectRow('Daily Cadence', 'selfReviewDailyMs', [
-          { value: '43200000', label: '12 hours' },
-          { value: '86400000', label: '24 hours' },
-          { value: '172800000', label: '48 hours' }
-        ], 'PRISM_SELF_REVIEW_DAILY_MS');
-        selectRow('Weekly Cadence', 'selfReviewWeeklyMs', [
-          { value: '302400000', label: '3.5 days' },
-          { value: '604800000', label: '7 days' },
-          { value: '1209600000', label: '14 days' }
-        ], 'PRISM_SELF_REVIEW_WEEKLY_MS');
-        selectRow('Monthly Cadence', 'selfReviewMonthlyMs', [
-          { value: '1296000000', label: '15 days' },
-          { value: '2592000000', label: '30 days' },
-          { value: '5184000000', label: '60 days' }
-        ], 'PRISM_SELF_REVIEW_MONTHLY_MS');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'selfReviewDailyMs' + '\\', \\'' + 'selfReviewWeeklyMs' + '\\', \\'' + 'selfReviewMonthlyMs' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 5: Retrieval & Memory ── */
-      sec('retrieval', 'Retrieval & Memory', function() {
-        numberRow('Max Episodic Events', 'maxEpisodicEvents', '', 'events');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'maxEpisodicEvents' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 6: Tool & Network Timeouts ── */
-      sec('timeouts', 'Tool & Network Timeouts', function() {
-        numberRow('Shell Command Timeout', 'shellTimeoutMs', '', 'ms');
-        numberRow('HTTP Request Timeout', 'httpTimeoutMs', '', 'ms');
-        numberRow('MCP Server Timeout', 'mcpTimeoutMs', '', 'ms');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'shellTimeoutMs' + '\\', \\'' + 'httpTimeoutMs' + '\\', \\'' + 'mcpTimeoutMs' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 7: Dashboard Preferences ── */
-      sec('prefs', 'Dashboard Preferences', function() {
-        selectRow('Telemetry Window', 'telemetryWindow', [
-          { value: '1h', label: '1 Hour' },
-          { value: '1d', label: '1 Day' },
-          { value: '7d', label: '7 Days' }
-        ]);
-        numberRow('Action History Limit', 'actionHistoryLimit', '', 'entries');
-        numberRow('Package History Limit', 'sessionPackageHistoryLimit', '', 'entries');
-        html += '<div style="margin-top:8px;text-align:right;">';
-        html += '<button class="stg-save-btn" onclick="saveSettings([\\'' + 'telemetryWindow' + '\\', \\'' + 'actionHistoryLimit' + '\\', \\'' + 'sessionPackageHistoryLimit' + '\\'])">Save</button>';
-        html += '</div>';
-      });
-
-      /* ── Section 8: Data & Paths ── */
-      sec('paths', 'Data & Paths', function() {
-        if (s) {
-          readonlyRow('Workspace Root', s.workspaceRoot, 'PRISM_WORKSPACE_ROOT');
-        }
-        readonlyRow('Dashboard URL', 'http://localhost:' + (location.port || '7070'));
-      });
-
-      /* ── Section 9: Readiness Requirements ── */
-      sec('readiness', 'Readiness Requirements', function() {
-        if (state.readiness && state.readiness.requirements) {
-          var reqs = state.readiness.requirements;
-          for (var ri = 0; ri < reqs.length; ri++) {
-            var met = reqs[ri].met;
-            html += '<div class="stg-req-row">';
-            html += '<span class="' + (met ? 'stg-req-met' : 'stg-req-unmet') + '">' + (met ? '\u2713' : '\u2717') + '</span>';
-            html += '<span>' + escapeHtml(reqs[ri].label || reqs[ri].id) + '</span>';
-            html += '</div>';
-          }
-        } else {
-          html += '<div class="muted">No readiness data loaded yet.</div>';
-        }
-        html += '<div style="margin-top:10px;">';
-        html += '<button class="stg-recheck-btn" onclick="recheckReadiness()">Re-check Readiness</button>';
-        html += '</div>';
-      });
-
-      container.innerHTML = html;
-    }
-
-    function toggleSettingsSection(id) {
-      state.settingsSections[id] = !state.settingsSections[id];
-      render();
-    }
-
-    function markSettingDirty(key) {
-      /* visual feedback could go here; for now we just let the user click Save */
-    }
-
-    async function saveSettings(keys) {
-      var payload = {};
-      for (var i = 0; i < keys.length; i++) {
-        var el = document.getElementById('stg-' + keys[i]);
-        if (el) {
-          var val = el.tagName === 'SELECT' ? el.value : el.value;
-          if (el.type === 'number') val = Number(val);
-          payload[keys[i]] = val;
-        }
-      }
-      state.settingsSaving = true;
-      render();
-      try {
-        await request('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        await refreshChrome();
-      } catch (e) {
-        console.error('[settings] save failed', e);
-      }
-      state.settingsSaving = false;
-      render();
-    }
-
-    async function recheckReadiness() {
-      try {
-        var sessionId = state.selectedSessionId || '';
-        await request('/api/readiness/recheck', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sessionId, source: 'dashboard_settings_panel' }) });
-        await refreshChrome();
-        render();
-      } catch (e) {
-        console.error('[settings] readiness recheck failed', e);
-      }
-    }
-
-    /* ═══ Tools & Plugins — shared helpers ═══ */
-    function getToolState(name) {
-      if (!state.toolStates[name]) state.toolStates[name] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
-      return state.toolStates[name];
-    }
-    function getPluginState(name) {
-      if (!state.pluginStates[name]) state.pluginStates[name] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, uptime: 100, lastChecked: null };
-      return state.pluginStates[name];
-    }
-    function getUtilityState(name) {
-      if (!state.utilityStates[name]) state.utilityStates[name] = { lastRun: null, lastDurationMs: 0, lastResult: null, runCount: 0 };
-      return state.utilityStates[name];
-    }
-    function getReview(store, name) {
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      return store[name];
-    }
-    function renderStars(store, name, kind) {
-      var r = getReview(store, name);
-      var html = '<div class="tp-review-stars">';
-      for (var s = 1; s <= 5; s++) {
-        html += '<span class="tp-star' + (s <= r.rating ? ' active' : '') + '" onclick="setItemRating(\\'' + kind + '\\', \\'' + escapeHtml(name) + '\\', ' + s + ')">\u2605</span>';
-      }
-      html += '</div>';
-      return html;
-    }
-    function approvalBadge(status) {
-      var cls = { approved: 'tp-approval-approved', review: 'tp-approval-review', flagged: 'tp-approval-flagged', blocked: 'tp-approval-blocked' };
-      return '<span class="tp-approval-badge ' + (cls[status] || 'tp-approval-review') + '">' + escapeHtml(status) + '</span>';
-    }
-    function healthDot(ok) {
-      return '<span class="tp-status-dot ' + (ok ? 'green' : 'red') + '"></span>';
-    }
-    function timeAgo(ts) {
-      if (!ts) return 'never';
-      var diff = Date.now() - new Date(ts).getTime();
-      if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
-      if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-      if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-      return Math.floor(diff / 86400000) + 'd ago';
-    }
-
-    function setItemRating(kind, name, rating) {
-      var store = kind === 'tool' ? state.toolReviews : kind === 'plugin' ? state.pluginReviews : state.utilityReviews;
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      store[name].rating = rating;
-      store[name].lastReviewed = new Date().toISOString();
-      render();
-    }
-    function setItemApproval(kind, name, approval) {
-      var store = kind === 'tool' ? state.toolReviews : kind === 'plugin' ? state.pluginReviews : state.utilityReviews;
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      store[name].approval = approval;
-      store[name].lastReviewed = new Date().toISOString();
-      render();
-    }
-    function saveItemNotes(kind, name) {
-      var el = document.getElementById('review-notes-' + kind + '-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
-      if (!el) return;
-      var store = kind === 'tool' ? state.toolReviews : kind === 'plugin' ? state.pluginReviews : state.utilityReviews;
-      if (!store[name]) store[name] = { rating: 0, notes: '', approval: 'review', lastReviewed: null };
-      store[name].notes = el.value;
-      store[name].lastReviewed = new Date().toISOString();
-    }
-    function toggleItemExpand(kind, name) {
-      var field = kind === 'tool' ? 'expandedToolId' : kind === 'plugin' ? 'expandedPluginId' : 'expandedUtilityId';
-      state[field] = state[field] === name ? null : name;
-      render();
-    }
-    function toggleItemEnabled(kind, name) {
-      var stateStore = kind === 'tool' ? state.toolStates : kind === 'plugin' ? state.pluginStates : state.utilityStates;
-      if (!stateStore[name]) {
-        if (kind === 'tool') getToolState(name);
-        else if (kind === 'plugin') getPluginState(name);
-        else getUtilityState(name);
-      }
-      stateStore[name].enabled = !stateStore[name].enabled;
-      fetch('/api/tools/' + encodeURIComponent(name) + '/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: stateStore[name].enabled }) }).catch(function() {});
-      render();
-    }
-    async function testTool(name) {
-      var resultEl = document.getElementById('test-result-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
-      if (resultEl) resultEl.innerHTML = '<span class="muted">Testing...</span>';
-      try {
-        var res = await request('/api/tools/' + encodeURIComponent(name) + '/test', { method: 'POST' });
-        if (resultEl) resultEl.innerHTML = '<span style="color:#7ecf7e;">\u2713 ' + escapeHtml(res.message || 'OK') + '</span>';
-      } catch (e) {
-        if (resultEl) resultEl.innerHTML = '<span style="color:#ffc1c1;">\u2717 ' + escapeHtml(e.message) + '</span>';
-      }
-    }
-    async function checkPluginHealth(name) {
-      var resultEl = document.getElementById('health-result-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
-      if (resultEl) resultEl.innerHTML = '<span class="muted">Checking...</span>';
-      try {
-        var res = await request('/api/plugins/' + encodeURIComponent(name) + '/health', { method: 'POST' });
-        var ps = getPluginState(name);
-        ps.healthy = res.healthy !== false;
-        ps.lastChecked = new Date().toISOString();
-        if (resultEl) resultEl.innerHTML = '<span style="color:' + (ps.healthy ? '#7ecf7e' : '#ffc1c1') + ';">' + (ps.healthy ? '\u2713 Healthy' : '\u2717 Unhealthy') + '</span>';
-        render();
-      } catch (e) {
-        if (resultEl) resultEl.innerHTML = '<span style="color:#ffc1c1;">\u2717 ' + escapeHtml(e.message) + '</span>';
-      }
-    }
-    function updateToolsFilter(val) {
-      state.toolsFilterText = val.toLowerCase();
-      render();
-    }
-
-    /* ═══ Brand Panel ═══ */
-    function formatUptime(seconds) {
-      if (!seconds || seconds < 0) return '0s';
-      var d = Math.floor(seconds / 86400);
-      var h = Math.floor((seconds % 86400) / 3600);
-      var m = Math.floor((seconds % 3600) / 60);
-      if (d > 0) return d + 'd ' + h + 'h';
-      if (h > 0) return h + 'h ' + m + 'm';
-      return m + 'm';
-    }
-
-    function renderBrandPanel() {
-      var panel = document.getElementById('brand-panel');
-      if (!panel) return;
-      var s = state.status;
-      if (!s) return;
-
-      var segment = (s.executionProfileSegment || 'individual').toLowerCase();
-      var isDemo = s.mode === 'demo';
-      var badgeClass = isDemo ? 'demo' : segment;
-      var badgeLabel = isDemo ? 'DEMO' : segment.toUpperCase();
-      var envProfile = s.environmentProfile || 'dev';
-      var envDotClass = envProfile === 'prod' ? 'prod' : (envProfile === 'staging' ? 'staging' : 'dev');
-
-      var html = '<div class="eyebrow">Frontier Operator Console</div>'
-        + '<h1>PRISM Chat</h1>'
-        + '<div class="brand-profile-badge ' + badgeClass + '">' + badgeLabel + '</div>'
-        + '<div class="brand-info-grid">'
-        + '<div class="brand-info-item"><span class="brand-info-label">Env</span><br><span class="brand-info-value"><span class="brand-env-dot ' + envDotClass + '"></span>' + escapeHtml(envProfile) + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Mode</span><br><span class="brand-info-value">' + escapeHtml(s.mode || 'server') + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Uptime</span><br><span class="brand-info-value">' + formatUptime(s.uptimeSeconds) + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Version</span><br><span class="brand-info-value">v0.2.0</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Sessions</span><br><span class="brand-info-value">' + (s.chatSessionCount || 0) + '</span></div>'
-        + '<div class="brand-info-item"><span class="brand-info-label">Events</span><br><span class="brand-info-value">' + (s.eventCount || 0) + '</span></div>'
-        + '</div>'
-        + '<div class="muted" style="margin-top:8px;">http://localhost:' + (location.port || '7070') + '</div>';
-
-      if (s.pendingApprovals && s.pendingApprovals > 0) {
-        html += '<div class="brand-approvals-badge">' + s.pendingApprovals + ' pending approval' + (s.pendingApprovals > 1 ? 's' : '') + '</div>';
-      }
-
-      panel.innerHTML = html;
-    }
-
-    /* ═══ Overview Bar ═══ */
-    function renderToolsOverviewBar() {
-      var bar = document.getElementById('tools-overview-bar');
-      if (!bar) return;
-      var totalTools = Math.max(19, Object.keys(state.toolStates || {}).length);
-      var totalPlugins = Math.max(7, Object.keys(state.pluginStates || {}).length);
-      var enabledTools = 0;
-      var healthyPlugins = 0;
-      var totalUtils = 30;
-      enabledTools = totalTools - Object.keys(state.toolStates || {}).filter(function(k) { return !state.toolStates[k].enabled; }).length;
-      healthyPlugins = totalPlugins - Object.keys(state.pluginStates || {}).filter(function(k) { return !state.pluginStates[k].healthy; }).length;
-
-      var html = '<div class="tp-overview-bar">';
-      html += '<span class="tp-status-dot green"></span>';
-      html += '<span class="tp-overview-stat">' + enabledTools + '/' + totalTools + ' tools <span class="muted">enabled</span></span>';
-      html += '<span style="color:var(--muted);">\u2502</span>';
-      html += '<span class="tp-overview-stat">' + healthyPlugins + '/' + totalPlugins + ' plugins <span class="muted">healthy</span></span>';
-      html += '<span style="color:var(--muted);">\u2502</span>';
-      html += '<span class="tp-overview-stat">' + totalUtils + ' <span class="muted">utilities</span></span>';
-      html += '<span style="flex:1;"></span>';
-      html += '<input class="tp-filter-input" type="text" placeholder="\uD83D\uDD0D Filter by name..." value="' + escapeHtml(state.toolsFilterText) + '" oninput="updateToolsFilter(this.value)">';
-      html += '</div>';
-      bar.innerHTML = html;
-    }
-
-    function renderToolsPanel() {
-      var container = document.getElementById('tools-panel');
-      if (!container) return;
-      renderToolsOverviewBar();
-
-      var fallbackTools = [
-        { name: 'file_read', cat: 'System', desc: 'Read file contents with encoding support', risk: 'low', mut: false },
-        { name: 'file_write', cat: 'System', desc: 'Write or append content to files', risk: 'medium', mut: true },
-        { name: 'file_delete', cat: 'System', desc: 'Delete files and directories', risk: 'high', mut: true },
-        { name: 'file_list', cat: 'System', desc: 'List directory contents with file type detection', risk: 'low', mut: false },
-        { name: 'shell_exec', cat: 'System', desc: 'Execute shell commands with blocked-pattern protection', risk: 'high', mut: true },
-        { name: 'terminal_session', cat: 'System', desc: 'Manage interactive terminal sessions with lifecycle control', risk: 'medium', mut: true },
-        { name: 'container_sandbox', cat: 'System', desc: 'Create and manage containerized sandbox environments', risk: 'medium', mut: true },
-        { name: 'http_request', cat: 'Integration', desc: 'Execute HTTP requests (GET/POST/PUT/PATCH/DELETE)', risk: 'medium', mut: true },
-        { name: 'email_ops', cat: 'Application', desc: 'Email operations \u2014 summarize, reply, and send', risk: 'medium', mut: true },
-        { name: 'calendar_plan', cat: 'Application', desc: 'Calendar management \u2014 availability and scheduling', risk: 'medium', mut: true },
-        { name: 'notes_extract', cat: 'Application', desc: 'Notes management \u2014 capture, extract, and persist', risk: 'medium', mut: true },
-        { name: 'tasks_timeline', cat: 'Application', desc: 'Task timeline planning and commitment', risk: 'medium', mut: true },
-        { name: 'neo4j_query', cat: 'Knowledge', desc: 'Execute Cypher queries against Neo4j graph database', risk: 'medium', mut: false },
-        { name: 'memory_query', cat: 'Knowledge', desc: 'Query episodic, semantic, or session memory stores', risk: 'low', mut: false },
-        { name: 'semantic_query', cat: 'Knowledge', desc: 'Semantic memory index with multiple retrieval modes', risk: 'low', mut: false },
-        { name: 'nexus_check_hotline', cat: 'Integration', desc: 'Read broadcast messages from Nexus hotline', risk: 'low', mut: false },
-        { name: 'nexus_read_memory', cat: 'Integration', desc: 'Read Nexus primary memory store', risk: 'low', mut: false },
-        { name: 'nexus_log_insight', cat: 'Integration', desc: 'Append insights to Nexus daily memory log', risk: 'medium', mut: true },
-        { name: 'nexus_broadcast', cat: 'Integration', desc: 'Send STP messages to Nexus thread or hotline', risk: 'medium', mut: true }
-      ];
-
-      var tools = (Array.isArray(state.toolCatalog) && state.toolCatalog.length > 0)
-        ? state.toolCatalog.slice()
-        : fallbackTools.slice();
-
-      var knownTools = {};
-      for (var k = 0; k < tools.length; k++) {
-        knownTools[tools[k].name] = true;
-      }
-      var observedToolNames = Object.keys(state.toolStates || {}).filter(function(name) {
-        return !knownTools[name];
-      }).sort();
-      for (var oi = 0; oi < observedToolNames.length; oi++) {
-        var observedName = observedToolNames[oi];
-        tools.push({
-          name: observedName,
-          cat: 'Observed',
-          desc: 'Observed from backend telemetry stream',
-          risk: 'medium',
-          mut: false
-        });
-      }
-
-      var riskColor = { low: '#7ecf7e', medium: '#ffd17a', high: '#ffc1c1' };
-      var riskBg = { low: 'rgba(126,207,126,0.15)', medium: 'rgba(255,200,80,0.12)', high: 'rgba(255,141,141,0.12)' };
-      var catIcon = { System: '\uD83D\uDDA5\uFE0F', Application: '\uD83D\uDCCB', Knowledge: '\uD83E\uDDE0', Integration: '\uD83D\uDD17', Observed: '\uD83D\uDCE1' };
-      var filter = state.toolsFilterText || '';
-
-      var categories = ['System', 'Application', 'Knowledge', 'Integration'];
-      var seenCategories = {};
-      for (var ci = 0; ci < categories.length; ci++) seenCategories[categories[ci]] = true;
-      for (var ti = 0; ti < tools.length; ti++) {
-        var candidateCategory = tools[ti].cat || 'System';
-        if (!seenCategories[candidateCategory]) {
-          categories.push(candidateCategory);
-          seenCategories[candidateCategory] = true;
-        }
-      }
-      if (observedToolNames.length > 0 && !seenCategories.Observed) {
-        categories.push('Observed');
-      }
-      var html = '<div class="muted" style="margin-bottom:8px;">'
-        + tools.length + ' tools registered across ' + categories.length + ' categories.</div>';
-
-      for (var c = 0; c < categories.length; c++) {
-        var cat = categories[c];
-        var catTools = tools.filter(function(t) { return t.cat === cat && (!filter || t.name.toLowerCase().indexOf(filter) !== -1 || t.desc.toLowerCase().indexOf(filter) !== -1); });
-        if (!catTools.length) continue;
-        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (catIcon[cat] || '') + ' ' + escapeHtml(cat) + ' <span class="muted">(' + catTools.length + ')</span></div>';
-        for (var i = 0; i < catTools.length; i++) {
-          var t = catTools[i];
-          var ts = getToolState(t.name);
-          var rv = getReview(state.toolReviews, t.name);
-          var isExpanded = state.expandedToolId === t.name;
-          var safeId = t.name.replace(/[^a-zA-Z0-9]/g, '_');
-
-          html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + '">';
-
-          /* ── collapsed header ── */
-          html += '<div class="tp-card-head" onclick="toggleItemExpand(\\'tool\\', \\'' + escapeHtml(t.name) + '\\')" data-tooltip="Category: ' + escapeHtml(t.cat) + ' | Risk: ' + escapeHtml(t.risk) + ' | ' + (t.mut ? 'Mutating' : 'Read-only') + '\\n' + escapeHtml(t.desc) + '">';
-          html += '<div style="flex:1;min-width:0;">';
-          html += '<div style="display:flex;align-items:center;gap:8px;">';
-          html += '<span class="tp-card-name">' + escapeHtml(t.name) + '</span>';
-          html += healthDot(ts.enabled);
-          html += '</div>';
-          html += '<div class="tp-card-desc">' + escapeHtml(t.desc) + '</div>';
-          html += '<div class="tp-card-meta">';
-          if (ts.invocations > 0) html += '<span class="tp-meta-tag">\uD83D\uDCCA ' + ts.invocations + ' calls</span>';
-          if (ts.lastInvoked) html += '<span class="tp-meta-tag">\uD83D\uDD52 ' + timeAgo(ts.lastInvoked) + '</span>';
-          html += '</div>';
-          html += '</div>';
-          html += '<div class="tp-card-badges">';
-          html += '<span class="ps-badge" style="background:' + riskBg[t.risk] + ';color:' + riskColor[t.risk] + ';">' + escapeHtml(t.risk) + '</span>';
-          html += '<span class="ps-badge" style="background:' + (t.mut ? 'rgba(255,200,80,0.12);color:#ffd17a' : 'rgba(126,207,126,0.15);color:#7ecf7e') + ';">' + (t.mut ? 'mutating' : 'read-only') + '</span>';
-          html += approvalBadge(rv.approval);
-          html += '</div></div>';
-
-          /* ── expanded body ── */
-          html += '<div class="tp-card-body">';
-
-          /* Controls */
-          html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Controls</div>';
-          html += '<div class="tp-controls">';
-          html += '<label class="tp-toggle"><input type="checkbox" ' + (ts.enabled ? 'checked' : '') + ' onchange="toggleItemEnabled(\\'tool\\', \\'' + escapeHtml(t.name) + '\\')"><span class="tp-toggle-track"></span>' + (ts.enabled ? 'Enabled' : 'Disabled') + '</label>';
-          html += '<button class="secondary-button" style="font-size:11px;padding:4px 12px;" onclick="testTool(\\'' + escapeHtml(t.name) + '\\')">\u{1F9EA} Test Tool</button>';
-          html += '</div>';
-          html += '<div id="test-result-' + safeId + '" style="margin-top:6px;font-size:12px;"></div>';
-          html += '</div>';
-
-          /* Telemetry */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Telemetry</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Invocations</span><span class="tp-stat-value">' + ts.invocations + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Success</span><span class="tp-stat-value" style="color:#7ecf7e;">' + ts.successes + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Failures</span><span class="tp-stat-value" style="color:#ffc1c1;">' + ts.failures + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Avg Latency</span><span class="tp-stat-value">' + (ts.avgLatencyMs ? ts.avgLatencyMs.toFixed(0) + 'ms' : '\u2014') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Used</span><span class="tp-stat-value">' + timeAgo(ts.lastInvoked) + '</span></div>';
-          html += '</div>';
-          if (ts.lastError) html += '<div style="margin-top:6px;font-size:11px;color:#ffc1c1;">Last error: ' + escapeHtml(ts.lastError) + '</div>';
-          html += '</div>';
-
-          /* Governance */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDEE1\uFE0F Governance</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Risk Level</span><span class="tp-stat-value" style="color:' + riskColor[t.risk] + ';">' + t.risk.toUpperCase() + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Mutating</span><span class="tp-stat-value">' + (t.mut ? 'Yes' : 'No') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Category</span><span class="tp-stat-value">' + escapeHtml(t.cat) + '</span></div>';
-          html += '</div></div>';
-
-          /* Review */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCDD Review & Evaluation</div>';
-          html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-          html += renderStars(state.toolReviews, t.name, 'tool');
-          html += approvalBadge(rv.approval);
-          html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\\'tool\\', \\'' + escapeHtml(t.name) + '\\', this.value)">';
-          var approvals = ['review', 'approved', 'flagged', 'blocked'];
-          for (var a = 0; a < approvals.length; a++) {
-            html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
-          }
-          html += '</select>';
-          if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
-          html += '</div>';
-          html += '<div style="margin-top:8px;"><textarea id="review-notes-tool-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\\'tool\\', \\'' + escapeHtml(t.name) + '\\')">' + escapeHtml(rv.notes) + '</textarea></div>';
-          html += '</div>';
-
-          html += '</div></div>';
-        }
-      }
-      html += '<div style="margin-top:16px;text-align:center;">';
-      html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showRegisterToolForm()">➕ Register Custom Tool</button>';
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function showRegisterToolForm() {
-      var existing = document.getElementById('register-tool-form');
-      if (existing) { existing.remove(); return; }
-      var container = document.getElementById('tools-panel');
-      if (!container) return;
-      var form = document.createElement('div');
-      form.id = 'register-tool-form';
-      form.style.cssText = 'margin-top:12px;padding:14px;border:1px solid var(--accent);border-radius:12px;background:rgba(0,0,0,0.2);';
-      form.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">➕ Register Custom Tool</div>'
-        + '<div class="ps-field"><label>Name</label><input id="reg-tool-name" placeholder="my_custom_tool"></div>'
-        + '<div class="ps-field"><label>Description</label><input id="reg-tool-desc" placeholder="What does this tool do?"></div>'
-        + '<div class="ps-field"><label>Category</label><select id="reg-tool-cat" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>System</option><option>Application</option><option>Knowledge</option><option>Integration</option></select></div>'
-        + '<div class="ps-field"><label>Risk Level</label><select id="reg-tool-risk" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>low</option><option>medium</option><option>high</option></select></div>'
-        + '<div class="ps-field"><label>Endpoint / Command</label><input id="reg-tool-endpoint" placeholder="http://localhost:9000/tool or /usr/bin/mytool"></div>'
-        + '<div style="display:flex;gap:8px;margin-top:12px;">'
-        + '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="submitRegisterTool()">Register</button>'
-        + '<button class="secondary-button" style="font-size:12px;padding:6px 16px;" onclick="cancelRegisterTool()">Cancel</button>'
-        + '</div>';
-      container.appendChild(form);
-    }
-    function cancelRegisterTool() {
-      var form = document.getElementById('register-tool-form');
-      if (form) form.remove();
-    }
-    function submitRegisterTool() {
-      var name = document.getElementById('reg-tool-name');
-      var desc = document.getElementById('reg-tool-desc');
-      var cat = document.getElementById('reg-tool-cat');
-      var risk = document.getElementById('reg-tool-risk');
-      var endpoint = document.getElementById('reg-tool-endpoint');
-      if (!name || !name.value.trim()) { alert('Tool name is required'); return; }
-      fetch('/api/tools/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.value.trim(), description: desc ? desc.value : '', category: cat ? cat.value : 'System', risk: risk ? risk.value : 'medium', endpoint: endpoint ? endpoint.value : '' })
-      }).then(function() {
-        var form = document.getElementById('register-tool-form');
-        if (form) form.remove();
-      }).catch(function(e) { alert('Registration failed: ' + e.message); });
-    }
-
-    function renderPluginsPanel() {
-      var container = document.getElementById('plugins-panel');
-      if (!container) return;
-
-      var plugins = [
-        { name: 'ids-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'IDS identity services \u2014 authentication, token lifecycle, and credential management', status: 'Active', trust: 'high', port: 8100 },
-        { name: 'impressioncore-eds', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Enterprise Data Services \u2014 structured data ingestion, transformation, and schema enforcement', status: 'Active', trust: 'high', port: 8200 },
-        { name: 'impressioncore-ipa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Intelligent Process Automation \u2014 task queuing, workflow dispatch, and RPA bridge', status: 'Active', trust: 'high', port: 8201 },
-        { name: 'impressioncore-goliath', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Large-scale data pipeline orchestration \u2014 batch ETL, partitioned processing, and backpressure control', status: 'Active', trust: 'high', port: 8202 },
-        { name: 'impressioncore-vrgc', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Visual Rendering & Graphics Compute \u2014 image generation, chart rendering, and GPU-accelerated transforms', status: 'Active', trust: 'high', port: 8203 },
-        { name: 'impressioncore-dpa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Document Processing & Analytics \u2014 PDF extraction, OCR, and document classification', status: 'Active', trust: 'high', port: 8204 },
-        { name: 'web-search-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'Web search provider \u2014 query routing, result aggregation, and safe content filtering', status: 'Active', trust: 'medium', port: 8300 }
-      ];
-
-      var groupIcon = { 'In-Repo': '\uD83D\uDCC1', 'ImpressionCore Suite': '\uD83E\uDDE9' };
-      var groups = ['In-Repo', 'ImpressionCore Suite'];
-      var trustColor = { high: '#7ecf7e', medium: '#ffd17a', low: '#ffc1c1' };
-      var filter = state.toolsFilterText || '';
-
-      var html = '<div class="muted" style="margin-bottom:8px;">'
-        + plugins.length + ' MCP plugins registered across ' + groups.length + ' sources.</div>';
-
-      for (var g = 0; g < groups.length; g++) {
-        var grp = groups[g];
-        var grpPlugins = plugins.filter(function(p) { return p.group === grp && (!filter || p.name.toLowerCase().indexOf(filter) !== -1 || p.desc.toLowerCase().indexOf(filter) !== -1); });
-        if (!grpPlugins.length) continue;
-        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (groupIcon[grp] || '') + ' ' + escapeHtml(grp) + ' <span class="muted">(' + grpPlugins.length + ')</span></div>';
-        for (var i = 0; i < grpPlugins.length; i++) {
-          var p = grpPlugins[i];
-          var ps = getPluginState(p.name);
-          var rv = getReview(state.pluginReviews, p.name);
-          var isExpanded = state.expandedPluginId === p.name;
-          var safeId = p.name.replace(/[^a-zA-Z0-9]/g, '_');
-
-          html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + '">';
-
-          /* ── collapsed header ── */
-          html += '<div class="tp-card-head" onclick="toggleItemExpand(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\')" data-tooltip="Group: ' + escapeHtml(p.group) + ' | Type: ' + escapeHtml(p.type) + '\\nStatus: ' + escapeHtml(p.status) + ' | Trust: ' + escapeHtml(p.trust) + '\\nPort: ' + p.port + '">';
-          html += '<div style="flex:1;min-width:0;">';
-          html += '<div style="display:flex;align-items:center;gap:8px;">';
-          html += '<span class="tp-card-name">' + escapeHtml(p.name) + '</span>';
-          html += healthDot(ps.healthy);
-          html += '<span class="ps-badge" style="background:rgba(130,170,255,0.12);color:#82aaff;font-size:10px;">' + escapeHtml(p.type) + '</span>';
-          html += '</div>';
-          html += '<div class="tp-card-desc">' + escapeHtml(p.desc) + '</div>';
-          html += '<div class="tp-card-meta">';
-          if (ps.requests > 0) html += '<span class="tp-meta-tag">\uD83D\uDCCA ' + ps.requests + ' reqs</span>';
-          if (ps.lastChecked) html += '<span class="tp-meta-tag">\u2713 checked ' + timeAgo(ps.lastChecked) + '</span>';
-          html += '</div>';
-          html += '</div>';
-          html += '<div class="tp-card-badges">';
-          html += '<span class="ps-badge" style="background:rgba(126,207,126,0.15);color:#7ecf7e;">' + escapeHtml(p.status) + '</span>';
-          html += approvalBadge(rv.approval);
-          html += '</div></div>';
-
-          /* ── expanded body ── */
-          html += '<div class="tp-card-body">';
-
-          /* Connection Info */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDD17 Connection</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Type</span><span class="tp-stat-value">' + escapeHtml(p.type) + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Port</span><span class="tp-stat-value">' + p.port + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Trust</span><span class="tp-stat-value" style="color:' + (trustColor[p.trust] || 'var(--fg)') + ';">' + escapeHtml(p.trust).toUpperCase() + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Group</span><span class="tp-stat-value">' + escapeHtml(p.group) + '</span></div>';
-          html += '</div></div>';
-
-          /* Controls */
-          html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Controls</div>';
-          html += '<div class="tp-controls">';
-          html += '<label class="tp-toggle"><input type="checkbox" ' + (ps.enabled ? 'checked' : '') + ' onchange="toggleItemEnabled(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\')"><span class="tp-toggle-track"></span>' + (ps.enabled ? 'Enabled' : 'Disabled') + '</label>';
-          html += '<button class="secondary-button" style="font-size:11px;padding:4px 12px;" onclick="checkPluginHealth(\\'' + escapeHtml(p.name) + '\\')">\uD83C\uDFE5 Check Health</button>';
-          html += '</div>';
-          html += '<div id="health-result-' + safeId + '" style="margin-top:6px;font-size:12px;"></div>';
-          html += '</div>';
-
-          /* Telemetry */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Telemetry</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Requests</span><span class="tp-stat-value">' + ps.requests + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Errors</span><span class="tp-stat-value" style="color:#ffc1c1;">' + ps.errors + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Avg Response</span><span class="tp-stat-value">' + (ps.avgResponseMs ? ps.avgResponseMs.toFixed(0) + 'ms' : '\u2014') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Uptime</span><span class="tp-stat-value">' + ps.uptime + '%</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Checked</span><span class="tp-stat-value">' + timeAgo(ps.lastChecked) + '</span></div>';
-          html += '</div></div>';
-
-          /* Review */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCDD Review & Evaluation</div>';
-          html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-          html += renderStars(state.pluginReviews, p.name, 'plugin');
-          html += approvalBadge(rv.approval);
-          html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\', this.value)">';
-          var approvals = ['review', 'approved', 'flagged', 'blocked'];
-          for (var a = 0; a < approvals.length; a++) {
-            html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
-          }
-          html += '</select>';
-          if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
-          html += '</div>';
-          html += '<div style="margin-top:8px;"><textarea id="review-notes-plugin-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\\'plugin\\', \\'' + escapeHtml(p.name) + '\\')">' + escapeHtml(rv.notes) + '</textarea></div>';
-          html += '</div>';
-
-          html += '</div></div>';
-        }
-      }
-      html += '<div style="margin-top:16px;text-align:center;">';
-      html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showInstallPluginForm()">➕ Install Plugin</button>';
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function showInstallPluginForm() {
-      var existing = document.getElementById('install-plugin-form');
-      if (existing) { existing.remove(); return; }
-      var container = document.getElementById('plugins-panel');
-      if (!container) return;
-      var form = document.createElement('div');
-      form.id = 'install-plugin-form';
-      form.style.cssText = 'margin-top:12px;padding:14px;border:1px solid var(--accent);border-radius:12px;background:rgba(0,0,0,0.2);';
-      form.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">➕ Install Plugin</div>'
-        + '<div class="ps-field"><label>Plugin Name</label><input id="reg-plugin-name" placeholder="my-plugin-mcp"></div>'
-        + '<div class="ps-field"><label>Type</label><select id="reg-plugin-type" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>Python MCP Server</option><option>Node.js MCP Server</option><option>REST Adapter</option></select></div>'
-        + '<div class="ps-field"><label>Server URL / Path</label><input id="reg-plugin-url" placeholder="http://localhost:8400 or ./plugins/my-plugin"></div>'
-        + '<div class="ps-field"><label>Port</label><input id="reg-plugin-port" type="number" placeholder="8400"></div>'
-        + '<div class="ps-field"><label>Description</label><textarea id="reg-plugin-desc" rows="2" placeholder="What does this plugin provide?" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea></div>'
-        + '<div style="display:flex;gap:8px;margin-top:12px;">'
-        + '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="submitInstallPlugin()">Install</button>'
-        + '<button class="secondary-button" style="font-size:12px;padding:6px 16px;" onclick="cancelInstallPlugin()">Cancel</button>'
-        + '</div>';
-      container.appendChild(form);
-    }
-    function cancelInstallPlugin() {
-      var form = document.getElementById('install-plugin-form');
-      if (form) form.remove();
-    }
-    function submitInstallPlugin() {
-      var name = document.getElementById('reg-plugin-name');
-      var type = document.getElementById('reg-plugin-type');
-      var url = document.getElementById('reg-plugin-url');
-      var port = document.getElementById('reg-plugin-port');
-      var desc = document.getElementById('reg-plugin-desc');
-      if (!name || !name.value.trim()) { alert('Plugin name is required'); return; }
-      fetch('/api/plugins/install', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.value.trim(), type: type ? type.value : 'Python MCP Server', url: url ? url.value : '', port: port ? parseInt(port.value) || 0 : 0, description: desc ? desc.value : '' })
-      }).then(function() {
-        var form = document.getElementById('install-plugin-form');
-        if (form) form.remove();
-      }).catch(function(e) { alert('Installation failed: ' + e.message); });
-    }
-
-    function renderUtilitiesPanel() {
-      var container = document.getElementById('utilities-panel');
-      if (!container) return;
-
-      var utils = [
-        { name: 'tool-contract-snapshot', cat: 'Benchmarks & Qualification', desc: 'Generate versioned tool contract snapshots for release evidence' },
-        { name: 'release-validation', cat: 'Benchmarks & Qualification', desc: 'Run release gate checks \u2014 test/build/perf/contract/policy validation' },
-        { name: 'ci-gate-check', cat: 'Benchmarks & Qualification', desc: 'CI quality gate \u2014 test pass, perf qualification, artifact upload' },
-        { name: 'perf-qualification', cat: 'Benchmarks & Qualification', desc: 'Performance SLO harness \u2014 p50/p95/p99 latency gates with contention scenarios' },
-        { name: 'e1-individual-qualification', cat: 'Benchmarks & Qualification', desc: 'Individual profile qualification \u2014 tool invocation, workflow, and terminal tests' },
-        { name: 'e2-business-qualification', cat: 'Benchmarks & Qualification', desc: 'Business profile qualification \u2014 governance paths, approval flows, and audit checks' },
-        { name: 'e3-policy-stress', cat: 'Benchmarks & Qualification', desc: 'Policy engine stress test \u2014 rapid tier routing under concurrency load' },
-        { name: 'e4-profile-switch-qualification', cat: 'Benchmarks & Qualification', desc: 'Profile hot-switch qualification \u2014 runtime transition fidelity and state preservation' },
-        { name: 'd1-workflow-template-qualification', cat: 'Benchmarks & Qualification', desc: 'Workflow template qualification \u2014 retry/timeout/fallback path completion' },
-        { name: 'e-stage2-qualification-summary', cat: 'Benchmarks & Qualification', desc: 'Aggregate stage-2 qualification summary across all E-series suites' },
-        { name: 'j-event-lineage-bundle', cat: 'Benchmarks & Qualification', desc: 'Event lineage bundle \u2014 full causal chain export for audit and replay' },
-
-        { name: 'SelfReviewScheduler', cat: 'Operator Services', desc: 'Automated self-review scheduling \u2014 daily, weekly, and monthly audit cycles' },
-        { name: 'SessionTraceExplorer', cat: 'Operator Services', desc: 'Session trace browser \u2014 search, filter, and inspect activity event chains' },
-        { name: 'PolicyAuditExporter', cat: 'Operator Services', desc: 'Export policy audit logs \u2014 JSON/CSV/NDJSON with reason-code annotations' },
-        { name: 'SessionPackageSqliteStore', cat: 'Operator Services', desc: 'SQLite-backed session package persistence and migration management' },
-        { name: 'DashboardService', cat: 'Operator Services', desc: 'Dashboard HTTP server \u2014 38 API routes, WebSocket, and static UI serving' },
-
-        { name: 'SemanticMemoryIndex', cat: 'Memory & Retrieval', desc: 'Semantic memory index with configurable embedding and multi-mode retrieval' },
-        { name: 'EpisodicMemory', cat: 'Memory & Retrieval', desc: 'Episodic memory buffer with rolling window and recency-weighted recall' },
-        { name: 'SessionMemoryStore', cat: 'Memory & Retrieval', desc: 'Per-session memory persistence with summary extraction and compaction' },
-        { name: 'RetrievalMetricsCollector', cat: 'Memory & Retrieval', desc: 'Retrieval quality instrumentation \u2014 hit-rate, coverage, novelty, utility scoring' },
-        { name: 'RetrievalDashboardStore', cat: 'Memory & Retrieval', desc: 'SQLite-backed retrieval cohort dashboard snapshots and trend persistence' },
-
-        { name: 'ActivityBus', cat: 'Activity & Audit', desc: 'Central event bus with SHA-256 hash chain and typed subscriber dispatch' },
-        { name: 'SqliteActivityStore', cat: 'Activity & Audit', desc: 'SQLite subscriber for durable activity event persistence and querying' },
-        { name: 'ConsoleActivitySubscriber', cat: 'Activity & Audit', desc: 'Console subscriber for development-mode real-time event logging' },
-
-        { name: 'normalizeReplayEvent', cat: 'Replay & Verification', desc: 'Normalize recorded events into deterministic replay format' },
-        { name: 'buildReplaySignature', cat: 'Replay & Verification', desc: 'Generate cryptographic replay signatures for trace parity verification' },
-        { name: 'compareReplayParity', cat: 'Replay & Verification', desc: 'Compare replay runs and report divergence with diff annotations' },
-
-        { name: 'resolveExecutionProfileFromEnv', cat: 'Configuration', desc: 'Resolve execution profile from environment variables (fast/balanced/governed)' },
-        { name: 'resolveEnvironmentProfile', cat: 'Configuration', desc: 'Resolve environment profile (dev/staging/prod) with SLO preset selection' },
-        { name: 'getPerformanceSloProfile', cat: 'Configuration', desc: 'Return performance SLO thresholds for the active environment profile' }
-      ];
-
-      var catIcon = {
-        'Benchmarks & Qualification': '\uD83C\uDFAF',
-        'Operator Services': '\u2699\uFE0F',
-        'Memory & Retrieval': '\uD83E\uDDE0',
-        'Activity & Audit': '\uD83D\uDCCA',
-        'Replay & Verification': '\uD83D\uDD01',
-        'Configuration': '\uD83D\uDD27'
-      };
-      var categories = ['Benchmarks & Qualification', 'Operator Services', 'Memory & Retrieval', 'Activity & Audit', 'Replay & Verification', 'Configuration'];
-      var filter = state.toolsFilterText || '';
-
-      var html = '<div class="muted" style="margin-bottom:8px;">'
-        + utils.length + ' utilities registered across ' + categories.length + ' categories.</div>';
-
-      for (var c = 0; c < categories.length; c++) {
-        var cat = categories[c];
-        var catUtils = utils.filter(function(u) { return u.cat === cat && (!filter || u.name.toLowerCase().indexOf(filter) !== -1 || u.desc.toLowerCase().indexOf(filter) !== -1); });
-        if (!catUtils.length) continue;
-        html += '<div style="margin-top:12px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--fg);">' + (catIcon[cat] || '') + ' ' + escapeHtml(cat) + ' <span class="muted">(' + catUtils.length + ')</span></div>';
-        for (var i = 0; i < catUtils.length; i++) {
-          var u = catUtils[i];
-          var us = getUtilityState(u.name);
-          var rv = getReview(state.utilityReviews, u.name);
-          var isExpanded = state.expandedUtilityId === u.name;
-          var safeId = u.name.replace(/[^a-zA-Z0-9]/g, '_');
-
-          html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + '">';
-
-          /* ── collapsed header ── */
-          html += '<div class="tp-card-head" onclick="toggleItemExpand(\\'utility\\', \\'' + escapeHtml(u.name) + '\\')" data-tooltip="Category: ' + escapeHtml(u.cat) + '\\n' + escapeHtml(u.desc) + (us.lastRun ? '\\nLast run: ' + timeAgo(us.lastRun) : '') + '">';
-          html += '<div style="flex:1;min-width:0;">';
-          html += '<span class="tp-card-name">' + escapeHtml(u.name) + '</span>';
-          html += '<div class="tp-card-desc">' + escapeHtml(u.desc) + '</div>';
-          html += '<div class="tp-card-meta">';
-          if (us.runCount > 0) html += '<span class="tp-meta-tag">\uD83D\uDD01 ' + us.runCount + ' runs</span>';
-          if (us.lastRun) html += '<span class="tp-meta-tag">\uD83D\uDD52 ' + timeAgo(us.lastRun) + '</span>';
-          if (us.lastResult) html += '<span class="tp-meta-tag" style="color:' + (us.lastResult === 'pass' ? '#7ecf7e' : '#ffc1c1') + ';">' + (us.lastResult === 'pass' ? '\u2713' : '\u2717') + ' ' + us.lastResult + '</span>';
-          html += '</div>';
-          html += '</div>';
-          html += '<div class="tp-card-badges">';
-          html += approvalBadge(rv.approval);
-          html += '</div></div>';
-
-          /* ── expanded body ── */
-          html += '<div class="tp-card-body">';
-
-          /* Telemetry */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Telemetry</div>';
-          html += '<div class="tp-stat-row">';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Run Count</span><span class="tp-stat-value">' + us.runCount + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Run</span><span class="tp-stat-value">' + timeAgo(us.lastRun) + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (us.lastDurationMs ? us.lastDurationMs.toFixed(0) + 'ms' : '\u2014') + '</span></div>';
-          html += '<div class="tp-stat"><span class="tp-stat-label">Last Result</span><span class="tp-stat-value" style="color:' + (us.lastResult === 'pass' ? '#7ecf7e' : us.lastResult === 'fail' ? '#ffc1c1' : 'var(--fg)') + ';">' + (us.lastResult || '\u2014') + '</span></div>';
-          html += '</div></div>';
-
-          /* Review */
-          html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCDD Review & Evaluation</div>';
-          html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-          html += renderStars(state.utilityReviews, u.name, 'utility');
-          html += approvalBadge(rv.approval);
-          html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\\'utility\\', \\'' + escapeHtml(u.name) + '\\', this.value)">';
-          var approvals = ['review', 'approved', 'flagged', 'blocked'];
-          for (var a = 0; a < approvals.length; a++) {
-            html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
-          }
-          html += '</select>';
-          if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
-          html += '</div>';
-          html += '<div style="margin-top:8px;"><textarea id="review-notes-utility-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\\'utility\\', \\'' + escapeHtml(u.name) + '\\')">' + escapeHtml(rv.notes) + '</textarea></div>';
-          html += '</div>';
-
-          html += '</div></div>';
-        }
-      }
-      container.innerHTML = html;
-    }
-
-    function renderActions() {
-      const container = document.getElementById('actions');
-      let html = '';
-      if (state.notice) {
-        html += '<div class="notice">' + escapeHtml(state.notice) + '</div>';
-      }
-      if (!state.actions.length) {
-        container.innerHTML = html + '<div class="muted">No dashboard actions available.</div>';
-        return;
-      }
-
-      html += state.actions.map(action =>
-        '<div class="action-card">'
-        + '<div class="action-card-head"><strong>' + escapeHtml(action.label) + '</strong>' + statusBadge(action) + '</div>'
-        + '<div class="muted">' + escapeHtml(action.description) + '</div>'
-        + (action.lastMessage ? '<div class="muted" style="margin-top:8px;">Last result: ' + escapeHtml(action.lastMessage) + '</div>' : '')
-        + (action.lastError ? '<div style="margin-top:8px;color:#ffc1c1;">Last error: ' + escapeHtml(action.lastError) + '</div>' : '')
-        + '<div class="action-buttons"><button class="secondary-button" ' + (action.status === 'running' ? 'disabled' : '') + ' data-action="' + escapeHtml(action.name) + '" onclick="runAction(this.dataset.action)">Run</button></div>'
-        + '</div>'
-      ).join('');
-      container.innerHTML = html;
-    }
-
-    function renderApprovals() {
-      const container = document.getElementById('pending');
-      if (!state.pending.length) {
-        container.innerHTML = '<div class="muted">No pending approvals.</div>';
-        return;
-      }
-      container.innerHTML = state.pending.map(item =>
-        '<div class="approval-card">'
-        + '<div><strong>' + escapeHtml(item.operation) + '</strong></div>'
-        + '<div class="muted mono" style="margin-top:6px;">' + escapeHtml(item.id) + '</div>'
-        + '<div class="action-buttons"><button class="secondary-button" data-approval-id="' + escapeHtml(item.id) + '" onclick="approve(this.dataset.approvalId)">Approve</button><button class="danger-button" data-approval-id="' + escapeHtml(item.id) + '" onclick="deny(this.dataset.approvalId)">Deny</button></div>'
-        + '</div>'
-      ).join('');
-    }
-
-    function renderActionHistory() {
-      const container = document.getElementById('action-history');
-      if (!state.actionHistory.length) {
-        container.innerHTML = '<div class="muted">No action runs recorded yet.</div>';
-        return;
-      }
-      container.innerHTML = '<table class="history-table"><thead><tr><th>Action</th><th>Status</th><th>Outcome</th></tr></thead><tbody>'
-        + state.actionHistory.slice(0, 8).map(entry => '<tr>'
-          + '<td>' + escapeHtml(entry.label) + '<div class="muted">' + escapeHtml(formatRelativeTime(entry.startedAt)) + '</div></td>'
-          + '<td>' + escapeHtml(entry.status) + '</td>'
-          + '<td>' + escapeHtml(entry.message || entry.error || '-') + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-    }
-
-    function renderSelfReview() {
-      const container = document.getElementById('self-review');
-      if (!state.selfReviewLatest) {
-        container.innerHTML = '<div class="muted">No self-review report generated yet.</div>';
-        return;
-      }
-
-      const report = state.selfReviewLatest;
-      const history = state.selfReviewHistory || [];
-      let html = ''
-        + '<div class="metric"><span class="muted">Cadence</span><span class="mono">' + escapeHtml(report.cadence || '-') + '</span></div>'
-        + '<div class="metric"><span class="muted">Generated</span><span class="mono">' + escapeHtml(formatRelativeTime(report.generatedAt)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Events</span><span class="mono">' + escapeHtml(String((report.metrics && report.metrics.eventsTotal) || 0)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Failures</span><span class="mono">' + escapeHtml(String((report.metrics && report.metrics.failures) || 0)) + '</span></div>';
-
-      if (report.recommendations && report.recommendations.length) {
-        html += '<div class="muted" style="margin-top:8px;">Top recommendation</div>'
-          + '<div class="action-card" style="margin-top:6px;">' + escapeHtml(String(report.recommendations[0])) + '</div>';
-      }
-
-      if (history.length > 0) {
-        html += '<div class="muted" style="margin-top:10px;">Recent review runs</div>'
-          + '<table class="events-table"><thead><tr><th>When</th><th>Cadence</th><th>Failures</th></tr></thead><tbody>'
-          + history.map(item => '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(item.generatedAt)) + '</td>'
-            + '<td>' + escapeHtml(item.cadence || '-') + '</td>'
-            + '<td>' + escapeHtml(String((item.metrics && item.metrics.failures) || 0)) + '</td>'
-            + '</tr>').join('')
-          + '</tbody></table>';
-      }
-
-      container.innerHTML = html;
-    }
-
-    function renderRetrievalObservability() {
-      const container = document.getElementById('retrieval-alerts');
-      const data = state.prioritizedAlerts;
-      if (!data || !data.alerts || !data.alerts.length) {
-        const hasLegacy = state.retrievalAlerts && state.retrievalAlerts.length > 0;
-        if (!hasLegacy) {
-          container.innerHTML = '<div class="muted">No alerts.</div>';
-          return;
-        }
-        let html = '<div class="stack">';
-        for (const alert of state.retrievalAlerts.slice(0, 5)) {
-          html += '<div class="action-card" style="background:rgba(255,141,141,0.06);border-color:rgba(255,141,141,0.18)">'
-            + '<div style="font-size:12px;color:var(--muted)">' + escapeHtml(alert) + '</div>'
-            + '</div>';
-        }
-        if (state.retrievalAlerts.length > 5) {
-          html += '<div class="muted">+ ' + (state.retrievalAlerts.length - 5) + ' more alerts</div>';
-        }
-        html += '</div>';
-        container.innerHTML = html;
-        return;
-      }
-
-      const severityStyle = { critical: 'rgba(255,80,80,0.12)', warning: 'rgba(255,200,80,0.10)', info: 'rgba(80,160,255,0.08)' };
-      const severityBorderStyle = { critical: 'rgba(255,80,80,0.35)', warning: 'rgba(255,200,80,0.30)', info: 'rgba(80,160,255,0.20)' };
-      const severityLabel = { critical: '🔴 Critical', warning: '🟡 Warning', info: '🔵 Info' };
-
-      let html = '';
-      if (data.criticalCount > 0 || data.warningCount > 0) {
-        html += '<div class="metric" style="margin-bottom:8px;">'
-          + '<span class="muted">Summary</span>'
-          + '<span class="mono">'
-          + (data.criticalCount > 0 ? data.criticalCount + ' critical  ' : '')
-          + (data.warningCount > 0 ? data.warningCount + ' warning  ' : '')
-          + data.infoCount + ' info'
-          + '</span></div>';
-      }
-
-      html += '<div class="stack">';
-      for (const alert of data.alerts.slice(0, 8)) {
-        const bg = severityStyle[alert.severity] || severityStyle.info;
-        const border = severityBorderStyle[alert.severity] || severityBorderStyle.info;
-        const badge = severityLabel[alert.severity] || alert.severity;
-        html += '<div class="action-card" style="background:' + bg + ';border-color:' + border + ';">'
-          + '<div style="font-size:11px;font-weight:600;margin-bottom:4px;opacity:0.85;">' + escapeHtml(badge) + '</div>'
-          + '<div style="font-size:12px;color:var(--muted)">' + escapeHtml(alert.message) + '</div>'
-          + '</div>';
-      }
-      if (data.alerts.length > 8) {
-        html += '<div class="muted">+ ' + (data.alerts.length - 8) + ' more alerts</div>';
-      }
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    async function setTelemetryWindow(window) {
-      state.telemetryWindow = window;
-      try {
-        const [summary, runtimeExcellence] = await Promise.all([
-          request('/api/telemetry/summary?window=' + encodeURIComponent(window)).catch(() => null),
-          request('/api/runtime/excellence?window=' + encodeURIComponent(window)).catch(() => null)
-        ]);
-        state.telemetrySummary = summary;
-        state.runtimeExcellence = runtimeExcellence;
-      } catch {
-        state.telemetrySummary = null;
-        state.runtimeExcellence = null;
-      }
-      render();
-    }
-
-    function renderRuntimeExcellence() {
-      const container = document.getElementById('runtime-excellence');
-      const data = state.runtimeExcellence;
-      if (!data) {
-        container.innerHTML = '<div class="muted">Runtime excellence snapshot unavailable.</div>';
-        return;
-      }
-
-      const priorityTone = data.planner && data.planner.priority === 'high'
-        ? 'color:#ff8d8d;'
-        : data.planner && data.planner.priority === 'medium'
-          ? 'color:#ffd17a;'
-          : 'color:#7ecf7e;';
-
-      let html = ''
-        + '<div class="metric"><span class="muted">Runtime health</span><span class="mono">' + escapeHtml(String(data.scores.runtimeHealth)) + '/100</span></div>'
-        + '<div class="metric"><span class="muted">Memory confidence</span><span class="mono">' + escapeHtml(String(data.scores.memoryConfidence)) + '/100</span></div>'
-        + '<div class="metric"><span class="muted">Planner priority</span><span class="mono" style="' + priorityTone + '">' + escapeHtml(data.planner.priority) + '</span></div>'
-        + '<div class="action-card" style="margin-top:8px;">'
-        + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Next action</div>'
-        + '<div style="margin-top:6px;">' + escapeHtml(data.planner.nextAction || '-') + '</div>'
-        + '<div class="muted" style="margin-top:6px;">' + escapeHtml(data.planner.rationale || '-') + '</div>'
-        + '</div>';
-
-      if (data.selfHealingSuggestions && data.selfHealingSuggestions.length > 0) {
-        html += '<div class="muted" style="margin-top:10px;">Self-healing candidates</div>';
-        for (const item of data.selfHealingSuggestions.slice(0, 3)) {
-          html += '<div class="action-card" style="margin-top:6px;">'
-            + '<div><strong>' + escapeHtml(item.title || '-') + '</strong></div>'
-            + '<div class="muted" style="margin-top:4px;">Trigger: ' + escapeHtml(item.trigger || '-') + '</div>'
-            + '<div style="margin-top:4px;">' + escapeHtml(item.action || '-') + '</div>'
-            + '</div>';
-        }
-      }
-
-      container.innerHTML = html;
-    }
-
-    function renderReleaseReadiness() {
-      const container = document.getElementById('release-readiness');
-      const report = state.releaseValidation;
-      const decision = state.releaseDecision;
-      const packageSnapshot = state.packageReleaseSnapshot;
-      if (!report) {
-        let html = '<div class="muted">No release validation artifact found yet.</div>'
-          + '<div class="muted" style="margin-top:8px;">Run <span class="mono">npm run release:validate</span> to generate one.</div>';
-        if (packageSnapshot && packageSnapshot.totalPackages > 0) {
-          html += '<div class="action-card" style="margin-top:10px;">'
-            + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Package Evidence</div>'
-            + '<div class="metric"><span class="muted">Packages</span><span class="mono">' + escapeHtml(String(packageSnapshot.totalPackages)) + '</span></div>'
-            + '<div class="metric"><span class="muted">Exports</span><span class="mono">' + escapeHtml(String(packageSnapshot.exportedCount || 0)) + '</span></div>'
-            + '<div class="metric"><span class="muted">Complete without export</span><span class="mono">' + escapeHtml(String(packageSnapshot.completeWithoutExportCount || 0)) + '</span></div>'
-            + (packageSnapshot.latestExportArtifactPath
-              ? '<div class="muted" style="margin-top:8px;word-break:break-all;">Latest export: ' + escapeHtml(packageSnapshot.latestExportArtifactPath) + '</div>'
-              : '')
-            + '</div>';
-        }
-        container.innerHTML = html;
-        return;
-      }
-
-      const gates = Array.isArray(report.gates) ? report.gates : [];
-      const passed = gates.filter(g => g.status === 'passed').length;
-      const failed = gates.filter(g => g.status === 'failed').length;
-      const manual = gates.filter(g => g.status === 'manual_required').length;
-      const overallTone = report.passed ? 'color:#7ecf7e;' : 'color:#ff8d8d;';
-
-      let html = ''
-        + '<div class="metric"><span class="muted">Generated</span><span class="mono">' + escapeHtml(formatRelativeTime(report.generatedAt || null)) + '</span></div>'
-        + '<div class="metric"><span class="muted">Overall</span><span class="mono" style="' + overallTone + '">' + escapeHtml(report.passed ? 'ready' : 'not ready') + '</span></div>'
-        + '<div class="metric"><span class="muted">Strict mode</span><span class="mono">' + escapeHtml(report.strictMode ? 'on' : 'off') + '</span></div>'
-        + '<div class="metric"><span class="muted">Gate counts</span><span class="mono">' + escapeHtml(String(passed)) + ' pass / '
-        + '<span style="color:#ff8d8d;">' + escapeHtml(String(failed)) + ' fail</span> / '
-        + '<span style="color:#ffd17a;">' + escapeHtml(String(manual)) + ' manual</span></span></div>';
-
-      if (decision) {
-        const recommendationTone = decision.recommendation === 'GO' ? 'color:#7ecf7e;' : 'color:#ff8d8d;';
-        html += '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="metric"><span class="muted">Recommendation</span><span class="mono" style="' + recommendationTone + '">' + escapeHtml(decision.recommendation || '-') + '</span></div>'
-          + '<div class="metric"><span class="muted">Risk level</span><span class="mono">' + escapeHtml(decision.riskLevel || '-') + '</span></div>'
-          + '</div>';
-      }
-
-      if (packageSnapshot && packageSnapshot.totalPackages > 0) {
-        html += '<div class="action-card" style="margin-top:10px;">'
-          + '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Package Evidence</div>'
-          + '<div class="metric"><span class="muted">By status</span><span class="mono">planned ' + escapeHtml(String(packageSnapshot.byStatus.planned || 0)) + ' / running ' + escapeHtml(String(packageSnapshot.byStatus.running || 0)) + ' / blocked ' + escapeHtml(String(packageSnapshot.byStatus.blocked || 0)) + ' / complete ' + escapeHtml(String(packageSnapshot.byStatus.complete || 0)) + '</span></div>'
-          + '<div class="metric"><span class="muted">Exports</span><span class="mono">' + escapeHtml(String(packageSnapshot.exportedCount || 0)) + '</span></div>'
-          + '<div class="metric"><span class="muted">Complete without export</span><span class="mono">' + escapeHtml(String(packageSnapshot.completeWithoutExportCount || 0)) + '</span></div>'
-          + (packageSnapshot.latestExportArtifactPath
-            ? '<div class="muted" style="margin-top:8px;word-break:break-all;">Latest export: ' + escapeHtml(packageSnapshot.latestExportArtifactPath) + '</div>'
-            : '')
-          + '</div>';
-      }
-
-      if (gates.length > 0) {
-        html += '<table class="events-table" style="margin-top:10px;"><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody>'
-          + gates.slice(0, 8).map(gate => {
-            const statusText = gate.status || '-';
-            const tone = statusText === 'passed'
-              ? 'color:#7ecf7e;'
-              : statusText === 'failed'
-                ? 'color:#ff8d8d;'
-                : 'color:#ffd17a;';
-            return '<tr>'
-              + '<td>' + escapeHtml(gate.label || gate.id || '-') + '</td>'
-              + '<td><span class="mono" style="' + tone + '">' + escapeHtml(statusText) + '</span></td>'
-              + '</tr>';
-          }).join('')
-          + '</tbody></table>';
-      }
-
-      container.innerHTML = html;
-    }
-
-    function renderWhatChanged() {
-      const container = document.getElementById('telemetry-what-changed');
-      if (!container) return;
-
-      const windows = ['1h', '1d', '7d'];
-      const btns = windows.map(w =>
-        '<button class="tab-button' + (state.telemetryWindow === w ? ' active' : '') + '" id="tw-' + w + '" onclick="setTelemetryWindow(&quot;' + w + '&quot;)">' + (w === '1h' ? '1 hour' : w === '1d' ? '1 day' : '7 days') + '</button>'
-      ).join(' ');
-
-      const summary = state.telemetrySummary;
-      if (!summary) {
-        container.innerHTML = '<div class="muted">No telemetry data available for this window.</div>';
-        return;
-      }
-
-      const win = summary.window;
-      const delta = summary.delta;
-
-      function deltaLabel(val, higherIsBad) {
-        if (val === 0) return '<span class="muted">±0</span>';
-        const positive = val > 0;
-        const bad = higherIsBad ? positive : !positive;
-        const color = bad ? '#ff8d8d' : '#7ecf7e';
-        return '<span style="color:' + color + ';">' + (positive ? '+' : '') + val + '</span>';
-      }
-
-      function pct(val) {
-        return (val * 100).toFixed(1) + '%';
-      }
-
-      let html = '<div class="stack">';
-
-      // Window summary card
-      html += '<div class="action-card" style="background:rgba(80,120,255,0.06);border-color:rgba(80,120,255,0.18);">'
-        + '<div style="font-size:11px;font-weight:600;opacity:0.7;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Last ' + escapeHtml(win.windowLabel === '1h' ? '1 hour' : win.windowLabel === '1d' ? '24 hours' : '7 days') + '</div>'
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;">'
-        + '<div class="metric"><span class="muted">Events</span><span class="mono">' + escapeHtml(String(win.eventsTotal)) + ' ' + deltaLabel(delta.eventsTotal, false) + '</span></div>'
-        + '<div class="metric"><span class="muted">Failures</span><span class="mono">' + escapeHtml(String(win.failures)) + ' ' + deltaLabel(delta.failures, true) + '</span></div>'
-        + '<div class="metric"><span class="muted">Approvals</span><span class="mono">' + escapeHtml(String(win.approvals)) + ' ' + deltaLabel(delta.approvals, false) + '</span></div>'
-        + '<div class="metric"><span class="muted">Fail rate</span><span class="mono">' + escapeHtml(pct(win.failureRate)) + ' ' + deltaLabel(parseFloat((delta.failureRate * 100).toFixed(1)), true) + '</span></div>'
-        + '</div>'
-        + (summary.newSinceLastWindow ? '<div style="margin-top:8px;font-size:11px;color:#7ecf7e;font-weight:600;">✓ New activity since last window</div>' : '')
-        + '</div>';
-
-      // Top operations
-      if (summary.topOperations && summary.topOperations.length > 0) {
-        html += '<div class="action-card" style="margin-top:6px;">'
-          + '<div class="muted" style="font-size:11px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Top Operations</div>'
-          + '<table class="events-table"><thead><tr><th>Operation</th><th>Count</th><th>Failures</th></tr></thead><tbody>'
-          + summary.topOperations.map(op => '<tr>'
-            + '<td class="mono" style="font-size:11px;">' + escapeHtml(op.operation) + '</td>'
-            + '<td>' + escapeHtml(String(op.count)) + '</td>'
-            + '<td>' + (op.failures > 0 ? '<span style="color:#ff8d8d;">' + escapeHtml(String(op.failures)) + '</span>' : '0') + '</td>'
-            + '</tr>').join('')
-          + '</tbody></table>'
-          + '</div>';
-      }
-
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function renderPackageHistory() {
-      const container = document.getElementById('package-history');
-      const history = state.sessionPackageHistory || [];
-      if (!container) {
-        return;
-      }
-      if (!history.length) {
-        container.innerHTML = '<div class="muted">No package history yet.</div>';
-        return;
-      }
-      container.innerHTML = '<table class="events-table"><thead><tr><th>Time</th><th>Package</th><th>Action</th><th>Status</th></tr></thead><tbody>'
-        + history.map(entry => '<tr>'
-          + '<td>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</td>'
-          + '<td><div>' + escapeHtml(entry.title || entry.packageId) + '</div>'
-          + (entry.message ? '<div class="muted" style="margin-top:4px;">' + escapeHtml(entry.message) + '</div>' : '') + '</td>'
-          + '<td>' + escapeHtml(entry.action) + '</td>'
-          + '<td>' + escapeHtml(entry.status || '-') + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-    }
-
-    function renderChatTelemetry() {
-      var container = document.getElementById('chat-telemetry');
-      if (!container) return;
-      var items = state.chatTelemetry || [];
-      if (!items.length) {
-        container.innerHTML = '<div class="muted">No chat telemetry events yet. Send a message to generate telemetry.</div>';
-        return;
-      }
-      var html = '<table class="events-table"><thead><tr><th>Time</th><th>Operation</th><th>Status</th><th>Details</th></tr></thead><tbody>'
-        + items.map(function(ev) {
-          var detail = '';
-          var d = ev.details || {};
-          if (d.model) detail += escapeHtml(d.model);
-          if (d.provider) detail += (detail ? ' / ' : '') + escapeHtml(d.provider);
-          if (d.toolName) detail += (detail ? ' \u2014 ' : '') + escapeHtml(d.toolName);
-          if (d.intent) detail += (detail ? ' \u2014 ' : '') + escapeHtml(d.intent);
-          if (d.error) detail += '<div class="muted" style="font-size:10px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(String(d.error)) + '">' + escapeHtml(String(d.error).substring(0, 80)) + '</div>';
-          if (d.correlationId) detail += '<div class="mono muted" style="font-size:9px;">' + escapeHtml(String(d.correlationId).substring(0, 24)) + '&hellip;</div>';
-          return '<tr>'
-            + '<td>' + escapeHtml(formatRelativeTime(ev.timestamp)) + '</td>'
-            + '<td class="mono" style="font-size:11px;">' + escapeHtml(ev.operation) + '</td>'
-            + '<td>' + escapeHtml(ev.status) + '</td>'
-            + '<td>' + (detail || '-') + '</td>'
-            + '</tr>';
-        }).join('')
-        + '</tbody></table>';
-      container.innerHTML = html;
-    }
-
-    function renderEvents() {
-      const container = document.getElementById('events');
-      if (!state.events.length) {
-        container.innerHTML = '<div class="muted">No recent events.</div>';
-        return;
-      }
-      container.innerHTML = '<table class="events-table"><thead><tr><th>Time</th><th>Operation</th><th>Status</th></tr></thead><tbody>'
-        + state.events.map(event => '<tr>'
-          + '<td>' + escapeHtml(formatRelativeTime(event.timestamp)) + '</td>'
-          + '<td>' + escapeHtml(event.operation) + '</td>'
-          + '<td>' + escapeHtml(event.status) + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-    }
-
-    function renderTraceView() {
-      const container = document.getElementById('trace-view');
-      const traceData = state.traceData;
-      if (!traceData || !traceData.traces || !traceData.traces.length) {
-        container.innerHTML = '<div class="muted">No correlated traces yet.</div>';
-        return;
-      }
-
-      const traces = traceData.traces;
-      let html = '<table class="events-table"><thead><tr><th>Trace</th><th>Events</th><th>Status</th><th>Last Seen</th></tr></thead><tbody>'
-        + traces.map(trace => '<tr>'
-          + '<td>'
-          + '<button class="secondary-button" style="padding:4px 8px;" onclick="loadTrace(&quot;' + escapeHtml(trace.correlationId) + '&quot;)">'
-          + (state.selectedTraceId === trace.correlationId ? 'Viewing' : 'View')
-          + '</button>'
-          + '<div class="mono" style="margin-top:6px;font-size:10px;word-break:break-all;">' + escapeHtml(trace.correlationId) + '</div>'
-          + '</td>'
-          + '<td>' + escapeHtml(String(trace.eventCount)) + '</td>'
-          + '<td>' + escapeHtml(trace.status) + (trace.failures > 0 ? ' (' + escapeHtml(String(trace.failures)) + ' failed)' : '') + '</td>'
-          + '<td>' + escapeHtml(formatRelativeTime(trace.lastAt)) + '</td>'
-          + '</tr>').join('')
-        + '</tbody></table>';
-
-      const selected = traceData.selectedTraceEvents || [];
-      if (state.selectedTraceId) {
-        html += '<div class="muted" style="margin-top:10px;">Trace timeline</div>';
-        if (!selected.length) {
-          html += '<div class="muted">No events found for selected correlation ID.</div>';
-        } else {
-          html += '<table class="events-table"><thead><tr><th>Time</th><th>Operation</th><th>Status</th></tr></thead><tbody>'
-            + selected.map(event => '<tr>'
-              + '<td>' + escapeHtml(formatRelativeTime(event.timestamp)) + '</td>'
-              + '<td class="mono" style="font-size:11px;">' + escapeHtml(event.operation) + '</td>'
-              + '<td>' + escapeHtml(event.status) + '</td>'
-              + '</tr>').join('')
-            + '</tbody></table>';
-        }
-      }
-
-      container.innerHTML = html;
-    }
-
-    async function loadTrace(correlationId) {
-      state.selectedTraceId = correlationId;
-      try {
-        const url = '/api/traces?limit=10'
-          + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '')
-          + '&correlationId=' + encodeURIComponent(correlationId);
-        state.traceData = await request(url);
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    // ── Agentic Control Tab Renderers ──────────────────────────────────
-
-    function renderAgentList() {
-      var container = document.getElementById('agent-list-container');
-      if (!container) return;
-      var d = state.agentData;
-      if (!d || !d.agents || d.agents.length === 0) {
-        container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">No agents running. Launch an agent to get started.</div>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < d.agents.length; i++) {
-        var a = d.agents[i];
-        var statusColor = a.status === 'running' ? '#7ecf7e' : (a.status === 'error' ? '#ff8d8d' : '#ffd17a');
-        html += '<div class="panel" style="padding:12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">';
-        html += '<div><span style="color:' + statusColor + ';font-weight:700;margin-right:8px;">\u25CF</span>';
-        html += '<strong>' + escapeHtml(a.name || a.id) + '</strong>';
-        html += ' <span class="muted" style="font-size:11px;">' + escapeHtml(a.role || 'general') + '</span></div>';
-        html += '<div style="display:flex;gap:6px;align-items:center;">';
-        html += '<span class="muted" style="font-size:11px;">' + (a.tasksCompleted || 0) + ' tasks</span>';
-        html += '<button class="primary-button" style="font-size:11px;padding:3px 10px;" onclick="stopAgent(\\'' + escapeHtml(a.id) + '\\')">\u23F9 Stop</button>';
-        html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="promoteAgent(\\'' + escapeHtml(a.id) + '\\')">\u2B06 Promote</button>';
-        html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="demoteAgent(\\'' + escapeHtml(a.id) + '\\')">\u2B07 Demote</button>';
-        html += '</div></div>';
-      }
-      container.innerHTML = html;
-    }
-
-    function renderSubAgentTree() {
-      var container = document.getElementById('sub-agent-tree-container');
-      if (!container) return;
-      var d = state.agentData;
-      if (!d || !d.agents || d.agents.length === 0) {
-        container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">Agent hierarchy will appear here when agents are active.</div>';
-        return;
-      }
-      var html = '<div style="font-family:monospace;font-size:12px;line-height:1.8;">';
-      html += '<div style="font-weight:700;color:var(--accent);">\u{1F3E0} Orchestrator (root)</div>';
-      for (var i = 0; i < d.agents.length; i++) {
-        var a = d.agents[i];
-        var last = i === d.agents.length - 1;
-        html += '<div style="padding-left:20px;">' + (last ? '\u2514' : '\u251C') + '\u2500 ';
-        html += '<span style="color:var(--fg);">' + escapeHtml(a.name || a.id) + '</span>';
-        html += ' <span class="muted">(' + escapeHtml(a.role || 'general') + ')</span></div>';
-      }
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function renderSwarmTopology() {
-      var container = document.getElementById('swarm-topology-container');
-      if (!container) return;
-      var d = state.agentData;
-      if (!d || !d.swarms || d.swarms.length === 0) {
-        container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">No swarms configured. Create a swarm to begin orchestration.</div>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < d.swarms.length; i++) {
-        var sw = d.swarms[i];
-        html += '<div class="panel" style="padding:12px;margin-bottom:6px;">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-        html += '<strong>' + escapeHtml(sw.name || sw.id) + '</strong>';
-        html += '<span class="muted" style="font-size:11px;">' + escapeHtml(sw.topology || 'mesh') + ' \u00B7 ' + (sw.agentCount || 0) + ' agents</span>';
-        html += '</div>';
-        html += '<div class="muted" style="font-size:11px;margin-top:4px;">Status: ' + escapeHtml(sw.status || 'unknown') + '</div>';
-        html += '</div>';
-      }
-      container.innerHTML = html;
-    }
-
-    function renderAgentTelemetry() {
-      var container = document.getElementById('agent-telemetry-container');
-      if (!container) return;
-      var d = state.agentData;
-      var t = d ? d.telemetry : null;
-      var active = t ? t.activeAgents : 0;
-      var completed = t ? t.tasksCompleted : 0;
-      var failed = t ? t.tasksFailed : 0;
-      var errorRate = (completed + failed) > 0 ? Math.round(failed / (completed + failed) * 100) : 0;
-      var avgResp = t && t.avgResponseMs > 0 ? t.avgResponseMs + 'ms' : '\u2014';
-      var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Active Agents</div><div style="font-size:24px;font-weight:700;color:var(--accent);">' + active + '</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Tasks Completed</div><div style="font-size:24px;font-weight:700;color:#7ecf7e;">' + completed + '</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Error Rate</div><div style="font-size:24px;font-weight:700;color:' + (errorRate > 10 ? '#ff8d8d' : 'var(--accent)') + ';">' + errorRate + '%</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Avg Response</div><div style="font-size:24px;font-weight:700;color:var(--accent);">' + escapeHtml(avgResp) + '</div></div>';
-      html += '<div class="panel" style="text-align:center;padding:16px;"><div class="muted" style="font-size:11px;">Total Dispatches</div><div style="font-size:24px;font-weight:700;color:var(--accent);">' + (t ? t.totalDispatches : 0) + '</div></div>';
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    async function refreshAgentList() {
-      try {
-        state.agentData = await request('/api/agents');
-        render();
-      } catch (e) { console.error('[agentic] refresh failed', e); }
-    }
-
-    async function launchNewAgent() {
-      var name = prompt('Agent name (optional):');
-      var role = prompt('Agent role (e.g. general, researcher, coder):');
-      try {
-        await request('/api/agents/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || undefined, role: role || undefined }) });
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] launch failed', e); }
-    }
-
-    async function stopAgent(agentId) {
-      try {
-        await request('/api/agents/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agentId: agentId }) });
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] stop failed', e); }
-    }
-
-    async function promoteAgent(agentId) {
-      try {
-        const result = await request('/api/agents/' + encodeURIComponent(agentId) + '/promote', { method: 'POST' });
-        state.agentData = result || state.agentData;
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] promote failed', e); }
-    }
-
-    async function demoteAgent(agentId) {
-      try {
-        const result = await request('/api/agents/' + encodeURIComponent(agentId) + '/demote', { method: 'POST' });
-        state.agentData = result || state.agentData;
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] demote failed', e); }
-    }
-
-    async function createSwarm() {
-      var name = prompt('Swarm name (optional):');
-      var topology = prompt('Topology (mesh / star / pipeline):') || 'mesh';
-      var count = parseInt(prompt('Number of agents:') || '3', 10);
-      try {
-        await request('/api/swarms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || undefined, topology: topology, agentCount: count }) });
-        await refreshAgentList();
-      } catch (e) { console.error('[agentic] swarm create failed', e); }
-    }
-
-    async function refreshSwarmStatus() {
-      await refreshAgentList();
-    }
-
-    // ── Computer Control Tab Renderers ──────────────────────────────────
-
-    function renderLocalSystemInfo() {
-      var container = document.getElementById('local-system-info');
-      if (!container) return;
-      var info = state.computerSystemInfo;
-      if (!info) return;
-      var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Operating System</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.os || '\u2014') + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Hostname</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.hostname || '\u2014') + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Platform</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.platform || '\u2014') + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Uptime</div><div style="font-size:14px;font-weight:600;">' + formatUptime(info.uptime) + '</div></div>';
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">CPUs</div><div style="font-size:14px;font-weight:600;">' + (info.cpus || '\u2014') + ' cores</div></div>';
-      var totalMb = info.totalMemory ? Math.round(info.totalMemory / 1048576) : 0;
-      var freeMb = info.freeMemory ? Math.round(info.freeMemory / 1048576) : 0;
-      var usedPct = totalMb > 0 ? Math.round((totalMb - freeMb) / totalMb * 100) : 0;
-      html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Memory</div><div style="font-size:14px;font-weight:600;">' + usedPct + '% used (' + Math.round(freeMb / 1024) + ' GB free / ' + Math.round(totalMb / 1024) + ' GB)</div></div>';
-      if (info.gpu) {
-        html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">GPU</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.gpu.name || '\u2014') + '</div></div>';
-        html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">VRAM</div><div style="font-size:14px;font-weight:600;">' + (info.gpu.vramTotalMb ? (info.gpu.vramTotalMb >= 1024 ? (Math.round(info.gpu.vramTotalMb / 1024 * 10) / 10) + ' GB' : info.gpu.vramTotalMb + ' MB') : '\u2014') + '</div></div>';
-        if (info.gpu.cudaVersion) {
-          html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">CUDA</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.gpu.cudaVersion) + '<span class="gpu-badge">CUDA</span></div></div>';
-        }
-        if (info.gpu.driverVersion) {
-          html += '<div class="panel" style="padding:12px;"><div class="muted" style="font-size:11px;">Driver</div><div style="font-size:14px;font-weight:600;">' + escapeHtml(info.gpu.driverVersion) + '</div></div>';
-        }
-      }
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function renderUsageMetrics(data) {
-      var container = document.getElementById('usage-metrics');
-      if (!container) return;
-      if (!data) { container.innerHTML = ''; return; }
-      var ramTotal = data.ramTotal || 1;
-      var ramUsed = ramTotal - (data.ramFree || 0);
-      var ramPct = Math.round(ramUsed / ramTotal * 100);
-      state.ramHistory.push(ramPct);
-      if (state.ramHistory.length > 60) state.ramHistory.shift();
-      var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">';
-      html += '<div class="panel" style="padding:14px;">';
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span class="muted" style="font-size:11px;">RAM Usage</span><span style="font-size:12px;font-weight:600;">' + ramPct + '% (' + Math.round(ramUsed / 1073741824 * 10) / 10 + ' / ' + Math.round(ramTotal / 1073741824 * 10) / 10 + ' GB)</span></div>';
-      html += '<div class="usage-bar"><div class="usage-bar-fill ram" style="width:' + ramPct + '%"></div><div class="usage-bar-label">' + ramPct + '%</div></div>';
-      html += '<div style="margin-top:8px;"><canvas id="sparkline-ram" width="320" height="40" style="width:100%;height:40px;"></canvas></div>';
-      html += '</div>';
-      if (data.gpu) {
-        var vramPct = data.gpu.vramTotalMb > 0 ? Math.round(data.gpu.vramUsedMb / data.gpu.vramTotalMb * 100) : 0;
-        state.vramHistory.push(vramPct);
-        if (state.vramHistory.length > 60) state.vramHistory.shift();
-        html += '<div class="panel" style="padding:14px;">';
-        html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span class="muted" style="font-size:11px;">VRAM Usage</span><span style="font-size:12px;font-weight:600;">' + vramPct + '% (' + data.gpu.vramUsedMb + ' / ' + data.gpu.vramTotalMb + ' MB)';
-        if (data.gpu.tempC) html += ' \u2022 ' + data.gpu.tempC + '\u00B0C';
-        html += '</span></div>';
-        html += '<div class="usage-bar"><div class="usage-bar-fill vram" style="width:' + vramPct + '%"></div><div class="usage-bar-label">' + vramPct + '%</div></div>';
-        html += '<div style="margin-top:8px;"><canvas id="sparkline-vram" width="320" height="40" style="width:100%;height:40px;"></canvas></div>';
-        html += '</div>';
-      } else {
-        html += '<div class="panel" style="padding:14px;"><div class="muted" style="font-size:11px;">VRAM Usage</div><div style="font-size:13px;color:var(--muted);margin-top:6px;">No GPU detected</div></div>';
-      }
-      html += '</div>';
-      container.innerHTML = html;
-      drawSparkline('sparkline-ram', state.ramHistory, '#69d2ff');
-      if (data.gpu) drawSparkline('sparkline-vram', state.vramHistory, '#7cf1c8');
-    }
-
-    function drawSparkline(canvasId, history, color) {
-      var canvas = document.getElementById(canvasId);
-      if (!canvas || !canvas.getContext) return;
-      var ctx = canvas.getContext('2d');
-      var w = canvas.width;
-      var h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-      if (history.length < 2) return;
-      var max = 100;
-      var step = w / 59;
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
-      for (var i = 0; i < history.length; i++) {
-        var x = (history.length - 1 === 0) ? 0 : (i / (history.length - 1)) * w;
-        var y = h - (history[i] / max) * (h - 4) - 2;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.lineTo(w, h);
-      ctx.lineTo(0, h);
-      ctx.closePath();
-      ctx.fillStyle = color.replace(')', ',0.08)').replace('rgb', 'rgba');
-      ctx.fill();
-    }
-
-    async function runLocalCommand() {
-      var input = document.getElementById('computer-console-input');
-      var output = document.getElementById('computer-console-output');
-      if (!input || !output) return;
-      var cmd = input.value.trim();
-      if (!cmd) return;
-      output.textContent = 'Running: ' + cmd + '\\n';
-      state.computerConsoleHistory.push({ command: cmd, timestamp: new Date().toISOString() });
-      try {
-        var result = await request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd }) });
-        var out = '';
-        if (result.stdout) out += result.stdout;
-        if (result.stderr) out += (out ? '\\n' : '') + result.stderr;
-        output.textContent = out || '(no output)';
-      } catch (e) {
-        output.textContent = 'Error: ' + e.message;
-      }
-      input.value = '';
-    }
-
-    async function refreshEnvVars() {
-      try {
-        state.computerEnvVars = await request('/api/computer/env-vars');
-        renderEnvVarsList();
-      } catch (e) { console.error('[computer] env vars failed', e); }
-    }
-
-    function renderEnvVarsList() {
-      var container = document.getElementById('env-vars-list');
-      if (!container || !state.computerEnvVars) return;
-      var data = state.computerEnvVars;
-      var html = '';
-      if (data.prismVars && data.prismVars.length > 0) {
-        html += '<div style="margin-bottom:8px;font-weight:700;color:var(--accent);font-size:12px;">PRISM Variables (' + data.prismVars.length + ')</div>';
-        for (var i = 0; i < data.prismVars.length; i++) {
-          html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.06);"><span style="color:var(--accent-2);font-weight:600;">' + escapeHtml(data.prismVars[i].key) + '</span>=<span>' + escapeHtml(data.prismVars[i].value) + '</span></div>';
-        }
-      }
-      if (data.systemVars && data.systemVars.length > 0) {
-        html += '<div style="margin:10px 0 6px;font-weight:700;color:var(--muted);font-size:12px;">System Variables (' + data.systemVars.length + ')</div>';
-        for (var j = 0; j < Math.min(data.systemVars.length, 50); j++) {
-          html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.06);"><span style="color:var(--fg);font-weight:600;">' + escapeHtml(data.systemVars[j].key) + '</span>=<span class="muted">' + escapeHtml(data.systemVars[j].value.substring(0, 120)) + '</span></div>';
-        }
-        if (data.systemVars.length > 50) {
-          html += '<div class="muted" style="margin-top:6px;">... and ' + (data.systemVars.length - 50) + ' more</div>';
-        }
-      }
-      container.innerHTML = html || '<div class="muted">No environment variables found.</div>';
-    }
-
-    async function openPolicyEditor(tool) {
-      try {
-        await request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: tool + '.msc' }) });
-        var output = document.getElementById('policy-status-output');
-        if (output) output.textContent = 'Launched ' + tool + '.msc at ' + new Date().toLocaleTimeString();
-      } catch (e) {
-        var output2 = document.getElementById('policy-status-output');
-        if (output2) output2.textContent = 'Failed: ' + e.message;
-      }
-    }
-
-    async function refreshPolicyStatus() {
-      var output = document.getElementById('policy-status-output');
-      if (!output) return;
-      output.textContent = 'Querying policy status...';
-      try {
-        var result = await request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'gpresult /Scope User /v' }) });
-        output.textContent = result.stdout || result.stderr || 'No policy data returned.';
-      } catch (e) {
-        output.textContent = 'Policy query failed: ' + e.message;
-      }
-    }
-
-    function launchBrowserPreview() {
-      window.open(location.href, '_blank');
-      var el = document.getElementById('browser-preview-mode');
-      if (el) el.textContent = 'External';
-    }
-
-    function openBrowserDevTools() {
-      var el = document.getElementById('browser-preview-mode');
-      if (el) el.textContent = 'Press F12 in this browser window';
-    }
-
-    async function refreshBrowserInfo() {
-      var el = document.getElementById('browser-default');
-      if (el) {
-        var ua = navigator.userAgent;
-        if (ua.indexOf('Chrome') !== -1) el.textContent = 'Chrome';
-        else if (ua.indexOf('Firefox') !== -1) el.textContent = 'Firefox';
-        else if (ua.indexOf('Edge') !== -1) el.textContent = 'Edge';
-        else if (ua.indexOf('Safari') !== -1) el.textContent = 'Safari';
-        else el.textContent = 'Unknown';
-      }
-    }
-
-    async function refreshDeviceManager() {
-      try {
-        state.computerDevices = await request('/api/computer/devices');
-        renderDeviceTree();
-      } catch (e) { console.error('[computer] device scan failed', e); }
-    }
-
-    function renderDeviceTree() {
-      var container = document.getElementById('device-tree-container');
-      if (!container || !state.computerDevices) return;
-      var devs = state.computerDevices.devices || {};
-      var html = '';
-      var icons = { 'Display Adapters': '\u{1F4BB}', 'Network Adapters': '\u{1F4F6}', 'Disk Drives': '\u{1F4BE}', 'Processors': '\u2699\uFE0F' };
-      for (var cat in devs) {
-        var items = devs[cat] || [];
-        var icon = icons[cat] || '\u{1F50C}';
-        html += '<details class="panel" style="padding:8px 12px;margin-bottom:4px;" open>';
-        html += '<summary style="cursor:pointer;font-weight:600;">' + icon + ' ' + escapeHtml(cat) + ' (' + items.length + ')</summary>';
-        if (items.length === 0) {
-          html += '<div class="muted" style="padding:6px 0 0 18px;font-size:12px;">No devices detected.</div>';
-        } else {
-          for (var i = 0; i < items.length; i++) {
-            html += '<div style="padding:4px 0 0 18px;font-size:12px;">\u2514 ' + escapeHtml(items[i]) + '</div>';
-          }
-        }
-        html += '</details>';
-      }
-      container.innerHTML = html || '<div class="muted">No device data. Click Scan Devices.</div>';
-    }
-
-    function openSystemDeviceManager() {
-      request('/api/computer/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'devmgmt.msc' }) }).catch(function() {});
-    }
-
-    async function initAgenticTab() {
-      if (!state.agentData) await refreshAgentList();
-    }
-
-    // ── Vision Framebuffer JS ────────────────────────────────────────────
-
-    async function captureScreengrab() {
-      var meta = document.getElementById('fb-meta');
-      if (meta) meta.textContent = 'Capturing...';
-      try {
-        var result = await request('/api/computer/screengrab/capture', { method: 'POST' });
-        if (meta) meta.textContent = result.filename + ' (' + Math.round(result.sizeBytes / 1024) + ' KB)';
-        refreshFramebufferViewer();
-        refreshFramebufferGallery();
-      } catch (e) {
-        if (meta) meta.textContent = 'Capture failed: ' + e.message;
-      }
-    }
-
-    async function burstCapture() {
-      var meta = document.getElementById('fb-meta');
-      if (meta) meta.textContent = 'Burst capturing (8 FPS, 2s)...';
-      try {
-        var result = await request('/api/computer/screengrab/burst', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fps: 8, duration: 2 }) });
-        if (meta) meta.textContent = 'Burst complete: ' + result.frames + ' frames captured';
-        refreshFramebufferViewer();
-        refreshFramebufferGallery();
-      } catch (e) {
-        if (meta) meta.textContent = 'Burst failed: ' + e.message;
-      }
-    }
-
-    function refreshFramebufferViewer() {
-      var img = document.getElementById('framebuffer-preview');
-      var placeholder = document.getElementById('fb-placeholder');
-      if (!img) return;
-      var ts = Date.now();
-      var testImg = new Image();
-      testImg.onload = function() {
-        img.src = '/api/computer/screengrab/latest?t=' + ts;
-        img.style.display = 'block';
-        if (placeholder) placeholder.style.display = 'none';
-      };
-      testImg.onerror = function() {
-        img.style.display = 'none';
-        if (placeholder) placeholder.style.display = 'block';
-      };
-      testImg.src = '/api/computer/screengrab/latest?t=' + ts;
-    }
-
-    async function refreshFramebufferGallery() {
-      var gallery = document.getElementById('framebuffer-gallery');
-      if (!gallery) return;
-      try {
-        var data = await request('/api/computer/screengrab/list');
-        var files = data.files || [];
-        var html = '';
-        for (var i = 0; i < Math.min(files.length, 20); i++) {
-          html += '<img class="framebuffer-thumb" src="/api/computer/screengrab/file/' + encodeURIComponent(files[i].name) + '" alt="' + escapeHtml(files[i].name) + '" title="' + escapeHtml(files[i].name) + '\\n' + Math.round(files[i].size / 1024) + ' KB" onclick="window.open(this.src, \\'_blank\\')" />';
-        }
-        gallery.innerHTML = html || '<span class="muted" style="font-size:12px;">No screengrabs in gallery.</span>';
-      } catch (e) {
-        gallery.innerHTML = '<span class="muted" style="font-size:12px;">Gallery load failed.</span>';
-      }
-    }
-
-    function toggleFramebufferAutoRefresh() {
-      state.framebufferAutoRefresh = !state.framebufferAutoRefresh;
-      var btn = document.getElementById('fb-auto-toggle');
-      if (btn) {
-        btn.textContent = 'Auto-Refresh: ' + (state.framebufferAutoRefresh ? 'ON' : 'OFF');
-        if (state.framebufferAutoRefresh) btn.classList.add('fb-toggle-active');
-        else btn.classList.remove('fb-toggle-active');
-      }
-      if (state.framebufferAutoRefresh) {
-        if (state.framebufferPollInterval) clearInterval(state.framebufferPollInterval);
-        state.framebufferPollInterval = setInterval(refreshFramebufferViewer, 2000);
-      } else {
-        if (state.framebufferPollInterval) { clearInterval(state.framebufferPollInterval); state.framebufferPollInterval = null; }
-      }
-    }
-
-    async function initComputerTab() {
-      if (!state.computerSystemInfo) {
-        try {
-          state.computerSystemInfo = await request('/api/computer/system-info');
-          renderLocalSystemInfo();
-        } catch (e) { console.error('[computer] system info failed', e); }
-      }
-      refreshBrowserInfo();
-      if (state.computerPollInterval) { clearInterval(state.computerPollInterval); state.computerPollInterval = null; }
-      async function pollUsage() {
-        try {
-          var data = await request('/api/computer/usage');
-          renderUsageMetrics(data);
-        } catch (e) { console.error('[computer] usage poll failed', e); }
-      }
-      pollUsage();
-      state.computerPollInterval = setInterval(pollUsage, 5000);
-      refreshFramebufferViewer();
-      if (state.framebufferAutoRefresh && !state.framebufferPollInterval) {
-        state.framebufferPollInterval = setInterval(refreshFramebufferViewer, 2000);
-      }
-    }
-
-    // ── Network Tab Panel Renderers ──────────────────────────────────────
-
-    function renderNetworkToolsPanel() {
-      const container = document.getElementById('network-tools-panel');
-      if (!container) return;
-
-      const commands = [
-        { tier: 'tier1', category: 'Diagnostics (Read-Only)', items: [
-          { name: 'ipconfig / ifconfig', desc: 'Display network interface configuration', platform: 'cross' },
-          { name: 'ping', desc: 'Test host reachability and measure round-trip time', platform: 'cross' },
-          { name: 'nslookup / dig', desc: 'DNS resolution lookup', platform: 'cross' },
-          { name: 'tracert / traceroute', desc: 'Trace route to destination host', platform: 'cross' },
-          { name: 'netstat / ss', desc: 'Display active connections and listening ports', platform: 'cross' },
-          { name: 'arp', desc: 'Display and manage the ARP cache', platform: 'cross' },
-          { name: 'hostname', desc: 'Display system hostname', platform: 'cross' },
-          { name: 'nbtstat', desc: 'NetBIOS over TCP/IP statistics', platform: 'win' },
-          { name: 'pathping', desc: 'Combined ping and tracert analysis', platform: 'win' },
-          { name: 'getmac', desc: 'Display MAC addresses for all interfaces', platform: 'win' },
-          { name: 'net view', desc: 'List shared resources visible on the network', platform: 'win' },
-          { name: 'net statistics', desc: 'Display network workstation/server statistics', platform: 'win' },
-          { name: 'curl / wget', desc: 'HTTP data transfer / file download', platform: 'cross' },
-          { name: 'ip addr / ip route', desc: 'IP address and routing (iproute2)', platform: 'linux' },
-        ]},
-        { tier: 'tier2', category: 'Config Inspection (Conditional)', items: [
-          { name: 'route print', desc: 'Display the IP routing table', platform: 'win' },
-          { name: 'netsh interface show', desc: 'Show network interface details', platform: 'win' },
-          { name: 'netsh wlan show', desc: 'Show wireless network profiles and info', platform: 'win' },
-          { name: 'netsh firewall show', desc: 'Show firewall configuration', platform: 'win' },
-          { name: 'netsh advfirewall show', desc: 'Show advanced firewall configuration', platform: 'win' },
-          { name: 'net use', desc: 'Map or manage network drives', platform: 'win' },
-          { name: 'net share', desc: 'View or manage shared folders', platform: 'win' },
-          { name: 'net session', desc: 'Display active network sessions', platform: 'win' },
-          { name: 'net user', desc: 'View user accounts', platform: 'win' },
-          { name: 'net localgroup', desc: 'View local group memberships', platform: 'win' },
-          { name: 'net config', desc: 'Display workstation or server configuration', platform: 'win' },
-        ]},
-        { tier: 'tier3', category: 'Mutating Operations (Approval-Gated)', items: [
-          { name: 'netsh interface set', desc: 'Modify network interface settings', platform: 'win' },
-          { name: 'netsh interface ip set', desc: 'Set IP/DHCP/DNS configuration', platform: 'win' },
-          { name: 'netsh firewall set', desc: 'Modify firewall rules', platform: 'win' },
-          { name: 'netsh wlan connect/disconnect', desc: 'Wi-Fi connection management', platform: 'win' },
-          { name: 'route add / delete / change', desc: 'Modify the routing table', platform: 'cross' },
-          { name: 'net start / stop', desc: 'Start or stop network services', platform: 'win' },
-          { name: 'ip addr add/del', desc: 'Add or remove IP addresses', platform: 'linux' },
-          { name: 'ip route add/del', desc: 'Add or remove routes', platform: 'linux' },
-          { name: 'iptables / ufw', desc: 'Linux firewall management', platform: 'linux' },
-        ]}
-      ];
-
-      const tierColors = { tier1: '#2ecc71', tier2: '#f39c12', tier3: '#e74c3c' };
-      const tierLabels = { tier1: 'Tier 1', tier2: 'Tier 2', tier3: 'Tier 3' };
-      const platformBadge = function(p) {
-        if (p === 'win') return '<span style="background:#0078d4;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;">WIN</span>';
-        if (p === 'linux') return '<span style="background:#e95420;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;">LINUX</span>';
-        return '<span style="background:#6c757d;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;">CROSS</span>';
-      };
-
-      var html = '<p class="muted" style="margin:0 0 10px 0;font-size:12px;">Curated network command allowlist with tier-based governance. Commands are validated against an allowlist before execution.</p>';
-
-      commands.forEach(function(group) {
-        html += '<div style="margin-bottom:12px;">'
-          + '<h4 style="margin:0 0 6px 0;font-size:13px;">'
-          + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + tierColors[group.tier] + ';margin-right:6px;"></span>'
-          + tierLabels[group.tier] + ' \u2014 ' + escapeHtml(group.category)
-          + ' <span class="muted">(' + group.items.length + ')</span></h4>'
-          + '<table style="width:100%;border-collapse:collapse;font-size:12px;"><tbody>';
-        group.items.forEach(function(item) {
-          html += '<tr style="border-bottom:1px solid var(--border);">'
-            + '<td style="padding:3px 8px 3px 0;white-space:nowrap;"><code>' + escapeHtml(item.name) + '</code>' + platformBadge(item.platform) + '</td>'
-            + '<td class="muted" style="padding:3px 0;">' + escapeHtml(item.desc) + '</td></tr>';
-        });
-        html += '</tbody></table></div>';
-      });
-
-      container.innerHTML = html;
-    }
-
-    function renderNetworkSettingsPanel() {
-      const container = document.getElementById('network-settings-panel');
-      if (!container) return;
-
-      container.innerHTML = '<p class="muted" style="font-size:12px;margin:0 0 8px 0;">Live interface data from the local host. Click Refresh to update.</p>'
-        + '<button onclick="refreshNetworkInterfaces()" style="padding:4px 12px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;margin-bottom:8px;">\u{1F504} Refresh Interfaces</button>'
-        + '<div id="network-interfaces-data" style="font-size:12px;"><span class="muted">Click Refresh to load interface data.</span></div>';
-    }
-
-    function renderNetworkTelemetryPanel() {
-      const container = document.getElementById('network-telemetry-panel');
-      if (!container) return;
-
-      const t = state.networkTelemetryData;
-      const total = t.totalCommands;
-      const pct = function(n) { return total > 0 ? ((n / total) * 100).toFixed(1) : '0.0'; };
-
-      container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:10px;">'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;">' + total + '</div><div class="muted" style="font-size:11px;">Total Commands</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#2ecc71;">' + t.tier1Count + '</div><div class="muted" style="font-size:11px;">Tier 1 (' + pct(t.tier1Count) + '%)</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#f39c12;">' + t.tier2Count + '</div><div class="muted" style="font-size:11px;">Tier 2 (' + pct(t.tier2Count) + '%)</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#e74c3c;">' + t.tier3Count + '</div><div class="muted" style="font-size:11px;">Tier 3 (' + pct(t.tier3Count) + '%)</div></div>'
-        + '<div class="panel" style="padding:8px;text-align:center;"><div style="font-size:20px;font-weight:bold;color:#e74c3c;">' + t.errorCount + '</div><div class="muted" style="font-size:11px;">Errors</div></div>'
-        + '</div>'
-        + (t.lastCommand ? '<p class="muted" style="font-size:11px;margin:0;">Last command: <code>' + escapeHtml(t.lastCommand) + '</code></p>' : '');
-    }
-
-    function renderNetworkConsolePanel() {
-      const hist = document.getElementById('network-history-list');
-      if (!hist) return;
-      const cmds = state.networkCommandHistory;
-      if (cmds.length === 0) {
-        hist.innerHTML = '';
-        return;
-      }
-      var html = '<div class="muted" style="font-size:11px;font-weight:600;margin-bottom:4px;">Recent Commands (' + cmds.length + ')</div>';
-      html += '<div style="font-family:monospace;font-size:11px;">';
-      var recent = cmds.slice(-10).reverse();
-      for (var i = 0; i < recent.length; i++) {
-        var c = recent[i];
-        var color = c.ok ? '#7ecf7e' : '#ff8d8d';
-        var ts = new Date(c.timestamp).toLocaleTimeString();
-        html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;gap:8px;align-items:baseline;">';
-        html += '<span style="color:' + color + ';font-size:9px;">\u25CF</span>';
-        html += '<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(c.command) + '</span>';
-        html += '<span class="muted" style="font-size:10px;white-space:nowrap;">' + ts + '</span>';
-        html += '</div>';
-      }
-      html += '</div>';
-      hist.innerHTML = html;
-    }
-
-    async function runNetworkCommand() {
-      const input = document.getElementById('network-console-input');
-      const output = document.getElementById('network-console-output');
-      if (!input || !output) return;
-
-      const command = input.value.trim();
-      if (!command) return;
-
-      output.textContent = '\u23F3 Running: ' + command + '\\n';
-
-      try {
-        const result = await request('/api/network/exec', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: command })
-        });
-
-        var text = '';
-        if (result.tier) text += '[' + result.tier + '] ';
-        text += '$ ' + command + '\\n';
-        if (result.stdout) text += result.stdout + '\\n';
-        if (result.stderr) text += '\\nSTDERR:\\n' + result.stderr + '\\n';
-        text += '\\nExit code: ' + (result.exitCode != null ? result.exitCode : 'N/A');
-
-        output.textContent = text;
-
-        // Update telemetry counters
-        state.networkTelemetryData.totalCommands++;
-        if (result.tier === 'tier1') state.networkTelemetryData.tier1Count++;
-        else if (result.tier === 'tier2') state.networkTelemetryData.tier2Count++;
-        else if (result.tier === 'tier3') state.networkTelemetryData.tier3Count++;
-        state.networkTelemetryData.lastCommand = command;
-
-        state.networkCommandHistory.push({ command: command, timestamp: new Date().toISOString(), ok: true });
-        await refreshNetworkTelemetry();
-      } catch (error) {
-        output.textContent = '\u274C Error: ' + String(error);
-        state.networkTelemetryData.errorCount++;
-        state.networkTelemetryData.totalCommands++;
-        state.networkTelemetryData.lastCommand = command;
-        state.networkCommandHistory.push({ command: command, timestamp: new Date().toISOString(), ok: false });
-        await refreshNetworkTelemetry();
-      }
-
-      renderNetworkTelemetryPanel();
-      input.value = '';
-    }
-
-    async function refreshNetworkInterfaces() {
-      const container = document.getElementById('network-interfaces-data');
-      if (!container) return;
-      container.innerHTML = '<span class="muted">\u23F3 Loading interface data...</span>';
-      try {
-        const data = await request('/api/network/interfaces');
-        if (!data.interfaces || data.interfaces.length === 0) {
-          container.innerHTML = '<span class="muted">No interface data available.</span>';
-          return;
-        }
-        var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:2px solid var(--border);">'
-          + '<th style="text-align:left;padding:4px 8px;">Interface</th>'
-          + '<th style="text-align:left;padding:4px 8px;">Details</th>'
-          + '</tr></thead><tbody>';
-        data.interfaces.forEach(function(iface) {
-          html += '<tr style="border-bottom:1px solid var(--border);">'
-            + '<td style="padding:4px 8px;font-weight:bold;white-space:nowrap;">' + escapeHtml(iface.name) + '</td>'
-            + '<td style="padding:4px 8px;"><pre style="margin:0;white-space:pre-wrap;font-size:11px;">' + escapeHtml(iface.details) + '</pre></td>'
-            + '</tr>';
-        });
-        html += '</tbody></table>';
-        container.innerHTML = html;
-      } catch (error) {
-        container.innerHTML = '<span style="color:#e74c3c;">\u274C Failed to load: ' + escapeHtml(String(error)) + '</span>';
-      }
-    }
-
-    async function refreshNetworkTelemetry() {
-      try {
-        const telemetry = await request('/api/network/telemetry');
-        state.networkTelemetryData = {
-          totalCommands: telemetry.totalCommands || 0,
-          tier1Count: telemetry.tier1Count || 0,
-          tier2Count: telemetry.tier2Count || 0,
-          tier3Count: telemetry.tier3Count || 0,
-          errorCount: telemetry.errorCount || 0,
-          lastCommand: telemetry.lastCommand || null
-        };
-        safeRenderStep('networkTelemetryPanel', renderNetworkTelemetryPanel);
-      } catch (error) {
-        console.error('[network] telemetry refresh failed', error);
-      }
-    }
-
-    function safeRenderStep(name, fn) {
-      try {
-        fn();
-      } catch (error) {
-        console.error('[dashboard-render]', name, error);
-      }
-    }
-
-    function render() {
-      safeRenderStep('brandPanel', renderBrandPanel);
-      safeRenderStep('tabs', renderTabs);
-      safeRenderStep('sessions', renderSessions);
-      safeRenderStep('header', renderHeader);
-      safeRenderStep('onboarding', renderOnboarding);
-      safeRenderStep('messages', renderMessages);
-      safeRenderStep('overview', renderOverview);
-      safeRenderStep('runtimeExcellence', renderRuntimeExcellence);
-      safeRenderStep('releaseReadiness', renderReleaseReadiness);
-      safeRenderStep('packageHistory', renderPackageHistory);
-      safeRenderStep('whatChanged', renderWhatChanged);
-      safeRenderStep('llm', renderLlm);
-      safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
-      safeRenderStep('modelRouting', renderModelRouting);
-      safeRenderStep('providerCards', renderProviderCards);
-      safeRenderStep('llmAudit', renderLlmAudit);
-      safeRenderStep('settingsPanel', renderSettingsPanel);
-      safeRenderStep('toolsOverviewBar', renderToolsOverviewBar);
-      safeRenderStep('toolsPanel', renderToolsPanel);
-      safeRenderStep('pluginsPanel', renderPluginsPanel);
-      safeRenderStep('utilitiesPanel', renderUtilitiesPanel);
-      safeRenderStep('agentList', renderAgentList);
-      safeRenderStep('subAgentTree', renderSubAgentTree);
-      safeRenderStep('swarmTopology', renderSwarmTopology);
-      safeRenderStep('agentTelemetry', renderAgentTelemetry);
-      safeRenderStep('localSystemInfo', renderLocalSystemInfo);
-      safeRenderStep('envVarsList', renderEnvVarsList);
-      safeRenderStep('deviceTree', renderDeviceTree);
-      safeRenderStep('importHistory', renderImportHistory);
-      safeRenderStep('networkToolsPanel', renderNetworkToolsPanel);
-      safeRenderStep('networkSettingsPanel', renderNetworkSettingsPanel);
-      safeRenderStep('networkTelemetryPanel', renderNetworkTelemetryPanel);
-      safeRenderStep('networkConsolePanel', renderNetworkConsolePanel);
-      safeRenderStep('actions', renderActions);
-      safeRenderStep('approvals', renderApprovals);
-      safeRenderStep('actionHistory', renderActionHistory);
-      safeRenderStep('chatTelemetry', renderChatTelemetry);
-      safeRenderStep('traceView', renderTraceView);
-      safeRenderStep('selfReview', renderSelfReview);
-      safeRenderStep('retrievalObservability', renderRetrievalObservability);
-      safeRenderStep('events', renderEvents);
-      const sendButton = document.getElementById('send-button');
-      if (sendButton) {
-        sendButton.disabled = state.busy;
-      }
-    }
-
-    function setActiveTab(tabId) {
-      if (!tabs.some(tab => tab.id === tabId)) {
-        return;
-      }
-      if (state.computerPollInterval && tabId !== 'computer') {
-        clearInterval(state.computerPollInterval);
-        state.computerPollInterval = null;
-      }
-      if (state.framebufferPollInterval && tabId !== 'computer') {
-        clearInterval(state.framebufferPollInterval);
-        state.framebufferPollInterval = null;
-      }
-      state.activeTab = tabId;
-      if (tabId === 'settings') {
-        refreshChrome().then(function() { render(); });
-      }
-      if (tabId === 'agentic') {
-        initAgenticTab();
-      }
-      if (tabId === 'workspace') {
-        initWorkspaceTab();
-      }
-      if (tabId === 'computer') {
-        initComputerTab();
-      }
-      if (tabId === 'network') {
-        refreshNetworkInterfaces();
-        refreshNetworkTelemetry();
-      }
-      if (tabId === 'telemetry') {
-        setTelemetryWindow(state.telemetryWindow);
-        return; // setTelemetryWindow calls render() — skip double render
-      }
-      render();
-    }
-
-    async function selectSession(sessionId) {
-      state.selectedSessionId = sessionId;
-      await Promise.all([loadMessages(), refreshChrome()]);
-      render();
-    }
-
-    async function deleteSession(event, sessionId) {
-      event.stopPropagation();
-      const existing = state.sessions.find(session => session.sessionId === sessionId);
-      if (!existing) {
-        return;
-      }
-      const confirmed = confirm('Delete session "' + existing.title + '"? This will remove all messages in this session.');
-      if (!confirmed) {
-        return;
-      }
-
-      state.notice = null;
-      try {
-        await request('/api/chat/sessions/' + encodeURIComponent(sessionId), { method: 'DELETE' });
-        await loadSessions();
-
-        if (!state.selectedSessionId && state.sessions.length > 0) {
-          state.selectedSessionId = state.sessions[0].sessionId;
-        }
-
-        if (state.selectedSessionId) {
-          await Promise.all([loadMessages(), refreshChrome()]);
-        } else {
-          state.messages = [];
-          await refreshChrome();
-        }
-      } catch (error) {
-        state.notice = String(error);
-      }
-
-      render();
-    }
-
-    async function renameSession(event, sessionId) {
-      event.stopPropagation();
-      var session = state.sessions.find(function(s) { return s.sessionId === sessionId; });
-      if (!session) return;
-      var newTitle = prompt('Rename session:', session.title);
-      if (!newTitle || !newTitle.trim() || newTitle.trim() === session.title) return;
-      try {
-        await request('/api/chat/sessions/' + encodeURIComponent(sessionId), {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newTitle.trim() })
-        });
-        await loadSessions();
-        safeRenderStep('sessionList', renderSessionList);
-        safeRenderStep('header', renderHeader);
-        state.notice = 'Session renamed.';
-      } catch (err) {
-        state.notice = { type: 'error', message: String(err) };
-      }
-      render();
-    }
-
-    async function copySession(event, sessionId) {
-      event.stopPropagation();
-      const existing = state.sessions.find(session => session.sessionId === sessionId);
-      if (!existing) {
-        return;
-      }
-      
-      const button = event.currentTarget;
-      const originalText = button.textContent;
-      button.textContent = "Copying...";
-
-      try {
-        const payload = await request('/api/chat/sessions/' + encodeURIComponent(sessionId) + '/messages');
-        const messages = payload.messages || [];
-        
-        let textToCopy = "Session: " + existing.title + "\\n";
-        textToCopy += "Date: " + new Date().toLocaleString() + "\\n\\n";
-        
-        for (const msg of messages) {
-          textToCopy += "[" + msg.role.toUpperCase() + "]\\n";
-          textToCopy += msg.content + "\\n\\n";
-        }
-        
-        await navigator.clipboard.writeText(textToCopy.trim());
-        button.textContent = "Copied!";
-        button.style.backgroundColor = "#10b981";
-        button.style.color = "white";
-        button.style.borderColor = "#10b981";
-      } catch (err) {
-        console.error('Copy failed:', err);
-        button.textContent = "Failed";
-      }
-      
-      setTimeout(() => {
-        button.textContent = originalText;
-        button.style.backgroundColor = "";
-        button.style.color = "";
-        button.style.borderColor = "";
-      }, 2000);
-    }
-
-    // --- Attachment handling ---
-    var pendingAttachments = [];
-
-    function handleFileSelect(input) {
-      if (!input.files || !input.files.length) return;
-      Array.from(input.files).forEach(function(file) {
-        if (file.size > 10 * 1024 * 1024) {
-          state.notice = 'File too large (max 10MB): ' + file.name;
-          render();
-          return;
-        }
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          pendingAttachments.push({ file: file, dataUrl: e.target.result, name: file.name, type: file.type, size: file.size });
-          renderAttachmentPreview();
-        };
-        reader.readAsDataURL(file);
-      });
-      input.value = '';
-    }
-
-    async function pasteFromClipboard() {
-      try {
-        var items = await navigator.clipboard.read();
-        for (var i = 0; i < items.length; i++) {
-          var types = items[i].types;
-          var imgType = types.find(function(t) { return t.startsWith('image/'); });
-          if (imgType) {
-            var blob = await items[i].getType(imgType);
-            var file = new File([blob], 'clipboard-' + Date.now() + '.' + imgType.split('/')[1], { type: imgType });
-            var reader = new FileReader();
-            reader.onload = function(e) {
-              pendingAttachments.push({ file: file, dataUrl: e.target.result, name: file.name, type: file.type, size: file.size });
-              renderAttachmentPreview();
-            };
-            reader.readAsDataURL(file);
-          }
-        }
-      } catch (err) {
-        state.notice = 'Clipboard access denied or empty.';
-        render();
-      }
-    }
-
-    function removeAttachment(index) {
-      pendingAttachments.splice(index, 1);
-      renderAttachmentPreview();
-    }
-
-    function renderAttachmentPreview() {
-      var container = document.getElementById('attachment-preview');
-      if (!container) return;
-      container.innerHTML = pendingAttachments.map(function(att, i) {
-        var preview = att.type && att.type.startsWith('image/')
-          ? '<img src="' + att.dataUrl + '" style="height:24px;border-radius:4px;" />'
-          : '\\u{1F4C4}';
-        return '<span class="attachment-chip">'
-          + preview
-          + ' <span>' + escapeHtml(att.name) + '</span>'
-          + ' <span class="remove-btn" onclick="removeAttachment(' + i + ')">\\u2715</span>'
-          + '</span>';
-      }).join('');
-    }
-
-    // Drag & drop
-    (function() {
-      var composer = document.querySelector('.composer');
-      if (!composer) return;
-      composer.addEventListener('dragover', function(e) { e.preventDefault(); composer.style.outline = '2px dashed var(--accent)'; });
-      composer.addEventListener('dragleave', function() { composer.style.outline = ''; });
-      composer.addEventListener('drop', function(e) {
-        e.preventDefault();
-        composer.style.outline = '';
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-          handleFileSelect({ files: e.dataTransfer.files, value: '' });
-        }
-      });
-    })();
-
-    async function uploadAttachments(sessionId, messageId) {
-      for (var i = 0; i < pendingAttachments.length; i++) {
-        var att = pendingAttachments[i];
-        try {
-          var formData = new FormData();
-          formData.append('file', att.file, att.name);
-          await fetch('/api/chat/sessions/' + encodeURIComponent(sessionId) + '/messages/' + encodeURIComponent(messageId) + '/attachments', {
-            method: 'POST',
-            body: formData
-          });
-        } catch (err) {
-          console.warn('Attachment upload failed:', att.name, err);
-        }
-      }
-      pendingAttachments = [];
-      renderAttachmentPreview();
-    }
-
-    async function sendMessage() {
-      const composer = document.getElementById('composer');
-      const content = composer.value.trim();
-      if (!content || state.busy) {
-        return;
-      }
-      if (!state.selectedSessionId) {
-        await createSession();
-      }
-      if (!state.readiness || !state.readiness.ready) {
-        state.notice = 'Complete the first-run checklist in Provider & Settings before sending messages.';
-        state.activeTab = 'settings';
-        render();
-        return;
-      }
-      state.busy = true;
-      state.notice = null;
-      state.agenticStream = [];
-      composer.value = '';
-      render();
-      try {
-        var response = await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
-        });
-        // Upload pending attachments to the user message if any
-        if (pendingAttachments.length && response && response.userMessage && response.userMessage.messageId) {
-          await uploadAttachments(state.selectedSessionId, response.userMessage.messageId);
-        }
-        state.agenticStream = [];
-        await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
-      } catch (error) {
-        state.notice = String(error);
-      } finally {
-        state.busy = false;
-        render();
-      }
-    }
-
-    async function runAction(name) {
-      state.notice = null;
-      try {
-        await request('/api/actions/' + name, { method: 'POST' });
-        await refreshChrome();
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function quickApplyLlm() {
-      const localSelection = getLocalLlmSelection(state.selectedSessionId);
-      const providerSelect = document.getElementById('provider-select');
-      const modelSelect = document.getElementById('model-select');
-      const providerId = localSelection && localSelection.providerId
-        ? localSelection.providerId
-        : (providerSelect ? providerSelect.value : '');
-      const model = localSelection
-        ? (localSelection.model || '')
-        : (modelSelect ? modelSelect.value : '');
-      if (!providerId || !state.selectedSessionId) {
-        return;
-      }
-      state.notice = null;
-      try {
-        state.llmCatalog = await request('/api/llm/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, providerId: providerId, model: model })
-        });
-        clearLocalLlmSelection(state.selectedSessionId);
-        const readiness = await request('/api/readiness/recheck', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId, source: 'llm_quick_apply' })
-        }).catch(function() { return null; });
-        await refreshChrome();
-        if (readiness) {
-          state.readiness = readiness;
-        }
-        state.notice = 'Provider applied: ' + providerId + ' / ' + (model || 'default') + '.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function refreshOllamaModels() {
-      state.notice = null;
-      try {
-        await refreshChrome();
-        state.notice = 'Model list refreshed from local server.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function rollbackLlmConfig() {
-      if (!state.selectedSessionId) {
-        return;
-      }
-      state.notice = null;
-      try {
-        clearLocalLlmSelection(state.selectedSessionId);
-        const payload = await request('/api/llm/config/rollback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: state.selectedSessionId })
-        });
-        state.llmCatalog = payload.catalog;
-        state.llmConfig = payload.config;
-        await refreshChrome();
-        state.notice = 'Rolled back to previous applied configuration.';
-      } catch (error) {
-        state.notice = String(error);
-      }
-      render();
-    }
-
-    async function approve(id) {
-      await request('/api/approve/' + id, { method: 'POST' });
-      await refreshChrome();
-      render();
-    }
-
-    async function deny(id) {
-      await request('/api/deny/' + id, { method: 'POST' });
-      await refreshChrome();
-      render();
-    }
-
-    // ── Workspace Tab Functions ─────────────────────────────────────────
-    async function refreshWorkspaceInfo() {
-      var pathEl = document.getElementById('workspace-path');
-      if (!pathEl) return;
-      pathEl.textContent = 'Loading...';
-      try {
-        var info = await request('/api/workspace/info');
-        pathEl.textContent = info.workspaceRoot || 'Unknown';
-        var profileEl = document.getElementById('ws-active-profile');
-        if (profileEl && info.manifest && info.manifest.profile) {
-          profileEl.textContent = info.manifest.profile;
-        }
-        var autoSaveEl = document.getElementById('ws-auto-save');
-        if (autoSaveEl) autoSaveEl.textContent = 'Enabled';
-      } catch (err) {
-        pathEl.textContent = '\\u274C Error: ' + String(err);
-      }
-      refreshGitStatus();
-    }
-
-    async function refreshGitStatus() {
-      var gitEl = document.getElementById('ws-git-status');
-      if (!gitEl) return;
-      gitEl.textContent = 'Checking...';
-      try {
-        var data = await request('/api/workspace/git-status');
-        if (data.isGitRepo) {
-          gitEl.textContent = data.branch + ' (' + data.changedFiles + ' changed)';
-        } else {
-          gitEl.textContent = 'Not a git repo';
-        }
-      } catch (e) {
-        gitEl.textContent = 'Unknown';
-      }
-    }
-
-    async function refreshWorkspaceFiles() {
-      var container = document.getElementById('workspace-file-tree');
-      if (!container) return;
-      container.innerHTML = '<span class="muted">\\u23F3 Loading workspace files...</span>';
-      try {
-        var data = await request('/api/workspace/files');
-        if (!data.entries || data.entries.length === 0) {
-          container.innerHTML = '<span class="muted">Workspace is empty.</span>';
-          return;
-        }
-        state._workspaceFiles = data.entries;
-        renderWorkspaceFileTree(data.entries, container);
-      } catch (err) {
-        container.innerHTML = '<span style="color:#e74c3c;">\\u274C ' + escapeHtml(String(err)) + '</span>';
-      }
-    }
-
-    function renderWorkspaceFileTree(entries, container) {
-      var dirs = {};
-      entries.forEach(function(e) {
-        var parts = e.path.split('/');
-        if (parts.length === 1) {
-          if (!dirs['_root']) dirs['_root'] = [];
-          dirs['_root'].push(e);
-        } else {
-          var top = parts[0];
-          if (!dirs[top]) dirs[top] = [];
-          dirs[top].push(e);
-        }
-      });
-      var html = '';
-      var topDirs = Object.keys(dirs).filter(function(k) { return k !== '_root'; }).sort();
-      topDirs.forEach(function(dirName) {
-        var children = dirs[dirName];
-        var fileCount = children.filter(function(c) { return c.type === 'file'; }).length;
-        html += '<details class="panel" style="padding:6px 10px;margin-bottom:3px;">';
-        html += '<summary style="cursor:pointer;font-weight:600;">\\u{1F4C1} ' + escapeHtml(dirName);
-        html += ' <span class="muted" style="font-weight:normal;font-size:11px;">(' + fileCount + ' files)</span></summary>';
-        html += '<div style="padding:4px 0 0 16px;">';
-        children.forEach(function(child) {
-          if (child.path === dirName) return;
-          var displayName = child.path.substring(dirName.length + 1);
-          var icon = child.type === 'dir' ? '\\u{1F4C1}' : '\\u{1F4C4}';
-          var sizeStr = child.type === 'file' ? ' <span class="muted" style="font-size:10px;">(' + formatFileSize(child.size) + ')</span>' : '';
-          html += '<div style="padding:2px 0;font-size:12px;">' + icon + ' ' + escapeHtml(displayName) + sizeStr + '</div>';
-        });
-        html += '</div></details>';
-      });
-      if (dirs['_root']) {
-        dirs['_root'].forEach(function(e) {
-          var icon = e.type === 'dir' ? '\\u{1F4C1}' : '\\u{1F4C4}';
-          var sizeStr = e.type === 'file' ? ' <span class="muted" style="font-size:10px;">(' + formatFileSize(e.size) + ')</span>' : '';
-          html += '<div style="padding:3px 0;font-size:12px;">' + icon + ' ' + escapeHtml(e.name) + sizeStr + '</div>';
-        });
-      }
-      container.innerHTML = html || '<span class="muted">No files found.</span>';
-    }
-
-    function formatFileSize(bytes) {
-      if (bytes === 0) return '0 B';
-      var units = ['B', 'KB', 'MB', 'GB'];
-      var i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-      var size = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1);
-      return size + ' ' + units[i];
-    }
-
-    function filterWorkspaceFiles(query) {
-      var container = document.getElementById('workspace-file-tree');
-      if (!container || !state._workspaceFiles) return;
-      if (!query || !query.trim()) {
-        renderWorkspaceFileTree(state._workspaceFiles, container);
-        return;
-      }
-      var lower = query.toLowerCase();
-      var filtered = state._workspaceFiles.filter(function(e) {
-        return e.path.toLowerCase().indexOf(lower) !== -1;
-      });
-      renderWorkspaceFileTree(filtered, container);
-    }
-
-    async function openWorkspaceInExplorer() {
-      try {
-        await request('/api/workspace/open-explorer', { method: 'POST' });
-      } catch (err) {
-        alert('Failed to open explorer: ' + String(err));
-      }
-    }
-
-    async function changeWorkspaceLocation() {
-      var currentPath = (document.getElementById('workspace-path') || {}).textContent || '';
-      var newPath = prompt('Enter the new workspace path (absolute):', currentPath.trim());
-      if (!newPath || newPath.trim() === '' || newPath.trim() === currentPath.trim()) return;
-      try {
-        var result = await request('/api/workspace/relocate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: newPath.trim() })
-        });
-        if (result.error) { alert('Relocation failed: ' + result.error); return; }
-        await refreshWorkspaceInfo();
-        await refreshWorkspaceFiles();
-      } catch (e) {
-        alert('Failed to change workspace location: ' + e.message);
-      }
-    }
-
-    var IMPORT_TARGET_DIRS = ['config','artifacts','data','data/tasks','data/notes','data/email','data/calendar','characters','logs','workspace','state'];
-    var IMPORT_REGISTERED_TYPES = [
-      { value: 'character', label: 'Character (JSON)' },
-      { value: 'mcp-config', label: 'MCP Config (JSON)' },
-      { value: 'session-package', label: 'Session Package (JSON)' },
-      { value: 'tool-contract', label: 'Tool Contract (JSON)' },
-      { value: 'self-review', label: 'Self-Review Report (JSON)' },
-      { value: 'task-timeline', label: 'Task Timeline (JSON)' },
-      { value: 'note', label: 'Note (Markdown)' }
-    ];
-
-    function showImportStatus(msg, isError) {
-      var el = document.getElementById('import-status');
-      if (!el) return;
-      el.style.display = 'block';
-      el.style.background = isError ? 'rgba(231,76,60,0.15)' : 'rgba(126,207,126,0.15)';
-      el.style.color = isError ? '#ff8d8d' : '#7ecf7e';
-      el.textContent = msg;
-      setTimeout(function() { el.style.display = 'none'; }, 6000);
-    }
-
-    function triggerWorkspaceImport() {
-      triggerGeneralImport();
-    }
-
-    function triggerGeneralImport() {
-      var targetDir = prompt('Target workspace directory:\\n\\n' + IMPORT_TARGET_DIRS.join('\\n') + '\\n\\nEnter directory name:', 'workspace');
-      if (!targetDir || !targetDir.trim()) return;
-      targetDir = targetDir.trim();
-      if (IMPORT_TARGET_DIRS.indexOf(targetDir) === -1) {
-        alert('Invalid target directory. Must be one of:\\n' + IMPORT_TARGET_DIRS.join(', '));
-        return;
-      }
-      var input = document.getElementById('import-file-input');
-      if (!input) return;
-      input._importTargetDir = targetDir;
-      input.value = '';
-      input.click();
-    }
-
-    function triggerRegisteredImport() {
-      var typeMsg = 'Select registered item type:\\n\\n';
-      for (var i = 0; i < IMPORT_REGISTERED_TYPES.length; i++) {
-        typeMsg += (i + 1) + '. ' + IMPORT_REGISTERED_TYPES[i].label + '\\n';
-      }
-      typeMsg += '\\nEnter number (1-' + IMPORT_REGISTERED_TYPES.length + '):';
-      var choice = prompt(typeMsg);
-      if (!choice) return;
-      var idx = parseInt(choice, 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= IMPORT_REGISTERED_TYPES.length) {
-        alert('Invalid selection.');
-        return;
-      }
-      var input = document.getElementById('import-registered-input');
-      if (!input) return;
-      input._importRegisteredType = IMPORT_REGISTERED_TYPES[idx].value;
-      input.value = '';
-      input.click();
-    }
-
-    function triggerFolderImport() {
-      var targetDir = prompt('Target workspace directory for folder contents:\\n\\n' + IMPORT_TARGET_DIRS.join('\\n') + '\\n\\nEnter directory name:', 'workspace');
-      if (!targetDir || !targetDir.trim()) return;
-      targetDir = targetDir.trim();
-      if (IMPORT_TARGET_DIRS.indexOf(targetDir) === -1) {
-        alert('Invalid target directory. Must be one of:\\n' + IMPORT_TARGET_DIRS.join(', '));
-        return;
-      }
-      var input = document.getElementById('import-folder-input');
-      if (!input) return;
-      input._importTargetDir = targetDir;
-      input.value = '';
-      input.click();
-    }
-
-    function readFileAsBase64(file) {
-      return new Promise(function(resolve, reject) {
-        var reader = new FileReader();
-        reader.onload = function() {
-          var result = reader.result;
-          var base64 = result.split(',')[1] || '';
-          resolve(base64);
-        };
-        reader.onerror = function() { reject(new Error('Failed to read file')); };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    // --- SSE streaming connection for agentic progress ---
-    function connectAgenticStream() {
-      var evtSource;
-      try {
-        evtSource = new EventSource('/api/chat/stream');
-      } catch (err) {
-        console.warn('[stream] SSE unavailable:', err);
-        return;
-      }
-      evtSource.onmessage = function(event) {
-        try {
-          var data = JSON.parse(event.data);
-          if (data.type === 'agentic_event') {
-            var ev = data.event || data;
-            if (ev.type === 'done') {
-              state.agenticStream = [];
-            } else {
-              state.agenticStream.push(ev);
-            }
-            safeRenderStep('messages', renderMessages);
-          }
-        } catch (e) { /* ignore parse errors */ }
-      };
-      evtSource.onerror = function() {
-        evtSource.close();
-        setTimeout(connectAgenticStream, 5000);
-      };
-    }
-    connectAgenticStream();
-
-    // General file import handler
-    document.addEventListener('DOMContentLoaded', function() {
-      var fileInput = document.getElementById('import-file-input');
-      if (fileInput) fileInput.addEventListener('change', async function() {
-        var file = this.files[0];
-        if (!file) return;
-        var targetDir = this._importTargetDir || 'workspace';
-        showImportStatus('Importing ' + file.name + '...', false);
-        try {
-          var base64 = await readFileAsBase64(file);
-          var result = await request('/api/workspace/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'general', fileName: file.name, content: base64, targetDir: targetDir })
-          });
-          if (result.error) { showImportStatus('Import failed: ' + result.error, true); return; }
-          showImportStatus('Imported ' + file.name + ' to ' + targetDir + '/', false);
-          await refreshImportHistory();
-          await refreshWorkspaceFiles();
-        } catch (e) { showImportStatus('Import error: ' + e.message, true); }
-      });
-
-      // Registered file import handler
-      var regInput = document.getElementById('import-registered-input');
-      if (regInput) regInput.addEventListener('change', async function() {
-        var file = this.files[0];
-        if (!file) return;
-        var registeredType = this._importRegisteredType || 'character';
-        showImportStatus('Importing ' + file.name + ' as ' + registeredType + '...', false);
-        try {
-          var base64 = await readFileAsBase64(file);
-          var result = await request('/api/workspace/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'registered', fileName: file.name, content: base64, registeredType: registeredType })
-          });
-          if (result.error) { showImportStatus('Import failed: ' + result.error, true); return; }
-          showImportStatus('Registered import: ' + result.entry.message, false);
-          await refreshImportHistory();
-          await refreshWorkspaceFiles();
-        } catch (e) { showImportStatus('Import error: ' + e.message, true); }
-      });
-
-      // Folder import handler
-      var folderInput = document.getElementById('import-folder-input');
-      if (folderInput) folderInput.addEventListener('change', async function() {
-        var files = this.files;
-        if (!files || files.length === 0) return;
-        var targetDir = this._importTargetDir || 'workspace';
-        showImportStatus('Importing ' + files.length + ' files...', false);
-        try {
-          var payload = [];
-          for (var i = 0; i < files.length; i++) {
-            var f = files[i];
-            var base64 = await readFileAsBase64(f);
-            payload.push({ name: f.name, content: base64, relativePath: f.webkitRelativePath || f.name });
-          }
-          var result = await request('/api/workspace/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'folder', files: payload, targetDir: targetDir })
-          });
-          if (result.error) { showImportStatus('Folder import failed: ' + result.error, true); return; }
-          showImportStatus('Folder import: ' + result.summary.message, false);
-          await refreshImportHistory();
-          await refreshWorkspaceFiles();
-        } catch (e) { showImportStatus('Folder import error: ' + e.message, true); }
-      });
-    });
-
-    async function refreshImportHistory() {
-      try {
-        var data = await request('/api/workspace/import/history');
-        state.importHistory = data.history || [];
-        renderImportHistory();
-      } catch (e) { console.error('[import] history refresh failed', e); }
-    }
-
-    function renderImportHistory() {
-      var container = document.getElementById('import-history-list');
-      if (!container) return;
-      var hist = state.importHistory;
-      if (!hist || hist.length === 0) {
-        container.innerHTML = '<span class="muted">No imports yet.</span>';
-        return;
-      }
-      var html = '';
-      for (var i = 0; i < Math.min(hist.length, 25); i++) {
-        var h = hist[i];
-        var statusColor = h.status === 'success' ? '#7ecf7e' : (h.status === 'partial' ? '#ffd17a' : '#ff8d8d');
-        var modeIcon = h.mode === 'folder' ? '\u{1F4C1}' : (h.mode === 'registered' ? '\u{1F9E9}' : '\u{1F4C4}');
-        var ts = new Date(h.timestamp);
-        var timeStr = ts.toLocaleTimeString();
-        html += '<div style="padding:6px 0;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;align-items:center;gap:8px;">';
-        html += '<span>' + modeIcon + '</span>';
-        html += '<div style="flex:1;min-width:0;">';
-        html += '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(h.fileName) + '</div>';
-        html += '<div class="muted" style="font-size:11px;">' + escapeHtml(h.message) + '</div>';
-        html += '</div>';
-        html += '<span style="color:' + statusColor + ';font-size:11px;font-weight:700;white-space:nowrap;">' + escapeHtml(h.status) + '</span>';
-        html += '<span class="muted" style="font-size:10px;white-space:nowrap;">' + timeStr + '</span>';
-        html += '</div>';
-      }
-      if (hist.length > 25) {
-        html += '<div class="muted" style="margin-top:6px;font-size:11px;">... and ' + (hist.length - 25) + ' more</div>';
-      }
-      container.innerHTML = html;
-    }
-
-    function initWorkspaceTab() {
-      refreshWorkspaceInfo();
-      refreshWorkspaceFiles();
-      refreshImportHistory();
-    }
-    document.getElementById('composer').addEventListener('keydown', function(event) {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        void sendMessage();
-      }
-    });
-
-    bootstrap();
-
-    window.packageSessions = packageSessions;
-    window.toggleSessionPackage = toggleSessionPackage;
-    window.runPackageWorkflow = runPackageWorkflow;
-    window.unpackageSessionPackage = unpackageSessionPackage;
-    window.cyclePackageStatus = cyclePackageStatus;
-    window.setPackageStatus = setPackageStatus;
-    window.exportPackageTrace = exportPackageTrace;
-    window.refreshWorkspaceInfo = refreshWorkspaceInfo;
-    window.refreshWorkspaceFiles = refreshWorkspaceFiles;
-    window.filterWorkspaceFiles = filterWorkspaceFiles;
-    window.openWorkspaceInExplorer = openWorkspaceInExplorer;
-    window.changeWorkspaceLocation = changeWorkspaceLocation;
-    window.triggerWorkspaceImport = triggerWorkspaceImport;
-    window.triggerGeneralImport = triggerGeneralImport;
-    window.triggerRegisteredImport = triggerRegisteredImport;
-    window.triggerFolderImport = triggerFolderImport;
-    window.refreshImportHistory = refreshImportHistory;
-    window.initWorkspaceTab = initWorkspaceTab;
-    window.setRoutingStrategy = setRoutingStrategy;
-    window.setRoleOverride = setRoleOverride;
-    window.setAgentOverride = setAgentOverride;
-    window.saveRoutingConfig = saveRoutingConfig;
-    window.suggestOptimalRouting = suggestOptimalRouting;
-    window.setSessionRoutingStrategy = setSessionRoutingStrategy;
-    window.discoverModels = discoverModels;
-    window.onModalitySelected = onModalitySelected;
-    window.onModalityFilterToggle = onModalityFilterToggle;
-    window.setModalityOverride = setModalityOverride;
-    window.exportSession = exportSession;
-    window.importSession = importSession;
-    window.promoteAgent = promoteAgent;
-    window.demoteAgent = demoteAgent;
-    window.refreshAgentList = refreshAgentList;
-    window.launchNewAgent = launchNewAgent;
-    window.stopAgent = stopAgent;
-    window.createSwarm = createSwarm;
-    window.refreshSwarmStatus = refreshSwarmStatus;
-    window.setTelemetryWindow = setTelemetryWindow;
-    window.refreshNetworkInterfaces = refreshNetworkInterfaces;
-    window.runNetworkCommand = runNetworkCommand;
-
-    // Only telemetry data refreshes automatically — everything else is event-driven.
-    setInterval(async function() {
-      try {
-        // Never touch the DOM while the user has a dropdown open — it forces it closed.
-        if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
-        const [telemetrySummaryData, runtimeExcellenceData] = await Promise.all([
-          request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
-          request('/api/runtime/excellence?window=' + state.telemetryWindow).catch(() => null)
-        ]);
-        // Re-check focus after the async fetch — user may have opened a dropdown while waiting.
-        if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
-        state.telemetrySummary = telemetrySummaryData || null;
-        state.runtimeExcellence = runtimeExcellenceData || null;
-        safeRenderStep('runtimeExcellence', renderRuntimeExcellence);
-      } catch (_) { /* silent — telemetry is best-effort */ }
-    }, 30000);
-  </script>
-  <script>
-  (function() {
-    var handle = document.getElementById('resize-handle');
-    var app = document.getElementById('app');
-    var sidebar = document.getElementById('sidebar');
-    if (!handle || !app || !sidebar) return;
-    var dragging = false;
-    var startX = 0;
-    var startWidth = 0;
-    handle.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      dragging = true;
-      startX = e.clientX;
-      startWidth = sidebar.getBoundingClientRect().width;
-      handle.classList.add('active');
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    });
-    document.addEventListener('mousemove', function(e) {
-      if (!dragging) return;
-      var newWidth = Math.max(200, Math.min(600, startWidth + (e.clientX - startX)));
-      app.style.setProperty('--sidebar-width', newWidth + 'px');
-    });
-    document.addEventListener('mouseup', function() {
-      if (!dragging) return;
-      dragging = false;
-      handle.classList.remove('active');
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    });
-  })();
-  </script>
-</body>
-</html>`;
-}
-
-function normalizePrompt(content: string): string {
-  return content.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function sanitizeFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 255) || "file";
-}
-
-interface MultipartPart {
-  fileName?: string;
-  contentType?: string;
-  data: Buffer;
-}
-
-function parseMultipartParts(body: Buffer, boundary: string): MultipartPart[] {
-  const parts: MultipartPart[] = [];
-  const boundaryBuf = Buffer.from(`--${boundary}`);
-  const endBoundaryBuf = Buffer.from(`--${boundary}--`);
-
-  let pos = body.indexOf(boundaryBuf);
-  if (pos === -1) return parts;
-  pos += boundaryBuf.length;
-
-  while (pos < body.length) {
-    // Skip CRLF after boundary
-    if (body[pos] === 0x0d && body[pos + 1] === 0x0a) pos += 2;
-
-    const nextBoundary = body.indexOf(boundaryBuf, pos);
-    if (nextBoundary === -1) break;
-
-    const partData = body.subarray(pos, nextBoundary);
-
-    // Split headers from body at double CRLF
-    const headerEnd = partData.indexOf(Buffer.from("\r\n\r\n"));
-    if (headerEnd === -1) { pos = nextBoundary + boundaryBuf.length; continue; }
-
-    const headerStr = partData.subarray(0, headerEnd).toString("utf-8");
-    const fileData = partData.subarray(headerEnd + 4);
-
-    // Strip trailing CRLF before boundary
-    const trimmed = fileData.length >= 2 && fileData[fileData.length - 2] === 0x0d && fileData[fileData.length - 1] === 0x0a
-      ? fileData.subarray(0, fileData.length - 2)
-      : fileData;
-
-    const fileNameMatch = /filename="([^"]*)"/.exec(headerStr);
-    const ctMatch = /Content-Type:\s*([^\r\n]+)/i.exec(headerStr);
-
-    parts.push({
-      fileName: fileNameMatch?.[1],
-      contentType: ctMatch?.[1]?.trim(),
-      data: Buffer.from(trimmed),
-    });
-
-    pos = nextBoundary + boundaryBuf.length;
-    // Check for end boundary
-    if (body.subarray(nextBoundary, nextBoundary + endBoundaryBuf.length).equals(endBoundaryBuf)) break;
-  }
-
-  return parts;
-}
-
-function deriveSessionTitle(content: string): string {
-  return content.trim().replace(/\s+/g, " ").slice(0, 60) || "New Session";
-}
-
-function parseEventFilters(
-  url: string,
-  fallbackLimit: number,
-): {
-  limit: number;
-  operation: string | null;
-  chatSessionId: string | null;
-  correlationId: string | null;
-} {
-  try {
-    const parsed = new URL(`http://localhost${url}`);
-    const value = Number(parsed.searchParams.get("limit") ?? fallbackLimit);
-    const limit = Number.isFinite(value)
-      ? Math.max(1, Math.min(500, Math.floor(value)))
-      : fallbackLimit;
-    const operation = parsed.searchParams.get("operation")?.trim() || null;
-    const chatSessionId = parsed.searchParams.get("chatSessionId")?.trim() || null;
-    const correlationId = parsed.searchParams.get("correlationId")?.trim() || null;
-    return { limit, operation, chatSessionId, correlationId };
-  } catch {
-    return { limit: fallbackLimit, operation: null, chatSessionId: null, correlationId: null };
-  }
-}
-
-function buildSessionConfigDiff(
-  beforeProviderId: string | null,
-  beforeModel: string | null,
-  afterProviderId: string | null,
-  afterModel: string | null,
-): SessionConfigDiff {
-  const changedFields: string[] = [];
-  if ((beforeProviderId ?? null) !== (afterProviderId ?? null)) {
-    changedFields.push("llmProviderId");
-  }
-  if ((beforeModel ?? null) !== (afterModel ?? null)) {
-    changedFields.push("llmModel");
-  }
-
-  return {
-    changedFields,
-    before: {
-      providerId: beforeProviderId ?? null,
-      model: beforeModel ?? null,
-    },
-    after: {
-      providerId: afterProviderId ?? null,
-      model: afterModel ?? null,
-    },
-  };
-}
-
-function normalizeSessionPackageStatus(value: unknown): SessionPackageStatus {
-  return value === "running" || value === "blocked" || value === "complete" ? value : "planned";
-}

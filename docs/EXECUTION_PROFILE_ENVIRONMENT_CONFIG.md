@@ -149,16 +149,6 @@ orchestrator.setExecutionProfile(BUSINESS_PROFILE);
 
 PRISM logs the resolved execution profile at startup. Look for this in the console output:
 
-```
-============================================================
-  PRISM RUNTIME -- Session: <uuid>
-  Environment profile: prod
-  Execution profile: BUSINESS profile (inferred from environment=prod) — Business: strict governance, rollback plan enforcement, full audit, approval required for mutations.
-  Mode: server
-  Dashboard: http://localhost:7070
-============================================================
-```
-
 ## Troubleshooting
 
 ### Profile Not Changing
@@ -191,3 +181,19 @@ Business profile enforces stricter governance and generates more audit telemetry
 - [EXECUTION_PROFILES_GUIDE.md](EXECUTION_PROFILES_GUIDE.md) - Detailed profile behavior and examples
 - [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) - Development practices for profile-aware code
 - [PRISM_PRD.md](PRISM_PRD.md) - Product requirements including profile definitions
+
+## Computer-Use Business Gate Alignment Addendum (2026-03-25)
+
+Environment-driven profile selection is part of the Business Security Alignment Gate for computer-use operations.
+
+For enterprise-ready claims tied to browser/terminal/container capabilities:
+
+1. `BUSINESS_PROFILE` must remain the default for `prod`/`staging` unless an explicit test override is documented.
+2. Profile override behavior must be auditable in release evidence.
+3. `CU-BG-1` through `CU-BG-5` status must be linked in the release packet before enterprise positioning.
+
+Canonical references:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md`
+- `PRODUCTION_RELEASE_RUNBOOK.md`

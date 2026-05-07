@@ -12,10 +12,13 @@
         "forceConsistentCasingInFileNames": true,
         "declaration": true,
         "sourceMap": true,
-        "outDir": "dist"
+        "outDir": "dist",
+        "rootDir": ".",
+        "jsx": "react-jsx"
     },
     "include": [
         "src/**/*.ts",
+        "src/**/*.tsx",
         "tests/**/*.ts"
     ]
 }

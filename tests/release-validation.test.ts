@@ -11,6 +11,7 @@ export async function testReleaseValidationGates(): Promise<void> {
         artifactsPresent: {
             perfQualification: true,
             contractSnapshot: true,
+            cuBgValidation: true,
         },
         stagingValidated: false,
         rollbackRehearsed: false,
@@ -30,6 +31,7 @@ export async function testReleaseValidationGates(): Promise<void> {
         artifactsPresent: {
             perfQualification: true,
             contractSnapshot: true,
+            cuBgValidation: true,
         },
         stagingValidated: false,
         rollbackRehearsed: false,
@@ -49,6 +51,7 @@ export async function testReleaseValidationGates(): Promise<void> {
         artifactsPresent: {
             perfQualification: true,
             contractSnapshot: true,
+            cuBgValidation: true,
         },
         stagingValidated: true,
         rollbackRehearsed: true,

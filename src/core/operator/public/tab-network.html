@@ -1,0 +1,68 @@
+<div class="tab-grid">
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkTools')"
+      data-tip-id="network:tools" data-tip-kind="network">
+      <h3>📡 Network Tools</h3>
+      <span id="networkTools-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="networkTools-collapsible" class="collapsible-body">
+      <div id="network-tools-panel" class="stack"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkSettings')"
+      data-tip-id="network:settings" data-tip-kind="network">
+      <h3>⚙️ Network Settings</h3>
+      <span id="networkSettings-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="networkSettings-collapsible" class="collapsible-body">
+      <div id="network-settings-panel" class="stack"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkTelemetry')"
+      data-tip-id="network:telemetry" data-tip-kind="network">
+      <h3>📊 Network Telemetry</h3>
+      <span id="networkTelemetry-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="networkTelemetry-collapsible" class="collapsible-body">
+      <div id="network-telemetry-panel" class="stack"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('networkConsole')"
+      data-tip-id="network:console" data-tip-kind="network">
+      <h3>🖥️ Network Console</h3>
+      <span id="networkConsole-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="networkConsole-collapsible" class="collapsible-body">
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <input id="network-console-input" type="text" placeholder="Enter network command (e.g. ipconfig, ping 8.8.8.8)"
+          style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:13px;"
+          onkeydown="if(event.key==='Enter')runNetworkCommand()" />
+        <button onclick="runNetworkCommand()"
+          style="padding:6px 14px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;">▶
+          Run</button>
+      </div>
+      <pre id="network-console-output"
+        style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;max-height:400px;overflow:auto;font-size:12px;white-space:pre-wrap;color:var(--text-muted);">Ready — enter a network command above.</pre>
+      <div id="network-history-list" style="margin-top:8px;"></div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;border:1px solid var(--accent);border-radius:8px;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;"
+      onclick="togglePanelCollapse('networkIntelligence')" data-tip-id="network:vrgc" data-tip-kind="network">
+      <h3>🧠 Network Intelligence (VRGC)</h3>
+      <span id="networkIntelligence-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="networkIntelligence-collapsible" class="collapsible-body">
+      <div id="network-intelligence-panel" class="stack">
+        <div class="muted" style="text-align:center;padding:24px;">Loading VRGC status…</div>
+      </div>
+    </div>
+  </section>
+</div>

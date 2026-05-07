@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  prism:
+    build: .
+    container_name: prism
+    ports:
+      - "${PRISM_DASHBOARD_PORT:-7070}:7070"
+    volumes:
+      # Persist workspace data across container restarts
+      - prism-data:/data/Prism_Refraction
+    environment:
+      - NODE_ENV=production
+      - PRISM_MODE=server
+      - PRISM_ENV_PROFILE=${PRISM_ENV_PROFILE:-prod}
+      - PRISM_DASHBOARD_PORT=7070
+      - PRISM_LLM_PROVIDER=${PRISM_LLM_PROVIDER:-ollama}
+      - PRISM_LLM_MODEL=${PRISM_LLM_MODEL:-gemma3:1b}
+      - PRISM_WORKSPACE_ROOT=/data/Prism_Refraction
+      # Optional: pass auth/TLS config
+      - PRISM_AUTH_DISABLED=${PRISM_AUTH_DISABLED:-}
+      - PRISM_RATE_LIMIT=${PRISM_RATE_LIMIT:-200}
+      - PRISM_TLS_CERT=${PRISM_TLS_CERT:-}
+      - PRISM_TLS_KEY=${PRISM_TLS_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:7070/health" ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  prism-data:

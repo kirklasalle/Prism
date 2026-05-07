@@ -1,0 +1,48 @@
+{
+    "version": "1.0.0",
+    "id": "business-default",
+    "description": "Default constitution for the Business execution profile. Enforces rollback plans on all state-mutating operations and blocks any step whose policy projection includes a CAC placeholder identity reason.",
+    "principles": [
+        {
+            "id": "no-mutation-without-rollback",
+            "description": "All medium- and high-risk mutating operations must declare a rollbackPlan.",
+            "appliesTo": {
+                "risk": [
+                    "medium",
+                    "high"
+                ]
+            },
+            "require": {
+                "rollbackPlan": true
+            }
+        },
+        {
+            "id": "no-placeholder-cac",
+            "description": "Refuse to compile any step whose policy projection cites a placeholder CAC identity.",
+            "appliesTo": {
+                "risk": [
+                    "medium",
+                    "high"
+                ]
+            },
+            "forbidIfReasonCode": [
+                "CAC_PLACEHOLDER_IDENTITY_DENY"
+            ]
+        },
+        {
+            "id": "bounded-step-timeout",
+            "description": "No individual step may declare a timeout greater than 5 minutes.",
+            "appliesTo": {},
+            "require": {
+                "maxTimeoutMs": 300000
+            }
+        }
+    ],
+    "memoryInvariants": [
+        {
+            "id": "retrieval-coverage-floor",
+            "type": "min_coverage",
+            "threshold": 0.6
+        }
+    ]
+}

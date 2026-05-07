@@ -86,5 +86,51 @@ export async function testPolicyEngine(): Promise<void> {
     assert.strictEqual(highWhitelisted.tier, "tier3_approval");
     assert.strictEqual(highWhitelisted.decision, "allow");
 
+    // Phase E3b: CAC placeholder-identity block — Business profile, tier-2+, placeholder CAC → deny.
+    const businessMediumPlaceholder = engine.evaluate({
+        operation: "file_write",
+        risk: "medium",
+        mutatesState: true,
+        rollbackPlan: "git revert",
+        executionProfile: BUSINESS_PROFILE,
+        cac: { assignmentId: "cac-test", hasPlaceholderIdentity: true },
+    });
+    assert.strictEqual(businessMediumPlaceholder.decision, "deny");
+    assert.ok(businessMediumPlaceholder.reasonCodes?.includes("CAC_PLACEHOLDER_IDENTITY_DENY"));
+    assert.strictEqual(businessMediumPlaceholder.remediation, "/setup?rerun=true&step=cac");
+
+    const businessHighPlaceholder = engine.evaluate({
+        operation: "shell_exec",
+        risk: "high",
+        mutatesState: true,
+        rollbackPlan: "snapshot restore",
+        executionProfile: BUSINESS_PROFILE,
+        cac: { assignmentId: "cac-test", hasPlaceholderIdentity: true },
+    });
+    assert.strictEqual(businessHighPlaceholder.decision, "deny");
+    assert.strictEqual(businessHighPlaceholder.tier, "tier3_approval");
+    assert.ok(businessHighPlaceholder.reasonCodes?.includes("CAC_PLACEHOLDER_IDENTITY_DENY"));
+
+    // Business tier-1 (low-risk read) stays allowed even with placeholder identity.
+    const businessLowPlaceholder = engine.evaluate({
+        operation: "file_list",
+        risk: "low",
+        mutatesState: false,
+        executionProfile: BUSINESS_PROFILE,
+        cac: { assignmentId: "cac-test", hasPlaceholderIdentity: true },
+    });
+    assert.notStrictEqual(businessLowPlaceholder.reasonCodes?.[0], "CAC_PLACEHOLDER_IDENTITY_DENY");
+
+    // Individual profile with placeholder identity is not blocked (wizard default path).
+    const individualMediumPlaceholder = engine.evaluate({
+        operation: "file_write",
+        risk: "medium",
+        mutatesState: true,
+        rollbackPlan: "git revert",
+        executionProfile: INDIVIDUAL_PROFILE,
+        cac: { assignmentId: "cac-test", hasPlaceholderIdentity: true },
+    });
+    assert.notStrictEqual(individualMediumPlaceholder.decision, "deny");
+
     console.log("✓ PolicyEngine tests passed");
 }

@@ -23,6 +23,16 @@ const CLASSIFY_PROMPT = `You are an intent classifier. Classify the user message
 - "tool-selection" — planning tasks, selecting tools, decomposing goals
 - "classification" — labeling, categorizing, or sorting items
 - "memory-indexing" — extracting knowledge, structuring information for storage
+- "speech-synthesis" — converting text to spoken audio (TTS)
+- "speech-recognition" — transcribing spoken audio to text (STT)
+- "realtime-voice" — live, low-latency voice conversation
+- "image-analysis" — analyzing, describing, or extracting info from images
+- "image-creation" — generating images from text descriptions
+- "video-analysis" — analyzing or describing video content
+- "video-creation" — generating video from text or image prompts
+- "audio-production" — creating music, sound effects, or audio content
+- "document-writing" — writing long-form documents, reports, briefs, or proposals
+- "research" — factual, legal (U.S.), or geographical research and investigation
 
 Respond with ONLY valid JSON: {"role": "<role>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}`;
 
@@ -102,6 +112,16 @@ const VALID_ROLES: Set<string> = new Set([
     "tool-selection",
     "classification",
     "memory-indexing",
+    "speech-synthesis",
+    "speech-recognition",
+    "realtime-voice",
+    "image-analysis",
+    "image-creation",
+    "video-analysis",
+    "video-creation",
+    "audio-production",
+    "document-writing",
+    "research",
 ]);
 
 function parseClassification(content: string): IntentClassification | null {

@@ -3,7 +3,7 @@
 **Document**: TERMINAL_VIRTUALIZATION_DESIGN.md  
 **Date**: 2026-03-17  
 **Owner**: Engineering  
-**Status**: DRAFT (pending review)
+**Status**: ACCEPTED (reviewed 2026-04-20)
 
 ---
 
@@ -16,6 +16,14 @@ Terminal virtualization enables PRISM agents to spawn, manage, and lifecycle iso
 - **Timeout & Revoke**: graceful shutdown with signal escalation (SIGTERM → SIGKILL)
 - **Session Persistence**: SQLite persistence for session metadata, history, and exit codes
 - **Reason-Coded Telemetry**: all lifecycle events emit reason-codes for audit trail
+
+Canonical cross-reference:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md` (computer-use core + Business Security Alignment Gate)
+
+Business enterprise note:
+
+- Terminal virtualization release claims for Business profile must satisfy `CU-BG-*` gate requirements before enterprise-ready positioning.
 
 ---
 
@@ -628,8 +636,38 @@ Step 5c: Timeout
 - [ ] Document all error modes with recovery procedures
 - [ ] Execute Stage 2 drill scenarios (3+ drills)
 - [ ] Create terminal-lifecycle-report.md with test results
-- [ ] Get sign-off from Engineering Lead
+- [x] Get sign-off from Engineering Lead
 
 ---
 
-**Next Step**: Schedule design review with Engineering Lead. Target: 2026-03-20.
+**Design Review**: Completed 2026-04-20.
+
+---
+
+## Implementation Notes (2026-04-20)
+
+### Artifacts
+
+| Artifact | Location |
+|----------|----------|
+| Adapter implementation | `src/adapters/application/terminal-session-adapter.ts` |
+| Test suite | `tests/terminal-session-adapter.test.ts` (12 test cases) |
+| System tool wrapper | `src/adapters/system/terminal-session-tool.ts` |
+
+### Implemented Capabilities
+
+- Full session lifecycle state machine (IDLE → ACTIVE → EXECUTING → TIMEOUT/REVOKED → TERMINATED)
+- SQLite persistence: 3 tables (`terminal_sessions`, `terminal_command_history`, `terminal_signal_log`)
+- Policy tier routing with keyword classification (Tier 1/2/3)
+- Graceful shutdown with SIGTERM → SIGKILL signal escalation (2s grace period)
+- Activity bus event emission for all lifecycle transitions
+- Command history retrieval with configurable limit
+- Revoke with forced termination and audit trail
+
+### Known Gaps (Deferred to Future Scope)
+
+- **Pause/Resume**: `SUSPENDED` state defined in spec but `pauseSession()`/`resumeSession()` methods not implemented. SIGSTOP/SIGCONT signals not wired.
+- **Shell process**: Uses `child_process.spawn` (mock); real PTY integration via `node-pty` deferred.
+- **Timeout detection**: Exit code detection via regex pattern; true terminal I/O handling deferred.
+- **Session pooling**: Each session spawns a fresh shell process; session pool/reuse not implemented.
+- **Policy routing**: `routeThroughPolicy()` classifies tiers but always returns `allow`; real ApprovalQueue integration for Tier 3 deferred.

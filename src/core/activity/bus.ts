@@ -38,10 +38,19 @@ export class ActivityBus {
             operation: event.operation,
             status: event.status,
             details: event.details,
+            characterId: event.characterId,
+            prismUserId: event.prismUserId,
+            prismUserEmail: event.prismUserEmail,
+            operatorId: event.operatorId,
+            operatorEmail: event.operatorEmail,
+            clientId: event.clientId,
+            assignmentId: event.assignmentId,
+            accountabilityChain: event.accountabilityChain,
             authorityTier: event.authorityTier,
             policyDecision: event.policyDecision,
             sideEffects: event.sideEffects,
             rollbackPlan: event.rollbackPlan,
+            workspaceHub: event.accountabilityChain?.workspaceHub,
         });
 
         return createHash("sha256").update(payload).digest("hex");

@@ -57,17 +57,18 @@ function nullDelegate(): LlmDelegate {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("AgentPool", () => {
-    it("list() returns all 6 default agents", () => {
+    it("list() returns all 16 default agents", () => {
         const pool = new AgentPool();
         const agents = pool.list();
-        assert.equal(agents.length, 6);
+        assert.equal(agents.length, 16);
         const ids = agents.map((a) => a.agentId);
-        assert.ok(ids.includes("chat"));
-        assert.ok(ids.includes("planner"));
-        assert.ok(ids.includes("coder"));
-        assert.ok(ids.includes("summarizer"));
-        assert.ok(ids.includes("classifier"));
-        assert.ok(ids.includes("indexer"));
+        for (const expected of [
+            "chat", "planner", "coder", "summarizer", "classifier", "indexer",
+            "speaker", "listener", "realtime", "image-analyst", "illustrator",
+            "video-analyst", "video-creator", "audio-producer", "writer", "researcher",
+        ]) {
+            assert.ok(ids.includes(expected), `missing default agent: ${expected}`);
+        }
     });
 
     it("findByRole returns the right agent", () => {

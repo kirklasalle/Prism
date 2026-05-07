@@ -1,0 +1,83 @@
+name: helm-publish
+
+# Lints the PRISM Helm chart on every push and PR, and publishes the
+# packaged chart to GHCR's OCI registry on tags matching v*.*.*.
+#
+# Pulling the published chart:
+#   helm pull oci://ghcr.io/<owner>/charts/prism --version <version>
+
+on:
+    push:
+        branches: [ main ]
+        tags: [ "v*.*.*" ]
+    pull_request:
+        branches: [ main ]
+        paths:
+            - "deploy/helm/**"
+            - ".github/workflows/helm-publish.yml"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    packages: write
+
+env:
+    CHART_DIR: deploy/helm/prism
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Install Helm
+              uses: azure/setup-helm@v4
+              with:
+                  version: v3.14.0
+
+            - name: helm lint
+              run: helm lint "${{ env.CHART_DIR }}"
+
+            - name: helm template (smoke test)
+              run: helm template test "${{ env.CHART_DIR }}" > /tmp/rendered.yaml
+
+            - name: Upload rendered manifests
+              uses: actions/upload-artifact@v4
+              with:
+                  name: rendered-manifests
+                  path: /tmp/rendered.yaml
+                  retention-days: 7
+
+    publish:
+        needs: lint
+        if: startsWith(github.ref, 'refs/tags/v')
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Install Helm
+              uses: azure/setup-helm@v4
+              with:
+                  version: v3.14.0
+
+            - name: Log in to GHCR
+              run: |
+                  echo "${{ secrets.GITHUB_TOKEN }}" | \
+                    helm registry login ghcr.io \
+                      --username "${{ github.actor }}" \
+                      --password-stdin
+
+            - name: Package chart
+              run: |
+                  mkdir -p dist/charts
+                  helm package "${{ env.CHART_DIR }}" --destination dist/charts
+
+            - name: Push chart to GHCR
+              run: |
+                  chart_file=$(ls dist/charts/prism-*.tgz | head -n1)
+                  echo "Pushing ${chart_file}"
+                  helm push "${chart_file}" "oci://ghcr.io/${{ github.repository_owner }}/charts"

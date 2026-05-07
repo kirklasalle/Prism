@@ -9,6 +9,7 @@ import {
     ResourceQuota,
 } from "../src/adapters/application/container-sandbox-adapter.js";
 import { ToolContractExtractor } from "../src/core/tools/tool-contract-extractor.js";
+import { ToolRegistry } from "../src/core/tools/registry.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
 import { ActivityBus } from "../src/core/activity/bus.js";
 import {
@@ -229,11 +230,16 @@ describe("Profile Parity Integration Tests", function () {
                 policyEngine,
                 new ActivityBus()
             );
+            extractorIndividual.setToolRegistry(new ToolRegistry());
+            extractorIndividual.addManifestPath(process.cwd()); // Dummy path
+
             const extractorBusiness = new ToolContractExtractor(
                 dbBusiness,
                 policyEngine,
                 new ActivityBus()
             );
+            extractorBusiness.setToolRegistry(new ToolRegistry());
+            extractorBusiness.addManifestPath(process.cwd()); // Dummy path
 
             const now = new Date().toISOString();
 
@@ -290,11 +296,14 @@ describe("Profile Parity Integration Tests", function () {
                 policyEngine,
                 new ActivityBus()
             );
+            extractorIndividual.addManifestPath(process.cwd());
+
             const extractorBusiness = new ToolContractExtractor(
                 dbBusiness,
                 policyEngine,
                 new ActivityBus()
             );
+            extractorBusiness.addManifestPath(process.cwd());
 
             const now = new Date().toISOString();
 
@@ -344,11 +353,16 @@ describe("Profile Parity Integration Tests", function () {
                 policyEngine,
                 new ActivityBus()
             );
+            extractorIndividual.setToolRegistry(new ToolRegistry());
+            extractorIndividual.addManifestPath(process.cwd());
+
             const extractorBusiness = new ToolContractExtractor(
                 dbBusiness,
                 policyEngine,
                 new ActivityBus()
             );
+            extractorBusiness.setToolRegistry(new ToolRegistry());
+            extractorBusiness.addManifestPath(process.cwd());
 
             const now = new Date().toISOString();
             const sourceTypes: ("manifest" | "decorator" | "dynamic")[] = [

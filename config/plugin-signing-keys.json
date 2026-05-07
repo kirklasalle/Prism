@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "description": "PRISM plugin signing key registry. Keys are DER-encoded Ed25519 public keys in base64 format. See docs/SECURITY_KEY_MANAGEMENT.md for rotation and custody procedures.",
+    "keys": [
+        {
+            "keyId": "prism-bootstrap-2026-01",
+            "tier": "bootstrap",
+            "label": "PRISM Bootstrap Public Key (development only — operators MUST regenerate before production via `npm run keys:generate-plugin`)",
+            "algorithm": "ed25519",
+            "publicKeyBase64": "MCowBQYDK2VwAyEA2Ih1sJxGZ4xHeJfMH1loaHuT1Jp3+Ocj7+mLXgQLnBg=",
+            "addedAt": "2026-01-01T00:00:00.000Z",
+            "expiresAt": null,
+            "productionReady": false
+        }
+    ]
+}

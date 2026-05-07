@@ -16,6 +16,12 @@
 - Latest full run result: **51 passing** total assertions/tests in combined output.
 - This closes the prior gap where D3 parity tests were passing when run directly but not included in default `npm test` evidence.
 
+## 0.1 ADDITIONAL DELTA (March 25, 2026)
+
+- Computer-use core documentation and release governance now include explicit Business Security Alignment Gate coupling.
+- Traceability requirements `CU-BG-1` through `CU-BG-5` have been introduced for enterprise computer-use claim discipline.
+- Validation scope now requires business gate evidence in addition to parity and governance-path evidence.
+
 ---
 
 ## 1. EXECUTIVE SUMMARY
@@ -732,3 +738,82 @@ All Phase D2 deliverables completed and validated:
 ---
 
 **End of D4 Coverage Validation Report**
+
+---
+
+# Phase D4c — Spectrum Refraction Advanced: Coverage Validation Addendum
+
+**Date:** 2026-04-20  
+**Test file:** `tests/spectrum-refraction-advanced.test.ts`  
+**Test runner:** `node --test`  
+**Result:** 20 pass / 0 fail / 0 skip
+
+## D4c Test Inventory
+
+| # | Test Name | Category | Pass |
+|---|-----------|----------|------|
+| 1 | returns partial result when left hemisphere times out | Timeout / partial result | ✓ |
+| 2 | returns partial result when right hemisphere times out | Timeout / partial result | ✓ |
+| 3 | opens left circuit after threshold consecutive failures | Circuit breaker | ✓ |
+| 4 | resets circuit after success | Circuit breaker | ✓ |
+| 5 | getSRCircuitBreakerState returns open=false for closed circuits | Circuit breaker | ✓ |
+| 6 | respects circuitBreakerEnabled=false (no tracking) | Circuit breaker | ✓ |
+| 7 | emits sr.fanout_start before fan-out | Audit trail | ✓ |
+| 8 | emits sr.fanout_complete after parallel generation | Audit trail | ✓ |
+| 9 | emits sr.generation_complete with timing after aggregation | Audit trail | ✓ |
+| 10 | emits sr.circuit_breaker_triggered when circuit is open | Audit trail | ✓ |
+| 11 | total time ≈ max of hemispheres, not their sum | Parallel timing | ✓ |
+| 12 | returns SRCostEstimate with correct shape | Cost estimation | ✓ |
+| 13 | totalEstimatedCostUsd ≥ sum of constituent parts | Cost estimation | ✓ |
+| 14 | aggregation cost uses expanded input (3x output tokens added) | Cost estimation | ✓ |
+| 15 | sets and gets key for default slot | Multi-key slot assignment | ✓ |
+| 16 | sets and gets key for named slot | Multi-key slot assignment | ✓ |
+| 17 | default and named slots are independent | Multi-key slot assignment | ✓ |
+| 18 | listSlots returns only named slot names | Multi-key slot assignment | ✓ |
+| 19 | clearApiKey removes only the specified slot | Multi-key slot assignment | ✓ |
+| 20 | returns null for unknown provider+slot | Multi-key slot assignment | ✓ |
+
+## D4c Category Summary
+
+| Category | Tests | Pass | Fail |
+|----------|-------|------|------|
+| Timeout / partial result | 2 | 2 | 0 |
+| Circuit breaker | 4 | 4 | 0 |
+| Audit trail (signed events) | 4 | 4 | 0 |
+| Parallel timing | 1 | 1 | 0 |
+| Cost estimation | 3 | 3 | 0 |
+| Multi-key slot assignment | 6 | 6 | 0 |
+| **Total** | **20** | **20** | **0** |
+
+## D4c Isolation Enforcement
+
+Multi-key slot tests (tests 15–20) confirm:
+
+- Default slot and named slots are stored independently — no cross-slot contamination.
+- `clearApiKey(slot)` removes only the named slot; default slot is unaffected.
+- Unknown provider+slot returns `null` with no bleed-over from other providers.
+
+## D4c Circuit Breaker States
+
+| State | Verified by Test # |
+|-------|--------------------|
+| Closed (initial) | 5 |
+| Open (after threshold consecutive failures) | 3 |
+| Blocked invocation emits `sr.circuit_breaker_triggered` | 10 |
+| Reset to closed after success | 4 |
+| `circuitBreakerEnabled: false` — no state changes | 6 |
+
+## D4c Audit Trail Events
+
+| Activity event operation | Test # |
+|--------------------------|--------|
+| `sr.fanout_start` | 7 |
+| `sr.fanout_complete` | 8 |
+| `sr.generation_complete` | 9 |
+| `sr.circuit_breaker_triggered` | 10 |
+
+## D4c Requirements Traceability
+
+All ten D4c requirements (D4-R1..D4-R10) in `REQUIREMENTS_TRACEABILITY_MATRIX.md` §9 are `status: pass`.
+
+**Phase D4 Go/No-Go: APPROVED** — 20/20 tests pass, all evidence artifacts present, zero regressions.

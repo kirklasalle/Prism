@@ -1,0 +1,705 @@
+[
+    {
+        "tipId": "character:aria-individual",
+        "summary": "ARIA — warm, approachable personal assistant for everyday tasks.",
+        "dynamic": [
+            "ARIA balances precision with approachability — ask broadly or in detail.",
+            "Best for: drafting, summarising, planning, and learning new topics.",
+            "Greeting style: friendly and structured. Tone follows your lead.",
+            "Tip: ARIA inherits Individual profile guardrails — Tier 2 max."
+        ]
+    },
+    {
+        "tipId": "character:aria-business",
+        "summary": "ARIA (Business) — assistant tuned for organisational workflows.",
+        "dynamic": [
+            "Business profile: assignments require operator + employee email.",
+            "Inherits stricter governance and approval-queue routing.",
+            "Best for: cross-team writing, briefs, and stakeholder updates."
+        ]
+    },
+    {
+        "tipId": "character:phoenix-individual",
+        "summary": "PHOENIX — bold, decisive operator for complex problem-solving.",
+        "dynamic": [
+            "PHOENIX trades verbosity for action — expect concise plans.",
+            "Best for: code, analysis, and multi-step tool execution.",
+            "Tip: PHOENIX uses tools aggressively; review approval queue."
+        ]
+    },
+    {
+        "tipId": "character:phoenix-business",
+        "summary": "PHOENIX (Business) — execution-focused operator with org guardrails.",
+        "dynamic": [
+            "Business mode adds policy gating to PHOENIX's tool access.",
+            "Best for: production engineering, ops runbooks, and migrations."
+        ]
+    },
+    {
+        "tipId": "character:sentinel-individual",
+        "summary": "SENTINEL — security- and governance-minded reviewer.",
+        "dynamic": [
+            "SENTINEL prefers verification over speed — expect questions back.",
+            "Best for: code review, threat modelling, and policy checks.",
+            "Tip: SENTINEL annotates risk tiers in every recommendation."
+        ]
+    },
+    {
+        "tipId": "character:sentinel-business",
+        "summary": "SENTINEL (Business) — compliance-aware reviewer for the team.",
+        "dynamic": [
+            "Business profile surfaces audit-friendly outputs by default.",
+            "Best for: PR reviews, change-control, and risk register updates."
+        ]
+    },
+    {
+        "tipId": "character:example-analyst",
+        "summary": "Analyst Agent — minimal example brief; data-driven and concise.",
+        "dynamic": [
+            "Use the Analyst as a template for crafting your own characters.",
+            "See characters/example-analyst.json for the schema reference."
+        ]
+    },
+    {
+        "tipId": "tab:workspace",
+        "summary": "Workspace — manage character assignments, files, imports, and settings.",
+        "dynamic": [
+            "Tip: assignments are scoped per workspace hub — switch hubs to isolate.",
+            "The Character Panel mirrors live CAC state; refresh to reconcile.",
+            "Drag-drop import is gated by your active execution profile."
+        ]
+    },
+    {
+        "tipId": "shell:brand",
+        "summary": "PRISM Frontier Console — operator pane for the AaaS platform.",
+        "dynamic": [
+            "Hover any control on screen — every panel has rotating insights here.",
+            "PRISM = Profile-aware, Risk-tiered, Inspectable, Sovereign, Multi-provider.",
+            "Press Esc anywhere to dismiss any open Prism tooltip."
+        ]
+    },
+    {
+        "tipId": "shell:ws-status",
+        "summary": "Live WebSocket link — green = healthy stream; red = reconnecting.",
+        "dynamic": [
+            "All live updates (chat stream, telemetry, Guardian) flow over this channel.",
+            "Auto-reconnect uses exponential backoff with jitter.",
+            "If you see red for more than ~30s, check your network and the PRISM core process."
+        ]
+    },
+    {
+        "tipId": "shell:tab:chat",
+        "summary": "Chat Interface — multi-provider, character-aware messaging with streaming.",
+        "dynamic": [
+            "The composer accepts files, pasted clipboard content, and Markdown.",
+            "Tool calls are captured per-message and visible in the Logs tab.",
+            "Tip: Enter to send, Shift-Enter for newline."
+        ]
+    },
+    {
+        "tipId": "shell:tab:settings",
+        "summary": "Provider & Settings — keys, routing, capability matrix, and Spectrum Refraction.",
+        "dynamic": [
+            "Spectrum Refraction (SR) fans a request out to multiple models in parallel.",
+            "Routing strategies: Direct, Role-Based, or Modality-Based.",
+            "Drag the divider between Provider Cards and the Capability Matrix to resize."
+        ]
+    },
+    {
+        "tipId": "shell:tab:tools",
+        "summary": "Tools & Plugins — full tool catalog plus the seven diagnostics suites.",
+        "dynamic": [
+            "Each diagnostics suite runs independently and live-streams progress here.",
+            "Plugins are signed; signing keys live under config/plugin-signing-keys.json.",
+            "Demo Scenarios let you replay reference flows for testing."
+        ]
+    },
+    {
+        "tipId": "shell:tab:agentic",
+        "summary": "Agentic Control — Guardian, agent fleet, sub-agents, swarms, hardware.",
+        "dynamic": [
+            "Guardian (llama.cpp) supervises agents locally and enforces policy.",
+            "The Hardware Swarm panel shows local model slots — load/unload live.",
+            "Sub-agents inherit risk tier from their parent agent."
+        ]
+    },
+    {
+        "tipId": "shell:tab:computer",
+        "summary": "Computer Control — system info, console, vision, env, policy, devices.",
+        "dynamic": [
+            "Vision framebuffer can capture single shots or 2-second 8 FPS bursts.",
+            "Policy controls require Windows + admin privileges to mutate.",
+            "Device Manager mirrors the OS device tree; click to expand."
+        ]
+    },
+    {
+        "tipId": "shell:tab:browser",
+        "summary": "Browser Control — sessions, viewport, network, console, DOM, storage, profiles.",
+        "dynamic": [
+            "Launch headed for inspection or headless for automation.",
+            "Each browser session is fully isolated; profiles persist across launches.",
+            "Use the Network sub-tab to capture every request a session makes."
+        ]
+    },
+    {
+        "tipId": "shell:tab:workspace",
+        "summary": "Workspace — character assignment, location, files, imports, settings.",
+        "dynamic": [
+            "Hover any character chip for a quick view of that persona.",
+            "Workspace files are scoped to your active workspace path.",
+            "Imports are gated by your active execution profile."
+        ]
+    },
+    {
+        "tipId": "shell:tab:network",
+        "summary": "Network — tools, settings, telemetry, console, and VRGC intelligence.",
+        "dynamic": [
+            "VRGC = Verified Routing & Governance Channel.",
+            "The console keeps a rolling history — click any entry to re-run.",
+            "Telemetry charts show throughput and error rates over the active window."
+        ]
+    },
+    {
+        "tipId": "shell:tab:telemetry",
+        "summary": "Telemetry — usage & cost, runtime, release readiness, SLO gauges.",
+        "dynamic": [
+            "Time-window buttons (1h / 1d / 7d) re-scope every panel on this tab.",
+            "Runtime Excellence is a composite score across SLOs and reliability.",
+            "Release Readiness is a checklist gating a packaged release."
+        ]
+    },
+    {
+        "tipId": "shell:tab:logs",
+        "summary": "Logs & Debug — actions, approvals, traces, events, tool calls, activity log.",
+        "dynamic": [
+            "Activity log shows the last 500 entries; filter by source and severity.",
+            "Pending approvals block agentic actions until you decide.",
+            "Trace view correlates chat, tool calls, and provider events by request id."
+        ]
+    },
+    {
+        "tipId": "shell:tab:scheduler",
+        "summary": "Scheduler — calendar, projects, Kanban, timeline, and cron jobs.",
+        "dynamic": [
+            "Switch views with the sub-tabs above the calendar.",
+            "Kanban cards drag between lanes; status updates persist immediately.",
+            "Cron jobs run on the PRISM core, not the browser."
+        ]
+    },
+    {
+        "tipId": "chat:send",
+        "summary": "Send your message (Enter). Streaming responses begin immediately.",
+        "dynamic": [
+            "Tool calls run during streaming — no second round-trip needed.",
+            "Tip: Esc cancels an in-flight stream.",
+            "Shift-Enter for newline; Enter sends."
+        ]
+    },
+    {
+        "tipId": "chat:composer",
+        "summary": "Type a message to PRISM. Markdown supported, drag-drop attaches files.",
+        "dynamic": [
+            "The textarea auto-grows to keep your message visible.",
+            "Drop files anywhere to attach.",
+            "Use Markdown for code blocks, lists, and headers."
+        ]
+    },
+    {
+        "tipId": "chat:messages",
+        "summary": "Streaming conversation thread — user, assistant, and tool calls inline.",
+        "dynamic": [
+            "Tool calls render expandable inline.",
+            "Provenance is captured per-message.",
+            "Right-click a message to copy as Markdown."
+        ]
+    },
+    {
+        "tipId": "chat:attach",
+        "summary": "Attach images, audio, video, text, code, PDF, JSON, CSV, XML, YAML, or Markdown.",
+        "dynamic": [
+            "Multiple files supported in a single message.",
+            "Attachments inherit the active execution profile policy."
+        ]
+    },
+    {
+        "tipId": "chat:paste",
+        "summary": "Paste clipboard content (text or image) into your next message.",
+        "dynamic": [
+            "Pasted images become attachments automatically.",
+            "Ctrl-V in the composer pastes plain text."
+        ]
+    },
+    {
+        "tipId": "settings:sr-toggle",
+        "summary": "Spectrum Refraction — compounding multi-model orchestration.",
+        "dynamic": [
+            "Trades latency for higher-quality outputs.",
+            "Toggle off for deterministic single-model responses."
+        ]
+    },
+    {
+        "tipId": "settings:session-provider",
+        "summary": "Pick the provider this session uses.",
+        "dynamic": [
+            "Switching mid-session preserves history."
+        ]
+    },
+    {
+        "tipId": "settings:model-routing",
+        "summary": "Direct, Role-Based, or Modality-Based routing.",
+        "dynamic": [
+            "Role routing: planner, coder, reviewer.",
+            "Modality routing: text/code/image."
+        ]
+    },
+    {
+        "tipId": "settings:provider-config",
+        "summary": "API keys and per-provider settings.",
+        "dynamic": [
+            "Keys are encrypted at rest.",
+            "Test Connection before saving."
+        ]
+    },
+    {
+        "tipId": "settings:capability-matrix",
+        "summary": "Models scored by tier T1 → T5.",
+        "dynamic": [
+            "Routing picks the best-tier model that supports the requested modality."
+        ]
+    },
+    {
+        "tipId": "settings:divider",
+        "summary": "Drag to resize the two panels.",
+        "dynamic": [
+            "Double-click to reset to 50/50."
+        ]
+    },
+    {
+        "tipId": "settings:settings-panel",
+        "summary": "Operator-level settings.",
+        "dynamic": [
+            "Telemetry opt-in, defaults, theme, audit retention."
+        ]
+    },
+    {
+        "tipId": "settings:llm-audit",
+        "summary": "Per-call audit trail with cost, latency, and tool calls.",
+        "dynamic": [
+            "Trails support compliance review and replay."
+        ]
+    },
+    {
+        "tipId": "tools:overview",
+        "summary": "Counts of registered tools, plugins, and active diagnostics.",
+        "dynamic": []
+    },
+    {
+        "tipId": "tools:plugins",
+        "summary": "Signed third-party extensions loaded into PRISM.",
+        "dynamic": [
+            "Disabled plugins are isolated and cannot be invoked."
+        ]
+    },
+    {
+        "tipId": "tools:tools",
+        "summary": "First-class tools available to agents.",
+        "dynamic": [
+            "Gated by your active execution profile."
+        ]
+    },
+    {
+        "tipId": "tools:utilities",
+        "summary": "Helper utilities: formatters, validators, encoders.",
+        "dynamic": []
+    },
+    {
+        "tipId": "tools:diagnostics",
+        "summary": "Run the full diagnostics suite.",
+        "dynamic": [
+            "Each suite live-streams results.",
+            "Pass/fail history is retained."
+        ]
+    },
+    {
+        "tipId": "tools:demo",
+        "summary": "Replay reference scenarios.",
+        "dynamic": [
+            "Useful for testing, training, and onboarding."
+        ]
+    },
+    {
+        "tipId": "diag:agent",
+        "summary": "End-to-end agent dispatch and tool-call checks.",
+        "dynamic": []
+    },
+    {
+        "tipId": "diag:computer",
+        "summary": "Local OS, console, framebuffer, and device probes.",
+        "dynamic": []
+    },
+    {
+        "tipId": "diag:workspace",
+        "summary": "Path, files, imports, and character integrity probes.",
+        "dynamic": []
+    },
+    {
+        "tipId": "diag:network",
+        "summary": "Connectivity, DNS, latency, and VRGC probes.",
+        "dynamic": []
+    },
+    {
+        "tipId": "diag:telemetry",
+        "summary": "Counters, histograms, SLO sanity probes.",
+        "dynamic": []
+    },
+    {
+        "tipId": "diag:logs",
+        "summary": "Log buffers, action history, and trace correlation.",
+        "dynamic": []
+    },
+    {
+        "tipId": "diag:scheduler",
+        "summary": "Calendar, cron, Kanban, and timeline integrity probes.",
+        "dynamic": []
+    },
+    {
+        "tipId": "agentic:guardian",
+        "summary": "Local llama.cpp supervisor — policy, redaction, tips.",
+        "dynamic": [
+            "Guardian runs entirely local.",
+            "Tips appear here in real time."
+        ]
+    },
+    {
+        "tipId": "agentic:agent-list",
+        "summary": "All registered agents — status, profile, character, health.",
+        "dynamic": []
+    },
+    {
+        "tipId": "agentic:sub-agents",
+        "summary": "Sub-agent hierarchy spawned by your agents.",
+        "dynamic": [
+            "Sub-agents inherit risk tier from their parent."
+        ]
+    },
+    {
+        "tipId": "agentic:swarm",
+        "summary": "Coordinate multiple agents on one objective.",
+        "dynamic": [
+            "Members share context, execute in parallel."
+        ]
+    },
+    {
+        "tipId": "agentic:hardware-swarm",
+        "summary": "Local model slots — load and unload models live.",
+        "dynamic": [
+            "Slots sized to your GPU/CPU memory."
+        ]
+    },
+    {
+        "tipId": "agentic:telemetry",
+        "summary": "Live KPIs across the agent fleet.",
+        "dynamic": []
+    },
+    {
+        "tipId": "computer:local",
+        "summary": "Host system info: OS, hostname, platform, uptime.",
+        "dynamic": []
+    },
+    {
+        "tipId": "computer:console",
+        "summary": "Run system commands inside the local sandbox.",
+        "dynamic": [
+            "Output streams live; cancel with Esc."
+        ]
+    },
+    {
+        "tipId": "computer:framebuffer",
+        "summary": "Capture screenshots or 8 FPS bursts for vision reasoning.",
+        "dynamic": [
+            "Bursts are 2 seconds at 8 FPS.",
+            "Auto-Refresh updates every 2 seconds."
+        ]
+    },
+    {
+        "tipId": "computer:env",
+        "summary": "Visible host environment variables.",
+        "dynamic": [
+            "Sensitive variables are redacted in display."
+        ]
+    },
+    {
+        "tipId": "computer:policy",
+        "summary": "Windows-only policy launchers (gpedit, secpol).",
+        "dynamic": [
+            "Requires admin to mutate."
+        ]
+    },
+    {
+        "tipId": "computer:devices",
+        "summary": "OS device tree mirror — drivers, status, identifiers.",
+        "dynamic": []
+    },
+    {
+        "tipId": "browser:control",
+        "summary": "Top-level browser controls.",
+        "dynamic": []
+    },
+    {
+        "tipId": "browser:sessions",
+        "summary": "Launch and manage isolated browser sessions.",
+        "dynamic": [
+            "Headed or headless."
+        ]
+    },
+    {
+        "tipId": "browser:viewport",
+        "summary": "Live page viewport, navigation, screenshots.",
+        "dynamic": [
+            "Click and type primitives included."
+        ]
+    },
+    {
+        "tipId": "browser:network",
+        "summary": "Per-session network log.",
+        "dynamic": [
+            "Method, status, type, timing for every request."
+        ]
+    },
+    {
+        "tipId": "browser:console",
+        "summary": "JavaScript console output captured from the page.",
+        "dynamic": []
+    },
+    {
+        "tipId": "browser:dom",
+        "summary": "Live DOM snapshot of the active session.",
+        "dynamic": []
+    },
+    {
+        "tipId": "browser:storage",
+        "summary": "Cookies, localStorage, and sessionStorage.",
+        "dynamic": []
+    },
+    {
+        "tipId": "browser:profiles",
+        "summary": "Persistent browser profiles by use-case.",
+        "dynamic": []
+    },
+    {
+        "tipId": "browser:action-log",
+        "summary": "Every browser action — replayable.",
+        "dynamic": []
+    },
+    {
+        "tipId": "workspace:location",
+        "summary": "Active workspace path. Files and imports are scoped here.",
+        "dynamic": [
+            "Switching preserves character assignments per-hub."
+        ]
+    },
+    {
+        "tipId": "workspace:files",
+        "summary": "Filterable tree of files in the workspace.",
+        "dynamic": []
+    },
+    {
+        "tipId": "workspace:import-manager",
+        "summary": "Import files, items, or folders into the workspace.",
+        "dynamic": [
+            "Gated by your active execution profile."
+        ]
+    },
+    {
+        "tipId": "workspace:settings",
+        "summary": "Active profile, auto-save, Git integration.",
+        "dynamic": []
+    },
+    {
+        "tipId": "network:tools",
+        "summary": "Ping, traceroute, DNS, port scans, and more.",
+        "dynamic": []
+    },
+    {
+        "tipId": "network:settings",
+        "summary": "Proxy, DNS, adapter preferences for PRISM.",
+        "dynamic": []
+    },
+    {
+        "tipId": "network:telemetry",
+        "summary": "Throughput, error rates, per-route latency.",
+        "dynamic": []
+    },
+    {
+        "tipId": "network:console",
+        "summary": "Run network commands directly.",
+        "dynamic": [
+            "History is preserved per session."
+        ]
+    },
+    {
+        "tipId": "network:vrgc",
+        "summary": "Verified Routing & Governance Channel.",
+        "dynamic": [
+            "Policy-aware routing for sensitive traffic."
+        ]
+    },
+    {
+        "tipId": "telemetry:usage-cost",
+        "summary": "Tokens and cost per provider/model.",
+        "dynamic": []
+    },
+    {
+        "tipId": "telemetry:time-window",
+        "summary": "Re-scope every panel: 1h, 1d, 7d.",
+        "dynamic": []
+    },
+    {
+        "tipId": "telemetry:what-changed",
+        "summary": "Delta vs. the prior comparable window.",
+        "dynamic": []
+    },
+    {
+        "tipId": "telemetry:runtime-overview",
+        "summary": "Top-line runtime metrics.",
+        "dynamic": []
+    },
+    {
+        "tipId": "telemetry:runtime-excellence",
+        "summary": "Composite SLO + reliability score.",
+        "dynamic": [
+            "Higher is better."
+        ]
+    },
+    {
+        "tipId": "telemetry:release-readiness",
+        "summary": "Checklist gating a packaged release.",
+        "dynamic": [
+            "All-green required to ship."
+        ]
+    },
+    {
+        "tipId": "telemetry:package-history",
+        "summary": "Timeline of recent PRISM releases.",
+        "dynamic": []
+    },
+    {
+        "tipId": "telemetry:self-review",
+        "summary": "PRISM's own observations and improvement notes.",
+        "dynamic": []
+    },
+    {
+        "tipId": "telemetry:retrieval-alerts",
+        "summary": "Anomalies in retrieval-augmented operations.",
+        "dynamic": []
+    },
+    {
+        "tipId": "telemetry:slo-gauges",
+        "summary": "Service-level objective dials.",
+        "dynamic": [
+            "Red breaching, amber at-risk, green healthy."
+        ]
+    },
+    {
+        "tipId": "logs:actions",
+        "summary": "One-click utilities (refresh, clear, export).",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:approvals",
+        "summary": "Agentic actions awaiting approve/deny.",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:action-history",
+        "summary": "Recent operator actions across the console.",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:chat-telemetry",
+        "summary": "Per-session chat counters.",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:trace-view",
+        "summary": "Cross-system traces linked by request id.",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:events",
+        "summary": "Time-ordered system events.",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:tool-call-log",
+        "summary": "Every tool call with arguments and results.",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:activity-log",
+        "summary": "Last 500 entries across the console.",
+        "dynamic": [
+            "Filter by source and severity."
+        ]
+    },
+    {
+        "tipId": "logs:filter-source",
+        "summary": "Filter the activity log by source.",
+        "dynamic": []
+    },
+    {
+        "tipId": "logs:filter-severity",
+        "summary": "Filter the activity log by severity.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:header",
+        "summary": "Calendar, projects, Kanban, timeline, cron jobs.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:add-event",
+        "summary": "Create a calendar event.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:add-task",
+        "summary": "Create a task that flows through the Kanban board.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:add-project",
+        "summary": "Create a project — groups events and tasks.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:add-cron",
+        "summary": "Schedule a recurring job on the PRISM core.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:view-calendar",
+        "summary": "Year / Month / Week / Day calendar grid.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:view-projects",
+        "summary": "List of projects with tasks and timelines.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:view-board",
+        "summary": "Backlog → To Do → In Progress → Review → Done.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:view-timeline",
+        "summary": "Gantt-style timeline.",
+        "dynamic": []
+    },
+    {
+        "tipId": "scheduler:view-cron",
+        "summary": "Recurring jobs running on the PRISM core.",
+        "dynamic": []
+    }
+]

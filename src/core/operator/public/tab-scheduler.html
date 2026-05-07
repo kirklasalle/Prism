@@ -1,0 +1,94 @@
+<div class="tab-grid">
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" data-tip-id="scheduler:header" data-tip-kind="scheduler">
+      <h3>📅 Scheduler</h3>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="primary-button" style="font-size:12px;" data-tip-id="scheduler:add-event"
+          data-tip-kind="scheduler" onclick="openSchedulerModal('event')">+ Event</button>
+        <button class="primary-button" style="font-size:12px;" data-tip-id="scheduler:add-task"
+          data-tip-kind="scheduler" onclick="openSchedulerModal('task')">+ Task</button>
+        <button class="primary-button" style="font-size:12px;" data-tip-id="scheduler:add-project"
+          data-tip-kind="scheduler" onclick="openSchedulerModal('project')">+ Project</button>
+        <button class="primary-button" style="font-size:12px;" data-tip-id="scheduler:add-cron"
+          data-tip-kind="scheduler" onclick="openSchedulerModal('cron')">+ Cron Job</button>
+        <button class="secondary-button" style="font-size:12px;" onclick="refreshSchedulerData()">🔄 Refresh</button>
+      </div>
+    </div>
+    <div class="tabs panel" style="margin:10px 0;padding:6px;">
+      <button class="tab-button sched-subnav-btn active" data-sched-view="calendar"
+        data-tip-id="scheduler:view-calendar" data-tip-kind="scheduler" onclick="switchSchedulerView('calendar')"
+        style="font-size:12px;">📅 Calendar</button>
+      <button class="tab-button sched-subnav-btn" data-sched-view="projects" data-tip-id="scheduler:view-projects"
+        data-tip-kind="scheduler" onclick="switchSchedulerView('projects')" style="font-size:12px;">📋 Projects</button>
+      <button class="tab-button sched-subnav-btn" data-sched-view="board" data-tip-id="scheduler:view-board"
+        data-tip-kind="scheduler" onclick="switchSchedulerView('board')" style="font-size:12px;">📌 Board</button>
+      <button class="tab-button sched-subnav-btn" data-sched-view="timeline" data-tip-id="scheduler:view-timeline"
+        data-tip-kind="scheduler" onclick="switchSchedulerView('timeline')" style="font-size:12px;">📊 Timeline</button>
+      <button class="tab-button sched-subnav-btn" data-sched-view="cron" data-tip-id="scheduler:view-cron"
+        data-tip-kind="scheduler" onclick="switchSchedulerView('cron')" style="font-size:12px;">⏰ Cron Jobs</button>
+    </div>
+    <div id="sched-view-calendar">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <button class="secondary-button" onclick="schedCalNav(-1)" style="font-size:12px;padding:4px 10px;">‹</button>
+        <span id="sched-cal-title" style="font-size:14px;font-weight:600;min-width:120px;text-align:center;"></span>
+        <button class="secondary-button" onclick="schedCalNav(1)" style="font-size:12px;padding:4px 10px;">›</button>
+        <button class="tab-button sched-mode-btn" data-cal-mode="year" onclick="setCalMode('year')"
+          style="font-size:11px;padding:4px 10px;">Year</button>
+        <button class="tab-button sched-mode-btn" data-cal-mode="month" onclick="setCalMode('month')"
+          style="font-size:11px;padding:4px 10px;">Month</button>
+        <button class="tab-button sched-mode-btn" data-cal-mode="week" onclick="setCalMode('week')"
+          style="font-size:11px;padding:4px 10px;">Week</button>
+        <button class="tab-button sched-mode-btn active" data-cal-mode="day" onclick="setCalMode('day')"
+          style="font-size:11px;padding:4px 10px;">Day</button>
+      </div>
+      <div id="sched-cal-body" style="min-height:200px;"></div>
+    </div>
+    <div id="sched-view-projects" style="display:none;">
+      <div id="sched-projects-list" class="stack"><span class="muted" style="font-size:12px;">No projects. Click +
+          Project to create one.</span></div>
+    </div>
+    <div id="sched-view-board" style="display:none;">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;min-height:300px;">
+        <div data-status="backlog">
+          <div style="font-weight:600;font-size:12px;margin-bottom:8px;">Backlog</div>
+          <div id="sched-lane-backlog" class="sched-lane-body"
+            style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+        </div>
+        <div data-status="todo">
+          <div style="font-weight:600;font-size:12px;margin-bottom:8px;">To Do</div>
+          <div id="sched-lane-todo" class="sched-lane-body"
+            style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+        </div>
+        <div data-status="in-progress">
+          <div style="font-weight:600;font-size:12px;margin-bottom:8px;">In Progress</div>
+          <div id="sched-lane-in-progress" class="sched-lane-body"
+            style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+        </div>
+        <div data-status="review">
+          <div style="font-weight:600;font-size:12px;margin-bottom:8px;">Review</div>
+          <div id="sched-lane-review" class="sched-lane-body"
+            style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+        </div>
+        <div data-status="done">
+          <div style="font-weight:600;font-size:12px;margin-bottom:8px;">Done</div>
+          <div id="sched-lane-done" class="sched-lane-body"
+            style="min-height:200px;padding:6px;border:1px dashed rgba(148,163,184,0.2);border-radius:6px;"></div>
+        </div>
+      </div>
+    </div>
+    <div id="sched-view-timeline" style="display:none;">
+      <div id="sched-gantt-header" style="position:relative;height:24px;"></div>
+      <div id="sched-gantt-rows" style="min-height:100px;"></div>
+    </div>
+    <div id="sched-view-cron" style="display:none;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <button class="primary-button" style="font-size:12px;" onclick="openSchedulerModal('cron')">+ New Cron
+          Job</button>
+        <button class="secondary-button" style="font-size:12px;" onclick="refreshCronJobs()">🔄 Refresh</button>
+        <span id="sched-cron-count" class="muted" style="font-size:12px;"></span>
+      </div>
+      <div id="sched-cron-list" class="stack"><span class="muted" style="font-size:12px;">No cron jobs scheduled. Click
+          + Cron Job to add one.</span></div>
+    </div>
+  </section>
+</div>

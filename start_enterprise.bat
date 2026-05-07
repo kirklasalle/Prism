@@ -114,8 +114,37 @@ timeout /t 1 /nobreak >nul
 netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
 if errorlevel 1 goto :wait_loop
 
-echo [START] Opening dashboard at http://localhost:%PRISM_DASHBOARD_PORT%
-start "" "http://localhost:%PRISM_DASHBOARD_PORT%"
+REM ── Resolve workspace root for token file ─────────────────────────────
+if not defined PRISM_WORKSPACE_ROOT (
+  for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "try { $j = Get-Content '%~dp0.prism-preferences.json' -Raw -ErrorAction Stop ^| ConvertFrom-Json; if ($j.workspaceRoot -and (Test-Path $j.workspaceRoot)) { $j.workspaceRoot } } catch {}"`) do (
+    if not "%%P"=="" set "PRISM_WORKSPACE_ROOT=%%P"
+  )
+)
+if not defined PRISM_WORKSPACE_ROOT set "PRISM_WORKSPACE_ROOT=%USERPROFILE%\Documents\Prism_Refraction"
+
+REM ── Read admin auth token ──────────────────────────────────────────────
+set "PRISM_TOKEN_FILE=%PRISM_WORKSPACE_ROOT%\state\admin-token"
+set "PRISM_AUTH_TOKEN="
+set "PRISM_TOKEN_RETRIES=0"
+:token_wait
+if exist "%PRISM_TOKEN_FILE%" goto :token_read
+set /a PRISM_TOKEN_RETRIES+=1
+if %PRISM_TOKEN_RETRIES% GEQ 5 goto :token_read
+timeout /t 1 /nobreak >nul
+goto :token_wait
+:token_read
+if exist "%PRISM_TOKEN_FILE%" (
+  for /f "usebackq delims=" %%T in ("%PRISM_TOKEN_FILE%") do set "PRISM_AUTH_TOKEN=%%T"
+)
+
+if defined PRISM_AUTH_TOKEN (
+  echo [START] Opening dashboard at http://localhost:%PRISM_DASHBOARD_PORT%/dashboard?token=...
+  start "" "http://localhost:%PRISM_DASHBOARD_PORT%/dashboard?token=%PRISM_AUTH_TOKEN%"
+) else (
+  echo [WARN] Could not read auth token. Dashboard may require manual token entry.
+  echo [START] Opening dashboard at http://localhost:%PRISM_DASHBOARD_PORT%
+  start "" "http://localhost:%PRISM_DASHBOARD_PORT%"
+)
 
 goto :eof
 

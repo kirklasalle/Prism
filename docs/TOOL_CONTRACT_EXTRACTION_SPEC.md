@@ -3,7 +3,7 @@
 **Document**: TOOL_CONTRACT_EXTRACTION_SPEC.md  
 **Date**: 2026-03-17  
 **Owner**: Engineering  
-**Status**: DRAFT (pending review)
+**Status**: ACCEPTED (reviewed 2026-04-20)
 
 ---
 
@@ -727,3 +727,53 @@ tool_staging_rejected_revoked_publisher (Business)
 ---
 
 **Next Step**: Schedule design review with Engineering Lead + Policy Lead. Target: 2026-03-20.
+
+---
+
+## 13. Computer-Use Business Security Alignment Gate Coupling (2026-03-25)
+
+Tool staging is part of PRISM computer-use risk posture and is therefore coupled to Business gate controls.
+
+Required alignment:
+
+1. Staged tools that can drive browser/terminal/container workflows must preserve tiered governance routing.
+2. High-risk staged tools must preserve approval/revoke semantics with reason-coded outcomes.
+3. Business-profile trust/provenance checks must remain mandatory for enterprise release claims.
+4. Release evidence must map staging behavior to `CU-BG-1` through `CU-BG-5` where applicable.
+
+Canonical references:
+
+- `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
+- `REQUIREMENTS_TRACEABILITY_MATRIX.md`
+- `PRODUCTION_RELEASE_RUNBOOK.md`
+
+---
+
+## Implementation Notes (2026-04-20)
+
+### Artifacts
+
+| Artifact | Location |
+|----------|----------|
+| Extractor implementation | `src/core/tools/tool-contract-extractor.ts` |
+| Contract utilities | `src/core/tools/contracts.ts` |
+| Test suite | `tests/tool-contract-extractor.test.ts` (8+ test cases) |
+| Contract validation tests | `tests/tool-contracts.test.ts` (2+ test cases) |
+
+### Implemented Capabilities
+
+- Three-source extraction pipeline: manifest, decorator, dynamic (all sources defined, pipeline orchestrated)
+- Baseline comparison: current vs. stored baseline with breaking/safe/deprecated change detection
+- Risk tier auto-assignment via keyword scoring (HIGH_RISK_KEYWORDS + BREAKING_CHANGE_KEYWORDS)
+- Approval routing for high-risk changes (routes to ApprovalQueue)
+- SQLite persistence: 4 tables (`tool_contracts`, `contract_baseline`, `extraction_requests`, `contract_changes`)
+- `ToolContract` and `ToolArgSchema` interfaces with semver versioning
+- Runtime contract validation: `validateToolContract()` and `validateToolRequestAgainstContract()`
+
+### Known Gaps (Deferred to Future Scope)
+
+- ~~**Manifest parsing**: Extraction returns structured test data; real JSON/YAML manifest file parsing not implemented.~~ **Resolved (April 2026)**: `extractFromManifest()` now parses real `tool-contract.json` files, `tool-contract-snapshot.json` manifests, and per-tool subdirectory manifests from configurable paths. Falls back to simulated data only when no manifest paths are configured.
+- ~~**Decorator reflection**: No TypeScript AST or decorator API introspection; uses simulated extraction.~~ **Resolved (April 2026)**: `extractFromDecorators()` now scans the `ToolRegistry` for tools with explicit `contract` properties, extracting real contract metadata. Falls back to simulated data only when no registry is wired.
+- ~~**Dynamic inspection**: No runtime tool loading/introspection; uses hardcoded contract definitions.~~ **Resolved (April 2026)**: `extractFromDynamic()` now infers contracts from `GovernanceSchema` on registered tools that lack explicit contracts. Extracts action names, risk levels, and mutation flags from governance rules.
+- ~~**Risk scoring**: Keyword-presence-based scoring only; no context weighting, NLP, or semantic analysis.~~ **Partially Resolved (April 2026)**: `assessRiskTier()` now scores across 6 dimensions: description keywords, parameter count, parameter types (side-effect indicators), parameter names (mutation indicators), tool name patterns, and governance schema analysis (mutating, minimumRisk, rollbackRequired). Full NLP/semantic analysis deferred.
+- ~~**Approval handler**: Routes to ApprovalQueue but approval response handling not fully wired.~~ **Resolved (April 2026)**: `resolveApproval()` method completes the approval flow — accepts approve/reject decisions, calls `stageForDeployment()`, retrieves approved contracts from the database, and registers them into the `ToolRegistry` with stub executors. Emits governance activity events for both approval and rejection paths.

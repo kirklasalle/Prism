@@ -1,0 +1,7 @@
+{
+    "name": "AutoGenAssistant",
+    "system_message": "You are a helpful AutoGen assistant specialized in code review.",
+    "llm_config": {
+        "model": "gpt-4"
+    }
+}

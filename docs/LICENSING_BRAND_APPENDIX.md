@@ -115,3 +115,13 @@ Before licensing finalization:
 3. Confirm pricing narrative aligns with control/compliance value, not artificial feature subtraction.
 4. Confirm legal review of adapter pack trust model and distribution terms.
 5. Confirm investor-facing claims align to implemented milestones and release artifacts.
+
+## 8. Computer-Use Commercialization Guardrail
+
+Commercial messaging and SKU positioning for browser/terminal/container computer-use capabilities must follow the Business Security Alignment Gate:
+
+- No enterprise-grade claim is considered sale-ready without `CU-BG-1` through `CU-BG-5` evidence.
+- Capability parity claims remain valid only when governance controls are shown as implemented, tested, and release-gated.
+- External benchmark framing must be labeled vendor-reported unless internally reproduced in PRISM qualification artifacts.
+
+Canonical reference: `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`.

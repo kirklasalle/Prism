@@ -109,6 +109,21 @@ PRISM moat components:
 - chat-to-agent routing (classifier-first intent detection),
 - dashboard Agent Control tab wiring with real data.
 
+### M6: Spectrum Refraction Advanced (Phase D4 — Completed 2026-04-20)
+
+Spectrum Refraction is PRISM's unique parallel LLM fan-out engine. Phase D4c delivered the full advanced capability surface:
+
+- **Per-hemisphere independent timeouts** with partial-result fallback (one side times out; the other still contributes).
+- **Circuit breaker** — opens after configurable consecutive failure threshold; auto-resets on success; `circuitBreakerEnabled: false` bypass available.
+- **Signed audit trail** — four canonical activity events (`sr.fanout_start`, `sr.fanout_complete`, `sr.generation_complete`, `sr.circuit_breaker_triggered`) emitted for every SR invocation.
+- **True parallel fan-out** — elapsed time ≈ max(hemispheres), not sum; verified in test.
+- **Cost estimation** — `SRCostEstimate` returned with per-hemisphere and aggregate cost; aggregation input expansion (3× output tokens) accounted for.
+- **Multi-key slot assignment** — per-provider, per-named-slot API key storage with slot isolation.
+
+**Evidence**: `tests/spectrum-refraction-advanced.test.ts` — 20/20 passing; `docs/D4_COVERAGE_VALIDATION.md` — full test listing with evidence. `REQUIREMENTS_TRACEABILITY_MATRIX.md` §9 — D4-R1..D4-R10 all status=pass.
+
+Spectrum Refraction is a differentiated capability not replicated in OpenClaw, AgentZero, or Hermes frameworks. It enables PRISM to run simultaneous reasoning paths, compare outputs, and produce cost-accounted aggregated results — all with full governance audit trail.
+
 ## 6. Key Risks and Mitigations
 
 1. Risk: feature velocity slows due to governance requirements.
@@ -132,3 +147,15 @@ The strategic upside is not only what PRISM can do, but what PRISM can prove:
 - and how to replay or roll back behavior under operational stress.
 
 That proof layer is expected to become a decisive procurement requirement in enterprise AI deployment cycles.
+
+## 8. Computer-Use Business Security Alignment Gate (Investor Addendum)
+
+All parity and growth claims that rely on browser/terminal/container computer-use capability must be interpreted as **gated claims** for enterprise readiness. Investment-readiness messaging is valid only when all CU-BG controls are evidenced in the release packet:
+
+1. `CU-BG-1` — Profile-aware policy enforcement across computer-use operations.
+2. `CU-BG-2` — Approval + revoke controls for high-risk computer-use paths.
+3. `CU-BG-3` — Reason-coded lineage from request to effect.
+4. `CU-BG-4` — Release evidence proving parity under governed controls.
+5. `CU-BG-5` — Incident-ready replay and rollback drills.
+
+Canonical reference: `COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`.

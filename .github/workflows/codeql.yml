@@ -1,0 +1,72 @@
+#
+# PRISM CodeQL — JavaScript/TypeScript static-analysis security gate.
+#
+# Runs the GitHub-managed CodeQL JS/TS query suite against the repository
+# on every push to main, every PR targeting main, and once a week on
+# Tuesday at 06:17 UTC (off-peak vs ci.yml + quality-gates.yml). Results
+# upload to the repository's Security tab as code-scanning alerts.
+#
+# This workflow is intentionally minimal and standalone — it does not
+# duplicate the build/smoke gates in ci.yml. CodeQL builds the JS/TS
+# database directly from the source tree (no `npm run build` needed).
+#
+# What this gate enforces:
+#
+#   1. No new high-severity static-analysis findings introduced by a PR
+#      (the check fails on findings at "error" or "high" severity by
+#      default — adjust via the Security → Code scanning settings if
+#      false positives are accepted by maintainers).
+#   2. Weekly drift detection — even if `main` is quiet, the schedule
+#      catches new query packs that flag previously-OK code.
+#
+
+name: PRISM CodeQL — JS/TS Static Analysis
+
+on:
+    push:
+        branches: [ "main" ]
+    pull_request:
+        branches: [ "main" ]
+    schedule:
+        # Weekly off-peak slot (Tue 06:17 UTC).
+        - cron: "17 6 * * 2"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    security-events: write
+    actions: read
+
+concurrency:
+    group: prism-codeql-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    analyze:
+        name: CodeQL analyze (javascript-typescript)
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        strategy:
+            fail-fast: false
+            matrix:
+                language: [ "javascript-typescript" ]
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@v3
+              with:
+                  languages: ${{ matrix.language }}
+                  queries: security-and-quality
+
+            # PRISM has no compiled language in the JS/TS analysis target — the
+            # tsc build is for runtime, not for CodeQL — so the autobuild step
+            # would only slow things down. Skip it.
+
+            - name: Perform CodeQL analysis
+              uses: github/codeql-action/analyze@v3
+              with:
+                  category: /language:${{ matrix.language }}

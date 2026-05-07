@@ -1,0 +1,67 @@
+/* PRISM Phase H — Mobile/Tablet Polish (additive only)
+ *
+ * Targets coarse-pointer (touch) devices to ensure tap targets meet WCAG
+ * 2.5.5 (Target Size, Level AAA — 44×44 CSS px).
+ *
+ * Frontend Protection Guarantee: nothing here removes or replaces existing
+ * styles. All rules are additive @media queries scoped to coarse pointers.
+ */
+
+@media (hover: none) and (pointer: coarse) {
+
+    button,
+    [role="button"],
+    a.btn,
+    .nav-link,
+    .toolbar-button,
+    input[type="submit"],
+    input[type="checkbox"],
+    input[type="radio"],
+    .tab,
+    .approval-action,
+    .session-action {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 12px 16px;
+    }
+
+    a {
+        padding: 6px 4px;
+    }
+
+    /* Larger hit area for compact lists. */
+    li[role="button"],
+    .list-item-tappable {
+        min-height: 44px;
+        padding: 10px 12px;
+    }
+
+    /* Slightly larger base font on phones to avoid zooming. */
+    body {
+        font-size: 16px;
+    }
+
+    /* Ensure form fields don't trigger iOS auto-zoom (<16px). */
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}
+
+/* Tablet portrait: relax breakpoint inheritance so nav rows wrap rather than
+   clip when fewer columns fit. */
+@media (max-width: 900px) and (orientation: portrait) {
+
+    .toolbar,
+    .nav-bar {
+        flex-wrap: wrap;
+    }
+}
+
+/* PWA standalone mode: hide elements that depend on browser chrome. */
+@media (display-mode: standalone) {
+    .browser-only {
+        display: none !important;
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "formatVersion": 1,
+    "decisions": [
+        {
+            "entryId": "example-tools-pack",
+            "version": "0.1.0",
+            "status": "approved",
+            "reviewer": "prism-curation-team",
+            "reviewedAt": "2026-05-05T00:00:00.000Z",
+            "notes": "Sample pack — approved as scaffold reference."
+        },
+        {
+            "entryId": "research-helper",
+            "version": "0.2.1",
+            "status": "approved",
+            "reviewer": "prism-curation-team",
+            "reviewedAt": "2026-05-05T00:00:00.000Z",
+            "notes": "Web fetch with documented allowlist and citation contract."
+        }
+    ]
+}

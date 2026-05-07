@@ -1,6 +1,9 @@
-﻿import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import sqlite3 from "sqlite3";
+import { TerminalSessionAdapter } from "./adapters/application/terminal-session-adapter.js";
+import { ContainerSandboxAdapter } from "./adapters/application/container-sandbox-adapter.js";
 import { ActivityBus } from "./core/activity/bus.js";
 import { ConsoleActivitySubscriber } from "./core/activity/console-subscriber.js";
 import { SqliteActivityStore } from "./core/activity/sqlite-store.js";
@@ -21,12 +24,17 @@ import { WorkflowExecutor } from "./core/runtime/workflow.js";
 import { resolveExecutionProfileFromEnv, describeExecutionProfileResolution } from "./core/config/execution-mode-config.js";
 import { builtinTools } from "./core/tools/builtin-tools.js";
 import { ToolRegistry } from "./core/tools/registry.js";
+import { GmailOAuthAdapter } from "./adapters/application/email-oauth-adapter.js";
+import { OutlookOAuthAdapter } from "./adapters/application/outlook-oauth-adapter.js";
+import { createOAuthTokenStore } from "./core/operator/oauth-token-store.js";
 import { MemoryQueryTool, SemanticQueryTool } from "./adapters/application/semantic-query-tool.js";
 import { nexusBridgeTools } from "./adapters/application/nexus-bridge-tool.js";
 import { ChatSessionStore } from "./core/operator/chat-session-store.js";
 import { DashboardService, type DashboardAction } from "./core/operator/dashboard-service.js";
 import { SelfReviewScheduler } from "./core/operator/self-review-scheduler.js";
+import { UsageMeteringService } from "./core/operator/usage-metering-service.js";
 import { McpClientAdapter } from "./adapters/protocol/mcp-client-tool.js";
+import { getConsoleInterceptor } from "./core/logging/console-interceptor.js";
 import { AgentPool } from "./core/agents/agent-pool.js";
 import { AgentLifecycleManager } from "./core/agents/agent-lifecycle.js";
 import { AgentTelemetryCollector } from "./core/agents/agent-telemetry-collector.js";
@@ -41,18 +49,105 @@ import {
     workspaceConfigDir,
     workspaceArtifactsDir,
     detectLegacyPaths,
+    seedDefaultCharacters,
 } from "./core/config/workspace-resolver.js";
 
 async function main(): Promise<void> {
+    // Install the console interceptor BEFORE any startup logging so the
+    // dashboard's Live Console panel captures every line — including the
+    // earliest [PRISM][startup] warnings about JWT secrets, etc.
+    const consoleInterceptor = getConsoleInterceptor();
+    consoleInterceptor.install();
+
     const runtimeMode = resolveRuntimeMode(process.env.PRISM_MODE ?? process.argv[2]);
+    const cliSetup = process.argv.includes("--setup");
     const dashboardPort = Number(process.env.PRISM_DASHBOARD_PORT ?? 7070);
     const environmentProfile = resolveEnvironmentProfile(
         process.env.PRISM_ENV_PROFILE ?? (process.env.CI ? "staging" : "dev"),
     );
     const retrievalAlertProfile = resolveRetrievalAlertProfile(environmentProfile);
 
+    // Startup environment validation — fail fast in production, warn in dev.
+    // Each FATAL condition refuses to boot when NODE_ENV=production.
+    const isProduction = process.env.NODE_ENV === "production";
+    const envWarnings: string[] = [];
+    const envFatals: string[] = [];
+
+    const jwtSecret = process.env.PRISM_JWT_SECRET ?? "";
+    if (jwtSecret.length < 32) {
+        if (isProduction) {
+            envFatals.push(
+                "PRISM_JWT_SECRET must be set to a string of at least 32 characters " +
+                "(generate via: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
+            );
+        } else {
+            // Dev convenience: auto-generate a persistent secret stored under
+            // the workspace data dir so the warning does not fire on every
+            // restart and so the same token survives across reboots.
+            try {
+                const dataDir = process.env.PRISM_DATA_DIR
+                    ?? join(process.env.USERPROFILE ?? process.env.HOME ?? process.cwd(), ".prism");
+                mkdirSync(dataDir, { recursive: true });
+                const secretPath = join(dataDir, ".prism-jwt-secret");
+                let secret = "";
+                if (existsSync(secretPath)) {
+                    secret = readFileSync(secretPath, "utf8").trim();
+                }
+                if (secret.length < 32) {
+                    secret = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+                    writeFileSync(secretPath, secret, { encoding: "utf8", mode: 0o600 });
+                    console.warn(
+                        `[PRISM][startup] PRISM_JWT_SECRET not set — generated a development ` +
+                        `secret at ${secretPath} (mode 0600). Set PRISM_JWT_SECRET explicitly for ` +
+                        `production deployments.`,
+                    );
+                }
+                process.env.PRISM_JWT_SECRET = secret;
+            } catch (err) {
+                envWarnings.push(
+                    "PRISM_JWT_SECRET not set and dev auto-generation failed " +
+                    `(${(err as Error).message}) — authentication may be insecure`,
+                );
+            }
+        }
+    }
+
+    if (process.env.PRISM_AUTH_DISABLED === "true") {
+        const msg = "PRISM_AUTH_DISABLED=true disables dashboard authentication entirely";
+        if (isProduction) envFatals.push(`${msg} — forbidden when NODE_ENV=production`);
+        else envWarnings.push(`${msg} — only acceptable in development`);
+    }
+
+    if (isProduction && !process.env.PRISM_DATA_DIR) {
+        envFatals.push(
+            "PRISM_DATA_DIR must be set in production so SQLite databases, characters, " +
+            "plugin packs, and audit logs are persistent across container restarts",
+        );
+    }
+
+    if (!process.env.PRISM_DASHBOARD_PORT) {
+        envWarnings.push("PRISM_DASHBOARD_PORT not set — defaulting to 7070");
+    }
+
+    for (const warn of envWarnings) {
+        console.warn(`[PRISM][startup] WARN: ${warn}`);
+    }
+
+    if (envFatals.length > 0) {
+        console.error("\n[PRISM][startup] FATAL: refusing to boot in production with the following issues:");
+        for (const fatal of envFatals) {
+            console.error(`  - ${fatal}`);
+        }
+        console.error(
+            "\nSet NODE_ENV=development for local work, or fix the environment and retry. " +
+            "See .env.example at the workspace root for documentation of every variable.",
+        );
+        process.exit(1);
+    }
+
     // Initialize persistent workspace
     ensureWorkspaceStructure(environmentProfile);
+    seedDefaultCharacters();
     const wsRoot = resolveWorkspaceRoot();
     const dbPath = workspaceDbPath();
     const legacy = detectLegacyPaths();
@@ -75,6 +170,7 @@ async function main(): Promise<void> {
     const sessionMemory = new SessionMemoryStore(dbPath);
     const chatSessionStore = new ChatSessionStore(dbPath);
     const approvalQueue = new ApprovalQueue();
+    const usageMeteringService = new UsageMeteringService(dbPath);
     const startedAt = new Date().toISOString();
     activityBus.subscribe(new ConsoleActivitySubscriber());
     activityBus.subscribe(sqliteStore);
@@ -82,8 +178,22 @@ async function main(): Promise<void> {
     activityBus.subscribe(semanticIndex);
     activityBus.subscribe(sessionMemory);
     const policyEngine = new PolicyEngine();
+    
+    // Initialize OAuth adapters early for tool injection
+    const oauthTokenStore = createOAuthTokenStore();
+    const gmailOAuth = new GmailOAuthAdapter(oauthTokenStore);
+    const outlookOAuth = new OutlookOAuthAdapter(oauthTokenStore);
+
+    // Initialize system adapters — PTY terminal + container sandbox
+    const adapterDb = new sqlite3.Database(dbPath);
+    const executionProfile = resolveExecutionProfileFromEnv(environmentProfile);
+    const terminalAdapter = new TerminalSessionAdapter(adapterDb, policyEngine, activityBus, executionProfile);
+    const containerAdapter = new ContainerSandboxAdapter(adapterDb, policyEngine, activityBus, executionProfile);
+    console.log(`[PRISM][adapters] TerminalSessionAdapter PTY init: pending (node-pty)`);
+    console.log(`[PRISM][adapters] ContainerSandboxAdapter runtime: ${containerAdapter.getRuntimeBackend()}`);
+
     const registry = new ToolRegistry();
-    for (const tool of builtinTools()) {
+    for (const tool of builtinTools(gmailOAuth, outlookOAuth, terminalAdapter, containerAdapter)) {
         registry.register(tool);
     }
     registry.register(new SemanticQueryTool(semanticIndex, episodicMemory, sessionMemory, metricsCollector));
@@ -115,7 +225,6 @@ async function main(): Promise<void> {
         }
     }
 
-    const executionProfile = resolveExecutionProfileFromEnv(environmentProfile);
     const orchestrator = new Orchestrator(
         sessionId, activityBus, policyEngine, registry,
         { approvalQueue, approvalTimeoutMs: 30_000, executionProfile },
@@ -140,104 +249,113 @@ async function main(): Promise<void> {
         undefined,
         sqliteStore,
         undefined,
-        undefined,
+        undefined, // sessionPackageExportDir
         registry,
+        usageMeteringService,
+        gmailOAuth,
+        outlookOAuth,
+        terminalAdapter,
+        containerAdapter,
     );
 
+    // Wire MCP adapter + console interceptor so /api/mcp/servers,
+    // /api/debug/console, and the Guardian's mcp_health_recovery task work.
+    dashboardService.setMcpAdapter(mcpAdapter);
+    dashboardService.setConsoleInterceptor(consoleInterceptor);
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
     const llmDelegate = dashboardService.getLlmDelegate();
     const agentTelemetry = new AgentTelemetryCollector();
     const agentLifecycle = new AgentLifecycleManager({
-      onSpawn: (inst) => {
-        activityBus.emit({
-          sessionId, layer: "agent", operation: "agent.spawned",
-          status: "succeeded", details: { agentId: inst.agentId, role: inst.role, lifecycle: inst.lifecycle },
-        });
-      },
-      onStop: (agentId) => {
-        activityBus.emit({
-          sessionId, layer: "agent", operation: "agent.stopped",
-          status: "succeeded", details: { agentId },
-        });
-      },
-      onPromote: (agentId, from, to) => {
-        activityBus.emit({
-          sessionId, layer: "agent", operation: "agent.promoted",
-          status: "succeeded", details: { agentId, from, to },
-        });
-      },
-      onReap: (agentId) => {
-        activityBus.emit({
-          sessionId, layer: "agent", operation: "agent.reaped",
-          status: "succeeded", details: { agentId },
-        });
-      },
+        onSpawn: (inst) => {
+            activityBus.emit({
+                sessionId, layer: "agent", operation: "agent.spawned",
+                status: "succeeded", details: { agentId: inst.agentId, role: inst.role, lifecycle: inst.lifecycle },
+            });
+        },
+        onStop: (agentId) => {
+            activityBus.emit({
+                sessionId, layer: "agent", operation: "agent.stopped",
+                status: "succeeded", details: { agentId },
+            });
+        },
+        onPromote: (agentId, from, to) => {
+            activityBus.emit({
+                sessionId, layer: "agent", operation: "agent.promoted",
+                status: "succeeded", details: { agentId, from, to },
+            });
+        },
+        onReap: (agentId) => {
+            activityBus.emit({
+                sessionId, layer: "agent", operation: "agent.reaped",
+                status: "succeeded", details: { agentId },
+            });
+        },
     });
 
     // Restore persisted agents from workspace
     try {
-      const persistPath = workspacePath("state", "agents.json");
-      const { readFileSync } = await import("node:fs");
-      if (existsSync(persistPath)) {
-        const persisted = JSON.parse(readFileSync(persistPath, "utf-8"));
-        if (Array.isArray(persisted)) {
-          agentLifecycle.restoreFromPersisted(persisted);
-          console.log(`[PRISM][agents] Restored ${persisted.length} persisted agent(s)`);
+        const persistPath = workspacePath("state", "agents.json");
+        const { readFileSync } = await import("node:fs");
+        if (existsSync(persistPath)) {
+            const persisted = JSON.parse(readFileSync(persistPath, "utf-8"));
+            if (Array.isArray(persisted)) {
+                agentLifecycle.restoreFromPersisted(persisted);
+                console.log(`[PRISM][agents] Restored ${persisted.length} persisted agent(s)`);
+            }
         }
-      }
     } catch {
-      // No persisted agents or parse error — continue with defaults
+        // No persisted agents or parse error — continue with defaults
     }
 
     // Sync lifecycle model overrides to LLM routing config
     const llmProviders = dashboardService.getLlmProviderManager();
     for (const inst of agentLifecycle.list()) {
-      if (inst.modelOverride) {
-        llmProviders.setAgentModelOverride(inst.agentId, inst.modelOverride.providerId, inst.modelOverride.model);
-      }
+        if (inst.modelOverride) {
+            llmProviders.setAgentModelOverride(inst.agentId, inst.modelOverride.providerId, inst.modelOverride.model);
+        }
     }
 
     const agentPool = new AgentPool(llmDelegate);
 
     // Register all lifecycle agents in the pool
     for (const inst of agentLifecycle.list()) {
-      agentPool.register({ agentId: inst.agentId, role: inst.role, description: inst.description, systemContext: inst.systemContext });
+        agentPool.register({ agentId: inst.agentId, role: inst.role, description: inst.description, systemContext: inst.systemContext });
     }
 
     // Wire dispatch hooks for lifecycle tracking and telemetry
     agentPool.setDispatchHooks(
-      (agentId) => agentLifecycle.recordDispatch(agentId),
-      (agentId, result: SubAgentResult) => {
-        agentLifecycle.recordDispatchComplete(agentId);
-        const inst = agentLifecycle.get(agentId);
-        agentTelemetry.record({
-          agentId,
-          role: inst?.role ?? "chat",
-          model: result.model ?? "unknown",
-          providerId: result.routing?.providerId ?? "unknown",
-          durationMs: result.durationMs,
-          ok: result.ok,
-          timestamp: Date.now(),
-        });
-      },
+        (agentId) => agentLifecycle.recordDispatch(agentId),
+        (agentId, result: SubAgentResult) => {
+            agentLifecycle.recordDispatchComplete(agentId);
+            const inst = agentLifecycle.get(agentId);
+            agentTelemetry.record({
+                agentId,
+                role: inst?.role ?? "chat",
+                model: result.model ?? "unknown",
+                providerId: result.routing?.providerId ?? "unknown",
+                durationMs: result.durationMs,
+                ok: result.ok,
+                timestamp: Date.now(),
+            });
+        },
     );
 
     const swarmCoordinator = new SwarmCoordinator(agentPool, (swarm) => {
-      activityBus.emit({
-        sessionId, layer: "agent", operation: "swarm.updated",
-        status: "succeeded", details: { swarmId: swarm.swarmId, state: swarm.state, topology: swarm.topology },
-      });
+        activityBus.emit({
+            sessionId, layer: "agent", operation: "swarm.updated",
+            status: "succeeded", details: { swarmId: swarm.swarmId, state: swarm.state, topology: swarm.topology },
+        });
     });
 
     const agentRouter = new AgentRouter(agentPool, llmDelegate);
 
     // Wire agent control into dashboard
     dashboardService.setAgentControl({
-      lifecycle: agentLifecycle,
-      telemetry: agentTelemetry,
-      swarm: swarmCoordinator,
-      pool: agentPool,
-      router: agentRouter,
+        lifecycle: agentLifecycle,
+        telemetry: agentTelemetry,
+        swarm: swarmCoordinator,
+        pool: agentPool,
+        router: agentRouter,
     });
 
     // Start ephemeral agent reaper
@@ -290,7 +408,29 @@ async function main(): Promise<void> {
         });
 
         console.log("\nPRISM server mode is running. Open the dashboard in your browser.");
+
+        // Auto-open setup wizard when --setup flag is passed
+        if (cliSetup) {
+            const setupUrl = `http://localhost:${dashboardPort}/setup`;
+            console.log(`[PRISM] --setup flag detected, opening wizard: ${setupUrl}`);
+            import("node:child_process").then(({ exec }) => {
+                const cmd = process.platform === "win32" ? `start "" "${setupUrl}"`
+                    : process.platform === "darwin" ? `open "${setupUrl}"`
+                        : `xdg-open "${setupUrl}"`;
+                exec(cmd, () => {/* best-effort */ });
+            }).catch(() => {/* ignore */ });
+        }
+
         await waitForShutdown(async () => {
+            // Emit shutdown event to all activity subscribers before stores close
+            activityBus.emit({
+                operation: "system.shutdown",
+                status: "started",
+                sessionId: "system",
+                layer: "agent",
+                details: {},
+            });
+
             // Persist agent state before shutdown
             try {
                 const { writeFileSync, mkdirSync } = await import("node:fs");
@@ -308,6 +448,7 @@ async function main(): Promise<void> {
             retrievalDashboardStore.close();
             sessionMemory.close();
             chatSessionStore.close();
+            adapterDb.close();
             await dashboardService.stop();
         });
         return;
@@ -475,6 +616,7 @@ async function main(): Promise<void> {
     retrievalDashboardStore.close();
     sessionMemory.close();
     chatSessionStore.close();
+    adapterDb.close();
     await dashboardService.stop();
 }
 

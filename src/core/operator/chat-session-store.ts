@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { PersistedProviderSettings, PrismLlmProviderId } from "./llm-provider-manager.js";
+import type { PersistedProviderSettings, PrismLlmProviderId, RoutingConfig } from "./llm-provider-manager.js";
+import type { ModelCapabilityProfile } from "./model-capability-matrix.js";
 
 export interface ChatSessionSummary {
     sessionId: string;
@@ -12,6 +13,30 @@ export interface ChatSessionSummary {
     messageCount: number;
     lastMessagePreview: string | null;
     lastMessageRole: "user" | "assistant" | "system" | null;
+    /** E3b governance-gate: character id this session is bound to. Null on legacy rows. */
+    characterId: string | null;
+    /** E3b governance-gate: CAC assignment id snapshot. */
+    cacAssignmentId: string | null;
+    /** Execution profile snapshot at session creation time ('individual' | 'business'). */
+    executionProfile: string | null;
+    /** Operator email snapshot from CAC assignment (may be placeholder). */
+    operatorEmail: string | null;
+    /** Assistant/character email snapshot from CAC assignment (may be placeholder). */
+    assistantEmail: string | null;
+}
+
+/**
+ * Input for creating a new chat session. As of Phase E3b every new session must
+ * be bound to a character; the string overload is retained for backward-compat
+ * with legacy callers (the server layer fills in a default character).
+ */
+export interface CreateSessionInput {
+    title?: string;
+    characterId?: string | null;
+    cacAssignmentId?: string | null;
+    executionProfile?: string | null;
+    operatorEmail?: string | null;
+    assistantEmail?: string | null;
 }
 
 export interface ChatMessage {
@@ -64,7 +89,9 @@ export interface ProviderSettingsInput {
     defaultModel?: string | null;
 }
 
-export class ChatSessionStore {
+import type { ISessionStore } from "../database/store-interfaces.js";
+
+export class ChatSessionStore implements ISessionStore {
     private readonly db: DatabaseSync;
     private readonly insertSessionStmt: StatementSync;
     private readonly insertMessageStmt: StatementSync;
@@ -74,10 +101,20 @@ export class ChatSessionStore {
 
     constructor(dbPath: string = "prism-activity.db") {
         this.db = new DatabaseSync(dbPath);
+        // Enable WAL mode for better concurrent read performance
+        this.db.exec("PRAGMA journal_mode=WAL");
         this.migrate();
         this.insertSessionStmt = this.db.prepare(`
-            INSERT INTO chat_sessions (session_id, title, created_at, updated_at)
-            VALUES (:sessionId, :title, :createdAt, :updatedAt)
+            INSERT INTO chat_sessions (
+                session_id, title, created_at, updated_at,
+                character_id, cac_assignment_id, execution_profile,
+                operator_email, assistant_email
+            )
+            VALUES (
+                :sessionId, :title, :createdAt, :updatedAt,
+                :characterId, :cacAssignmentId, :executionProfile,
+                :operatorEmail, :assistantEmail
+            )
         `);
         this.insertMessageStmt = this.db.prepare(`
             INSERT INTO chat_messages (message_id, session_id, role, content, created_at, metadata_json)
@@ -169,6 +206,14 @@ export class ChatSessionStore {
         this.ensureColumn("chat_sessions", "llm_provider_id", "TEXT");
         this.ensureColumn("chat_sessions", "llm_model", "TEXT");
 
+        // Phase E3b governance-gate columns — bind every session to a character + CAC identity.
+        // Legacy rows keep NULL values and surface a "no character bound" banner until reassigned.
+        this.ensureColumn("chat_sessions", "character_id", "TEXT");
+        this.ensureColumn("chat_sessions", "cac_assignment_id", "TEXT");
+        this.ensureColumn("chat_sessions", "execution_profile", "TEXT");
+        this.ensureColumn("chat_sessions", "operator_email", "TEXT");
+        this.ensureColumn("chat_sessions", "assistant_email", "TEXT");
+
         // Attachment storage table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS chat_attachments (
@@ -192,6 +237,84 @@ export class ChatSessionStore {
             CREATE INDEX IF NOT EXISTS idx_chat_attachments_session
             ON chat_attachments (session_id);
         `);
+
+        // Routing configuration persistence (single-row table)
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS routing_config (
+                config_key TEXT PRIMARY KEY DEFAULT 'default',
+                strategy TEXT NOT NULL DEFAULT 'single',
+                role_overrides_json TEXT NOT NULL DEFAULT '{}',
+                agent_overrides_json TEXT NOT NULL DEFAULT '{}',
+                modality_overrides_json TEXT NOT NULL DEFAULT '{}',
+                preferred_modality TEXT,
+                updated_at TEXT NOT NULL DEFAULT ''
+            );
+        `);
+
+        // Model capability profile persistence (runtime user-defined profiles)
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS model_profiles (
+                pattern TEXT PRIMARY KEY,
+                label TEXT NOT NULL,
+                tier INTEGER NOT NULL,
+                parameter_size TEXT NOT NULL,
+                parameters_billions REAL NOT NULL DEFAULT 0,
+                context_window INTEGER NOT NULL DEFAULT 4096,
+                estimated_vram_mb INTEGER NOT NULL DEFAULT 0,
+                max_output_tokens INTEGER NOT NULL DEFAULT 2048,
+                adaptive_prompt_budget INTEGER NOT NULL DEFAULT 1000,
+                strengths_json TEXT NOT NULL DEFAULT '[]',
+                modalities_json TEXT NOT NULL DEFAULT '["text"]',
+                locality TEXT NOT NULL DEFAULT 'cloud',
+                version_constraint TEXT,
+                updated_at TEXT NOT NULL
+            );
+        `);
+
+        // Deprecation lifecycle columns (safe migration for existing DBs)
+        this.ensureColumn("model_profiles", "deprecated", "INTEGER DEFAULT 0");
+        this.ensureColumn("model_profiles", "deprecated_at", "TEXT");
+        this.ensureColumn("model_profiles", "sunset_date", "TEXT");
+        this.ensureColumn("model_profiles", "successor", "TEXT");
+        this.ensureColumn("model_profiles", "deprecation_reason", "TEXT");
+
+        // Spectrum Refraction (Prism SR) per-session config
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS sr_config (
+                session_id TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                left_provider_id TEXT,
+                left_model TEXT,
+                right_provider_id TEXT,
+                right_model TEXT,
+                updated_at TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE
+            );
+        `);
+
+        // SR saved presets (named configurations)
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS sr_presets (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                scope TEXT NOT NULL DEFAULT 'global',
+                scope_id TEXT,
+                left_provider_id TEXT,
+                left_model TEXT,
+                right_provider_id TEXT,
+                right_model TEXT,
+                created_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT ''
+            );
+        `);
+
+        // D4c: extended SR config columns (safe migration for existing DBs)
+        this.ensureColumn("sr_config", "left_slot", "TEXT");
+        this.ensureColumn("sr_config", "right_slot", "TEXT");
+        this.ensureColumn("sr_config", "left_timeout_ms", "INTEGER");
+        this.ensureColumn("sr_config", "right_timeout_ms", "INTEGER");
+        this.ensureColumn("sr_config", "circuit_breaker_enabled", "INTEGER DEFAULT 1");
+        this.ensureColumn("sr_config", "show_hemispheres", "INTEGER DEFAULT 0");
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {
@@ -202,16 +325,58 @@ export class ChatSessionStore {
         this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
 
-    createSession(title: string = "New Session"): ChatSessionSummary {
+    createSession(input: string | CreateSessionInput = "New Session"): ChatSessionSummary {
+        const opts: CreateSessionInput = typeof input === "string" ? { title: input } : input;
         const now = new Date().toISOString();
         const sessionId = randomUUID();
         this.insertSessionStmt.run({
             sessionId,
-            title: sanitizeTitle(title),
+            title: sanitizeTitle(opts.title ?? "New Session"),
             createdAt: now,
             updatedAt: now,
+            characterId: opts.characterId ?? null,
+            cacAssignmentId: opts.cacAssignmentId ?? null,
+            executionProfile: opts.executionProfile ?? null,
+            operatorEmail: opts.operatorEmail ?? null,
+            assistantEmail: opts.assistantEmail ?? null,
         });
         return this.getSession(sessionId)!;
+    }
+
+    /**
+     * Phase E3b: (re)bind an existing session to a character + CAC identity.
+     * Returns the refreshed session summary, or null if the session does not exist.
+     */
+    bindSessionCharacter(sessionId: string, input: {
+        characterId: string;
+        cacAssignmentId?: string | null;
+        executionProfile?: string | null;
+        operatorEmail?: string | null;
+        assistantEmail?: string | null;
+    }): ChatSessionSummary | null {
+        const now = new Date().toISOString();
+        const result = this.db.prepare(`
+            UPDATE chat_sessions
+            SET character_id = :characterId,
+                cac_assignment_id = :cacAssignmentId,
+                execution_profile = :executionProfile,
+                operator_email = :operatorEmail,
+                assistant_email = :assistantEmail,
+                updated_at = :updatedAt
+            WHERE session_id = :sessionId
+        `).run({
+            sessionId,
+            characterId: input.characterId,
+            cacAssignmentId: input.cacAssignmentId ?? null,
+            executionProfile: input.executionProfile ?? null,
+            operatorEmail: input.operatorEmail ?? null,
+            assistantEmail: input.assistantEmail ?? null,
+            updatedAt: now,
+        });
+        if (!result.changes) {
+            return null;
+        }
+        return this.getSession(sessionId);
     }
 
     listSessions(): ChatSessionSummary[] {
@@ -223,6 +388,11 @@ export class ChatSessionStore {
                 s.updated_at,
                 s.llm_provider_id,
                 s.llm_model,
+                s.character_id,
+                s.cac_assignment_id,
+                s.execution_profile,
+                s.operator_email,
+                s.assistant_email,
                 COALESCE(m.message_count, 0) AS message_count,
                 m.last_message_preview,
                 m.last_message_role
@@ -256,6 +426,11 @@ export class ChatSessionStore {
             updated_at: string;
             llm_provider_id: string | null;
             llm_model: string | null;
+            character_id: string | null;
+            cac_assignment_id: string | null;
+            execution_profile: string | null;
+            operator_email: string | null;
+            assistant_email: string | null;
             message_count: number;
             last_message_preview: string | null;
             last_message_role: "user" | "assistant" | "system" | null;
@@ -271,6 +446,11 @@ export class ChatSessionStore {
             messageCount: row.message_count,
             lastMessagePreview: row.last_message_preview,
             lastMessageRole: row.last_message_role,
+            characterId: row.character_id,
+            cacAssignmentId: row.cac_assignment_id,
+            executionProfile: row.execution_profile,
+            operatorEmail: row.operator_email,
+            assistantEmail: row.assistant_email,
         }));
     }
 
@@ -626,6 +806,184 @@ export class ChatSessionStore {
         return this.getProviderSettings(providerId)!;
     }
 
+    // ── Routing config persistence ────────────────────────────────────
+
+    saveRoutingConfig(config: RoutingConfig): void {
+        const updatedAt = new Date().toISOString();
+        this.db.prepare(`
+            INSERT INTO routing_config (
+                config_key, strategy,
+                role_overrides_json, agent_overrides_json,
+                modality_overrides_json, preferred_modality, updated_at
+            ) VALUES (
+                'default', :strategy,
+                :roleOverridesJson, :agentOverridesJson,
+                :modalityOverridesJson, :preferredModality, :updatedAt
+            )
+            ON CONFLICT(config_key) DO UPDATE SET
+                strategy = excluded.strategy,
+                role_overrides_json = excluded.role_overrides_json,
+                agent_overrides_json = excluded.agent_overrides_json,
+                modality_overrides_json = excluded.modality_overrides_json,
+                preferred_modality = excluded.preferred_modality,
+                updated_at = excluded.updated_at
+        `).run({
+            strategy: config.strategy || "single",
+            roleOverridesJson: JSON.stringify(config.roleOverrides ?? {}),
+            agentOverridesJson: JSON.stringify(config.agentOverrides ?? {}),
+            modalityOverridesJson: JSON.stringify(config.modalityOverrides ?? {}),
+            preferredModality: config.preferredModality ?? null,
+            updatedAt,
+        });
+    }
+
+    loadRoutingConfig(): RoutingConfig | null {
+        const row = this.db.prepare(`
+            SELECT strategy, role_overrides_json, agent_overrides_json,
+                   modality_overrides_json, preferred_modality
+            FROM routing_config
+            WHERE config_key = 'default'
+            LIMIT 1
+        `).get() as {
+            strategy: string;
+            role_overrides_json: string;
+            agent_overrides_json: string;
+            modality_overrides_json: string;
+            preferred_modality: string | null;
+        } | undefined;
+
+        if (!row) return null;
+
+        return {
+            strategy: (row.strategy === "multi" || row.strategy === "modality") ? row.strategy : "single",
+            roleOverrides: safeJsonParse(row.role_overrides_json),
+            agentOverrides: safeJsonParse(row.agent_overrides_json),
+            modalityOverrides: safeJsonParse(row.modality_overrides_json),
+            preferredModality: row.preferred_modality ?? null,
+        };
+    }
+
+    // ── Model profile persistence ─────────────────────────────────────
+
+    listModelProfiles(): ModelCapabilityProfile[] {
+        const rows = this.db.prepare(`
+            SELECT pattern, label, tier, parameter_size, parameters_billions,
+                   context_window, estimated_vram_mb, max_output_tokens,
+                   adaptive_prompt_budget, strengths_json, modalities_json,
+                   locality, version_constraint,
+                   deprecated, deprecated_at, sunset_date, successor, deprecation_reason
+            FROM model_profiles
+            ORDER BY pattern ASC
+        `).all() as Array<{
+            pattern: string;
+            label: string;
+            tier: number;
+            parameter_size: string;
+            parameters_billions: number;
+            context_window: number;
+            estimated_vram_mb: number;
+            max_output_tokens: number;
+            adaptive_prompt_budget: number;
+            strengths_json: string;
+            modalities_json: string;
+            locality: string;
+            version_constraint: string | null;
+            deprecated: number | null;
+            deprecated_at: string | null;
+            sunset_date: string | null;
+            successor: string | null;
+            deprecation_reason: string | null;
+        }>;
+
+        return rows.map((row) => ({
+            pattern: row.pattern,
+            label: row.label,
+            tier: row.tier as 1 | 2 | 3 | 4 | 5,
+            parameterSize: row.parameter_size as "tiny" | "small" | "medium" | "large" | "frontier",
+            parametersBillions: row.parameters_billions,
+            contextWindow: row.context_window,
+            estimatedVramMb: row.estimated_vram_mb,
+            maxOutputTokens: row.max_output_tokens,
+            adaptivePromptBudget: row.adaptive_prompt_budget,
+            strengths: (JSON.parse(row.strengths_json || "[]") as string[]),
+            modalities: (JSON.parse(row.modalities_json || '["text"]') as string[]),
+            locality: row.locality as "local" | "cloud",
+            ...(row.version_constraint ? { versionConstraint: row.version_constraint } : {}),
+            ...(row.deprecated ? { deprecated: true } : {}),
+            ...(row.deprecated_at ? { deprecatedAt: row.deprecated_at } : {}),
+            ...(row.sunset_date ? { sunsetDate: row.sunset_date } : {}),
+            ...(row.successor ? { successor: row.successor } : {}),
+            ...(row.deprecation_reason ? { deprecationReason: row.deprecation_reason } : {}),
+        } as ModelCapabilityProfile));
+    }
+
+    upsertModelProfile(profile: ModelCapabilityProfile): void {
+        const updatedAt = new Date().toISOString();
+        this.db.prepare(`
+            INSERT INTO model_profiles (
+                pattern, label, tier, parameter_size, parameters_billions,
+                context_window, estimated_vram_mb, max_output_tokens,
+                adaptive_prompt_budget, strengths_json, modalities_json,
+                locality, version_constraint,
+                deprecated, deprecated_at, sunset_date, successor, deprecation_reason,
+                updated_at
+            ) VALUES (
+                :pattern, :label, :tier, :parameterSize, :parametersBillions,
+                :contextWindow, :estimatedVramMb, :maxOutputTokens,
+                :adaptivePromptBudget, :strengthsJson, :modalitiesJson,
+                :locality, :versionConstraint,
+                :deprecated, :deprecatedAt, :sunsetDate, :successor, :deprecationReason,
+                :updatedAt
+            )
+            ON CONFLICT(pattern) DO UPDATE SET
+                label = excluded.label,
+                tier = excluded.tier,
+                parameter_size = excluded.parameter_size,
+                parameters_billions = excluded.parameters_billions,
+                context_window = excluded.context_window,
+                estimated_vram_mb = excluded.estimated_vram_mb,
+                max_output_tokens = excluded.max_output_tokens,
+                adaptive_prompt_budget = excluded.adaptive_prompt_budget,
+                strengths_json = excluded.strengths_json,
+                modalities_json = excluded.modalities_json,
+                locality = excluded.locality,
+                version_constraint = excluded.version_constraint,
+                deprecated = excluded.deprecated,
+                deprecated_at = excluded.deprecated_at,
+                sunset_date = excluded.sunset_date,
+                successor = excluded.successor,
+                deprecation_reason = excluded.deprecation_reason,
+                updated_at = excluded.updated_at
+        `).run({
+            pattern: profile.pattern,
+            label: profile.label,
+            tier: profile.tier,
+            parameterSize: profile.parameterSize,
+            parametersBillions: profile.parametersBillions,
+            contextWindow: profile.contextWindow,
+            estimatedVramMb: profile.estimatedVramMb,
+            maxOutputTokens: profile.maxOutputTokens,
+            adaptivePromptBudget: profile.adaptivePromptBudget,
+            strengthsJson: JSON.stringify(profile.strengths ?? []),
+            modalitiesJson: JSON.stringify(profile.modalities ?? ["text"]),
+            locality: profile.locality,
+            versionConstraint: (profile as any).versionConstraint ?? null,
+            deprecated: profile.deprecated ? 1 : 0,
+            deprecatedAt: profile.deprecatedAt ?? null,
+            sunsetDate: profile.sunsetDate ?? null,
+            successor: profile.successor ?? null,
+            deprecationReason: profile.deprecationReason ?? null,
+            updatedAt,
+        });
+    }
+
+    removeModelProfile(pattern: string): boolean {
+        const result = this.db.prepare(`
+            DELETE FROM model_profiles WHERE pattern = :pattern
+        `).run({ pattern });
+        return (result as any).changes > 0;
+    }
+
     close(): void {
         this.db.close();
     }
@@ -756,6 +1114,200 @@ export class ChatSessionStore {
         `).run({ attachmentId });
         return (result as any).changes > 0;
     }
+
+    // ── Spectrum Refraction (Prism SR) config ───────────────────────────
+
+    getSRConfig(sessionId: string): {
+        enabled: boolean;
+        leftProviderId: string | null;
+        leftModel: string | null;
+        rightProviderId: string | null;
+        rightModel: string | null;
+        leftSlot: string | null;
+        rightSlot: string | null;
+        leftTimeoutMs: number | null;
+        rightTimeoutMs: number | null;
+        circuitBreakerEnabled: boolean;
+        showHemispheres: boolean;
+    } | null {
+        const row = this.db.prepare(`
+            SELECT enabled, left_provider_id, left_model, right_provider_id, right_model,
+                   left_slot, right_slot, left_timeout_ms, right_timeout_ms,
+                   circuit_breaker_enabled, show_hemispheres
+            FROM sr_config
+            WHERE session_id = :sessionId
+        `).get({ sessionId }) as {
+            enabled: number;
+            left_provider_id: string | null;
+            left_model: string | null;
+            right_provider_id: string | null;
+            right_model: string | null;
+            left_slot: string | null;
+            right_slot: string | null;
+            left_timeout_ms: number | null;
+            right_timeout_ms: number | null;
+            circuit_breaker_enabled: number | null;
+            show_hemispheres: number | null;
+        } | undefined;
+
+        if (!row) return null;
+
+        return {
+            enabled: row.enabled === 1,
+            leftProviderId: row.left_provider_id,
+            leftModel: row.left_model,
+            rightProviderId: row.right_provider_id,
+            rightModel: row.right_model,
+            leftSlot: row.left_slot ?? null,
+            rightSlot: row.right_slot ?? null,
+            leftTimeoutMs: row.left_timeout_ms ?? null,
+            rightTimeoutMs: row.right_timeout_ms ?? null,
+            circuitBreakerEnabled: row.circuit_breaker_enabled !== 0,
+            showHemispheres: row.show_hemispheres === 1,
+        };
+    }
+
+    saveSRConfig(
+        sessionId: string,
+        enabled: boolean,
+        leftProviderId: string | null,
+        leftModel: string | null,
+        rightProviderId: string | null,
+        rightModel: string | null,
+        opts?: {
+            leftSlot?: string | null;
+            rightSlot?: string | null;
+            leftTimeoutMs?: number | null;
+            rightTimeoutMs?: number | null;
+            circuitBreakerEnabled?: boolean;
+            showHemispheres?: boolean;
+        },
+    ): void {
+        this.assertSessionExists(sessionId);
+        const updatedAt = new Date().toISOString();
+        this.db.prepare(`
+            INSERT INTO sr_config (session_id, enabled, left_provider_id, left_model, right_provider_id, right_model,
+                left_slot, right_slot, left_timeout_ms, right_timeout_ms, circuit_breaker_enabled, show_hemispheres, updated_at)
+            VALUES (:sessionId, :enabled, :leftProviderId, :leftModel, :rightProviderId, :rightModel,
+                :leftSlot, :rightSlot, :leftTimeoutMs, :rightTimeoutMs, :circuitBreakerEnabled, :showHemispheres, :updatedAt)
+            ON CONFLICT(session_id) DO UPDATE SET
+                enabled = excluded.enabled,
+                left_provider_id = excluded.left_provider_id,
+                left_model = excluded.left_model,
+                right_provider_id = excluded.right_provider_id,
+                right_model = excluded.right_model,
+                left_slot = excluded.left_slot,
+                right_slot = excluded.right_slot,
+                left_timeout_ms = excluded.left_timeout_ms,
+                right_timeout_ms = excluded.right_timeout_ms,
+                circuit_breaker_enabled = excluded.circuit_breaker_enabled,
+                show_hemispheres = excluded.show_hemispheres,
+                updated_at = excluded.updated_at
+        `).run({
+            sessionId,
+            enabled: enabled ? 1 : 0,
+            leftProviderId: leftProviderId?.trim() || null,
+            leftModel: leftModel?.trim() || null,
+            rightProviderId: rightProviderId?.trim() || null,
+            rightModel: rightModel?.trim() || null,
+            leftSlot: opts?.leftSlot ?? null,
+            rightSlot: opts?.rightSlot ?? null,
+            leftTimeoutMs: opts?.leftTimeoutMs ?? null,
+            rightTimeoutMs: opts?.rightTimeoutMs ?? null,
+            circuitBreakerEnabled: opts?.circuitBreakerEnabled !== false ? 1 : 0,
+            showHemispheres: opts?.showHemispheres ? 1 : 0,
+            updatedAt,
+        });
+    }
+
+    deleteSRConfig(sessionId: string): void {
+        this.db.prepare(`
+            DELETE FROM sr_config WHERE session_id = :sessionId
+        `).run({ sessionId });
+    }
+
+    // ── SR Presets (named saved configurations) ─────────────────────────
+
+    listSRPresets(scope: "global" | "session", scopeId?: string): Array<{
+        id: string; name: string; scope: string; scopeId: string | null;
+        leftProviderId: string | null; leftModel: string | null;
+        rightProviderId: string | null; rightModel: string | null;
+        createdAt: string; updatedAt: string;
+    }> {
+        const rows = scope === "global"
+            ? this.db.prepare(`SELECT * FROM sr_presets WHERE scope = 'global' ORDER BY updated_at DESC`).all() as any[]
+            : this.db.prepare(`SELECT * FROM sr_presets WHERE scope = 'session' AND scope_id = :scopeId ORDER BY updated_at DESC`).all({ scopeId: scopeId ?? "" }) as any[];
+        return rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            scope: r.scope,
+            scopeId: r.scope_id,
+            leftProviderId: r.left_provider_id,
+            leftModel: r.left_model,
+            rightProviderId: r.right_provider_id,
+            rightModel: r.right_model,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+        }));
+    }
+
+    saveSRPreset(
+        id: string,
+        name: string,
+        scope: "global" | "session",
+        scopeId: string | null,
+        leftProviderId: string | null,
+        leftModel: string | null,
+        rightProviderId: string | null,
+        rightModel: string | null,
+    ): void {
+        const now = new Date().toISOString();
+        this.db.prepare(`
+            INSERT INTO sr_presets (id, name, scope, scope_id, left_provider_id, left_model, right_provider_id, right_model, created_at, updated_at)
+            VALUES (:id, :name, :scope, :scopeId, :leftProviderId, :leftModel, :rightProviderId, :rightModel, :now, :now)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                left_provider_id = excluded.left_provider_id,
+                left_model = excluded.left_model,
+                right_provider_id = excluded.right_provider_id,
+                right_model = excluded.right_model,
+                updated_at = excluded.updated_at
+        `).run({
+            id,
+            name: name.trim().slice(0, 80),
+            scope,
+            scopeId: scopeId ?? null,
+            leftProviderId: leftProviderId?.trim() || null,
+            leftModel: leftModel?.trim() || null,
+            rightProviderId: rightProviderId?.trim() || null,
+            rightModel: rightModel?.trim() || null,
+            now,
+        });
+    }
+
+    deleteSRPreset(id: string): boolean {
+        const result = this.db.prepare(`DELETE FROM sr_presets WHERE id = :id`).run({ id });
+        return (result as any).changes > 0;
+    }
+
+    getSRPreset(id: string): {
+        id: string; name: string; scope: string; scopeId: string | null;
+        leftProviderId: string | null; leftModel: string | null;
+        rightProviderId: string | null; rightModel: string | null;
+    } | null {
+        const row = this.db.prepare(`SELECT * FROM sr_presets WHERE id = :id`).get({ id }) as any;
+        if (!row) return null;
+        return {
+            id: row.id,
+            name: row.name,
+            scope: row.scope,
+            scopeId: row.scope_id,
+            leftProviderId: row.left_provider_id,
+            leftModel: row.left_model,
+            rightProviderId: row.right_provider_id,
+            rightModel: row.right_model,
+        };
+    }
 }
 
 function sanitizeTitle(title: string): string {
@@ -829,4 +1381,13 @@ function normalizeProviderModels(models: string[]): string[] {
 function normalizeOptionalText(value: string | null | undefined): string | null {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
+}
+
+function safeJsonParse(raw: string): Record<string, any> {
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
 }

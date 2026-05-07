@@ -8,6 +8,54 @@ export class PolicyEngine {
         const reasonCodes: string[] = [];
         const profile = context.executionProfile ?? INDIVIDUAL_PROFILE;
 
+        // Phase E3b: Business segment with placeholder CAC identity blocks all tier-2+
+        // operations (medium + high risk) until the operator replaces sentinel emails
+        // via the CAC identity panel. Tier-1 (low-risk, non-mutating) reads remain allowed.
+        if (
+            profile.segment === "business"
+            && context.cac?.hasPlaceholderIdentity
+            && (context.risk === "medium" || context.risk === "high")
+        ) {
+            reasons.push(
+                "Tier-2+ operation denied: CAC assignment uses placeholder identity. Replace `@prism.local` / `@placeholder` emails in the CAC panel before continuing.",
+            );
+            reasonCodes.push(POLICY_REASON_CODES.CAC_PLACEHOLDER_IDENTITY_DENY);
+            return {
+                tier: context.risk === "high" ? "tier3_approval" : "tier2_conditional",
+                decision: "deny",
+                reasons,
+                reasonCodes,
+                remediation: "/setup?rerun=true&step=cac",
+            };
+        }
+
+        // Phase E5: Business segment + tier-2+ + email-bound tools require fresh
+        // OAuth email verification (within 30 days). Tier-1 and individual flows
+        // are unaffected. Verification freshness is enforced via the recorded
+        // `cac.emailVerifiedAt` timestamp.
+        if (
+            profile.segment === "business"
+            && context.emailBound
+            && (context.risk === "medium" || context.risk === "high")
+        ) {
+            const verifiedAt = context.cac?.emailVerifiedAt;
+            const verifiedAtMs = verifiedAt ? new Date(verifiedAt).getTime() : NaN;
+            const fresh = !isNaN(verifiedAtMs) && (Date.now() - verifiedAtMs) <= 30 * 86_400_000;
+            if (!fresh) {
+                reasons.push(
+                    "Tier-2+ email-bound operation denied: operator email must be verified via OAuth within the last 30 days.",
+                );
+                reasonCodes.push(POLICY_REASON_CODES.CAC_EMAIL_VERIFICATION_REQUIRED);
+                return {
+                    tier: context.risk === "high" ? "tier3_approval" : "tier2_conditional",
+                    decision: "deny",
+                    reasons,
+                    reasonCodes,
+                    remediation: "/dashboard#cac-panel",
+                };
+            }
+        }
+
         // High-risk operations
         if (context.risk === "high") {
             if (!profile.tier3ApprovalRequired) {

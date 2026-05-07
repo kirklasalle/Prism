@@ -156,6 +156,7 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
     tasks_timeline: "Task management operations. Args: action (string, required).",
     vision_capture: "Capture screenshots. Args: action (string: capture|burst|list|get), options (object).",
     semantic_query: "Query semantic memory for relevant context. Args: query (string, required).",
+    ask_reasoning_model: "Delegate a complex reasoning, coding, or analysis task to the primary reasoning model. Args: prompt (string, required).",
     memory_query: "Query episodic and session memory. Args: query (string, required).",
 };
 

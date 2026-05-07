@@ -8,6 +8,7 @@
  *   plan    — read timeline, return tasks sorted by priority then due date (read-only)
  *   commit  — mark timeline as committed, record committedAt timestamp
  *   replan  — clear committed flag, re-sort tasks by priority/due for revision
+ *   update_status — update a task's status field by task id
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +20,7 @@ import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 // ──────────────────────────────────────────────────────────────────────────────
 
 export type TaskPriority = "high" | "medium" | "low";
+export type TaskStatus = "backlog" | "todo" | "in-progress" | "review" | "done";
 
 export interface Task {
     id: string;
@@ -27,6 +29,18 @@ export interface Task {
     priority: TaskPriority;
     completed: boolean;
     addedAt: string;
+    status?: TaskStatus;
+    assignee?: string;
+    labels?: string[];
+    parentId?: string;
+    dependencies?: string[];
+    milestoneId?: string;
+    startDate?: string;
+    endDate?: string;
+    estimatedHours?: number;
+    actualHours?: number;
+    progress?: number;
+    projectId?: string;
 }
 
 export interface TaskTimeline {
@@ -90,8 +104,12 @@ export class TasksTimelineTool implements Tool {
         const args = request.args as {
             action?: string;
             timelineId?: string;
+            taskId?: string;
+            status?: TaskStatus;
+            assignee?: string;
+            progress?: number;
             /** For plan/replan: optional list of tasks to add to the timeline */
-            tasks?: Array<{ title: string; due?: string; priority?: TaskPriority }>;
+            tasks?: Array<{ title: string; due?: string; priority?: TaskPriority; status?: TaskStatus; assignee?: string; labels?: string[]; startDate?: string; endDate?: string; estimatedHours?: number; milestoneId?: string; projectId?: string; dependencies?: string[] }>;
         };
 
         const action = args.action ?? "";
@@ -111,6 +129,16 @@ export class TasksTimelineTool implements Tool {
                             priority: t.priority ?? "medium",
                             completed: false,
                             addedAt: new Date().toISOString(),
+                            status: t.status ?? "backlog",
+                            ...(t.assignee ? { assignee: t.assignee } : {}),
+                            ...(t.labels ? { labels: t.labels } : {}),
+                            ...(t.startDate ? { startDate: t.startDate } : {}),
+                            ...(t.endDate ? { endDate: t.endDate } : {}),
+                            ...(t.estimatedHours ? { estimatedHours: t.estimatedHours } : {}),
+                            ...(t.milestoneId ? { milestoneId: t.milestoneId } : {}),
+                            ...(t.projectId ? { projectId: t.projectId } : {}),
+                            ...(t.dependencies ? { dependencies: t.dependencies } : {}),
+                            progress: 0,
                         });
                     }
                     saveTimeline(dir, tl);
@@ -160,6 +188,16 @@ export class TasksTimelineTool implements Tool {
                             priority: t.priority ?? "medium",
                             completed: false,
                             addedAt: new Date().toISOString(),
+                            status: t.status ?? "backlog",
+                            ...(t.assignee ? { assignee: t.assignee } : {}),
+                            ...(t.labels ? { labels: t.labels } : {}),
+                            ...(t.startDate ? { startDate: t.startDate } : {}),
+                            ...(t.endDate ? { endDate: t.endDate } : {}),
+                            ...(t.estimatedHours ? { estimatedHours: t.estimatedHours } : {}),
+                            ...(t.milestoneId ? { milestoneId: t.milestoneId } : {}),
+                            ...(t.projectId ? { projectId: t.projectId } : {}),
+                            ...(t.dependencies ? { dependencies: t.dependencies } : {}),
+                            progress: 0,
                         });
                     }
                 }
@@ -174,6 +212,23 @@ export class TasksTimelineTool implements Tool {
                         tasks: tl.tasks,
                     },
                     sideEffects: [{ type: "file", description: `timeline replanned: ${timelinePath(dir, timelineId)}` }],
+                };
+            }
+
+            case "update_status": {
+                const tl = loadTimeline(dir, timelineId);
+                const taskId = args.taskId;
+                if (!taskId) return { ok: false, output: { error: "taskId required" } };
+                const task = tl.tasks.find((t) => t.id === taskId);
+                if (!task) return { ok: false, output: { error: `Task not found: ${taskId}` } };
+                if (args.status) { task.status = args.status; task.completed = args.status === "done"; }
+                if (args.assignee !== undefined) task.assignee = args.assignee;
+                if (args.progress !== undefined) task.progress = Math.max(0, Math.min(100, args.progress));
+                saveTimeline(dir, tl);
+                return {
+                    ok: true,
+                    output: { timelineId, task },
+                    sideEffects: [{ type: "file", description: `task updated: ${timelinePath(dir, timelineId)}` }],
                 };
             }
 

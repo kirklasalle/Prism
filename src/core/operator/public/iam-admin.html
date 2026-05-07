@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<!--
+  PRISM Enterprise IAM — admin console (Phase H-3)
+
+  Standalone additive HTML page served from the dashboard's `public/`
+  directory. Reachable at `/public/iam-admin.html` (the existing
+  `/public/` route prefix is registered as a non-auth-gated path, but
+  every API call from this page carries the configured bearer token in
+  `Authorization: Bearer <token>`, so the actual data fetches go
+  through the normal `AuthGate` + admin role gate.
+
+  This page does NOT touch the existing dashboard tabs, navigation, or
+  WebSocket wiring. Operators reach it directly via the URL above.
+-->
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>PRISM IAM Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #131a30;
+            --panel-2: #1a2342;
+            --fg: #e6ecff;
+            --fg-dim: #9aa6c7;
+            --accent: #6ea1ff;
+            --danger: #ff7a8b;
+            --ok: #58d68d;
+            --border: #243059;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+        }
+
+        header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        header h1 {
+            font-size: 18px;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        header .badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: var(--panel-2);
+            color: var(--fg-dim);
+        }
+
+        main {
+            padding: 24px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+        }
+
+        section h2 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--fg-dim);
+            margin: 0 0 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            color: var(--fg-dim);
+            font-weight: 500;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        button {
+            background: var(--accent);
+            color: #0b1020;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: var(--panel-2);
+            color: var(--fg);
+            border: 1px solid var(--border);
+        }
+
+        button.danger {
+            background: var(--danger);
+            color: #1a0612;
+        }
+
+        input,
+        select {
+            background: var(--panel-2);
+            color: var(--fg);
+            border: 1px solid var(--border);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font: inherit;
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .row>* {
+            flex: 0 0 auto;
+        }
+
+        .pill {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            color: var(--fg-dim);
+            margin-right: 4px;
+        }
+
+        .pill.ok {
+            color: var(--ok);
+            border-color: var(--ok);
+        }
+
+        .pill.warn {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            max-width: 480px;
+            background: var(--panel-2);
+            color: var(--fg);
+            padding: 12px 16px;
+            border-left: 3px solid var(--accent);
+            border-radius: 4px;
+            font-size: 13px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.error {
+            border-left-color: var(--danger);
+        }
+
+        code {
+            background: var(--panel-2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .empty {
+            padding: 18px;
+            text-align: center;
+            color: var(--fg-dim);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>PRISM IAM Admin</h1>
+        <span class="badge">Phase H-3 · enterprise IAM</span>
+        <span style="flex:1"></span>
+        <span id="me-banner" class="badge">…</span>
+    </header>
+    <main>
+        <section>
+            <h2>Bearer token</h2>
+            <p style="font-size:13px;color:var(--fg-dim);margin:0 0 8px;">
+                Paste the dashboard admin bearer token (or an API key with the <code>admin</code> role). It is held in
+                memory only and used to call <code>/api/iam/admin/*</code>.
+            </p>
+            <div class="row">
+                <input id="token-input" type="password" placeholder="Bearer token" style="flex:1;min-width:240px;">
+                <button id="token-save">Use token</button>
+                <button id="token-clear" class="secondary">Clear</button>
+            </div>
+        </section>
+
+        <section>
+            <h2>Users</h2>
+            <table id="users-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Display name</th>
+                        <th>Status</th>
+                        <th>Roles</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="5" class="empty">load token to populate</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Roles</h2>
+            <table id="roles-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="3" class="empty">—</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>SCIM tokens</h2>
+            <div class="row" style="margin-bottom:12px;">
+                <input id="scim-label" placeholder="Label (e.g. Okta production)">
+                <button id="scim-create">Create token</button>
+                <span style="font-size:12px;color:var(--fg-dim);">Plaintext shown once — copy it immediately.</span>
+            </div>
+            <table id="scim-table">
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>ID</th>
+                        <th>Created</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="5" class="empty">—</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+    <div id="toast-host"></div>
+    <script>
+        "use strict";
+        (function () {
+            const tokenStore = { value: "" };
+            const $ = (sel) => document.querySelector(sel);
+
+            function toast(msg, isError) {
+                const host = $("#toast-host");
+                const el = document.createElement("div");
+                el.className = "toast" + (isError ? " error" : "");
+                el.textContent = msg;
+                host.appendChild(el);
+                setTimeout(() => el.remove(), 4500);
+            }
+
+            async function api(path, init) {
+                const opts = Object.assign({ method: "GET", headers: {} }, init || {});
+                if (!opts.headers["Content-Type"] && opts.body) opts.headers["Content-Type"] = "application/json";
+                if (tokenStore.value) opts.headers["Authorization"] = "Bearer " + tokenStore.value;
+                const res = await fetch(path, opts);
+                const text = await res.text();
+                let body = null;
+                try { body = text ? JSON.parse(text) : null; } catch { body = { raw: text }; }
+                if (!res.ok) {
+                    const msg = (body && body.error && body.error.message) || ("HTTP " + res.status);
+                    throw new Error(msg);
+                }
+                return body;
+            }
+
+            function statusPill(status) {
+                const cls = status === "active" ? "ok" : (status === "deprovisioned" ? "warn" : "");
+                return '<span class="pill ' + cls + '">' + status + "</span>";
+            }
+
+            async function refreshMe() {
+                try {
+                    const me = await api("/api/iam/me");
+                    const p = me.principal;
+                    $("#me-banner").textContent = p.email ? (p.email + " · " + (p.roles || []).join(",")) : (p.userId + " · " + (p.roles || []).join(","));
+                } catch (e) {
+                    $("#me-banner").textContent = "not authenticated";
+                }
+            }
+
+            async function refreshUsers() {
+                const tbody = $("#users-table tbody");
+                if (!tokenStore.value) { tbody.innerHTML = '<tr><td colspan="5" class="empty">load token to populate</td></tr>'; return; }
+                try {
+                    const data = await api("/api/iam/admin/users");
+                    const users = data.users || [];
+                    if (!users.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">no users yet</td></tr>'; return; }
+                    tbody.innerHTML = users.map((u) => {
+                        const roles = (u.roles || []).map((r) => '<span class="pill">' + r + "</span>").join("");
+                        const toggle = u.status === "active" ? "suspended" : "active";
+                        return "<tr>"
+                            + "<td>" + escapeHtml(u.email) + "</td>"
+                            + "<td>" + escapeHtml(u.displayName || "") + "</td>"
+                            + "<td>" + statusPill(u.status) + "</td>"
+                            + "<td>" + roles + "</td>"
+                            + '<td><button class="secondary" data-action="status" data-id="' + u.id + '" data-target="' + toggle + '">→ ' + toggle + "</button> "
+                            + '<button class="secondary" data-action="grant-admin" data-id="' + u.id + '">grant admin</button></td>'
+                            + "</tr>";
+                    }).join("");
+                    tbody.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", onUserAction));
+                } catch (e) { toast("users: " + e.message, true); }
+            }
+
+            async function onUserAction(ev) {
+                const btn = ev.currentTarget;
+                const action = btn.getAttribute("data-action");
+                const id = btn.getAttribute("data-id");
+                try {
+                    if (action === "status") {
+                        const target = btn.getAttribute("data-target");
+                        await api("/api/iam/admin/users/" + encodeURIComponent(id) + "/status", {
+                            method: "POST", body: JSON.stringify({ status: target }),
+                        });
+                        toast("status → " + target);
+                    } else if (action === "grant-admin") {
+                        await api("/api/iam/admin/users/" + encodeURIComponent(id) + "/roles", {
+                            method: "POST", body: JSON.stringify({ role: "admin" }),
+                        });
+                        toast("granted admin role");
+                    }
+                    await refreshUsers();
+                } catch (e) { toast(e.message, true); }
+            }
+
+            async function refreshRoles() {
+                const tbody = $("#roles-table tbody");
+                if (!tokenStore.value) { tbody.innerHTML = '<tr><td colspan="3" class="empty">—</td></tr>'; return; }
+                try {
+                    const data = await api("/api/iam/admin/roles");
+                    const roles = data.roles || [];
+                    if (!roles.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty">no roles</td></tr>'; return; }
+                    tbody.innerHTML = roles.map((r) => "<tr>"
+                        + "<td><code>" + escapeHtml(r.name) + "</code></td>"
+                        + "<td>" + escapeHtml(r.description || "") + "</td>"
+                        + "<td>" + escapeHtml(r.createdAt) + "</td>"
+                        + "</tr>").join("");
+                } catch (e) { toast("roles: " + e.message, true); }
+            }
+
+            async function refreshScim() {
+                const tbody = $("#scim-table tbody");
+                if (!tokenStore.value) { tbody.innerHTML = '<tr><td colspan="5" class="empty">—</td></tr>'; return; }
+                try {
+                    const data = await api("/api/iam/admin/scim-tokens");
+                    const tokens = data.tokens || [];
+                    if (!tokens.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">no tokens</td></tr>'; return; }
+                    tbody.innerHTML = tokens.map((t) => {
+                        const status = t.revokedAt ? '<span class="pill warn">revoked</span>' : '<span class="pill ok">active</span>';
+                        const actions = t.revokedAt ? "" : '<button class="danger" data-action="revoke" data-id="' + t.id + '">revoke</button>';
+                        return "<tr>"
+                            + "<td>" + escapeHtml(t.label || "(unlabeled)") + "</td>"
+                            + "<td><code>" + escapeHtml(t.id) + "</code></td>"
+                            + "<td>" + escapeHtml(t.createdAt) + "</td>"
+                            + "<td>" + status + "</td>"
+                            + "<td>" + actions + "</td>"
+                            + "</tr>";
+                    }).join("");
+                    tbody.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", onScimAction));
+                } catch (e) { toast("scim-tokens: " + e.message, true); }
+            }
+
+            async function onScimAction(ev) {
+                const btn = ev.currentTarget;
+                const action = btn.getAttribute("data-action");
+                const id = btn.getAttribute("data-id");
+                try {
+                    if (action === "revoke") {
+                        await api("/api/iam/admin/scim-tokens/" + encodeURIComponent(id), { method: "DELETE" });
+                        toast("token revoked");
+                    }
+                    await refreshScim();
+                } catch (e) { toast(e.message, true); }
+            }
+
+            function escapeHtml(s) {
+                return String(s == null ? "" : s)
+                    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+            }
+
+            // Wire-up
+            $("#token-save").addEventListener("click", async () => {
+                tokenStore.value = $("#token-input").value.trim();
+                await Promise.all([refreshMe(), refreshUsers(), refreshRoles(), refreshScim()]);
+            });
+            $("#token-clear").addEventListener("click", () => {
+                tokenStore.value = ""; $("#token-input").value = "";
+                $("#me-banner").textContent = "(no token)";
+                refreshUsers(); refreshRoles(); refreshScim();
+            });
+            $("#scim-create").addEventListener("click", async () => {
+                const label = $("#scim-label").value.trim();
+                try {
+                    const r = await api("/api/iam/admin/scim-tokens", { method: "POST", body: JSON.stringify({ label }) });
+                    // Show the plaintext token via prompt() so the operator can copy it
+                    // before it disappears. We deliberately do NOT log the value.
+                    window.prompt("Copy this SCIM token NOW. It will not be shown again.", r.token);
+                    $("#scim-label").value = "";
+                    await refreshScim();
+                } catch (e) { toast(e.message, true); }
+            });
+
+            refreshMe();
+        })();
+    </script>
+</body>
+
+</html>

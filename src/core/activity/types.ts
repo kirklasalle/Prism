@@ -8,9 +8,22 @@ export type ActivityLayer =
     | "governance"
     | "performance"
     | "llm"
-    | "agent";
+    | "agent"
+    | "demo";
 
 export type AuthorityTier = "tier1_autonomous" | "tier2_conditional" | "tier3_approval";
+
+export interface AccountabilityChain {
+    assignmentId: string;
+    characterId: string;
+    prismUserId: string;
+    prismUserEmail: string;
+    operatorId: string;
+    operatorEmail: string;
+    clientId: string;
+    executionProfileSegment: "individual" | "business";
+    workspaceHub?: string;
+}
 
 export interface ActivityEvent {
     id: string;
@@ -33,6 +46,15 @@ export interface ActivityEvent {
         reversible?: boolean;
         rollbackPlan?: string;
     }>;
+    characterId?: string;
+    prismUserId?: string;
+    prismUserEmail?: string;
+    operatorId?: string;
+    operatorEmail?: string;
+    clientId?: string;
+    executionProfileSegment?: "individual" | "business";
+    assignmentId?: string;
+    accountabilityChain?: AccountabilityChain;
     rollbackPlan?: string;
     hash?: string;
 }
