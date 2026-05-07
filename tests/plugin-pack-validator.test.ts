@@ -569,8 +569,10 @@ if (testResults.failed > 0) {
         .forEach((t: any) => {
             console.log(`  - ${t.name}: ${t.error}`);
         });
-    if (require.main === module) process.exit(1);
-    else throw new Error(`Plugin-pack-validator: ${testResults.failed} test(s) failed`);
+    if (testResults.tests.length > 0) {
+        // ESM-safe: always throw on failure; if executed as a script, Node will exit non-zero.
+        throw new Error(`Plugin-pack-validator: ${testResults.failed} test(s) failed`);
+    }
 } else {
     console.log('\n✓ All tests passed!');
 }

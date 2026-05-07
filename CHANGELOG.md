@@ -2,6 +2,18 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.14.2 — 2026-05-07 — Linux portability hotfix
+
+Patch release on top of `v0.14.1`. The `v0.14.1` Docker image **builds** successfully on linux/amd64+linux/arm64, but at **runtime** the dashboard service unconditionally instantiated `WindowsProtectedFileProviderSecretStore` as the default provider secret store, causing PRISM bootstrap to crash on Linux with `Windows protected provider secret storage is only available on Windows.` (caught here by `PRISM CI — Build & Smoke` Playwright/E2E job, which boots the dashboard on Ubuntu).
+
+**Fixes.**
+- [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — Default `providerSecretStore` is now platform-aware: `WindowsProtectedFileProviderSecretStore` on `win32`, `InMemoryProviderSecretStore` everywhere else. Callers can still inject either store explicitly.
+- [tests/plugin-pack-validator.test.ts](tests/plugin-pack-validator.test.ts) — Replaced CommonJS `require.main === module` (illegal in ES module scope, threw `ReferenceError` under Mocha on Linux CI) with an unconditional ESM-safe `throw` on aggregate failure.
+
+**Verification.** `npm run build` clean; `node dist/tests/index.js` reports `Tests: 75 | Passed: 75 | Failed: 0`.
+
+**Still tracked for follow-up.** `resolvePluginTrustTier: valid official signature returns official tier` assertion in `tests/plugin-pack-validator.test.ts` still fails under Mocha on Linux CI (pre-existing, environment-specific). Not release-impacting; investigation deferred.
+
 ## v0.14.1 — 2026-05-07 — Docker-publish hotfix
 
 Patch release on top of `v0.14.0` to fix the multi-arch Docker image build that broke on the `v0.14.0` tag run (`docker-publish.yml`). Helm chart and source release artifacts on `v0.14.0` were unaffected and remain published.
@@ -9,12 +21,14 @@ Patch release on top of `v0.14.0` to fix the multi-arch Docker image build that 
 **Root cause.** `tsc`'s emitted output directory was implicitly derived from the common ancestor of the matched source files. With `include: ["src/**/*.ts","tests/**/*.ts"]` and the Docker builder stage only `COPY`'ing `src/`, the inferred `rootDir` collapsed to `src/`, so `tsc` emitted to `dist/core/operator/...` instead of `dist/src/core/operator/...`. The hardcoded `cp -r src/core/operator/public dist/src/core/operator/public` in the Dockerfile then failed with `cp: can't create directory ... No such file or directory`.
 
 **Fix.**
+
 - `tsconfig.json` — added explicit `"rootDir": "."` so emit paths are deterministic regardless of which include patterns match in a given build context. Local `npm run build` and the multi-arch Docker build now both emit to `dist/<original-path>/...`.
 - `Dockerfile` — added defensive `mkdir -p dist/src/core/operator` before the `cp -r`, so a future similar misalignment would surface with a real error rather than a silent path drift.
 
 **Verification.** Local `npm run build` succeeds; `dist/src/core/operator/dashboard-service.js` present; `node dist/tests/index.js` reports `Tests: 75 | Passed: 75 | Failed: 0`.
 
 **Known unrelated failures (pre-existing on `feat/agentic-ux-polish`, not introduced or addressed by `v0.14.0`/`v0.14.1`).**
+
 - `quality-gates.yml`: `tests/plugin-pack-validator.test.ts` uses CommonJS `require()` at line ~477 inside an ES module package, breaking under Mocha on Linux CI; one signature-tier assertion (`resolvePluginTrustTier: valid official signature returns official tier`) also fails. These ran red on the four runs prior to `v0.14.0` and are tracked for a follow-up patch.
 
 ## v0.14.0 — 2026-05-07 — Five-workstream aggregate release

@@ -36,6 +36,7 @@ import {
 import { resolveProfile } from "./model-capability-matrix.js";
 import {
   WindowsProtectedFileProviderSecretStore,
+  InMemoryProviderSecretStore,
   type ProviderSecretStore,
 } from "./provider-secret-store.js";
 import { SessionTraceExplorer, type SessionTraceBundle } from "./session-trace-explorer.js";
@@ -936,7 +937,9 @@ export class DashboardService {
     terminalAdapter?: TerminalSessionAdapter,
     containerAdapter?: ContainerSandboxAdapter,
   ) {
-    this.providerSecretStore = providerSecretStore ?? new WindowsProtectedFileProviderSecretStore();
+    this.providerSecretStore = providerSecretStore ?? (process.platform === "win32"
+      ? new WindowsProtectedFileProviderSecretStore()
+      : new InMemoryProviderSecretStore());
 
     // ── Security: Auth gate & rate limiter ──────────────────────────────
     const authDisabled = process.env.PRISM_AUTH_DISABLED === "true";
