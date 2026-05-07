@@ -58,6 +58,14 @@ export function buildSignaturePayload(manifest: PluginPackManifest): string {
     if (copy.security) {
         delete (copy.security as Record<string, unknown>).signature;
         delete (copy.security as Record<string, unknown>).signature_algorithm;
+        // If only the signature fields were present, drop the empty security
+        // object entirely. Otherwise the verify-side payload (which sees the
+        // signature fields) and the sign-side payload (which never had a
+        // security field on a fresh manifest) would differ in shape — empty
+        // `"security":{}` vs absent — and the signature would never verify.
+        if (Object.keys(copy.security as Record<string, unknown>).length === 0) {
+            delete (copy as unknown as Record<string, unknown>).security;
+        }
     }
     return JSON.stringify(copy);
 }

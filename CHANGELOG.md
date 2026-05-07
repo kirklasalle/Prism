@@ -2,11 +2,28 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.14.3 — 2026-05-07 — Signature-payload + E2E preferences hotfix
+
+Patch release on top of `v0.14.2`. After v0.14.2 cleared the Linux runtime crash, the next CI runs surfaced two latent bugs that had never run on Linux before. Both fixed here.
+
+**Fixes.**
+
+1. `buildSignaturePayload` shape mismatch in [src/core/plugins/plugin-pack-validator.ts](src/core/plugins/plugin-pack-validator.ts).
+   - When a fresh manifest is signed *before* its `security.signature` is attached, the sign-side payload has no `security` field at all. The verify-side payload, after `delete copy.security.signature` + `delete copy.security.signature_algorithm`, was left with an empty `"security":{}` object. The two payloads serialized to different JSON, so signatures by an "official" tier key never verified.
+   - Drop the `security` key entirely after deletion if it has become empty. Restores the `resolvePluginTrustTier: valid official signature returns official tier` assertion under Mocha on Linux CI.
+
+2. E2E smoke "GET / returns the PRISM dashboard HTML shell" + "renders the dashboard in a real Chromium browser" in [tests/e2e/playwright-smoke.test.ts](tests/e2e/playwright-smoke.test.ts).
+   - The dashboard handler 302-redirects `/` to `/setup` until `setupComplete` is true in the preferences file. CI's fresh checkout has no preferences file, so both smoke assertions saw `302` instead of `200` and "PRISM — Setup Wizard" instead of "PRISM Frontier Console".
+   - The smoke contract is "the dashboard shell is reachable", not "first-run wizard works". The `before()` hook now writes a minimal preferences JSON (`setupComplete: true`, `uiMode: "advanced"`) into the per-test temp dir and points `PRISM_PREFERENCES_PATH` at it, so the redirect does not fire and the test's intent is preserved.
+
+**Verification.** `npm run build` clean; `node dist/tests/index.js` reports `Tests: 75 | Passed: 75 | Failed: 0`; `node dist/tests/plugin-pack-validator.test.js` reports `Passed: 36, Failed: 0`.
+
 ## v0.14.2 — 2026-05-07 — Linux portability hotfix
 
 Patch release on top of `v0.14.1`. The `v0.14.1` Docker image **builds** successfully on linux/amd64+linux/arm64, but at **runtime** the dashboard service unconditionally instantiated `WindowsProtectedFileProviderSecretStore` as the default provider secret store, causing PRISM bootstrap to crash on Linux with `Windows protected provider secret storage is only available on Windows.` (caught here by `PRISM CI — Build & Smoke` Playwright/E2E job, which boots the dashboard on Ubuntu).
 
 **Fixes.**
+
 - [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — Default `providerSecretStore` is now platform-aware: `WindowsProtectedFileProviderSecretStore` on `win32`, `InMemoryProviderSecretStore` everywhere else. Callers can still inject either store explicitly.
 - [tests/plugin-pack-validator.test.ts](tests/plugin-pack-validator.test.ts) — Replaced CommonJS `require.main === module` (illegal in ES module scope, threw `ReferenceError` under Mocha on Linux CI) with an unconditional ESM-safe `throw` on aggregate failure.
 

@@ -26,7 +26,7 @@
 
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -116,12 +116,24 @@ describe("E2E smoke (Playwright + HTTP)", function () {
     let stderrTail = "";
 
     before(async function () {
+        // Pre-populate a preferences file so the dashboard handler does not
+        // 302-redirect GET / to /setup. The smoke contract is "the dashboard
+        // shell is reachable", not "first-run wizard works".
+        const prefsPath = join(dataDir, ".prism-preferences.json");
+        writeFileSync(prefsPath, JSON.stringify({
+            setupComplete: true,
+            uiMode: "advanced",
+            executionProfileSegment: "individual",
+            lastModified: new Date().toISOString(),
+        }), "utf-8");
+
         const env: NodeJS.ProcessEnv = {
             ...process.env,
             NODE_ENV: "development",
             PRISM_MODE: "server",
             PRISM_DASHBOARD_PORT: String(port),
             PRISM_DATA_DIR: dataDir,
+            PRISM_PREFERENCES_PATH: prefsPath,
             PRISM_AUTH_DISABLED: "true",
             // 32+ char dev secret — required by the startup validator. NOT a
             // real secret; this server is bound to 127.0.0.1 on a random port
