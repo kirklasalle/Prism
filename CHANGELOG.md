@@ -2,6 +2,29 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.15.0 — 2026-05-07 — W6: ActivityBus retention policy
+
+Minor release on top of `v0.14.3`. Begins W6 (post-W5 closeout) with a default-off retention policy for the `activity_events` table. No changes to existing schema, ActivityBus contract, or any existing subscriber. Frontend additivity guarantee preserved (no UI changes in this release).
+
+**New.**
+
+1. New module `src/core/activity/retention-policy.ts` exporting `ActivityRetentionPolicy`, `ActivityRetentionConfig`, `ActivityRetentionSweepResult`, and `resolveRetentionConfigFromEnv`.
+   - Periodic sweep deletes rows from `activity_events` whose `timestamp` is older than `now - retentionDays`, then emits an `activity.retention.swept` governance event onto the ActivityBus carrying `{deleted, cutoffIso, durationMs, retentionDays}` and a `database` side-effect record (`mutating: true, reversible: false`).
+   - Config injection + a `now` clock for deterministic testing.
+   - `start()` is idempotent; the timer is `unref()`-ed so it never keeps the process alive on its own.
+
+2. Wired into `DashboardService` constructor immediately after the SOC 2 evidence exporter, gated by `resolveRetentionConfigFromEnv(activityStore.dbPath)`. When the env-gate is unset, the field is `null` and no sweeps run.
+
+**Env gates (all optional, all default off).**
+
+- `PRISM_ACTIVITY_RETENTION_DAYS` — positive integer enables the policy. `0`, missing, or non-numeric leaves it disabled.
+- `PRISM_ACTIVITY_RETENTION_SWEEP_MS` — sweep cadence (≥ 1000 ms). Default 3,600,000 (1 hour).
+- `PRISM_ACTIVITY_DB_PATH` — optional override of the SQLite path; otherwise the same path as `SqliteActivityStore` is used.
+
+**Tests.** New `tests/activity-retention.test.ts` (registered in `tests/index.ts`) covers env-resolver edge cases, cutoff math against a fixed clock, the emitted ActivityBus event shape, idempotent start/stop, and the constructor's `retentionDays > 0` guard. **Total: 76/76 unit tests pass.**
+
+**Not addressed.** Pre-existing Quality-Gates browser-session test failures (no `playwright install chromium` in QG runner) — tracked in PR #1 follow-ups.
+
 ## v0.14.3 — 2026-05-07 — Signature-payload + E2E preferences hotfix
 
 Patch release on top of `v0.14.2`. After v0.14.2 cleared the Linux runtime crash, the next CI runs surfaced two latent bugs that had never run on Linux before. Both fixed here.

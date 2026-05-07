@@ -84,6 +84,7 @@ import { A2ATaskAdapter } from "../../adapters/application/a2a-task-adapter.js";
 import { GovernanceHooksAdapter } from "../../adapters/application/governance-hooks-adapter.js";
 import { MetricsStore, HistogramSnapshot } from "../activity/metrics-store.js";
 import { OtelExporter } from "../activity/otel-exporter.js";
+import { ActivityRetentionPolicy, resolveRetentionConfigFromEnv } from "../activity/retention-policy.js";
 import { Soc2EvidenceExporter } from "../compliance/soc2-exporter.js";
 import { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
 import { OutlookOAuthAdapter } from "../../adapters/application/outlook-oauth-adapter.js";
@@ -907,6 +908,7 @@ export class DashboardService {
   private readonly metricsStore: MetricsStore;
   private readonly otelExporter: OtelExporter;
   private readonly soc2Exporter: Soc2EvidenceExporter;
+  private readonly activityRetentionPolicy: ActivityRetentionPolicy | null;
 
   /* ── OAuth adapters (Phase E2) ──────────────────────────────────────── */
   private readonly gmailOAuth: GmailOAuthAdapter;
@@ -983,6 +985,22 @@ export class DashboardService {
     this.soc2Exporter = new Soc2EvidenceExporter(this.activityBus);
     if (this.soc2Exporter.isEnabled()) {
       this.soc2Exporter.start();
+    }
+
+    // ── Activity-events retention policy (W6) ─ default off ────────────────
+    // Activated when PRISM_ACTIVITY_RETENTION_DAYS is a positive integer.
+    // Periodically deletes rows from activity_events older than the configured
+    // window and emits an `activity.retention.swept` governance event.
+    {
+      const retentionCfg = activityStore
+        ? resolveRetentionConfigFromEnv(activityStore.dbPath)
+        : null;
+      if (retentionCfg) {
+        this.activityRetentionPolicy = new ActivityRetentionPolicy(retentionCfg, this.activityBus);
+        this.activityRetentionPolicy.start();
+      } else {
+        this.activityRetentionPolicy = null;
+      }
     }
 
     // ── OAuth adapters (Phase E2) ─────────────────────────────────────────────

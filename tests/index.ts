@@ -1,4 +1,5 @@
 import { testActivityBus } from "./activity-bus.test.js";
+import { testActivityRetention } from "./activity-retention.test.js";
 import { testAdapterSafetyRegression } from "./adapter-safety.test.js";
 import { testAdapterSafetyRegressionExpanded } from "./adapter-safety-expanded.test.js";
 import { testNetworkAdapterSafety } from "./network-adapter-safety.test.js";
@@ -133,6 +134,7 @@ async function runTests(): Promise<void> {
         { name: "D2GovernancePaths", fn: testD2GovernancePaths },
         { name: "PolicyPathMutatingOps", fn: testPolicyPathMutatingOps },
         { name: "ActivityBus", fn: testActivityBus },
+        { name: "ActivityRetention", fn: testActivityRetention },
         { name: "AdapterSafetyRegression", fn: testAdapterSafetyRegression },
         { name: "AdapterSafetyRegressionExpanded", fn: testAdapterSafetyRegressionExpanded },
         { name: "NetworkAdapterSafety", fn: testNetworkAdapterSafety },
