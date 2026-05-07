@@ -2,6 +2,34 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.16.0 — 2026-05-07 — W7: Compliance & Retention status panel
+
+Minor release on top of `v0.15.1`. Adds a strictly-additive read-only operator surface for the otherwise-silent W5 SOC 2 evidence exporter and W6 activity-events retention policy. **No existing UI, schema, or behavior changed.** Frontend Protection Guarantee preserved — only new DOM appended to one tab; every existing tab, ID, class, and WebSocket binding is untouched.
+
+**New — backend.**
+
+1. [`Soc2EvidenceExporter.getStatus()`](src/core/compliance/soc2-exporter.ts) returns `{enabled, mode, running, webhookFlavor?, outputDir?, lastEventAt, totalEvents, droppedEvents}`. The exporter now also tracks `totalEvents` / `droppedEvents` / `lastEventAt` internally; the values are zeroed when the exporter is off and have no effect on its hot path.
+2. [`ActivityRetentionPolicy.getStatus()` and `getLastSweep()`](src/core/activity/retention-policy.ts) cache the most recent `ActivityRetentionSweepResult` and the wall-clock `lastSweepAt` ISO timestamp. `getStatus()` returns `{enabled:true, retentionDays, sweepIntervalMs, dbPath, running, lastSweepAt, lastSweep}`.
+3. Two new read-only HTTP endpoints in [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts):
+   - `GET /api/compliance/soc2/status`
+   - `GET /api/activity/retention/status`
+   Both return `{enabled:false}` cleanly when their env gate is unset.
+
+**New — frontend (additive only).**
+
+- New collapsible **Compliance & Retention** card appended to the bottom of [src/core/operator/public/tab-telemetry.html](src/core/operator/public/tab-telemetry.html). Two read-only tiles ("SOC 2 Evidence Exporter", "Activity Retention") fetch the new status endpoints on mount and refresh every 30 s, with a color-coded badge (gray=disabled, green=running, amber=stopped, red=error). The script is idempotent (`window.__prismCompliancePanelInit`) so it survives tab re-mounts. **No edits to existing markup, classes, IDs, or WebSocket wiring.**
+
+**Tests.**
+
+- New `tests/compliance-status-routes.test.ts` (Mocha, registered in `package.json`) boots a real `DashboardService` on an ephemeral port and asserts the default-off shape of both endpoints.
+- `tests/activity-retention.test.ts` extended to assert `getStatus()` / `getLastSweep()` after a manual sweep.
+- **76/76 unit tests pass; 3/3 compliance-status route tests pass; build clean.**
+
+**Operational invariants preserved.**
+
+- With `PRISM_SOC2_EXPORTER` and `PRISM_ACTIVITY_RETENTION_DAYS` unset (the default), the new code paths are inert: the exporter never subscribes, the retention timer never starts, and the new endpoints reply `{enabled:false}`.
+- The new Telemetry-tab card renders "Disabled" by default; the existing telemetry, SLO gauge, package history, and runtime-overview panels are pixel-identical.
+
 ## v0.15.1 — 2026-05-07 — CI hygiene: Quality Gates + CodeQL
 
 Patch release on top of `v0.15.0`. Closes the two pre-existing CI gates that have been red since W1 — they ran red on every release tag from v0.14.0 through v0.15.0 but were never code defects in PRISM itself. **No source-tree changes.** Workflows-only.

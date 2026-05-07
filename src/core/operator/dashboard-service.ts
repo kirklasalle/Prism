@@ -6727,6 +6727,20 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return this.json(res, 200, computeSloSummary(this.metricsStore));
     }
 
+    // ── Compliance & retention status (W7) ────────────────────────────────────
+    // Read-only diagnostics for the W5 SOC 2 evidence exporter and the W6
+    // activity_events retention policy. Both default to {enabled:false} when
+    // their env gates are unset, so calling these endpoints is always safe.
+    if (method === "GET" && url === "/api/compliance/soc2/status") {
+      return this.json(res, 200, this.soc2Exporter.getStatus());
+    }
+    if (method === "GET" && url === "/api/activity/retention/status") {
+      if (!this.activityRetentionPolicy) {
+        return this.json(res, 200, { enabled: false });
+      }
+      return this.json(res, 200, this.activityRetentionPolicy.getStatus());
+    }
+
     // ── CAC Identity Chain API ────────────────────────────────────────────────
     if (method === "GET" && url.startsWith("/api/cac/chain")) {
       try {

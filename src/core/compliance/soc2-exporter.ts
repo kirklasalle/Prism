@@ -323,6 +323,9 @@ export class Soc2EvidenceExporter implements ActivitySubscriber {
         Pick<Soc2ExporterConfig, "webhookUrl" | "webhookToken" | "httpPoster">;
     private transport: Transport | null = null;
     private unsubscribe: (() => void) | null = null;
+    private lastEventAt: string | null = null;
+    private totalEvents = 0;
+    private droppedEvents = 0;
 
     constructor(
         private readonly activityBus: ActivityBus,
@@ -361,9 +364,38 @@ export class Soc2EvidenceExporter implements ActivitySubscriber {
         const record = mapEventToSoc2(event, controls);
         try {
             this.transport.write(record);
+            this.lastEventAt = new Date().toISOString();
+            this.totalEvents += 1;
         } catch {
             // Never let the pipeline tear down PRISM.
+            this.droppedEvents += 1;
         }
+    }
+
+    /**
+     * Read-only status snapshot. Safe to call regardless of `mode`.
+     * Returns `{enabled:false}` cleanly when `PRISM_SOC2_EXPORTER` is unset.
+     */
+    getStatus(): {
+        enabled: boolean;
+        mode: Soc2ExporterConfig["mode"];
+        running: boolean;
+        webhookFlavor?: WebhookFlavor;
+        outputDir?: string;
+        lastEventAt: string | null;
+        totalEvents: number;
+        droppedEvents: number;
+    } {
+        return {
+            enabled: this.isEnabled(),
+            mode: this.config.mode,
+            running: this.unsubscribe !== null,
+            webhookFlavor: this.config.mode === "webhook" ? this.config.webhookFlavor : undefined,
+            outputDir: this.config.mode === "file" ? this.config.outputDir : undefined,
+            lastEventAt: this.lastEventAt,
+            totalEvents: this.totalEvents,
+            droppedEvents: this.droppedEvents,
+        };
     }
 
     /** Flush + unsubscribe. Safe to call repeatedly. */

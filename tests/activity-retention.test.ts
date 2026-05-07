@@ -95,6 +95,17 @@ export async function testActivityRetention(): Promise<void> {
     assert.strictEqual(result.deleted, 2, "sweep deletes both rows older than 7 days");
     assert.strictEqual(rowCount(dbPath), 1, "recent row survives");
 
+    // getStatus() / getLastSweep() reflect the most recent sweep
+    const status = policy.getStatus();
+    assert.strictEqual(status.enabled, true);
+    assert.strictEqual(status.retentionDays, 7);
+    assert.strictEqual(status.sweepIntervalMs, 60_000);
+    assert.strictEqual(status.dbPath, dbPath);
+    assert.strictEqual(status.running, false, "not running until start()");
+    assert.ok(status.lastSweepAt, "lastSweepAt is recorded");
+    assert.deepStrictEqual(status.lastSweep, result, "getStatus surfaces last sweep");
+    assert.deepStrictEqual(policy.getLastSweep(), result);
+
     // emitted activity event has expected shape
     assert.strictEqual(seen.length, 1, "sweep emits exactly one activity event");
     const ev = seen[0]!;
