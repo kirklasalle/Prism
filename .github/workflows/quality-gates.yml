@@ -67,7 +67,7 @@ jobs:
 
       - name: Seed CU-BG status artifact (CI baseline)
         run: |
-          node -e "const fs=require('fs'); const runId=process.env.GITHUB_RUN_ID || 'local-run'; const src='docs/COMPUTER_USE_BUSINESS_GATE_STATUS_TEMPLATE.json'; const dst='prism-output/computer-use-business-gate-status.json'; const data=JSON.parse(fs.readFileSync(src,'utf8')); const candidateId=`${runId}-d2`; data.generatedAt=new Date().toISOString(); data.candidateId=candidateId; if(Array.isArray(data.requirements)){ data.requirements=data.requirements.map(r=>({ ...r, evidenceLink:String(r.evidenceLink||'').replace(/<candidate-id>/g, candidateId) })); } fs.writeFileSync(dst, JSON.stringify(data,null,2));"
+          node -e "const fs=require('fs'); const runId=process.env.GITHUB_RUN_ID || 'local-run'; const src='docs/COMPUTER_USE_BUSINESS_GATE_STATUS_TEMPLATE.json'; const dst='prism-output/computer-use-business-gate-status.json'; const data=JSON.parse(fs.readFileSync(src,'utf8')); const candidateId=runId + '-d2'; data.generatedAt=new Date().toISOString(); data.candidateId=candidateId; if(Array.isArray(data.requirements)){ data.requirements=data.requirements.map(r=>({ ...r, evidenceLink:String(r.evidenceLink||'').replace(/<candidate-id>/g, candidateId) })); } fs.writeFileSync(dst, JSON.stringify(data,null,2));"
 
       - name: Run computer-use Business gate check
         run: npm run cu:bg:check -- --strict
