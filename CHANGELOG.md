@@ -2,6 +2,20 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.16.1 — 2026-05-07 — Flaky-test hotfix: deterministic JWT/cookie signature tamper
+
+Patch release on top of `v0.16.0`. After `v0.16.0` shipped, the QG run on commit `14f54a8` revealed a latent flake in `tests/iam-sso.test.ts` (`testIamSsoOidc`):
+
+```
+assert.ok(thrown instanceof OidcError)
+```
+
+**Root cause.** Both the OIDC ID-token tamper (`valid.token.slice(0, -2) + "AA"`) and the session-cookie tamper (`cookie.slice(0, -2) + "AA"`) only flipped the trailing 12 bits of a base64url-encoded signature. Because the last 4–6 bits of the encoding are padding/garbage, on roughly 1-in-256 runs the *decoded* signature byte was unchanged, the signature still verified, no error was thrown, and `assert.ok(thrown instanceof OidcError)` failed. The test had been silently flaky since H-2 landed.
+
+**Fix.** [tests/iam-sso.test.ts](tests/iam-sso.test.ts) — both tamper sites now decode the base64url signature, XOR the first byte with `0xff`, and re-encode. The mutation is byte-deterministic regardless of the original signature contents.
+
+**Verification.** `npm run build` clean; `node dist/tests/index.js` reports `Tests: 76 | Passed: 76 | Failed: 0` (run repeated locally). No source-tree changes outside the test file.
+
 ## v0.16.0 — 2026-05-07 — W7: Compliance & Retention status panel
 
 Minor release on top of `v0.15.1`. Adds a strictly-additive read-only operator surface for the otherwise-silent W5 SOC 2 evidence exporter and W6 activity-events retention policy. **No existing UI, schema, or behavior changed.** Frontend Protection Guarantee preserved — only new DOM appended to one tab; every existing tab, ID, class, and WebSocket binding is untouched.
