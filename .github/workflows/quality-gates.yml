@@ -11,6 +11,10 @@ jobs:
     env:
       PRISM_CU_BG_STATUS_PATH: prism-output/computer-use-business-gate-status.json
       PRISM_CU_BG_VALIDATION_OUTPUT_PATH: prism-output/computer-use-business-gate-validation.json
+      # Route benchmark artifacts to prism-output/ so ci:gate:check can find them.
+      PRISM_PERF_OUTPUT_PATH: prism-output/perf-qualification.json
+      PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH: prism-output/tool-contract-snapshot.json
+      PRISM_RELEASE_VALIDATION_OUTPUT_PATH: prism-output/release-validation.json
 
     steps:
       - name: Checkout
