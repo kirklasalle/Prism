@@ -94,6 +94,10 @@ interface PrismPreferences {
     lastUsedCharacterId?: string;
     /** Phase E3b: the CAC assignment id the first-run wizard created. */
     cacBootstrapAssignmentId?: string;
+    /** v0.20.5: persisted Guardian Agent configuration (model selection, autoStart, etc.).
+     * Stored as a free-form record so we don't have to import the GuardianConfig type into
+     * the workspace-resolver layer; dashboard-service shape-checks before applying. */
+    guardianConfig?: Record<string, unknown>;
     lastModified: string;
 }
 

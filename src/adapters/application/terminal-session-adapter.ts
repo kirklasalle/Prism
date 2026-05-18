@@ -408,6 +408,153 @@ export class TerminalSessionAdapter {
     }
 
     /**
+     * Pause a running session (real OS-level suspension).
+     *
+     * - POSIX: SIGSTOP delivered to the PTY child PID via process.kill.
+     * - Win32: NtSuspendProcess invoked through PowerShell P/Invoke against the
+     *   PTY child PID (mirrors the SendInput P/Invoke pattern already shipped
+     *   in computer-use-tool.ts).
+     *
+     * Idempotent: calling pauseSession on an already-suspended session re-issues
+     * the suspension call and refreshes the signal log entry.
+     *
+     * @param session_id - Session identifier
+     */
+    async pauseSession(session_id: string): Promise<void> {
+        await this.initializationPromise;
+        const sessionEntry = this.activeSessions.get(session_id);
+        if (!sessionEntry) {
+            throw new Error(`Session ${session_id} not found`);
+        }
+        const { ptyProcess, session } = sessionEntry;
+        const pid = ptyProcess.pid as number;
+        if (typeof pid !== "number" || pid <= 0) {
+            throw new Error(`Session ${session_id} has no live process to pause`);
+        }
+
+        if (process.platform === "win32") {
+            await this.win32SuspendOrResume(pid, "suspend");
+        } else {
+            try {
+                process.kill(pid, "SIGSTOP");
+            } catch (error) {
+                throw new Error(`SIGSTOP delivery failed for pid=${pid}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+
+        this.db.run(
+            "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
+            [session_id, process.platform === "win32" ? "NtSuspendProcess" : "SIGSTOP", "pause_session", new Date().toISOString()],
+            () => { }
+        );
+
+        session.state = TerminalSessionState.SUSPENDED;
+        session.last_activity = new Date().toISOString();
+        await this.persistSession(session);
+
+        this.activityBus.emit({
+            sessionId: session_id,
+            layer: "governance",
+            operation: "terminal_session_pause",
+            status: "succeeded",
+            details: { pid, platform: process.platform },
+            authorityTier: "tier1_autonomous",
+            policyDecision: "allow"
+        });
+    }
+
+    /**
+     * Resume a previously paused session.
+     *
+     * - POSIX: SIGCONT delivered to the PTY child PID via process.kill.
+     * - Win32: NtResumeProcess invoked through PowerShell P/Invoke.
+     *
+     * Idempotent and safe to call against an already-active session.
+     *
+     * @param session_id - Session identifier
+     */
+    async resumeSession(session_id: string): Promise<void> {
+        await this.initializationPromise;
+        const sessionEntry = this.activeSessions.get(session_id);
+        if (!sessionEntry) {
+            throw new Error(`Session ${session_id} not found`);
+        }
+        const { ptyProcess, session } = sessionEntry;
+        const pid = ptyProcess.pid as number;
+        if (typeof pid !== "number" || pid <= 0) {
+            throw new Error(`Session ${session_id} has no live process to resume`);
+        }
+
+        if (process.platform === "win32") {
+            await this.win32SuspendOrResume(pid, "resume");
+        } else {
+            try {
+                process.kill(pid, "SIGCONT");
+            } catch (error) {
+                throw new Error(`SIGCONT delivery failed for pid=${pid}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+
+        this.db.run(
+            "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
+            [session_id, process.platform === "win32" ? "NtResumeProcess" : "SIGCONT", "resume_session", new Date().toISOString()],
+            () => { }
+        );
+
+        session.state = TerminalSessionState.ACTIVE;
+        session.last_activity = new Date().toISOString();
+        await this.persistSession(session);
+
+        this.activityBus.emit({
+            sessionId: session_id,
+            layer: "governance",
+            operation: "terminal_session_resume",
+            status: "succeeded",
+            details: { pid, platform: process.platform },
+            authorityTier: "tier1_autonomous",
+            policyDecision: "allow"
+        });
+    }
+
+    /**
+     * Win32 NtSuspendProcess / NtResumeProcess via PowerShell P/Invoke.
+     * Same pattern used by ComputerUseTool's SendInput shim — no native deps.
+     * @private
+     */
+    private async win32SuspendOrResume(pid: number, mode: "suspend" | "resume"): Promise<void> {
+        const { spawn } = await import("node:child_process");
+        const fn = mode === "suspend" ? "NtSuspendProcess" : "NtResumeProcess";
+        const ps = `
+$ErrorActionPreference = 'Stop';
+$src = @"
+using System;
+using System.Runtime.InteropServices;
+public static class PrismProc {
+    [DllImport("ntdll.dll", SetLastError = true)]
+    public static extern int NtSuspendProcess(IntPtr hProc);
+    [DllImport("ntdll.dll", SetLastError = true)]
+    public static extern int NtResumeProcess(IntPtr hProc);
+}
+"@;
+Add-Type -TypeDefinition $src -Language CSharp;
+$p = [System.Diagnostics.Process]::GetProcessById(${pid});
+$rc = [PrismProc]::${fn}($p.Handle);
+if ($rc -ne 0) { Write-Error "${fn} returned status 0x$($rc.ToString('X')) for pid ${pid}"; exit 1 };
+exit 0;
+`;
+        await new Promise<void>((resolve, reject) => {
+            const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { windowsHide: true });
+            let stderr = "";
+            child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+            child.once("error", reject);
+            child.once("exit", (code: number | null) => {
+                if (code === 0) resolve();
+                else reject(new Error(`${fn} pid=${pid} failed (exit=${code}): ${stderr.trim()}`));
+            });
+        });
+    }
+
+    /**
      * Stop a session gracefully
      * 
      * @param session_id - Session identifier

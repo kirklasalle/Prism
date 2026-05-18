@@ -172,6 +172,10 @@ export const REASON_CODE_TAXONOMY: ReadonlyArray<ReasonCodeEntry> = [
     { code: POLICY_REASON_CODES.DIRECTIVE_INTEGRITY_VIOLATION, domain: "directive", severity: "critical", description: "Permanent Active Directives SHA-256 hash mismatch; file may have been tampered with." },
     { code: POLICY_REASON_CODES.DIRECTIVE_AMENDMENT_UNAUTHORIZED, domain: "directive", severity: "critical", description: "Attempted amendment to Permanent Active Directives rejected; requires formal amendment process." },
 
+    // ── CAC Identity (from POLICY_REASON_CODES) ───────
+    { code: POLICY_REASON_CODES.CAC_PLACEHOLDER_IDENTITY_DENY, domain: "identity", severity: "deny", description: "Business profile operation denied because the active identity is a placeholder (e.g. unverified default user); a real bound identity is required." },
+    { code: POLICY_REASON_CODES.CAC_EMAIL_VERIFICATION_REQUIRED, domain: "identity", severity: "deny", description: "Business + tier-2-or-higher email-bound operation denied because no fresh OAuth email verification is on file; user must re-verify before proceeding." },
+
     // ── Trust / Provenance ────────────────────────────
     { code: TAXONOMY_CODES.TRUST_LEVEL_BELOW_MIN, domain: "trust", severity: "deny", description: "Plugin trust level is below the minimum required by the business trust policy." },
     { code: TAXONOMY_CODES.TRUST_AUTHOR_EMAIL_MISSING, domain: "trust", severity: "deny", description: "Plugin manifest author email is required but missing." },

@@ -45,8 +45,11 @@ export function generateOpenApiSpec(port: number = 7070): OpenApiSpec {
   const paths: OpenApiSpec["paths"] = {};
 
   for (const ep of endpoints) {
-    const versionedPath = `/api/v1${ep.path.startsWith("/api") ? ep.path.substring(4) : ep.path}`;
-    if (!paths[versionedPath]) paths[versionedPath] = {};
+    // Strip the leading `/api` segment so paths are bare (e.g. `/telemetry/slo-summary`).
+    // The `/api/v1` prefix is carried in the `servers[].url` entry below, which is the
+    // OpenAPI 3.0 convention and what api-versioning.test.ts asserts.
+    const barePath = ep.path.startsWith("/api") ? ep.path.substring(4) : ep.path;
+    if (!paths[barePath]) paths[barePath] = {};
 
     const operation: OpenApiOperation = {
       operationId: ep.operationId,
@@ -75,7 +78,7 @@ export function generateOpenApiSpec(port: number = 7070): OpenApiSpec {
       }));
     }
 
-    paths[versionedPath][ep.method.toLowerCase()] = operation;
+    paths[barePath][ep.method.toLowerCase()] = operation;
   }
 
   return {
@@ -85,7 +88,7 @@ export function generateOpenApiSpec(port: number = 7070): OpenApiSpec {
       version: "0.2.0",
       description: "The Prism Frontier Operator Console API provides endpoints for managing chat sessions, LLM providers, tools, agents, telemetry, and system governance.",
     },
-    servers: [{ url: `http://127.0.0.1:${port}`, description: "Local development server" }],
+    servers: [{ url: `http://127.0.0.1:${port}/api/v1`, description: "Local development server" }],
     paths,
     components: {
       schemas: getComponentSchemas(),
@@ -135,7 +138,8 @@ function getKnownEndpoints(): EndpointDef[] {
     // ── Tools & Plugins ──
     { path: "/api/tools", method: "GET", operationId: "listTools", summary: "List registered tools with state", tags: ["Tools"] },
     { path: "/api/tools/{toolName}/toggle", method: "POST", operationId: "toggleTool", summary: "Enable or disable a tool", tags: ["Tools"] },
-    { path: "/api/plugins/{pluginName}/toggle", method: "POST", operationId: "togglePlugin", summary: "Enable or disable a plugin", tags: ["Tools"] },
+    { path: "/api/plugins/{name}/toggle", method: "POST", operationId: "togglePlugin", summary: "Enable or disable a plugin", tags: ["Tools"] },
+    { path: "/api/plugins/{name}/health", method: "GET", operationId: "getPluginHealth", summary: "Per-plugin health status", tags: ["Tools"] },
     { path: "/api/tools/{toolName}/test", method: "POST", operationId: "testTool", summary: "Test a tool with sample input", tags: ["Tools"] },
 
     // ── Telemetry ──
@@ -147,6 +151,7 @@ function getKnownEndpoints(): EndpointDef[] {
         { name: "correlationId", required: false, schema: { type: "string" }, description: "Filter by correlation ID" },
       ] },
     { path: "/api/slo", method: "GET", operationId: "getSlo", summary: "SLO gauge metrics", tags: ["Telemetry"] },
+    { path: "/api/telemetry/slo-summary", method: "GET", operationId: "getSloSummary", summary: "SLO summary across the configured window", tags: ["Telemetry"] },
 
     // ── Actions ──
     { path: "/api/actions", method: "GET", operationId: "listActions", summary: "List dashboard actions and their states", tags: ["Actions"] },

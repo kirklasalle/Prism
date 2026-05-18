@@ -7,6 +7,8 @@ import type { Tool, ToolRequest, ToolResult } from "../tools/types.js";
 import type { LlamaCppSupervisor, LlamaModelSlot } from "../operator/llama-cpp-supervisor.js";
 import type { AgentLifecycleTier, AgentState } from "./agent-types.js";
 import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
+import type { AABLedgerEntry } from "../runtime/autonomous-agent-loop.js";
+import type { CovenantStatus } from "../governance/prism-covenant.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Guardian Agent — Permanent autonomous system agent powered by llama.cpp
@@ -96,6 +98,10 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
     { id: "log_volume_analysis", name: "Log Volume Analysis", category: "monitoring", intervalMs: 120000, enabled: true },
     // MCP self-heal — every 60s, kick stuck/down servers back up.
     { id: "mcp_health_recovery", name: "MCP Health & Recovery", category: "monitoring", intervalMs: 60000, enabled: true },
+    // AAB Ledger — every 30s, check for anomalous autonomous behavior.
+    { id: "aab_ledger_monitor", name: "AAB Ledger Monitor", category: "monitoring", intervalMs: 30000, enabled: true },
+    // Covenant integrity — every 5 minutes, audit the Sacred Covenant.
+    { id: "covenant_audit", name: "Covenant Integrity Audit", category: "security", intervalMs: 300000, enabled: true },
 ];
 
 const DEFAULT_CONFIG: GuardianConfig = {
@@ -139,6 +145,12 @@ export class GuardianAgent extends EventEmitter {
         getServerStates: () => Array<{ name: string; state: "connected" | "down" | "retrying" | "failed"; retryCount: number; lastError: string | null }>;
         forceReconnect: (name: string) => Promise<{ ok: boolean; error?: string }>;
     } | null;
+    /** Optional AAB ledger accessor — polls the autonomous loop for anomalous entries. */
+    private aabLedgerFn?: () => AABLedgerEntry[];
+    /** Tracks the last AAB ledger count to detect new entries. */
+    private lastAABLedgerCount = 0;
+    /** Optional Covenant accessor — runs integrity audits. */
+    private covenantFn?: () => CovenantStatus;
 
     constructor(
         private readonly activityBus: ActivityBus,
@@ -388,6 +400,16 @@ export class GuardianAgent extends EventEmitter {
         this.mcpAdapterFn = fn;
     }
 
+    /** Inject AAB ledger accessor for autonomous behavior monitoring. */
+    public setAABLedgerFn(fn: () => AABLedgerEntry[]): void {
+        this.aabLedgerFn = fn;
+    }
+
+    /** Inject Covenant accessor for integrity audits. */
+    public setCovenantFn(fn: () => CovenantStatus): void {
+        this.covenantFn = fn;
+    }
+
     /** Returns current task catalog with status. */
     public getTaskStatus(): GuardianTask[] {
         return this.tasks.map(t => ({ ...t }));
@@ -485,6 +507,8 @@ export class GuardianAgent extends EventEmitter {
             case "agent_census": return this.taskAgentCensus();
             case "log_volume_analysis": return this.taskLogVolumeAnalysis();
             case "mcp_health_recovery": return await this.taskMcpHealthRecovery();
+            case "aab_ledger_monitor": return this.taskAABLedgerMonitor();
+            case "covenant_audit": return this.taskCovenantAudit();
             default: return { status: "failure", detail: `Unknown task: ${taskId}` };
         }
     }
@@ -785,6 +809,79 @@ export class GuardianAgent extends EventEmitter {
             return { status: "warning", detail: `${stillDown.length} MCP server(s) still down: ${stillDown.join(", ")}` };
         } catch (error) {
             return { status: "failure", detail: `MCP recovery task failed: ${String(error)}` };
+        }
+    }
+
+    // ── Autonomous Monitoring Tasks ───────────────────────────────────
+
+    /**
+     * AAB Ledger Monitor — polls the autonomous loop's AAB ledger for
+     * new entries since the last check. When critical anomalies are
+     * detected, the Guardian triggers an alert event.
+     */
+    private taskAABLedgerMonitor(): { status: "success" | "warning" | "failure"; detail: string } {
+        if (!this.aabLedgerFn) {
+            return { status: "success", detail: "AAB ledger accessor not attached — skipped" };
+        }
+        try {
+            const entries = this.aabLedgerFn();
+            const newEntries = entries.slice(this.lastAABLedgerCount);
+            this.lastAABLedgerCount = entries.length;
+
+            if (newEntries.length === 0) {
+                return { status: "success", detail: `AAB ledger stable — ${entries.length} total entries` };
+            }
+
+            const terminations = newEntries.filter(e => e.intervention === "terminate");
+            const pauses = newEntries.filter(e => e.intervention === "pause");
+            const rateLimits = newEntries.filter(e => e.intervention === "rate_limit");
+
+            if (terminations.length > 0) {
+                this.issuesDetected += terminations.length;
+                this.emitEvent("guardian.aab.critical", `${terminations.length} autonomous termination(s) detected: ${terminations.map(e => e.description).join("; ")}`);
+                return {
+                    status: "warning",
+                    detail: `${newEntries.length} new AAB entries: ${terminations.length} termination(s), ${pauses.length} pause(s), ${rateLimits.length} rate limit(s)`,
+                };
+            }
+
+            return {
+                status: "success",
+                detail: `${newEntries.length} new AAB entries (${pauses.length} pauses, ${rateLimits.length} rate limits). Total: ${entries.length}`,
+            };
+        } catch (error) {
+            return { status: "failure", detail: `AAB ledger monitor failed: ${String(error)}` };
+        }
+    }
+
+    /**
+     * Covenant Integrity Audit — runs the Sacred Covenant's audit()
+     * method and reports any violations detected since the last check.
+     */
+    private taskCovenantAudit(): { status: "success" | "warning" | "failure"; detail: string } {
+        if (!this.covenantFn) {
+            return { status: "success", detail: "Covenant accessor not attached — skipped" };
+        }
+        try {
+            const status = this.covenantFn();
+            const criticalCount = status.violations.filter(v => v.severity === "critical").length;
+            const breachCount = status.violations.filter(v => v.severity === "breach").length;
+
+            if (!status.isIntact) {
+                this.issuesDetected++;
+                this.emitEvent("guardian.covenant.violated", `Covenant integrity VIOLATED — ${criticalCount} critical, ${breachCount} breach violations`);
+                return {
+                    status: "warning",
+                    detail: `Covenant NOT intact — ${criticalCount} critical, ${breachCount} breach, ${status.violations.length} total violations`,
+                };
+            }
+
+            return {
+                status: "success",
+                detail: `Covenant intact (v${status.version}, hash: ${status.hash}). ${status.violations.length} advisory violation(s).`,
+            };
+        } catch (error) {
+            return { status: "failure", detail: `Covenant audit failed: ${String(error)}` };
         }
     }
 

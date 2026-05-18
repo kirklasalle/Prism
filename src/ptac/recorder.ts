@@ -29,14 +29,19 @@ export class PtacRecorder {
     private readonly screenshotsDir: string;
     private screenshotSeq = 0;
     public readonly demoRecording: boolean;
+    public readonly recordVideo: boolean;
+    public readonly recordVideoFps: number;
+    private readonly videoFrames: Array<{ stepId: string; relPath: string; observedAt: string; bracket: string }> = [];
 
-    constructor(public readonly runDir: string, options: { demoRecording?: boolean } = {}) {
+    constructor(public readonly runDir: string, options: { demoRecording?: boolean; recordVideo?: boolean; recordVideoFps?: number } = {}) {
         mkdirSync(runDir, { recursive: true });
         this.screenshotsDir = join(runDir, "screenshots");
         mkdirSync(this.screenshotsDir, { recursive: true });
         this.stepsLogPath = join(runDir, "steps.jsonl");
         this.eventsLogPath = join(runDir, "events.jsonl");
         this.demoRecording = options.demoRecording === true;
+        this.recordVideo = options.recordVideo === true;
+        this.recordVideoFps = Math.max(1, Math.min(8, options.recordVideoFps ?? 2));
     }
 
     /** Persist a single screenshot and return its relative path. */
@@ -47,7 +52,16 @@ export class PtacRecorder {
         const filename = `${seq}_${stepId}_${safeLabel}_${digest}.png`;
         const abs = join(this.screenshotsDir, filename);
         writeFileSync(abs, png);
-        return `screenshots/${filename}`;
+        const rel = `screenshots/${filename}`;
+        if (this.recordVideo) {
+            this.videoFrames.push({
+                stepId,
+                relPath: rel,
+                observedAt: new Date().toISOString(),
+                bracket: label,
+            });
+        }
+        return rel;
     }
 
     /** Append a step result to `steps.jsonl`. */
@@ -81,6 +95,25 @@ export class PtacRecorder {
             writeFileSync(
                 join(this.runDir, "transcript.txt"),
                 transcript.map(formatTranscriptLine).join("\n") + "\n",
+                "utf8",
+            );
+        }
+        if (this.recordVideo && this.videoFrames.length > 0) {
+            const manifest = {
+                runId: run.runId,
+                fps: this.recordVideoFps,
+                frameCount: this.videoFrames.length,
+                durationSec: Math.round((this.videoFrames.length / this.recordVideoFps) * 100) / 100,
+                frames: this.videoFrames,
+            };
+            writeFileSync(
+                join(this.runDir, "video-manifest.json"),
+                JSON.stringify(manifest, null, 2),
+                "utf8",
+            );
+            writeFileSync(
+                join(this.runDir, "video.html"),
+                renderVideoSlideshow(run.runId, this.videoFrames, this.recordVideoFps),
                 "utf8",
             );
         }
@@ -151,6 +184,95 @@ function narrateStep(scenarioId: string, st: PtacStepResult): string {
 function formatTranscriptLine(e: TranscriptEntry): string {
     const tag = `[${e.status.toUpperCase().padEnd(7)}]`;
     return `${tag} ${e.scenarioId} · ${e.kind} · ${e.stepId} (${e.durationMs}ms) — ${e.narration}`;
+}
+
+/* ── Video slideshow renderer (zero-dep, browser-playable) ───────────── */
+
+/**
+ * Render a self-contained `video.html` that plays the captured per-step
+ * screenshots back as a timed slideshow at the configured FPS. The
+ * slideshow is a single static HTML page with no external assets — it
+ * loads the screenshot files relative to its own location, so the entire
+ * `<runDir>/` folder is portable as one demo asset.
+ *
+ * The slideshow is **not** an MP4/WebM. Encoding video would require
+ * pulling in ffmpeg or a wasm encoder; both violate the
+ * zero-new-runtime-deps invariant. A timed-slideshow page is a valid
+ * "demo recording" artifact — recordable to MP4 by any screen recorder
+ * pointed at the page if a true video file is needed downstream.
+ */
+function renderVideoSlideshow(
+    runId: string,
+    frames: ReadonlyArray<{ stepId: string; relPath: string; observedAt: string; bracket: string }>,
+    fps: number,
+): string {
+    const intervalMs = Math.max(1, Math.round(1000 / fps));
+    const json = JSON.stringify(frames);
+    return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PTAC Demo — ${escapeHtml(runId)}</title>
+<style>
+  body{margin:0;background:#0e1116;color:#e6edf3;font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:16px}
+  h1{margin:0 0 12px;font-size:16px}
+  #stage{max-width:100%;max-height:80vh;border:1px solid #30363d;border-radius:6px;background:#000}
+  #caption{margin-top:8px;font-size:13px;color:#8b949e;font-family:monospace}
+  #controls{margin-top:12px;display:flex;gap:8px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:4px;padding:6px 12px;cursor:pointer;font-size:13px}
+  button:hover{background:#30363d}
+  #progress{margin-top:6px;font-size:11px;color:#6e7681}
+</style>
+</head>
+<body>
+<h1>PTAC Demo Recording — ${escapeHtml(runId)} @ ${fps} fps</h1>
+<img id="stage" alt="frame">
+<div id="caption">—</div>
+<div id="progress">—</div>
+<div id="controls">
+  <button id="play">▶ Play</button>
+  <button id="pause">⏸ Pause</button>
+  <button id="prev">◀ Prev</button>
+  <button id="next">Next ▶</button>
+  <button id="restart">↻ Restart</button>
+</div>
+<script>
+const FRAMES = ${json};
+const INTERVAL_MS = ${intervalMs};
+let idx = 0;
+let timer = null;
+const stage = document.getElementById('stage');
+const cap = document.getElementById('caption');
+const prog = document.getElementById('progress');
+function show(i){
+  if (i < 0) i = 0;
+  if (i >= FRAMES.length) i = FRAMES.length - 1;
+  idx = i;
+  const f = FRAMES[i];
+  stage.src = f.relPath;
+  cap.textContent = '[' + f.bracket + '] ' + f.stepId + ' — ' + f.observedAt;
+  prog.textContent = 'frame ' + (i + 1) + ' / ' + FRAMES.length;
+}
+function tick(){
+  if (idx + 1 >= FRAMES.length){ stop(); return; }
+  show(idx + 1);
+}
+function play(){ if (!timer) timer = setInterval(tick, INTERVAL_MS); }
+function stop(){ if (timer){ clearInterval(timer); timer = null; } }
+document.getElementById('play').onclick = play;
+document.getElementById('pause').onclick = stop;
+document.getElementById('prev').onclick = () => { stop(); show(idx - 1); };
+document.getElementById('next').onclick = () => { stop(); show(idx + 1); };
+document.getElementById('restart').onclick = () => { stop(); show(0); play(); };
+show(0);
+play();
+</script>
+</body>
+</html>`;
+}
+
+function escapeHtml(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /* ── Report renderer (intentionally dependency-free) ─────────────────── */

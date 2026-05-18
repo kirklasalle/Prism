@@ -1,0 +1,152 @@
+# Prism Demonstration Mode — Interactive Showcase Engine
+
+A live, narrated demonstration system that puts Prism through its paces — showing self-control, browser control, and computer control capabilities with real actions, not simulations. Interruptible, resumable, and designed to **wow** anyone watching.
+
+## Overview
+
+The Demonstration Mode is a **guided tour** that executes real Prism capabilities in sequence, with a narration overlay explaining what's happening. It covers 9 demonstrations (3 per control surface) plus a full tab tour, all driven by a state machine that supports pause/resume/stop at any point.
+
+---
+
+## Proposed Changes
+
+### Demo Architecture
+
+```
+┌──────────────────────────────────────┐
+│         Dashboard UI                 │
+│   [▶ Start Demo]  [⏸ Pause] [⏹ Stop] │
+│   ┌───────────────────────────┐      │
+│   │  Narration Overlay        │      │
+│   │  "Prism is now deploying  │      │
+│   │   a 3-agent swarm..."    │      │
+│   │  ████████░░ Step 3/12    │      │
+│   └───────────────────────────┘      │
+└──────────────────────────────────────┘
+          │ API calls
+          ▼
+┌──────────────────────────────────────┐
+│  DemonstrationEngine (server)        │
+│  State: running | paused | idle      │
+│  Current: "self-control-1"           │
+│  Progress: 3/12 steps                │
+│  ──────────────────────────────      │
+│  Executes real tools via registry    │
+│  Switches tabs via WS broadcast      │
+│  All actions → ActivityBus           │
+└──────────────────────────────────────┘
+```
+
+---
+
+### 9 Demonstrations
+
+#### 🧠 Self Control (Prism controlling itself)
+
+| # | Title | What It Does |
+|---|-------|-------------|
+| S1 | **Agent Swarm Deployment** | Spawns 3 agents → creates a star-topology swarm → dispatches a research task → shows live telemetry → cleans up |
+| S2 | **Guardian Health Check** | Triggers Guardian scheduled tasks → shows real-time health data → demonstrates AAB ledger → shows self-healing |
+| S3 | **Governance Policy Audit** | Runs Tier 1 read-only → Tier 2 mutation with rollback → Tier 3 approval flow → shows policy divergence |
+
+#### 🌐 Browser Control (Prism driving a browser)
+
+| # | Title | What It Does |
+|---|-------|-------------|
+| B1 | **Web Research** | Opens browser session → navigates to docs page → extracts accessibility tree → captures screenshot → summarizes |
+| B2 | **Multi-Page Navigation** | Navigates across 3 pages → captures screenshots at each → extracts key data → compiles report |
+| B3 | **Form Interaction** | Navigates to form → fills text fields → selects dropdown → submits → verifies submission |
+
+#### 💻 Computer Control (Prism executing system commands)
+
+| # | Title | What It Does |
+|---|-------|-------------|
+| C1 | **System Diagnostics** | Runs `node --version`, `hostname`, `whoami` → captures output → writes diagnostic report to workspace |
+| C2 | **Workspace File Operations** | Creates directory → writes file → reads back → appends content → lists directory → cleans up |
+| C3 | **Process & Batch Execution** | Lists running processes → runs `start_web.bat` → monitors output → reports results |
+
+#### 🎯 Tab Tour (after demos complete)
+
+Cycles through every tab (Chat → Browser → Computer → Agents → Tools → Workspace → Settings → Telemetry → Logs → Scheduler → Watch Me → Network → Health) with a 3-second pause and a narration highlight for each.
+
+---
+
+### Component Design
+
+#### [NEW] `src/core/runtime/demonstration-engine.ts`
+
+The server-side orchestrator. Manages demo state machine, executes demo steps, broadcasts progress via WebSocket.
+
+```typescript
+interface DemoState {
+  status: "idle" | "running" | "paused" | "completed" | "error";
+  currentDemo: string | null;
+  currentStep: number;
+  totalSteps: number;
+  startedAt: string | null;
+  pausedAt: string | null;
+  completedDemos: string[];
+  log: DemoLogEntry[];
+}
+```
+
+- `startDemo()` — begins the full 9-demo + tab-tour sequence
+- `pauseDemo()` / `resumeDemo()` — pauses mid-step, resumes from exact point
+- `stopDemo()` — halts immediately, resets state
+- `skipToDemo(demoId)` — jump to a specific demo
+- Each step: executes action → emits narration event → waits delay → next
+
+#### [NEW] `src/core/operator/public/demo-mode.js`
+
+Client-side UI controller:
+- Floating demo control bar (bottom of screen)
+- Narration overlay panel with progress bar
+- Tab switching via DOM manipulation
+- WebSocket listener for server-pushed demo events
+- Keyboard shortcuts: Space (pause/resume), Escape (stop)
+
+#### [NEW] `src/core/operator/public/demo-mode.css`
+
+Styles for the demo overlay, narration panel, progress bar, and control buttons.
+
+#### [MODIFY] `src/core/operator/dashboard-service.ts`
+
+New API routes:
+- `POST /api/v1/demo/start` — start demo mode
+- `POST /api/v1/demo/stop` — stop demo
+- `POST /api/v1/demo/pause` — pause
+- `POST /api/v1/demo/resume` — resume  
+- `GET /api/v1/demo/status` — get current demo state
+
+#### [MODIFY] `src/core/operator/public/dashboard-app.js`
+
+- Import and initialize `demo-mode.js`
+- Add "Demo Mode" button to sidebar
+- Register keyboard shortcuts
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Browser demos**: The browser demos will use the existing browser sessions in the Browser tab. Should the demos use the Prism-internal browser (Playwright), or should they navigate within the dashboard's iframe? Currently designed to use the Playwright-managed sessions.
+
+> [!NOTE]
+> **start_web.bat**: Demo C3 references the canonical batch file at `D:\Projects\Prism\start_web.bat`. Is this the file you want used for the batch execution demonstration, or would you prefer a safer demo-specific script?
+
+> [!NOTE]
+> **Tab tour speed**: Currently designed with a 3-second pause per tab. Would you prefer faster (2s) or slower (5s) for the tour?
+
+---
+
+## Verification Plan
+
+### Automated
+- `npm run build` — clean compile
+- Demo state machine unit test (start → pause → resume → stop transitions)
+
+### Manual
+- Start demo from dashboard, observe all 9 demonstrations execute with narration
+- Pause mid-demo, verify state preserved, resume from same point
+- Stop demo, verify clean shutdown
+- Full tab tour shows all tabs with narration highlights

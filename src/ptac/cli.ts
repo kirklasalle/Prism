@@ -43,6 +43,8 @@ interface CliArgs {
     hostConfirmed: boolean;
     idleTimeoutS?: number;
     demoRecording: boolean;
+    recordVideo: boolean;
+    recordVideoFps?: number;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -77,6 +79,8 @@ function parseArgs(argv: string[]): CliArgs {
         hostConfirmed: argv.includes("--i-understand-host-control"),
         idleTimeoutS: get("idle-timeout") ? Number(get("idle-timeout")) : undefined,
         demoRecording: argv.includes("--demo-recording"),
+        recordVideo: argv.includes("--record-video"),
+        recordVideoFps: get("record-video-fps") ? Number(get("record-video-fps")) : undefined,
     };
 }
 
@@ -113,6 +117,21 @@ async function main(): Promise<number> {
         return 2;
     }
 
+    // --record-video opt-in dual gate: requires PRISM_PTAC_SAFE=1 AND
+    // PRISM_PTAC_RECORD_VIDEO=1. Mirrors the computer-use safety gate and
+    // ensures recording only happens on operator-prepared hosts.
+    if (args.recordVideo) {
+        if (process.env.PRISM_PTAC_SAFE !== "1" || process.env.PRISM_PTAC_RECORD_VIDEO !== "1") {
+            console.error(
+                "[ptac] --record-video requires both PRISM_PTAC_SAFE=1 and " +
+                "PRISM_PTAC_RECORD_VIDEO=1 to be set in the environment. " +
+                "These dual gates ensure the host is prepared and the operator " +
+                "explicitly opted in to recording artefacts being written to disk.",
+            );
+            return 2;
+        }
+    }
+
     const scenarios = selectScenarios(args);
     if (scenarios.length === 0) {
         console.error(
@@ -138,6 +157,8 @@ async function main(): Promise<number> {
         hostConfirmed: args.hostConfirmed,
         idleTimeoutS: args.idleTimeoutS,
         demoRecording: args.demoRecording,
+        recordVideo: args.recordVideo,
+        recordVideoFps: args.recordVideoFps,
     };
 
     const orchestrator = new PtacOrchestrator();

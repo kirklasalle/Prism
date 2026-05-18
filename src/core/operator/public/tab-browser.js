@@ -689,3 +689,94 @@ export async function refreshBrowserInfo() {
     else el.textContent = 'Unknown';
   }
 }
+
+/* ── Browser Auto-Pilot (Phase A2B) ── */
+
+export async function submitBrowserAutopilot() {
+  var objectiveEl = document.getElementById('browser-autopilot-objective');
+  var sessionEl = document.getElementById('browser-autopilot-session');
+  var maxEl = document.getElementById('browser-autopilot-max');
+  var objective = objectiveEl ? objectiveEl.value.trim() : '';
+  var sessionId = sessionEl ? sessionEl.value : '';
+  var maxActions = maxEl ? parseInt(maxEl.value, 10) || 20 : 20;
+  if (!objective) {
+    browserLogAction('autopilot', 'Objective required');
+    return;
+  }
+  var statusEl = document.getElementById('browser-autopilot-status');
+  var actionsEl = document.getElementById('browser-autopilot-actions');
+  if (statusEl) { statusEl.textContent = 'running'; statusEl.style.color = '#69d2ff'; statusEl.style.background = 'rgba(105,210,255,0.1)'; }
+  if (actionsEl) actionsEl.innerHTML = '<span class="muted">Submitting objective…</span>';
+  browserLogAction('autopilot', 'Submitting: ' + objective);
+  try {
+    var result = await request('/api/v1/autonomous/goal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        objective: '[Browser Auto-Pilot] ' + objective,
+        source: 'browser-autopilot',
+        constraints: {
+          allowBrowser: true,
+          allowComputer: false,
+          allowShell: false,
+          maxActions: maxActions,
+          browserSessionId: sessionId || undefined,
+        },
+      }),
+    });
+    if (objectiveEl) objectiveEl.value = '';
+    browserLogAction('autopilot', 'Goal submitted: ' + (result.goalId || 'unknown'));
+    if (actionsEl) actionsEl.innerHTML = '<span class="muted">Goal ' + escapeHtml(result.goalId || '') + ' submitted. Monitoring…</span>';
+    // Start polling status
+    pollBrowserAutopilot(result.goalId);
+  } catch (e) {
+    browserLogAction('autopilot', 'Failed: ' + e.message);
+    if (statusEl) { statusEl.textContent = 'error'; statusEl.style.color = '#ff7a7a'; }
+    if (actionsEl) actionsEl.innerHTML = '<span class="muted" style="color:#ff9a85;">Error: ' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+export async function stopBrowserAutopilot() {
+  var statusEl = document.getElementById('browser-autopilot-status');
+  try {
+    await request('/api/v1/autonomous/terminate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    browserLogAction('autopilot', 'Stop requested');
+    if (statusEl) { statusEl.textContent = 'idle'; statusEl.style.color = '#3ec46d'; statusEl.style.background = 'rgba(62,196,109,0.1)'; }
+  } catch (e) {
+    browserLogAction('autopilot', 'Stop failed: ' + e.message);
+  }
+}
+
+function pollBrowserAutopilot(goalId) {
+  if (!goalId) return;
+  var interval = setInterval(async function () {
+    try {
+      var data = await request('/api/v1/autonomous/status');
+      var statusEl = document.getElementById('browser-autopilot-status');
+      var actionsEl = document.getElementById('browser-autopilot-actions');
+      if (!data.active || data.active.goalId !== goalId) {
+        clearInterval(interval);
+        if (statusEl) { statusEl.textContent = 'idle'; statusEl.style.color = '#3ec46d'; statusEl.style.background = 'rgba(62,196,109,0.1)'; }
+        if (actionsEl && data.active) {
+          actionsEl.innerHTML = '<span class="muted">Goal completed.</span>';
+        }
+        return;
+      }
+      var goal = data.active;
+      if (statusEl) statusEl.textContent = goal.status || 'running';
+      if (actionsEl && goal.steps) {
+        var html = '';
+        for (var i = 0; i < goal.steps.length; i++) {
+          var step = goal.steps[i];
+          var icon = step.success ? '<span style="color:#3ec46d;">✓</span>' : '<span style="color:#ff7a7a;">✗</span>';
+          html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.06);">'
+            + icon + ' <span class="muted" style="font-size:10px;">' + escapeHtml((step.timestamp || '').slice(11, 19)) + '</span> '
+            + escapeHtml(step.action || step.tool || '') + ' '
+            + '<span class="muted">' + escapeHtml(step.summary || '') + '</span>'
+            + '</div>';
+        }
+        actionsEl.innerHTML = html || '<span class="muted">Waiting for actions…</span>';
+      }
+    } catch { /* best-effort */ }
+  }, 2000);
+}

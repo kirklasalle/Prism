@@ -56,4 +56,166 @@
       <div id="slo-gauge-panel"></div>
     </div>
   </section>
+  <section class="rail-section panel" style="grid-column:1/-1;" data-tip-id="telemetry:compliance"
+    data-tip-kind="telemetry">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('compliancePanel')">
+      <h3>🛡️ Compliance &amp; Retention</h3>
+      <span id="compliancePanel-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="compliancePanel-collapsible" class="collapsible-body">
+      <div id="compliance-panel" class="stack"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+        <div id="compliance-soc2-tile" class="panel" style="padding:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <strong>SOC 2 Evidence Exporter</strong>
+            <span id="compliance-soc2-badge" class="muted"
+              style="font-size:11px;padding:2px 8px;border-radius:10px;background:#444;">loading…</span>
+          </div>
+          <div id="compliance-soc2-body" class="muted" style="font-size:12px;margin-top:6px;">Fetching status…</div>
+        </div>
+        <div id="compliance-retention-tile" class="panel" style="padding:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <strong>Activity Retention</strong>
+            <span id="compliance-retention-badge" class="muted"
+              style="font-size:11px;padding:2px 8px;border-radius:10px;background:#444;">loading…</span>
+          </div>
+          <div id="compliance-retention-body" class="muted" style="font-size:12px;margin-top:6px;">Fetching status…
+          </div>
+        </div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:8px;">
+        Read-only. Both surfaces default to disabled. Enable via
+        <code>PRISM_SOC2_EXPORTER</code> / <code>PRISM_ACTIVITY_RETENTION_DAYS</code>.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- R6-2 Health Widget · R6-3 Approval Queue UI                         -->
+  <!-- Additive sections appended at the end of the Telemetry tab grid.    -->
+  <!-- Controllers live in:                                                 -->
+  <!--   /public/tab-health-widget.js                                       -->
+  <!--   /public/tab-approval-queue.js                                      -->
+  <!-- Frontend Protection: zero edits to existing telemetry components.    -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <section id="health-widget" class="rail-section panel" style="grid-column:1/-1;" data-tip-id="telemetry:health-widget"
+    data-tip-kind="telemetry">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('healthWidget')">
+      <h3>💗 Process Health</h3>
+      <span id="healthWidget-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="healthWidget-collapsible" class="collapsible-body">
+      <div id="health-widget-grid"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">
+        <div class="muted" style="font-size:12px;">Loading process health…</div>
+      </div>
+      <div id="health-widget-footer" class="muted" style="font-size:11px;margin-top:8px;">
+        GET /api/health/extended — refreshes every 10s.
+      </div>
+    </div>
+  </section>
+
+  <section id="approval-queue" class="rail-section panel" style="grid-column:1/-1;"
+    data-tip-id="telemetry:approval-queue" data-tip-kind="telemetry">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('approvalQueue')">
+      <h3>🛂 Pending Approvals <span id="approval-queue-count" class="muted"
+          style="font-size:12px;font-weight:normal;">(0)</span></h3>
+      <span id="approvalQueue-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="approvalQueue-collapsible" class="collapsible-body">
+      <div id="approval-queue-list" class="stack">
+        <div class="muted" style="font-size:12px;">Loading pending approvals…</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <button id="approval-queue-refresh" type="button"
+          style="font-size:12px;padding:4px 10px;background:#2b6;color:#fff;border:0;border-radius:4px;cursor:pointer;">↻
+          Refresh</button>
+        <span id="approval-queue-message" class="muted" style="font-size:11px;"></span>
+      </div>
+    </div>
+  </section>
 </div>
+<script>
+  (function () {
+    // Idempotent — safe if the tab is re-mounted.
+    if (window.__prismCompliancePanelInit) return;
+    window.__prismCompliancePanelInit = true;
+
+    function setBadge(el, text, bg) {
+      if (!el) return;
+      el.textContent = text;
+      el.style.background = bg;
+      el.style.color = "#fff";
+    }
+    function fmtDate(iso) {
+      if (!iso) return "never";
+      try { return new Date(iso).toLocaleString(); } catch (_) { return iso; }
+    }
+    function fmtNum(n) { return (typeof n === "number") ? n.toLocaleString() : "—"; }
+
+    async function fetchJson(url) {
+      const r = await fetch(url, { credentials: "same-origin" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }
+
+    async function refreshSoc2() {
+      const badge = document.getElementById("compliance-soc2-badge");
+      const body = document.getElementById("compliance-soc2-body");
+      if (!badge || !body) return;
+      try {
+        const s = await fetchJson("/api/compliance/soc2/status");
+        if (!s.enabled) {
+          setBadge(badge, "disabled", "#555");
+          body.textContent = "Set PRISM_SOC2_EXPORTER=file or =webhook to enable.";
+          return;
+        }
+        setBadge(badge, s.running ? "running" : "stopped", s.running ? "#2a7" : "#a72");
+        var lines = [];
+        lines.push("Mode: " + (s.mode || "—"));
+        if (s.webhookFlavor) lines.push("Flavor: " + s.webhookFlavor);
+        if (s.outputDir) lines.push("Output: " + s.outputDir);
+        lines.push("Events forwarded: " + fmtNum(s.totalEvents));
+        if (s.droppedEvents > 0) lines.push("Dropped: " + fmtNum(s.droppedEvents));
+        lines.push("Last event: " + fmtDate(s.lastEventAt));
+        body.innerHTML = lines.map(function (l) { return "<div>" + l + "</div>"; }).join("");
+      } catch (e) {
+        setBadge(badge, "error", "#a33");
+        body.textContent = "Status fetch failed: " + (e && e.message ? e.message : String(e));
+      }
+    }
+
+    async function refreshRetention() {
+      const badge = document.getElementById("compliance-retention-badge");
+      const body = document.getElementById("compliance-retention-body");
+      if (!badge || !body) return;
+      try {
+        const s = await fetchJson("/api/activity/retention/status");
+        if (!s.enabled) {
+          setBadge(badge, "disabled", "#555");
+          body.textContent = "Set PRISM_ACTIVITY_RETENTION_DAYS to a positive integer to enable.";
+          return;
+        }
+        setBadge(badge, s.running ? "running" : "stopped", s.running ? "#2a7" : "#a72");
+        var lines = [];
+        lines.push("Retention: " + s.retentionDays + " day(s)");
+        lines.push("Sweep cadence: " + Math.round(s.sweepIntervalMs / 60000) + " min");
+        if (s.lastSweep) {
+          lines.push("Last sweep: " + fmtDate(s.lastSweepAt) + " · deleted " + fmtNum(s.lastSweep.deleted));
+          lines.push("Cutoff: " + fmtDate(s.lastSweep.cutoffIso));
+        } else {
+          lines.push("Last sweep: pending first interval");
+        }
+        body.innerHTML = lines.map(function (l) { return "<div>" + l + "</div>"; }).join("");
+      } catch (e) {
+        setBadge(badge, "error", "#a33");
+        body.textContent = "Status fetch failed: " + (e && e.message ? e.message : String(e));
+      }
+    }
+
+    function refresh() { refreshSoc2(); refreshRetention(); }
+    refresh();
+    // Refresh every 30s while the tab DOM remains mounted.
+    setInterval(refresh, 30000);
+  })();
+</script>

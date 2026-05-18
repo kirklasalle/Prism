@@ -231,6 +231,38 @@ export interface ComputerUseStep extends StepBase {
     readonly expectContains?: string;
 }
 
+/**
+ * Real-PTY lifecycle step (PTAC s26).
+ *
+ * Drives `TerminalSessionAdapter` IN-PROCESS — no HTTP round-trip — to
+ * verify the v0.17 real-PTY pause/resume codepath end-to-end. Gated by
+ * `PRISM_PTAC_SAFE=1` because it spawns a real OS child process. The
+ * orchestrator instantiates the adapter once per step against a temp
+ * SQLite database; nothing leaks across scenarios.
+ */
+export interface RealPtyLifecycleStep extends StepBase {
+    readonly kind: "realPtyLifecycle";
+    /** Shell to spawn for the verification (default: cmd.exe on Win32, /bin/sh otherwise). */
+    readonly shell?: string;
+    /** Smoke command to send before pause (default: `echo prism-ptac-s26`). */
+    readonly probeCommand?: string;
+}
+
+/**
+ * Real-Docker lifecycle step (PTAC s27).
+ *
+ * Drives `DockerContainerAdapter` IN-PROCESS to verify the v0.18
+ * real-Docker codepath: ping → image-pull → create → start → exec →
+ * snapshot → revert → stop → destroy. Gated by `PRISM_PTAC_SAFE=1` AND
+ * Docker Engine reachability; if either is missing the step is recorded
+ * as a structured skip (not a failure).
+ */
+export interface RealDockerLifecycleStep extends StepBase {
+    readonly kind: "realDockerLifecycle";
+    /** Image to pull (default: alpine:latest). */
+    readonly image?: string;
+}
+
 export type PtacStep =
     | SetupWizardStep
     | ChatStep
@@ -247,7 +279,9 @@ export type PtacStep =
     | PluginLifecycleStep
     | PadHashVerifyStep
     | BrowserDriveStep
-    | ComputerUseStep;
+    | ComputerUseStep
+    | RealPtyLifecycleStep
+    | RealDockerLifecycleStep;
 
 /* ── Scenario & run plumbing ───────────────────────────────────────────── */
 
@@ -280,6 +314,16 @@ export interface PtacRunRequest {
      * step in the run, suitable for promo / customer demo asset capture.
      */
     readonly demoRecording?: boolean;
+    /**
+     * When true (and gated by both `PRISM_PTAC_SAFE=1` and
+     * `PRISM_PTAC_RECORD_VIDEO=1` at the CLI), the recorder additionally
+     * emits a self-contained `video.html` slideshow + `video-manifest.json`
+     * built from the timestamped per-step screenshots. Zero new runtime
+     * dependencies — the slideshow is plain HTML+JS that browsers play.
+     */
+    readonly recordVideo?: boolean;
+    /** Frames-per-second for the video slideshow (default 2). */
+    readonly recordVideoFps?: number;
 }
 
 export interface PtacStepResult {

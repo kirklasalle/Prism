@@ -118,8 +118,12 @@ export async function testIamSsoSession(): Promise<void> {
         assert.ok(verified, "valid cookie verifies");
         assert.equal(verified!.userId, user.id);
 
-        // Tampered cookie does NOT verify.
-        const tampered = cookie.slice(0, -2) + "AA";
+        // Tampered cookie does NOT verify. Decode the signature half, flip a
+        // byte, re-encode — deterministic, unlike a base64url char swap.
+        const dot = cookie.lastIndexOf(".");
+        const sigBuf = Buffer.from(cookie.slice(dot + 1), "base64url");
+        sigBuf[0] ^= 0xff;
+        const tampered = `${cookie.slice(0, dot + 1)}${sigBuf.toString("base64url")}`;
         assert.equal(mgr.verify(tampered), null, "tampered signature rejected");
 
         // Different secret rejects existing cookie.
@@ -202,8 +206,13 @@ export async function testIamSsoOidc(): Promise<void> {
     assert.equal(identity.displayName, "Alice");
     assert.equal(identity.issuer, issuer);
 
-    // Tampered signature rejected.
-    const tampered = valid.token.slice(0, -2) + "AA";
+    // Tampered signature rejected. Flip the first byte of the decoded signature
+    // so the change is byte-deterministic regardless of the encoded last-char
+    // padding bits (otherwise the test was flaky on roughly 1/256 of runs).
+    const parts = valid.token.split(".");
+    const sigBytes = Buffer.from(parts[2], "base64url");
+    sigBytes[0] ^= 0xff;
+    const tampered = `${parts[0]}.${parts[1]}.${sigBytes.toString("base64url")}`;
     let thrown: unknown = null;
     try { await provider.verifyIdToken(tampered, { expectedNonce: "n123" }); } catch (e) { thrown = e; }
     assert.ok(thrown instanceof OidcError);

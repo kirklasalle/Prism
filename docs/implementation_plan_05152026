@@ -1,0 +1,555 @@
+# Prism Autonomous Operation — Implementation Plan
+
+**Goal**: Enable Prism to work autonomously with full browser use, computer use, and a unified observability layer — all traceable, secure, and readable by both humans and AI.
+
+---
+
+## Current State Analysis
+
+After thorough analysis of the Prism codebase (v0.21.0), here is what exists today:
+
+| Capability | Status | Key Files |
+|---|---|---|
+| **Browser Control** | ✅ Functional (Playwright) | [browser-session-manager.ts](file:///d:/Projects/Prism/src/core/operator/browser-session-manager.ts), [browser-control-tool.ts](file:///d:/Projects/Prism/src/adapters/system/browser-control-tool.ts) |
+| **Computer Use** | ✅ Functional (Win32 SendInput + Framebuffer) | [computer-use-tool.ts](file:///d:/Projects/Prism/src/adapters/system/computer-use-tool.ts), [framebuffer-capture.ts](file:///d:/Projects/Prism/src/core/operator/framebuffer-capture.ts) |
+| **Agentic Loop** | ✅ Functional (25 iterations, tool calling) | [agentic-chat-executor.ts](file:///d:/Projects/Prism/src/core/operator/agentic-chat-executor.ts) |
+| **Console Capture** | ✅ Functional (5000-line ring buffer, redaction) | [console-interceptor.ts](file:///d:/Projects/Prism/src/core/logging/console-interceptor.ts) |
+| **Activity Bus** | ✅ Functional (multi-subscriber event bus) | `src/core/activity/bus.ts`, `sqlite-store.ts` |
+| **Auth/IAM** | ✅ Token auth + RBAC skeleton | [auth.ts](file:///d:/Projects/Prism/src/core/security/auth.ts), [rbac.ts](file:///d:/Projects/Prism/src/core/iam/rbac.ts) |
+| **Agent Framework** | ✅ Pool, Lifecycle, Router, Swarm, Guardian | `src/core/agents/*` (8 modules) |
+| **Dashboard Tabs** | ✅ 14 tabs (Chat, Browser, Computer, Watch, Logs, etc.) | `src/core/operator/public/tab-*.{html,js}` (43 files) |
+| **Autonomous Agent Loop** | ❌ Missing | Agentic loop only triggered by chat messages |
+| **Dev Identity/CAC Bootstrap** | ❌ Missing | No operator identity at startup |
+| **Tab Session Initialization** | ❌ Missing | Tabs don't create traced sessions on load |
+| **Universal Telemetry → Logs** | ⚠️ Partial | Console + activity events, but not all tab actions piped |
+| **Dashboard Command Execution** | ❌ Missing | Computer tab is display-only (screengrabs) |
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Execution Profile Decision**: The autonomous agent loop introduces a "broader control surface" as you described. For development/testing, the `individual` profile with `dev` environment will be used with relaxed governance. For production deployment, should the autonomous loop require explicit approval for every computer-use action, or should it operate within a configurable autonomy budget (e.g., 50 actions per hour)?
+
+> [!WARNING]
+> **Security Surface Expansion**: Enabling direct command execution from the dashboard creates a new attack vector. The plan includes allowlist/denylist, Guardian oversight, and audit logging. Please confirm this approach is acceptable for the individual profile during development.
+
+> [!IMPORTANT]  
+> **LLM Provider for Autonomous Loop**: The autonomous agent loop needs an LLM to reason about goals and select actions. During development, this will use the configured provider from Settings (default: Ollama `gemma3:1b`). For production autonomy, should we enforce a minimum model tier (e.g., Tier 3+ models only)?
+
+---
+
+## Open Questions
+
+1. **Watch Me Tab Scope**: Should "Watch Me" observe autonomous operations in real-time and build a behavioral replay model, or is it primarily for screen recording/monitoring?
+
+2. **Cross-Tab Autonomous Workflows**: Should the autonomous agent be able to drive multiple tabs simultaneously (e.g., research in Browser while executing in Computer), or sequential only?
+
+3. **Startup Identity Persistence**: Should the dev operator identity persist across restarts (stored in workspace state), or should a fresh identity be generated each time `start_web.bat` runs?
+
+4. **Guardian Intervention Threshold**: When Guardian detects anomalous autonomous behavior, should it (a) pause and alert the operator, (b) terminate the autonomous session, or (c) apply rate limiting and continue?
+
+---
+
+## Proposed Changes
+
+### Phase 1: Dev Identity & Tab Session Initialization
+
+This phase creates the foundation for traceability — every action has a known operator, and every tab has a tracked session.
+
+---
+
+#### [NEW] `src/core/iam/dev-identity-provider.ts`
+
+Creates a development/test operator identity for CAC (Credential Access Control). On startup via `start_web.bat`, this module:
+- Generates a deterministic dev operator identity (`prism-dev-operator@localhost`)
+- Creates a CAC-compatible session with unique session tokens
+- Establishes per-tab session records in SQLite
+- Emits `iam.session.created` events to the activity bus for full audit trail
+
+```typescript
+interface DevOperatorIdentity {
+  operatorId: string;           // "prism-dev-operator"
+  email: string;                // "prism-dev-operator@localhost"
+  displayName: string;          // "Prism Dev Operator"
+  role: "admin";
+  sessionId: string;            // Per-runtime unique session
+  cacFingerprint: string;       // Computed from machine + runtime
+  createdAt: string;            // ISO 8601
+  expiresAt: string | null;     // null for dev (never expires)
+}
+
+interface TabSession {
+  tabId: string;                // "chat" | "browser" | "computer" | "watch" | ...
+  sessionId: string;            // Per-tab unique ID
+  operatorId: string;           // Link to operator identity
+  createdAt: string;
+  lastActiveAt: string;
+  eventCount: number;
+  status: "active" | "idle" | "terminated";
+}
+```
+
+---
+
+#### [NEW] `src/core/iam/tab-session-registry.ts`
+
+Manages per-tab session lifecycle. Every tab gets a dedicated session at initialization with:
+- Unique session ID linked to operator identity
+- Event counter for activity tracking  
+- Status lifecycle (active → idle → terminated)
+- Persisted to SQLite for cross-restart recovery
+
+All 14 tabs will have sessions created at startup:
+`chat`, `agentic`, `browser`, `computer`, `watch`, `logs`, `telemetry`, `settings`, `network`, `workspace`, `scheduler`, `tools`, `characters`, `approval-queue`
+
+---
+
+#### [MODIFY] [index.ts](file:///d:/Projects/Prism/src/index.ts)
+
+Add dev identity bootstrap after workspace initialization (~line 160):
+- Instantiate `DevIdentityProvider`
+- Create operator identity for the runtime session
+- Initialize `TabSessionRegistry` with all tab IDs
+- Emit startup audit events for each tab session
+- Pass identity + tab sessions to `DashboardService`
+
+---
+
+#### [MODIFY] [start_web.bat](file:///d:/Projects/Prism/start_web.bat)
+
+Add development-specific environment variables for CAC identity:
+```batch
+REM ── Dev Identity & CAC Bootstrap ─────────────────────────────────────────
+set PRISM_DEV_IDENTITY=prism-dev-operator
+set PRISM_DEV_EMAIL=prism-dev-operator@localhost
+set PRISM_CAC_MODE=development
+set PRISM_TAB_SESSION_INIT=all
+set PRISM_TELEMETRY_PIPE=logs
+```
+
+---
+
+### Phase 2: Autonomous Agent Loop & Command Execution
+
+This is the critical phase — enabling Prism to operate autonomously with both browser and computer control surfaces.
+
+---
+
+#### [NEW] `src/core/runtime/autonomous-agent-loop.ts`
+
+The core autonomous execution engine. This service:
+
+1. **Accepts Goals**: From chat, scheduler, API, or dashboard
+2. **Decomposes Goals**: Uses `TaskDecomposer` to break objectives into steps
+3. **Plans Actions**: Selects appropriate tools (browser_control, computer, shell_exec, etc.)
+4. **Executes Steps**: Runs tools via `AgenticChatExecutor` with extended iteration limits
+5. **Self-Monitors**: Integrates Guardian agent for anomaly detection
+6. **Reports Everything**: All actions emitted to activity bus → piped to Logs tab
+
+```typescript
+interface AutonomousGoal {
+  goalId: string;
+  objective: string;              // Natural language objective
+  source: "chat" | "scheduler" | "api" | "dashboard";
+  operatorId: string;             // Who authorized this goal
+  constraints: {
+    maxDurationMs: number;        // Hard timeout
+    maxActions: number;           // Action budget
+    allowBrowserUse: boolean;
+    allowComputerUse: boolean;
+    allowShellExec: boolean;
+    requireApprovalAboveRisk: "low" | "medium" | "high";
+  };
+  correlationId: string;          // Links all actions in this goal
+}
+
+interface AutonomousStep {
+  stepId: string;
+  goalId: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  status: "planned" | "executing" | "succeeded" | "failed" | "skipped";
+  startedAt: string | null;
+  completedAt: string | null;
+  output: unknown;
+  durationMs: number;
+}
+```
+
+Key design decisions:
+- **Goal-Action-Outcome Triad**: Every autonomous action records what was attempted, what happened, and what changed
+- **Budget Enforcement**: Hard limits on actions, duration, and cost prevent runaway behavior
+- **Guardian Check-in**: After every N actions, Guardian evaluates trajectory
+- **Pause & Resume**: Operator can pause/resume autonomous loops from the dashboard
+
+---
+
+#### [NEW] `src/core/runtime/autonomous-browser-agent.ts`
+
+Specialized agent for autonomous browser interactions:
+
+- Launches headless Playwright session with CAC identity
+- Navigates, clicks, types based on LLM reasoning over DOM/accessibility trees
+- Uses **accessibility tree snapshots** (not vision) as primary perception — dramatically reduces LLM cost
+- Falls back to screenshot + vision when accessibility tree is insufficient
+- Captures all network requests and console output for audit
+- Supports multi-page workflows (form filling, research, data extraction)
+
+---
+
+#### [NEW] `src/core/runtime/autonomous-computer-agent.ts`
+
+Specialized agent for autonomous computer control:
+
+- Executes shell commands via `TerminalSessionAdapter` 
+- Uses framebuffer capture for visual verification of results
+- Supports both sandboxed (workspace-only) and elevated (system-wide) execution
+- Implements command allowlist/denylist from policy engine
+- Real-time output streaming via WebSocket to dashboard
+
+---
+
+#### [MODIFY] [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts)
+
+Add API routes for autonomous operations:
+```
+POST /api/v1/autonomous/goal      — Submit a new autonomous goal
+GET  /api/v1/autonomous/status    — Get active goal status
+POST /api/v1/autonomous/pause     — Pause active autonomous loop
+POST /api/v1/autonomous/resume    — Resume paused autonomous loop
+POST /api/v1/autonomous/terminate — Hard-stop autonomous loop
+GET  /api/v1/autonomous/history   — List past autonomous goals
+POST /api/v1/computer/execute     — Direct command execution from dashboard
+GET  /api/v1/computer/output/:id  — Stream command output via SSE
+```
+
+---
+
+#### [MODIFY] [tab-computer.html](file:///d:/Projects/Prism/src/core/operator/public/tab-computer.html)
+
+Add a "Command Execution" panel to the Computer tab:
+- Input field for shell/PowerShell commands
+- Execute button with confirmation for dangerous commands
+- Real-time output display (monospace, color-coded)
+- Command history dropdown
+- Kill button for long-running commands
+- All executions logged to activity bus
+
+---
+
+#### [MODIFY] [tab-computer.js](file:///d:/Projects/Prism/src/core/operator/public/tab-computer.js)
+
+Wire command execution panel to new API routes. Add WebSocket subscription for real-time output streaming.
+
+---
+
+#### [MODIFY] [tab-browser.html](file:///d:/Projects/Prism/src/core/operator/public/tab-browser.html) & [tab-browser.js](file:///d:/Projects/Prism/src/core/operator/public/tab-browser.js)
+
+Add autonomous browser control panel:
+- "Auto-Pilot" mode toggle
+- Goal input field for autonomous browsing objectives
+- Step-by-step action log showing what the agent is doing
+- Screenshot preview updating in real-time
+- Intervention controls (pause, step-through, cancel)
+
+---
+
+#### [MODIFY] [agentic-chat-executor.ts](file:///d:/Projects/Prism/src/core/operator/agentic-chat-executor.ts)
+
+Extend for autonomous mode:
+- New `executeAutonomous()` method with higher iteration limits (100+)
+- Goal-oriented system prompts for autonomous operation
+- Integration with browser and computer agents
+- Budget tracking (actions, tokens, cost)
+
+---
+
+### Phase 3: Universal Telemetry → Logs & Debug
+
+This phase ensures every action from every tab is piped to the Logs & Debug tab in a structured, AI-readable format.
+
+---
+
+#### [NEW] `src/core/observability/universal-telemetry-aggregator.ts`
+
+Central aggregation service that:
+
+1. **Subscribes to ALL event sources**:
+   - ActivityBus events (all layers)
+   - ConsoleInterceptor lines
+   - Browser session events (network, console, navigation)
+   - Computer use events (commands, screenshots, mouse/keyboard)
+   - Chat session events (messages, tool calls, agentic turns)
+   - Agent lifecycle events (spawn, stop, promote, reap)
+   - Guardian events (alerts, interventions)
+   - Scheduler events (job starts, completions, failures)
+   - Telemetry events (SLO, metrics, alerts)
+   - Settings changes
+   - Workspace operations
+   - Network/MCP events
+
+2. **Normalizes into unified format**:
+```typescript
+interface UnifiedTelemetryEntry {
+  id: string;                    // Unique entry ID
+  timestamp: string;             // ISO 8601
+  source: string;                // "chat" | "browser" | "computer" | "agent" | ...
+  category: string;              // "action" | "event" | "error" | "metric" | "state_change"
+  severity: "trace" | "debug" | "info" | "warn" | "error" | "critical";
+  operation: string;             // Machine-readable operation name
+  summary: string;               // Human-readable one-line summary
+  details: Record<string, unknown>; // Full structured details
+  operatorId: string | null;     // Who triggered this
+  correlationId: string | null;  // Links related events
+  tabSessionId: string | null;   // Which tab session
+  goalId: string | null;         // Which autonomous goal (if any)
+  durationMs: number | null;     // How long this took
+  outcome: "success" | "failure" | "pending" | "skipped" | null;
+  
+  // AI-readable metadata
+  aiContext: {
+    isActionable: boolean;       // Can an agent act on this?
+    suggestedAction: string | null; // What should be done about this?
+    relatedEntries: string[];    // IDs of related entries
+    tags: string[];              // Searchable tags
+  };
+}
+```
+
+3. **Provides query API**:
+```
+GET /api/v1/telemetry/unified?source=browser&severity=error&limit=100
+GET /api/v1/telemetry/unified/stream  (WebSocket)
+GET /api/v1/telemetry/unified/ai-summary  (LLM-generated summary)
+```
+
+---
+
+#### [MODIFY] [tab-logs.html](file:///d:/Projects/Prism/src/core/operator/public/tab-logs.html)
+
+Overhaul the Logs & Debug tab with:
+
+1. **Unified Telemetry Stream** (new panel):
+   - Real-time scrolling feed of ALL system events
+   - Structured card layout (not raw text) for each entry
+   - Color-coded by severity (trace=gray, info=blue, warn=amber, error=red, critical=pulse-red)
+   - Source badges (🌐 Browser, 🖥️ Computer, 💬 Chat, 🤖 Agent, etc.)
+   - Expandable details section (JSON pretty-printed)
+   - Filter by source, severity, tab, time range, correlation ID
+   - Search across all fields (full-text + structured)
+
+2. **AI Summary Panel** (new):
+   - Guardian/LLM-generated summary of recent activity
+   - Anomaly highlights
+   - Suggested actions
+   - Updated every 30 seconds or on-demand
+
+3. **Tab Session Overview** (new):
+   - Grid showing all active tab sessions
+   - Event counts, last activity, status indicators
+   - Click to filter telemetry by tab session
+
+---
+
+#### [MODIFY] [tab-logs.js](file:///d:/Projects/Prism/src/core/operator/public/tab-logs.js)
+
+Wire all new panels to unified telemetry API. Add WebSocket subscription for real-time updates.
+
+---
+
+#### [MODIFY] [console-interceptor.ts](file:///d:/Projects/Prism/src/core/logging/console-interceptor.ts)
+
+Add structured metadata injection:
+- Parse known log patterns (`[PRISM][module]`, `[MCP]`, `[AUTH]`, etc.)
+- Extract severity from log content
+- Attach source module identification
+- Forward parsed entries to `UniversalTelemetryAggregator`
+
+---
+
+#### [MODIFY] [browser-session-manager.ts](file:///d:/Projects/Prism/src/core/operator/browser-session-manager.ts)
+
+Pipe all browser events to unified telemetry:
+- Navigation events with URL and title
+- Network requests with timing
+- Console messages from browsed pages
+- DOM interaction events (click, type, hover)
+- Screenshot captures
+- Session lifecycle (launch, suspend, terminate)
+
+---
+
+#### [MODIFY] [computer-use-tool.ts](file:///d:/Projects/Prism/src/adapters/system/computer-use-tool.ts)
+
+Pipe all computer use events to unified telemetry:
+- Mouse movements and clicks with coordinates
+- Keyboard input (redacted for sensitive content)
+- Screenshots with metadata
+- Command execution with output
+
+---
+
+### Phase 4: Polish & Hardening
+
+---
+
+#### [MODIFY] [guardian-agent.ts](file:///d:/Projects/Prism/src/core/agents/guardian-agent.ts)
+
+Extend Guardian to monitor autonomous operations:
+- Subscribe to `UniversalTelemetryAggregator` for pattern detection
+- Detect and alert on: rapid action sequences, repeated failures, unusual navigation patterns, excessive resource consumption
+- Intervention capabilities: pause autonomous loop, rate-limit, terminate
+- Periodic health reports emitted to Logs tab
+
+---
+
+#### [NEW] `src/core/runtime/autonomous-rate-limiter.ts`
+
+Rate limiting for autonomous operations:
+- Configurable limits per goal, per session, and global
+- Token bucket algorithm for smooth throttling
+- Emergency kill switch accessible from dashboard and Guardian
+- Metrics exposed to telemetry and SLO system
+
+---
+
+#### [MODIFY] [tab-watch.html](file:///d:/Projects/Prism/src/core/operator/public/tab-watch.html) & [tab-watch.js](file:///d:/Projects/Prism/src/core/operator/public/tab-watch.js)
+
+Integrate Watch Me tab with autonomous operations:
+- Real-time screen capture playback from autonomous computer use
+- Browser session screenshot slideshow from autonomous browser use
+- Action timeline showing steps alongside visual state
+- Recording export for behavioral analysis
+
+---
+
+#### [MODIFY] Multiple tab files
+
+Add session initialization to every tab's JavaScript module. Each tab's `init()` function will:
+1. Call `POST /api/v1/sessions/tab/{tabId}` to create/resume a tab session
+2. Store the session ID for all subsequent actions
+3. Include session ID in all API calls from that tab
+4. Emit `tab.activated` / `tab.deactivated` events
+
+Affected files:
+- `tab-chat.js`, `tab-agentic.js`, `tab-browser.js`, `tab-computer.js`
+- `tab-watch.js`, `tab-logs.js`, `tab-telemetry.js`, `tab-settings.js`
+- `tab-network.js`, `tab-workspace.js`, `tab-scheduler.js`, `tab-tools.js`
+- `tab-characters.js`, `tab-approval-queue.js`
+
+---
+
+## Enhancement Suggestions
+
+> [!TIP]
+> **Accessibility-First Browser Perception**: Instead of relying solely on screenshots + vision models for browser automation, use Playwright's `page.accessibility.snapshot()` as the primary perception layer. This is dramatically cheaper (no vision model needed), faster, and more reliable. Fall back to screenshots only when the accessibility tree is insufficient (e.g., canvas-heavy pages).
+
+> [!TIP]
+> **Structured Command Categories**: For the computer command execution panel, pre-define categories of commands (system info, network diagnostics, file management, process management, development tools) with safe defaults. This provides a safer starting surface than raw shell access.
+
+> [!TIP]
+> **Telemetry Retention Tiers**: Not all telemetry needs to persist forever. Implement a tiered retention policy:
+> - **Hot** (in-memory, 1 hour): Full detail, all events
+> - **Warm** (SQLite, 7 days): Summarized, significant events
+> - **Cold** (file export, 90 days): Aggregated metrics, policy decisions
+> This prevents the `prism-activity.db` from growing unboundedly.
+
+> [!TIP]
+> **Goal Templates for Autonomous Operation**: Pre-define common autonomous goals as templates (e.g., "Research topic X and summarize findings", "Monitor webpage Y and alert on changes", "Run test suite and report results"). This provides safe entry points for autonomous behavior.
+
+> [!TIP]
+> **Dual-Channel Logging**: The Logs & Debug tab should support both a human-readable rendered view and a raw JSON view (toggle). The raw JSON view is what Guardian and other LLM agents consume. The rendered view is for the human operator. Both views show the same data with different presentations.
+
+---
+
+## Roadmap Integration
+
+```mermaid
+gantt
+    title Prism Autonomous Operation Roadmap
+    dateFormat YYYY-MM-DD
+    
+    section Phase 1: Foundation
+    Dev Identity Provider           :p1a, 2026-05-16, 2d
+    Tab Session Registry            :p1b, after p1a, 2d
+    start_web.bat Enhancements      :p1c, after p1a, 1d
+    Index.ts Bootstrap Integration  :p1d, after p1b, 1d
+    
+    section Phase 2: Autonomous Execution
+    AutonomousAgentLoop             :p2a, after p1d, 3d
+    AutonomousBrowserAgent          :p2b, after p2a, 2d
+    AutonomousComputerAgent         :p2c, after p2a, 2d
+    Dashboard Command Panel         :p2d, after p2c, 2d
+    Browser Auto-Pilot UI           :p2e, after p2b, 2d
+    API Routes Integration          :p2f, after p2d, 1d
+    
+    section Phase 3: Observability
+    UniversalTelemetryAggregator    :p3a, after p2f, 3d
+    Logs Tab Overhaul               :p3b, after p3a, 3d
+    Event Source Piping             :p3c, after p3a, 2d
+    AI Summary Panel                :p3d, after p3b, 2d
+    
+    section Phase 4: Hardening
+    Guardian Integration            :p4a, after p3c, 2d
+    Rate Limiter                    :p4b, after p4a, 1d
+    Watch Me Integration            :p4c, after p3d, 2d
+    Session Recovery                :p4d, after p4b, 2d
+    E2E Testing & Validation        :p4e, after p4d, 3d
+```
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+```bash
+# Phase 1 verification
+npm run build
+node --test --test-force-exit dist/tests/dev-identity-provider.test.js
+node --test --test-force-exit dist/tests/tab-session-registry.test.js
+
+# Phase 2 verification
+node --test --test-force-exit dist/tests/autonomous-agent-loop.test.js
+node --test --test-force-exit dist/tests/autonomous-browser-agent.test.js
+node --test --test-force-exit dist/tests/autonomous-computer-agent.test.js
+node ./node_modules/mocha/bin/mocha.js --exit --timeout 60000 \
+  "dist/tests/autonomous-api-routes.test.js" \
+  "dist/tests/computer-execute-routes.test.js"
+
+# Phase 3 verification
+node --test --test-force-exit dist/tests/universal-telemetry-aggregator.test.js
+node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 \
+  "dist/tests/tab-logs-telemetry.test.js"
+
+# Phase 4 verification
+npm test  # Full test suite
+npm run release:validate  # Release validation
+```
+
+### Integration Testing via start_web.bat
+
+```bash
+# Canonical development test
+D:\Projects\Prism\start_web.bat
+
+# Expected behavior:
+# 1. Build succeeds
+# 2. Dev identity created → logged to console
+# 3. 14 tab sessions initialized → logged to console  
+# 4. Dashboard opens with auth token
+# 5. Logs & Debug tab shows all startup events
+# 6. Computer tab shows Command Execution panel
+# 7. Browser tab shows Auto-Pilot controls
+```
+
+### Manual Verification
+
+1. **Dev Identity**: Verify operator identity appears in Settings tab under "Session Identity"
+2. **Tab Sessions**: Verify each tab shows its session ID in the footer/header
+3. **Command Execution**: Execute `node --version` from Computer tab, verify output appears
+4. **Autonomous Browser**: Set a goal "navigate to google.com", verify browser launches and navigates
+5. **Telemetry Piping**: Perform actions in every tab, verify all appear in Logs & Debug
+6. **Guardian Monitoring**: Start an autonomous loop, verify Guardian reports activity
+7. **AI Readability**: Call `/api/v1/telemetry/unified?limit=10`, verify structured JSON output

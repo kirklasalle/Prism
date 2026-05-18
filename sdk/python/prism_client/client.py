@@ -33,7 +33,7 @@ Transport = Callable[[str, str, Mapping[str, str], Optional[bytes], float], Tran
 
 DEFAULT_BASE_URL = "http://localhost:7070"
 DEFAULT_TIMEOUT_S = 30.0
-DEFAULT_USER_AGENT = "prism-python-sdk/0.1.0"
+DEFAULT_USER_AGENT = "prism-python-sdk/0.2.0"
 
 
 def _urllib_transport(
@@ -285,3 +285,61 @@ class PrismClient:
 
     def setup_status(self) -> Any:
         return self._request("GET", "/api/setup/status")
+
+    def status(self) -> Any:
+        """Consolidated status snapshot — runtime, version, gates, advisories.
+
+        Mirrors what ``prism doctor`` reports in JSON mode against a live
+        server.
+        """
+        return self._request("GET", "/api/status")
+
+    # --------------------------------------------------------- autonomous loop (v0.21)
+
+    def chat_autonomous(
+        self,
+        prompt: str,
+        *,
+        session_id: str,
+        character_id: Optional[str] = None,
+        extra: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Drive the autonomous AgenticChatExecutor loop via ``POST /api/chat``.
+
+        v0.21 headline. The server-side executor handles tool dispatch,
+        budget enforcement, workspace-sandbox containment, and Tier-3
+        routing to the Approval Queue. The terminal answer is returned
+        synchronously; intermediate ``agentic_event`` envelopes stream
+        over the dashboard WebSocket — subscribe via :meth:`watch_events`
+        for the live timeline.
+        """
+        payload: Dict[str, Any] = {"message": prompt, "sessionId": session_id}
+        if character_id is not None:
+            payload["characterId"] = character_id
+        if extra:
+            payload.update(extra)
+        return self._request("POST", "/api/chat", json_body=payload)
+
+    def watch_events(
+        self,
+        *,
+        session_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> Iterator[Dict[str, Any]]:
+        """Yield recent ``agentic_event`` envelopes from the activity bus.
+
+        Polling shim over ``GET /api/events`` for stdlib-only callers that
+        cannot easily open a WebSocket. For real-time streaming, attach to
+        the dashboard ``/ws`` endpoint directly.
+        """
+        events = self.events(limit=limit)
+        if not isinstance(events, list):
+            events = events.get("events", []) if isinstance(events, dict) else []
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            if ev.get("type") != "agentic_event":
+                continue
+            if session_id and ev.get("sessionId") != session_id:
+                continue
+            yield ev

@@ -4,6 +4,7 @@ import { IRouteHandler } from "./types.js";
 import { DashboardHandler } from "./dashboard-handler.js";
 import { SetupHandler } from "./setup-handler.js";
 import { ApiHandler } from "./api-handler.js";
+import { AutonomousHandler } from "./autonomous-handler.js";
 import { SchedulerHandler } from "./scheduler-handler.js";
 import { WorkspaceHandler } from "./workspace-handler.js";
 import { TooltipsHandler } from "./tooltips-handler.js";
@@ -16,6 +17,7 @@ export * from "./types.js";
 export * from "./dashboard-handler.js";
 export * from "./setup-handler.js";
 export * from "./api-handler.js";
+export * from "./autonomous-handler.js";
 export * from "./scheduler-handler.js";
 export * from "./workspace-handler.js";
 export * from "./tooltips-handler.js";
@@ -34,6 +36,7 @@ export class Router {
     this.handlers.push(new SchedulerHandler());
     this.handlers.push(new TooltipsHandler());
     this.handlers.push(new ApiHandler());
+    this.handlers.push(new AutonomousHandler());
     // OpenAI Assistants API compatibility surface (/v1/*). Auth is enforced
     // by the upstream AuthGate before dispatch reaches this handler.
     this.handlers.push(new OpenAiCompatHandler());

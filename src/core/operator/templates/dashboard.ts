@@ -1,4 +1,4 @@
-﻿export function dashboardHtml(port: number, authToken?: string): string {
+export function dashboardHtml(port: number, authToken?: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -8,6 +8,7 @@
   <title>PRISM Frontier Console</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/public/dashboard.css">
+  <link rel="stylesheet" href="/public/demo-mode.css">
 </head>
 <body>
   <div class="app" id="app">
@@ -24,6 +25,7 @@
       <button class="secondary-button" onclick="packageSessions()" data-tip-id="shell:package-sessions" data-tip-kind="shell">Package Sessions</button>
       <button id="new-session-button" class="primary-button" onclick="createSession()" data-tip-id="shell:new-session" data-tip-kind="shell">New Session</button>
       <button class="secondary-button" onclick="window.location.href='/setup?rerun=true'" style="font-size:11px;opacity:0.75;margin-top:2px;" title="Re-run the guided setup wizard" data-tip-id="shell:setup-wizard" data-tip-kind="shell">\u2728 Setup Wizard</button>
+      <button class="primary-button" onclick="window.prismDemo && window.prismDemo.open()" style="font-size:11px;margin-top:2px;background:linear-gradient(135deg,#a371f7,#f778ba);border:none;" title="Launch interactive demonstration of all Prism capabilities">\uD83C\uDFAC Demo Mode</button>
       <div id="session-list" class="session-list"></div>
     </aside>
     <div class="resize-handle" id="resize-handle"></div>
@@ -41,6 +43,7 @@
         <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:telemetry" data-tip-kind="shell-tab">Telemetry</button>
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:logs" data-tip-kind="shell-tab">Logs &amp; Debug</button>
         <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:scheduler" data-tip-kind="shell-tab">Scheduler</button>
+        <button id="tab-button-watch" type="button" class="tab-button" data-tab-id="watch" role="tab" aria-selected="false" aria-controls="tab-watch" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:watch" data-tip-kind="shell-tab" title="Watch PRISM run autonomously">👁️ Watch Me</button>
         <span id="prism-ws-status" title="WebSocket connected" style="width:10px;height:10px;border-radius:50%;background:#22c55e;align-self:center;margin-left:auto;flex:0 0 10px;box-shadow:0 0 6px rgba(34,197,94,0.5);transition:background 0.3s;" data-tip-id="shell:ws-status" data-tip-kind="shell" tabindex="0" role="status" aria-label="WebSocket connection status"></span>
       </section>
 
@@ -66,6 +69,8 @@
 
       <section id="tab-scheduler" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-scheduler" aria-hidden="true"></section>
 
+      <section id="tab-watch" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-watch" aria-hidden="true"></section>
+
       <div id="sched-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:520px;width:90%;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -82,6 +87,32 @@
     </main>
   </div>
   <script type="module" src="/public/dashboard-app.js"></script>
+  <!-- Additive (v0.20): PTAC Operator Demo panel controller. Hydrates the
+       additive panel injected into tab-computer.html. Self-hides when the
+       feature gates are not set; never modifies existing dashboard state. -->
+  <script src="/public/tab-ptac-demo.js"></script>
+
+  <!-- Additive (v0.20.2): R6-2 Process Health widget controller. Polls
+       /api/health/extended every 10s into the additive #health-widget
+       <section> appended to tab-telemetry.html. -->
+  <script src="/public/tab-health-widget.js"></script>
+
+  <!-- Additive (v0.20.2): R6-3 Pending Approvals UI controller. Hits
+       /api/approval/pending + /api/approval/:id/{approve,deny} for the
+       additive #approval-queue <section> appended to tab-telemetry.html. -->
+  <script src="/public/tab-approval-queue.js"></script>
+
+  <!-- Additive (v0.21): Watch Me — autonomous PRISM live view. Streams
+       the existing agentic_event WebSocket messages emitted by the
+       AgenticChatExecutor loop into a curated, demo-friendly timeline.
+       Frontend Protection Guarantee: purely additive, no existing UI
+       removed or modified. -->
+  <script src="/public/tab-watch.js"></script>
+
+  <!-- Demonstration Mode: Interactive showcase with Mad Libs prompts,
+       9 demos (3 self-control, 3 browser, 3 computer), tab tour,
+       and full playback controls (pause/resume/stop/speed). -->
+  <script src="/public/demo-mode.js"></script>
 
   <script>
   (function() {

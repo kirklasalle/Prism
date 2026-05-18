@@ -40,6 +40,13 @@ import { AgentLifecycleManager } from "./core/agents/agent-lifecycle.js";
 import { AgentTelemetryCollector } from "./core/agents/agent-telemetry-collector.js";
 import { AgentRouter } from "./core/agents/agent-router.js";
 import { SwarmCoordinator } from "./core/agents/swarm-coordinator.js";
+import { DevIdentityProvider } from "./core/iam/dev-identity-provider.js";
+import { TabSessionRegistry } from "./core/iam/tab-session-registry.js";
+import { UniversalTelemetryAggregator } from "./core/observability/universal-telemetry-aggregator.js";
+import { AutonomousAgentLoop } from "./core/runtime/autonomous-agent-loop.js";
+import { AutonomousBrowserAgent } from "./core/runtime/autonomous-browser-agent.js";
+import { AutonomousComputerAgent } from "./core/runtime/autonomous-computer-agent.js";
+import { PrismCovenant } from "./core/governance/prism-covenant.js";
 import type { DispatchTelemetryRecord, SubAgentResult } from "./core/agents/agent-types.js";
 import {
     ensureWorkspaceStructure,
@@ -177,6 +184,41 @@ async function main(): Promise<void> {
     activityBus.subscribe(episodicMemory);
     activityBus.subscribe(semanticIndex);
     activityBus.subscribe(sessionMemory);
+
+    // ── Phase A1: Dev Identity & Tab Session Bootstrap ────────────────────
+    // Creates a persistent dev operator identity (CAC-compatible) and
+    // initializes per-tab sessions for full traceability across all tabs.
+    const stateDir = workspacePath("state");
+    const devIdentity = new DevIdentityProvider(stateDir, sessionId, activityBus);
+    const { operator: devOperator, agent: devAgent } = devIdentity.bootstrap();
+    console.log(`[PRISM][identity] Dev operator: ${devOperator.displayName} <${devOperator.email}>`);
+    console.log(`[PRISM][identity] Agent identity: ${devAgent.displayName} <${devAgent.email}>`);
+    console.log(`[PRISM][identity] CAC fingerprint: ${devOperator.cacFingerprint}`);
+
+    const tabSessionRegistry = new TabSessionRegistry(stateDir, sessionId, devOperator.operatorId, activityBus);
+    const tabSessions = tabSessionRegistry.initializeAll();
+    console.log(`[PRISM][identity] Initialized ${tabSessions.length} tab sessions`);
+
+    // ── Phase A3: Universal Telemetry Aggregator ──────────────────────────
+    // Central observability — all events from every source normalized into
+    // a unified format piped to Logs & Debug tab.
+    const telemetryAggregator = new UniversalTelemetryAggregator(10_000);
+    activityBus.subscribe(telemetryAggregator);
+    // Wire console interceptor lines to the telemetry aggregator
+    consoleInterceptor.onLine((line) => telemetryAggregator.ingestConsoleLine(line));
+    console.log(`[PRISM][telemetry] Universal telemetry aggregator active (10k buffer)`);
+
+    // ── Phase A4: Prism Covenant ─────────────────────────────────────────
+    // Immutable governance contract between agent and operator.
+    // Ref: .github/PRISM_SACRED_COVENANT.md
+    const covenant = new PrismCovenant(activityBus);
+    console.log(`[PRISM][covenant] Sacred Covenant active (v${covenant.getStatus().version}, hash:${covenant.getStatus().hash})`);
+
+    // ── Phase A2B: Specialized Autonomous Agents ─────────────────────────
+    const autonomousBrowserAgent = new AutonomousBrowserAgent(activityBus);
+    const autonomousComputerAgent = new AutonomousComputerAgent(activityBus);
+    console.log(`[PRISM][autonomous] Browser + Computer agents initialized`);
+    // ── Phase A2: Autonomous Agent Loop ──────────────────────────────────
     const policyEngine = new PolicyEngine();
     
     // Initialize OAuth adapters early for tool injection
@@ -230,7 +272,8 @@ async function main(): Promise<void> {
         { approvalQueue, approvalTimeoutMs: 30_000, executionProfile },
     );
     const workflowExecutor = new WorkflowExecutor();
-    const dashboardActions = createDashboardActions(orchestrator, workflowExecutor, approvalQueue, sessionId);
+    const demoHooksRef: { service: DashboardService | null } = { service: null };
+    const dashboardActions = createDashboardActions(orchestrator, workflowExecutor, approvalQueue, sessionId, demoHooksRef, activityBus);
     const dashboardService = new DashboardService(
         approvalQueue,
         activityBus,
@@ -262,6 +305,22 @@ async function main(): Promise<void> {
     // /api/debug/console, and the Guardian's mcp_health_recovery task work.
     dashboardService.setMcpAdapter(mcpAdapter);
     dashboardService.setConsoleInterceptor(consoleInterceptor);
+
+    // ── Phase A2 (cont): Wire Autonomous Agent Loop ─────────────────────
+    // Goal-driven autonomous execution with browser + computer + shell tools.
+    // Uses the configured LLM provider and Guardian (llama.cpp) for reasoning.
+    const autonomousLoop = new AutonomousAgentLoop(activityBus, registry, {
+        maxConcurrentGoals: 1,
+        defaultMaxActions: 100,
+        defaultMaxDurationMs: 10 * 60 * 1000,
+        guardianCheckIntervalActions: 5,
+        actionsPerMinuteLimit: 30,
+    });
+    console.log(`[PRISM][autonomous] Autonomous agent loop initialized`);
+
+    // Late-bind the dashboard service into the workflow-demo action's hooks so
+    // the demo can broadcast a UI tour and fire real BUA/CUA probes.
+    demoHooksRef.service = dashboardService;
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
     const llmDelegate = dashboardService.getLlmDelegate();
     const agentTelemetry = new AgentTelemetryCollector();
@@ -356,6 +415,17 @@ async function main(): Promise<void> {
         swarm: swarmCoordinator,
         pool: agentPool,
         router: agentRouter,
+    });
+
+    // Wire autonomous control surface into dashboard (Phase A)
+    await dashboardService.setAutonomousControl({
+        autonomousLoop,
+        devIdentity,
+        tabSessionRegistry,
+        telemetryAggregator,
+        covenant,
+        browserAgent: autonomousBrowserAgent,
+        computerAgent: autonomousComputerAgent,
     });
 
     // Start ephemeral agent reaper
@@ -625,6 +695,8 @@ function createDashboardActions(
     workflowExecutor: WorkflowExecutor,
     approvalQueue: ApprovalQueue,
     sessionId: string,
+    demoHooksRef: { service: DashboardService | null },
+    activityBus: ActivityBus,
 ): DashboardAction[] {
     let actionInFlight = false;
 
@@ -678,7 +750,7 @@ function createDashboardActions(
         {
             name: "run_workflow_demo",
             label: "Run workflow demo",
-            description: "Runs a two-step workflow (file list + episodic memory query).",
+            description: "Visual UI tour + a 2-step DAG + a real (best-effort) browser-use and computer-use probe so the operator can watch PRISM operate itself.",
             run: () => guarded(async () => {
                 const dag = workflowExecutor.createDAG(
                     "Dashboard Workflow",
@@ -688,8 +760,94 @@ function createDashboardActions(
                     ],
                     [],
                 );
-                await orchestrator.runWorkflow(dag);
-                return { message: "Workflow demo completed." };
+
+                // ── Cosmetic UI tour: walks every operator console tab so the user
+                //    can literally watch PRISM cycle through Chat → Agentic → Computer
+                //    → Browser → Logs while the underlying DAG + BUA + CUA run in
+                //    parallel. Suppress with PRISM_DEMO_TOUR_DISABLED=1.
+                const svc = demoHooksRef.service;
+                const tour = svc
+                    ? svc.broadcastUiTour([
+                        { tabId: "chat", dwellMs: 600, message: "Workflow demo started" },
+                        { tabId: "agentic", anchor: "guardian-status", dwellMs: 1500, message: "Guardian observing the run" },
+                        { tabId: "computer", dwellMs: 1500, message: "Computer-use probe — capturing a screengrab" },
+                        { tabId: "browser", dwellMs: 1800, message: "Browser-use probe — launching a headless session" },
+                        { tabId: "logs", anchor: "actions", dwellMs: 1500, message: "Quick Actions running" },
+                        { tabId: "logs", anchor: "action-history", dwellMs: 1500, message: "Action recorded in history" },
+                        { tabId: "chat", dwellMs: 200, message: "Workflow demo complete" },
+                    ])
+                    : Promise.resolve();
+
+                // ── Real CUA probe: take a single framebuffer screengrab. Best-effort,
+                //    fails gracefully on headless servers / restricted environments.
+                const cuaProbe = (async () => {
+                    if (!svc) return;
+                    try {
+                        const fb = svc.getFramebufferCapture();
+                        const result = await fb.captureSingle();
+                        activityBus.emit({
+                            sessionId, layer: "tool_execution", operation: "cua.screengrab",
+                            status: "succeeded",
+                            details: { source: "workflow_demo", path: (result as Record<string, unknown>)?.path ?? null },
+                        });
+                    } catch (err) {
+                        activityBus.emit({
+                            sessionId, layer: "tool_execution", operation: "cua.screengrab",
+                            status: "failed",
+                            details: { source: "workflow_demo", error: String(err) },
+                        });
+                    }
+                })();
+
+                // ── Real BUA probe: launch a headless browser, navigate to about:blank,
+                //    take a screenshot, close. Best-effort — fails gracefully when no
+                //    Chromium is available (e.g. fresh Windows dev box without Playwright).
+                const buaProbe = (async () => {
+                    if (!svc) return;
+                    try {
+                        const reg = svc.getToolRegistry();
+                        const tool = reg ? (reg.get("browser_control") as unknown as { getManager?: () => { launch: (o: Record<string, unknown>) => Promise<{ id: string }>; navigate: (id: string, url: string) => Promise<unknown>; screenshot: (id: string) => Promise<unknown>; closeSession: (id: string) => Promise<void>; } } | null) : null;
+                        const mgr = tool?.getManager?.();
+                        if (!mgr) {
+                            activityBus.emit({
+                                sessionId, layer: "tool_execution", operation: "bua.probe",
+                                status: "failed",
+                                details: { source: "workflow_demo", error: "browser_control tool not available" },
+                            });
+                            return;
+                        }
+                        const session = await mgr.launch({ headless: true });
+                        try {
+                            await mgr.navigate(session.id, "about:blank");
+                            await mgr.screenshot(session.id);
+                            activityBus.emit({
+                                sessionId, layer: "tool_execution", operation: "bua.probe",
+                                status: "succeeded",
+                                details: { source: "workflow_demo", url: "about:blank", sessionId: session.id },
+                            });
+                        } finally {
+                            try { await mgr.closeSession(session.id); } catch { /* swallow close errors */ }
+                        }
+                    } catch (err) {
+                        activityBus.emit({
+                            sessionId, layer: "tool_execution", operation: "bua.probe",
+                            status: "failed",
+                            details: { source: "workflow_demo", error: String(err) },
+                        });
+                    }
+                })();
+
+                // Run the underlying DAG concurrently with the cosmetic tour and the
+                // BUA/CUA probes. The DAG is the substantive workload; the others are
+                // observable side-quests that surface in Recent Action History.
+                const [, , , ] = await Promise.all([
+                    orchestrator.runWorkflow(dag),
+                    tour,
+                    cuaProbe,
+                    buaProbe,
+                ]);
+
+                return { message: "Workflow demo completed (DAG + UI tour + BUA + CUA)." };
             }),
         },
     ];

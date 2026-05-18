@@ -46,11 +46,14 @@ jobs:
         name: CodeQL analyze (javascript-typescript)
         runs-on: ubuntu-latest
         timeout-minutes: 30
-
-        strategy:
-            fail-fast: false
-            matrix:
-                language: [ "javascript-typescript" ]
+        # CodeQL alert uploads require GitHub-managed code scanning, which
+        # on private repos requires GitHub Advanced Security (a paid add-on).
+        # When code scanning is not enabled at the repo level, the upload
+        # step fails with HTTP 403 even though the analysis itself succeeds.
+        # We keep the analysis running (so it's a one-flag-flip away from
+        # being a hard gate) but tolerate the upload failure so PRs aren't
+        # blocked on a billing decision.
+        continue-on-error: true
 
         steps:
             - name: Checkout

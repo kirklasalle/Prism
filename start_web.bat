@@ -10,6 +10,17 @@ echo ================================================
 echo PRISM One-Click Startup
 echo ================================================
 
+REM ── Phase A1: Dev Identity ^& CAC Bootstrap ──────────────────────────────
+REM These environment variables configure the development operator identity,
+REM CAC mode, tab session initialization, and telemetry piping. All values
+REM are mock data for development purposes only.
+if not defined PRISM_DEV_IDENTITY set "PRISM_DEV_IDENTITY=prism-dev-operator"
+if not defined PRISM_DEV_EMAIL set "PRISM_DEV_EMAIL=prism-dev-operator@localhost"
+if not defined PRISM_CAC_MODE set "PRISM_CAC_MODE=development"
+if not defined PRISM_TAB_SESSION_INIT set "PRISM_TAB_SESSION_INIT=all"
+if not defined PRISM_TELEMETRY_PIPE set "PRISM_TELEMETRY_PIPE=logs"
+if not defined PRISM_AUTONOMOUS_ENABLED set "PRISM_AUTONOMOUS_ENABLED=true"
+
 where node >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] Node.js was not found on PATH.

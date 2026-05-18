@@ -439,6 +439,13 @@
                 tokenStore.value = $("#token-input").value.trim();
                 await Promise.all([refreshMe(), refreshUsers(), refreshRoles(), refreshScim()]);
             });
+            // Allow pressing Enter in the password field to submit the token (password fields outside forms don't auto-submit)
+            $("#token-input").addEventListener("keydown", (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    $("#token-save").click();
+                }
+            });
             $("#token-clear").addEventListener("click", () => {
                 tokenStore.value = ""; $("#token-input").value = "";
                 $("#me-banner").textContent = "(no token)";

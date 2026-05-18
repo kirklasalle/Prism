@@ -33,6 +33,49 @@
   </section>
 
   <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('autonomousControl')"
+      data-tip-id="computer:autonomous" data-tip-kind="computer">
+      <h3>🤖 Autonomous Control</h3>
+      <span id="autonomous-status-pill" class="muted" style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(62,196,109,0.15);color:#3ec46d;">ready</span>
+      <span id="autonomousControl-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="autonomousControl-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">Submit goals for autonomous execution. Prism will use browser, computer, and shell tools to accomplish objectives.</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;">
+        <input id="autonomous-goal-input" type="text"
+          placeholder="Enter autonomous goal (e.g. 'Run test suite and report results')"
+          style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;"
+          onkeydown="if(event.key==='Enter')submitAutonomousGoal()" />
+        <button onclick="submitAutonomousGoal()"
+          style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;">▶ Execute</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+        <label class="muted" style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="auto-allow-browser" checked> Browser Use
+        </label>
+        <label class="muted" style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="auto-allow-computer" checked> Computer Use
+        </label>
+        <label class="muted" style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="auto-allow-shell" checked> Shell Exec
+        </label>
+        <div style="flex:1;"></div>
+        <button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="pauseAutonomousGoal()">⏸ Pause</button>
+        <button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="resumeAutonomousGoal()">▶ Resume</button>
+        <button class="secondary-button" style="font-size:11px;padding:3px 10px;color:#ff6b6b;" onclick="terminateAutonomousGoal()">⏹ Terminate</button>
+      </div>
+      <div id="autonomous-active-goal" style="margin-bottom:10px;">
+        <div class="muted" style="font-size:12px;">No active goal. Submit an objective above.</div>
+      </div>
+      <details style="margin-top:6px;">
+        <summary class="muted" style="font-size:11px;cursor:pointer;">Goal History & AAB Ledger</summary>
+        <div id="autonomous-goal-history" class="muted" style="font-size:12px;margin-top:6px;">No history yet.</div>
+        <div id="autonomous-aab-ledger" class="muted" style="font-size:12px;margin-top:6px;"></div>
+      </details>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;">
     <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('consoleView')"
       data-tip-id="computer:console" data-tip-kind="computer">
       <h3>📠 Console View</h3>
@@ -136,7 +179,8 @@
     </div>
     <div id="policyControl-collapsible" class="collapsible-body">
       <div class="muted" style="margin-bottom:8px;">Windows Group Policy viewer and local security policy access.
-        <strong>(Windows only)</strong></div>
+        <strong>(Windows only)</strong>
+      </div>
       <div id="policy-control-container" class="stack">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
           <button class="primary-button" onclick="openPolicyEditor('gpedit')" style="font-size:12px;">📜 Group Policy
@@ -174,6 +218,44 @@
         <div class="muted" style="text-align:center;padding:18px;">Click <strong>Scan Devices</strong> to enumerate
           hardware via WMI.</div>
       </div>
+    </div>
+  </section>
+
+  <!--
+    PTAC Operator Demo (additive — v0.20).
+    This section is hydrated by tab-ptac-demo.js. It calls
+    /api/ptac/demo/feature-flags on tab activation; if the demo is not
+    enabled, the entire panel collapses to a small advisory line so the
+    existing tab layout is unaffected. No existing markup is modified.
+  -->
+  <section id="ptac-demo-panel" class="rail-card" style="margin-top:16px;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('ptacDemo')">
+      <span class="collapsible-icon" id="ptacDemo-icon">▼</span>
+      <span style="font-weight:600;">🎬 PTAC Operator Demo</span>
+      <span id="ptac-demo-status-pill" class="muted" style="margin-left:auto;font-size:11px;">checking…</span>
+    </div>
+    <div id="ptacDemo-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">
+        End-to-end self-driven demonstration. PRISM exercises its own dashboard, real PTY,
+        real Docker, and computer-use surfaces — recording every step as a portable HTML
+        slideshow you can replay or share. <a href="/public/docs-ptac-operator-demo.html" target="_blank"
+          rel="noopener">Walkthrough &amp; documentation →</a>
+      </div>
+      <div id="ptac-demo-gates" class="stack" style="font-size:12px;margin-bottom:10px;"></div>
+      <div id="ptac-demo-controls" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <select id="ptac-demo-suite"
+          style="font-size:12px;padding:4px 8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+          <option value="demo">demo (default — curated showcase)</option>
+          <option value="fast">fast (~2 min — smoke)</option>
+          <option value="full">full (~10 min — every scenario)</option>
+        </select>
+        <button id="ptac-demo-run-button" class="primary-button" onclick="startPtacDemo()" style="font-size:13px;"
+          disabled>▶ Start Recorded Run</button>
+        <button class="secondary-button" onclick="refreshPtacDemoRuns()" style="font-size:13px;">🔄 Refresh
+          runs</button>
+      </div>
+      <div id="ptac-demo-message" class="muted" style="font-size:12px;margin-bottom:10px;"></div>
+      <div id="ptac-demo-runs" class="stack" style="font-size:12px;"></div>
     </div>
   </section>
 </div>

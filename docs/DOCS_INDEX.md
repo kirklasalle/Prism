@@ -30,6 +30,7 @@
 - PRISM_COMPETITIVE_AaaS_MAP_2026.md: AaaS market survey — top 10 frameworks, commercial cloud AaaS list, OSS toolkits, unique-niche positioning for PRISM
 - PRISM_UPDATED_ROADMAP_2026_Q2.md: formal roadmap appending Phase R (Readiness) between E and F; extended F/G/H/I workstreams
 - READINESS_RUNBOOK.md: operator checklist turning Phase R into executable tasks with IDs, target files, acceptance criteria, and effort bands
+- PTAC_OPERATOR_DEMO_GUIDE.md: walkthrough + reference for the v0.20 self-drive demo button — three gates, suite selector, slideshow viewer, endpoint reference, security posture, FAQ
 
 ## User and Operator Guides (NEW)
 

@@ -1,4 +1,4 @@
-﻿import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -61,7 +61,15 @@ import type { McpClientAdapter } from "../../adapters/protocol/mcp-client-tool.j
 import type { ConsoleInterceptor, ConsoleLine } from "../logging/console-interceptor.js";
 import { DashboardControlTool } from "../tools/dashboard-control-tool.js";
 import { ComputerUseTool } from "../../adapters/system/computer-use-tool.js";
+import { ImageGenerateTool } from "../../adapters/application/image-generate-tool.js";
+import { VideoGenerateTool, AudioGenerateTool, AudioTranscribeTool } from "../../adapters/application/media-tools.js";
 import { SchedulerEngine, parseCronExpression, getNextNCronOccurrences } from "./scheduler-engine.js";
+
+import { AutonomousAgentLoop } from "../runtime/autonomous-agent-loop.js";
+import { AutonomousBrowserAgent } from "../runtime/autonomous-browser-agent.js";
+import { AutonomousComputerAgent } from "../runtime/autonomous-computer-agent.js";
+import type { AutonomousLlmGenerateFn, LlmToolDef } from "../runtime/autonomous-planner.js";
+import { PrismCovenant } from "../governance/prism-covenant.js";
 
 import { AuthGate } from "../security/auth.js";
 import { RateLimiter } from "../security/rate-limiter.js";
@@ -904,6 +912,11 @@ export class DashboardService {
   private readonly terminalAdapter: TerminalSessionAdapter | null = null;
   private readonly containerAdapter: ContainerSandboxAdapter | null = null;
 
+  /* ── Autonomous Modules (Priority 1 — Roadmap) ─────────────────────── */
+  // Note: autonomousLoop, _browserAgent, _computerAgent, and _covenant
+  // are declared in the Phase A section below (~L2736). The constructor
+  // creates instances and wires them into those existing members.
+
   /* ── Observability (Phase E6) ───────────────────────────────────────── */
   private readonly metricsStore: MetricsStore;
   private readonly otelExporter: OtelExporter;
@@ -1087,6 +1100,122 @@ export class DashboardService {
     }
     this.tools.push(computerUseTool);
 
+    // ── v0.20.3: image generation tool ──
+    // Wired here (not in builtinTools()) because it needs the LlmProviderManager
+    // + ProviderSecretStore that DashboardService owns. Routes through the
+    // model-capability matrix to pick an `image-generation`-capable model.
+    const imageGenerateTool = new ImageGenerateTool({
+      providerManager: this.llmProviders,
+      secretStore: this.providerSecretStore,
+    });
+    if (this.toolRegistry) {
+      this.toolRegistry.register(imageGenerateTool);
+    }
+    this.tools.push(imageGenerateTool);
+
+    // ── v0.20.4: full media-modality tool coverage ──
+    // Video generation, audio (TTS / music / SFX), and audio transcription.
+    // Same wiring pattern as ImageGenerateTool. Each routes through the
+    // model-capability matrix and surfaces structured failures when no capable
+    // provider is configured.
+    const videoGenerateTool = new VideoGenerateTool({
+      providerManager: this.llmProviders,
+      secretStore: this.providerSecretStore,
+    });
+    const audioGenerateTool = new AudioGenerateTool({
+      providerManager: this.llmProviders,
+      secretStore: this.providerSecretStore,
+    });
+    const audioTranscribeTool = new AudioTranscribeTool({
+      providerManager: this.llmProviders,
+      secretStore: this.providerSecretStore,
+    });
+    if (this.toolRegistry) {
+      this.toolRegistry.register(videoGenerateTool);
+      this.toolRegistry.register(audioGenerateTool);
+      this.toolRegistry.register(audioTranscribeTool);
+    }
+    this.tools.push(videoGenerateTool, audioGenerateTool, audioTranscribeTool);
+
+    // ── Autonomous modules (Priority 1 — Roadmap) ──────────────────────
+    // Initialize covenant, agents, and the autonomous loop. The loop needs
+    // the tool registry for step execution, the LLM for planning, and the
+    // specialized agents for browser/computer tasks.
+    // These are assigned to the Phase A members declared later in the class.
+    this._covenant = new PrismCovenant(this.activityBus);
+    this._browserAgent = new AutonomousBrowserAgent(this.activityBus);
+    this._computerAgent = new AutonomousComputerAgent(this.activityBus);
+
+    if (this.toolRegistry) {
+      const loop = new AutonomousAgentLoop(
+        this.activityBus,
+        this.toolRegistry,
+        {
+          maxConcurrentGoals: 1,
+          defaultMaxActions: 100,
+          defaultMaxDurationMs: 10 * 60 * 1000,
+          guardianCheckIntervalActions: 5,
+          actionsPerMinuteLimit: 30,
+        },
+      );
+      this.autonomousLoop = loop;
+
+      // Wire LLM generate function — adapts LlmProviderManager.generate()
+      // to the AutonomousLlmGenerateFn signature expected by the planner.
+      const providerManager = this.llmProviders;
+      const autonomousGenerateFn: AutonomousLlmGenerateFn = async (input) => {
+        const result = await providerManager.generate({
+          message: input.message,
+          conversation: input.conversation as any,
+          systemPrompt: input.systemPrompt,
+          tools: input.tools as any,
+          tool_choice: input.tool_choice,
+        });
+        if (!result) return null;
+        return {
+          content: result.content,
+          toolCalls: result.toolCalls,
+          stopReason: result.stopReason,
+        };
+      };
+      loop.setLlmGenerateFn(autonomousGenerateFn);
+
+      // Wire tool definitions from the registry
+      const toolDefs: LlmToolDef[] = this.toolRegistry.list()
+        .filter(t => t.contract?.args)
+        .map(t => ({
+          name: t.name,
+          description: (t.contract as any)?.description ?? `Execute the ${t.name} tool`,
+          parameters: {
+            type: "object" as const,
+            properties: Object.fromEntries(
+              Object.entries(t.contract?.args ?? {}).map(([key, schema]) => [
+                key,
+                {
+                  type: String((schema as any).type ?? "string"),
+                  description: String((schema as any).description ?? key),
+                },
+              ]),
+            ),
+            required: Object.entries(t.contract?.args ?? {})
+              .filter(([, schema]) => (schema as any).required === true)
+              .map(([key]) => key),
+          },
+        }));
+      loop.setToolDefinitions(toolDefs);
+
+      // Wire specialized agents
+      loop.setSpecializedAgents(
+        this._browserAgent ?? undefined,
+        this._computerAgent ?? undefined,
+      );
+
+      // Wire covenant for pre-step enforcement
+      if (this._covenant) {
+        loop.setCovenant(this._covenant);
+      }
+    }
+
 
     // Forward Guardian events and UI actions to WebSocket clients
     this.guardianAgent.on("guardian_event", (evt: { operation: string; detail: string }) => {
@@ -1108,6 +1237,26 @@ export class DashboardService {
         }
       }
     });
+    // v0.20.5 — Hydrate Guardian config from persisted preferences BEFORE the
+    // autostart check below. Without this, every server restart loses the
+    // operator's last-selected model and Guardian refuses to autostart.
+    try {
+      const guardianPrefs = readPreferences()?.guardianConfig;
+      if (guardianPrefs && typeof guardianPrefs === "object") {
+        // Strip any unknown keys defensively. The agent's configure() merges
+        // with its own defaults so missing fields are safe.
+        const allowed: Record<string, unknown> = {};
+        for (const k of ["modelAlias", "modelPath", "draftModelPath", "authorityTier", "healthCheckIntervalMs", "autoStart", "contextSize", "flashAttn", "gpuLayers", "modelSource"]) {
+          if (k in (guardianPrefs as Record<string, unknown>)) allowed[k] = (guardianPrefs as Record<string, unknown>)[k];
+        }
+        if (Object.keys(allowed).length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          this.guardianAgent.configure(allowed as any);
+        }
+      }
+    } catch (err) {
+      console.warn("[guardian] failed to hydrate config from preferences:", err);
+    }
     // Auto-start Guardian if configured and model path is set
     if (this.guardianAgent.getConfig().autoStart && this.guardianAgent.getConfig().modelPath) {
       void this.guardianAgent.start();
@@ -1119,6 +1268,18 @@ export class DashboardService {
         const agents = lifecycle.list().map(a => ({ id: a.agentId, state: a.state, role: a.role, lifecycle: a.lifecycle }));
         return { agents };
       });
+    }
+
+    // Inject AAB ledger accessor so Guardian can monitor autonomous behavior
+    if (this.autonomousLoop) {
+      const loop = this.autonomousLoop;
+      this.guardianAgent.setAABLedgerFn(() => loop.getAABLedger());
+    }
+
+    // Inject Covenant accessor so Guardian can run integrity audits
+    if (this._covenant) {
+      const covenant = this._covenant;
+      this.guardianAgent.setCovenantFn(() => covenant.getStatus());
     }
 
     for (const t of this.tools) {
@@ -2559,6 +2720,92 @@ export class DashboardService {
     };
   }
 
+  // ── Phase A: Autonomous Control Surface ──────────────────────────────────
+
+  private autonomousLoop: import("../runtime/autonomous-agent-loop.js").AutonomousAgentLoop | null = null;
+  private devIdentity: import("../iam/dev-identity-provider.js").DevIdentityProvider | null = null;
+  private tabSessionRegistry: import("../iam/tab-session-registry.js").TabSessionRegistry | null = null;
+  private telemetryAggregator: import("../observability/universal-telemetry-aggregator.js").UniversalTelemetryAggregator | null = null;
+  private _covenant: import("../governance/prism-covenant.js").PrismCovenant | null = null;
+  private _browserAgent: import("../runtime/autonomous-browser-agent.js").AutonomousBrowserAgent | null = null;
+  private _computerAgent: import("../runtime/autonomous-computer-agent.js").AutonomousComputerAgent | null = null;
+  private _demoEngine: import("../runtime/demonstration-engine.js").DemonstrationEngine | null = null;
+
+  /**
+   * Wire autonomous control dependencies after construction.
+   * Provides access to:
+   *   - AutonomousAgentLoop for goal-driven autonomous execution
+   *   - DevIdentityProvider for operator identity and CAC
+   *   - TabSessionRegistry for per-tab session management
+   *   - UniversalTelemetryAggregator for unified observability
+   */
+  async setAutonomousControl(deps: {
+    autonomousLoop: import("../runtime/autonomous-agent-loop.js").AutonomousAgentLoop;
+    devIdentity: import("../iam/dev-identity-provider.js").DevIdentityProvider;
+    tabSessionRegistry: import("../iam/tab-session-registry.js").TabSessionRegistry;
+    telemetryAggregator: import("../observability/universal-telemetry-aggregator.js").UniversalTelemetryAggregator;
+    covenant?: import("../governance/prism-covenant.js").PrismCovenant;
+    browserAgent?: import("../runtime/autonomous-browser-agent.js").AutonomousBrowserAgent;
+    computerAgent?: import("../runtime/autonomous-computer-agent.js").AutonomousComputerAgent;
+  }): Promise<void> {
+    this.autonomousLoop = deps.autonomousLoop;
+    this.devIdentity = deps.devIdentity;
+    this.tabSessionRegistry = deps.tabSessionRegistry;
+    this.telemetryAggregator = deps.telemetryAggregator;
+    if (deps.covenant) this._covenant = deps.covenant;
+    if (deps.browserAgent) this._browserAgent = deps.browserAgent;
+    if (deps.computerAgent) this._computerAgent = deps.computerAgent;
+
+    // ── Bind LLM reasoning engine to the autonomous loop ──────────────────
+    // This connects the planner brain to the configured LLM provider so
+    // autonomous goals can think and act via the ReAct loop.
+    deps.autonomousLoop.setLlmGenerateFn(async (input) => {
+      const result = await this.llmProviders.generate({
+        message: input.message,
+        conversation: input.conversation as any,
+        systemPrompt: input.systemPrompt,
+        tools: input.tools as any,
+        tool_choice: input.tool_choice,
+      });
+      if (!result) return null;
+      return {
+        content: result.content,
+        toolCalls: result.toolCalls,
+        stopReason: result.stopReason,
+      };
+    });
+
+    // Bind tool definitions for the planner
+    if (this.toolRegistry) {
+      const { toolsToLlmDefinitions } = await import("../tools/tool-schema-converter.js");
+      const defs = toolsToLlmDefinitions(this.toolRegistry.list()) as any;
+      deps.autonomousLoop.setToolDefinitions(defs);
+    }
+
+    // Bind specialized agents
+    deps.autonomousLoop.setSpecializedAgents(
+      deps.browserAgent ?? undefined,
+      deps.computerAgent ?? undefined,
+    );
+
+    // Wire telemetry WebSocket fan-out so Logs & Debug gets real-time updates
+    deps.telemetryAggregator.subscribe((entry) => {
+      const payload = JSON.stringify({ type: "telemetry", entry });
+      for (const ws of this.wsClients) {
+        try { ws.send(payload); } catch { /* ignore broken clients */ }
+      }
+    });
+  }
+
+  /** Return the autonomous loop for external callers (e.g. API routes). */
+  getAutonomousLoop() { return this.autonomousLoop; }
+  /** Return the dev identity provider. */
+  getDevIdentity() { return this.devIdentity; }
+  /** Return the tab session registry. */
+  getTabSessionRegistry() { return this.tabSessionRegistry; }
+  /** Return the universal telemetry aggregator. */
+  getTelemetryAggregator() { return this.telemetryAggregator; }
+
   /** Return the LlmProviderManager for direct access. */
   getLlmProviderManager(): LlmProviderManager {
     return this.llmProviders;
@@ -2705,6 +2952,36 @@ export class DashboardService {
     }
     for (const [, res] of this.sseClients) {
       res.write(`data: ${data}\n\n`);
+    }
+  }
+
+  /**
+   * Drive every connected dashboard like a screencast: sequentially broadcast
+   * `{type:'ui_action', action:'switch_tab', tabId, anchor?, message?}` envelopes
+   * with a configurable dwell between steps. Used by the Workflow Demo so the
+   * operator can literally watch PRISM walk Chat → Agentic → Computer → Browser
+   * → Logs while the underlying DAG runs in parallel.
+   *
+   * No-op when no clients are connected. Defensive — any per-step error is
+   * swallowed so the cosmetic narrator never crashes the host action.
+   *
+   * Suppress the entire tour by setting `PRISM_DEMO_TOUR_DISABLED=1`.
+   */
+  public async broadcastUiTour(steps: Array<{ tabId: string; anchor?: string; dwellMs?: number; message?: string }>): Promise<void> {
+    if (process.env.PRISM_DEMO_TOUR_DISABLED === "1") return;
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    if (this.wsClients.size === 0 && this.sseClients.size === 0) return;
+    for (const step of steps) {
+      try {
+        const tabId = String(step.tabId || "").trim();
+        if (!tabId) continue;
+        const envelope: Record<string, unknown> = { type: "ui_action", action: "switch_tab", tabId };
+        if (step.anchor) envelope.anchor = String(step.anchor);
+        if (step.message) envelope.message = String(step.message);
+        this.broadcastEvent(envelope);
+      } catch { /* defensive: tour is cosmetic, never crash the caller */ }
+      const dwell = Math.max(0, Math.min(60_000, Number(step.dwellMs) || 0));
+      if (dwell > 0) await new Promise<void>((r) => setTimeout(r, dwell));
     }
   }
 
@@ -2889,8 +3166,21 @@ export class DashboardService {
   getToolRegistry(): ToolRegistry | null { return this.toolRegistry; }
   getContainerAdapter(): ContainerSandboxAdapter | null { return this.containerAdapter; }
   getTerminalAdapter(): TerminalSessionAdapter | null { return this.terminalAdapter; }
+  getCovenant(): PrismCovenant { return this._covenant!; }
+  getAutonomousBrowserAgent(): AutonomousBrowserAgent | null { return this._browserAgent; }
+  getAutonomousComputerAgent(): AutonomousComputerAgent | null { return this._computerAgent; }
+  /** Broadcast a message to all connected WebSocket clients. */
+  broadcastWs(data: Record<string, unknown>): void {
+    const payload = JSON.stringify(data);
+    for (const ws of this.wsClients) {
+      try { ws.send(payload); } catch { /* client may have disconnected */ }
+    }
+  }
   getGmailOAuth(): GmailOAuthAdapter { return this.gmailOAuth; }
   getOutlookOAuth(): OutlookOAuthAdapter { return this.outlookOAuth; }
+  /** Public access to the framebuffer capture surface, used by the Workflow Demo
+   *  to fire a real CUA screengrab as part of the Option-C automation tour. */
+  public getFramebufferCapture(): FramebufferCapture { return this.framebufferCapture; }
   public getTooltipsRegistry(): TooltipsRegistry { return this.tooltipsRegistry; }
   /** Broadcast a Guardian-curated tooltip insight to all connected clients. */
   public emitTooltipInsight(tipId: string, message: string, kind: string = "guardian"): void {
@@ -3715,6 +4005,178 @@ export class DashboardService {
       return this.json(res, 200, this.listChatSessions());
     }
 
+    // ── Phase A: Autonomous Operations API ──────────────────────────────────
+
+    if (method === "POST" && url === "/api/v1/autonomous/goal") {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Autonomous loop not initialized" });
+      try {
+        const body = await this.readBody(req);
+        const parsed = JSON.parse(body);
+        const op = this.devIdentity?.getOperator();
+        const goal = this.autonomousLoop.submitGoal(
+          parsed.objective ?? "No objective specified",
+          parsed.source ?? "dashboard",
+          op?.operatorId ?? "unknown",
+          parsed.constraints,
+        );
+        // Fire-and-forget: begin autonomous execution in background.
+        // The planner drives the ReAct loop via LLM + tool calls.
+        if (parsed.execute !== false) {
+          void this.autonomousLoop.executeGoal(goal.goalId, (step) => {
+            // Broadcast step progress to all connected WebSocket clients
+            const payload = JSON.stringify({ type: "autonomous_step", goalId: goal.goalId, ...step });
+            for (const ws of this.wsClients) {
+              try { ws.send(payload); } catch { /* ignore */ }
+            }
+          }).catch((err) => {
+            this.activityBus.emit({
+              sessionId: "autonomous-api", layer: "governance",
+              operation: "autonomous.goal.execution_error", status: "failed",
+              details: { goalId: goal.goalId, error: String(err) },
+            });
+          });
+        }
+        return this.json(res, 201, goal);
+      } catch (err) { return this.json(res, 400, { error: String(err) }); }
+    }
+    if (method === "GET" && url === "/api/v1/autonomous/status") {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Autonomous loop not initialized" });
+      const active = this.autonomousLoop.getActiveGoal();
+      return this.json(res, 200, { active, paused: this.autonomousLoop.isPaused() });
+    }
+    if (method === "POST" && url === "/api/v1/autonomous/pause") {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
+      try {
+        const body = await this.readBody(req);
+        const { goalId, reason } = JSON.parse(body);
+        if (goalId) this.autonomousLoop.pauseGoal(goalId, reason ?? "Operator pause");
+        else this.autonomousLoop.globalPause();
+        return this.json(res, 200, { ok: true });
+      } catch (err) { return this.json(res, 400, { error: String(err) }); }
+    }
+    if (method === "POST" && url === "/api/v1/autonomous/resume") {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
+      try {
+        const body = await this.readBody(req);
+        const { goalId } = JSON.parse(body);
+        if (goalId) this.autonomousLoop.resumeGoal(goalId);
+        else this.autonomousLoop.globalResume();
+        return this.json(res, 200, { ok: true });
+      } catch (err) { return this.json(res, 400, { error: String(err) }); }
+    }
+    if (method === "POST" && url === "/api/v1/autonomous/terminate") {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
+      try {
+        const body = await this.readBody(req);
+        const { goalId, reason } = JSON.parse(body);
+        this.autonomousLoop.terminateGoal(goalId, reason ?? "Operator terminate");
+        return this.json(res, 200, { ok: true });
+      } catch (err) { return this.json(res, 400, { error: String(err) }); }
+    }
+    if (method === "GET" && url.startsWith("/api/v1/autonomous/history")) {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
+      return this.json(res, 200, { goals: this.autonomousLoop.listGoals(20) });
+    }
+    if (method === "GET" && url === "/api/v1/autonomous/aab-ledger") {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
+      return this.json(res, 200, { entries: this.autonomousLoop.getAABLedger() });
+    }
+    if (method === "POST" && url === "/api/v1/autonomous/abort") {
+      if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
+      this.autonomousLoop.requestAbort();
+      return this.json(res, 200, { ok: true, message: "Abort requested" });
+    }
+
+    // ── Demonstration Mode API ─────────────────────────────────────────────
+
+    if (url.startsWith("/api/v1/demo/")) {
+      // Lazy-init demo engine
+      if (!this._demoEngine) {
+        const { DemonstrationEngine } = await import("../runtime/demonstration-engine.js");
+        this._demoEngine = new DemonstrationEngine(this.activityBus, this.toolRegistry ?? undefined);
+        this._demoEngine.setBroadcast((msg) => {
+          const payload = JSON.stringify({ type: "demo_event", ...msg });
+          for (const ws of this.wsClients) { try { ws.send(payload); } catch { /* */ } }
+        });
+      }
+      if (method === "GET" && url === "/api/v1/demo/status") {
+        return this.json(res, 200, this._demoEngine.getState());
+      }
+      if (method === "GET" && url === "/api/v1/demo/definitions") {
+        return this.json(res, 200, { demos: this._demoEngine.getDefinitions(), tabTour: this._demoEngine.getTabTour() });
+      }
+      if (method === "POST" && url === "/api/v1/demo/start") {
+        const body = await this.readBody(req).catch(() => "{}");
+        const parsed = JSON.parse(body);
+        void this._demoEngine.start(parsed.answers);
+        return this.json(res, 200, { ok: true, state: this._demoEngine.getState() });
+      }
+      if (method === "POST" && url === "/api/v1/demo/pause") {
+        this._demoEngine.pause();
+        return this.json(res, 200, { ok: true });
+      }
+      if (method === "POST" && url === "/api/v1/demo/resume") {
+        this._demoEngine.resume();
+        return this.json(res, 200, { ok: true });
+      }
+      if (method === "POST" && url === "/api/v1/demo/stop") {
+        this._demoEngine.stop();
+        return this.json(res, 200, { ok: true });
+      }
+      if (method === "POST" && url === "/api/v1/demo/configure") {
+        const body = await this.readBody(req).catch(() => "{}");
+        const parsed = JSON.parse(body);
+        if (parsed.answers) this._demoEngine.setPromptAnswers(parsed.answers);
+        if (parsed.speedMs) this._demoEngine.setSpeed(parsed.speedMs);
+        return this.json(res, 200, { ok: true });
+      }
+    }
+
+    // ── Phase A1: Identity & Tab Sessions API ───────────────────────────────
+
+    if (method === "GET" && url === "/api/v1/identity") {
+      const op = this.devIdentity?.getOperator();
+      const ag = this.devIdentity?.getAgent();
+      return this.json(res, 200, { operator: op ?? null, agent: ag ?? null });
+    }
+    if (method === "GET" && url === "/api/v1/sessions/tabs") {
+      if (!this.tabSessionRegistry) return this.json(res, 200, { sessions: [] });
+      return this.json(res, 200, { sessions: this.tabSessionRegistry.getSummary() });
+    }
+    if (method === "POST" && url.startsWith("/api/v1/sessions/tab/")) {
+      if (!this.tabSessionRegistry) return this.json(res, 503, { error: "Tab sessions not initialized" });
+      const tabId = url.replace("/api/v1/sessions/tab/", "").split("?")[0];
+      try {
+        const session = this.tabSessionRegistry.getOrCreate(tabId as any);
+        return this.json(res, 200, session);
+      } catch (err) { return this.json(res, 400, { error: String(err) }); }
+    }
+    if (method === "POST" && url.startsWith("/api/v1/sessions/tab-event/")) {
+      if (!this.tabSessionRegistry) return this.json(res, 503, { error: "Not initialized" });
+      const tabId = url.replace("/api/v1/sessions/tab-event/", "").split("?")[0];
+      const session = this.tabSessionRegistry.recordEvent(tabId as any);
+      return this.json(res, 200, { ok: !!session, session });
+    }
+
+    // ── Phase A3: Unified Telemetry API ─────────────────────────────────────
+
+    if (method === "GET" && url.startsWith("/api/v1/telemetry/unified")) {
+      if (!this.telemetryAggregator) return this.json(res, 200, { entries: [], stats: null });
+      try {
+        const parsed = new URL(`http://localhost${url}`);
+        const filter: Record<string, unknown> = {};
+        for (const [k, v] of parsed.searchParams) filter[k] = v;
+        if (filter.limit) filter.limit = Number(filter.limit);
+        const entries = this.telemetryAggregator.query(filter as any);
+        const stats = this.telemetryAggregator.getStats();
+        return this.json(res, 200, { entries, stats });
+      } catch { return this.json(res, 200, { entries: this.telemetryAggregator.getTail(100), stats: this.telemetryAggregator.getStats() }); }
+    }
+    if (method === "GET" && url === "/api/v1/telemetry/stats") {
+      if (!this.telemetryAggregator) return this.json(res, 200, { stats: null });
+      return this.json(res, 200, { stats: this.telemetryAggregator.getStats() });
+    }
+
     if (method === "GET" && url === "/api/session-packages") {
       return this.json(res, 200, {
         packages: this.listSessionPackages(),
@@ -4471,6 +4933,14 @@ export class DashboardService {
       try {
         const body = await this.readJsonBody<Record<string, unknown>>(req);
         this.guardianAgent.configure(body as any);
+        // v0.20.5 — Persist the merged config so the next server boot can
+        // hydrate + autostart with the operator's last-selected model.
+        try {
+          const merged = this.guardianAgent.getConfig() as unknown as Record<string, unknown>;
+          writePreferences({ guardianConfig: merged });
+        } catch (err) {
+          console.warn("[guardian] failed to persist config:", err);
+        }
         return this.json(res, 200, this.guardianAgent.getStatus());
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
@@ -5253,6 +5723,190 @@ $r | ConvertTo-Json -Depth 4 -Compress
           } catch { lines.push("  (query failed)"); lines.push(""); }
         }
         return this.json(res, 200, { report: lines.join("\\n") });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    // ── PTAC Operator Demo API ───────────────────────────────────────────
+    //
+    // The PTAC Operator Demo is the headline self-drive demonstration: PRISM
+    // drives its own dashboard end-to-end (chat, approvals, computer-use,
+    // browser, terminal, container) with full evidence capture, then renders
+    // the result as a portable, browser-playable HTML slideshow.
+    //
+    // Endpoints:
+    //   - GET  /api/ptac/demo/feature-flags
+    //         Reports whether the demo is wired on this host. Always 200.
+    //         The dashboard polls this to decide whether to render the
+    //         operator panel. Returns `enabled` + per-gate flags + advisory.
+    //   - POST /api/ptac/demo/run
+    //         Spawns a new demo run as a detached child process. 202 on
+    //         success, 403 with advisory on each missing gate.
+    //   - GET  /api/ptac/demo/runs
+    //         Lists prior runs from the output directory, newest first.
+    //   - GET  /api/ptac/demo/runs/:runId/video.html
+    //   - GET  /api/ptac/demo/runs/:runId/video-manifest.json
+    //   - GET  /api/ptac/demo/runs/:runId/screenshots/:filename
+    //         Serve the slideshow + frames so the operator can review the
+    //         run inline without leaving the dashboard.
+    //
+    // Triple-gated to ensure the endpoint is unreachable in default
+    // deployments:
+    //   1. PRISM_PTAC_OPERATOR_DEMO=1 — admin-installed opt-in for the
+    //      operator-facing button.
+    //   2. PRISM_PTAC_SAFE=1          — host-prepared confirmation.
+    //   3. PRISM_PTAC_RECORD_VIDEO=1  — explicit per-recording opt-in.
+    if (method === "GET" && url === "/api/ptac/demo/feature-flags") {
+      const operatorGate = process.env.PRISM_PTAC_OPERATOR_DEMO === "1";
+      const safeGate = process.env.PRISM_PTAC_SAFE === "1";
+      const videoGate = process.env.PRISM_PTAC_RECORD_VIDEO === "1";
+      const ready = operatorGate && safeGate && videoGate;
+      return this.json(res, 200, {
+        enabled: operatorGate,
+        gates: {
+          operatorGate,
+          safeGate,
+          videoGate,
+        },
+        ready,
+        advisory: ready
+          ? "All three gates set. POST /api/ptac/demo/run to start a recorded run."
+          : "Set PRISM_PTAC_OPERATOR_DEMO=1, PRISM_PTAC_SAFE=1, and PRISM_PTAC_RECORD_VIDEO=1 to enable the demo button.",
+      });
+    }
+
+    if (method === "GET" && url === "/api/ptac/demo/runs") {
+      if (process.env.PRISM_PTAC_OPERATOR_DEMO !== "1") {
+        return this.json(res, 403, { error: "PTAC operator demo endpoint is disabled" });
+      }
+      try {
+        const { readdir, stat, readFile: readFileAsync } = await import("node:fs/promises");
+        const { join: pathJoin } = await import("node:path");
+        const outDir = process.env.PRISM_PTAC_OUTPUT_DIR
+          ?? (process.env.PRISM_DATA_DIR ? pathJoin(process.env.PRISM_DATA_DIR, "ptac") : pathJoin(process.cwd(), "prism-output", "ptac"));
+        let entries: string[] = [];
+        try { entries = await readdir(outDir); } catch { entries = []; }
+        const runs: any[] = [];
+        for (const name of entries) {
+          const runDir = pathJoin(outDir, name);
+          let st;
+          try { st = await stat(runDir); } catch { continue; }
+          if (!st.isDirectory()) continue;
+          let manifest: any = null;
+          try {
+            const raw = await readFileAsync(pathJoin(runDir, "video-manifest.json"), "utf8");
+            manifest = JSON.parse(raw);
+          } catch { /* missing manifest is fine */ }
+          let summary: any = null;
+          try {
+            const raw = await readFileAsync(pathJoin(runDir, "summary.json"), "utf8");
+            summary = JSON.parse(raw);
+          } catch { /* missing summary is fine */ }
+          runs.push({
+            runId: name,
+            mtime: st.mtimeMs,
+            hasVideo: manifest !== null,
+            frameCount: manifest?.frameCount ?? 0,
+            durationSec: manifest?.durationSec ?? 0,
+            fps: manifest?.fps ?? 0,
+            status: summary?.status ?? "unknown",
+            scenarioCount: summary?.scenarios?.length ?? 0,
+          });
+        }
+        runs.sort((a, b) => b.mtime - a.mtime);
+        return this.json(res, 200, { outputDir: outDir, runs });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url?.startsWith("/api/ptac/demo/runs/")) {
+      if (process.env.PRISM_PTAC_OPERATOR_DEMO !== "1") {
+        return this.json(res, 403, { error: "PTAC operator demo endpoint is disabled" });
+      }
+      try {
+        const { readFile: readFileAsync } = await import("node:fs/promises");
+        const { join: pathJoin, normalize: pathNormalize, sep: pathSep } = await import("node:path");
+        const tail = url.slice("/api/ptac/demo/runs/".length);
+        // Path traversal defence: reject any segment that is "..", contains
+        // null bytes, or starts with a path separator. Then re-normalise and
+        // verify the resolved file lives under the output dir.
+        const parts = tail.split("/").filter(Boolean);
+        if (parts.length < 2 || parts.some(p => p === ".." || p.includes("\0"))) {
+          return this.json(res, 400, { error: "Invalid run path" });
+        }
+        const outDir = process.env.PRISM_PTAC_OUTPUT_DIR
+          ?? (process.env.PRISM_DATA_DIR ? pathJoin(process.env.PRISM_DATA_DIR, "ptac") : pathJoin(process.cwd(), "prism-output", "ptac"));
+        const filePath = pathNormalize(pathJoin(outDir, ...parts));
+        if (!filePath.startsWith(pathNormalize(outDir) + pathSep)) {
+          return this.json(res, 400, { error: "Path escapes output directory" });
+        }
+        // Whitelist filename suffix to known artefacts.
+        const allowed = filePath.endsWith("video.html")
+          || filePath.endsWith("video-manifest.json")
+          || filePath.endsWith("summary.json")
+          || filePath.endsWith("report.html")
+          || (filePath.includes(`${pathSep}screenshots${pathSep}`) && filePath.endsWith(".png"));
+        if (!allowed) {
+          return this.json(res, 403, { error: "Artifact type not served by this endpoint" });
+        }
+        const data = await readFileAsync(filePath);
+        const ct = filePath.endsWith(".png") ? "image/png"
+          : filePath.endsWith(".html") ? "text/html; charset=utf-8"
+            : "application/json";
+        res.writeHead(200, { "Content-Type": ct, "Content-Length": data.length, "Cache-Control": "no-store" });
+        res.end(data);
+        return;
+      } catch (e: unknown) {
+        return this.json(res, 404, { error: "Artifact not found", detail: (e as Error).message });
+      }
+    }
+
+    if (method === "POST" && url === "/api/ptac/demo/run") {
+      if (process.env.PRISM_PTAC_OPERATOR_DEMO !== "1") {
+        return this.json(res, 403, {
+          error: "PTAC operator demo endpoint is disabled",
+          advisory: "Set PRISM_PTAC_OPERATOR_DEMO=1 to enable.",
+        });
+      }
+      if (process.env.PRISM_PTAC_SAFE !== "1") {
+        return this.json(res, 403, {
+          error: "PTAC operator demo requires PRISM_PTAC_SAFE=1",
+          advisory: "Host must be prepared (browser-tools blocked, scratch session, kill switch armed).",
+        });
+      }
+      if (process.env.PRISM_PTAC_RECORD_VIDEO !== "1") {
+        return this.json(res, 403, {
+          error: "PTAC operator demo requires PRISM_PTAC_RECORD_VIDEO=1",
+          advisory: "Operator must explicitly opt in to writing recording artefacts.",
+        });
+      }
+      const body = await this.readJsonBody<{ suite?: "fast" | "demo" | "full" }>(req).catch(() => ({} as any));
+      const suite = body.suite === "fast" || body.suite === "full" ? body.suite : "demo";
+      try {
+        const { spawn } = await import("node:child_process");
+        const { join: pathJoin } = await import("node:path");
+        const cliPath = pathJoin(process.cwd(), "dist", "src", "ptac", "cli.js");
+        const args = [
+          cliPath,
+          "--profile=sandbox",
+          `--suite=${suite}`,
+          "--demo-recording",
+          "--record-video",
+        ];
+        const child = spawn(process.execPath, args, {
+          detached: true,
+          stdio: "ignore",
+          env: { ...process.env },
+        });
+        child.unref();
+        return this.json(res, 202, {
+          status: "spawned",
+          pid: child.pid,
+          suite,
+          advisory: "Run is async; output written to PRISM_PTAC_OUTPUT_DIR or prism-output/ptac/.",
+        });
       } catch (e: unknown) {
         return this.json(res, 500, { error: (e as Error).message });
       }
@@ -6557,7 +7211,14 @@ $r | ConvertTo-Json -Depth 4 -Compress
     if (chatMessagesMatch && method === "GET") {
       try {
         const sessionId = decodeURIComponent(chatMessagesMatch[1]!);
-        return this.json(res, 200, { messages: this.getChatMessages(sessionId) });
+        const messages = this.getChatMessages(sessionId);
+        // ── v0.20.3: enrich each message with its attachments[] so the UI can render chips on bubbles.
+        // Additive — clients that ignore the field continue to render byte-identically.
+        const enriched = messages.map((m) => {
+          const attachments = this.chatStore.getAttachments(m.messageId);
+          return attachments.length ? { ...m, attachments } : m;
+        });
+        return this.json(res, 200, { messages: enriched });
       } catch (error) {
         return this.json(res, 404, { error: String(error) });
       }
@@ -6725,6 +7386,20 @@ $r | ConvertTo-Json -Depth 4 -Compress
     // ── SLO Gauge API ─────────────────────────────────────────────────────────
     if (method === "GET" && url === "/api/telemetry/slo-summary") {
       return this.json(res, 200, computeSloSummary(this.metricsStore));
+    }
+
+    // ── Compliance & retention status (W7) ────────────────────────────────────
+    // Read-only diagnostics for the W5 SOC 2 evidence exporter and the W6
+    // activity_events retention policy. Both default to {enabled:false} when
+    // their env gates are unset, so calling these endpoints is always safe.
+    if (method === "GET" && url === "/api/compliance/soc2/status") {
+      return this.json(res, 200, this.soc2Exporter.getStatus());
+    }
+    if (method === "GET" && url === "/api/activity/retention/status") {
+      if (!this.activityRetentionPolicy) {
+        return this.json(res, 200, { enabled: false });
+      }
+      return this.json(res, 200, this.activityRetentionPolicy.getStatus());
     }
 
     // ── CAC Identity Chain API ────────────────────────────────────────────────
@@ -7634,11 +8309,19 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return;
     }
 
-    // ── E2: No backward-compat redirect ─────────────────────────────────────
-    // Removed: the redirect /api/<path> → /api/v1/<path> was creating ERR_TOO_MANY_REDIRECTS
-    // loops when browsers had cached old 301s in the opposite direction (/api/v1/* → /api/*).
-    // The client-side request() function already rewrites /api/ → /api/v1/ before fetch,
-    // and all inline handlers accept both normalized (/api/) paths natively.
+    // ── E3e: Backward-compat 301 redirect ──────────────────────────────────
+    // For unmatched GET requests under `/api/` (but not already `/api/v1/`),
+    // emit a 301 to the `/api/v1/` equivalent so external clients written
+    // against the unversioned surface keep working. The previous redirect-loop
+    // hazard came from a reverse `/api/v1/* → /api/*` redirect that no longer
+    // exists; the client-side `request()` helper rewrites in the forward
+    // direction only, so this is safe.
+    if (method === "GET" && rawUrl.startsWith("/api/") && !rawUrl.startsWith("/api/v1/")) {
+      const redirected = "/api/v1/" + rawUrl.substring("/api/".length);
+      res.writeHead(301, { Location: redirected });
+      res.end();
+      return;
+    }
 
     this.json(res, 404, { error: "Not found" });
   }
@@ -7771,7 +8454,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
         this.triggerAction(actionName, sessionId);
         const action = this.actionStates.get(actionName)!;
         return {
-          content: `Started ${action.label}. Track progress in Quick Actions and Recent Action History.`,
+          content: `Started ${action.label}. Track progress in [Quick Actions](prism://tab/logs#actions) and [Recent Action History](prism://tab/logs#action-history).`,
           metadata: { intent: "run_action", actionName },
         };
       } catch (error) {

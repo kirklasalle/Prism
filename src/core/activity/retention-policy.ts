@@ -79,6 +79,8 @@ export class ActivityRetentionPolicy {
     private timer: NodeJS.Timeout | null = null;
     private readonly intervalMs: number;
     private readonly retentionMs: number;
+    private lastSweep: ActivityRetentionSweepResult | null = null;
+    private lastSweepAt: string | null = null;
 
     constructor(
         private readonly config: ActivityRetentionConfig,
@@ -144,6 +146,8 @@ export class ActivityRetentionPolicy {
             cutoffIso,
             durationMs: Date.now() - start,
         };
+        this.lastSweep = result;
+        this.lastSweepAt = new Date().toISOString();
 
         this.bus.emit({
             sessionId: "system:activity-retention",
@@ -172,5 +176,34 @@ export class ActivityRetentionPolicy {
     /** Test/diagnostic helper — true while the timer is active. */
     isRunning(): boolean {
         return this.timer !== null;
+    }
+
+    /** Most recent successful sweep result, or null when no sweep has run. */
+    getLastSweep(): ActivityRetentionSweepResult | null {
+        return this.lastSweep;
+    }
+
+    /**
+     * Read-only status snapshot. Safe to call before `start()` and after
+     * `stop()`. Used by the `/api/activity/retention/status` endpoint.
+     */
+    getStatus(): {
+        enabled: true;
+        retentionDays: number;
+        sweepIntervalMs: number;
+        dbPath: string;
+        running: boolean;
+        lastSweepAt: string | null;
+        lastSweep: ActivityRetentionSweepResult | null;
+    } {
+        return {
+            enabled: true,
+            retentionDays: this.config.retentionDays,
+            sweepIntervalMs: this.intervalMs,
+            dbPath: this.config.dbPath,
+            running: this.timer !== null,
+            lastSweepAt: this.lastSweepAt,
+            lastSweep: this.lastSweep,
+        };
     }
 }

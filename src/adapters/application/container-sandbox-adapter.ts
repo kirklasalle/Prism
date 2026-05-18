@@ -13,7 +13,7 @@
 import sqlite3 from "sqlite3";
 import { v4 as uuidv4 } from "uuid";
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { PolicyEngine } from "../../core/policy/engine.js";
@@ -369,6 +369,27 @@ export class ContainerSandboxAdapter {
         const snapshotPath = join(snapshotsDir, snapshot_id);
         mkdirSync(snapshotPath, { recursive: true });
         cpSync(workspace, snapshotPath, { recursive: true, force: true });
+
+        // Write an audit manifest into the snapshot so it has a verifiable
+        // footprint even when the workspace is empty (empty workspaces would
+        // otherwise round to a zero-byte snapshot, which break downstream
+        // size-based audits and parity assertions). The manifest also serves
+        // as a stable on-disk record of the snapshot identity.
+        const manifest = {
+            snapshot_id,
+            container_id,
+            snapshot_name,
+            description: description ?? null,
+            created_at,
+            parent_snapshot_id: parent_snapshot_id ?? null,
+            adapter: "builtin-prism",
+            schema_version: 1,
+        };
+        writeFileSync(
+            join(snapshotPath, ".prism-snapshot.json"),
+            JSON.stringify(manifest, null, 2),
+            "utf-8",
+        );
 
         const snapshot_size_mb = Math.max(0, Math.ceil(this.dirSizeBytes(snapshotPath) / (1024 * 1024)));
         const snapshot: ContainerSnapshot = {

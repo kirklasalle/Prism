@@ -237,7 +237,15 @@ As a warning gate, not a failure gate initially.
 
 ## 6. R5 — Operations and data safety
 
-### R5-1 — Backup / restore scripts (M)
+### R5-1 — Backup / restore scripts (M) — DONE (v0.20.2)
+
+**Status:** Shipped in v0.20.2. Cross-platform helpers under [scripts/](../scripts/):
+
+- [scripts/backup.ps1](../scripts/backup.ps1) and [scripts/backup.sh](../scripts/backup.sh) — archive `$PRISM_WORKSPACE_ROOT` (default `~/Prism_Refraction`) to `prism-backup-<UTC>.zip` / `.tgz`.
+- [scripts/restore.ps1](../scripts/restore.ps1) and [scripts/restore.sh](../scripts/restore.sh) — restore an archive into an empty workspace; refuses to overwrite a non-empty workspace unless `-Force` / `--force` is passed.
+- Existing thin Node wrappers `npm run backup` / `npm run restore` continue to work.
+
+Reference shell sketch:
 
 `scripts/backup.sh`:
 
@@ -265,13 +273,13 @@ Add a lightweight migration runner:
 
 No ORM; just versioned SQL.
 
-### R5-3 — Log rotation (M)
+### R5-3 — Log rotation (M) — DONE (v0.20.2)
 
-Adopt a simple daily rotation (winston-daily-rotate-file or a hand-rolled rotator). 30-day retention default, configurable via `PRISM_LOG_RETENTION_DAYS`.
+Shipped in v0.20.2 as a zero-dep rotator at [src/core/observability/log-rotator.ts](../src/core/observability/log-rotator.ts). Exports `dateStamp`, `rotateActiveLog`, `pruneOldArchives`, `resolveRetentionDays`, `rotateAndPrune`, `DEFAULT_LOG_RETENTION_DAYS=30`. Idempotent (duplicate archive → `{ skipped: true }`). Retention clamped to 1..365 days via `PRISM_LOG_RETENTION_DAYS`. Test: [tests/log-rotation.test.ts](../tests/log-rotation.test.ts).
 
-### R5-4 — Structured JSON logs (M)
+### R5-4 — Structured JSON logs (M) — DONE (v0.20.2)
 
-Respect `PRISM_LOG_FORMAT=json`. Emit one JSON object per log line with `ts`, `level`, `msg`, `op`, and any contextual fields.
+Shipped in v0.20.2 as [src/core/observability/logger.ts](../src/core/observability/logger.ts). Honors `PRISM_LOG_FORMAT=json` (one JSON object per line, key order `ts, level, msg, op, ...rest`) and `PRISM_LOG_LEVEL` (default `info`). Test: [tests/json-logger.test.ts](../tests/json-logger.test.ts).
 
 ---
 
@@ -289,13 +297,13 @@ Expose counters and histograms:
 
 Public endpoint (no auth) — PROMETHEUS convention.
 
-### R6-2 — Health widget (M)
+### R6-2 — Health widget (M) — DONE (v0.20.2)
 
-A small card on the default dashboard tab showing uptime, heap, RSS, DB size, active sessions, pending approvals.
+Shipped in v0.20.2. Backend: `GET /api/health/extended` in [src/core/operator/routes/api-handler.ts](../src/core/operator/routes/api-handler.ts) returning `{ status, version, uptimeS, process:{heapMb,heapTotalMb,rssMb,externalMb}, sessions, pendingApprovals, dbSizeMb, nodeEnv }`. UI: additive [src/core/operator/public/tab-health-widget.js](../src/core/operator/public/tab-health-widget.js) renders into the `#health-widget` section appended to the Telemetry tab — Frontend Protection preserved. Test: [tests/health-extended-endpoint.test.ts](../tests/health-extended-endpoint.test.ts).
 
-### R6-3 — Approval queue UI (L)
+### R6-3 — Approval queue UI (L) — DONE (v0.20.2)
 
-In the Telemetry tab, render the pending approval list with approve/deny buttons. Wire to `/api/approval/*`.
+Shipped in v0.20.2. UI: additive [src/core/operator/public/tab-approval-queue.js](../src/core/operator/public/tab-approval-queue.js) renders into the `#approval-queue` section appended to the Telemetry tab. Wired to existing `GET /api/approval/pending`, `POST /api/approval/:id/approve`, `POST /api/approval/:id/deny`. Refresh cadence: 5 s.
 
 ### R6-4 — Log tail over WebSocket (M)
 

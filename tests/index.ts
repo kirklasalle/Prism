@@ -30,6 +30,8 @@ import { testBrowserControlTool } from "./browser-control-tool.test.js";
 import { testGuardianAgent } from "./guardian-agent.test.js";
 import { testTerminalSessionAdapter } from "./terminal-session-adapter.test.js";
 import { testContainerSandboxAdapter } from "./container-sandbox-adapter.test.js";
+import { testDockerContainerAdapter } from "./docker-container-adapter.test.js";
+import { testComputerUseCrossPlatform } from "./computer-use-cross-platform.test.js";
 import { testOAuthAdapters } from "./oauth-adapters.test.js";
 import {
     testUtilityRegistry,
@@ -60,6 +62,13 @@ import { testMarketplaceCuration } from "./marketplace-curation.test.js";
 import { testSrShowcaseDemo } from "./sr-showcase.test.js";
 import { testPluginScaffold } from "./plugin-scaffold.test.js";
 import { testPtacOrchestrator } from "./ptac-orchestrator.test.js";
+import { testPtacRecorderVideo } from "./ptac-recorder-video.test.js";
+import { testLogRotation } from "./log-rotation.test.js";
+import { testJsonLogger } from "./json-logger.test.js";
+import { testHealthExtendedEndpoint } from "./health-extended-endpoint.test.js";
+import { testApprovalQueueEndpoints } from "./approval-queue-endpoints.test.js";
+import { testImageGenerateTool } from "./image-generate-tool.test.js";
+import { testVideoGenerateTool, testAudioGenerateTool, testAudioTranscribeTool } from "./media-tools.test.js";
 import { testOpenAiCompatShim } from "./openai-compat-shim.test.js";
 import { testOpenAiCompatRoutes } from "./openai-compat-routes.test.js";
 import { testIamStore } from "./iam-store.test.js";
@@ -165,6 +174,8 @@ async function runTests(): Promise<void> {
         { name: "GuardianAgent", fn: testGuardianAgent },
         { name: "TerminalSessionAdapter", fn: testTerminalSessionAdapter },
         { name: "ContainerSandboxAdapter", fn: testContainerSandboxAdapter },
+        { name: "DockerContainerAdapter", fn: testDockerContainerAdapter },
+        { name: "ComputerUseCrossPlatform", fn: testComputerUseCrossPlatform },
         { name: "OAuthAdapters", fn: testOAuthAdapters },
         { name: "UtilityRegistry", fn: testUtilityRegistry },
         { name: "RiskOverrideStore", fn: testRiskOverrideStore },
@@ -193,6 +204,15 @@ async function runTests(): Promise<void> {
         { name: "SrShowcaseDemo", fn: testSrShowcaseDemo },
         { name: "PluginScaffold", fn: testPluginScaffold },
         { name: "PtacOrchestrator", fn: testPtacOrchestrator },
+        { name: "PtacRecorderVideo", fn: testPtacRecorderVideo },
+        { name: "LogRotation", fn: testLogRotation },
+        { name: "JsonLogger", fn: testJsonLogger },
+        { name: "HealthExtendedEndpoint", fn: testHealthExtendedEndpoint },
+        { name: "ApprovalQueueEndpoints", fn: testApprovalQueueEndpoints },
+        { name: "ImageGenerateTool", fn: testImageGenerateTool },
+        { name: "VideoGenerateTool", fn: testVideoGenerateTool },
+        { name: "AudioGenerateTool", fn: testAudioGenerateTool },
+        { name: "AudioTranscribeTool", fn: testAudioTranscribeTool },
         { name: "OpenAiCompatShim", fn: testOpenAiCompatShim },
         { name: "OpenAiCompatRoutes", fn: testOpenAiCompatRoutes },
         { name: "IamStore", fn: testIamStore },

@@ -1,6 +1,9 @@
 import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector } from './dashboard-core.js';
 import { renderToolCallLog } from './tab-logs.js';
 
+// Holds files staged for upload prior to server ACK. Ensure initialized.
+let pendingAttachments = [];
+
 export
   function reconcileExpandedSessionPackages() {
   const validPackageIds = new Set((state.sessionPackages || []).map(pkg => pkg.packageId));
@@ -458,7 +461,7 @@ export
   try {
     const payload = await request('/api/chat/sessions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body)
     });
     state.selectedSessionId = payload.session.sessionId;
@@ -910,9 +913,46 @@ export
 
     const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : escapeHtml(message.content);
 
+    // ── v0.20.3: render attachment chips on user message bubbles ──
+    // Additive — only emits markup when attachments are present, so messages
+    // without attachments render byte-identically to prior versions.
+    let attachmentsHtml = '';
+    if (message.attachments && message.attachments.length) {
+      attachmentsHtml = '<div class="message-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">'
+        + message.attachments.map(function (att) {
+          var isImage = att.mimeType && att.mimeType.indexOf('image/') === 0;
+          var href = '/api/attachments/' + encodeURIComponent(att.attachmentId);
+          if (isImage) {
+            return '<a href="' + href + '" target="_blank" class="attachment-chip" title="' + escapeHtml(att.fileName) + '">'
+              + '<img src="' + href + '" alt="' + escapeHtml(att.fileName) + '" style="height:48px;border-radius:4px;object-fit:cover;" />'
+              + '</a>';
+          }
+          return '<a href="' + href + '" target="_blank" class="attachment-chip" title="' + escapeHtml(att.fileName) + '">'
+            + '\u{1F4C4} <span>' + escapeHtml(att.fileName) + '</span>'
+            + '</a>';
+        }).join('')
+        + '</div>';
+    } else if (message._optimisticAttachments && message._optimisticAttachments.length) {
+      // Optimistic local user-message bubble — mirror pendingAttachments before server roundtrip.
+      attachmentsHtml = '<div class="message-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">'
+        + message._optimisticAttachments.map(function (att) {
+          var isImage = att.type && att.type.indexOf('image/') === 0;
+          if (isImage) {
+            return '<span class="attachment-chip" title="' + escapeHtml(att.name) + '">'
+              + '<img src="' + att.dataUrl + '" alt="' + escapeHtml(att.name) + '" style="height:48px;border-radius:4px;object-fit:cover;" />'
+              + '</span>';
+          }
+          return '<span class="attachment-chip" title="' + escapeHtml(att.name) + '">'
+            + '\u{1F4C4} <span>' + escapeHtml(att.name) + '</span>'
+            + '</span>';
+        }).join('')
+        + '</div>';
+    }
+
     return '<div class="message ' + escapeHtml(message.role) + '">'
       + '<div class="message-label">' + escapeHtml(roleLabel) + '</div>'
       + '<div>' + contentHtml + '</div>'
+      + attachmentsHtml
       + extraHtml
       + '<div class="message-time">' + escapeHtml(formatRelativeTime(message.createdAt)) + '</div>'
       + '</div>';
@@ -1119,19 +1159,60 @@ export
 export
   async function pasteFromClipboard() {
   try {
-    var items = await navigator.clipboard.read();
-    for (var i = 0; i < items.length; i++) {
-      var types = items[i].types;
-      var imgType = types.find(function (t) { return t.startsWith('image/'); });
-      if (imgType) {
-        var blob = await items[i].getType(imgType);
-        var file = new File([blob], 'clipboard-' + Date.now() + '.' + imgType.split('/')[1], { type: imgType });
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          pendingAttachments.push({ file: file, dataUrl: e.target.result, name: file.name, type: file.type, size: file.size });
-          renderAttachmentPreview();
-        };
-        reader.readAsDataURL(file);
+    var foundImage = false;
+    if (navigator.clipboard && navigator.clipboard.read) {
+      try {
+        var items = await navigator.clipboard.read();
+        for (var i = 0; i < items.length; i++) {
+          var types = items[i].types;
+          var imgType = types.find(function (t) { return t.startsWith('image/'); });
+          if (imgType) {
+            foundImage = true;
+            var blob = await items[i].getType(imgType);
+            var file = new File([blob], 'clipboard-' + Date.now() + '.' + imgType.split('/')[1], { type: imgType });
+            var reader = new FileReader();
+            reader.onload = function (e) {
+              pendingAttachments.push({ file: file, dataUrl: e.target.result, name: file.name, type: file.type, size: file.size });
+              renderAttachmentPreview();
+            };
+            reader.readAsDataURL(file);
+          }
+        }
+      } catch (_innerErr) {
+        // navigator.clipboard.read() may reject (permission, no image, Firefox)
+        // — fall through to text fallback below.
+      }
+    }
+    // ── v0.20.3: text-on-clipboard fallback ──
+    // If no image was captured, try readText() and inject into the composer
+    // at the caret position. This makes the paste button useful for prompts
+    // copied from other apps, not just images.
+    if (!foundImage) {
+      var text = '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          text = await navigator.clipboard.readText();
+        }
+      } catch (_textErr) {
+        text = '';
+      }
+      if (text && text.length) {
+        var composer = document.getElementById('composer');
+        if (composer) {
+          var start = composer.selectionStart != null ? composer.selectionStart : composer.value.length;
+          var end = composer.selectionEnd != null ? composer.selectionEnd : composer.value.length;
+          var before = composer.value.slice(0, start);
+          var after = composer.value.slice(end);
+          composer.value = before + text + after;
+          composer.focus();
+          var caret = (before + text).length;
+          composer.setSelectionRange(caret, caret);
+          composer.style.height = 'auto';
+          composer.style.height = Math.min(composer.scrollHeight, 240) + 'px';
+        }
+      } else {
+        state.notice = 'Clipboard is empty or browser blocked access. Use Ctrl+V to paste directly.';
+        render();
       }
     }
   } catch (err) {
@@ -1233,7 +1314,10 @@ export
     role: 'user',
     content: content,
     createdAt: new Date().toISOString(),
-    _optimistic: true
+    _optimistic: true,
+    // v0.20.3: mirror pendingAttachments locally so the operator sees
+    // their attached files in the bubble before the upload roundtrip completes.
+    _optimisticAttachments: Array.isArray(pendingAttachments) ? pendingAttachments.slice() : []
   });
   safeRenderStep('messages', renderMessages);
   try {
@@ -1261,7 +1345,7 @@ export
       });
     }
     // Upload pending attachments to the user message if any
-    if (pendingAttachments.length && response && response.userMessage && response.userMessage.messageId) {
+    if (Array.isArray(pendingAttachments) && pendingAttachments.length && response && response.userMessage && response.userMessage.messageId) {
       await uploadAttachments(state.selectedSessionId, response.userMessage.messageId);
     }
     state.agenticStream = [];

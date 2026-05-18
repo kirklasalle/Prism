@@ -67,6 +67,7 @@ export async function testTerminalSessionAdapter(): Promise<void> {
     await testErrorCases();
     await testConcurrentSessions();
     await testExecutionProfileSwitching();
+    await testPauseResumeSession();
 
     console.log("✓ Terminal session adapter integration tests passed");
 }
@@ -453,6 +454,50 @@ async function testExecutionProfileSwitching(): Promise<void> {
             "individual",
             "Should switch back to individual",
         );
+    } finally {
+        await closeDb(db);
+    }
+}
+
+/**
+ * Verify real OS-level pause/resume against a running PTY child process.
+ * POSIX uses SIGSTOP/SIGCONT; Win32 uses NtSuspendProcess/NtResumeProcess via
+ * PowerShell P/Invoke. Test asserts state transitions, signal-log persistence,
+ * and that the resumed session can still execute commands.
+ */
+async function testPauseResumeSession(): Promise<void> {
+    const { adapter, db } = createTestAdapter();
+    try {
+        const session = await adapter.startSession(SHELL, process.cwd(), "test-user");
+
+        await adapter.pauseSession(session.session_id);
+        const paused = await adapter.getSessionStatus(session.session_id);
+        assert.strictEqual(paused.state, TerminalSessionState.SUSPENDED, "Session should report SUSPENDED after pauseSession");
+
+        await adapter.resumeSession(session.session_id);
+        const resumed = await adapter.getSessionStatus(session.session_id);
+        assert.strictEqual(resumed.state, TerminalSessionState.ACTIVE, "Session should report ACTIVE after resumeSession");
+
+        // Resumed session must still execute commands.
+        const result = await adapter.execCommand(session.session_id, "echo prism-resume", 5000);
+        assert.strictEqual(result.exit_code, 0, "Resumed session should execute commands successfully");
+        assert.match(result.stdout, /prism-resume/, "Resumed session stdout should contain command output");
+
+        // Verify both signal-log entries were persisted.
+        const expectedPause = process.platform === "win32" ? "NtSuspendProcess" : "SIGSTOP";
+        const expectedResume = process.platform === "win32" ? "NtResumeProcess" : "SIGCONT";
+        const signals = await new Promise<Array<{ signal: string; reason: string }>>((resolve, reject) => {
+            db.all(
+                "SELECT signal, reason FROM terminal_signal_log WHERE session_id = ? ORDER BY id ASC",
+                [session.session_id],
+                (err: any, rows: any[]) => err ? reject(err) : resolve(rows as any),
+            );
+        });
+        const signalNames = signals.map(s => s.signal);
+        assert.ok(signalNames.includes(expectedPause), `Signal log should include ${expectedPause}; got ${signalNames.join(",")}`);
+        assert.ok(signalNames.includes(expectedResume), `Signal log should include ${expectedResume}; got ${signalNames.join(",")}`);
+
+        await adapter.stopSession(session.session_id);
     } finally {
         await closeDb(db);
     }
