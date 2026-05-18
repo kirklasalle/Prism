@@ -4,7 +4,7 @@
 
 Official Python client for the [PRISM](https://github.com/kirklasalle/Prism) governance-native Agents-as-a-Service runtime. Wraps the dashboard HTTP/SSE surface so Python applications, notebooks, and automation scripts can drive PRISM the same way the operator dashboard does.
 
-> **Status:** v0.1.0 — alpha scaffold. Stable surface for `chat`, `chat_stream`, providers, Spectrum Refraction, approvals, events, and readiness. See the [PRISM full audit](../../docs/PRISM_FULL_AUDIT_2026_Q2.md) for the roadmap.
+> **Status:** v0.2.0 — adds the v0.21 autonomous-loop helpers (`chat_autonomous`, `watch_events`, `status`). Stable surface for `chat`, `chat_stream`, providers, Spectrum Refraction, approvals, events, and readiness. See the [PRISM full audit](../../docs/PRISM_FULL_AUDIT_2026_Q2.md) for the roadmap.
 
 ## Why a Python SDK
 

@@ -1,0 +1,178 @@
+# Prism Development Roadmap — What's Next
+
+## Current State (v0.21.0)
+
+Prism has a **massive, well-structured codebase** — 24 core modules, 5 adapter layers, 14 dashboard tabs, 191 tests, and a complete autonomous governance framework. Here's an honest assessment of what's built vs. what needs finishing.
+
+---
+
+## ✅ What's Solid & Working
+
+| System | Status | Notes |
+|--------|--------|-------|
+| Dashboard UI (14 tabs) | ✅ Complete | Chat, Browser, Computer, Tools, Agentic, Telemetry, Logs, Scheduler, Workspace, Settings, Network, Watch Me, Characters, Health |
+| Guardian Agent | ✅ Complete | 15 autonomous tasks, self-healing, MCP recovery, llama.cpp integration |
+| Agent Lifecycle | ✅ Complete | Spawn/stop/promote/demote, ephemeral reaper, telemetry, swarm coordination |
+| Tool Registry | ✅ Complete | 20+ tools, contracts, governance tiers, approval queue |
+| Browser Control | ✅ Complete | Playwright sessions, viewport, network, console, DOM, storage, profiles |
+| Computer Use | ✅ Complete | Screengrab, framebuffer, burst capture, PTY terminal, command execution |
+| Identity (IAM) | ✅ Complete | Dev identity, CAC fingerprinting, tab session registry, RBAC |
+| Telemetry | ✅ Complete | Unified aggregator, WebSocket streaming, severity filtering, 10k ring buffer |
+| Sacred Covenant | ✅ Complete | Runtime enforcer + `.github/PRISM_SACRED_COVENANT.md` |
+| Autonomous Loop | ✅ Structure | Goal submission, step execution, budget/rate limiting, AAB ledger |
+| Browser Auto-Pilot | ✅ UI + Agent | Panel, objective input, status polling; agent class ready |
+| Computer Auto-Pilot | ✅ UI + Agent | Panel, goal management; agent class with risk classification |
+| Policy Engine | ✅ Complete | Tier classification, approval routing, execution profiles |
+| Build Pipeline | ✅ Clean | TypeScript compiles with 0 errors |
+
+---
+
+## 🔶 What Needs Finishing — Prioritized
+
+### Priority 1: Connect Autonomous Agents to LLM Reasoning
+
+> [!IMPORTANT]
+> This is the **single most impactful remaining work**. The autonomous loop has the structure (goals, steps, budget, AAB ledger) but doesn't yet call the LLM to *decide what to do next*. Right now, steps must be submitted externally.
+
+**What's needed:**
+- [ ] **LLM Planning Loop**: Wire the `AutonomousAgentLoop.executeGoal()` method to call the configured LLM provider, pass the goal + current state, and receive tool-call decisions
+- [ ] **Perception → Action Cycle**: Browser agent perceives page state (accessibility tree or screenshot) → sends to LLM → LLM decides next action → agent executes → loops
+- [ ] **Computer agent planning**: Similar loop for shell commands — LLM sees system state, decides what command to run
+- [ ] **Conversation memory**: The loop needs a message history buffer so the LLM can reason over past steps
+- [ ] Wire `AutonomousBrowserAgent.executeObjective()` to use the LLM delegate from `DashboardService.getLlmDelegate()`
+- [ ] Wire `AutonomousComputerAgent.executeObjective()` similarly
+
+**Files to modify:**
+- `src/core/runtime/autonomous-agent-loop.ts` — Add `executeGoal()` with LLM loop
+- `src/core/runtime/autonomous-browser-agent.ts` — Wire `perceive()` → LLM → `act()`
+- `src/core/runtime/autonomous-computer-agent.ts` — Wire LLM reasoning
+
+**Estimated effort:** 2-3 sessions
+
+---
+
+### Priority 2: Guardian AAB Monitoring Integration
+
+> [!NOTE]
+> The Guardian is fully operational for system health tasks, but it doesn't yet actively monitor the AAB ledger for anomalous autonomous behavior.
+
+**What's needed:**
+- [ ] Add a new Guardian task: `aab_ledger_monitor` — polls the AAB ledger for new entries
+- [ ] When critical anomalies detected, Guardian triggers intervention (pause/terminate/alert)
+- [ ] Wire Covenant violation checks into the Guardian's monitoring cycle
+- [ ] Add AAB summary panel to the Agentic tab UI
+
+**Files to modify:**
+- `src/core/agents/guardian-agent.ts` — Add `taskAABLedgerMonitor()`
+- `src/core/governance/prism-covenant.ts` — Add `bindGuardian()` method
+- `tab-agentic.html/js` — AAB ledger summary panel
+
+**Estimated effort:** 1 session
+
+---
+
+### Priority 3: Watch Me — Behavioral Replay & Training
+
+> [!NOTE]
+> The "Watch Me" tab has a **working UI** with session selection, prompt input, live timeline, and screenshot polling. It pipes into `AgenticChatExecutor` via WebSocket. What's missing is the recording/replay/training layer.
+
+**What's needed:**
+- [ ] **Recording**: Capture autonomous run sequences to disk as JSON replay files (goal + steps + tool calls + results)
+- [ ] **Replay**: Load and replay a recorded session in the Watch Me timeline (read-only)
+- [ ] **Training Model Generation**: Export recorded sequences as fine-tuning datasets (input: state → output: tool call)
+- [ ] Wire the existing `replay.ts` module (which has comparison/normalization utilities) into the Watch Me controller
+
+**Files to modify:**
+- `src/core/runtime/replay.ts` — Add recording/export functions
+- `tab-watch.js` — Add record/replay UI controls
+- New: `src/core/runtime/replay-recorder.ts` — Session recording service
+
+**Estimated effort:** 1-2 sessions
+
+---
+
+### Priority 4: Test Coverage for New Modules
+
+> [!TIP]
+> 191 existing tests — but no tests yet for the new autonomous modules.
+
+**What's needed:**
+- [ ] `tests/autonomous-agent-loop.test.ts` — Goal lifecycle, budget limits, AAB ledger, rate limiting
+- [ ] `tests/autonomous-browser-agent.test.ts` — Risk classification, session binding
+- [ ] `tests/autonomous-computer-agent.test.ts` — Denylist enforcement, risk tiers
+- [ ] `tests/prism-covenant.test.ts` — Article checks, violation reporting, audit integrity
+- [ ] `tests/dev-identity-provider.test.ts` — Idempotent bootstrap, CAC fingerprint
+- [ ] `tests/tab-session-registry.test.ts` — Session lifecycle, tab initialization
+- [ ] `tests/universal-telemetry-aggregator.test.ts` — Ring buffer, subscriber fan-out
+
+**Estimated effort:** 1-2 sessions
+
+---
+
+### Priority 5: Production Hardening
+
+**What's needed:**
+- [ ] **Enterprise IAM cutover**: The `DevIdentityProvider` works for dev — production needs OAuth/SSO integration from `iam/store.ts` + `iam/rbac.ts`
+- [ ] **Persistent goal storage**: Currently goals live in-memory (`Map`). For production, persist to SQLite/PostgreSQL
+- [ ] **AAB ledger persistence**: Same — currently in-memory. Needs durable storage
+- [ ] **Telemetry export**: Add Prometheus/OpenTelemetry export from `UniversalTelemetryAggregator`
+- [ ] **Rate limiting per-operator**: Currently global — production needs per-identity budgets
+- [ ] **Covenant audit endpoint**: Expose `/api/v1/covenant/audit` for internal governance checks
+
+**Estimated effort:** 2-3 sessions
+
+---
+
+### Priority 6: UI Polish & Cross-Tab Integration
+
+**What's needed:**
+- [ ] **Unified Telemetry Stream — source filter population**: The `<select>` for source filter needs to be dynamically populated from observed telemetry sources
+- [ ] **Tab Sessions panel refresh**: Auto-refresh on timer, show event counts updating live
+- [ ] **Browser Auto-Pilot → Watch Me integration**: When an auto-pilot goal runs, it should also appear in Watch Me timeline
+- [ ] **Computer Auto-Pilot → Watch Me integration**: Same
+- [ ] **Health widget**: Show covenant status (intact/violated) in the sidebar health widget
+
+**Estimated effort:** 1 session
+
+---
+
+## Recommended Execution Order
+
+```mermaid
+gantt
+    title Prism Development Roadmap
+    dateFormat X
+    axisFormat %s
+
+    section Priority 1
+    LLM Planning Loop           :p1a, 0, 3
+    Browser Agent LLM Wiring    :p1b, 1, 3
+    Computer Agent LLM Wiring   :p1c, 2, 3
+
+    section Priority 2
+    Guardian AAB Monitor        :p2, 3, 4
+
+    section Priority 3
+    Watch Me Recording          :p3a, 4, 5
+    Replay & Training Export    :p3b, 5, 6
+
+    section Priority 4
+    Test Coverage               :p4, 3, 5
+
+    section Priority 5
+    Production Hardening        :p5, 6, 8
+
+    section Priority 6
+    UI Polish                   :p6, 5, 6
+```
+
+**My recommendation**: Start with **Priority 1** — connecting the LLM to the autonomous loop. That's the keystone. Everything else builds on having working end-to-end autonomy. Once the loop can think and act, the Guardian monitoring (P2), Watch Me recording (P3), and tests (P4) all become testable and meaningful.
+
+---
+
+## Quick Wins (Can Do Right Now)
+
+1. **Add autonomous module tests** — low risk, high value
+2. **Wire source filter dropdown** in Unified Telemetry — 15 min fix
+3. **Add covenant status to health widget** — quick visibility win
+4. **Add AAB ledger panel to Agentic tab** — existing data, just needs rendering

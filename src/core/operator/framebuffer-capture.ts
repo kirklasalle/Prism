@@ -235,8 +235,15 @@ export class FramebufferCapture {
 
     /**
      * Capture all monitors into a single PNG buffer.
+     *
+     * Cross-platform: PowerShell + System.Drawing on Win32, `scrot`/`grim`
+     * on Linux (X11/Wayland respectively), `screencapture` on macOS. Raises
+     * a clear error when no supported tool is available so callers can show
+     * a precise advisory.
      */
     async captureAllMonitors(): Promise<Buffer> {
+        if (process.platform === "linux") return this.captureLinux();
+        if (process.platform === "darwin") return this.captureDarwin();
         const dir = this.ensureDir();
         const script = captureScript(dir, 1, 0);
         const { stdout, stderr } = await execFileAsync("powershell.exe", [
@@ -248,6 +255,40 @@ export class FramebufferCapture {
             throw new Error(detail ? `PowerShell returned no image data: ${detail}` : "PowerShell returned no image data");
         }
         return Buffer.from(base64, "base64");
+    }
+
+    /** Linux capture — prefer Wayland's `grim`, fall back to X11's `scrot`. */
+    private async captureLinux(): Promise<Buffer> {
+        const tmp = join(this.ensureDir(), `_tmp-${process.pid}-${Date.now()}.png`);
+        const isWayland = Boolean(process.env.WAYLAND_DISPLAY);
+        const tools = isWayland ? ["grim", "scrot"] : ["scrot", "grim"];
+        let lastErr: unknown;
+        for (const tool of tools) {
+            try {
+                if (tool === "grim") {
+                    await execFileAsync("grim", [tmp], { timeout: 15_000 });
+                } else {
+                    // scrot needs an existing DISPLAY; -o overwrites if needed.
+                    await execFileAsync("scrot", ["-o", tmp], { timeout: 15_000 });
+                }
+                const buf = readFileSync(tmp);
+                try { unlinkSync(tmp); } catch { /* best effort */ }
+                return buf;
+            } catch (err) {
+                lastErr = err;
+            }
+        }
+        throw new Error(`Linux framebuffer capture failed: install grim (Wayland) or scrot (X11). Last error: ${String(lastErr)}`);
+    }
+
+    /** macOS capture — built-in `screencapture` covers all displays merged. */
+    private async captureDarwin(): Promise<Buffer> {
+        const tmp = join(this.ensureDir(), `_tmp-${process.pid}-${Date.now()}.png`);
+        // -x = silent (no shutter sound), -t png = PNG, -C captures cursor
+        await execFileAsync("/usr/sbin/screencapture", ["-x", "-t", "png", tmp], { timeout: 15_000 });
+        const buf = readFileSync(tmp);
+        try { unlinkSync(tmp); } catch { /* best effort */ }
+        return buf;
     }
 
     /**

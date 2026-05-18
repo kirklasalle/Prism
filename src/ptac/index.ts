@@ -80,3 +80,12 @@ import "./scenarios/s16-self-drive-system-smoke.js";
 import "./scenarios/s17-self-drive-sr-cost-gate.js";
 import "./scenarios/s18-self-drive-plugin-lifecycle.js";
 import "./scenarios/s20-self-drive-pad-tamper.js";
+// Phase R+ — real adapter verification scenarios (host-only, gated by
+// PRISM_PTAC_SAFE=1). s26 covers v0.17 real PTY pause/resume; s27 covers
+// v0.18 real Docker container lifecycle.
+import "./scenarios/s26-real-pty-lifecycle.js";
+import "./scenarios/s27-real-docker-lifecycle.js";
+// v0.21 — headline autonomous self-test demo. Drives the live
+// AgenticChatExecutor loop through `/api/chat` via a single Tier-1
+// prompt and asserts a non-empty terminal answer.
+import "./scenarios/s28-autonomous-self-test.js";

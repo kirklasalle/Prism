@@ -1,12 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { IRouteHandler } from "./types.js";
 import { DashboardService } from "../dashboard-service.js";
 import { resolveWorkspaceRoot } from "../../config/workspace-resolver.js";
 import { PRISM_VERSION } from "../../version.js";
 import {
-    DIRECTIVE_SHA256,
-    DIRECTIVE_HASH_LAST_GENERATED_AT,
-    verifyDirectiveIntegrity,
+  DIRECTIVE_SHA256,
+  DIRECTIVE_HASH_LAST_GENERATED_AT,
+  verifyDirectiveIntegrity,
 } from "../../security/directive-integrity.js";
 import { probeOptionalDeps, summarizeOptionalDeps } from "../../system/optional-deps.js";
 
@@ -18,6 +20,7 @@ export class ApiHandler implements IRouteHandler {
     // so that other modular handlers and the inline DashboardService routes remain reachable.
     return method === "GET" && (
       url === "/api/health" || url === "/health" ||
+      url === "/api/health/extended" ||
       url === "/api/status" ||
       url === "/api/system/adapters"
     );
@@ -77,6 +80,35 @@ export class ApiHandler implements IRouteHandler {
       return;
     }
 
+    if (method === "GET" && url === "/api/health/extended") {
+      // R6-2 — Health widget endpoint. Auth-gated (this handler is mounted
+      // behind the dashboard auth chain via the standard route table); the
+      // payload exposes per-process counters that the dashboard's Health
+      // card polls every 10 s. Public surface stays `/api/health` and
+      // `/metrics`.
+      const mem = process.memoryUsage();
+      const dbSize = this.measureWorkspaceDbSize();
+      const status = service.getRuntimeStatus();
+      const startedAtMs = Date.parse(status.startedAt);
+      const uptimeS = Number.isFinite(startedAtMs) ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)) : Math.floor(process.uptime());
+      this.json(res, 200, {
+        status: "ok",
+        version: PRISM_VERSION,
+        uptimeS,
+        process: {
+          heapMb: Math.round((mem.heapUsed / 1_048_576) * 100) / 100,
+          heapTotalMb: Math.round((mem.heapTotal / 1_048_576) * 100) / 100,
+          rssMb: Math.round((mem.rss / 1_048_576) * 100) / 100,
+          externalMb: Math.round((mem.external / 1_048_576) * 100) / 100,
+        },
+        sessions: service.getChatStore().listSessions().length,
+        pendingApprovals: service.getApprovalQueue().list().length,
+        dbSizeMb: dbSize,
+        nodeEnv: process.env.NODE_ENV ?? "development",
+      });
+      return;
+    }
+
     if (method === "GET" && url === "/api/status") {
       const events = service.getActivityBus().listEvents();
       this.json(res, 200, {
@@ -118,6 +150,45 @@ export class ApiHandler implements IRouteHandler {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * R6-2 — Total bytes of all `.db` / `.sqlite` files under the workspace
+   * root, returned in MiB (rounded to 2 dp). Best-effort; on any I/O error
+   * returns 0 rather than failing the health endpoint.
+   */
+  private measureWorkspaceDbSize(): number {
+    let total = 0;
+    try {
+      const root = resolveWorkspaceRoot();
+      if (!existsSync(root)) return 0;
+      const stack: string[] = [root];
+      // Bound the walk so a misconfigured workspace root cannot stall the
+      // request — 5000 directory entries is far above any realistic PRISM
+      // workspace.
+      let visited = 0;
+      while (stack.length > 0 && visited < 5000) {
+        const dir = stack.pop()!;
+        let entries: string[] = [];
+        try { entries = readdirSync(dir); } catch { continue; }
+        for (const name of entries) {
+          visited++;
+          const full = join(dir, name);
+          let st;
+          try { st = statSync(full); } catch { continue; }
+          if (st.isDirectory()) {
+            // Skip well-known noisy subtrees that never hold DB files.
+            if (name === "node_modules" || name === ".git") continue;
+            stack.push(full);
+          } else if (st.isFile() && /\.(db|sqlite|sqlite3)$/i.test(name)) {
+            total += st.size;
+          }
+        }
+      }
+    } catch {
+      return 0;
+    }
+    return Math.round((total / 1_048_576) * 100) / 100;
   }
 
   private json(res: ServerResponse, status: number, data: any): void {

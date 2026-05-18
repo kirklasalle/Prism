@@ -40,6 +40,13 @@ import { AgentLifecycleManager } from "./core/agents/agent-lifecycle.js";
 import { AgentTelemetryCollector } from "./core/agents/agent-telemetry-collector.js";
 import { AgentRouter } from "./core/agents/agent-router.js";
 import { SwarmCoordinator } from "./core/agents/swarm-coordinator.js";
+import { DevIdentityProvider } from "./core/iam/dev-identity-provider.js";
+import { TabSessionRegistry } from "./core/iam/tab-session-registry.js";
+import { UniversalTelemetryAggregator } from "./core/observability/universal-telemetry-aggregator.js";
+import { AutonomousAgentLoop } from "./core/runtime/autonomous-agent-loop.js";
+import { AutonomousBrowserAgent } from "./core/runtime/autonomous-browser-agent.js";
+import { AutonomousComputerAgent } from "./core/runtime/autonomous-computer-agent.js";
+import { PrismCovenant } from "./core/governance/prism-covenant.js";
 import type { DispatchTelemetryRecord, SubAgentResult } from "./core/agents/agent-types.js";
 import {
     ensureWorkspaceStructure,
@@ -177,6 +184,41 @@ async function main(): Promise<void> {
     activityBus.subscribe(episodicMemory);
     activityBus.subscribe(semanticIndex);
     activityBus.subscribe(sessionMemory);
+
+    // ── Phase A1: Dev Identity & Tab Session Bootstrap ────────────────────
+    // Creates a persistent dev operator identity (CAC-compatible) and
+    // initializes per-tab sessions for full traceability across all tabs.
+    const stateDir = workspacePath("state");
+    const devIdentity = new DevIdentityProvider(stateDir, sessionId, activityBus);
+    const { operator: devOperator, agent: devAgent } = devIdentity.bootstrap();
+    console.log(`[PRISM][identity] Dev operator: ${devOperator.displayName} <${devOperator.email}>`);
+    console.log(`[PRISM][identity] Agent identity: ${devAgent.displayName} <${devAgent.email}>`);
+    console.log(`[PRISM][identity] CAC fingerprint: ${devOperator.cacFingerprint}`);
+
+    const tabSessionRegistry = new TabSessionRegistry(stateDir, sessionId, devOperator.operatorId, activityBus);
+    const tabSessions = tabSessionRegistry.initializeAll();
+    console.log(`[PRISM][identity] Initialized ${tabSessions.length} tab sessions`);
+
+    // ── Phase A3: Universal Telemetry Aggregator ──────────────────────────
+    // Central observability — all events from every source normalized into
+    // a unified format piped to Logs & Debug tab.
+    const telemetryAggregator = new UniversalTelemetryAggregator(10_000);
+    activityBus.subscribe(telemetryAggregator);
+    // Wire console interceptor lines to the telemetry aggregator
+    consoleInterceptor.onLine((line) => telemetryAggregator.ingestConsoleLine(line));
+    console.log(`[PRISM][telemetry] Universal telemetry aggregator active (10k buffer)`);
+
+    // ── Phase A4: Prism Covenant ─────────────────────────────────────────
+    // Immutable governance contract between agent and operator.
+    // Ref: .github/PRISM_SACRED_COVENANT.md
+    const covenant = new PrismCovenant(activityBus);
+    console.log(`[PRISM][covenant] Sacred Covenant active (v${covenant.getStatus().version}, hash:${covenant.getStatus().hash})`);
+
+    // ── Phase A2B: Specialized Autonomous Agents ─────────────────────────
+    const autonomousBrowserAgent = new AutonomousBrowserAgent(activityBus);
+    const autonomousComputerAgent = new AutonomousComputerAgent(activityBus);
+    console.log(`[PRISM][autonomous] Browser + Computer agents initialized`);
+    // ── Phase A2: Autonomous Agent Loop ──────────────────────────────────
     const policyEngine = new PolicyEngine();
     
     // Initialize OAuth adapters early for tool injection
@@ -263,6 +305,19 @@ async function main(): Promise<void> {
     // /api/debug/console, and the Guardian's mcp_health_recovery task work.
     dashboardService.setMcpAdapter(mcpAdapter);
     dashboardService.setConsoleInterceptor(consoleInterceptor);
+
+    // ── Phase A2 (cont): Wire Autonomous Agent Loop ─────────────────────
+    // Goal-driven autonomous execution with browser + computer + shell tools.
+    // Uses the configured LLM provider and Guardian (llama.cpp) for reasoning.
+    const autonomousLoop = new AutonomousAgentLoop(activityBus, registry, {
+        maxConcurrentGoals: 1,
+        defaultMaxActions: 100,
+        defaultMaxDurationMs: 10 * 60 * 1000,
+        guardianCheckIntervalActions: 5,
+        actionsPerMinuteLimit: 30,
+    });
+    console.log(`[PRISM][autonomous] Autonomous agent loop initialized`);
+
     // Late-bind the dashboard service into the workflow-demo action's hooks so
     // the demo can broadcast a UI tour and fire real BUA/CUA probes.
     demoHooksRef.service = dashboardService;
@@ -360,6 +415,17 @@ async function main(): Promise<void> {
         swarm: swarmCoordinator,
         pool: agentPool,
         router: agentRouter,
+    });
+
+    // Wire autonomous control surface into dashboard (Phase A)
+    await dashboardService.setAutonomousControl({
+        autonomousLoop,
+        devIdentity,
+        tabSessionRegistry,
+        telemetryAggregator,
+        covenant,
+        browserAgent: autonomousBrowserAgent,
+        computerAgent: autonomousComputerAgent,
     });
 
     // Start ephemeral agent reaper

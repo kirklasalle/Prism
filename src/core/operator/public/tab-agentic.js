@@ -227,6 +227,45 @@ export
   } catch (e) { console.error('[guardian] start failed', e); }
 }
 
+// v0.20.5 — Auto-start the Guardian Agent on client load when a local model is
+// configured. Operators expect Guardian to be running by default (per user
+// preference: start_web.bat is the single reliable entrypoint). Idempotent and
+// guarded by `state.guardianAutoStartAttempted` so it runs at most once per
+// page session. Operators can opt out by setting
+// `localStorage['prism.guardian.autostart'] = 'false'` in DevTools.
+export
+  async function autoStartGuardianIfConfigured() {
+  if (state.guardianAutoStartAttempted) return;
+  state.guardianAutoStartAttempted = true;
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('prism.guardian.autostart') === 'false') {
+      dashboardLog('agentic', 'guardian.autostart.skipped', 'Auto-start disabled via localStorage');
+      return;
+    }
+  } catch (_) { /* localStorage may be unavailable in some sandboxes */ }
+  try {
+    if (!state.guardianStatus) {
+      try { state.guardianStatus = await request('/api/guardian/status'); }
+      catch (_) { /* leave status null — panel handles unavailable case */ }
+    }
+    var g = state.guardianStatus;
+    if (!g) return;
+    // Only autostart if a model is configured and Guardian is not already up.
+    if (!g.modelPath) {
+      dashboardLog('agentic', 'guardian.autostart.deferred', 'No local model selected; skipping auto-start');
+      return;
+    }
+    if (g.state === 'running' || g.state === 'starting' || g.state === 'healing') {
+      return;
+    }
+    dashboardLog('agentic', 'guardian.autostart', 'Auto-starting Guardian agent');
+    await startGuardian();
+  } catch (e) {
+    console.error('[guardian] autostart failed', e);
+    dashboardLog('agentic', 'guardian.autostart.error', 'Auto-start failed: ' + (e && e.message ? e.message : e));
+  }
+}
+
 export
   async function stopGuardian() {
   try {
@@ -646,4 +685,145 @@ export
   if (!state.localGgufModels) await refreshLocalModels();
   if (!state.customRecommendedModels) await loadCustomRecommendedModels();
   if (!state.guardianTasks) await refreshGuardianTasks();
+  // Initialize new autonomous panels
+  refreshAABLedger();
+  refreshAutonomousGoals();
+  // Best-effort auto-start once status + models are known. No-op if already
+  // attempted, already running, or no model configured.
+  autoStartGuardianIfConfigured();
+}
+
+/* ── AAB Ledger Panel ──────────────────────────────────────────────── */
+
+export async function refreshAABLedger() {
+  try {
+    var data = await request('/api/autonomous/aab-ledger');
+    var entries = data.entries || [];
+    var badge = document.getElementById('aab-ledger-badge');
+    if (badge) badge.textContent = entries.length + ' entries';
+    var tbody = document.getElementById('aab-ledger-body');
+    if (!tbody) return;
+    if (entries.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:16px;">No AAB entries yet. The ledger populates when autonomous goals are executed.</td></tr>';
+      return;
+    }
+    var html = '';
+    // Show newest first
+    for (var i = entries.length - 1; i >= Math.max(0, entries.length - 50); i--) {
+      var e = entries[i];
+      var interventionColor = e.intervention === 'terminate' ? '#ff8d8d' : e.intervention === 'pause' ? '#ffd17a' : e.intervention === 'rate_limit' ? '#7ec8e3' : '#888';
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+      html += '<td style="padding:4px 8px;white-space:nowrap;">' + new Date(e.timestamp).toLocaleTimeString() + '</td>';
+      html += '<td style="padding:4px 8px;font-family:monospace;font-size:11px;">' + escapeHtml((e.goalId || '').substring(0, 8)) + '</td>';
+      html += '<td style="padding:4px 8px;">' + escapeHtml(e.anomalyType || '') + '</td>';
+      html += '<td style="padding:4px 8px;color:' + interventionColor + ';font-weight:600;">' + escapeHtml(e.intervention || '') + '</td>';
+      html += '<td style="padding:4px 8px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(e.description || '') + '">' + escapeHtml(e.description || '') + '</td>';
+      html += '</tr>';
+    }
+    tbody.innerHTML = html;
+  } catch (e) {
+    console.warn('[agentic] AAB ledger refresh failed:', e);
+  }
+}
+
+/* ── Autonomous Goals Panel ────────────────────────────────────────── */
+
+export async function submitAutonomousGoal() {
+  var objectiveEl = document.getElementById('autonomous-goal-objective');
+  if (!objectiveEl || !objectiveEl.value.trim()) {
+    dashboardLog('agentic', 'goal.error', 'Objective is required');
+    return;
+  }
+  var objective = objectiveEl.value.trim();
+  var maxActions = parseInt(document.getElementById('auto-goal-max-actions')?.value || '50', 10);
+  var allowBrowser = document.getElementById('auto-goal-allow-browser')?.checked || false;
+  var allowComputer = document.getElementById('auto-goal-allow-computer')?.checked || false;
+
+  var badge = document.getElementById('autonomous-goals-badge');
+  if (badge) badge.textContent = 'Submitting...';
+  objectiveEl.value = '';
+
+  try {
+    var result = await request('/api/autonomous/goals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        objective: objective,
+        source: 'dashboard',
+        maxActions: maxActions,
+        allowBrowserUse: allowBrowser,
+        allowComputerUse: allowComputer,
+      })
+    });
+    dashboardLog('agentic', 'goal.submitted', 'Goal submitted: ' + (result.goalId || 'unknown'));
+    if (badge) badge.textContent = 'Active: ' + (result.goalId || '').substring(0, 8);
+    refreshAutonomousGoals();
+  } catch (e) {
+    dashboardLog('agentic', 'goal.error', 'Failed to submit goal: ' + (e.message || e));
+    if (badge) badge.textContent = 'Error';
+  }
+}
+
+export async function refreshAutonomousGoals() {
+  try {
+    var data = await request('/api/autonomous/goals');
+    var goals = data.goals || [];
+    var badge = document.getElementById('autonomous-goals-badge');
+
+    // Check for active goal
+    var active = goals.find(function (g) { return g.status === 'executing' || g.status === 'planning'; });
+    if (badge) {
+      badge.textContent = active
+        ? '🟢 Active: ' + (active.objective || '').substring(0, 30)
+        : goals.length > 0 ? goals.length + ' goals' : 'No active goal';
+    }
+
+    var container = document.getElementById('autonomous-goals-list');
+    if (!container) return;
+    if (goals.length === 0) {
+      container.innerHTML = '<div class="muted" style="text-align:center;padding:16px;">No goals submitted yet.</div>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < Math.min(goals.length, 20); i++) {
+      var g = goals[i];
+      var statusColor = g.status === 'completed' ? '#7ecf7e' : g.status === 'executing' || g.status === 'planning' ? '#7ec8e3' : g.status === 'failed' || g.status === 'terminated' ? '#ff8d8d' : g.status === 'paused' ? '#ffd17a' : '#888';
+      var statusIcon = g.status === 'completed' ? '✅' : g.status === 'executing' ? '🔄' : g.status === 'planning' ? '🧠' : g.status === 'failed' ? '❌' : g.status === 'terminated' ? '⛔' : g.status === 'paused' ? '⏸' : '⏳';
+
+      html += '<div class="panel" style="padding:10px;margin-bottom:6px;border-left:3px solid ' + statusColor + ';">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;">';
+      html += '<span>' + statusIcon + '</span>';
+      html += '<strong style="font-size:13px;">' + escapeHtml(g.objective || '') + '</strong>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:4px;align-items:center;">';
+      html += '<span style="color:' + statusColor + ';font-size:11px;font-weight:600;">' + escapeHtml(g.status) + '</span>';
+      if (g.status === 'executing' || g.status === 'planning') {
+        html += '<button class="secondary-button" style="font-size:10px;padding:1px 6px;" onclick="abortAutonomousGoal(\'' + escapeHtml(g.goalId) + '\')">⏹ Abort</button>';
+      }
+      html += '</div></div>';
+      html += '<div style="font-size:11px;color:var(--muted);display:flex;gap:12px;">';
+      html += '<span>ID: ' + escapeHtml((g.goalId || '').substring(0, 8)) + '</span>';
+      html += '<span>Actions: ' + (g.totalActions || 0) + '/' + (g.constraints?.maxActions || '—') + '</span>';
+      if (g.startedAt) html += '<span>Started: ' + new Date(g.startedAt).toLocaleTimeString() + '</span>';
+      if (g.completedAt) html += '<span>Completed: ' + new Date(g.completedAt).toLocaleTimeString() + '</span>';
+      html += '</div>';
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  } catch (e) {
+    console.warn('[agentic] goals refresh failed:', e);
+  }
+}
+
+export async function abortAutonomousGoal(goalId) {
+  try {
+    await request('/api/autonomous/goals/' + encodeURIComponent(goalId) + '/abort', { method: 'POST' });
+    dashboardLog('agentic', 'goal.aborted', 'Goal ' + goalId.substring(0, 8) + ' aborted');
+    refreshAutonomousGoals();
+    refreshAABLedger();
+  } catch (e) {
+    dashboardLog('agentic', 'goal.abort.error', 'Failed to abort goal: ' + (e.message || e));
+  }
 }

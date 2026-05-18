@@ -220,7 +220,8 @@ export const tabs = [
   { id: 'network', label: 'Network' },
   { id: 'telemetry', label: 'Telemetry' },
   { id: 'logs', label: 'Logs & Debug' },
-  { id: 'scheduler', label: 'Scheduler' }
+  { id: 'scheduler', label: 'Scheduler' },
+  { id: 'watch', label: 'Watch Me' }
 ];
 
 // ── Auth token (injected via <meta> tag from server) ──────────────────

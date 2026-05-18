@@ -89,6 +89,51 @@
       </div>
     </div>
   </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- R6-2 Health Widget · R6-3 Approval Queue UI                         -->
+  <!-- Additive sections appended at the end of the Telemetry tab grid.    -->
+  <!-- Controllers live in:                                                 -->
+  <!--   /public/tab-health-widget.js                                       -->
+  <!--   /public/tab-approval-queue.js                                      -->
+  <!-- Frontend Protection: zero edits to existing telemetry components.    -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <section id="health-widget" class="rail-section panel" style="grid-column:1/-1;" data-tip-id="telemetry:health-widget"
+    data-tip-kind="telemetry">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('healthWidget')">
+      <h3>💗 Process Health</h3>
+      <span id="healthWidget-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="healthWidget-collapsible" class="collapsible-body">
+      <div id="health-widget-grid"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">
+        <div class="muted" style="font-size:12px;">Loading process health…</div>
+      </div>
+      <div id="health-widget-footer" class="muted" style="font-size:11px;margin-top:8px;">
+        GET /api/health/extended — refreshes every 10s.
+      </div>
+    </div>
+  </section>
+
+  <section id="approval-queue" class="rail-section panel" style="grid-column:1/-1;"
+    data-tip-id="telemetry:approval-queue" data-tip-kind="telemetry">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('approvalQueue')">
+      <h3>🛂 Pending Approvals <span id="approval-queue-count" class="muted"
+          style="font-size:12px;font-weight:normal;">(0)</span></h3>
+      <span id="approvalQueue-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="approvalQueue-collapsible" class="collapsible-body">
+      <div id="approval-queue-list" class="stack">
+        <div class="muted" style="font-size:12px;">Loading pending approvals…</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <button id="approval-queue-refresh" type="button"
+          style="font-size:12px;padding:4px 10px;background:#2b6;color:#fff;border:0;border-radius:4px;cursor:pointer;">↻
+          Refresh</button>
+        <span id="approval-queue-message" class="muted" style="font-size:11px;"></span>
+      </div>
+    </div>
+  </section>
 </div>
 <script>
   (function () {

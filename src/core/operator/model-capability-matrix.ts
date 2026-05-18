@@ -40,6 +40,8 @@ export type ModelModality =
     | "voice-output"
     | "tts"
     | "stt"
+    | "music-generation"
+    | "sound-effects"
     | "realtime"
     | "embedding"
     | "multimodal-reasoning";
@@ -64,6 +66,8 @@ export const ALL_MODALITIES: readonly ModalityInfo[] = [
     { id: "voice-output", label: "Voice Output", icon: "\u{1F50A}", description: "Generating spoken audio output" },
     { id: "tts", label: "Text-to-Speech", icon: "\u{1F5E3}", description: "Converting text to natural speech" },
     { id: "stt", label: "Speech-to-Text", icon: "\u{1F4AC}", description: "Transcribing speech to text" },
+    { id: "music-generation", label: "Music Generation", icon: "\u{1F3B5}", description: "Composing music or single-instrument audio from prompts" },
+    { id: "sound-effects", label: "Sound Effects", icon: "\u{1F50A}", description: "Generating non-speech sound effects from prompts" },
     { id: "realtime", label: "Realtime", icon: "\u26A1", description: "Low-latency streaming and realtime interaction" },
     { id: "embedding", label: "Embedding", icon: "\u{1F9E9}", description: "Vector embeddings for search and similarity" },
     { id: "multimodal-reasoning", label: "Multimodal Reasoning", icon: "\u{1F9E0}", description: "Cross-modal reasoning across text, image, audio" },

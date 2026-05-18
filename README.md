@@ -166,6 +166,10 @@ It is a next-generation agent operating system focused on five differentiators:
   - WebSocket auto-reconnect with exponential backoff (1s → 30s cap, max 50 retries) and connection status indicator
   - SSE (EventSource) reconnect with matching exponential backoff
   - Provider health endpoint: `GET /api/llm/provider-health` — tests all configured providers in parallel with latency measurement
+- **Self-Drive Demonstration (PTAC Operator Demo, v0.20):**
+  - One-click recorded run from the Computer Control tab. PRISM drives its own dashboard end-to-end (chat, approvals, computer-use, browser, real PTY, real Docker) and emits a portable, browser-playable HTML slideshow.
+  - Triple-gated by `PRISM_PTAC_OPERATOR_DEMO=1` + `PRISM_PTAC_SAFE=1` + `PRISM_PTAC_RECORD_VIDEO=1`. Default deployments have zero gates set.
+  - Full walkthrough: [docs/PTAC_OPERATOR_DEMO_GUIDE.md](docs/PTAC_OPERATOR_DEMO_GUIDE.md).
 
 ## Quick Start
 

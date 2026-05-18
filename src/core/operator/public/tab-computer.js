@@ -1022,3 +1022,118 @@ export async function pollUsage() {
     renderUsageMetrics(data);
   } catch (e) { console.error('[computer] usage poll failed', e); }
 }
+
+// ── Autonomous Control Functions ──────────────────────────────────────────
+
+var _activeGoalId = null;
+
+export async function submitAutonomousGoal() {
+  var input = document.getElementById('autonomous-goal-input');
+  if (!input) return;
+  var objective = input.value.trim();
+  if (!objective) return;
+  var constraints = {
+    allowBrowserUse: document.getElementById('auto-allow-browser')?.checked ?? true,
+    allowComputerUse: document.getElementById('auto-allow-computer')?.checked ?? true,
+    allowShellExec: document.getElementById('auto-allow-shell')?.checked ?? true,
+  };
+  try {
+    var result = await request('/api/v1/autonomous/goal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ objective, source: 'dashboard', constraints })
+    });
+    _activeGoalId = result.goalId;
+    input.value = '';
+    renderActiveGoal(result);
+    updateAutonomousPill('executing');
+    dashboardLog('computer', 'autonomous.goal.submitted', 'Goal: ' + objective);
+  } catch (e) {
+    var container = document.getElementById('autonomous-active-goal');
+    if (container) container.innerHTML = '<div class="muted" style="font-size:12px;color:#ff6b6b;">Failed: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+export async function pauseAutonomousGoal() {
+  try {
+    await request('/api/v1/autonomous/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goalId: _activeGoalId, reason: 'Operator paused from dashboard' })
+    });
+    updateAutonomousPill('paused');
+    dashboardLog('computer', 'autonomous.goal.paused', 'Goal paused by operator');
+  } catch (e) { console.error('[autonomous] pause failed', e); }
+}
+
+export async function resumeAutonomousGoal() {
+  try {
+    await request('/api/v1/autonomous/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goalId: _activeGoalId })
+    });
+    updateAutonomousPill('executing');
+    dashboardLog('computer', 'autonomous.goal.resumed', 'Goal resumed by operator');
+  } catch (e) { console.error('[autonomous] resume failed', e); }
+}
+
+export async function terminateAutonomousGoal() {
+  if (!_activeGoalId) return;
+  try {
+    await request('/api/v1/autonomous/terminate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goalId: _activeGoalId, reason: 'Operator terminated from dashboard' })
+    });
+    _activeGoalId = null;
+    updateAutonomousPill('ready');
+    var container = document.getElementById('autonomous-active-goal');
+    if (container) container.innerHTML = '<div class="muted" style="font-size:12px;">Goal terminated. Submit a new objective above.</div>';
+    dashboardLog('computer', 'autonomous.goal.terminated', 'Goal terminated by operator');
+  } catch (e) { console.error('[autonomous] terminate failed', e); }
+}
+
+function renderActiveGoal(goal) {
+  var container = document.getElementById('autonomous-active-goal');
+  if (!container || !goal) return;
+  var statusColor = goal.status === 'executing' ? '#3ec46d' : goal.status === 'paused' ? '#ffd17a' : goal.status === 'failed' ? '#ff6b6b' : 'var(--text-muted)';
+  var html = '<div style="border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+  html += '<span style="font-weight:600;">🎯 ' + escapeHtml(goal.objective) + '</span>';
+  html += '<span style="margin-left:auto;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,0.06);color:' + statusColor + ';font-size:11px;">' + goal.status + '</span>';
+  html += '</div>';
+  html += '<div class="muted">ID: ' + goal.goalId + ' • Actions: ' + goal.totalActions + '/' + goal.constraints.maxActions + ' • Steps: ' + (goal.steps?.length ?? 0) + '</div>';
+  if (goal.steps && goal.steps.length > 0) {
+    html += '<div style="margin-top:6px;max-height:150px;overflow:auto;">';
+    for (var i = goal.steps.length - 1; i >= Math.max(0, goal.steps.length - 5); i--) {
+      var step = goal.steps[i];
+      var stepIcon = step.status === 'succeeded' ? '✅' : step.status === 'failed' ? '❌' : step.status === 'executing' ? '⏳' : '⏸';
+      html += '<div style="padding:2px 0;border-bottom:1px solid rgba(148,163,184,0.06);">' + stepIcon + ' ' + escapeHtml(step.tool) + ' <span class="muted">(' + step.durationMs + 'ms)</span></div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function updateAutonomousPill(status) {
+  var pill = document.getElementById('autonomous-status-pill');
+  if (!pill) return;
+  pill.textContent = status;
+  pill.style.color = status === 'executing' ? '#69d2ff' : status === 'paused' ? '#ffd17a' : status === 'ready' ? '#3ec46d' : '#ff6b6b';
+  pill.style.background = status === 'executing' ? 'rgba(105,210,255,0.12)' : status === 'paused' ? 'rgba(255,209,122,0.12)' : status === 'ready' ? 'rgba(62,196,109,0.15)' : 'rgba(255,107,107,0.12)';
+}
+
+export async function pollAutonomousStatus() {
+  try {
+    var data = await request('/api/v1/autonomous/status');
+    if (data.active) {
+      _activeGoalId = data.active.goalId;
+      renderActiveGoal(data.active);
+      updateAutonomousPill(data.active.status);
+    } else if (data.paused) {
+      updateAutonomousPill('paused');
+    }
+  } catch (e) { /* silent */ }
+}

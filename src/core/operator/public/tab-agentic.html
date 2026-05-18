@@ -12,6 +12,78 @@
     </div>
   </section>
 
+  <section class="rail-section panel" style="grid-column:1/-1;border:1px solid var(--warn,#f0ad4e);border-radius:8px;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('aabLedger')"
+      data-tip-id="agentic:aab-ledger" data-tip-kind="agentic">
+      <h3>📋 AAB Ledger — Autonomous Behavior Monitor</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="aab-ledger-badge" class="muted" style="font-size:11px;">0 entries</span>
+        <button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); refreshAABLedger()">🔄</button>
+        <span id="aabLedger-collapse-icon" class="collapse-icon">▼</span>
+      </div>
+    </div>
+    <div id="aabLedger-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;font-size:12px;">
+        The Autonomous Action &amp; Behavior (AAB) ledger tracks every autonomous intervention — pauses, rate limits,
+        terminations, and covenant violations detected during goal execution.
+      </div>
+      <div id="aab-ledger-container" style="max-height:300px;overflow-y:auto;">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;" id="aab-ledger-table">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border-subtle,#333);">
+              <th style="text-align:left;padding:4px 8px;color:var(--muted);">Time</th>
+              <th style="text-align:left;padding:4px 8px;color:var(--muted);">Goal</th>
+              <th style="text-align:left;padding:4px 8px;color:var(--muted);">Anomaly</th>
+              <th style="text-align:left;padding:4px 8px;color:var(--muted);">Intervention</th>
+              <th style="text-align:left;padding:4px 8px;color:var(--muted);">Description</th>
+            </tr>
+          </thead>
+          <tbody id="aab-ledger-body">
+            <tr><td colspan="5" class="muted" style="text-align:center;padding:16px;">No AAB entries yet. The ledger populates when autonomous goals are executed.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="rail-section panel" style="grid-column:1/-1;border:1px solid var(--accent);border-radius:8px;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('autonomousGoals')"
+      data-tip-id="agentic:autonomous-goals" data-tip-kind="agentic">
+      <h3>🎯 Autonomous Goals</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="autonomous-goals-badge" class="muted" style="font-size:11px;">No active goal</span>
+        <button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); refreshAutonomousGoals()">🔄</button>
+        <span id="autonomousGoals-collapse-icon" class="collapse-icon">▼</span>
+      </div>
+    </div>
+    <div id="autonomousGoals-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;font-size:12px;">
+        Submit and monitor autonomous goal execution. Goals are executed by the ReAct planner with LLM reasoning.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+        <input id="autonomous-goal-objective" type="text" placeholder="e.g. Summarize the latest activity events"
+          style="flex:1;min-width:200px;font-size:13px;"
+          onkeydown="if(event.key==='Enter')submitAutonomousGoal()" />
+        <button class="primary-button" onclick="submitAutonomousGoal()" style="font-size:12px;">🚀 Submit Goal</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="auto-goal-allow-browser" /> Browser Use
+        </label>
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="auto-goal-allow-computer" /> Computer Use
+        </label>
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          Max Actions: <input type="number" id="auto-goal-max-actions" value="50" min="1" max="200"
+            style="width:60px;font-size:11px;" />
+        </label>
+      </div>
+      <div id="autonomous-goals-list" class="stack">
+        <div class="muted" style="text-align:center;padding:16px;">No goals submitted yet.</div>
+      </div>
+    </div>
+  </section>
+
   <section class="rail-section panel" style="grid-column:1/-1;">
     <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('agentMgmt')"
       data-tip-id="agentic:agent-list" data-tip-kind="agentic">

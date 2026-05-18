@@ -1,0 +1,185 @@
+/* ── Prism Demonstration Mode Overlay ────────────────────────────────────── */
+
+#prism-demo-overlay {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 10000;
+  width: 420px;
+  max-height: 80vh;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  pointer-events: auto;
+}
+
+#demo-overlay-inner {
+  background: linear-gradient(135deg, rgba(13, 17, 23, 0.97) 0%, rgba(22, 27, 34, 0.97) 100%);
+  border: 1px solid rgba(88, 166, 255, 0.25);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow:
+    0 0 40px rgba(88, 166, 255, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+#demo-minimize-btn {
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  background: var(--card-bg, #161b22);
+  border: 1px solid var(--border, #30363d);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+  cursor: pointer;
+  color: var(--muted, #8b949e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+#demo-minimize-btn:hover {
+  background: var(--border, #30363d);
+  color: var(--fg, #c9d1d9);
+}
+
+/* Header */
+#demo-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+#demo-icon { font-size: 20px; }
+#demo-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg, #c9d1d9);
+  flex: 1;
+  letter-spacing: -0.01em;
+}
+#demo-status-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Narration */
+#demo-narration {
+  font-size: 13px;
+  color: var(--fg, #c9d1d9);
+  line-height: 1.5;
+  min-height: 36px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 10px;
+}
+
+/* Progress bar */
+#demo-progress-wrap {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+#demo-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #58a6ff, #a371f7, #f778ba);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+#demo-progress-text {
+  font-size: 11px;
+  color: var(--muted, #8b949e);
+  text-align: right;
+  margin-bottom: 10px;
+}
+
+/* Controls */
+#demo-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+#demo-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+#demo-speed-slider {
+  width: 80px;
+  height: 3px;
+  accent-color: #58a6ff;
+  cursor: pointer;
+}
+
+/* Buttons */
+.demo-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg, #c9d1d9);
+}
+.demo-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.demo-btn-primary {
+  background: linear-gradient(135deg, #238636, #2ea043);
+  border-color: #2ea043;
+  color: #fff;
+}
+.demo-btn-primary:hover {
+  background: linear-gradient(135deg, #2ea043, #3fb950);
+  box-shadow: 0 0 12px rgba(46, 160, 67, 0.3);
+}
+.demo-btn-danger {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #f85149;
+}
+.demo-btn-danger:hover {
+  background: rgba(248, 81, 73, 0.25);
+}
+
+/* Prompt cards */
+#demo-prompts {
+  margin-top: 12px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+#demo-prompts label:hover {
+  background: rgba(88, 166, 255, 0.08) !important;
+  border-color: rgba(88, 166, 255, 0.3) !important;
+}
+#demo-prompts input[type=radio]:checked + * {
+  color: #58a6ff;
+}
+
+/* Animation */
+@keyframes demo-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+#demo-status-pill[style*="accent"] {
+  animation: demo-pulse 2s ease-in-out infinite;
+}

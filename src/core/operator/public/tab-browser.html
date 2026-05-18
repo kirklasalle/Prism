@@ -186,4 +186,54 @@
       </div>
     </div>
   </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Browser Auto-Pilot — Phase A2B
+       Autonomous browser goal execution via AutonomousBrowserAgent.
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <section class="rail-section panel" style="grid-column:1/-1;" data-tip-id="browser:autopilot" data-tip-kind="browser">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('browserAutopilot')">
+      <h3>🤖 Browser Auto-Pilot</h3>
+      <span id="browser-autopilot-status" class="muted"
+        style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(62,196,109,0.1);color:#3ec46d;">idle</span>
+      <span id="browserAutopilot-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="browserAutopilot-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">
+        Assign an objective and let the autonomous browser agent navigate, interact, and extract information.
+        Uses accessibility-first perception for cost efficiency.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+        <select id="browser-autopilot-session"
+          style="padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;min-width:180px;">
+          <option value="">Select session…</option>
+        </select>
+        <input id="browser-autopilot-objective" type="text" placeholder="e.g. Search for 'Prism AI' and extract top 3 results"
+          style="flex:1;min-width:200px;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"
+          onkeydown="if(event.key==='Enter')submitBrowserAutopilot()" />
+        <button class="primary-button" onclick="submitBrowserAutopilot()" style="font-size:12px;">🚀 Go</button>
+        <button class="secondary-button" onclick="stopBrowserAutopilot()" style="font-size:12px;">⏹ Stop</button>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:10px;align-items:center;">
+        <label class="muted" style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          Perception:
+          <select id="browser-autopilot-perception"
+            style="font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+            <option value="accessibility">Accessibility tree (fast)</option>
+            <option value="screenshot">Screenshot (visual)</option>
+            <option value="hybrid">Hybrid (both)</option>
+          </select>
+        </label>
+        <label class="muted" style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          Max actions:
+          <input id="browser-autopilot-max" type="number" value="20" min="1" max="100"
+            style="width:50px;font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text);border:1px solid var(--border);border-radius:4px;" />
+        </label>
+      </div>
+      <div id="browser-autopilot-actions"
+        style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.2);padding:8px;font-size:12px;">
+        <span class="muted">No auto-pilot actions yet. Assign an objective to start.</span>
+      </div>
+    </div>
+  </section>
 </div>

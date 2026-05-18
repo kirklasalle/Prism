@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>PTAC Operator Demo — Walkthrough</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 32px;
+            max-width: 900px;
+            margin: 0 auto;
+            font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.55;
+            color: #e6edf3;
+            background: #0d1117;
+        }
+
+        h1 {
+            margin-top: 0;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 12px;
+        }
+
+        h2 {
+            margin-top: 32px;
+            color: #8b949e;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        code,
+        pre {
+            background: #161b22;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: "Cascadia Code", Consolas, monospace;
+            font-size: 13px;
+        }
+
+        pre {
+            padding: 12px;
+            overflow-x: auto;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+            font-size: 13px;
+        }
+
+        th,
+        td {
+            border: 1px solid #30363d;
+            padding: 8px 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #161b22;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            background: #1f6feb33;
+            color: #79c0ff;
+        }
+
+        a {
+            color: #58a6ff;
+        }
+
+        .gate {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 8px;
+            background: #161b22;
+            border-radius: 4px;
+            margin: 4px 0;
+        }
+
+        .ok {
+            color: #2da44e;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🎬 PTAC Operator Demo</h1>
+    <p><span class="pill">v0.20.1</span> One-click, end-to-end self-driven recording of the PRISM dashboard.</p>
+
+    <h2>What it is</h2>
+    <p>PRISM drives its own dashboard — chat, approval queue, computer-use, browser, real PTY, real Docker — capturing
+        every step as evidence and rendering the result as a portable, browser-playable HTML slideshow.</p>
+
+    <h2>Three gates</h2>
+    <p>The demo is triple-gated. All three must be set to <code>1</code> before the button activates:</p>
+    <div class="gate"><span class="ok">①</span> <code>PRISM_PTAC_OPERATOR_DEMO=1</code> — admin opt-in (the panel
+        itself).</div>
+    <div class="gate"><span class="ok">②</span> <code>PRISM_PTAC_SAFE=1</code> — host-prepared confirmation (per
+        session).</div>
+    <div class="gate"><span class="ok">③</span> <code>PRISM_PTAC_RECORD_VIDEO=1</code> — recording opt-in (per session).
+    </div>
+
+    <h2>Quick start</h2>
+    <pre>$env:PRISM_PTAC_OPERATOR_DEMO = "1"
+$env:PRISM_PTAC_SAFE = "1"
+$env:PRISM_PTAC_RECORD_VIDEO = "1"
+.\start_web.bat</pre>
+    <ol>
+        <li>Open the dashboard, go to <strong>Computer Control</strong>.</li>
+        <li>Scroll to <strong>🎬 PTAC Operator Demo</strong>. The status pill should read <em>ready</em>.</li>
+        <li>Pick a suite: <strong>demo</strong> (curated), <strong>fast</strong> (~2 min), or <strong>full</strong> (~10
+            min).</li>
+        <li>Click <strong>▶ Start Recorded Run</strong>. The runs list polls for new output every 5 seconds.</li>
+        <li>When your run appears, click <strong>▶ Slideshow</strong> to replay it inline.</li>
+    </ol>
+
+    <h2>What you get</h2>
+    <table>
+        <tr>
+            <th>File</th>
+            <th>What it is</th>
+        </tr>
+        <tr>
+            <td><code>video.html</code></td>
+            <td>Self-contained slideshow with play / pause / prev / next / restart. Inlines all frame metadata; loads
+                PNGs relatively so the run folder is portable.</td>
+        </tr>
+        <tr>
+            <td><code>video-manifest.json</code></td>
+            <td><code>{ runId, fps, frameCount, durationSec, frames[] }</code></td>
+        </tr>
+        <tr>
+            <td><code>report.html</code></td>
+            <td>Full PTAC HTML report with per-step evidence.</td>
+        </tr>
+        <tr>
+            <td><code>summary.json</code></td>
+            <td>Run-level result tree.</td>
+        </tr>
+        <tr>
+            <td><code>steps.jsonl</code> / <code>events.jsonl</code></td>
+            <td>Per-step + per-event JSON-Lines logs.</td>
+        </tr>
+        <tr>
+            <td><code>screenshots/</code></td>
+            <td>One PNG per recorded frame, content-addressed by SHA-256 prefix.</td>
+        </tr>
+        <tr>
+            <td><code>transcript.json</code> / <code>transcript.txt</code></td>
+            <td>Deterministic narration (when <code>--demo-recording</code>).</td>
+        </tr>
+    </table>
+
+    <h2>Why slideshow and not MP4?</h2>
+    <p>Encoding video would require ffmpeg or a wasm encoder — both violate PRISM's zero-new-runtime-deps invariant. The
+        slideshow is a single static HTML page; any screen recorder pointed at it will produce a true MP4 if needed
+        downstream.</p>
+
+    <h2>CLI alternative</h2>
+    <pre>PRISM_PTAC_SAFE=1 PRISM_PTAC_RECORD_VIDEO=1 \
+  node dist/src/ptac/cli.js \
+    --profile=sandbox \
+    --suite=demo \
+    --demo-recording \
+    --record-video \
+    --record-video-fps=2</pre>
+
+    <h2>Endpoints</h2>
+    <table>
+        <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>GET</td>
+            <td><code>/api/ptac/demo/feature-flags</code></td>
+            <td>Gate state. Always 200.</td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td><code>/api/ptac/demo/run</code></td>
+            <td>Spawn recorded run. <code>202</code> on success, <code>403</code> per missing gate.</td>
+        </tr>
+        <tr>
+            <td>GET</td>
+            <td><code>/api/ptac/demo/runs</code></td>
+            <td>List all runs newest-first.</td>
+        </tr>
+        <tr>
+            <td>GET</td>
+            <td><code>/api/ptac/demo/runs/:runId/video.html</code></td>
+            <td>Slideshow.</td>
+        </tr>
+        <tr>
+            <td>GET</td>
+            <td><code>/api/ptac/demo/runs/:runId/report.html</code></td>
+            <td>Report.</td>
+        </tr>
+        <tr>
+            <td>GET</td>
+            <td><code>/api/ptac/demo/runs/:runId/screenshots/:filename</code></td>
+            <td>Single PNG frame.</td>
+        </tr>
+    </table>
+
+    <h2>Full reference</h2>
+    <p>The complete walkthrough — implementation map, security posture, FAQ — lives in
+        <a href="https://github.com/kirklasalle/Prism/blob/main/docs/PTAC_OPERATOR_DEMO_GUIDE.md" target="_blank"
+            rel="noopener">docs/PTAC_OPERATOR_DEMO_GUIDE.md</a>.
+    </p>
+
+</body>
+
+</html>

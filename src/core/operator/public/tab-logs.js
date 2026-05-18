@@ -174,3 +174,208 @@ export async function captureIncidentBundle() {
     dashboardLog('logs', 'incident.bundle.error', 'Bundle capture failed: ' + e.message);
   }
 }
+
+// ── Unified Telemetry Stream (Phase A3B) ──────────────────────────────────────
+
+var utBuffer = [];
+var utPaused = false;
+var UT_CAP = 2000;
+
+var SEVERITY_COLORS = {
+  trace: '#6b7280',
+  debug: '#94a3b8',
+  info: '#69d2ff',
+  warning: '#ffd17a',
+  error: '#ff7a7a',
+  critical: '#ff4d4d',
+};
+
+function utShouldShow(entry) {
+  var sevFilter = document.getElementById('ut-severity-filter');
+  var srcFilter = document.getElementById('ut-source-filter');
+  var searchEl = document.getElementById('ut-search');
+  if (sevFilter && sevFilter.value && entry.severity !== sevFilter.value) return false;
+  if (srcFilter && srcFilter.value && entry.source !== srcFilter.value) return false;
+  if (searchEl && searchEl.value) {
+    var q = searchEl.value.toLowerCase();
+    var haystack = (entry.operation + ' ' + entry.summary + ' ' + (entry.source || '')).toLowerCase();
+    if (haystack.indexOf(q) === -1) return false;
+  }
+  return true;
+}
+
+function renderUtEntries() {
+  if (utPaused) return;
+  var body = document.getElementById('unified-telemetry-body');
+  if (!body) return;
+  var visible = utBuffer.filter(utShouldShow);
+  var showAi = document.getElementById('ut-ai-context');
+  var showContext = showAi ? showAi.checked : false;
+  if (visible.length === 0) {
+    body.innerHTML = '<div class="muted" style="font-size:12px;">(no entries match filters)</div>';
+    return;
+  }
+  // Show last 200 for performance
+  var slice = visible.slice(-200);
+  body.innerHTML = slice.map(function (e) {
+    var color = SEVERITY_COLORS[e.severity] || '#94a3b8';
+    var ts = (e.timestamp || '').slice(11, 23);
+    var sevBadge = '<span style="color:' + color + ';font-weight:600;">' + escapeHtml(e.severity || 'info') + '</span>';
+    var src = '<span class="muted">[' + escapeHtml(e.source || '?') + ']</span>';
+    var op = escapeHtml(e.operation || '');
+    var summary = escapeHtml(e.summary || '');
+    var aiLine = '';
+    if (showContext && e.aiContext && e.aiContext.actionable) {
+      aiLine = '<div style="margin-left:16px;color:#a78bfa;font-size:10px;">⚡ ' + escapeHtml(e.aiContext.suggestedAction || 'actionable') + '</div>';
+    }
+    return '<div style="border-bottom:1px solid rgba(148,163,184,0.06);padding:1px 0;">'
+      + '<span class="muted" style="font-size:10px;">' + escapeHtml(ts) + '</span> '
+      + sevBadge + ' ' + src + ' '
+      + '<span style="font-weight:500;">' + op + '</span> '
+      + '<span class="muted">' + summary + '</span>'
+      + aiLine
+      + '</div>';
+  }).join('');
+  var autoScroll = document.getElementById('ut-autoscroll');
+  if (autoScroll && autoScroll.checked) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function pushUtEntry(entry) {
+  utBuffer.push(entry);
+  if (utBuffer.length > UT_CAP) utBuffer.splice(0, utBuffer.length - UT_CAP);
+  renderUtEntries();
+}
+
+export function clearUnifiedTelemetry() {
+  utBuffer.length = 0;
+  renderUtEntries();
+}
+
+function renderUtStats(stats) {
+  var container = document.getElementById('unified-telemetry-stats');
+  if (!container || !stats) return;
+  var items = [
+    { label: 'Total', value: stats.totalIngested || 0, color: '#69d2ff' },
+    { label: 'Errors', value: stats.bySeverity?.error || 0, color: '#ff7a7a' },
+    { label: 'Warnings', value: stats.bySeverity?.warning || 0, color: '#ffd17a' },
+    { label: 'Buffer', value: stats.bufferSize + '/' + stats.bufferCapacity, color: '#94a3b8' },
+  ];
+  container.innerHTML = items.map(function (i) {
+    return '<span style="padding:3px 8px;border-radius:4px;background:rgba(255,255,255,0.04);">'
+      + '<span class="muted">' + i.label + ':</span> '
+      + '<span style="color:' + i.color + ';font-weight:600;">' + i.value + '</span></span>';
+  }).join('');
+}
+
+export async function hydrateUnifiedTelemetry() {
+  try {
+    var data = await request('/api/v1/telemetry/unified?limit=200');
+    if (data.entries && Array.isArray(data.entries)) {
+      for (var i = 0; i < data.entries.length; i++) {
+        utBuffer.push(data.entries[i]);
+      }
+    }
+    if (data.stats) renderUtStats(data.stats);
+    renderUtEntries();
+  } catch (e) {
+    var body = document.getElementById('unified-telemetry-body');
+    if (body) body.innerHTML = '<div class="muted" style="font-size:12px;color:#ff9a85;">Error loading telemetry: ' + escapeHtml(String(e)) + '</div>';
+  }
+}
+
+export function handleTelemetryWsMessage(data) {
+  if (data.type === 'telemetry' && data.entry) {
+    pushUtEntry(data.entry);
+  }
+}
+
+// Wire filters
+if (typeof document !== 'undefined') {
+  setTimeout(function () {
+    var sevFilter = document.getElementById('ut-severity-filter');
+    var srcFilter = document.getElementById('ut-source-filter');
+    var searchEl = document.getElementById('ut-search');
+    var pauseBtn = document.getElementById('ut-pause');
+    if (sevFilter) sevFilter.addEventListener('change', renderUtEntries);
+    if (srcFilter) srcFilter.addEventListener('change', renderUtEntries);
+    if (searchEl) searchEl.addEventListener('input', renderUtEntries);
+    if (pauseBtn) {
+      pauseBtn.addEventListener('click', function () {
+        utPaused = !utPaused;
+        pauseBtn.textContent = utPaused ? 'Resume' : 'Pause';
+        var statusEl = document.getElementById('unified-telemetry-status');
+        if (statusEl) {
+          statusEl.textContent = utPaused ? 'paused' : 'live';
+          statusEl.style.color = utPaused ? '#ffd17a' : '#69d2ff';
+        }
+        if (!utPaused) renderUtEntries();
+      });
+    }
+  }, 100);
+}
+
+// ── Operator Identity & Tab Sessions (Phase A1) ───────────────────────────────
+
+export async function refreshIdentityPanel() {
+  try {
+    var data = await request('/api/v1/identity');
+    var panel = document.getElementById('identity-panel');
+    if (!panel) return;
+    var op = data.operator;
+    var ag = data.agent;
+    if (!op && !ag) {
+      panel.innerHTML = '<div class="muted">No identity configured.</div>';
+      return;
+    }
+    var html = '';
+    if (op) {
+      html += '<div class="panel" style="padding:10px;"><div class="muted" style="font-size:11px;">Operator</div>';
+      html += '<div style="font-size:13px;font-weight:600;">' + escapeHtml(op.displayName || op.operatorId || '—') + '</div>';
+      html += '<div class="muted" style="font-size:11px;">' + escapeHtml(op.email || '') + '</div>';
+      html += '<div class="muted" style="font-size:10px;margin-top:4px;">CAC: ' + escapeHtml(op.cacMode || 'unknown') + '</div>';
+      html += '</div>';
+    }
+    if (ag) {
+      html += '<div class="panel" style="padding:10px;"><div class="muted" style="font-size:11px;">Agent</div>';
+      html += '<div style="font-size:13px;font-weight:600;">' + escapeHtml(ag.agentId || '—') + '</div>';
+      html += '<div class="muted" style="font-size:11px;">' + escapeHtml(ag.role || '') + '</div>';
+      html += '</div>';
+    }
+    panel.innerHTML = html;
+  } catch (e) {
+    var panel2 = document.getElementById('identity-panel');
+    if (panel2) panel2.innerHTML = '<div class="muted">Identity load failed.</div>';
+  }
+}
+
+export async function refreshTabSessions() {
+  try {
+    var data = await request('/api/v1/sessions/tabs');
+    var panel = document.getElementById('tab-sessions-panel');
+    if (!panel) return;
+    var sessions = data.sessions || [];
+    if (sessions.length === 0) {
+      panel.innerHTML = '<div class="muted">No tab sessions active.</div>';
+      return;
+    }
+    var html = '<table class="events-table"><thead><tr><th>Tab</th><th>Session</th><th>Events</th><th>Status</th><th>Last Activity</th></tr></thead><tbody>';
+    for (var i = 0; i < sessions.length; i++) {
+      var s = sessions[i];
+      var statusColor = s.status === 'active' ? '#3ec46d' : s.status === 'idle' ? '#ffd17a' : '#ff7a7a';
+      html += '<tr>';
+      html += '<td>' + escapeHtml(s.tabId) + '</td>';
+      html += '<td class="mono" style="font-size:10px;">' + escapeHtml((s.sessionId || '').slice(0, 12)) + '</td>';
+      html += '<td>' + (s.eventCount || 0) + '</td>';
+      html += '<td><span style="color:' + statusColor + ';">' + escapeHtml(s.status || 'unknown') + '</span></td>';
+      html += '<td class="muted" style="font-size:11px;">' + escapeHtml(formatRelativeTime(s.lastActivity)) + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    panel.innerHTML = html;
+  } catch (e) {
+    var panel2 = document.getElementById('tab-sessions-panel');
+    if (panel2) panel2.innerHTML = '<div class="muted">Tab sessions unavailable.</div>';
+  }
+}
