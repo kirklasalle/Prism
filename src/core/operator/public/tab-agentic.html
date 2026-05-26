@@ -12,6 +12,26 @@
     </div>
   </section>
 
+  <section class="rail-section panel" style="grid-column:1/-1;border:1px solid #8b5cf6;border-radius:8px;background:linear-gradient(135deg,rgba(139,92,246,0.05),rgba(59,130,246,0.02));">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('cshHandoff')"
+      data-tip-id="agentic:csh-handoff" data-tip-kind="agentic">
+      <h3>🤝 Cognitive Session Handoff (CSH) "Baton Pass"</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="csh-handoff-badge" class="muted" style="font-size:11px;">0 pending</span>
+        <button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); refreshCshHandoffs()">🔄</button>
+        <span id="cshHandoff-collapse-icon" class="collapse-icon">▼</span>
+      </div>
+    </div>
+    <div id="cshHandoff-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;font-size:12px;">
+        When an agent encounters CAPTCHAs, MFA, or safety suspensions, it requests a "Baton Pass" human-in-the-loop handoff. Take manual control, solve the roadblock, and hand control back to the autonomous planner.
+      </div>
+      <div id="csh-handoff-container" class="stack">
+        <div class="muted" style="text-align:center;padding:16px;">No pending handoffs. Ready for autonomous triggers.</div>
+      </div>
+    </div>
+  </section>
+
   <section class="rail-section panel" style="grid-column:1/-1;border:1px solid var(--warn,#f0ad4e);border-radius:8px;">
     <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('aabLedger')"
       data-tip-id="agentic:aab-ledger" data-tip-kind="agentic">

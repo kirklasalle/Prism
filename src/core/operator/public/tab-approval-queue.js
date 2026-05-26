@@ -64,7 +64,12 @@
         var counter = document.getElementById('approval-queue-count');
         if (!list) return;
         try {
-            var res = await fetch('/api/approval/pending', { credentials: 'same-origin' });
+            var meta = document.querySelector('meta[name="prism-auth-token"]');
+            var token = meta ? meta.getAttribute('content') || '' : '';
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            var res = await fetch('/api/approval/pending', { credentials: 'same-origin', headers: headers });
             if (!res.ok) {
                 list.innerHTML = '<div class="muted" style="font-size:12px;color:#a33;">HTTP ' + res.status + '</div>';
                 if (counter) counter.textContent = '(error)';
@@ -87,10 +92,15 @@
     async function decide(id, decision) {
         setMessage('Submitting ' + decision + '…');
         try {
+            var meta = document.querySelector('meta[name="prism-auth-token"]');
+            var token = meta ? meta.getAttribute('content') || '' : '';
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
             var res = await fetch('/api/approval/' + encodeURIComponent(id) + '/' + decision, {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: '{}',
             });
             if (!res.ok) {

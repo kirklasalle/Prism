@@ -6,43 +6,42 @@ import type { ActivityBus } from "../../core/activity/bus.js";
 
 const BROWSER_GOVERNANCE: GovernanceSchema = {
   actions: {
-    launch_session:        { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
-    close_session:         { minimumRisk: "low",    mutating: true,  rollbackRequired: false },
-    navigate:              { minimumRisk: "medium", mutating: false, rollbackRequired: false },
-    click:                 { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
-    type:                  { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
-    screenshot:            { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    evaluate:              { minimumRisk: "high",   mutating: true,  rollbackRequired: true  },
-    get_console_logs:      { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    get_network_log:       { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    get_dom_snapshot:      { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    list_sessions:         { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    diagnostics:           { minimumRisk: "low",    mutating: false, rollbackRequired: false },
+    launch_session: { minimumRisk: "medium", mutating: true, rollbackRequired: false },
+    close_session: { minimumRisk: "low", mutating: true, rollbackRequired: false },
+    navigate: { minimumRisk: "medium", mutating: false, rollbackRequired: false },
+    click: { minimumRisk: "medium", mutating: true, rollbackRequired: false },
+    type: { minimumRisk: "medium", mutating: true, rollbackRequired: false },
+    screenshot: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    evaluate: { minimumRisk: "high", mutating: true, rollbackRequired: true },
+    get_console_logs: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    get_network_log: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    get_dom_snapshot: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    list_sessions: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    diagnostics: { minimumRisk: "low", mutating: false, rollbackRequired: false },
     // Navigation helpers (medium-risk)
-    go_back:               { minimumRisk: "medium", mutating: false, rollbackRequired: false },
-    go_forward:            { minimumRisk: "medium", mutating: false, rollbackRequired: false },
-    reload:                { minimumRisk: "medium", mutating: false, rollbackRequired: false },
+    go_back: { minimumRisk: "medium", mutating: false, rollbackRequired: false },
+    go_forward: { minimumRisk: "medium", mutating: false, rollbackRequired: false },
+    reload: { minimumRisk: "medium", mutating: false, rollbackRequired: false },
     // Interaction helpers (medium-risk)
-    hover:                 { minimumRisk: "medium", mutating: false, rollbackRequired: false },
-    select_option:         { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
-    scroll:                { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    wait_for_selector:     { minimumRisk: "low",    mutating: false, rollbackRequired: false },
+    hover: { minimumRisk: "medium", mutating: false, rollbackRequired: false },
+    select_option: { minimumRisk: "medium", mutating: true, rollbackRequired: false }, drag_and_drop: { minimumRisk: "medium", mutating: true, rollbackRequired: false }, scroll: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    wait_for_selector: { minimumRisk: "low", mutating: false, rollbackRequired: false },
     // Page info extraction (low-risk)
-    get_page_info:         { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    get_text_content:      { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    get_links:             { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    get_accessibility_tree:{ minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    screenshot_full_page:  { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    save_pdf:              { minimumRisk: "low",    mutating: false, rollbackRequired: false },
+    get_page_info: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    get_text_content: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    get_links: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    get_accessibility_tree: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    screenshot_full_page: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    save_pdf: { minimumRisk: "low", mutating: false, rollbackRequired: false },
     // Cookie management (medium-risk)
-    get_cookies:           { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    set_cookie:            { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
-    clear_cookies:         { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
+    get_cookies: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    set_cookie: { minimumRisk: "medium", mutating: true, rollbackRequired: false },
+    clear_cookies: { minimumRisk: "medium", mutating: true, rollbackRequired: false },
     // Profile management (medium-risk)
-    list_profiles:         { minimumRisk: "low",    mutating: false, rollbackRequired: false },
-    create_profile:        { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
-    delete_profile:        { minimumRisk: "medium", mutating: true,  rollbackRequired: false },
-    get_profile:           { minimumRisk: "low",    mutating: false, rollbackRequired: false },
+    list_profiles: { minimumRisk: "low", mutating: false, rollbackRequired: false },
+    create_profile: { minimumRisk: "medium", mutating: true, rollbackRequired: false },
+    delete_profile: { minimumRisk: "medium", mutating: true, rollbackRequired: false },
+    get_profile: { minimumRisk: "low", mutating: false, rollbackRequired: false },
   },
 };
 
@@ -52,31 +51,34 @@ export class BrowserControlTool implements Tool {
   readonly contract: ToolContract = {
     version: "2.0.0",
     args: {
-      action:    { type: "string",  required: true, enum: [
-        "launch_session", "close_session", "navigate", "click", "type",
-        "screenshot", "evaluate", "get_console_logs", "get_network_log",
-        "get_dom_snapshot", "list_sessions", "diagnostics",
-        "go_back", "go_forward", "reload",
-        "hover", "select_option", "scroll", "wait_for_selector",
-        "get_page_info", "get_text_content", "get_links",
-        "get_accessibility_tree", "screenshot_full_page", "save_pdf",
-        "get_cookies", "set_cookie", "clear_cookies",
-        "list_profiles", "create_profile", "delete_profile", "get_profile",
-      ] },
-      sessionId:  { type: "string" },
-      url:        { type: "string" },
-      selector:   { type: "string" },
-      text:       { type: "string" },
+      action: {
+        type: "string", required: true, enum: [
+          "launch_session", "close_session", "navigate", "click", "type",
+          "screenshot", "evaluate", "get_console_logs", "get_network_log",
+          "get_dom_snapshot", "list_sessions", "diagnostics",
+          "go_back", "go_forward", "reload",
+          "hover", "select_option", "drag_and_drop", "scroll", "wait_for_selector",
+          "get_page_info", "get_text_content", "get_links",
+          "get_accessibility_tree", "screenshot_full_page", "save_pdf",
+          "get_cookies", "set_cookie", "clear_cookies",
+          "list_profiles", "create_profile", "delete_profile", "get_profile",
+        ]
+      },
+      sessionId: { type: "string" },
+      url: { type: "string" },
+      selector: { type: "string" },
+      selector_to: { type: "string" },
+      text: { type: "string" },
       expression: { type: "string" },
-      headless:   { type: "boolean" },
-      profileId:  { type: "string" },
-      values:     { type: "string" },
-      x:          { type: "number" },
-      y:          { type: "number" },
-      timeout:    { type: "number" },
-      email:      { type: "string" },
-      segment:    { type: "string" },
-      cookie:     { type: "string" },
+      headless: { type: "boolean" },
+      profileId: { type: "string" },
+      values: { type: "string" },
+      x: { type: "number" },
+      y: { type: "number" },
+      timeout: { type: "number" },
+      email: { type: "string" },
+      segment: { type: "string" },
+      cookie: { type: "string" },
     },
   };
 
@@ -185,7 +187,7 @@ export class BrowserControlTool implements Tool {
           const buf = await this.manager.screenshot(sessionId);
           return {
             ok: true,
-            output: { sessionId, sizeBytes: buf.length, format: "png" },
+            output: { sessionId, sizeBytes: buf.length, format: "png", base64: buf.toString("base64") },
             sideEffects: [{ type: "file", description: "Screenshot captured", mutating: false, reversible: true }],
           };
         }
@@ -245,6 +247,14 @@ export class BrowserControlTool implements Tool {
           await this.manager.hover(sessionId, sel);
           return { ok: true, output: { sessionId, hovered: sel } };
         }
+        case "drag_and_drop": {
+          if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
+          const from = String(request.args.selector ?? "");
+          const to = String(request.args.selector_to ?? "");
+          if (!from || !to) return { ok: false, output: { error: "selector and selector_to are required." } };
+          await this.manager.dragAndDrop(sessionId, from, to);
+          return { ok: true, output: { sessionId, dragged: from, droppedOn: to } };
+        }
         case "select_option": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
           const sel = String(request.args.selector ?? "");
@@ -294,7 +304,7 @@ export class BrowserControlTool implements Tool {
         case "screenshot_full_page": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
           const buf = await this.manager.screenshotFullPage(sessionId);
-          return { ok: true, output: { sessionId, sizeBytes: buf.length, format: "png", fullPage: true } };
+          return { ok: true, output: { sessionId, sizeBytes: buf.length, format: "png", fullPage: true, base64: buf.toString("base64") } };
         }
         case "save_pdf": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };

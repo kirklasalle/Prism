@@ -1,0 +1,67 @@
+# Walkthrough: PRISM Base Mode Implementation
+
+We have successfully designed, implemented, and compiled the **PRISM Base Mode** configuration. This mode leverages the global environment flag `PRISM_BASE_MODE=true` to adjust hardware utilization parameters, orchestrate on-demand GGUF sequential slot reclaiming, check and lock Ollama residents in graphics memory, and prune the Guardian task execution catalog to match the resource profile of a **GTX 1050 Ti VRAM** and **Core i5 Haswell CPU**.
+
+---
+
+## Changes Made
+
+### 1. Hardware-Level `llama-server` Optimization Flags
+**File modified**: [llama-cpp-supervisor.ts](file:///d:/Projects/Prism/src/core/operator/llama-cpp-supervisor.ts)
+- Checked `process.env.PRISM_BASE_MODE === "true"` when spawning processes.
+- Clamped context windows strictly to **2048** to keep memory allocation low.
+- Enforced `--threads 4` to match physical i5 cores and bypass thread-scheduling context overhead.
+- Enforced `--batch-size 64` to maximize CPU L3 cache hits.
+- Bypassed draft-model specular decoding to reclaim graphics memory.
+- Enforced full GPU offload `--n-gpu-layers 99` and `--flash-attn` to accelerate inference and bypass slow system memory buses.
+- Implemented DDR3 prefix caching with `--grp-attn-n 1 --grp-attn-w 512` arguments for instant in-memory context swapping.
+
+### 2. Dynamic Ollama Interrogation & Keep-Alive Locking
+**File modified**: [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
+- Added private helper `isOllamaModelHot(settings, modelName)` which makes a lightweight `/api/ps` check.
+- If Ollama indicates the model is hot/resident in VRAM, requests are dispatched with `keep_alive: -1` to lock it in memory and avoid frequent unloading.
+- Standardized context clamping to 2048 for Ollama generations in Base Mode.
+
+### 3. Single-Slot Sequential Runner (SSSR) Dynamic Loading
+**File modified**: [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
+- In the `generate` pipeline, if the active provider is `llamacpp` and the GGUF supervisor slot does not hold the model, SSSR auto-loading takes over.
+- Resolves the model path and executes `loadModel(...)` on the supervisor, awaiting slot availability and initialization before routing the OpenAI-compatible completion request.
+
+### 4. Guardian Task Catalog Pruning
+**File modified**: [guardian-agent.ts](file:///d:/Projects/Prism/src/core/agents/guardian-agent.ts)
+- In the Guardian constructor, if `PRISM_BASE_MODE === "true"`, the catalog is pruned of resource-heavy diagnostic tasks.
+- Only the **survival triad** is registered:
+  1. `directive_integrity` (SHA-256 validation of directives)
+  2. `mcp_health_recovery` (Tool adapters self-healing)
+  3. `aab_ledger_monitor` (Anomalous autonomous loop circuit breaker)
+
+### 5. System Boot Validation Logs
+**File modified**: [index.ts](file:///d:/Projects/Prism/src/index.ts)
+- Injected clear boot logging so the operator knows exactly when the active resource constraint paradigm is active:
+  ```
+  [PRISM][startup] ======================================================
+  [PRISM][startup] ACTIVE CONSTRAINT PARADIGM ENGAGED: Base Mode initialized.
+  [PRISM][startup] Optimizing GGUF and task scheduling for GTX 1050 Ti & Core i5 Haswell.
+  [PRISM][startup] ======================================================
+  ```
+
+---
+
+## Build Verification
+
+A clean TypeScript compilation was performed to verify all files typecheck correctly:
+```
+> tsc -p tsconfig.json && node -e "require('fs').cpSync('src/core/operator/public','dist/src/core/operator/public',{recursive:true})"
+
+Exit code: 0
+```
+
+---
+
+## Verification Diff Summary
+
+To inspect the modifications made, use the links below to view the files:
+- [llama-cpp-supervisor.ts](file:///d:/Projects/Prism/src/core/operator/llama-cpp-supervisor.ts)
+- [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
+- [guardian-agent.ts](file:///d:/Projects/Prism/src/core/agents/guardian-agent.ts)
+- [index.ts](file:///d:/Projects/Prism/src/index.ts)

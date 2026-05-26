@@ -56,6 +56,8 @@ export const state = {
   pending: [],
   actionHistory: [],
   toolCallLog: [],
+  logEntries: [],
+  activeTab: 'logs',
 };
 export function request(url, opts) { return Promise.resolve({}); }
 export function escapeHtml(str) {
@@ -69,6 +71,8 @@ export function statusBadge(action) {
   if (!action || !action.status) return '';
   return '<span class="badge">' + action.status + '</span>';
 }
+export function safeRenderStep(step, fn) { fn(); }
+export function renderLogsPanel() {}
 `;
 
 /* ──── Module types ──────────────────────────────────────────────────────────────────────── */

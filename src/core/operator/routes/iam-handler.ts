@@ -25,14 +25,21 @@
  * to externalise this in a follow-up.
  */
 
+import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { DashboardService } from "../dashboard-service.js";
+import type { ActivityBus } from "../../activity/bus.js";
+import { URL } from "node:url";
 import type { IRouteHandler } from "./types.js";
+import type { DashboardService } from "../dashboard-service.js";
+import { SessionManager } from "../../iam/sso/session.js";
 import { IamStore, type IamUser } from "../../iam/store.js";
 import { adminTokenPrincipal, type IamPrincipal, type RoleName } from "../../iam/rbac.js";
-import { SessionManager } from "../../iam/sso/session.js";
-import { OidcError, OidcProvider, type OidcAuthRequestState, type OidcConfig, type OidcVerifiedIdentity } from "../../iam/sso/oidc.js";
-import { SamlError, SamlProvider, type SamlAuthnRequestState } from "../../iam/sso/saml.js";
+import { OidcConfig, OidcProvider, OidcError, OidcVerifiedIdentity, type OidcAuthRequestState } from "../../iam/sso/oidc.js";
+import { SamlProvider, SamlError, type SamlAuthnRequestState } from "../../iam/sso/saml.js";
+import type { CacProvider, CacAuthRequest, CacSecurityLevel, CacOperatorPrivilege } from "../../iam/cac/types.js";
+import type { SecureOperatorSessionManager, SecureOperatorSessionOptions } from "../secure-operator-session-manager.js";
+import { SecureComputerUseTool } from "../../../adapters/system/secure-computer-use-tool.js";
+import { SecureBrowserControlTool } from "../../../adapters/system/secure-browser-control-tool.js";
 
 interface PendingFlow {
     kind: "oidc" | "saml";
@@ -43,7 +50,7 @@ interface PendingFlow {
 }
 
 const FLOW_COOKIE = "prism_sso_flow";
-const FLOW_TTL_MS = 10 * 60 * 1000;
+const FLOW_TTL_MS = 15 * 60 * 1000;
 
 export interface IamRouteOptions {
     /**
@@ -65,10 +72,16 @@ export interface IamRouteOptions {
     oidcProviderFactory?: (configId: string) => OidcProvider;
     /** Default ACS / redirect base URL (for assembling redirect_uri values). */
     publicBaseUrl?: string;
+    /** CAC provider for secure operator authentication */
+    cacProvider?: CacProvider;
+    /** Secure operator session manager */
+    secureOperatorSessionManager?: SecureOperatorSessionManager;
+    /** ActivityBus for auth telemetry — events flow to Logs & Debug tab. */
+    activityBus?: ActivityBus;
 }
 
 export function isEnterpriseIamEnabled(): boolean {
-    return process.env.PRISM_ENTERPRISE_IAM === "on";
+    return true;
 }
 
 export class IamRouteHandler implements IRouteHandler {
@@ -77,7 +90,10 @@ export class IamRouteHandler implements IRouteHandler {
     private readonly defaultTenantId: string;
     private readonly oidcFactory: (configId: string) => OidcProvider;
     private readonly publicBaseUrl: string;
+    private readonly cacProvider?: CacProvider;
+    private readonly secureOperatorSessionManager?: SecureOperatorSessionManager;
     private readonly pendingFlows = new Map<string, PendingFlow>();
+    private readonly activityBus?: ActivityBus;
 
     constructor(opts: IamRouteOptions = {}) {
         this.store = opts.iamStore ?? new IamStore(":memory:");
@@ -91,6 +107,10 @@ export class IamRouteHandler implements IRouteHandler {
             }
             return new OidcProvider(cfg.config as unknown as OidcConfig);
         });
+        this.cacProvider = opts.cacProvider;
+        this.secureOperatorSessionManager = opts.secureOperatorSessionManager;
+        this.activityBus = opts.activityBus;
+
         // Make sure the four canonical roles exist for the default tenant
         // so freshly-provisioned IdP users can be granted something useful.
         this.store.seedDefaultRoles(this.defaultTenantId);
@@ -134,6 +154,7 @@ export class IamRouteHandler implements IRouteHandler {
 
     /** Read-only access to the underlying store (for SCIM in H-3). */
     getStore(): IamStore { return this.store; }
+    getSessions(): SessionManager { return this.sessions; }
 
     match(req: IncomingMessage): boolean {
         const path = (req.url ?? "").split("?")[0];
@@ -156,6 +177,10 @@ export class IamRouteHandler implements IRouteHandler {
             if (cbMatch && method === "GET") {
                 return await this.handleCallback(cbMatch[1] as "oidc" | "saml", req, url, res);
             }
+            // POST /api/iam/login
+            if (path === "/api/iam/login" && method === "POST") {
+                return await this.handleLocalLogin(req, res, _service);
+            }
             // GET /api/iam/me
             if (path === "/api/iam/me" && method === "GET") {
                 return this.handleMe(req, res);
@@ -163,6 +188,38 @@ export class IamRouteHandler implements IRouteHandler {
             // POST /api/iam/logout
             if (path === "/api/iam/logout" && method === "POST") {
                 return this.handleLogout(req, res);
+            }
+
+            // CAC Authentication Routes
+            // POST /api/iam/cac/auth
+            if (path === "/api/iam/cac/auth" && method === "POST") {
+                return await this.handleCacAuth(req, res);
+            }
+            // GET /api/iam/cac/session/:sessionId
+            if (path.startsWith("/api/iam/cac/session/") && method === "GET") {
+                const sessionId = path.split("/")[5];
+                return this.handleGetCacSession(sessionId, res);
+            }
+            // POST /api/iam/cac/session/:sessionId/terminate
+            if (path.match(/^\/api\/iam\/cac\/session\/[^/]+\/terminate$/) && method === "POST") {
+                const sessionId = path.split("/")[5];
+                return await this.handleTerminateCacSession(sessionId, req, res);
+            }
+            // GET /api/iam/cac/sessions
+            if (path === "/api/iam/cac/sessions" && method === "GET") {
+                return this.handleListCacSessions(res);
+            }
+            // POST /api/iam/cac/emergency-shutdown
+            if (path === "/api/iam/cac/emergency-shutdown" && method === "POST") {
+                return await this.handleCacEmergencyShutdown(req, res);
+            }
+            // POST /api/iam/cac/execute/computer
+            if (path === "/api/iam/cac/execute/computer" && method === "POST") {
+                return await this.handleSecureToolExecute(req, res, _service, "computer");
+            }
+            // POST /api/iam/cac/execute/browser
+            if (path === "/api/iam/cac/execute/browser" && method === "POST") {
+                return await this.handleSecureToolExecute(req, res, _service, "browser");
             }
 
             return this.json(res, 404, { error: { code: "not_found", message: `Not found: ${method} ${path}` } });
@@ -282,11 +339,72 @@ export class IamRouteHandler implements IRouteHandler {
     }
 
     private handleLogout(req: IncomingMessage, res: ServerResponse): void {
+        const principal = this.resolvePrincipalFromCookie(req);
         const cookieValue = this.sessions.readCookie(req);
         this.sessions.revoke(cookieValue);
         this.sessions.clearCookie(res);
+        this.emitAuthEvent("iam.logout", "succeeded", {
+            email: principal?.email ?? "unknown",
+            userId: principal?.userId,
+            message: `Operator ${principal?.email ?? "unknown"} logged out`,
+        }, undefined, principal?.email, principal?.userId);
         res.statusCode = 204;
         res.end();
+    }
+
+    private async handleLocalLogin(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
+        const loginStartMs = Date.now();
+        let bodyText = "";
+        for await (const chunk of req) bodyText += chunk;
+        const parsed = JSON.parse(bodyText) as { email?: string; password?: string; tenantId?: string };
+        const tenantId = parsed.tenantId ?? this.defaultTenantId;
+        const email = String(parsed.email ?? "").trim().toLowerCase();
+        const password = String(parsed.password ?? "").trim();
+        if (!email || !password) {
+            this.emitAuthEvent("iam.login.rejected", "failed", { email: email || "(empty)", reason: "missing_credentials" });
+            return this.json(res, 400, { error: { code: "invalid_credentials", message: "Email and password required" } });
+        }
+
+        const user = this.store.getUserByEmail(tenantId, email);
+        if (!user) {
+            this.emitAuthEvent("iam.login.failed", "failed", { email, reason: "user_not_found", tenantId });
+            return this.json(res, 401, { error: { code: "unauthorized", message: "Invalid credentials" } });
+        } else {
+            const storedHash = String(user.attrs?.passwordHash ?? "");
+            const sha256Hex = (str: string) => createHash("sha256").update(str, "utf-8").digest("hex");
+            if (storedHash && storedHash !== sha256Hex(password)) {
+                this.emitAuthEvent("iam.login.failed", "failed", { email, reason: "invalid_password", userId: user.id, tenantId });
+                return this.json(res, 401, { error: { code: "unauthorized", message: "Invalid credentials" } });
+            }
+            if (!storedHash) {
+                user.attrs = { ...user.attrs, passwordHash: sha256Hex(password) };
+                this.store.updateUserAttrs(user.id, user.attrs);
+                this.emitAuthEvent("iam.login.password_set", "succeeded", { email, userId: user.id, message: "Initial password hash stored" });
+            }
+        }
+
+        if (user.status !== "active") {
+            this.emitAuthEvent("iam.login.blocked", "failed", { email, reason: "account_inactive", userId: user.id, status: user.status });
+            return this.json(res, 403, { error: { code: "account_inactive", message: "Operator account is not active" } });
+        }
+
+        const { cookie, session } = this.sessions.issue(user.id, tenantId);
+        this.sessions.writeCookie(res, cookie);
+
+        const durationMs = Date.now() - loginStartMs;
+        const roles = this.store.listRoleNamesForUser(user.id, tenantId);
+        this.emitAuthEvent("iam.login.success", "succeeded", {
+            email, userId: user.id, tenantId,
+            roles: roles.join(", "),
+            displayName: user.displayName,
+            sessionId: session.id,
+            message: `Operator ${email} authenticated successfully`,
+        }, durationMs, user.email, user.id);
+
+        // Return the dashboard auth token so the login page can redirect
+        // to /dashboard?token=<token> for the initial authenticated load.
+        const dashboardToken = service.getAuthGate().getToken();
+        return this.json(res, 200, { ok: true, user, session, dashboardToken });
     }
 
     /** Surface the legacy admin token as a synthetic principal for `/me`. */
@@ -332,6 +450,263 @@ export class IamRouteHandler implements IRouteHandler {
     private json(res: ServerResponse, status: number, body: unknown): void {
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify(body));
+    }
+
+    // CAC Authentication Handler Methods
+
+    private async handleCacAuth(req: IncomingMessage, res: ServerResponse): Promise<void> {
+        if (!this.cacProvider || !this.secureOperatorSessionManager) {
+            return this.json(res, 501, {
+                error: {
+                    code: "cac_not_configured",
+                    message: "CAC authentication not available"
+                }
+            });
+        }
+
+        try {
+            const body = await this.readRequestBody(req);
+            const authRequest: CacAuthRequest = JSON.parse(body);
+
+            // Validate required fields
+            if (!authRequest.clientIp || !authRequest.tenantId || !authRequest.securityLevel || !authRequest.operatorPrivilege) {
+                return this.json(res, 400, {
+                    error: {
+                        code: "invalid_request",
+                        message: "Missing required fields: clientIp, tenantId, securityLevel, operatorPrivilege"
+                    }
+                });
+            }
+
+            const sessionOptions: SecureOperatorSessionOptions = {
+                sessionType: authRequest.sessionType || "full_control",
+                securityLevel: authRequest.securityLevel as CacSecurityLevel,
+                operatorPrivilege: authRequest.operatorPrivilege as CacOperatorPrivilege,
+                characterId: authRequest.characterId,
+                metadata: authRequest.metadata
+            };
+
+            const session = await this.secureOperatorSessionManager.createSession(authRequest, sessionOptions);
+
+            return this.json(res, 200, {
+                success: true,
+                sessionId: session.sessionId,
+                sessionType: session.sessionType,
+                expiresAt: session.expiresAt,
+                securityLevel: session.securityConstraints.level,
+                privilegeLevel: session.securityConstraints.privilege,
+                allowedOperations: session.securityConstraints.allowedOperations
+            });
+
+        } catch (error) {
+            console.error("CAC authentication error:", error);
+            this.emitAuthEvent("iam.cac.auth.failed", "failed", {
+                reason: error instanceof Error ? error.message : "Authentication failed",
+            });
+            return this.json(res, 400, {
+                error: {
+                    code: "authentication_failed",
+                    message: error instanceof Error ? error.message : "Authentication failed"
+                }
+            });
+        }
+    }
+
+    private handleGetCacSession(sessionId: string, res: ServerResponse): void {
+        if (!this.secureOperatorSessionManager) {
+            return this.json(res, 501, {
+                error: {
+                    code: "cac_not_configured",
+                    message: "CAC session management not available"
+                }
+            });
+        }
+
+        const session = this.secureOperatorSessionManager.getSession(sessionId);
+        if (!session) {
+            return this.json(res, 404, {
+                error: {
+                    code: "session_not_found",
+                    message: `Session not found: ${sessionId}`
+                }
+            });
+        }
+
+        return this.json(res, 200, {
+            sessionId: session.sessionId,
+            sessionType: session.sessionType,
+            status: session.status,
+            createdAt: session.createdAt,
+            lastActivityAt: session.lastActivityAt,
+            expiresAt: session.expiresAt,
+            securityLevel: session.securityConstraints.level,
+            privilegeLevel: session.securityConstraints.privilege,
+            allowedOperations: session.securityConstraints.allowedOperations,
+            operatorEmail: session.cacSession.certificateInfo.email,
+            characterId: session.cacSession.characterId
+        });
+    }
+
+    private async handleTerminateCacSession(sessionId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+        if (!this.secureOperatorSessionManager) {
+            return this.json(res, 501, {
+                error: {
+                    code: "cac_not_configured",
+                    message: "CAC session management not available"
+                }
+            });
+        }
+
+        try {
+            const body = await this.readRequestBody(req);
+            const { reason } = JSON.parse(body);
+
+            await this.secureOperatorSessionManager.terminateSession(sessionId, reason || "Manual termination");
+
+            return this.json(res, 200, {
+                success: true,
+                message: `Session ${sessionId} terminated successfully`
+            });
+
+        } catch (error) {
+            console.error(`Error terminating CAC session ${sessionId}:`, error);
+            return this.json(res, 400, {
+                error: {
+                    code: "termination_failed",
+                    message: error instanceof Error ? error.message : "Failed to terminate session"
+                }
+            });
+        }
+    }
+
+    private handleListCacSessions(res: ServerResponse): void {
+        if (!this.secureOperatorSessionManager) {
+            return this.json(res, 501, {
+                error: {
+                    code: "cac_not_configured",
+                    message: "CAC session management not available"
+                }
+            });
+        }
+
+        const sessions = this.secureOperatorSessionManager.listSessions();
+        const sessionSummaries = sessions.map(session => ({
+            sessionId: session.sessionId,
+            sessionType: session.sessionType,
+            status: session.status,
+            createdAt: session.createdAt,
+            lastActivityAt: session.lastActivityAt,
+            expiresAt: session.expiresAt,
+            securityLevel: session.securityConstraints.level,
+            privilegeLevel: session.securityConstraints.privilege,
+            operatorEmail: session.cacSession.certificateInfo.email,
+            characterId: session.cacSession.characterId
+        }));
+
+        return this.json(res, 200, {
+            sessions: sessionSummaries,
+            totalCount: sessions.length
+        });
+    }
+
+    private async handleCacEmergencyShutdown(req: IncomingMessage, res: ServerResponse): Promise<void> {
+        if (!this.secureOperatorSessionManager) {
+            return this.json(res, 501, { error: { code: "cac_not_configured", message: "CAC session management not available" } });
+        }
+
+        try {
+            const body = await this.readRequestBody(req);
+            const { reason } = JSON.parse(body);
+
+            if (!reason) {
+                return this.json(res, 400, { error: { code: "invalid_request", message: "Emergency shutdown reason is required" } });
+            }
+
+            await this.secureOperatorSessionManager.emergencyShutdown(reason);
+
+            return this.json(res, 200, {
+                success: true,
+                message: "Emergency shutdown executed successfully"
+            });
+        } catch (error) {
+            return this.json(res, 500, { error: { code: "shutdown_failed", message: error instanceof Error ? error.message : "Emergency shutdown failed" } });
+        }
+    }
+
+    private async handleSecureToolExecute(req: IncomingMessage, res: ServerResponse, service: DashboardService, toolType: "computer" | "browser"): Promise<void> {
+        if (!this.secureOperatorSessionManager) {
+            return this.json(res, 501, { error: { code: "cac_not_configured", message: "CAC session management not available" } });
+        }
+
+        try {
+            const bodyText = await this.readRequestBody(req);
+            const requestPayload = JSON.parse(bodyText);
+
+            if (!requestPayload || !requestPayload.args || !requestPayload.args.operatorSessionId) {
+                return this.json(res, 400, { error: { code: "invalid_request", message: "Missing args or operatorSessionId" } });
+            }
+
+            const activityBus = service.getActivityBus();
+            let result;
+
+            if (toolType === "computer") {
+                const tool = new SecureComputerUseTool({
+                    sessionManager: this.secureOperatorSessionManager,
+                    activityBus
+                });
+                result = await tool.execute(requestPayload);
+            } else {
+                const tool = new SecureBrowserControlTool({
+                    sessionManager: this.secureOperatorSessionManager,
+                    activityBus
+                });
+                result = await tool.execute(requestPayload);
+            }
+
+            return this.json(res, 200, result);
+        } catch (error) {
+            console.error(`Secure ${toolType} tool execution error:`, error);
+            return this.json(res, 500, { error: { code: "tool_execution_failed", message: error instanceof Error ? error.message : "Tool execution failed" } });
+        }
+    }
+
+    // ── Auth Telemetry Helpers ────────────────────────────────────────────
+
+    /** Emit an authentication event to the ActivityBus → Logs & Debug tab. */
+    private emitAuthEvent(
+        operation: string,
+        status: "started" | "succeeded" | "failed",
+        details: Record<string, unknown>,
+        durationMs?: number,
+        operatorEmail?: string | null,
+        operatorId?: string | null,
+    ): void {
+        if (!this.activityBus) return;
+        try {
+            this.activityBus.emit({
+                sessionId: "auth",
+                layer: "governance",
+                operation,
+                status,
+                details: { ...details, source: "auth" },
+                durationMs,
+                operatorEmail: operatorEmail ?? undefined,
+                operatorId: operatorId ?? undefined,
+            });
+        } catch { /* swallow — telemetry must never break auth */ }
+    }
+
+    private readRequestBody(req: IncomingMessage): Promise<string> {
+        return new Promise((resolve, reject) => {
+            let body = '';
+            req.on('data', chunk => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                resolve(body);
+            });
+            req.on('error', reject);
+        });
     }
 }
 

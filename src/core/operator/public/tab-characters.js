@@ -221,6 +221,7 @@ export function renderCharacterRoster() {
       html += '<button class="primary-button" onclick="resumeCharacterAssignment(\'' + escapeHtml(assignment.assignmentId) + '\')" style="font-size:11px;">Resume</button>';
       html += '<button class="primary-button" onclick="revokeCharacterAssignment(\'' + escapeHtml(assignment.assignmentId) + '\')" style="font-size:11px;">Revoke</button>';
     }
+    html += '<button class="danger-button" onclick="deleteCharacterAssignment(\'' + escapeHtml(assignment.assignmentId) + '\')" style="font-size:11px;">Delete</button>';
     html += '</div>';
     html += '</div>';
     if (expanded) {
@@ -618,6 +619,24 @@ export async function revokeCharacterAssignment(assignmentId) {
   if (reason == null) return;
   await transitionAssignment('/api/workspace/character-revoke', assignmentId, reason);
 }
+
+window.deleteCharacterAssignment = async function (assignmentId) {
+  if (!confirm('Are you sure you want to permanently delete this assignment?')) return;
+  try {
+    const result = await request('/api/workspace/character-assignment-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignmentId })
+    });
+    if (result.error) {
+      alert('Delete failed: ' + result.error);
+    } else {
+      await refreshCharacterPanel();
+    }
+  } catch (e) {
+    alert('Delete failed: ' + String(e));
+  }
+};
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 export function initCharacterPanel() {

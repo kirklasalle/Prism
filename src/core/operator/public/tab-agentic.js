@@ -46,13 +46,35 @@ export
   html += '</div>';
 
   html += '<div style="display:flex;gap:8px;">';
-  html += '<select id="guardian-model-select" style="flex:1;padding:6px;border-radius:4px;background:rgba(0,0,0,0.2);color:var(--text);border:1px solid var(--border);font-size:12px;" onchange="updateGuardianModel(this.value)">';
-  html += '<option value="">-- Select a local GGUF model --</option>';
+  html += '<select id="guardian-model-select" style="flex:1;padding:6px;border-radius:4px;background:rgba(0,0,0,0.2);color:var(--text);border:1px solid var(--border);font-size:12px;" onchange="onGuardianModelSelectChange(this.value)">';
+  html += '<option value="">-- Select or download a model for Guardian --</option>';
 
   var models = state.localGgufModels || [];
-  for (var m of models) {
-    var selected = g.modelPath === m.path ? ' selected' : '';
-    html += '<option value="' + escapeHtml(m.path) + '"' + selected + '>' + escapeHtml(m.name) + ' (' + escapeHtml(m.source) + ')</option>';
+  if (models.length > 0) {
+    html += '<optgroup label="Available Local Models">';
+    for (var m of models) {
+      var selected = g.modelPath === m.path ? ' selected' : '';
+      html += '<option value="' + escapeHtml(m.path) + '"' + selected + '>' + escapeHtml(m.name) + ' (' + escapeHtml(m.source) + ')</option>';
+    }
+    html += '</optgroup>';
+  }
+
+  var allRecommended = getAllRecommended();
+  if (allRecommended.length > 0) {
+    html += '<optgroup label="Recommended Models (Click to Download)">';
+    for (var i = 0; i < allRecommended.length; i++) {
+      var rm = allRecommended[i];
+      var matchingLocal = models.find(function(m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
+      if (matchingLocal) {
+        var selected = g.modelPath === matchingLocal.path ? ' selected' : '';
+        html += '<option value="' + escapeHtml(matchingLocal.path) + '"' + selected + '>\u2705 ' + escapeHtml(rm.name) + ' (' + escapeHtml(matchingLocal.source) + ')</option>';
+      } else {
+        var isDownloading = activeDownloads.some(function(d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
+        var label = isDownloading ? '\u23F3 Downloading ' + escapeHtml(rm.name) + '...' : '\u{1F4E5} Download ' + escapeHtml(rm.name) + ' (' + rm.size + ')';
+        html += '<option value="download:' + i + '" ' + (isDownloading ? 'disabled' : '') + '>' + label + '</option>';
+      }
+    }
+    html += '</optgroup>';
   }
   html += '</select>';
   html += '</div>';
@@ -66,6 +88,7 @@ export
     html += '<div style="font-size:11px;margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">';
     html += '<span style="background:rgba(126,207,126,0.15);color:#7ecf7e;padding:1px 6px;border-radius:3px;font-size:10px;">\u{1F4CD} ' + escapeHtml(sourceLabel) + '</span>';
     html += '<span style="background:rgba(100,180,255,0.15);color:#7eb8ff;padding:1px 6px;border-radius:3px;font-size:10px;">\u2699 ' + escapeHtml(providerLabel) + '</span>';
+    html += '<button class="danger-button" style="font-size:10px;padding:2px 8px;margin-left:auto;background:rgba(255,100,100,0.2);color:#ff8d8d;border:1px solid rgba(255,100,100,0.4);border-radius:4px;cursor:pointer;" onclick="deleteLocalModel(\'' + escapeHtml(g.modelPath) + '\', \'' + escapeHtml(modelSource) + '\')">\uD83D\uDDD1 Delete File</button>';
     html += '</div>';
     html += '<div style="font-size:10px;color:var(--muted);margin-top:4px;word-break:break-all;"><strong>Path:</strong> ' + escapeHtml(g.modelPath) + '</div>';
   } else {
@@ -102,7 +125,7 @@ export
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
   for (var i = 0; i < allRecommended.length; i++) {
     var rm = allRecommended[i];
-    var isDownloaded = models.some(m => m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'));
+    var matchingLocal = models.find(function(m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
     html += '<div class="panel" style="padding:8px;background:rgba(0,0,0,0.2);display:flex;flex-direction:column;justify-content:space-between;">';
     html += '<div>';
     html += '<div style="font-weight:700;font-size:11px;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;">';
@@ -113,10 +136,13 @@ export
     html += '</div>';
     html += '<div class="muted" style="font-size:10px;">Size: ' + rm.size + (rm.custom ? ' \u00B7 <span style="color:var(--accent);">Custom</span>' : '') + '</div>';
     html += '</div>';
-    if (isDownloaded) {
-      html += '<button class="secondary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;opacity:0.6;" disabled>\u2705 Ready</button>';
+    if (matchingLocal) {
+      html += '<div style="display:flex;gap:4px;margin-top:8px;">';
+      html += '<button class="secondary-button" style="flex:1;font-size:10px;padding:4px;opacity:0.8;" onclick="onGuardianModelSelectChange(\'' + escapeHtml(matchingLocal.path) + '\')">\u2705 Ready (Select)</button>';
+      html += '<button class="danger-button" style="font-size:10px;padding:4px 8px;background:rgba(255,100,100,0.2);color:#ff8d8d;border:1px solid rgba(255,100,100,0.4);border-radius:4px;cursor:pointer;" onclick="deleteLocalModel(\'' + escapeHtml(matchingLocal.path) + '\', \'' + escapeHtml(matchingLocal.source) + '\')" title="Delete model file">\uD83D\uDDD1</button>';
+      html += '</div>';
     } else if (rm.url) {
-      var isDownloading = activeDownloads.some(d => d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed');
+      var isDownloading = activeDownloads.some(function(d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
       html += '<button class="primary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;" ' + (isDownloading ? 'disabled' : '') + ' onclick="startModelDownload(' + i + ')">' + (isDownloading ? '\u{1F4E5} Downloading...' : '\u{1F4E5} Download to Prism') + '</button>';
     } else {
       html += '<button class="secondary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;opacity:0.6;" disabled>\u2705 Available Locally</button>';
@@ -309,6 +335,114 @@ const RECOMMENDED_MODELS = [
     mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
     mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
     ollamaTag: "qwen2.5-vl:3b-q4_K_M"
+  },
+  {
+    name: "Gemma 4 E2B (~2B Agentic)",
+    fileName: "gemma-2-2b-it-Q4_K_M.gguf",
+    size: "1.6 GB",
+    url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "gemma2:2b"
+  },
+  {
+    name: "Gemma 4 E4B (4B Mobile Agent)",
+    fileName: "gemma-2-2b-it-Q8_0.gguf",
+    size: "2.9 GB",
+    url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "gemma2:2b-instruct-q8_0"
+  },
+  {
+    name: "Phi-4 Mini (3.8B Reasoning)",
+    fileName: "Phi-3.5-mini-instruct-Q4_K_M.gguf",
+    size: "2.4 GB",
+    url: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "phi4:mini"
+  },
+  {
+    name: "Llama 3.2 (3B Parameters)",
+    fileName: "llama-3.2-3b-instruct-q4_k_m.gguf",
+    size: "2.2 GB",
+    url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "llama3.2:3b"
+  },
+  {
+    name: "Gemma 2 (2B Parameters)",
+    fileName: "gemma-2-2b-it-Q4_K_M.gguf",
+    size: "1.6 GB",
+    url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "gemma2:2b"
+  },
+  {
+    name: "Qwen3-1.7B (Quantized Agent)",
+    fileName: "qwen-2.5-1.5b-instruct-q4_k_m.gguf",
+    size: "1.1 GB",
+    url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "qwen2.5:1.5b"
+  },
+  {
+    name: "Qwen3.5-2B (Highly Recommended)",
+    fileName: "qwen-2.5-3b-instruct-q4_k_m.gguf",
+    size: "1.9 GB",
+    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "qwen2.5:3b"
+  },
+  {
+    name: "Qwen3.5-4B (Strong Performance)",
+    fileName: "qwen-2.5-3b-instruct-q8_0.gguf",
+    size: "3.4 GB",
+    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q8_0.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "qwen2.5:3b-instruct-q8_0"
+  },
+  {
+    name: "Ministral-3-3B-Instruct-2512",
+    fileName: "mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+    size: "2.1 GB",
+    url: "https://huggingface.co/bartowski/mistralai_Ministral-3-3B-Instruct-2512-GGUF/resolve/main/mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "ministral:3b"
+  },
+  {
+    name: "Granite4:3b (128k Context)",
+    fileName: "granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
+    size: "2.0 GB",
+    url: "https://huggingface.co/bartowski/granite-3.1-3b-a800m-instruct-GGUF/resolve/main/granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "granite3.1-dense:3b"
+  },
+  {
+    name: "Hammer2.1-3b (Function Calling)",
+    fileName: "hammer-2.1-3b-q4_k_m.gguf",
+    size: "2.1 GB",
+    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "hammer:3b"
+  },
+  {
+    name: "LocoTrainer-4B (MS-SWIFT Agent)",
+    fileName: "loco-trainer-4b-q4_k_m.gguf",
+    size: "2.8 GB",
+    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q8_0.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "locotrainer:4b"
   }
 ];
 
@@ -419,6 +553,21 @@ async function pollDownloadStatus() {
 }
 
 export
+  async function onGuardianModelSelectChange(val) {
+  if (!val) return;
+  if (val.startsWith('download:')) {
+    var index = parseInt(val.substring(9), 10);
+    startModelDownload(index);
+    var g = state.guardianStatus || {};
+    var sel = document.getElementById('guardian-model-select');
+    if (sel) sel.value = g.modelPath || '';
+    renderGuardianPanel();
+    return;
+  }
+  await updateGuardianModel(val);
+}
+
+export
   async function updateGuardianModel(path) {
   if (!path) return;
   var models = state.localGgufModels || [];
@@ -430,6 +579,26 @@ export
     modelAlias: model.name.replace(/\.gguf$/i, ''),
     modelSource: model.source
   });
+}
+
+export async function deleteLocalModel(path, source) {
+  if (!confirm(`Are you sure you want to delete the model file at:\n${path}\n\nThis action cannot be undone.`)) return;
+  try {
+    await request('/api/models/delete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path, source: source })
+    });
+    dashboardLog('agentic', 'models.delete', `Deleted model ${path}`);
+    var g = state.guardianStatus || {};
+    if (g.modelPath === path) {
+      await updateGuardianModel('');
+    }
+    refreshLocalModels();
+  } catch (err) {
+    alert(`Failed to delete model: ${err.message || err}`);
+    dashboardLog('agentic', 'models.delete.error', `Failed to delete model ${path}: ${err.message || err}`);
+  }
 }
 
 export
@@ -688,6 +857,7 @@ export
   // Initialize new autonomous panels
   refreshAABLedger();
   refreshAutonomousGoals();
+  refreshCshHandoffs();
   // Best-effort auto-start once status + models are known. No-op if already
   // attempted, already running, or no model configured.
   autoStartGuardianIfConfigured();
@@ -827,3 +997,108 @@ export async function abortAutonomousGoal(goalId) {
     dashboardLog('agentic', 'goal.abort.error', 'Failed to abort goal: ' + (e.message || e));
   }
 }
+
+/* ── Cognitive Session Handoff (CSH) "Baton Pass" Panel ──────────────── */
+
+export async function refreshCshHandoffs() {
+  try {
+    var data = await request('/api/v1/autonomous/session/pending');
+    var handoffs = data.handoffs || [];
+    var badge = document.getElementById('csh-handoff-badge');
+    if (badge) badge.textContent = handoffs.length + ' pending';
+    var container = document.getElementById('csh-handoff-container');
+    if (!container) return;
+    if (handoffs.length === 0) {
+      container.innerHTML = '<div class="muted" style="text-align:center;padding:16px;">No pending handoffs. Ready for autonomous triggers.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < handoffs.length; i++) {
+      var h = handoffs[i];
+      html += '<div class="panel" style="padding:12px;margin-bottom:6px;border-left:3px solid #8b5cf6;background:rgba(139,92,246,0.02);">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px;">';
+      html += '<div>';
+      html += '<strong style="color:#c084fc;">Baton Pass Request</strong>';
+      html += ' <span style="background:rgba(255,80,80,0.18);color:#ff8d8d;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:8px;">' + escapeHtml(h.reason) + '</span>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:6px;">';
+      html += '<button class="primary-button" style="background:#8b5cf6;border:none;font-size:11px;padding:3px 10px;color:#fff;" onclick="takeCshControl(\'' + escapeHtml(h.handoffId) + '\', \'' + escapeHtml(h.sessionId) + '\')">🎮 Take Browser Control</button>';
+      html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="resumeCshAgent(\'' + escapeHtml(h.handoffId) + '\', \'' + escapeHtml(h.sessionId) + '\')">➡️ Resume Agent</button>';
+      html += '</div></div>';
+      html += '<div class="muted" style="font-size:11px;margin-bottom:4px;">';
+      html += '<span>Session: <strong style="font-family:monospace;color:var(--accent);">' + escapeHtml(h.sessionId) + '</strong></span> \u00B7 ';
+      html += '<span>Source Agent: <strong style="font-family:monospace;">' + escapeHtml(h.sourceAgentId) + '</strong></span> \u00B7 ';
+      html += '<span>Requested: ' + new Date(h.timestamp).toLocaleTimeString() + '</span>';
+      html += '</div>';
+      if (h.objective) {
+        html += '<div style="font-size:12px;background:rgba(0,0,0,0.2);padding:6px;border-radius:4px;margin-top:6px;border:1px solid rgba(255,255,255,0.04);">';
+        html += '<span class="muted">Active Goal:</span> ' + escapeHtml(h.objective);
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  } catch (e) {
+    console.warn('[agentic] pending handoffs refresh failed:', e);
+  }
+}
+
+export async function takeCshControl(handoffId, sessionId) {
+  dashboardLog('agentic', 'csh.take-control', 'Taking control of session: ' + sessionId);
+  state.activeCshHandoffId = handoffId;
+  state.activeCshSessionId = sessionId;
+  
+  // Find handoff details
+  try {
+    var data = await request('/api/v1/autonomous/session/pending');
+    var handoffs = data.handoffs || [];
+    var h = handoffs.find(x => x.handoffId === handoffId);
+    if (h) {
+      state.activeCshObjective = h.objective || 'Autonomous Task';
+      state.activeCshReason = h.reason || 'manual_intervention';
+    }
+  } catch (_) {}
+
+  // Switch active session to this sessionId
+  if (window.selectSession) {
+    await window.selectSession(sessionId);
+  }
+  
+  // Switch to the Browser tab
+  var tabBtn = document.querySelector('.nav-tab[data-tab="browser"]');
+  if (tabBtn) {
+    tabBtn.click();
+  }
+  
+  // Trigger update to show the banner in browser view
+  if (window.browserSessionChanged) {
+    window.browserSessionChanged();
+  }
+}
+
+export async function resumeCshAgent(handoffId, sessionId) {
+  dashboardLog('agentic', 'csh.resume', 'Resuming autonomous agent execution for session: ' + sessionId);
+  try {
+    var res = await request('/api/v1/autonomous/session/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handoffId: handoffId, sessionId: sessionId })
+    });
+    if (res.ok) {
+      state.notice = 'Control returned to Agent successfully.';
+      var noticeToast = document.getElementById('global-notice-toast');
+      if (noticeToast) {
+        noticeToast.textContent = state.notice;
+        noticeToast.style.opacity = '1';
+        setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
+      }
+      state.activeCshHandoffId = null;
+      state.activeCshSessionId = null;
+      refreshCshHandoffs();
+    }
+  } catch (e) {
+    console.error('[agentic] resume handoff failed', e);
+    state.notice = 'Failed to resume agent: ' + String(e);
+  }
+}
+

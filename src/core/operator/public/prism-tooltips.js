@@ -53,7 +53,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TOOLTIP_ID = 'prism-tooltip';
-const SHOW_DELAY_MS = 200;
+const SHOW_DELAY_MS = 3000;
 const HIDE_GRACE_MS = 100;
 const SERVER_FETCH_TTL_MS = 60_000;
 

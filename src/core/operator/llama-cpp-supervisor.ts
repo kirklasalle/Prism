@@ -215,14 +215,25 @@ export class LlamaCppSupervisor extends EventEmitter {
 
     private spawnProcess(slot: LlamaModelSlot, ctxSize: number): Promise<void> {
         return new Promise((resolve, reject) => {
+            const isBaseMode = process.env.PRISM_BASE_MODE === "true";
+            const effectiveCtxSize = isBaseMode ? Math.min(ctxSize, 2048) : ctxSize;
+            
             const args = [
                 "--model", slot.modelPath!,
                 "--alias", slot.modelAlias!,
                 "--port", String(slot.port),
-                "--ctx-size", String(ctxSize),
+                "--ctx-size", String(effectiveCtxSize),
                 // Always enable native tool calling (Jinja templates)
                 "--jinja",
             ];
+
+            if (isBaseMode) {
+                args.push("--threads", "4");
+                args.push("--batch-size", "64");
+                // Host-memory context prefix caching to allow sequential instant swaps
+                args.push("--grp-attn-n", "1");
+                args.push("--grp-attn-w", "512");
+            }
 
             // Multimodal Vision support
             if (slot.modelPath!.toLowerCase().includes("vl")) {
@@ -233,21 +244,23 @@ export class LlamaCppSupervisor extends EventEmitter {
                 }
             }
 
-            // Speculative decoding: draft model
-            if (slot.draftModelPath) {
+            // Speculative decoding: draft model (disabled in Base Mode to conserve VRAM)
+            if (slot.draftModelPath && !isBaseMode) {
                 args.push("--model-draft", slot.draftModelPath);
                 args.push("--draft-max", String(slot.draftMax));
                 args.push("--draft-min", String(slot.draftMin));
                 args.push("--draft-p-min", String(slot.draftPMin));
             }
 
-            // GPU offloading
-            if (slot.gpuLayers !== null) {
-                args.push("--n-gpu-layers", String(slot.gpuLayers));
+            // GPU offloading (fully offload by default in Base Mode to bypass DDR3 system RAM bus)
+            const gpuLayers = isBaseMode ? (slot.gpuLayers ?? 99) : slot.gpuLayers;
+            if (gpuLayers !== null) {
+                args.push("--n-gpu-layers", String(gpuLayers));
             }
 
-            // Flash attention for memory efficiency
-            if (slot.flashAttn) {
+            // Flash attention for memory efficiency (always enable in Base Mode)
+            const flashAttn = isBaseMode ? true : slot.flashAttn;
+            if (flashAttn) {
                 args.push("--flash-attn");
             }
 

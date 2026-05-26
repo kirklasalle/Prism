@@ -468,6 +468,14 @@ export class BrowserSessionManager {
     this.emit("browser.hover.completed", { sessionId, selector });
   }
 
+  async dragAndDrop(sessionId: string, fromSelector: string, toSelector: string): Promise<void> {
+    const session = this.requireSession(sessionId);
+    await (session.page as any).dragAndDrop(fromSelector, toSelector, { timeout: 20000 });
+    session.meta.updatedAt = new Date().toISOString();
+    this.resetIdleTimer(sessionId);
+    this.emit("browser.dragAndDrop.completed", { sessionId, from: fromSelector, to: toSelector });
+  }
+
   async selectOption(sessionId: string, selector: string, values: string[]): Promise<string[]> {
     const s = this.requireSession(sessionId);
     const selected: string[] = await (s.page as any).selectOption(selector, values, { timeout: 10000 });
@@ -573,6 +581,13 @@ export class BrowserSessionManager {
     s.meta.updatedAt = new Date().toISOString();
     this.resetIdleTimer(sessionId);
     this.emit("browser.cookies.cleared", { sessionId });
+  }
+
+  /** Get the raw page and context of a session. Used by SSHP and CSH extensions. */
+  getSessionPageAndContext(sessionId: string): { page: any; context: any } | null {
+    const s = this.sessions.get(sessionId);
+    if (!s || s.meta.state === "terminated") return null;
+    return { page: s.page, context: s.context };
   }
 
   // ── Internal Helpers ────────────────────────────────────────────────

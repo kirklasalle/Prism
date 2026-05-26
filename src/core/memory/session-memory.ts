@@ -10,21 +10,37 @@ export interface SessionSummary {
 }
 
 export class SessionMemoryStore implements ActivitySubscriber {
-    private readonly db: DatabaseSync;
-    private readonly upsertStmt: StatementSync;
+    private db: DatabaseSync = undefined as any;
+    private upsertStmt: StatementSync = undefined as any;
+    private dbPath: string;
 
     constructor(dbPath: string = "prism-activity.db") {
-        this.db = new DatabaseSync(dbPath);
+        this.dbPath = dbPath;
+        this.initDb();
+    }
+
+    // Initialize or re-initialize the SQLite DB and prepared statements safely
+    private initDb(): void {
+        try {
+            this.db?.close?.();
+        } catch { /* ignore */ }
+        this.db = new DatabaseSync(this.dbPath);
         this.migrate();
         this.upsertStmt = this.db.prepare(`
       INSERT INTO session_summaries (session_id, total_events, failures, tool_executions, updated_at)
       VALUES (:sessionId, :totalEvents, :failures, :toolExecutions, :updatedAt)
-      ON CONFLICT(session_id) DO UPDATE SET
+    ON CONFLICT(session_id) DO UPDATE SET
         total_events = excluded.total_events,
         failures = excluded.failures,
         tool_executions = excluded.tool_executions,
         updated_at = excluded.updated_at
     `);
+    }
+
+    // Heuristic check for closed-database errors
+    private isDbClosedError(err: any): boolean {
+        const msg = String(err?.message ?? err);
+        return /database.*(closed|not open)/i.test(msg) || /SQLITE_BUSY|SQLITE_CLOSED/i.test(msg);
     }
 
     private migrate(): void {
@@ -63,41 +79,75 @@ export class SessionMemoryStore implements ActivitySubscriber {
     }
 
     onEvent(event: ActivityEvent): void {
-        const row = this.db.prepare(`
+        // Read current counters
+        let row: { total_events: number; failures: number; tool_executions: number } | undefined;
+        try {
+            row = this.db.prepare(`
       SELECT total_events, failures, tool_executions
       FROM session_summaries
       WHERE session_id = :sessionId
-    `).get({ sessionId: event.sessionId }) as
-            | { total_events: number; failures: number; tool_executions: number }
-            | undefined;
+    `).get({ sessionId: event.sessionId }) as any;
+        } catch (err) {
+            if (this.isDbClosedError(err)) {
+                this.initDb();
+                row = this.db.prepare(`
+      SELECT total_events, failures, tool_executions
+      FROM session_summaries
+      WHERE session_id = :sessionId
+    `).get({ sessionId: event.sessionId }) as any;
+            } else {
+                throw err;
+            }
+        }
 
-        const nextTotal = (row?.total_events ?? 0) + 1;
-        const nextFailures = (row?.failures ?? 0) + (event.status === "failed" ? 1 : 0);
-        const nextToolExecutions = (row?.tool_executions ?? 0) + (event.layer === "tool_execution" ? 1 : 0);
+        const nextTotal = ((row?.total_events ?? 0) + 1);
+        const nextFailures = ((row?.failures ?? 0) + (event.status === "failed" ? 1 : 0));
+        const nextToolExecutions = ((row?.tool_executions ?? 0) + (event.layer === "tool_execution" ? 1 : 0));
 
-        this.upsertStmt.run({
-            sessionId: event.sessionId,
-            totalEvents: nextTotal,
-            failures: nextFailures,
-            toolExecutions: nextToolExecutions,
-            updatedAt: new Date().toISOString(),
-        });
+        try {
+            this.upsertStmt.run({
+                sessionId: event.sessionId,
+                totalEvents: nextTotal,
+                failures: nextFailures,
+                toolExecutions: nextToolExecutions,
+                updatedAt: new Date().toISOString(),
+            });
+        } catch (err) {
+            if (this.isDbClosedError(err)) {
+                this.initDb();
+                this.upsertStmt.run({
+                    sessionId: event.sessionId,
+                    totalEvents: nextTotal,
+                    failures: nextFailures,
+                    toolExecutions: nextToolExecutions,
+                    updatedAt: new Date().toISOString(),
+                });
+            } else {
+                throw err;
+            }
+        }
     }
 
     getSessionSummary(sessionId: string): SessionSummary | null {
-        const row = this.db.prepare(`
+        let row: any = undefined;
+        try {
+            row = this.db.prepare(`
       SELECT session_id, total_events, failures, tool_executions, updated_at
       FROM session_summaries
       WHERE session_id = :sessionId
-    `).get({ sessionId }) as
-            | {
-                session_id: string;
-                total_events: number;
-                failures: number;
-                tool_executions: number;
-                updated_at: string;
+    `).get({ sessionId }) as any;
+        } catch (err) {
+            if (this.isDbClosedError(err)) {
+                this.initDb();
+                row = this.db.prepare(`
+      SELECT session_id, total_events, failures, updated_at
+      FROM session_summaries
+      WHERE session_id = :sessionId
+    `).get({ sessionId }) as any;
+            } else {
+                throw err;
             }
-            | undefined;
+        }
 
         if (!row) {
             return null;

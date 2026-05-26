@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRISM RESEARCH DOCUMENTATION - PRISM Documentation</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  
+  <style>
+    :root {
+      /* Theme color tokens - Dark (Default) */
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131a2b;
+      --bg-tertiary: #1b263e;
+      --border-color: #263554;
+      --border-glow: rgba(38, 53, 84, 0.4);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #38bdf8;
+      --accent-secondary: #0ea5e9;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      
+      --code-bg: #090d16;
+      --code-text: #e2e8f0;
+      
+      /* Alerts color coding */
+      --alert-note-bg: rgba(56, 189, 248, 0.08);
+      --alert-note-border: #0ea5e9;
+      --alert-tip-bg: rgba(52, 211, 153, 0.08);
+      --alert-tip-border: #10b981;
+      --alert-important-bg: rgba(99, 102, 241, 0.08);
+      --alert-important-border: #6366f1;
+      --alert-warning-bg: rgba(251, 191, 36, 0.08);
+      --alert-warning-border: #f59e0b;
+      --alert-caution-bg: rgba(244, 63, 94, 0.08);
+      --alert-caution-border: #f43f5e;
+      
+      --sidebar-width: 320px;
+    }
+    
+    [data-theme="light"] {
+      /* Theme color tokens - Light */
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --border-color: #cbd5e1;
+      --border-glow: rgba(203, 213, 225, 0.4);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-secondary: #0369a1;
+      --accent-glow: rgba(2, 132, 199, 0.1);
+      
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      
+      --alert-note-bg: rgba(14, 165, 233, 0.05);
+      --alert-tip-bg: rgba(16, 185, 129, 0.05);
+      --alert-important-bg: rgba(99, 102, 241, 0.05);
+      --alert-warning-bg: rgba(245, 158, 11, 0.05);
+      --alert-caution-bg: rgba(244, 63, 94, 0.05);
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* Layout */
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      overflow-y: auto;
+      transition: background-color 0.3s, border-color 0.3s;
+    }
+    
+    .main-viewport {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      min-height: 100vh;
+      padding: 3rem 4rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .article-container {
+      width: 100%;
+      max-width: 880px;
+    }
+    
+    /* Sidebar Header & Brand */
+    .sidebar-header {
+      padding: 1.75rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-family: 'Outfit', sans-serif;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: 0.5px;
+      background: linear-gradient(to right, var(--text-primary), var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    /* Theme Toggle */
+    .theme-toggle-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .theme-toggle-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .theme-toggle-btn svg {
+      transition: transform 0.3s;
+    }
+    
+    .theme-toggle-btn:hover svg {
+      transform: rotate(20deg);
+    }
+    
+    /* Sidebar Navigation Links */
+    .sidebar-nav {
+      padding: 1.5rem 1rem;
+      flex-grow: 1;
+    }
+    
+    .toc-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      padding-left: 0.75rem;
+    }
+    
+    .toc-list {
+      list-style: none;
+    }
+    
+    .toc-item {
+      margin-bottom: 0.35rem;
+    }
+    
+    .toc-item a {
+      display: block;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: background-color 0.2s, color 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .toc-item a:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+    }
+    
+    .toc-item.active a {
+      background-color: var(--accent-glow);
+      color: var(--accent-primary);
+      font-weight: 500;
+      border-left: 2px solid var(--accent-primary);
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    
+    .toc-item-level-1 { padding-left: 0; }
+    .toc-item-level-2 { padding-left: 0.75rem; }
+    .toc-item-level-3 { padding-left: 1.5rem; }
+    .toc-item-level-4 { padding-left: 2.25rem; }
+    
+    /* Markdown Article Styles */
+    article h1, article h2, article h3, article h4, article h5, article h6 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2.25rem;
+      margin-bottom: 1rem;
+      line-height: 1.35;
+    }
+    
+    article h1 {
+      font-size: 2.5rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      letter-spacing: -0.5px;
+    }
+    
+    article h2 {
+      font-size: 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.4rem;
+      margin-top: 3rem;
+    }
+    
+    article h3 { font-size: 1.35rem; }
+    article h4 { font-size: 1.15rem; }
+    
+    article p {
+      margin-bottom: 1.25rem;
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+    
+    article a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-bottom-color 0.2s;
+    }
+    
+    article a:hover {
+      border-bottom-color: var(--accent-primary);
+    }
+    
+    /* Lists */
+    article ul, article ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+    
+    article li {
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }
+    
+    article li strong {
+      color: var(--text-primary);
+    }
+    
+    /* Inline Code */
+    article code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--accent-primary);
+      word-break: break-word;
+    }
+    
+    /* Blockquotes */
+    article blockquote {
+      border-left: 4px solid var(--border-color);
+      padding: 0.75rem 1.25rem;
+      background-color: var(--bg-secondary);
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1.5rem;
+    }
+    
+    article blockquote p {
+      margin-bottom: 0;
+      font-style: italic;
+    }
+    
+    /* Horizontal Rule */
+    article hr {
+      border: 0;
+      height: 1px;
+      background-color: var(--border-color);
+      margin: 3rem 0;
+    }
+    
+    /* Code Cards */
+    .code-card {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 1.75rem;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .code-card-header {
+      padding: 0.5rem 1rem;
+      background-color: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .code-card-lang {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .copy-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .code-card pre {
+      margin: 0;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    
+    .code-card code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      background: none;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      color: var(--code-text);
+      word-break: normal;
+      white-space: pre;
+    }
+    
+    /* Tables */
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.925rem;
+      text-align: left;
+    }
+    
+    th {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      padding: 0.85rem 1.25rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+    
+    td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      background-color: var(--bg-secondary);
+      transition: background-color 0.2s;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    tr:hover td {
+      background-color: var(--bg-tertiary);
+    }
+    
+    /* GitHub Style Alerts */
+    .alert-box {
+      border-left: 4px solid var(--border-color);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    
+    .alert-box-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.875rem;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+    
+    .alert-box-content {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    
+    .alert-box-content a {
+      font-weight: 500;
+    }
+    
+    .alert-note {
+      background-color: var(--alert-note-bg);
+      border-left-color: var(--alert-note-border);
+    }
+    
+    .alert-note .alert-box-header {
+      color: var(--alert-note-border);
+    }
+    
+    .alert-tip {
+      background-color: var(--alert-tip-bg);
+      border-left-color: var(--alert-tip-border);
+    }
+    
+    .alert-tip .alert-box-header {
+      color: var(--alert-tip-border);
+    }
+    
+    .alert-important {
+      background-color: var(--alert-important-bg);
+      border-left-color: var(--alert-important-border);
+    }
+    
+    .alert-important .alert-box-header {
+      color: var(--alert-important-border);
+    }
+    
+    .alert-warning {
+      background-color: var(--alert-warning-bg);
+      border-left-color: var(--alert-warning-border);
+    }
+    
+    .alert-warning .alert-box-header {
+      color: var(--alert-warning-border);
+    }
+    
+    .alert-caution {
+      background-color: var(--alert-caution-bg);
+      border-left-color: var(--alert-caution-border);
+    }
+    
+    .alert-caution .alert-box-header {
+      color: var(--alert-caution-border);
+    }
+    
+    /* Mermaid Diagrams Styling */
+    .mermaid {
+      background-color: var(--bg-secondary) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Image and Figures */
+    .content-image {
+      margin: 2rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .content-image img {
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .content-image figcaption {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+    }
+    
+    /* Responsive Design adjustments */
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      
+      .main-viewport {
+        margin-left: 0;
+        width: 100%;
+        padding: 2rem 1.5rem;
+      }
+      
+      /* Toggle Sidebar Menu trigger for mobile */
+      .menu-trigger {
+        display: flex;
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        cursor: pointer;
+        z-index: 1000;
+      }
+    }
+    
+    @media (min-width: 1025px) {
+      .menu-trigger {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Menu trigger for small screens -->
+  <button class="menu-trigger" onclick="toggleSidebar()">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+
+  <!-- Left Sidebar (TOC) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-group">
+        <div class="brand-logo">Δ</div>
+        <div class="brand-title">PRISM</div>
+      </div>
+      <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
+        <svg id="theme-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Sun icon -->
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <div class="toc-title">Table of Contents</div>
+      <ul class="toc-list">
+  <li class="toc-item toc-item-level-1"><a href="#prism-full-context-research-documentation">PRISM Full-Context Research Documentation</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#0-executive-summary-one-page">0 Executive Summary One-Page</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#strategic-objective">Strategic objective</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#core-thesis">Core thesis</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#research-backed-design-choices">Research-backed design choices</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#what-is-already-implemented">What is already implemented</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#current-risk-posture">Current risk posture</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#novelty-trajectory">Novelty trajectory</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#release-readiness-position">Release-readiness position</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#01-boardinvestor-brief-half-page">01 BoardInvestor Brief Half-Page</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#02-the-shift-to-agents-as-a-service-aaas-and-no-we-are-not-changing-it-it-will-remain-hilarious-and-bring-joy">02 The Shift to Agents As A Service AaaS AND no we are not changing it IT will remain hilarious and bring joy</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#1-purpose">1 Purpose</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#2-scope-and-method">2 Scope and Method</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#3-agentic-landscape-current-state">3 Agentic Landscape Current State</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#31-architecture-classes-in-practice">31 Architecture classes in practice</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#32-what-distinguishes-production-grade-agent-systems">32 What distinguishes production-grade agent systems</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#4-research-foundations-and-prism-mapping">4 Research Foundations and PRISM Mapping</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#41-anthropic-effective-agent-engineering">41 Anthropic effective agent engineering</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#42-react-reason-act-observe-loops">42 ReAct reason-act-observe loops</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#43-toolformer-native-tool-invocation-patterns">43 Toolformer native tool invocation patterns</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#44-controller-worker-composition-patterns-hugginggpt-family">44 Controller-worker composition patterns HuggingGPT family</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#45-nist-ai-rmf-trust-and-risk-lifecycle">45 NIST AI RMF trust and risk lifecycle</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#5-prism-architecture-thesis">5 PRISM Architecture Thesis</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#6-novelty-program-prism-specific">6 Novelty Program PRISM-Specific</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#61-constitutional-causal-compiler-ccc">61 Constitutional Causal Compiler CCC</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#62-dual-lens-memory-arbitration-dlma">62 Dual-Lens Memory Arbitration DLMA</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#63-self-healing-workflow-synthesis-shws">63 Self-Healing Workflow Synthesis SHWS</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#7-risk-register-research-derived">7 Risk Register Research-Derived</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#8-evidence-to-execution-mapping">8 Evidence-to-Execution Mapping</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#81-implemented-baseline-evidence">81 Implemented baseline evidence</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#82-documentation-and-process-evidence">82 Documentation and process evidence</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#83-remaining-research-to-build-priorities">83 Remaining research-to-build priorities</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#9-full-lifecycle-success-criteria">9 Full Lifecycle Success Criteria</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#10-references">10 References</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#11-additional-research-sources-user-supplied-2026-03-12">11 Additional Research Sources User-Supplied 2026-03-12</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#12-competitive-agent-research-autoresearch-hermes-2026-03-21">12 Competitive Agent Research autoresearch  Hermes 2026-03-21</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#121-karpathyautoresearch">121 karpathyautoresearch</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#122-facebookhermes">122 facebookhermes</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#123-swarm-multi-agent-orchestration-prism-current-state">123 Swarm  Multi-Agent Orchestration PRISM Current State</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#124-synthesis-governed-swarm-intelligence">124 Synthesis Governed Swarm Intelligence</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#13-computer-use-frontier-addendum-2026-03-25">13 Computer Use Frontier Addendum 2026-03-25</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#131-why-this-matters">131 Why this matters</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#132-external-signals-factored">132 External signals factored</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#133-implications-for-prism">133 Implications for PRISM</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#14-world-class-project-critique-academicmarket-alignment-school-style-scorecard-q2-2026">14 World-Class Project Critique AcademicMarket Alignment  School-Style Scorecard Q2 2026</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#141-engineering-architectural-critique-world-class-lens">141 Engineering  Architectural Critique World-Class Lens</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#1-vertical-monolith-hotspot-dashboard-servicets">1 Vertical Monolith Hotspot dashboard-servicets</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#2-single-language-runtime-constraint-node-only">2 Single-Language Runtime Constraint Node-only</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#3-in-process-event-bus-scaling-limits">3 In-Process Event Bus Scaling Limits</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#4-sqlite-high-availability-limits">4 SQLite High-Availability Limits</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#142-aillmnlp-spectrum-refraction-sr-critique">142 AILLMNLP  Spectrum Refraction SR Critique</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#1-spectrum-refraction-vs-mixture-of-agents-moa">1 Spectrum Refraction vs Mixture-of-Agents MoA</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#2-the-missing-hard-budget-ceiling-kill-switch">2 The Missing Hard Budget Ceiling Kill-Switch</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#143-uiux-telemetry-critique">143 UIUX  Telemetry Critique</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#1-technical-ergonomics-vs-simple-mode-gaps">1 Technical Ergonomics vs Simple Mode Gaps</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#2-telemetry-is-write-only">2 Telemetry is Write-Only</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#144-school-style-grading-scorecard-gap-analysis">144 School-Style Grading Scorecard  Gap Analysis</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#1-app-idea-thesis">1 App Idea  Thesis</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#2-core-engineering-architecture">2 Core Engineering  Architecture</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#3-uiux-operator-ergonomics">3 UIUX  Operator Ergonomics</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#4-codebase-quality-test-discipline">4 Codebase Quality  Test Discipline</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#5-documentation-depth-release-discipline">5 Documentation Depth  Release Discipline</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#6-aillmnlpsr-implementation">6 AILLMNLPSR Implementation</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#145-prism-promotional-sell-sheet-from-aaas-to-gaas">145 PRISM Promotional Sell-Sheet From AaaS to GaaS</a></li>
+</ul>
+
+    </nav>
+  </aside>
+
+  <!-- Main Viewport -->
+  <main class="main-viewport">
+    <div class="article-container">
+      <article>
+        <h1 id="prism-full-context-research-documentation">PRISM Full-Context Research Documentation</h1>
+
+<p>Date: 2026-03-11  </p>
+<p>Status: Living research baseline for product, engineering, and release decisions</p>
+
+<h2 id="0-executive-summary-one-page">0. Executive Summary (One-Page)</h2>
+
+<p>PRISM is a governed autonomous agent runtime built for high-trust production operation, not just demo-level capability. The core strategy is to combine deterministic workflow reliability with bounded autonomy, enforced by explicit policy tiers and approval gates for high-risk actions.</p>
+
+<h3 id="strategic-objective">Strategic objective</h3>
+
+<p>Advance from a robust governed runtime into a world-class SOTA and novel agent platform while preserving verifiable safety, auditability, and operator control.</p>
+
+<h3 id="core-thesis">Core thesis</h3>
+
+<p>Governed autonomy with causal observability delivers better real-world reliability than unconstrained autonomy.</p>
+
+<h3 id="research-backed-design-choices">Research-backed design choices</h3>
+
+<ul class="list-level-0">
+  <li>Prefer composable workflows first, add autonomy selectively where uncertainty and value justify it.</li>
+  <li>Ground decisions in tool and environment feedback rather than free-running planning.</li>
+  <li>Treat tool interfaces as strict contracts with explicit risk and failure semantics.</li>
+  <li>Decompose orchestration into a central controller plus specialized workers/adapters.</li>
+  <li>Operationalize trust using measurable controls and lifecycle risk management.</li>
+</ul>
+<h3 id="what-is-already-implemented">What is already implemented</h3>
+
+<ul class="list-level-0">
+  <li>Tiered governance model with approval handling for high-risk actions.</li>
+  <li>Workflow runtime with retries, timeouts, and conditional fallback routing.</li>
+  <li>Integration tests covering approval granted, denied, and timeout behavior.</li>
+  <li>Activity traces and memory-related telemetry persisted for audit and diagnostics.</li>
+  <li>Retrieval observability with quality proxies, drift diagnostics, and cohort dashboards.</li>
+</ul>
+<h3 id="current-risk-posture">Current risk posture</h3>
+
+<p>Primary risks are authority drift, observability gaps, retrieval degradation, workflow brittleness, and release gate erosion. PRISM addresses these through explicit policy controls, event-level traces, retrieval alerts, tested recovery semantics, and phase-based release gates.</p>
+
+<h3 id="novelty-trajectory">Novelty trajectory</h3>
+
+<ol class="list-level-0">
+  <li>Constitutional Causal Compiler: pre-execution constrained plan compilation from policy, memory, and intent.</li>
+  <li>Dual-Lens Memory Arbitration: fused semantic and causal consequence retrieval for safer decisions.</li>
+  <li>Self-Healing Workflow Synthesis: policy-constrained repair generation and staged promotion after failures.</li>
+</ol>
+<h3 id="release-readiness-position">Release-readiness position</h3>
+
+<p>PRISM should be promoted through evidence-based gates: governance correctness, failure-path reliability, retrieval quality stability, and reproducible release operations with rollback confidence.</p>
+
+<p>Companion appendices:</p>
+
+<ul class="list-level-0">
+  <li><code>PRISM<em>GAP</em>ANALYSIS.md</code> (current-state gaps and parity closure plan)</li>
+  <li><code>INVESTOR<em>APPENDIX</em>PARITY.md</code> (market/investor narrative for parity + governance moat)</li>
+  <li><code>LICENSING<em>BRAND</em>APPENDIX.md</code> (Individual vs Business licensing and brand strategy)</li>
+</ul>
+<h2 id="01-boardinvestor-brief-half-page">0.1 Board/Investor Brief (Half-Page)</h2>
+
+<p>PRISM is an enterprise-grade autonomous agent runtime designed for high-trust operations. Its core differentiation is governed autonomy: the system can execute meaningful multi-step work while maintaining explicit policy controls, human approval boundaries, and full operational traceability.</p>
+
+<p>From a market perspective, PRISM targets a gap between low-control assistant tooling and high-risk autonomous systems that lack production governance. The platform is built to deliver measurable reliability in real environments where auditability, rollback confidence, and incident response readiness matter as much as model capability.</p>
+
+<p>Today’s baseline includes tiered authority controls, approval-gated high-risk actions, resilient workflow execution (retry/timeout/fallback), and telemetry for retrieval quality and drift monitoring. This creates a practical foundation for scaled deployment without sacrificing operator trust.</p>
+
+<p>PRISM’s strategic upside comes from three planned novel capabilities: a Constitutional Causal Compiler for pre-execution constrained planning, Dual-Lens Memory Arbitration for safer context selection, and Self-Healing Workflow Synthesis for policy-constrained failure recovery. Together, these features aim to increase task success and autonomy while preserving hard governance guarantees.</p>
+
+<p>Execution risk is managed through phase-gated delivery, evidence-based release criteria, and explicit production runbooks. The investment thesis is that organizations will prefer autonomous systems that can prove control, safety, and reliability under operational stress, not just benchmark performance.</p>
+
+<h2 id="02-the-shift-to-agents-as-a-service-aaas-and-no-we-are-not-changing-it-it-will-remain-hilarious-and-bring-joy">0.2 The Shift to "Agents As A Service" (AaaS) (AND, no, we are not changing it. IT, will remain hilarious and bring joy.))</h2>
+
+<p>As the market matures past initial generative AI experiments, enterprise value is moving rapidly from isolated copilots to "Agents As A Service" (AaaS). Coined to describe the architectural paradigm where autonomous agents are treated as deployable, scalable, and orchestratable services, AaaS transforms AI from a static tool into an active, distributed workforce.</p>
+
+<p>PRISM is inherently built for this paradigm shift. By encapsulating complex multi-step reasoning, strict governance boundaries, and dynamic tool orchestration into containerized, monitorable agent services, PRISM allows enterprises to scale autonomous operations with the same rigor, API-driven accessibility, and operational telemetry as traditional microservices. This transition to AaaS positions PRISM not merely as an application, but as foundational enterprise infrastructure.</p>
+
+<h2 id="1-purpose">1. Purpose</h2>
+
+<p>This document consolidates the full research context behind PRISM’s architecture, governance model, roadmap, and release strategy.</p>
+
+<p>It is intended to be the canonical source for:</p>
+
+<ul class="list-level-0">
+  <li>why PRISM is designed the way it is,</li>
+  <li>what external research supports that design,</li>
+  <li>what is novel in PRISM’s direction,</li>
+  <li>and how research evidence maps to implementation and production gates.</li>
+</ul>
+<h2 id="2-scope-and-method">2. Scope and Method</h2>
+
+<p>This research synthesis is based on:</p>
+
+<ol class="list-level-0">
+  <li>An inspired, repository-verified implementation state in OpenClaw.</li>
+  <li>Established agent-systems literature and production engineering guidance.</li>
+  <li>Governance and trust frameworks for safety-critical AI operation.</li>
+</ol>
+<p>Evidence model used in this document:</p>
+
+<ul class="list-level-0">
+  <li><strong>Research signal</strong>: external paper/framework/guidance.</li>
+  <li><strong>Design implication</strong>: concrete architectural consequence.</li>
+  <li><strong>PRISM implementation mapping</strong>: where this appears in runtime/docs/tests.</li>
+  <li><strong>Validation signal</strong>: how correctness and safety are measured.</li>
+</ul>
+<h2 id="3-agentic-landscape-current-state">3. Agentic Landscape (Current State)</h2>
+
+<h3 id="31-architecture-classes-in-practice">3.1 Architecture classes in practice</h3>
+
+<ol class="list-level-0">
+  <li><strong>Single-call augmented systems</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Strengths: speed and simplicity.</li>
+  <li>Limits: weak long-horizon control and recovery semantics.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Workflow-oriented systems</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Strengths: predictable routing, explicit branches, controllable failure handling.</li>
+  <li>Limits: brittle under unmodeled conditions unless adaptive policies are present.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Autonomous agent loops</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Strengths: flexible decomposition and open-ended task handling.</li>
+  <li>Limits: requires strict governance, observability, and bounded authority to be production-safe.</li>
+</ul>
+<p>PRISM intentionally combines classes (2) and (3): deterministic workflow reliability with bounded autonomy.</p>
+
+<h3 id="32-what-distinguishes-production-grade-agent-systems">3.2 What distinguishes production-grade agent systems</h3>
+
+<p>Production systems consistently require:</p>
+
+<ul class="list-level-0">
+  <li>explicit tool contracts,</li>
+  <li>policy-enforced authority boundaries,</li>
+  <li>observable and replayable control flow,</li>
+  <li>measurable quality/safety telemetry,</li>
+  <li>and tested denial/timeout/failure paths.</li>
+</ul>
+<p>PRISM aligns to these requirements through tiered governance, workflow semantics, and retrieval observability.</p>
+
+<h2 id="4-research-foundations-and-prism-mapping">4. Research Foundations and PRISM Mapping</h2>
+
+<h3 id="41-anthropic-effective-agent-engineering">4.1 Anthropic: effective agent engineering</h3>
+
+<p>Research signal:</p>
+
+<ul class="list-level-0">
+  <li>Prefer simple composable workflows first; add autonomy where uncertainty and payoff justify it.</li>
+</ul>
+<p>Design implication:</p>
+
+<ul class="list-level-0">
+  <li>Keep deterministic orchestration as a stable baseline and add bounded agentic behavior incrementally.</li>
+</ul>
+<p>PRISM mapping:</p>
+
+<ul class="list-level-0">
+  <li>Workflow runtime with retries/timeouts/fallback conditions.</li>
+  <li>Separate approval-gated execution path for high-risk operations.</li>
+</ul>
+<p>Validation signal:</p>
+
+<ul class="list-level-0">
+  <li>Integration tests for success, retry, timeout, approval granted, denied, and timeout outcomes.</li>
+</ul>
+<h3 id="42-react-reason-act-observe-loops">4.2 ReAct: reason-act-observe loops</h3>
+
+<p>Research signal:</p>
+
+<ul class="list-level-0">
+  <li>Reasoning quality and interpretability improve when actions are grounded in environment feedback.</li>
+</ul>
+<p>Design implication:</p>
+
+<ul class="list-level-0">
+  <li>Avoid purely text-planning loops disconnected from tool outcomes.</li>
+</ul>
+<p>PRISM mapping:</p>
+
+<ul class="list-level-0">
+  <li>Tool execution results and policy outcomes are emitted as structured activity events that feed subsequent decisions.</li>
+</ul>
+<p>Validation signal:</p>
+
+<ul class="list-level-0">
+  <li>Event-level traces in activity bus and persisted SQLite audit artifacts.</li>
+</ul>
+<h3 id="43-toolformer-native-tool-invocation-patterns">4.3 Toolformer: native tool invocation patterns</h3>
+
+<p>Research signal:</p>
+
+<ul class="list-level-0">
+  <li>Reliable tool usage requires explicit invocation structure and high signal schemas.</li>
+</ul>
+<p>Design implication:</p>
+
+<ul class="list-level-0">
+  <li>Treat tool interfaces as first-class runtime contracts.</li>
+</ul>
+<p>PRISM mapping:</p>
+
+<ul class="list-level-0">
+  <li>Adapter-driven tool execution across system/protocol/application layers.</li>
+  <li>Memory tools exposed as explicit operations (<code>semantic<em>query</code>, <code>memory</em>query</code>).</li>
+</ul>
+<p>Validation signal:</p>
+
+<ul class="list-level-0">
+  <li>Adapter contract tests and workflow-level integration tests.</li>
+</ul>
+<h3 id="44-controller-worker-composition-patterns-hugginggpt-family">4.4 Controller-worker composition patterns (HuggingGPT family)</h3>
+
+<p>Research signal:</p>
+
+<ul class="list-level-0">
+  <li>Capability breadth scales with controller-worker decomposition.</li>
+</ul>
+<p>Design implication:</p>
+
+<ul class="list-level-0">
+  <li>Maintain a central orchestrator and specialized adapters/workers under common governance.</li>
+</ul>
+<p>PRISM mapping:</p>
+
+<ul class="list-level-0">
+  <li>Core orchestrator plus system/protocol/application adapters with unified policy gate.</li>
+</ul>
+<p>Validation signal:</p>
+
+<ul class="list-level-0">
+  <li>Cross-adapter orchestration traces and deterministic gating events.</li>
+</ul>
+<h3 id="45-nist-ai-rmf-trust-and-risk-lifecycle">4.5 NIST AI RMF: trust and risk lifecycle</h3>
+
+<p>Research signal:</p>
+
+<ul class="list-level-0">
+  <li>Trustworthiness requires measurable risk controls across lifecycle stages.</li>
+</ul>
+<p>Design implication:</p>
+
+<ul class="list-level-0">
+  <li>Convert governance and safety into explicit, testable operational controls.</li>
+</ul>
+<p>PRISM mapping:</p>
+
+<ul class="list-level-0">
+  <li>Three authority tiers, approval service, denial/timeout handling, release gates, and incident-oriented runbook.</li>
+</ul>
+<p>Validation signal:</p>
+
+<ul class="list-level-0">
+  <li>Production release checklist and observable policy outcome metrics.</li>
+</ul>
+<h2 id="5-prism-architecture-thesis">5. PRISM Architecture Thesis</h2>
+
+<p>PRISM is designed around a single thesis:</p>
+
+<p><strong>Governed autonomy with causal observability outperforms unconstrained autonomy in real operational environments.</strong></p>
+
+<p>Key corollaries:</p>
+
+<ul class="list-level-0">
+  <li>No high-risk execution without explicit authority.</li>
+  <li>No opaque action path without traceability.</li>
+  <li>No reliability claim without tested failure-path behavior.</li>
+  <li>No release promotion without measurable gate evidence.</li>
+</ul>
+<h2 id="6-novelty-program-prism-specific">6. Novelty Program (PRISM-Specific)</h2>
+
+<p>These concepts define PRISM’s research-to-product novelty trajectory.</p>
+
+<h3 id="61-constitutional-causal-compiler-ccc">6.1 Constitutional Causal Compiler (CCC)</h3>
+
+<p>Definition:</p>
+
+<ul class="list-level-0">
+  <li>A pre-execution compiler that transforms intent + policy + memory + environment state into constrained executable plan graphs.</li>
+</ul>
+<p>Expected value:</p>
+
+<ul class="list-level-0">
+  <li>Reduces unsafe branch surfaces.</li>
+  <li>Improves explainability and policy conformance before execution starts.</li>
+</ul>
+<p>Evaluation focus:</p>
+
+<ul class="list-level-0">
+  <li>policy violation reduction,</li>
+  <li>planning determinism under equivalent contexts,</li>
+  <li>operator override rate.</li>
+</ul>
+<h3 id="62-dual-lens-memory-arbitration-dlma">6.2 Dual-Lens Memory Arbitration (DLMA)</h3>
+
+<p>Definition:</p>
+
+<ul class="list-level-0">
+  <li>Retrieval fusion of semantic relevance and causal consequence/rollback relevance, arbitrated by confidence and risk context.</li>
+</ul>
+<p>Expected value:</p>
+
+<ul class="list-level-0">
+  <li>Reduces semantically plausible but operationally unsafe recommendations.</li>
+</ul>
+<p>Evaluation focus:</p>
+
+<ul class="list-level-0">
+  <li>utility proxy uplift,</li>
+  <li>high-risk retrieval precision,</li>
+  <li>post-action incident correlation.</li>
+</ul>
+<h3 id="63-self-healing-workflow-synthesis-shws">6.3 Self-Healing Workflow Synthesis (SHWS)</h3>
+
+<p>Definition:</p>
+
+<ul class="list-level-0">
+  <li>On workflow failure, generate constrained repair candidates, evaluate with policy and quality gates, and stage safe promotion.</li>
+</ul>
+<p>Expected value:</p>
+
+<ul class="list-level-0">
+  <li>Lower operator intervention frequency and faster recovery.</li>
+</ul>
+<p>Evaluation focus:</p>
+
+<ul class="list-level-0">
+  <li>recovery success rate,</li>
+  <li>mean time to recovery,</li>
+  <li>false-safe repair rejection quality.</li>
+</ul>
+<h2 id="7-risk-register-research-derived">7. Risk Register (Research-Derived)</h2>
+
+<ol class="list-level-0">
+  <li><strong>Authority drift risk</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Description: autonomy expands faster than governance coverage.</li>
+  <li>Control: strict tier mapping and approval enforcement.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Observability gaps</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Description: decision/action paths missing from trace stream.</li>
+  <li>Control: event completeness checks and replay readiness.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Retrieval degradation</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Description: quality drift degrades decisions over time.</li>
+  <li>Control: cohort dashboards, drift diagnostics, configurable threshold alerts.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Workflow brittleness</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Description: edge cases fail without recoverable transitions.</li>
+  <li>Control: retry/timeout/fallback semantics and denial/timeout integration tests.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Release gate erosion</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Description: production promotion without evidence discipline.</li>
+  <li>Control: phase gates + test strategy + production runbook enforcement.</li>
+</ul>
+<h2 id="8-evidence-to-execution-mapping">8. Evidence-to-Execution Mapping</h2>
+
+<h3 id="81-implemented-baseline-evidence">8.1 Implemented baseline evidence</h3>
+
+<ul class="list-level-0">
+  <li>Governed orchestrator with tiered policy decisions.</li>
+  <li>Approval queue/service handling allow/deny/timeout behaviors.</li>
+  <li>Workflow engine with retries, timeout, and conditional fallback routing.</li>
+  <li>Retrieval observability with quality proxies, percentile latency, cohort dashboards, drift/growth diagnostics.</li>
+  <li>SQLite persistence for activity traces and cohort snapshots.</li>
+</ul>
+<h3 id="82-documentation-and-process-evidence">8.2 Documentation and process evidence</h3>
+
+<ul class="list-level-0">
+  <li>Product requirements and acceptance criteria in PRD.</li>
+  <li>Development standards and test philosophy in developer guide.</li>
+  <li>Operator safety and workflow behavior guide for user operations.</li>
+  <li>Phase execution plan, test strategy, and production release runbook.</li>
+</ul>
+<h3 id="83-remaining-research-to-build-priorities">8.3 Remaining research-to-build priorities</h3>
+
+<ol class="list-level-0">
+  <li>Deterministic replay harness for incident forensics.</li>
+  <li>Adapter contract conformance matrix with mutation safety guarantees.</li>
+  <li>Automated eval loop for retrieval quality and workflow repair candidates.</li>
+  <li>Formal release readiness scorecard with objective promotion thresholds.</li>
+</ol>
+<h2 id="9-full-lifecycle-success-criteria">9. Full Lifecycle Success Criteria</h2>
+
+<p>PRISM reaches research-informed production maturity when:</p>
+
+<ul class="list-level-0">
+  <li>governance correctness is measured and stable,</li>
+  <li>reliability under denial/timeout/failure is routinely verified,</li>
+  <li>retrieval quality is continuously monitored with actionable alerts,</li>
+  <li>release decisions are evidence-driven and reproducible,</li>
+  <li>and novel capabilities improve outcomes without weakening control boundaries.</li>
+</ul>
+<h2 id="10-references">10. References</h2>
+
+<ol class="list-level-0">
+  <li>Anthropic Engineering, <em>Building effective agents</em> (2024): &lt;https://www.anthropic.com/engineering/building-effective-agents&gt;  </li>
+  <li>Yao et al., <em>ReAct: Synergizing Reasoning and Acting in Language Models</em> (arXiv:2210.03629): &lt;https://arxiv.org/abs/2210.03629&gt;  </li>
+  <li>Schick et al., <em>Toolformer: Language Models Can Teach Themselves to Use Tools</em> (arXiv:2302.04761): &lt;https://arxiv.org/abs/2302.04761&gt;  </li>
+  <li>Shen et al., <em>HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face</em> (arXiv:2303.17580): &lt;https://arxiv.org/abs/2303.17580&gt;  </li>
+  <li>Model Context Protocol, Introduction: &lt;https://modelcontextprotocol.io/introduction&gt;  </li>
+  <li>NIST AI Risk Management Framework: &lt;https://www.nist.gov/itl/ai-risk-management-framework&gt;</li>
+</ol>
+<h2 id="11-additional-research-sources-user-supplied-2026-03-12">11. Additional Research Sources (User-Supplied, 2026-03-12)</h2>
+
+<ol class="list-level-0">
+  <li>ieeexplore.ieee.org — Agentic AI: Autonomous Intelligence for Complex Goals—A Comprehensive Survey (IEEE Xplore)</li>
+  <li>arxiv.org — Agentic AI: Autonomy, Accountability, and the Algorithmic Society</li>
+  <li>blogs.lse.ac.uk — With autonomous problem-solving, agentic AI will upend what you consider work</li>
+  <li>medium.com — Meta-Cognitive AI: The Hidden Layer of Self-Aware Intelligence Powering the Next Generation of Reasoning Agents (RAKTIM SINGH)</li>
+  <li>alignmentforum.org — Human-like metacognitive skills will reduce LLM slop and aid alignment and capabilities</li>
+  <li>arxiv.org — What Do LLM Agents Do When Left Alone? Evidence of Spontaneous Meta-Cognitive Patterns</li>
+  <li>builder.aws.com — re:Invent 2025: Frontier Agents Are Here - The Complete Breakdown</li>
+  <li>sodevelopment.medium.com — Top AI Agent Models in 2025: Architecture, Capabilities, and Future Impact</li>
+  <li>openreview.net — METACOGNITIVE SELF-CORRECTION FOR MULTI-...</li>
+  <li>arxiv.org — Metacognitive Self-Correction for Multi-Agent System via Prototype-Guided Next-Execution Reconstruction</li>
+  <li>researchgate.net — Recursive Self-Improvement in AI: A Formal Analysis of Autonomous Mathematical Knowledge Acquisition</li>
+  <li>emergentmind.com — Self-Evolving AI Agents</li>
+  <li>yoheinakajima.com — Better Ways to Build Self-Improving AI Agents</li>
+  <li>dev.to — AI Agent Memory Management - When Markdown Files Are All You Need?</li>
+  <li>milvus.io — We Extracted OpenClaw's Memory System and Open-Sourced It (memsearch)</li>
+  <li>shivamagarwal7.medium.com — Agentic AI: OpenClaw/MoltBot/ClawdBot's Memory Architecture Explained</li>
+  <li>snowan.gitbook.io — Deep Dive: How OpenClaw's Memory System Works (Kuma Blog / Study Notes)</li>
+  <li>pmc.ncbi.nlm.nih.gov — A self-correcting Agentic Graph RAG for clinical decision support in hepatology</li>
+  <li>arxiv.org — MAGMA: A Multi-Graph based Agentic Memory Architecture for AI Agents</li>
+  <li>architectureandgovernance.com — Lean Agents: The Agile Workforce of Agentic AI</li>
+  <li>ijcaonline.org — Dynamic LLM Routing and Selection based on User Preferences: Balancing Performance, Cost, and Ethics</li>
+  <li>docs.langchain.com — Models (LangChain Docs)</li>
+  <li>arxiv.org — Dynamic Model Routing and Cascading for Efficient LLM Inference: A Survey</li>
+  <li>repositum.tuwien.at — A Dynamic Routing Approach for Sustainable Language Model Inference</li>
+  <li>medium.com — Agent Skills: Standard for Smarter AI (Plaban Nayak, Jan 2026)</li>
+  <li>datacamp.com — What Are Agent Skills? Modular AI Agent Frameworks Explained</li>
+  <li>zenml.io — Dynamic Context Discovery for Production Coding Agents</li>
+  <li>lobehub.com — ai-agents | Skills Marketplace</li>
+  <li>developer.nvidia.com — Build a Log Analysis Multi-Agent Self-Corrective RAG System with NVIDIA Nemotron</li>
+  <li>cncf.io — Reimagining log management tools and software: The impact of AI and GenAI</li>
+  <li>medium.com — Day 6: AI-Assisted DevOps — AIOps Project for Log Anomaly Detection using AI &amp; ML (Vikram Kumar)</li>
+  <li>prassanna.io — Agent Drift: How Autonomous AI Agents Lose the Plot</li>
+  <li>software-lab.org — RepairAgent: An Autonomous, LLM-Based Agent for ...</li>
+  <li>aha.io — Agile vs. Lean: Understanding the Differences</li>
+  <li>pmi.org — Agile and Lean Project Management</li>
+  <li>planview.com — Agile and Lean Project Management</li>
+  <li>medium.com — Context Engineering Strategies for AI Agents: A Developer's Guide (Zilliz)</li>
+  <li>atlassian.com — What is Lean Methodology?</li>
+  <li>genpact.com — How enterprise transformation has evolved from Lean Six Sigma to the agentic era</li>
+  <li>lean6sigmahub.com — DMAIC Projects for Autonomous Vehicle Testing: A Comprehensive Guide to Quality Excellence</li>
+  <li>asq.org — DMAIC Process: Define, Measure, Analyze, Improve, Control</li>
+  <li>gravitexgenesys.com — AI Agents in Lean Six Sigma: Automating DMAIC for IT Efficiency 2026</li>
+  <li>pmc.ncbi.nlm.nih.gov — Define, Measure, Analyze, Improve, Control (DMAIC) Methodology as a Roadmap</li>
+</ol>
+<h2 id="12-competitive-agent-research-autoresearch-hermes-2026-03-21">12. Competitive Agent Research: autoresearch &amp; Hermes (2026-03-21)</h2>
+
+<h3 id="121-karpathyautoresearch">12.1 karpathy/autoresearch</h3>
+
+<p><strong>Source:</strong> &lt;https://github.com/karpathy/autoresearch&gt; (47.4k stars, MIT license)</p>
+
+<p><strong>Summary:</strong> Autonomous AI research loop by Andrej Karpathy. Agent modifies a single training file (<code>train.py</code>), runs a fixed 5-minute training budget, evaluates validation loss, keeps or discards changes, and repeats. The human programs strategy via a markdown "skill" file (<code>program.md</code>). Deliberately minimal — 3 files, single GPU, one metric.</p>
+
+<p><strong>Key architectural patterns:</strong></p>
+
+<ul class="list-level-0">
+  <li>Autonomous experiment loop: edit → execute → evaluate → decide → repeat</li>
+  <li>Markdown-as-program: <code>program.md</code> is the entire agent instruction set</li>
+  <li>Fixed-budget execution: 5-min wall-clock cap per experiment for comparability</li>
+  <li>Keep/discard logic: metric comparison gates rollback decisions</li>
+  <li>Overnight autonomy with morning-after experiment log review</li>
+</ul>
+<p><strong>PRISM applicability:</strong></p>
+
+<ul class="list-level-0">
+  <li><strong>High fit:</strong> Autonomous Research Loop workflow template — Prism's DAG engine + rollback + policy governance can implement a governed version of autoresearch's loop</li>
+  <li><strong>High fit:</strong> Campaign-scoped execution budgets (time, cost, iteration caps) extend Prism's existing timeoutMs semantics</li>
+  <li><strong>High fit:</strong> Metric-driven rollback — wire WorkflowStep output comparison to rollback decisions (extends existing rollback plans)</li>
+  <li><strong>Medium fit:</strong> Markdown skill documents as Session Package objective specs</li>
+  <li><strong>PRISM advantage:</strong> autoresearch runs ungoverned; Prism's tiered risk model + approval gates enable autonomous research with safety constraints</li>
+</ul>
+<h3 id="122-facebookhermes">12.2 facebook/hermes</h3>
+
+<p><strong>Source:</strong> &lt;https://github.com/facebook/hermes&gt; (10.8k stars, MIT license)</p>
+
+<p><strong>Summary:</strong> JavaScript engine optimized for React Native — ahead-of-time static compilation to compact bytecode, fast startup. Static Hermes (SH) branch compiles JS to native machine code via LLVM. Includes structured performance analysis tooling (<code>agent-perf/</code>).</p>
+
+<p><strong>Key architectural patterns:</strong></p>
+
+<ul class="list-level-0">
+  <li>Ahead-of-time compilation: compile before execution for deterministic, fast startup</li>
+  <li>Compact bytecode: optimized intermediate representation under resource constraints</li>
+  <li>Static analysis tools: structured binary-size and performance analysis</li>
+  <li>Constrained execution surface: bytecode limits what can happen at runtime</li>
+</ul>
+<p><strong>PRISM applicability:</strong></p>
+
+<ul class="list-level-0">
+  <li><strong>Conceptual validation:</strong> Hermes's compile-first philosophy directly validates Prism's CCC (Constitutional Causal Compiler) roadmap — pre-compile intent→constrained plan graphs</li>
+  <li><strong>Medium fit:</strong> Cached compilation of frequently-run workflow templates</li>
+  <li><strong>Low direct fit:</strong> Hermes is an engine, not an agent — no governance, memory, or orchestration</li>
+  <li><strong>PRISM advantage:</strong> Prism's CCC goes further than Hermes by fusing policy constraints into the compilation step</li>
+</ul>
+<h3 id="123-swarm-multi-agent-orchestration-prism-current-state">12.3 Swarm &amp; Multi-Agent Orchestration (PRISM Current State)</h3>
+
+<p><strong>Implemented today:</strong></p>
+
+<ul class="list-level-0">
+  <li>AgentPool with 6 built-in role-specialized agents (classifier, chat, summarizer, planner, coder, indexer)</li>
+  <li>SubAgent dispatch via <code>Orchestrator.runSubAgent()</code> with role-based or ID-based routing</li>
+  <li>Task decomposition via <code>TaskDecomposer.toParallelBatches()</code> with dependency analysis</li>
+  <li>True parallel execution via <code>Promise.allSettled()</code> in <code>Orchestrator.runDecomposed()</code></li>
+  <li>Per-dispatch policy governance and activity tracing</li>
+</ul>
+<p><strong>Implemented (Phase D3 — Agent Control &amp; Swarm Intelligence):</strong></p>
+
+<ol class="list-level-0">
+  <li>Agent lifecycle management — ephemeral/semi-permanent/permanent tiers with spawn, stop, promote, demote, reap, persist, and restore</li>
+  <li>Per-agent model assignment — dynamic LLM provider/model override per agent via <code>agentOverrides</code> in RoutingConfig, validated against model capability matrix</li>
+  <li>Chat-to-agent routing — classifier-first intent detection routes majority of chat requests through specialized agents rather than direct LLM calls</li>
+  <li>Swarm orchestration — four topologies (mesh, star, pipeline, broadcast) with coordinator lifecycle, timeout budgets, and per-step governance</li>
+  <li>Intelligent telemetry — dispatch frequency analysis, latency distributions, promotion recommendations, efficiency pattern detection</li>
+  <li>Dashboard wiring — real Agent Control tab with live data replacing mock handlers</li>
+</ol>
+<p><strong>Remaining swarm evolution (future phases):</strong></p>
+
+<ol class="list-level-0">
+  <li>Step result chaining — parallel batch outputs feeding into dependent steps via output→input mapping</li>
+  <li>Nested workflows — DAGs invoking sub-DAGs or decomposed sub-plans</li>
+  <li>Swarm-level atomic rollback — coordinated rollback across all swarm participants on failure</li>
+</ol>
+<h3 id="124-synthesis-governed-swarm-intelligence">12.4 Synthesis: Governed Swarm Intelligence</h3>
+
+<p><strong>Thesis:</strong> Neither autoresearch nor Hermes provides governance. autoresearch runs unconstrained loops. Hermes is a raw execution engine. Prism's integration of autonomous research loops + swarm orchestration + tiered governance = <strong>governed swarm intelligence</strong> — the AaaS vision realized.</p>
+
+<p><strong>Priority integrations:</strong></p>
+
+<ol class="list-level-0">
+  <li>Autonomous Research Loop workflow template (from autoresearch pattern, governed by Prism policy)</li>
+  <li>Campaign-scoped execution with budget constraints (time, cost, iteration count)</li>
+  <li>Metric-driven rollback gates (compare step output vs. baseline, auto-decide keep/discard)</li>
+  <li>Swarm result chaining (output→input mapping across parallel batch boundaries)</li>
+  <li>CCC pre-compilation of plan graphs (validated by Hermes compile-first architecture)</li>
+</ol>
+<p><strong>Competitive positioning (Phase D3):</strong></p>
+
+<ul class="list-level-0">
+  <li>vs. AutoGen/CrewAI: PRISM adds governed lifecycle (ephemeral/semi-permanent/permanent), per-agent model assignment with dynamic switching, tiered policy enforcement per dispatch, and intelligent telemetry with promotion recommendations. AutoGen/CrewAI offer ungoverned multi-agent patterns without lifecycle management or model-level control.</li>
+  <li>vs. LangGraph: PRISM's swarm topologies (mesh/star/pipeline/broadcast) are first-class runtime primitives with timeout budgets and activity tracing, whereas LangGraph requires manual graph construction for equivalent coordination patterns.</li>
+  <li>vs. OpenClaw Agents: PRISM preserves full causal observability and approval gates for every agent dispatch, ensuring enterprise-grade auditability that OpenClaw's agent system does not provide.</li>
+</ul>
+<h2 id="13-computer-use-frontier-addendum-2026-03-25">13. Computer Use Frontier Addendum (2026-03-25)</h2>
+
+<h3 id="131-why-this-matters">13.1 Why this matters</h3>
+
+<p>Computer use is now a frontier differentiator in agent platforms. It materially expands real-world automation reach where APIs are absent, but introduces a higher-risk operating surface than text-only or API-only agents.</p>
+
+<h3 id="132-external-signals-factored">13.2 External signals factored</h3>
+
+<ul class="list-level-0">
+  <li>Anthropic computer-use documentation emphasizes: sandboxed environments, bounded agent loops, prompt-injection risk controls, and human confirmation for consequential actions.</li>
+  <li>Anthropic release/news context indicates rapid model capability movement in computer-use workloads.</li>
+  <li>OpenAI computer-use preview similarly positions the capability as useful but not perfectly reliable, with explicit recommendation for oversight.</li>
+</ul>
+<h3 id="133-implications-for-prism">13.3 Implications for PRISM</h3>
+
+<ol class="list-level-0">
+  <li>Preserve governance first</li>
+</ol>
+<ul class="list-level-0">
+  <li>Computer-use growth must not weaken tiered policy and approval boundaries.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Preserve accountability first</li>
+</ol>
+<ul class="list-level-0">
+  <li>CAC chain and lifecycle evidence must remain mandatory in governed computer-use pathways.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Preserve epistemic clarity</li>
+</ol>
+<ul class="list-level-0">
+  <li>External benchmark metrics are informative but must be labeled as <code>vendor-reported</code> unless reproduced in Prism harnesses.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Preserve enterprise controls</li>
+</ol>
+<ul class="list-level-0">
+  <li>Business profile requires sandboxing, least privilege, and explicit sensitive-action confirmation semantics.</li>
+</ul>
+<ul class="list-level-0">
+  <li><code>PRODUCTION<em>RELEASE</em>RUNBOOK.md</code></li>
+</ul>
+<hr />
+
+<h2 id="14-world-class-project-critique-academicmarket-alignment-school-style-scorecard-q2-2026">14. World-Class Project Critique, Academic/Market Alignment &amp; School-Style Scorecard (Q2 2026)</h2>
+
+<h3 id="141-engineering-architectural-critique-world-class-lens">14.1 Engineering &amp; Architectural Critique (World-Class Lens)</h3>
+
+<p>While PRISM possesses a robust, industry-leading security and policy posture, a world-class architectural evaluation reveals critical engineering bottlenecks and structural risks that must be addressed before commercial scaling.</p>
+
+<h4 id="1-vertical-monolith-hotspot-dashboard-servicets">1. Vertical Monolith Hotspot: <code>dashboard-service.ts</code></h4>
+<ul class="list-level-0">
+  <li><strong>The Issue:</strong> At over 528 KiB, <code>dashboard-service.ts</code> represents a severe architectural "hotspot." It concentrates HTTP REST API routing, WebSocket real-time connection management, static file serving, and core feature logic (such as session control and telemetry gathering) into a single, massive file.</li>
+  <li><strong>The Risk:</strong> Any small UI/UX or API change risks breaking the central WebSocket transport layer. It increases compile times, creates merge-conflict friction in multi-developer environments, and violates the Single Responsibility Principle.</li>
+  <li><strong>Resolution Path:</strong> Proactively split the server into modular routing directories:</li>
+  <li><code>src/core/operator/routes/auth.ts</code></li>
+  <li><code>src/core/operator/routes/chat.ts</code></li>
+  <li><code>src/core/operator/routes/tools.ts</code></li>
+  <li><code>src/core/operator/routes/approval.ts</code></li>
+  <li>Isolate the WebSocket broadcast logic into a standalone <code>src/core/operator/transports/websocket-manager.ts</code>.</li>
+</ul>
+<h4 id="2-single-language-runtime-constraint-node-only">2. Single-Language Runtime Constraint (Node-only)</h4>
+<ul class="list-level-0">
+  <li><strong>The Issue:</strong> PRISM is written entirely in TypeScript/Node.js. While excellent for dashboard event handling, real-time WebSockets, and asynchronous event buses, Node.js is not the native language of AI. Approximately 70–80% of data scientists, ML engineers, and AI application developers work strictly in Python.</li>
+  <li><strong>The Risk:</strong> Forcing developers to integrate or orchestrate with PRISM by writing TypeScript adapters represents a massive adoption ceiling.</li>
+  <li><strong>Resolution Path:</strong> Immediately publish a thin, highly typed Python SDK (<code>prism-client</code>) that wraps PRISM's 41+ REST API endpoints. This enables Python-native pipelines (e.g., Jupyter Notebooks, FastAPI microservices) to programmatically register tools, request approvals, and configure Spectrum Refraction sessions.</li>
+</ul>
+<h4 id="3-in-process-event-bus-scaling-limits">3. In-Process Event Bus Scaling Limits</h4>
+<ul class="list-level-0">
+  <li><strong>The Issue:</strong> PRISM’s Activity Bus (<code>src/core/activity/bus.ts</code>) executes fully in-process. All event routing, SHA-256 event hashing, and DB persistence subscribers operate on the same Node.js event loop.</li>
+  <li><strong>The Risk:</strong> In high-throughput settings—such as a multi-agent swarm executing parallel browser automation—the event loop can become congested, leading to latency spikes and delayed policy evaluation. Furthermore, horizontal scaling is impossible; multiple PRISM server instances cannot share a unified activity trace.</li>
+  <li><strong>Resolution Path:</strong> Abstract the Activity Bus behind a standard interface. Introduce a configurable adapter pattern allowing production deployments to hot-swap the in-process bus for a highly available distributed broker (e.g., Redis Streams, NATS, or Apache Kafka).</li>
+</ul>
+<h4 id="4-sqlite-high-availability-limits">4. SQLite High-Availability Limits</h4>
+<ul class="list-level-0">
+  <li><strong>The Issue:</strong> PRISM utilizes SQLite for persisting chat sessions, telemetry snapshots, and CAC identity logs.</li>
+  <li><strong>The Risk:</strong> SQLite is outstanding for local development, CLI-first workflows, and edge deployments. However, it lacks native support for concurrent high-volume writes, clustering, and active-active failover. </li>
+  <li><strong>Resolution Path:</strong> Modify the persistence layer to support a PostgreSQL adapter for high-availability enterprise environments, while retaining SQLite as the default zero-config option for individuals.</li>
+</ul>
+<hr />
+
+<h3 id="142-aillmnlp-spectrum-refraction-sr-critique">14.2 AI/LLM/NLP &amp; Spectrum Refraction (SR) Critique</h3>
+
+<p>PRISM’s AI capability is dominated by the <strong>Spectrum Refraction (SR)</strong> tri-model fan-out, representing a major conceptual advancement in agent reasoning. However, comparing SR to contemporary LLM architectures exposes both its unique strengths and hidden limits.</p>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">TEXT</span>
+    <button class="copy-btn" onclick="copyCode('code-6apkaph', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-6apkaph">       +-----------------------------------------------------------+
+       |                  PRISM Operator Prompt                    |
+       +-----------------------------------------------------------+
+                                     |
+                    +----------------+----------------+
+                    | (Parallel Fan-Out Orchestration) |
+                    v                                 v
+         +--------------------+             +--------------------+
+         |   Left Hemisphere  |             |  Right Hemisphere  |
+         |      (Logic)       |             |     (Creative)     |
+         |   [Specialized]    |             |   [Specialized]    |
+         +--------------------+             +--------------------+
+                    |                                 |
+     &lt;logic_analysis&gt;...&lt;/logic_analysis&gt;   &lt;creative_synthesis&gt;...&lt;/creative_synthesis&gt;
+                    |                                 |
+                    +----------------+----------------+
+                                     |
+                                     v
+                        +--------------------------+
+                        |      Main Hemisphere     |
+                        |      (Coordination)      |
+                        |      [Structured XML     |
+                        |      Tagged Fusion]      |
+                        +--------------------------+
+                                     |
+                                     v
+                        +--------------------------+
+                        | Unified Compound Response|
+                        +--------------------------+</code></pre>
+</div>
+
+
+<h4 id="1-spectrum-refraction-vs-mixture-of-agents-moa">1. Spectrum Refraction vs. Mixture-of-Agents (MoA)</h4>
+<ul class="list-level-0">
+  <li><strong>Academic Contrast:</strong> Standard Mixture-of-Agents (MoA) networks utilize sequential "debating" layers where multiple homogenous models iteratively review and refine each other's outputs. This is highly effective for mathematical and raw factual correctness but suffers from <em>homogenization</em> (models drift toward consensus, losing diverse perspectives) and massive latency overhead.</li>
+  <li><strong>The SR Advantage:</strong> Spectrum Refraction is structurally superior for complex decision-making. Instead of iterative consensus, it enforces <strong>hemispheric specialization</strong>. The Left model receives a prompt structured for logical, step-by-step analytical reasoning; the Right model receives a prompt tuned for creative, wide-context synthesis. The Main coordinator fuses these highly polarized inputs.</li>
+  <li><strong>Enforced Moat:</strong> The mandatory configuration and activation gates enforcing <code>Left !== Right</code> (model or provider level) mathematically prevent homogenization, guaranteeing distinct logical and creative lenses.</li>
+</ul>
+<h4 id="2-the-missing-hard-budget-ceiling-kill-switch">2. The Missing "Hard Budget Ceiling" Kill-Switch</h4>
+<ul class="list-level-0">
+  <li><strong>The Issue:</strong> Running three distinct LLM calls (Left, Right, Main) in parallel for every single user turn multiplies operational API costs by 300%.</li>
+  <li><strong>The Gap:</strong> While PRISM v0.4.2 added cost estimation, it lacks an enforceable <strong>budget kill-switch</strong>. A runaway agent loop or a highly active swarm utilizing SR can exhaust an organization's monthly OpenAI or Anthropic API budget in a matter of hours.</li>
+  <li><strong>Resolution Path:</strong> Implement a runtime cost-tracking middleware. If a session or a tenant exceeds a configurable dollar threshold (e.g., $10/hour or $100/day), the orchestrator must trigger a fail-safe circuit breaker, log a <code>budget_exhausted</code> event to the Activity Bus, and suspend all active agent lifecycles.</li>
+</ul>
+<hr />
+
+<h3 id="143-uiux-telemetry-critique">14.3 UI/UX &amp; Telemetry Critique</h3>
+
+<h4 id="1-technical-ergonomics-vs-simple-mode-gaps">1. Technical Ergonomics vs. "Simple Mode" Gaps</h4>
+<ul class="list-level-0">
+  <li><strong>The Issue:</strong> The PRISM Operator Dashboard is a powerful, highly technical command center containing 12 tabbed panels. It provides developer-level visibility into activity streams, SQLite tables, Neo4j graphs, and PTY processes.</li>
+  <li><strong>The UX Gap:</strong> For business operators, SREs, and compliance officers, this interface is overwhelming. "Simple Mode" (Phase E3a) remains scaffolded rather than end-to-end integrated.</li>
+  <li><strong>Resolution Path:</strong> Complete the Simple Mode wiring. When toggled, the dashboard should compress the 12 tabs into a clean 3-tab layout: <strong>Chat (Interactive), Approval Queue (Governance), and Audit Log (Observability)</strong>, keeping deep system diagnostics accessible only to power-users.</li>
+</ul>
+<h4 id="2-telemetry-is-write-only">2. Telemetry is "Write-Only"</h4>
+<ul class="list-level-0">
+  <li><strong>The Issue:</strong> PRISM gathers exceptional telemetry (retrieval cohorts, percentile latency, policy drift). However, this data remains localized within the SQLite database and the dashboard UI.</li>
+  <li><strong>The Gap:</strong> SRE teams in mature enterprises do not look at custom dashboard telemetry; they integrate all infrastructure logs and metrics into unified enterprise monitors (e.g., Datadog, Prometheus, Grafana, ELK).</li>
+  <li><strong>Resolution Path:</strong> Wire up a native Prometheus <code>/metrics</code> scraping endpoint and an OpenTelemetry (OTel) egress collector. This allows PRISM's latency, budget usage, and policy violations to be scraped directly by standard corporate observability pipelines.</li>
+</ul>
+<hr />
+
+<h3 id="144-school-style-grading-scorecard-gap-analysis">14.4 School-Style Grading Scorecard &amp; Gap Analysis</h3>
+
+<p>To provide a transparent, academic-level assessment of the PRISM project’s current state, we grade the six core dimensions of the system on a standard A+ to F scale, mapping every sub-A grade directly to an actionable parity resolution.</p>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">TEXT</span>
+    <button class="copy-btn" onclick="copyCode('code-c9lt0xj', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-c9lt0xj">+-----------------------------------------------------------------------+
+|                         PRISM REPORT CARD                             |
+|                                                                       |
+| 1. App Idea &amp; Thesis............................................. A+   |
+| 2. Core Engineering &amp; Architecture............................... B+   |
+| 3. UI/UX &amp; Operator Ergonomics................................... B    |
+| 4. Codebase Quality &amp; Test Discipline............................ A-   |
+| 5. Documentation Depth &amp; Release Discipline...................... A    |
+| 6. AI/LLM/NLP/SR Implementation.................................. A    |
++-----------------------------------------------------------------------+</code></pre>
+</div>
+
+
+<h4 id="1-app-idea-thesis">1. App Idea &amp; Thesis</h4>
+<ul class="list-level-0">
+  <li><strong>Grade:</strong> <strong>A+</strong></li>
+  <li><strong>Rationale:</strong> The concept of <strong>open-source, self-hostable, governance-native Agents-as-a-Service (AaaS)</strong> combined with a decoupled security plane (GaaS) is structurally vacant in the market. Combining constitutional governance (PAD) with multi-model parallel orchestration (SR) creates a highly defensible, world-class competitive moat.</li>
+  <li><strong>Parity Actions:</strong> N/A (Perfect conceptual score).</li>
+</ul>
+<h4 id="2-core-engineering-architecture">2. Core Engineering &amp; Architecture</h4>
+<ul class="list-level-0">
+  <li><strong>Grade:</strong> <strong>B+</strong></li>
+  <li><strong>Rationale:</strong> Outstanding modular design with clean abstractions for adapters, tools, and workflows. However, it suffers from vertical monolith coupling in <code>dashboard-service.ts</code>, an in-process activity bus that limits horizontal scaling, and a lack of native PostgreSQL support for high-volume enterprise HA databases.</li>
+  <li><strong>A+ Parity Actions:</strong></li>
+  <li>[ ] Refactor and split <code>dashboard-service.ts</code> into isolated, domain-specific route controllers.</li>
+  <li>[ ] Extract <code>ActivityBus</code> into a configurable broker pattern supporting Redis Streams or Kafka.</li>
+  <li>[ ] Add native PostgreSQL driver and migration support for corporate database clustering.</li>
+</ul>
+<h4 id="3-uiux-operator-ergonomics">3. UI/UX &amp; Operator Ergonomics</h4>
+<ul class="list-level-0">
+  <li><strong>Grade:</strong> <strong>B</strong></li>
+  <li><strong>Rationale:</strong> The dashboard is visual, responsive, and packed with high-fidelity telemetry widgets. However, the 12 tabs are overly complex for non-developer operators, and "Simple Mode" is not wired end-to-end. There is no graphical interface to review pending approvals directly in the main stream.</li>
+  <li><strong>A+ Parity Actions:</strong></li>
+  <li>[ ] Complete the Phase E3a Simple Mode toggle, dynamically collapsing technical tabs.</li>
+  <li>[ ] Build a dedicated, highly visible pending approval queue modal directly inside the Chat interface.</li>
+  <li>[ ] Add an interactive live log-tail component to the Log tab to stream active <code>.log</code> files in real-time.</li>
+</ul>
+<h4 id="4-codebase-quality-test-discipline">4. Codebase Quality &amp; Test Discipline</h4>
+<ul class="list-level-0">
+  <li><strong>Grade:</strong> <strong>A-</strong></li>
+  <li><strong>Rationale:</strong> Exceptional test density (~650 passing suites, 98% coverage). The gap lies in the transition from mock execution to live environment validation: both <code>terminal-session-adapter.ts</code> (PTY) and <code>container-sandbox-adapter.ts</code> (Docker Engine) use mock/simulated backends in the test suite.</li>
+  <li><strong>A+ Parity Actions:</strong></li>
+  <li>[ ] Implement a real PTY integration test suite (<code>tests/terminal-session-pty.integration.test.ts</code>) that runs against the host shell.</li>
+  <li>[ ] Implement a real Docker API integration test (<code>tests/container-sandbox-docker.integration.test.ts</code>) that spawns an actual disposable Alpine Linux container.</li>
+  <li>[ ] Generate and rotate cryptographically signed plugin key pairs (Ed25519) instead of utilizing release placeholders.</li>
+</ul>
+<h4 id="5-documentation-depth-release-discipline">5. Documentation Depth &amp; Release Discipline</h4>
+<ul class="list-level-0">
+  <li><strong>Grade:</strong> <strong>A</strong></li>
+  <li><strong>Rationale:</strong> Massive, world-class documentation footprint (53 markdown files) covering every strategic, architectural, and operational aspect of the runtime. The release process, though disciplined, remains heavily manual.</li>
+  <li><strong>A+ Parity Actions:</strong></li>
+  <li>[ ] Automate the <code>DIRECTIVE_SHA256</code> boot-hash check by writing a pre-build script that auto-injects the current manifest hash.</li>
+  <li>[ ] Establish automated GitHub Action CI/CD workflows under <code>.github/workflows/</code> to automatically run all 9 CI gate checks on every commit.</li>
+</ul>
+<h4 id="6-aillmnlpsr-implementation">6. AI/LLM/NLP/SR Implementation</h4>
+<ul class="list-level-0">
+  <li><strong>Grade:</strong> <strong>A</strong></li>
+  <li><strong>Rationale:</strong> Spectrum Refraction is implemented with rigorous configuration, activation, and runtime gates that validate model isolation. The integration of local <code>llama.cpp</code> for the Guardian Agent provides a phenomenal local self-healing capability. Lacks cost-containment circuit breakers.</li>
+  <li><strong>A+ Parity Actions:</strong></li>
+  <li>[ ] Write a runtime API budget controller middleware that suspends swarms upon reaching dollar-spend limits.</li>
+  <li>[ ] Build an automated evaluator-optimizer loop to benchmark prompt drift and quality metrics for SR outputs.</li>
+</ul>
+<hr />
+
+<h3 id="145-prism-promotional-sell-sheet-from-aaas-to-gaas">14.5 PRISM Promotional Sell-Sheet: "From AaaS to GaaS"</h3>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">TEXT</span>
+    <button class="copy-btn" onclick="copyCode('code-xn4jgbz', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-xn4jgbz">========================================================================================
+                                     P  R  I  S  M
+           THE OPEN-SOURCE, GOVERNANCE-NATIVE AGENTS-AS-A-SERVICE RUNTIME
+========================================================================================
+
+"Generative AI gave you Copilots. PRISM delivers an Autonomous, Governed Workforce."
+
+As enterprise operations shift from isolated chat tools to deployable "Agents-as-a-Service" 
+(AaaS), the primary barrier to scale is trust. Organizations cannot deploy autonomous 
+agents that can write code, run terminal sessions, or access corporate databases without 
+absolute, verifiable control.
+
+PRISM is the world's ONLY governance-native, self-hostable agent operating system.
+By introducing the "Governance-as-a-Service" (GaaS) paradigm, PRISM guarantees that your 
+agents operate with absolute integrity, security, and total compliance.
+
+----------------------------------------------------------------------------------------
+                                   THE FIVE CORE MOATS
+----------------------------------------------------------------------------------------
+
+1. THE DECOUPLED GOVERNANCE TRIAD (PAD + POLICY + CAC)
+   Never trust prompt engineering to secure an agent. PRISM decouples security entirely.
+   *  PAD (Permanent Active Directives): Your immutable core constitution (10 Laws),
+      cryptographically locked with SHA-256 and verified at boot and runtime.
+   *  Policy Engine: A strict, multi-tiered enforcement gate that physically blocks
+      unauthorized operations. Business profile tier-caps are absolute.
+   *  CAC (Character Accountability Control): Links every single agent action back to 
+      a verified user, human operator, and session context via an immutable audit chain.
+
+2. SPECTRUM REFRACTION (SR) TRI-MODEL ORCHESTRATION
+   The world's only multi-model parallel fan-out engine with mandatory instance isolation.
+   PRISM simultaneously calls distinct models specialized in Logic (Left Hemisphere) 
+   and Creativity (Right Hemisphere) to analyze a prompt. Their polarized perspectives 
+   are dynamically fused by a Main Coordinator (Main Hemisphere) utilizing structured 
+   XML tags. PRISM enforces Left !== Right at the configuration, activation, and execution 
+   gates, ensuring rich, uncompromised perspective compounding.
+
+3. LOCAL SOVEREIGNTY &amp; SELF-HEALING (GUARDIAN AGENT)
+   PRISM runs entirely on-premise or in your private cloud. The built-in "Guardian Agent" 
+   is a permanent system monitor powered by highly optimized local llama.cpp inference. 
+   Operating alongside the operator, the Guardian Agent constantly checks runtime health, 
+   verifies policy compliance, and automatically self-heals crashed model slots on the fly.
+
+4. BEYOND PLUGINS: MODULE CONTEXT PROTOCOL (MCP) INTEGRATED
+   PRISM is built on modern, open agentic interoperability. It ships out of the box with 
+   19 built-in secure tools, 30 system utilities, and full support for the Model Context 
+   Protocol (MCP), enabling seamless, governed communication with enterprise data, 
+   databases, and APIs.
+
+5. FASTRACK PRODUCTION ERGONOMICS
+   Deployable via Docker, PM2 process managers, and a 1-click wizard (available via 
+   Web, TUI, and non-interactive CLI). Complete with robust WebSocket exponential 
+   backoffs, structured activity log-export (JSON/CSV), and real-time retrieval telemetry.
+
+----------------------------------------------------------------------------------------
+                                THE BUSINESS BOTTOM LINE
+----------------------------------------------------------------------------------------
+In highly regulated industries—such as legal, healthcare, and finance—unconstrained AI 
+agents are a catastrophic liability. PRISM transforms this liability into a secure asset.
+PRISM proves compliance, records a cryptographically hashed, replayable audit trail, 
+and guarantees that high-risk actions never bypass a human manager.
+
+"PRISM: The return of operational growth, secured by absolute governance integrity."
+========================================================================================
+
+</code></pre>
+</div>
+
+
+      </article>
+    </div>
+  </main>
+
+  <script>
+    // Theme toggle logic
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      html.setAttribute('data-theme', newTheme);
+      updateThemeIcon(newTheme);
+      localStorage.setItem('prism-docs-theme', newTheme);
+      
+      // Re-initialize mermaid to match the new theme if needed
+      if (window.mermaid) {
+        mermaid.initialize({ 
+          startOnLoad: true, 
+          theme: newTheme === 'dark' ? 'dark' : 'default' 
+        });
+      }
+    }
+    
+    function updateThemeIcon(theme) {
+      const icon = document.getElementById('theme-icon');
+      if (theme === 'dark') {
+        icon.innerHTML = `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
+      } else {
+        // Render moon icon
+        icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`;
+      }
+    }
+    
+    // Auto-load theme
+    const savedTheme = localStorage.getItem('prism-docs-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+    
+    // Initialize Mermaid
+    mermaid.initialize({ 
+      startOnLoad: true, 
+      theme: savedTheme === 'dark' ? 'dark' : 'default',
+      securityLevel: 'loose'
+    });
+    
+    // Copy code button logic
+    function copyCode(codeId, btnElement) {
+      const codeElement = document.getElementById(codeId);
+      if (!codeElement) return;
+      
+      const textArea = document.createElement("textarea");
+      textArea.value = codeElement.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      
+      try {
+        document.execCommand("copy");
+        // Update button visual state
+        const textSpan = btnElement.querySelector('span');
+        const origText = textSpan.textContent;
+        textSpan.textContent = "Copied!";
+        btnElement.style.borderColor = "var(--alert-tip-border)";
+        btnElement.style.color = "var(--alert-tip-border)";
+        
+        setTimeout(() => {
+          textSpan.textContent = origText;
+          btnElement.style.borderColor = "";
+          btnElement.style.color = "";
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy code: ", err);
+      }
+      
+      document.body.removeChild(textArea);
+    }
+    
+    // Toggle Mobile Sidebar
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('open');
+    }
+    
+    // Active heading tracking in TOC on scroll
+    window.addEventListener('DOMContentLoaded', () => {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('id');
+          if (entry.intersectionRatio > 0) {
+            document.querySelectorAll('.toc-list li').forEach(li => {
+              li.classList.remove('active');
+            });
+            const activeLi = document.querySelector(`.toc-list li a[href="#${id}"]`);
+            if (activeLi) {
+              activeLi.parentElement.classList.add('active');
+            }
+          }
+        });
+      }, { rootMargin: '0px 0px -60% 0px' });
+      
+      // Track all headers
+      document.querySelectorAll('article h1, article h2, article h3, article h4').forEach(header => {
+        observer.observe(header);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -85,6 +85,19 @@ export class LinuxComputerUseBackend implements ComputerUseBackend {
         throw new Error("Linux computer-use: click requires xdotool or wlrctl");
     }
 
+    async mouseDrag(x1: number, y1: number, x2: number, y2: number): Promise<void> {
+        if (await this.hasXdotool) {
+            await execFileAsync("xdotool", [
+                "mousemove", String(Math.round(x1)), String(Math.round(y1)),
+                "mousedown", "1",
+                "mousemove", String(Math.round(x2)), String(Math.round(y2)),
+                "mouseup", "1"
+            ]);
+            return;
+        }
+        throw new Error("Linux computer-use: mouseDrag requires xdotool");
+    }
+
     async typeText(text: string): Promise<void> {
         // Prefer wtype on Wayland (xdotool's keyboard sim is broken under
         // pure Wayland compositors); xdotool is fine on X11 / XWayland.

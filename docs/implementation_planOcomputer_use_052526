@@ -1,0 +1,95 @@
+# Implementation Plan: Sovereign Sentinel Hyper-Proxy (SSHP) & Cognitive Session Handoff (CSH) "Baton Pass" Protocol
+
+This document outlines the high-fidelity implementation plan for integrating advanced visual/DOM PII masking, Sacred Covenant checking, and multi-agent human-in-the-loop session handoffs into the PRISM core dashboard.
+
+## 📜 Architectural Goals & Security Boundary
+1. **Zero-Trust Visual Redaction (SSHP)**: Redact all personal identifiable information (PII) including emails, password fields, credit cards, and SSNs from the page DOM *and* from the visual screenshot *before* they leave the sandbox or are sent to third-party LLMs.
+2. **Sacred Covenant Auditing**: Verify browser actions (navigating, clicking, typing, script execution) against the `PrismCovenant` policies, blocking and escalating unsafe actions.
+3. **Cognitive Session Handoff (CSH)**: Enable seamless session serialization, voluntary/preemptive "Baton Passing" to humans or security agents, and visual-headed human-in-the-loop (HITL) resumption.
+
+---
+
+## 🛡️ User Review Required
+
+> [!IMPORTANT]
+> **Use of Sharp for Visual Redaction**
+> We will use `sharp` (already present in `package.json` dependencies) to dynamically draw black redaction rectangles over bounding boxes of sensitive input elements on screen. This process happens entirely in-memory on the host before saving or transmitting screenshots.
+
+> [!WARNING]
+> **Playwright StorageState Extension**
+> Playwright's default `context.storageState()` captures cookies and localStorage, but does *not* capture sessionStorage. We will extend this by running an in-page script evaluation during serialization to capture and restore sessionStorage.
+
+---
+
+## ❓ Open Questions
+- None. The guidelines are fully resolved and aligned with Kirk's decision to enforce local visual masking inside the sandboxed node host prior to external API dispatch, and support both voluntary and preemptive handoffs.
+
+---
+
+## 🛠️ Proposed Changes
+
+We will group our implementation into three core areas: the SSHP Core Engine (Phase B), the CSH "Baton Pass" Protocol (Phase C), and the integration points inside `dashboard-service.ts` and `autonomous-agent-loop.ts`.
+
+### 1. Security & Redaction (Phase B)
+
+#### [NEW] [sshp-interceptor.ts](file:///d:/Projects/Prism/src/core/operator/sshp-interceptor.ts)
+Contains the `SSHPInterceptor` class responsible for:
+- Parsing DOM trees to find sensitive elements: input elements matching `type="password"`, sensitive auto-completes, names containing `cvv`, `card`, `ssn`, `social-security`, etc.
+- Matching text content for general PII formats (regex filters for emails, credit cards, SSNs).
+- Calculating element bounding box coordinates relative to the viewport.
+- Redacting DOM snapshot strings (replacing values with `[REDACTED_PII]`).
+- Overlaying black rectangles on screenshot PNG buffers using `sharp` based on coordinate metadata.
+- Querying the active `PrismCovenant` to validate commands before they execute.
+
+```typescript
+export class SSHPInterceptor {
+  // Methods for sanitizing DOM, redacting screenshots via sharp, and validating against Covenant
+  async sanitizeDom(rawHtml: string): Promise<{ sanitizedHtml: string; selectorsToMask: string[] }>;
+  async redactScreenshot(imageBuffer: Buffer, selectorsToMask: string[], page: any): Promise<Buffer>;
+  async auditAction(command: string, args: Record<string, any>): Promise<{ allowed: boolean; reason?: string }>;
+}
+```
+
+### 2. Cognitive Session Handoff (Phase C)
+
+#### [NEW] [csh-manager.ts](file:///d:/Projects/Prism/src/core/operator/csh-manager.ts)
+Contains `CSHManager` class responsible for:
+- Serializing full browser context: Playwright cookies, localStorage, and sessionStorage.
+- Saving/loading the session package (`CognitiveHandoffState`) including complete agent reasoning logs, completed plans, and DAG memory.
+- Exposing clean APIs to save handoff states to the workspace storage and restoring them into live Playwright instances.
+
+```typescript
+export class CSHManager {
+  async serialize(page: any, context: any, reason: string, target: string): Promise<CognitiveHandoffState>;
+  async deserialize(state: CognitiveHandoffState, page: any, context: any): Promise<void>;
+}
+```
+
+### 3. Server Endpoints & Runtime Integration
+
+#### [MODIFY] [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts)
+- Integrate SSHP hooks inside `/api/browser/screenshot`, `/api/browser/click`, `/api/browser/type`, and `/api/browser/dom-snapshot` endpoints.
+- Register new routes:
+  - `POST /api/v1/autonomous/session/handoff`: Initiates session state packaging, changes state to `suspended`, and broadcasts a WebSocket handoff event.
+  - `POST /api/v1/autonomous/session/resume`: Reloads state into the active browser and resumes autonomous execution.
+  - `GET /api/v1/autonomous/session/pending`: Lists pending handoffs waiting for operator intervention.
+
+#### [MODIFY] [autonomous-agent-loop.ts](file:///d:/Projects/Prism/src/core/runtime/autonomous-agent-loop.ts)
+- Add new FSM state support for `suspended` and `handing_off`.
+- Enhance the goal loop execution sequence so that if it encounters an auth wall or CAPTCHA, it calls the `handoff` sequence and yields control gracefully, ready for manual operator resumption.
+
+---
+
+## 🧪 Verification Plan
+
+### Automated Verification
+- We will write a dedicated test suite `tests/sshp-csh.test.ts` to exercise:
+  1. **SSHP Redaction**: Asserting that a DOM snapshot with password values and mock credit cards is fully stripped, and a mock PNG screenshot has redacted regions overlaid by `sharp`.
+  2. **CSH State Pass**: Asserting that Playwright storage states (cookies, localStorage, and sessionStorage) are perfectly serialized and restored.
+  3. **Covenant Interception**: Verifying that navigating to a forbidden sandbox URL or dangerous target is correctly intercepted and blocked by the Covenant gatekeeper.
+
+We can run the verification suite via:
+`npm run build && node --test dist/tests/sshp-csh.test.js`
+
+### Manual Verification
+- We will use the browser tool to confirm that all REST endpoints resolve with HTTP 200/201 and correctly serialize.

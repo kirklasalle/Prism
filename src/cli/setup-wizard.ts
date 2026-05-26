@@ -59,6 +59,7 @@ interface ProviderDef {
 }
 
 const PROVIDERS: ProviderDef[] = [
+    { id: "llamacpp", label: "Llama.cpp", needsKey: false, description: "Local GGUF CPU/GPU acceleration" },
     { id: "ollama", label: "Ollama", needsKey: false, description: "Local inference server" },
     { id: "openai", label: "OpenAI", needsKey: true, description: "GPT-4o, GPT-4.1, o3" },
     { id: "anthropic", label: "Anthropic", needsKey: true, description: "Claude 4, Sonnet, Haiku" },
@@ -205,7 +206,7 @@ async function runNonInteractive(args: CliArgs, client: SetupApiClient | null): 
     }
 
     const workspace = args.workspace || resolveWorkspaceRoot();
-    const provider = args.provider || "ollama";
+    const provider = args.provider || "llamacpp";
     const validProvider = PROVIDERS.find((p) => p.id === provider);
     if (!validProvider) {
         printError(`Unknown provider: ${provider}. Valid: ${PROVIDERS.map((p) => p.id).join(", ")}`);
@@ -288,7 +289,7 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
     const state: WizardState = {
         profile: currentProfile === "business" ? "business" : "individual",
         workspace: currentWorkspace,
-        provider: args.provider || "ollama",
+        provider: args.provider || "llamacpp",
         apiKey: args.apiKey || "",
     };
 

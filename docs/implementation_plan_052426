@@ -1,0 +1,101 @@
+# Plan to Teach and Engineer Prism as an Autonomous Web Builder
+
+This plan outlines the conceptual architecture, development steps, and training loops required to engineer **PRISM** so that it can autonomously design, program, refine, and validate complex, linked document systems (such as multi-page glassmorphic websites) out in production. It enables PRISM to utilize its own specialized environment—the **Prism IDE**—to write, compile, lint, and audit code in the same task-driven, self-healing manner as world-class agent runtime environments.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Enabling the Self-Contained Prism IDE Workspace**
+> In production, the agent must be able to write and inspect code files without manual operator intervention. We propose introducing a dedicated **Prism IDE toolset** (offering granular block replacements, file syntax validation, and instant test builds) integrated directly into the `Tools & Plugins` dashboard interface.
+
+> [!WARNING]
+> **Governance Approvals for Sandbox Shell Execution**
+> Because visual audits require launching a headless Playwright/Chrome browser, the agent will execute background sandboxed shell processes. These are governed under `tier2_conditional` policies and require pre-signed token authorization profiles in corporate environments.
+
+---
+
+## Proposed System Architecture
+
+To make Prism excel at website construction, we will tie together four existing and new components within the Prism runtime:
+
+```mermaid
+graph TD
+    A[Operator Request] --> B[Task Decomposer]
+    B -->|Decomposes goal| C[Skills Engine]
+    C -->|Invokes web-creator skill| D[Main Hemisphere: Coordination]
+    D -->|Prompts| E[Spectrum Refraction Triad]
+    E -->|Left: Logic & Lint| F[Prism IDE Sandboxed Editor]
+    E -->|Right: Creative Assets & CSS| F
+    F -->|Executes Code Writes| G[Workspace /prism_public]
+    G -->|Runs Audits| H[Browser Control Tool]
+    H -->|Playwright Screenshots| I[Visual Consensus Gate]
+    I -->|Failed: Retries with error logs| F
+    I -->|Passed: Deploys| J[Operator Live Preview]
+```
+
+---
+
+## Detailed Engineering & Training Phases
+
+### Phase 1: Interactive Tasking and Dynamic TODOs (`task.md`)
+To mimic professional multi-step planning, we must train the **Main Hemisphere (Coordination)** and the **TaskDecomposer** to compile a dynamic visual tracker (`task.md`) inside the workspace root prior to writing any source code:
+1. **Dynamic Task Generation**: The `TaskDecomposer` evaluates the operator's website prompt and initializes an execution ledger mapping files to target folders (e.g., assets, styles, scripts, templates).
+2. **State Updates**: On entering any step in the `web-builder-skill.json` workflow, the coordinating agent updates the ledger with a status marker (`[ ]` for pending, `[/]` for in-progress, `[x]` for complete).
+3. **Recovery Semantics**: If a verification step fails, the agent is trained to append a recovery checklist dynamically to the active `task.md` detailing the visual anomalies or syntax errors to debug, keeping the runtime loop organized.
+
+### Phase 2: Activating the Prism IDE Workspace
+Prism must operate within its own high-reliability editor environment. We will register two new developer-centric tools under `src/core/tools/builtin-tools.ts`:
+1. **`prism_ide_modify` (Targeted File Editor)**:
+   - *Behavior*: Accepts a file path, target content substring, and replacement content. 
+   - *Logic*: Searches the target file, verifies the target block is unique to avoid corrupting files, performs a clean surgical replacement, and runs an automated AST parser (Abstract Syntax Tree check via Node's native compiler) to guarantee zero syntax crashes.
+2. **`prism_ide_lint` (Compliance & Quality Check)**:
+   - *Behavior*: Automatically triggers lint checks. Ensures all local assets (stylesheets, icons, fonts) are linked with absolute integrity. Ensures that `div` tags are balanced, absolute layout overflows are mitigated, and interactive event hooks have safe null-catch blocks.
+
+### Phase 3: Fusing Spectrum Refraction for High-Fidelity Design & Sound
+We will engineer the **tri-model Spectrum Refraction (SR)** templates inside `skills/web-builder-skill.json` to synthesize the creative and analytical aspects of web building:
+
+* **Left Hemisphere (Logic & Structure)**:
+  - Validates responsive viewport standards (`<meta name="viewport">`).
+  - Ensures clean navigation layouts and strict file system hierarchy.
+  - Reviews script hooks to prevent broken reference execution.
+* **Right Hemisphere (Creative & Aesthetics)**:
+  - Generates premium HSL color tokens, radial-blur frosted obsidians, dynamic animations, and interactive CSS hover transitions.
+  - Generates code for the **Web Audio API** sound engine, structuring elegant soundscapes (detuned oscillators, custom frequency filters, physical glass chime transients, and sonar pings) that play on user interactions.
+* **Main Hemisphere (Consensus Orchestrator)**:
+  - Fuses structural markup and creative assets.
+  - Dispatches tool calls to assemble and link files inside the target workspace.
+
+### Phase 4: Autonomous Playwright Visual Verification
+To achieve SOTA reliability, Prism must run visual validations on the completed pages:
+1. **Server Boot**: The agent boots a background HTTP server (e.g., `http-server`) on a sandbox port.
+2. **Browser Navigation**: Dispatches the `browser-control-tool.ts` (leveraging Playwright) to navigate to each built page.
+3. **Visual Evaluation & Logs**:
+   - Takes screenshots of each page at multiple responsive break-points (Mobile, Desktop).
+   - Monitors the browser's console for exceptions, missing asset warnings (404s), or rendering alerts.
+   - Feeds the screenshots and browser console logs back into the **Left Hemisphere** to achieve consensus before completing the build.
+
+---
+
+## Verification & Training Plan
+
+To verify that Prism can successfully build multi-page sites out in production, we will establish an automated integration suite in the repository:
+
+### 1. Automated Integration Test (`tests/prism-web-creator.test.ts`)
+We will create a test suite that simulates an operator's request:
+```bash
+# Execute the automated Prism Web Creator training test
+npm run test:web-creator
+```
+* **Test Criteria**:
+  1. Boot the `SkillsEngine` and trigger the `prism.skill.web_creator` workflow.
+  2. Verify that a multi-page boilerplate is successfully initialized.
+  3. Verify that visual features (frosted glass grids, CSS cards) are successfully injected.
+  4. Verify that the dynamic `task.md` file tracks all phases.
+  5. Run `web_visual_audit` and verify that `passes` is evaluated as `true` with zero empty tags or unclosed structures.
+
+### 2. Manual Operator Cockpit Validation
+An operator can inspect the live compilation via the local operator dashboard (`http://localhost:7070`):
+- Open the **Logs & Debug** tab to watch the causal activity events (`skill.step.start` -> `skill.step.complete`).
+- Open the **Telemetry** tab to verify that retrieval utility and tool validation latencies remain optimal.

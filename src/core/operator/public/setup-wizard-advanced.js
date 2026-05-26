@@ -13,7 +13,7 @@ const ROUTING_ROLES = [
 let advState = {
   profile: 'individual',
   workspaceRoot: '',
-  provider: 'ollama',
+  provider: 'llamacpp',
   apiKey: '',
   routingStrategy: 'single',
   roleOverrides: {},
@@ -53,6 +53,33 @@ function escHtml(str) {
   return d.innerHTML;
 }
 
+function applyAdvancedWizardHoverTooltips() {
+  document.querySelectorAll('.wizard-option').forEach((el) => {
+    if (el.getAttribute('title')) return;
+    const heading = el.querySelector('h3');
+    const text = (heading?.textContent || el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text) el.setAttribute('title', text);
+  });
+
+  document.querySelectorAll('button, input, select, textarea, .wizard-toggle').forEach((el) => {
+    if (el.getAttribute('title')) return;
+    if (el.id === 'adv-wizard-next') {
+      el.setAttribute('title', currentStep === TOTAL_STEPS ? 'Create initialization certificate and launch PRISM' : 'Continue to the next setup step');
+      return;
+    }
+    if (el.id === 'adv-wizard-back') {
+      el.setAttribute('title', 'Return to the previous setup step');
+      return;
+    }
+    if (el.id === 'adv-wizard-skip') {
+      el.setAttribute('title', 'Return to the basic setup wizard');
+      return;
+    }
+    const labelText = (el.getAttribute('aria-label') || el.textContent || el.placeholder || '').replace(/\s+/g, ' ').trim();
+    if (labelText) el.setAttribute('title', labelText);
+  });
+}
+
 // ── Progress ─────────────────────────────────────────────────────────────────
 
 function renderProgress() {
@@ -90,6 +117,7 @@ function showStep(n) {
   if (n === 7) initBrowserSchedulerStep();
   if (n === 8) initIntegrationsStep();
   if (n === 9) initSummaryStep();
+  applyAdvancedWizardHoverTooltips();
 }
 
 // ── Step 1: Profile ──────────────────────────────────────────────────────────
@@ -214,6 +242,7 @@ function renderRoleGrid() {
     </div>`;
   }
   grid.innerHTML = html;
+  applyAdvancedWizardHoverTooltips();
 }
 
 window.advSetRoleOverride = function advSetRoleOverride(role, value) {
@@ -291,8 +320,8 @@ async function initCacStep() {
     for (const c of filtered) {
       const cid = c.id || c.characterId || '';
       const icon = cid.startsWith('aria') ? '\u{1F916}' :
-                   cid.startsWith('phoenix') ? '\u{1F985}' :
-                   cid.startsWith('sentinel') ? '\u{1F6E1}' : '\u{1F464}';
+        cid.startsWith('phoenix') ? '\u{1F985}' :
+          cid.startsWith('sentinel') ? '\u{1F6E1}' : '\u{1F464}';
       html += `<option value="${escHtml(cid)}">${icon} ${escHtml(c.displayName || c.name || cid || 'Unknown')}</option>`;
     }
     charSelect.innerHTML = html;
@@ -408,6 +437,7 @@ function renderSchedulerSuggestions() {
     </div>`;
   }
   container.innerHTML = html;
+  applyAdvancedWizardHoverTooltips();
 }
 
 window.advToggleScheduler = function advToggleScheduler(id, el) {
@@ -449,7 +479,7 @@ async function initIntegrationsStep() {
       if (oStat) oStat.innerHTML = 'Not connected.';
     }
   } catch { /* ignore */ }
-  
+
   // Set up polling for OAuth popups
   if (!advState.oauthPoll) {
     advState.oauthPoll = setInterval(() => {
@@ -740,4 +770,5 @@ window.advSkipSetup = function advSkipSetup() {
       advState.roleOverrides = data.routingConfig.roleOverrides || {};
     }
   } catch { /* ignore */ }
+  applyAdvancedWizardHoverTooltips();
 })();

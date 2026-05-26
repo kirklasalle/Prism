@@ -20,6 +20,7 @@ if not defined PRISM_CAC_MODE set "PRISM_CAC_MODE=development"
 if not defined PRISM_TAB_SESSION_INIT set "PRISM_TAB_SESSION_INIT=all"
 if not defined PRISM_TELEMETRY_PIPE set "PRISM_TELEMETRY_PIPE=logs"
 if not defined PRISM_AUTONOMOUS_ENABLED set "PRISM_AUTONOMOUS_ENABLED=true"
+if not defined PRISM_ALLOW_QUERY_TOKEN set "PRISM_ALLOW_QUERY_TOKEN=1"
 
 where node >nul 2>nul
 if errorlevel 1 (
@@ -138,8 +139,8 @@ set PRISM_MODE=server
 set PRISM_ENV_PROFILE=dev
 if not defined PRISM_DASHBOARD_PORT set "PRISM_DASHBOARD_PORT=7070"
 
-if not defined PRISM_LLM_PROVIDER set PRISM_LLM_PROVIDER=ollama
-if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemma3:1b
+if not defined PRISM_LLM_PROVIDER set PRISM_LLM_PROVIDER=google
+if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemini-3.0-flash
 if not defined PRISM_OLLAMA_MODELS set PRISM_OLLAMA_MODELS=gemma3:1b,granite3.1-moe:1b,driaforall/tiny-agent-a:1.5b,qwen3-vl:2b
 
 echo [START] Running PRISM server mode...
@@ -156,13 +157,19 @@ echo [PM2] PRISM launched via PM2. Use 'pm2 logs prism' or 'npm run pm2:monit' t
 goto :wait_loop
 
 :start_direct
-start "PRISM Server" npm start
+echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will stay open to inspect.
+start "PRISM Server" cmd /k npm start
 
 echo [WAIT] Waiting for PRISM server to be ready on port %PRISM_DASHBOARD_PORT%...
 :wait_loop
 timeout /t 1 /nobreak >nul
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %PRISM_DASHBOARD_PORT% -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+if %errorlevel% equ 0 goto :server_ready
 netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
-if errorlevel 1 goto :wait_loop
+if %errorlevel% equ 0 goto :server_ready
+goto :wait_loop
+
+:server_ready
 
 REM Read admin auth token from workspace state (written by server on startup)
 set "PRISM_TOKEN_FILE=%PRISM_WORKSPACE_ROOT%\state\admin-token"

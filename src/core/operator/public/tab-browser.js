@@ -586,6 +586,20 @@ export function browserSessionChanged() {
       pageInfo.textContent = sessions.length === 0 ? 'No active sessions — launch one below' : '';
     }
   }
+
+  // Check CSH Handoff Banner visibility for the current active session
+  var banner = document.getElementById('browser-csh-handoff-banner');
+  if (banner) {
+    if (sessionId && state.activeCshSessionId === sessionId) {
+      banner.style.display = 'flex';
+      var reasonEl = document.getElementById('browser-csh-reason');
+      if (reasonEl) {
+        reasonEl.innerHTML = 'Roadblock Reason: <strong style="color:#ff8d8d;">' + escapeHtml(state.activeCshReason || 'MFA/CAPTCHA verification') + '</strong><br/>Active Objective: <em>' + escapeHtml(state.activeCshObjective || 'Goal') + '</em>';
+      }
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 }
 
 export function populateBrowserSessionDropdowns() {
@@ -661,6 +675,7 @@ export async function initBrowserTab() {
   await refreshSessionsList();
   await browserRefreshLaunchProfiles();
   await refreshBrowserInfo();
+  updateSshpShieldIndicator();
 }
 
 /* ── Legacy functions (from old Computer tab browser section) ── */
@@ -780,3 +795,54 @@ function pollBrowserAutopilot(goalId) {
     } catch { /* best-effort */ }
   }, 2000);
 }
+
+/* ── SSHP & CSH Integration helpers ── */
+
+export function updateSshpShieldIndicator() {
+  var indicator = document.getElementById('browser-sshp-status');
+  if (!indicator) return;
+  var enabled = state.runtimeSettings ? (state.runtimeSettings.sshpRedactionEnabled !== false) : true;
+  if (enabled) {
+    indicator.style.background = 'rgba(34,197,94,0.15)';
+    indicator.style.color = '#4ade80';
+    indicator.textContent = '🛡️ SSHP ACTIVE';
+    indicator.title = 'Sovereign Sentinel Visual/DOM PII masking is fully armed.';
+  } else {
+    indicator.style.background = 'rgba(239,68,68,0.15)';
+    indicator.style.color = '#f87171';
+    indicator.textContent = '🛡️ SSHP OFF';
+    indicator.title = 'Visual/DOM PII masking is disabled by operator command.';
+  }
+}
+
+export async function resumeActiveCsh() {
+  if (!state.activeCshHandoffId || !state.activeCshSessionId) {
+    alert('No active Cognitive Session Handoff (CSH) baton pass to resume.');
+    return;
+  }
+  dashboardLog('browser', 'csh.resume-active', 'Operator initiated baton return.');
+  try {
+    var res = await request('/api/v1/autonomous/session/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handoffId: state.activeCshHandoffId, sessionId: state.activeCshSessionId })
+    });
+    if (res.ok) {
+      state.notice = 'Control returned to Agent successfully.';
+      var noticeToast = document.getElementById('global-notice-toast');
+      if (noticeToast) {
+        noticeToast.textContent = state.notice;
+        noticeToast.style.opacity = '1';
+        setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
+      }
+      var banner = document.getElementById('browser-csh-handoff-banner');
+      if (banner) banner.style.display = 'none';
+      state.activeCshHandoffId = null;
+      state.activeCshSessionId = null;
+    }
+  } catch (e) {
+    console.error('[browser] resume active handoff failed', e);
+    alert('Failed to resume agent: ' + e.message);
+  }
+}
+

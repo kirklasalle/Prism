@@ -143,6 +143,7 @@ export class IamStore {
         getUserByEmail: StatementSync;
         listUsers: StatementSync;
         updateUserStatus: StatementSync;
+        updateUserAttrs: StatementSync;
         insertRole: StatementSync;
         getRoleById: StatementSync;
         getRoleByName: StatementSync;
@@ -276,6 +277,9 @@ export class IamStore {
             `),
             updateUserStatus: this.db.prepare(`
                 UPDATE iam_users SET status = :status, updated_at = :updated_at WHERE id = :id
+            `),
+            updateUserAttrs: this.db.prepare(`
+                UPDATE iam_users SET attrs = :attrs, updated_at = :updated_at WHERE id = :id
             `),
 
             insertRole: this.db.prepare(`
@@ -427,6 +431,10 @@ export class IamStore {
 
     setUserStatus(id: string, status: IamUserStatus): void {
         this.stmts.updateUserStatus.run({ id, status, updated_at: nowIso() });
+    }
+
+    updateUserAttrs(id: string, attrs: Record<string, unknown>): void {
+        this.stmts.updateUserAttrs.run({ id, attrs: JSON.stringify(attrs), updated_at: nowIso() });
     }
 
     // ── roles ───────────────────────────────────────────────────────────────

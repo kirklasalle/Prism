@@ -29,6 +29,12 @@ export class VisionCaptureTool implements Tool {
         if (action === "capture_screen") {
             try {
                 const result = await capture.captureSingle();
+                const latestPath = capture.getLatestPath();
+                if (!latestPath) {
+                    return { ok: false, output: { error: "Failed to get latest screenshot path." } };
+                }
+                const fs = await import("node:fs");
+                const buf = fs.readFileSync(latestPath);
                 return {
                     ok: true,
                     output: {
@@ -36,6 +42,7 @@ export class VisionCaptureTool implements Tool {
                         sizeBytes: result.sizeBytes,
                         timestamp: result.timestamp,
                         latestPath: capture.getLatestPath(),
+                        base64: buf.toString("base64"),
                     },
                     sideEffects: [
                         { type: "file", description: `Screen captured: ${result.filename}`, mutating: false, reversible: true },

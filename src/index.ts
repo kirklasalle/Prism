@@ -214,6 +214,13 @@ async function main(): Promise<void> {
     const covenant = new PrismCovenant(activityBus);
     console.log(`[PRISM][covenant] Sacred Covenant active (v${covenant.getStatus().version}, hash:${covenant.getStatus().hash})`);
 
+    if (process.env.PRISM_BASE_MODE === "true") {
+        console.log(`\n[PRISM][startup] ======================================================`);
+        console.log(`[PRISM][startup] ACTIVE CONSTRAINT PARADIGM ENGAGED: Base Mode initialized.`);
+        console.log(`[PRISM][startup] Optimizing GGUF and task scheduling for GTX 1050 Ti & Core i5 Haswell.`);
+        console.log(`[PRISM][startup] ======================================================\n`);
+    }
+
     // ── Phase A2B: Specialized Autonomous Agents ─────────────────────────
     const autonomousBrowserAgent = new AutonomousBrowserAgent(activityBus);
     const autonomousComputerAgent = new AutonomousComputerAgent(activityBus);
@@ -316,7 +323,9 @@ async function main(): Promise<void> {
         guardianCheckIntervalActions: 5,
         actionsPerMinuteLimit: 30,
     });
+    autonomousLoop.setUsageMetering(usageMeteringService);
     console.log(`[PRISM][autonomous] Autonomous agent loop initialized`);
+
 
     // Late-bind the dashboard service into the workflow-demo action's hooks so
     // the demo can broadcast a UI tour and fire real BUA/CUA probes.
@@ -492,7 +501,10 @@ async function main(): Promise<void> {
         }
 
         await waitForShutdown(async () => {
+            console.log("[PRISM][system] [INFO] Commencing graceful system shutdown sequence...");
+
             // Emit shutdown event to all activity subscribers before stores close
+            console.log("[PRISM][system] [TRACE] Emitting 'system.shutdown' event to ActivityBus.");
             activityBus.emit({
                 operation: "system.shutdown",
                 status: "started",
@@ -502,24 +514,36 @@ async function main(): Promise<void> {
             });
 
             // Persist agent state before shutdown
+            console.log("[PRISM][system] [TRACE] Persisting agent lifecycle states to state/agents.json...");
             try {
                 const { writeFileSync, mkdirSync } = await import("node:fs");
                 const persistDir = workspacePath("state");
                 mkdirSync(persistDir, { recursive: true });
                 const persistPath = workspacePath("state", "agents.json");
                 writeFileSync(persistPath, JSON.stringify(agentLifecycle.serializePersistent(), null, 2));
-            } catch {
-                // Best-effort persistence
+                console.log("[PRISM][system] [TRACE] Agent states persisted successfully.");
+            } catch (err) {
+                console.warn("[PRISM][system] [WARN] Best-effort agent state persistence failed:", err);
             }
+
+            console.log("[PRISM][system] [TRACE] Deactivating agent reapers and schedulers...");
             agentLifecycle.stopReaper();
             selfReviewScheduler.stop();
+
+            console.log("[PRISM][system] [TRACE] Disconnecting all active MCP client interfaces...");
             mcpAdapter.disconnectAll();
+
+            console.log("[PRISM][system] [TRACE] Flushing and closing persistent databases...");
             sqliteStore.close();
             retrievalDashboardStore.close();
             sessionMemory.close();
             chatSessionStore.close();
             adapterDb.close();
+            console.log("[PRISM][system] [TRACE] SQLite activity, retrieval, memory, and chat stores closed.");
+
+            console.log("[PRISM][system] [TRACE] Terminating operator console HTTP/WS dashboard service...");
             await dashboardService.stop();
+            console.log("[PRISM][system] [INFO] Graceful shutdown process complete. System offline.");
         });
         return;
     }

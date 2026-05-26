@@ -27,6 +27,7 @@ import type { ActivityBus } from "../activity/bus.js";
 import type { AutonomousAgentLoop, AutonomousGoal } from "./autonomous-agent-loop.js";
 import type { AutonomousBrowserAgent, BrowserAgentPerception } from "./autonomous-browser-agent.js";
 import type { AutonomousComputerAgent } from "./autonomous-computer-agent.js";
+import type { LlmContentPart } from "../operator/llm-provider-manager.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ export type AutonomousLlmGenerateFn = (input: {
 
 export interface ConversationEntry {
     role: "user" | "assistant" | "system" | "tool";
-    content: string;
+    content: string | LlmContentPart[];
     tool_call_id?: string;
     tool_calls?: LlmToolCallResult[];
 }
@@ -178,18 +179,21 @@ export class AutonomousPlanner {
                     return this.buildResult(goal.goalId, currentGoal?.status === "completed" ? "completed" : "terminated",
                         currentGoal?.error || "Goal ended externally", iteration, totalToolCalls, startTime);
                 }
-                if (currentGoal.status === "paused") {
+                if (currentGoal.status === "paused" || currentGoal.status === "suspended" || currentGoal.status === "handing_off") {
                     // Wait for resume — poll every 2s, max 5min
                     const resumed = await this.waitForResume(loop, goal.goalId, 5 * 60 * 1000);
                     if (!resumed) {
-                        return this.buildResult(goal.goalId, "terminated", "Paused goal was not resumed within 5 minutes", iteration, totalToolCalls, startTime);
+                        return this.buildResult(goal.goalId, "terminated", "Goal execution was not resumed within 5 minutes", iteration, totalToolCalls, startTime);
                     }
                 }
 
                 // Build the user message for first iteration
-                const userMessage = iteration === 0
-                    ? `Execute this objective:\n\n${goal.objective}`
-                    : "";
+                if (iteration === 0) {
+                    conversation.push({
+                        role: "user",
+                        content: `Execute this objective:\n\n${goal.objective}`,
+                    });
+                }
 
                 // Call LLM
                 this.emit("planner.llm.calling", "succeeded", {
@@ -200,7 +204,7 @@ export class AutonomousPlanner {
                 let llmResult;
                 try {
                     llmResult = await generateFn({
-                        message: userMessage,
+                        message: "",
                         conversation,
                         systemPrompt,
                         tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
@@ -214,7 +218,7 @@ export class AutonomousPlanner {
                     await this.sleep(2000);
                     try {
                         llmResult = await generateFn({
-                            message: userMessage,
+                            message: "",
                             conversation,
                             systemPrompt,
                             tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
@@ -256,7 +260,7 @@ export class AutonomousPlanner {
                 for (const toolCall of llmResult.toolCalls) {
                     totalToolCalls++;
                     let stepSuccess = false;
-                    let toolOutput = "";
+                    let toolContentParts: LlmContentPart[] = [];
 
                     try {
                         const step = await loop.executeStep(
@@ -267,23 +271,45 @@ export class AutonomousPlanner {
                         );
 
                         stepSuccess = step.status === "succeeded";
-                        toolOutput = typeof step.output === "string"
+                        let toolOutputRaw = typeof step.output === "string"
                             ? step.output
                             : JSON.stringify(step.output ?? { ok: stepSuccess }, null, 2);
 
                         // Truncate large outputs for context efficiency
-                        if (toolOutput.length > 3000) {
-                            toolOutput = toolOutput.slice(0, 3000) + "\n...[truncated]";
+                        if (toolOutputRaw.length > 3000) {
+                            toolOutputRaw = toolOutputRaw.slice(0, 3000) + "\n...[truncated]";
                         }
+
+                        toolContentParts.push({ type: "text", text: toolOutputRaw });
+
+                        if (step.output && typeof step.output === "object" && typeof (step.output as any).base64 === "string") {
+                            const format = (step.output as any).format || "png";
+                            toolContentParts.push({
+                                type: "image_url",
+                                image_url: { url: `data:image/${format};base64,${(step.output as any).base64}` }
+                            });
+
+                            // Remove base64 from the text part so we don't send megabytes of text
+                            if (typeof step.output !== "string") {
+                                const shallowCopy = { ...step.output } as any;
+                                delete shallowCopy.base64;
+                                let cleanOutput = JSON.stringify(shallowCopy, null, 2);
+                                if (cleanOutput.length > 3000) cleanOutput = cleanOutput.slice(0, 3000) + "\n...[truncated]";
+                                toolContentParts[0] = { type: "text", text: cleanOutput };
+                            }
+                        }
+
                     } catch (execError) {
-                        toolOutput = `Error: ${String(execError)}`;
+                        toolContentParts.push({ type: "text", text: `Error: ${String(execError)}` });
                         stepSuccess = false;
                     }
 
                     // Add tool result to conversation
                     conversation.push({
                         role: "tool",
-                        content: toolOutput,
+                        content: toolContentParts.length === 1 && toolContentParts[0].type === "text"
+                            ? toolContentParts[0].text!
+                            : toolContentParts,
                         tool_call_id: toolCall.id,
                     });
 
@@ -292,13 +318,13 @@ export class AutonomousPlanner {
                         iteration,
                         tool: toolCall.name,
                         success: stepSuccess,
-                        summary: toolOutput.slice(0, 200),
+                        summary: toolContentParts[0].text!.slice(0, 200),
                     });
 
                     this.emit("planner.step.executed", stepSuccess ? "succeeded" : "failed", {
                         goalId: goal.goalId, iteration,
                         tool: toolCall.name, success: stepSuccess,
-                        outputLength: toolOutput.length,
+                        outputLength: (toolContentParts[0].text ?? "").length,
                     });
                 }
 
@@ -380,7 +406,7 @@ export class AutonomousPlanner {
             await this.sleep(2000);
             const goal = loop.getGoal(goalId);
             if (!goal) return false;
-            if (goal.status === "executing") return true;
+            if (goal.status === "executing" || goal.status === "planning") return true;
             if (goal.status === "terminated" || goal.status === "completed" || goal.status === "failed") return false;
         }
         return false;

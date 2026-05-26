@@ -258,10 +258,10 @@ export function setupWizardHtml(port: number): string {
       <!-- Step 2: Workspace Location -->
       <div class="wizard-step" id="step-2">
         <h2>Workspace Location</h2>
-        <p>PRISM stores configuration, agent state, and artifacts in a workspace directory.</p>
+        <p>PRISM stores configuration, agent state, and artifacts in a workspace directory. Leave this blank to use the default workspace location.</p>
         <div class="wizard-field">
           <label>Workspace Path</label>
-          <input type="text" id="workspace-path" />
+          <input type="text" id="workspace-path" placeholder="Leave blank for default workspace" />
         </div>
         <div class="wizard-check-list" id="workspace-checks"></div>
       </div>
@@ -275,6 +275,13 @@ export function setupWizardHtml(port: number): string {
           <div class="wizard-option-body">
             <h3>\u{1F5A5} Ollama (Local)</h3>
             <p class="desc">Run open-source models locally. No API key needed. Requires Ollama installed and running.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="custom" onclick="selectProvider(this, 'custom')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F4BB} Custom Provider</h3>
+            <p class="desc">Use a custom configured provider if PRISM has one available. API key required when configured.</p>
           </div>
         </div>
         <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')">
@@ -331,7 +338,7 @@ export function setupWizardHtml(port: number): string {
       <!-- Step 5 (E3b): Identity & First Session -->
       <div class="wizard-step" id="step-5">
         <h2>Identity &amp; First Session</h2>
-        <p>Your Character Accountability Chain (CAC) binds every action back to a real identity. You can accept placeholder emails now and boot the workspace; tier-2+ tool calls on the Business profile stay blocked until real addresses land.</p>
+        <p>Your Character Accountability Chain (CAC) binds every action back to a real identity. PRISM will create your first chat session and initialize browser/computer tooling with the selected assistant. Placeholder emails may be used now, but Business-profile tier-2+ tools remain blocked until real addresses are configured.</p>
         <label style="display:block;margin-top:12px;">Operator email (the human accountable for decisions):
           <input type="email" id="wizard-operator-email" style="width:100%;margin-top:4px;" placeholder="operator@prism.local" />
         </label>

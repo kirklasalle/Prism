@@ -1,6 +1,17 @@
 <div style="display:flex;flex-direction:column;gap:12px;">
   <div id="tools-overview-bar" data-tip-id="tools:overview" data-tip-kind="tools"></div>
   <section class="rail-section panel">
+    <div class="collapsible-header" onclick="togglePanelCollapse('skillsPanel')" data-tip-id="tools:skills"
+      data-tip-kind="tools">
+      <h3>⚡ Skills</h3>
+      <span class="tp-panel-summary" id="skillsPanel-summary" style="display:none;"></span>
+      <span class="collapse-chevron" id="chevron-skillsPanel">▶</span>
+    </div>
+    <div class="collapsible-body collapsed" id="body-skillsPanel">
+      <div id="skills-panel" class="stack"></div>
+    </div>
+  </section>
+  <section class="rail-section panel">
     <div class="collapsible-header" onclick="togglePanelCollapse('pluginsPanel')" data-tip-id="tools:plugins"
       data-tip-kind="tools">
       <h3>🧩 Plugins</h3>

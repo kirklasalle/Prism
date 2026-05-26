@@ -151,6 +151,8 @@ export class GuardianAgent extends EventEmitter {
     private lastAABLedgerCount = 0;
     /** Optional Covenant accessor — runs integrity audits. */
     private covenantFn?: () => CovenantStatus;
+    /** Optional Skills Engine for dynamic, multi-step self-healing workflows. */
+    private skillsEngine?: any;
 
     constructor(
         private readonly activityBus: ActivityBus,
@@ -160,7 +162,18 @@ export class GuardianAgent extends EventEmitter {
     ) {
         super();
         this.config = { ...DEFAULT_CONFIG, ...config };
-        this.tasks = GUARDIAN_TASK_CATALOG.map(t => ({ ...t, lastRunAt: null, lastResult: null, lastDetail: null }));
+        
+        // Base Mode catalog pruning: retain only directive_integrity, mcp_health_recovery, and aab_ledger_monitor
+        if (process.env.PRISM_BASE_MODE === "true") {
+            const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(t =>
+                t.id === "directive_integrity" ||
+                t.id === "mcp_health_recovery" ||
+                t.id === "aab_ledger_monitor"
+            );
+            this.tasks = prunedCatalog.map(t => ({ ...t, lastRunAt: null, lastResult: null, lastDetail: null }));
+        } else {
+            this.tasks = GUARDIAN_TASK_CATALOG.map(t => ({ ...t, lastRunAt: null, lastResult: null, lastDetail: null }));
+        }
     }
 
     get state(): GuardianState {
@@ -178,6 +191,36 @@ export class GuardianAgent extends EventEmitter {
         if (wasRunning && this._state === "stopped") {
             void this.start();
         }
+    }
+
+    /** Re-prune or expand the tasks catalog at runtime when Base Mode toggles. */
+    public syncModeCatalog(): void {
+        const wasRunning = this._state === "running";
+        if (wasRunning) {
+            this.stopTaskRunners();
+        }
+        
+        if (process.env.PRISM_BASE_MODE === "true") {
+            const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(t =>
+                t.id === "directive_integrity" ||
+                t.id === "mcp_health_recovery" ||
+                t.id === "aab_ledger_monitor"
+            );
+            this.tasks = prunedCatalog.map(t => {
+                const old = this.tasks.find(o => o.id === t.id);
+                return { ...t, lastRunAt: old ? old.lastRunAt : null, lastResult: old ? old.lastResult : null, lastDetail: old ? old.lastDetail : null };
+            });
+        } else {
+            this.tasks = GUARDIAN_TASK_CATALOG.map(t => {
+                const old = this.tasks.find(o => o.id === t.id);
+                return { ...t, lastRunAt: old ? old.lastRunAt : null, lastResult: old ? old.lastResult : null, lastDetail: old ? old.lastDetail : null };
+            });
+        }
+        
+        if (wasRunning) {
+            this.startTaskRunners();
+        }
+        this.emitEvent("guardian.config_updated", `Synchronized tasks for Base Mode: ${process.env.PRISM_BASE_MODE === "true"}`);
     }
 
     /** Start the Guardian Agent. Loads the model into a supervisor slot. */
@@ -310,6 +353,31 @@ export class GuardianAgent extends EventEmitter {
         this.emitEvent("guardian.healing", `Attempting self-heal: ${issue}`);
 
         try {
+            // ── Dynamic Skills-Engine Self-Healing Workflow ───────────────────
+            if (this.skillsEngine) {
+                const skill = await this.skillsEngine.routeQuery(issue);
+                if (skill) {
+                    this.emitEvent("guardian.skills_heal.starting", `Dynamic self-healing skill found: ${skill.name} (ID: ${skill.id}). Initiating recovery session...`);
+                    try {
+                        let session = await this.skillsEngine.createSession(skill.id, "guardian-session");
+                        while (session.status === "running") {
+                            session = await this.skillsEngine.executeStep(session.sessionId);
+                        }
+                        if (session.status === "completed") {
+                            this.issuesResolved++;
+                            this._state = "running";
+                            this.recordAction("self_heal", "success", `Recovered via skill ${skill.name}. Josephine knows!`);
+                            this.emitEvent("guardian.healed", `[guardian:self-heal] ${skill.name} completed successfully. Josephine knows!`);
+                            return;
+                        } else {
+                            throw new Error(`Self-healing workflow ended with state: ${session.status}`);
+                        }
+                    } catch (skillErr) {
+                        this.emitEvent("guardian.skills_heal.failed", `Skills-engine recovery failed: ${String(skillErr)}. Falling back to default routines...`);
+                    }
+                }
+            }
+
             if (issue === "model_slot_down") {
                 // Re-load the model
                 await this.supervisor.loadModel(
@@ -324,8 +392,8 @@ export class GuardianAgent extends EventEmitter {
                 );
                 this.issuesResolved++;
                 this._state = "running";
-                this.recordAction("self_heal", "success", `Recovered model slot: ${this.config.modelAlias}`);
-                this.emitEvent("guardian.healed", `Model slot recovered: ${this.config.modelAlias}`);
+                this.recordAction("self_heal", "success", `Recovered model slot: ${this.config.modelAlias}. Josephine knows!`);
+                this.emitEvent("guardian.healed", `Model slot recovered: ${this.config.modelAlias}. Josephine knows!`);
                 return;
             }
 
@@ -408,6 +476,11 @@ export class GuardianAgent extends EventEmitter {
     /** Inject Covenant accessor for integrity audits. */
     public setCovenantFn(fn: () => CovenantStatus): void {
         this.covenantFn = fn;
+    }
+
+    /** Inject SkillsEngine for autonomous, multi-step self-healing workflows. */
+    public setSkillsEngine(engine: any): void {
+        this.skillsEngine = engine;
     }
 
     /** Returns current task catalog with status. */

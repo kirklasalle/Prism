@@ -26,6 +26,7 @@
 
 ## 2026 Q2 Audit and Readiness (NEW)
 
+- BASE_MODE_BOOT_TRACING.md: comprehensive, line-by-line tracing analysis explaining PRISM's boot instructions and fallbacks under Base Mode
 - PRISM_FULL_AUDIT_2026_Q2.md: comprehensive audit — what is implemented, what looks complete but isn't, canonical gap list G-1 through G-25, system critique, readiness scorecard
 - PRISM_COMPETITIVE_AaaS_MAP_2026.md: AaaS market survey — top 10 frameworks, commercial cloud AaaS list, OSS toolkits, unique-niche positioning for PRISM
 - PRISM_UPDATED_ROADMAP_2026_Q2.md: formal roadmap appending Phase R (Readiness) between E and F; extended F/G/H/I workstreams
@@ -34,6 +35,12 @@
 
 ## User and Operator Guides (NEW)
 
+- PRISM_GLOSSARY.md: full system glossary and abbreviation guide detailing core architectual acronyms (PAD, CAC, SR, PTAC, AAB, SSSR, etc.)
+- PRISM_FAQ.md: highly requested Frequently Asked Questions (FAQ) guide covering General, Operator, Developer, and Security usage scenarios.
+- COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md: full executive overview answering core operator control layouts, chat integration capabilities, and step playbooks.
+- OPERATOR_DASHBOARD_WALKTHROUGH.md: natural language operator playbook to configure security shielding, trigger autonomous loops, and resolve Baton Pass handoffs.
+- OPERATOR_DASHBOARD_WALKTHROUGH.html: highly styled HTML visual representation of the operator dashboard manual.
+- SOTA_BROWSER_WIKI.md: wiki for Sovereign Sentinel Hyper-Proxy (SSHP), visual PII masking, Sacred Covenant action audits, and CSH Baton Pass Human-in-the-Loop transitions.
 - BUSINESS_VS_INDIVIDUAL_GUIDE.md: profile differences — tool-by-tool examples, CAC domain enforcement, character pairing
 - DEPLOYMENT_GUIDE.md: local, Docker, Docker Compose, PM2, systemd, TLS, backup, post-deploy checklist
 - ADMIN_SRE_GUIDE.md: day-2 operations — health, metrics, rotations, backup drills, incident response, capacity planning

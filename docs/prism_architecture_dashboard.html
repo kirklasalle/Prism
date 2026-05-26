@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRISM Base Mode: Extreme Constraint Architecture</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Warm Neutrals with Amber/Rose accents for constraints (Stone 50 bg, Stone 800 text, Rose 700 warnings, Emerald 600 success) -->
+    <!-- Application Structure Plan: A technical dashboard approach. It is structured linearly from 'The Problem' (Hardware Reality) to 'The Goal' (Model Target Matrix) and finally 'The Solution' (Degradation & SSSR Architecture). This logical flow allows engineers to understand the strict bottlenecks before interacting with the proposed routing and pruning solutions. Interactive elements focus on toggling the 'Base Mode' degradation to visually demonstrate how the system reduces its footprint. -->
+    <!-- Visualization & Content Choices: Hardware Limits -> Inform/Compare -> Doughnut & Bar Charts (Chart.js) -> Hover tooltips -> Shows severe VRAM and Bandwidth limits. Model Scouting -> Compare/Relationships -> Bubble Chart (Chart.js) -> Hover details -> Visualizes parameters vs VRAM to find the 'safe zone'. Task Degradation -> Change/Organize -> Interactive HTML List -> Toggle Button -> Demonstrates dynamic resource pruning. CONFIRMATION: NO SVG used. NO Mermaid JS used. All visuals are Canvas or HTML/CSS. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #fafaf9; color: #292524; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+            padding: 1rem;
+            background: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e7e5e4;
+        }
+
+        @media (max-width: 640px) {
+            .chart-container { height: 280px; }
+        }
+
+        .task-card {
+            transition: all 0.3s ease;
+        }
+        
+        .task-suspended {
+            opacity: 0.5;
+            background-color: #f5f5f4;
+            border-color: #d6d3d1;
+        }
+        
+        .task-suspended .task-title {
+            text-decoration: line-through;
+            color: #78716c;
+        }
+    </style>
+</head>
+<body class="antialiased pb-20">
+
+    <header class="bg-stone-900 text-stone-50 py-12 px-6 border-b-4 border-rose-700">
+        <div class="max-w-5xl mx-auto">
+            <div class="inline-block px-3 py-1 mb-4 text-xs font-bold tracking-wider text-rose-100 bg-rose-800 rounded-full mono">
+                EXTREME CONSTRAINT CHALLENGE
+            </div>
+            <h1 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight">PRISM "Base Mode" Architecture</h1>
+            <p class="text-lg md:text-xl text-stone-300 max-w-3xl leading-relaxed">
+                Designing a local, dual-agent platform (Main LLM + Perpetual Guardian) strictly constrained to a <strong>2.0GB - 3.0GB VRAM</strong> footprint on legacy hardware.
+            </p>
+        </div>
+    </header>
+
+    <nav class="sticky top-0 bg-white/90 backdrop-blur-md border-b border-stone-200 z-50">
+        <div class="max-w-5xl mx-auto px-6 py-4 flex gap-6 overflow-x-auto text-sm font-semibold text-stone-600">
+            <a href="#hardware" class="hover:text-rose-700 transition-colors whitespace-nowrap">1. Hardware Reality</a>
+            <a href="#models" class="hover:text-rose-700 transition-colors whitespace-nowrap">2. Model Scouting</a>
+            <a href="#architecture" class="hover:text-rose-700 transition-colors whitespace-nowrap">3. Base Mode Degradation</a>
+            <a href="#engine" class="hover:text-rose-700 transition-colors whitespace-nowrap">4. Local Engine Routing</a>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto px-6 mt-12 space-y-20">
+
+        <section id="hardware" class="scroll-mt-24">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold mb-4 flex items-center gap-3">
+                    <span class="text-rose-700">01.</span> The Hardware Reality
+                </h2>
+                <p class="text-stone-600 text-lg leading-relaxed">
+                    This section visualizes the extreme bottlenecks defined in the PRISM prompt. Theoretical solutions assuming modern architectures (Flash Attention 2, DDR5, large VRAM) will fail here. We must design for a legacy Pascal GPU and an outdated CPU bus.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="chart-container">
+                    <canvas id="vramChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="bandwidthChart"></canvas>
+                </div>
+            </div>
+
+            <div class="mt-8 bg-stone-100 border border-stone-200 rounded-xl p-6">
+                <h3 class="font-bold text-stone-800 mb-3">System Specifications</h3>
+                <ul class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mono text-stone-700">
+                    <li class="flex items-center gap-2"><span class="text-rose-600">■</span> <strong>GPU:</strong> Nvidia GTX 1050 Ti (Pascal)</li>
+                    <li class="flex items-center gap-2"><span class="text-rose-600">■</span> <strong>CPU:</strong> Intel i5-4460 (Haswell 22nm, 4C/4T)</li>
+                    <li class="flex items-center gap-2"><span class="text-rose-600">■</span> <strong>RAM:</strong> 32GB DDR3 @ ~1600MT/s</li>
+                    <li class="flex items-center gap-2"><span class="text-rose-600">■</span> <strong>Storage:</strong> SATA III SSD (~550 MB/s)</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="models" class="scroll-mt-24">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold mb-4 flex items-center gap-3">
+                    <span class="text-rose-700">02.</span> SOTA Model Scouting
+                </h2>
+                <p class="text-stone-600 text-lg leading-relaxed">
+                    To fit both the Main Agent and the Guardian within the 3GB ceiling, we must target 1B to 3B parameter models using native 8-bit (Q8_0) quantization for logical stability. The chart below plots our primary research candidates against the VRAM "Death Zone".
+                </p>
+            </div>
+
+            <div class="chart-container" style="max-width: 100%; height: 450px;">
+                <canvas id="modelChart"></canvas>
+            </div>
+            
+            <div class="mt-6 text-sm text-stone-500 bg-stone-50 p-4 rounded-lg border border-stone-200">
+                <strong>Selection Criteria:</strong> Focus on Q4_K_M, Q5_K_M, and strictly emphasize Q8_0 for architecture stability over aggressive sub-4-bit crushing. Must have stable context windows up to 4,096 tokens and exact JSON schema validation capabilities.
+            </div>
+        </section>
+
+        <section id="architecture" class="scroll-mt-24 pt-8 border-t border-stone-200">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold mb-4 flex items-center gap-3">
+                    <span class="text-rose-700">03.</span> Base Mode Degradation Strategy
+                </h2>
+                <p class="text-stone-600 text-lg leading-relaxed">
+                    When the <code>LlamaCppSupervisor</code> detects extreme constraint, it engages "Base Mode." The Guardian Agent cannot run its full suite of 17 diagnostics. Use the interactive toggle below to observe how the <code>GUARDIAN_TASK_CATALOG</code> is pruned to preserve critical security and connectivity operations while dropping heavy compute tasks.
+                </p>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-8 items-start">
+                
+                <div class="w-full md:w-1/3 bg-white p-6 rounded-xl border border-stone-200 shadow-sm sticky top-24">
+                    <h3 class="text-xl font-bold mb-4">System State</h3>
+                    <div class="flex items-center justify-between mb-6 p-4 bg-stone-100 rounded-lg">
+                        <span class="font-semibold text-stone-700">Toggle Base Mode:</span>
+                        <button id="baseModeToggle" class="relative inline-flex h-7 w-14 items-center rounded-full bg-stone-300 transition-colors focus:outline-none">
+                            <span id="toggleKnob" class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform translate-x-1 shadow-sm"></span>
+                        </button>
+                    </div>
+                    
+                    <div id="stateStatus" class="text-sm p-4 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <strong>Current Status: Full Capacity</strong><br>
+                        All Guardian tasks active. VRAM footprint exceeded for 1050 Ti. Prompt contexts at maximum size.
+                    </div>
+                    
+                    <div class="mt-6">
+                        <h4 class="font-bold text-sm text-stone-500 uppercase tracking-wider mb-2">Prompt Budgeting</h4>
+                        <div class="mono text-sm space-y-2">
+                            <div class="flex justify-between border-b border-stone-100 pb-1">
+                                <span>Max Context:</span> <span id="valContext" class="font-bold text-stone-800">4096</span>
+                            </div>
+                            <div class="flex justify-between border-b border-stone-100 pb-1">
+                                <span>System Prompt:</span> <span id="valPrompt" class="font-bold text-stone-800">4000+ tk</span>
+                            </div>
+                            <div class="flex justify-between pb-1">
+                                <span>Tool Contracts:</span> <span id="valTools" class="font-bold text-stone-800">Full XML</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full md:w-2/3 space-y-4" id="taskList">
+                </div>
+
+            </div>
+        </section>
+
+        <section id="engine" class="scroll-mt-24 pt-8 border-t border-stone-200">
+            <div class="mb-8">
+                <h2 class="text-3xl font-bold mb-4 flex items-center gap-3">
+                    <span class="text-rose-700">04.</span> Local Engine Routing (SSSR)
+                </h2>
+                <p class="text-stone-600 text-lg leading-relaxed">
+                    To co-exist within 2.5GB VRAM, PRISM utilizes a <strong>Single-Slot Sequential Runner (SSSR)</strong>. We cannot load two models simultaneously. Context switching must rely on Llama.cpp's KV prefix caching instead of RAM swapping due to severe DDR3 bandwidth bottlenecks.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white border border-stone-200 p-6 rounded-xl shadow-sm hover:border-rose-300 transition-colors">
+                    <div class="text-2xl mb-4">🔄</div>
+                    <h3 class="text-xl font-bold mb-2">Ollama Fallback Routine</h3>
+                    <p class="text-sm text-stone-600 mb-4">
+                        Supervisor dynamically queries Ollama API. If the model is resident, it routes internally to save process overhead. If cold, it natively spawns <code>llama-server</code>.
+                    </p>
+                    <div class="bg-stone-900 text-stone-300 text-xs p-3 rounded mono overflow-x-auto">
+                        if (await checkOllama(modelPath)) {<br>
+                        &nbsp;&nbsp;routeToOllama();<br>
+                        } else {<br>
+                        &nbsp;&nbsp;spawnLlamaServer();<br>
+                        }
+                    </div>
+                </div>
+                
+                <div class="bg-white border border-stone-200 p-6 rounded-xl shadow-sm hover:border-rose-300 transition-colors">
+                    <div class="text-2xl mb-4">⚙️</div>
+                    <h3 class="text-xl font-bold mb-2">Llama.cpp Flags (Haswell/Pascal)</h3>
+                    <p class="text-sm text-stone-600 mb-4">
+                        Optimized command-line arguments to prevent the 4-thread i5 CPU from stalling during Prompt Evaluation.
+                    </p>
+                    <ul class="text-sm text-stone-700 space-y-2 mono">
+                        <li class="flex items-start gap-2"><span class="text-rose-600 mt-1">►</span> <div><code>-t 4</code><br><span class="text-xs text-stone-500 font-sans">Maps directly to Haswell physical cores.</span></div></li>
+                        <li class="flex items-start gap-2"><span class="text-rose-600 mt-1">►</span> <div><code>--batch-size 128</code><br><span class="text-xs text-stone-500 font-sans">Prevents hardware lockup on DDR3.</span></div></li>
+                        <li class="flex items-start gap-2"><span class="text-rose-600 mt-1">►</span> <div><code>--lookup-cache</code><br><span class="text-xs text-stone-500 font-sans">Mandatory for SSSR context swapping.</span></div></li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-stone-900 text-stone-400 py-8 text-center mt-20 border-t border-stone-800">
+        <p class="text-sm">PRISM "Base Mode" Architecture Visualization. Adhering to strict local hardware constraints.</p>
+    </footer>
+
+    <script>
+        // Data Configuration
+        const guardianTasks = [
+            { id: "directive_integrity", type: "Security", desc: "SHA-256 PAD check ensuring directives are untampered.", essential: true, interval: "600,000ms" },
+            { id: "mcp_health_recovery", type: "Monitoring", desc: "Reconnects and verifies accessibility of downed MCP servers.", essential: true, interval: "60,000ms" },
+            { id: "aab_ledger_monitor", type: "Monitoring", desc: "Audits for anomalous behavior and runaway agent loops.", essential: true, interval: "30,000ms" },
+            { id: "memory_audit", type: "Maintenance", desc: "Deep scan of memory usage and context window fragmentation.", essential: false, interval: "300,000ms" },
+            { id: "disk_space_check", type: "Maintenance", desc: "Verifies local SSD constraints and temp file cleanup.", essential: false, interval: "300,000ms" },
+            { id: "command_filter_verify", type: "Security", desc: "Cross-references executed commands against safe-lists.", essential: false, interval: "600,000ms" },
+            { id: "knowledge_graph_check", type: "Diagnostics", desc: "Validates local semantic memory relationships.", essential: false, interval: "900,000ms" },
+            { id: "log_volume_analysis", type: "Monitoring", desc: "Aggregates and analyzes output log sizes.", essential: false, interval: "120,000ms" }
+        ];
+
+        let baseModeActive = false;
+
+        // Render Task List
+        function renderTasks() {
+            const listEl = document.getElementById('taskList');
+            listEl.innerHTML = '';
+            
+            guardianTasks.forEach(task => {
+                const isSuspended = baseModeActive && !task.essential;
+                const cardClass = isSuspended ? 'task-suspended' : 'bg-white hover:border-stone-300';
+                const badgeColor = task.essential ? 'bg-rose-100 text-rose-800' : 'bg-stone-200 text-stone-700';
+                
+                const html = `
+                    <div class="task-card p-5 border border-stone-200 rounded-xl ${cardClass}">
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="task-title font-bold text-stone-800 text-lg mono">${task.id}</h4>
+                            <span class="text-xs px-2 py-1 rounded font-semibold tracking-wide ${badgeColor}">${task.type}</span>
+                        </div>
+                        <p class="text-stone-600 text-sm mb-3">${task.desc}</p>
+                        <div class="flex items-center justify-between text-xs font-semibold mono">
+                            <span class="text-stone-500">Interval: ${task.interval}</span>
+                            ${isSuspended ? '<span class="text-rose-600">SUSPENDED (VRAM Conservation)</span>' : '<span class="text-emerald-600">ACTIVE</span>'}
+                        </div>
+                    </div>
+                `;
+                listEl.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // Toggle Logic
+        document.getElementById('baseModeToggle').addEventListener('click', function() {
+            baseModeActive = !baseModeActive;
+            const knob = document.getElementById('toggleKnob');
+            const bg = this;
+            const statusBox = document.getElementById('stateStatus');
+            
+            if (baseModeActive) {
+                knob.classList.replace('translate-x-1', 'translate-x-8');
+                bg.classList.replace('bg-stone-300', 'bg-rose-600');
+                
+                statusBox.className = 'text-sm p-4 rounded-lg bg-rose-50 text-rose-800 border border-rose-200';
+                statusBox.innerHTML = '<strong>Current Status: BASE MODE ENGAGED</strong><br>Non-critical Guardian tasks suspended. Prompt compressed via GBNF.';
+                
+                document.getElementById('valPrompt').innerText = '< 600 tk';
+                document.getElementById('valPrompt').classList.add('text-rose-600');
+                document.getElementById('valTools').innerText = 'GBNF / Raw string';
+                document.getElementById('valTools').classList.add('text-rose-600');
+
+            } else {
+                knob.classList.replace('translate-x-8', 'translate-x-1');
+                bg.classList.replace('bg-rose-600', 'bg-stone-300');
+                
+                statusBox.className = 'text-sm p-4 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200';
+                statusBox.innerHTML = '<strong>Current Status: Full Capacity</strong><br>All Guardian tasks active. VRAM footprint exceeded for 1050 Ti.';
+                
+                document.getElementById('valPrompt').innerText = '4000+ tk';
+                document.getElementById('valPrompt').classList.remove('text-rose-600');
+                document.getElementById('valTools').innerText = 'Full XML';
+                document.getElementById('valTools').classList.remove('text-rose-600');
+            }
+            renderTasks();
+        });
+
+        // Initialize Charts
+        window.addEventListener('DOMContentLoaded', () => {
+            renderTasks();
+
+            // Chart Defaults
+            Chart.defaults.font.family = "'Inter', sans-serif";
+            Chart.defaults.color = '#57534e';
+
+            // 1. VRAM Chart (Doughnut)
+            const ctxVram = document.getElementById('vramChart').getContext('2d');
+            new Chart(ctxVram, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Target Model (Q8_0)', 'OS/System Overhead', 'Guardian Cache', 'Free Buffer'],
+                    datasets: [{
+                        data: [2.0, 1.2, 0.5, 0.3],
+                        backgroundColor: ['#e11d48', '#a8a29e', '#0d9488', '#d6d3d1'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        title: { display: true, text: 'GTX 1050 Ti VRAM Budget (4.0GB Total)', font: { size: 16, weight: 'bold' } }
+                    },
+                    cutout: '65%'
+                }
+            });
+
+            // 2. Bandwidth Chart (Bar)
+            const ctxBandwidth = document.getElementById('bandwidthChart').getContext('2d');
+            new Chart(ctxBandwidth, {
+                type: 'bar',
+                data: {
+                    labels: ['Storage (SATA SSD)', 'RAM (Dual DDR3)', 'RAM (Modern DDR5)'],
+                    datasets: [{
+                        label: 'Bandwidth (GB/s)',
+                        data: [0.55, 25.6, 64.0],
+                        backgroundColor: ['#a8a29e', '#e11d48', '#d6d3d1'],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: 'The Hardware Bottleneck', font: { size: 16, weight: 'bold' } },
+                        tooltip: { callbacks: { label: (ctx) => `${ctx.raw} GB/s` } }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'GB/s' } }
+                    }
+                }
+            });
+
+            // 3. Model Scouting Chart (Bubble)
+            const ctxModel = document.getElementById('modelChart').getContext('2d');
+            new Chart(ctxModel, {
+                type: 'bubble',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Target Candidates (1B - 3B)',
+                            data: [
+                                { x: 1.5, y: 1.6, r: 15, model: 'Qwen 2.5 Coder (1.5B)' },
+                                { x: 3.0, y: 3.2, r: 15, model: 'Qwen 2.5 (3B)' },
+                                { x: 1.0, y: 1.1, r: 12, model: 'Gemma 3 (1B)' },
+                                { x: 4.0, y: 4.2, r: 8, model: 'Gemma 3 (4B)' },
+                                { x: 1.2, y: 1.3, r: 12, model: 'Llama 3.2 (1B)' },
+                                { x: 3.2, y: 3.4, r: 15, model: 'Llama 3.2 (3B)' },
+                                { x: 1.5, y: 1.6, r: 14, model: 'DeepSeek-R1-Distill (1.5B)' }
+                            ],
+                            backgroundColor: 'rgba(13, 148, 136, 0.6)',
+                            borderColor: 'rgb(13, 148, 136)',
+                            borderWidth: 1
+                        },
+                        {
+                            // Dummy dataset to draw the 'Death Zone' line via annotation/data points
+                            label: 'Absolute VRAM Ceiling (3.0GB)',
+                            data: [{ x: 0, y: 3.0, r: 0 }, { x: 4.5, y: 3.0, r: 0 }],
+                            type: 'line',
+                            borderColor: '#be123c',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: 'Parameters vs Estimated VRAM (Q8_0 Quantization)', font: { size: 16 } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if(context.dataset.type === 'line') return '';
+                                    const d = context.raw;
+                                    return `${d.model}: ${d.x}B Params, ~${d.y}GB VRAM`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Parameters (Billions)' },
+                            min: 0, max: 4.5
+                        },
+                        y: { 
+                            title: { display: true, text: 'Est. VRAM Footprint (GB)' },
+                            min: 0, max: 5.0
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

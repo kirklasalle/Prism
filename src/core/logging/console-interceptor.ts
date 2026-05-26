@@ -15,6 +15,9 @@
  *   - Process-wide singleton so multiple subsystems share the same buffer.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 export interface ConsoleLine {
     /** ISO 8601 timestamp. */
     ts: string;
@@ -173,6 +176,19 @@ export class ConsoleInterceptor {
         if (this.buffer.length > RING_CAPACITY) {
             this.buffer.splice(0, this.buffer.length - RING_CAPACITY);
         }
+
+        // Write to persistent logs folder on disk in real time
+        try {
+            const logDir = "D:\\Projects\\Prism\\logs";
+            if (!fs.existsSync(logDir)) {
+                fs.mkdirSync(logDir, { recursive: true });
+            }
+            const logLine = `[${entry.ts}] [${stream.toUpperCase()}] ${redacted}\n`;
+            fs.appendFileSync(path.join(logDir, "prism.log"), logLine, "utf-8");
+        } catch (err) {
+            // Graceful degradation if disk is locked
+        }
+
         this.inEmit = true;
         try {
             for (const listener of this.listeners) {

@@ -42,6 +42,7 @@ const WORKSPACE_SUBDIRS = [
     "state/framebuffer-screengrabs",
     "state/browser-profiles",
     "characters",
+    "skills",
     "logs",
     "workspace",
 ] as const;
@@ -275,6 +276,9 @@ export function ensureWorkspaceStructure(environmentProfile = "dev"): void {
         };
         writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
     }
+
+    // Seed default skills
+    seedDefaultSkills();
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -431,5 +435,51 @@ export function seedDefaultCharacters(): void {
 
     if (repoFiles.length > 0) {
         console.log(`[PRISM][workspace] Seeded ${repoFiles.length} default character(s) into ${workspaceDir}`);
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Default Skills Seeding
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Seed the workspace skills/ directory with default skill definitions
+ * from the repo skills/ directory if the workspace has no skill files.
+ * Safe to call multiple times — only seeds when the directory is empty.
+ */
+export function seedDefaultSkills(): void {
+    const workspaceDir = workspacePath("skills");
+    if (!existsSync(workspaceDir)) {
+        mkdirSync(workspaceDir, { recursive: true });
+    }
+
+    // Check if any JSON or YAML files already exist
+    const existing = readdirSync(workspaceDir).filter((f) => {
+        const lower = f.toLowerCase();
+        return lower.endsWith(".json") || lower.endsWith(".yaml") || lower.endsWith(".yml");
+    });
+    if (existing.length > 0) return;
+
+    // Locate repo skills/ directory
+    const repoRoot = projectRoot();
+    const repoSkillsDir = join(repoRoot, "skills");
+    if (!existsSync(repoSkillsDir)) return;
+
+    const repoFiles = readdirSync(repoSkillsDir).filter((f) => {
+        const lower = f.toLowerCase();
+        return lower.endsWith(".json") || lower.endsWith(".yaml") || lower.endsWith(".yml");
+    });
+    for (const fileName of repoFiles) {
+        const src = join(repoSkillsDir, fileName);
+        const dest = join(workspaceDir, fileName);
+        try {
+            copyFileSync(src, dest);
+        } catch {
+            // Skip files that fail to copy
+        }
+    }
+
+    if (repoFiles.length > 0) {
+        console.log(`[PRISM][workspace] Seeded ${repoFiles.length} default skill(s) into ${workspaceDir}`);
     }
 }

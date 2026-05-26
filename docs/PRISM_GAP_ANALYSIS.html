@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRISM GAP ANALYSIS - PRISM Documentation</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  
+  <style>
+    :root {
+      /* Theme color tokens - Dark (Default) */
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131a2b;
+      --bg-tertiary: #1b263e;
+      --border-color: #263554;
+      --border-glow: rgba(38, 53, 84, 0.4);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #38bdf8;
+      --accent-secondary: #0ea5e9;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      
+      --code-bg: #090d16;
+      --code-text: #e2e8f0;
+      
+      /* Alerts color coding */
+      --alert-note-bg: rgba(56, 189, 248, 0.08);
+      --alert-note-border: #0ea5e9;
+      --alert-tip-bg: rgba(52, 211, 153, 0.08);
+      --alert-tip-border: #10b981;
+      --alert-important-bg: rgba(99, 102, 241, 0.08);
+      --alert-important-border: #6366f1;
+      --alert-warning-bg: rgba(251, 191, 36, 0.08);
+      --alert-warning-border: #f59e0b;
+      --alert-caution-bg: rgba(244, 63, 94, 0.08);
+      --alert-caution-border: #f43f5e;
+      
+      --sidebar-width: 320px;
+    }
+    
+    [data-theme="light"] {
+      /* Theme color tokens - Light */
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --border-color: #cbd5e1;
+      --border-glow: rgba(203, 213, 225, 0.4);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-secondary: #0369a1;
+      --accent-glow: rgba(2, 132, 199, 0.1);
+      
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      
+      --alert-note-bg: rgba(14, 165, 233, 0.05);
+      --alert-tip-bg: rgba(16, 185, 129, 0.05);
+      --alert-important-bg: rgba(99, 102, 241, 0.05);
+      --alert-warning-bg: rgba(245, 158, 11, 0.05);
+      --alert-caution-bg: rgba(244, 63, 94, 0.05);
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* Layout */
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      overflow-y: auto;
+      transition: background-color 0.3s, border-color 0.3s;
+    }
+    
+    .main-viewport {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      min-height: 100vh;
+      padding: 3rem 4rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .article-container {
+      width: 100%;
+      max-width: 880px;
+    }
+    
+    /* Sidebar Header & Brand */
+    .sidebar-header {
+      padding: 1.75rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-family: 'Outfit', sans-serif;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: 0.5px;
+      background: linear-gradient(to right, var(--text-primary), var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    /* Theme Toggle */
+    .theme-toggle-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .theme-toggle-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .theme-toggle-btn svg {
+      transition: transform 0.3s;
+    }
+    
+    .theme-toggle-btn:hover svg {
+      transform: rotate(20deg);
+    }
+    
+    /* Sidebar Navigation Links */
+    .sidebar-nav {
+      padding: 1.5rem 1rem;
+      flex-grow: 1;
+    }
+    
+    .toc-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      padding-left: 0.75rem;
+    }
+    
+    .toc-list {
+      list-style: none;
+    }
+    
+    .toc-item {
+      margin-bottom: 0.35rem;
+    }
+    
+    .toc-item a {
+      display: block;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: background-color 0.2s, color 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .toc-item a:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+    }
+    
+    .toc-item.active a {
+      background-color: var(--accent-glow);
+      color: var(--accent-primary);
+      font-weight: 500;
+      border-left: 2px solid var(--accent-primary);
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    
+    .toc-item-level-1 { padding-left: 0; }
+    .toc-item-level-2 { padding-left: 0.75rem; }
+    .toc-item-level-3 { padding-left: 1.5rem; }
+    .toc-item-level-4 { padding-left: 2.25rem; }
+    
+    /* Markdown Article Styles */
+    article h1, article h2, article h3, article h4, article h5, article h6 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2.25rem;
+      margin-bottom: 1rem;
+      line-height: 1.35;
+    }
+    
+    article h1 {
+      font-size: 2.5rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      letter-spacing: -0.5px;
+    }
+    
+    article h2 {
+      font-size: 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.4rem;
+      margin-top: 3rem;
+    }
+    
+    article h3 { font-size: 1.35rem; }
+    article h4 { font-size: 1.15rem; }
+    
+    article p {
+      margin-bottom: 1.25rem;
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+    
+    article a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-bottom-color 0.2s;
+    }
+    
+    article a:hover {
+      border-bottom-color: var(--accent-primary);
+    }
+    
+    /* Lists */
+    article ul, article ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+    
+    article li {
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }
+    
+    article li strong {
+      color: var(--text-primary);
+    }
+    
+    /* Inline Code */
+    article code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--accent-primary);
+      word-break: break-word;
+    }
+    
+    /* Blockquotes */
+    article blockquote {
+      border-left: 4px solid var(--border-color);
+      padding: 0.75rem 1.25rem;
+      background-color: var(--bg-secondary);
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1.5rem;
+    }
+    
+    article blockquote p {
+      margin-bottom: 0;
+      font-style: italic;
+    }
+    
+    /* Horizontal Rule */
+    article hr {
+      border: 0;
+      height: 1px;
+      background-color: var(--border-color);
+      margin: 3rem 0;
+    }
+    
+    /* Code Cards */
+    .code-card {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 1.75rem;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .code-card-header {
+      padding: 0.5rem 1rem;
+      background-color: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .code-card-lang {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .copy-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .code-card pre {
+      margin: 0;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    
+    .code-card code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      background: none;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      color: var(--code-text);
+      word-break: normal;
+      white-space: pre;
+    }
+    
+    /* Tables */
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.925rem;
+      text-align: left;
+    }
+    
+    th {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      padding: 0.85rem 1.25rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+    
+    td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      background-color: var(--bg-secondary);
+      transition: background-color 0.2s;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    tr:hover td {
+      background-color: var(--bg-tertiary);
+    }
+    
+    /* GitHub Style Alerts */
+    .alert-box {
+      border-left: 4px solid var(--border-color);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    
+    .alert-box-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.875rem;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+    
+    .alert-box-content {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    
+    .alert-box-content a {
+      font-weight: 500;
+    }
+    
+    .alert-note {
+      background-color: var(--alert-note-bg);
+      border-left-color: var(--alert-note-border);
+    }
+    
+    .alert-note .alert-box-header {
+      color: var(--alert-note-border);
+    }
+    
+    .alert-tip {
+      background-color: var(--alert-tip-bg);
+      border-left-color: var(--alert-tip-border);
+    }
+    
+    .alert-tip .alert-box-header {
+      color: var(--alert-tip-border);
+    }
+    
+    .alert-important {
+      background-color: var(--alert-important-bg);
+      border-left-color: var(--alert-important-border);
+    }
+    
+    .alert-important .alert-box-header {
+      color: var(--alert-important-border);
+    }
+    
+    .alert-warning {
+      background-color: var(--alert-warning-bg);
+      border-left-color: var(--alert-warning-border);
+    }
+    
+    .alert-warning .alert-box-header {
+      color: var(--alert-warning-border);
+    }
+    
+    .alert-caution {
+      background-color: var(--alert-caution-bg);
+      border-left-color: var(--alert-caution-border);
+    }
+    
+    .alert-caution .alert-box-header {
+      color: var(--alert-caution-border);
+    }
+    
+    /* Mermaid Diagrams Styling */
+    .mermaid {
+      background-color: var(--bg-secondary) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Image and Figures */
+    .content-image {
+      margin: 2rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .content-image img {
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .content-image figcaption {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+    }
+    
+    /* Responsive Design adjustments */
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      
+      .main-viewport {
+        margin-left: 0;
+        width: 100%;
+        padding: 2rem 1.5rem;
+      }
+      
+      /* Toggle Sidebar Menu trigger for mobile */
+      .menu-trigger {
+        display: flex;
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        cursor: pointer;
+        z-index: 1000;
+      }
+    }
+    
+    @media (min-width: 1025px) {
+      .menu-trigger {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Menu trigger for small screens -->
+  <button class="menu-trigger" onclick="toggleSidebar()">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+
+  <!-- Left Sidebar (TOC) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-group">
+        <div class="brand-logo">Δ</div>
+        <div class="brand-title">PRISM</div>
+      </div>
+      <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
+        <svg id="theme-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Sun icon -->
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <div class="toc-title">Table of Contents</div>
+      <ul class="toc-list">
+  <li class="toc-item toc-item-level-1"><a href="#prism-vs-market-leaders-technical-gap-analysis-and-parity-implementation-blueprint">PRISM vs Market Leaders Technical Gap Analysis and Parity Implementation Blueprint</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#1-executive-summary">1 Executive Summary</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#2-technical-gap-analysis-what-prism-cannot-do-today">2 Technical Gap Analysis What PRISM Cannot Do Today</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#21-product-profiles-authoritative">21 Product Profiles Authoritative</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-1-unconstrained-dynamic-zero-day-tool-generation-vs-agentzero-architecturally-closed">Gap 1 Unconstrained Dynamic Zero-Day Tool Generation vs AgentZero  ARCHITECTURALLY CLOSED</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-2-raw-inference-speed-and-edge-latency-vs-hermes-agentzero-closed">Gap 2 Raw Inference Speed and Edge-Latency vs Hermes  AgentZero  CLOSED</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-3-native-containerized-sandboxing-vs-openclaw-architecturally-closed">Gap 3 Native Containerized Sandboxing vs OpenClaw  ARCHITECTURALLY CLOSED</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-4-mature-plugin-ecosystem-community-standardization-vs-openclaw-architecturally-closed">Gap 4 Mature Plugin Ecosystem  Community Standardization vs OpenClaw  ARCHITECTURALLY CLOSED</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#3-capability-matrix-current-state-vs-planned-state">3 Capability Matrix Current State vs Planned State</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#4-strategic-assessment">4 Strategic Assessment</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#5-implementation-roadmap-parity-program">5 Implementation Roadmap Parity Program</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#milestone-m1-capability-surface-parity">Milestone M1 Capability Surface Parity</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#milestone-m2-governance-completion">Milestone M2 Governance Completion</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#milestone-m3-performance-qualification">Milestone M3 Performance Qualification</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#milestone-m4-release-and-investor-readiness">Milestone M4 Release and Investor Readiness</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#milestone-m5-agent-control-swarm-intelligence">Milestone M5 Agent Control  Swarm Intelligence</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#milestone-m6-spectrum-refraction-sr-tri-model-orchestration-complete">Milestone M6 Spectrum Refraction SR Tri-Model Orchestration  COMPLETE</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-7-setup-wizard-surface-parity-cli-gap-closed">Gap 7 Setup Wizard Surface Parity CLI Gap  CLOSED</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#milestone-m7-setup-wizard-completeness">Milestone M7 Setup Wizard Completeness</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-5-governed-multi-agent-swarm-orchestration-vs-autogen-crewai-langgraph">Gap 5 Governed Multi-Agent Swarm Orchestration vs AutoGen  CrewAI  LangGraph</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-6-multi-model-orchestration-spectrum-refraction-vs-all-surveyed-frameworks-closed">Gap 6 Multi-Model Orchestration  Spectrum Refraction vs All Surveyed Frameworks  CLOSED</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#6-profile-level-requirements-mandatory">6 Profile-Level Requirements Mandatory</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#61-prism-individual">61 PRISM Individual</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#62-prism-business">62 PRISM Business</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#7-exit-criteria">7 Exit Criteria</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#8-character-accountability-control-cac-identity-gap-closed">8 Character Accountability Control CAC  Identity Gap Closed</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-description">Gap Description</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#resolution-implemented">Resolution Implemented</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#remaining-strategic-gaps-roadmap-items">Remaining Strategic Gaps Roadmap Items</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#9-computer-use-core-gap-register-2026-03-25">9 Computer Use Core Gap Register 2026-03-25</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-cu-1-cross-surface-enterprise-hardening-completeness">Gap CU-1 Cross-surface enterprise hardening completeness</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-cu-2-claim-discipline-for-external-benchmarks">Gap CU-2 Claim discipline for external benchmarks</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#gap-cu-3-business-gono-go-coupling">Gap CU-3 Business gono-go coupling</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#business-security-alignment-gate-mandatory">Business Security Alignment Gate Mandatory</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#10-2026-world-class-market-gap-threat-analysis">10 2026 World-Class Market Gap  Threat Analysis</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#101-nist-ai-agent-standards-initiative-feb-2026-alignment-critique">101 NIST AI Agent Standards Initiative Feb 2026 Alignment  Critique</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#1-real-time-security-boundaries-guardrails">1 Real-Time Security Boundaries Guardrails</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#2-identity-and-attribution-accountability">2 Identity and Attribution Accountability</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#3-epistemic-traceability-auditability">3 Epistemic Traceability Auditability</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#102-the-decoupled-gaas-governance-as-a-service-paradigm-blueprint">102 The Decoupled GaaS Governance-as-a-Service Paradigm Blueprint</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#103-2026-world-class-app-comparison-matrix">103 2026 World-Class App Comparison Matrix</a></li>
+</ul>
+
+    </nav>
+  </aside>
+
+  <!-- Main Viewport -->
+  <main class="main-viewport">
+    <div class="article-container">
+      <article>
+        <h1 id="prism-vs-market-leaders-technical-gap-analysis-and-parity-implementation-blueprint">PRISM vs. Market Leaders: Technical Gap Analysis and Parity Implementation Blueprint</h1>
+
+<p><strong>Date:</strong> March 17, 2026 (Updated: April 20, 2026)  </p>
+<p><strong>Target:</strong> Investor Review, Licensing Strategy, and Engineering Execution  </p>
+
+<h2 id="1-executive-summary">1. Executive Summary</h2>
+
+<p>PRISM represents a SOTA paradigm in Agents As A Service (AaaS), excelling in Constitutional Causal Governance and Dual-Lens Memory. However, to accurately evaluate market positioning, this document isolates the <strong>technical gaps</strong>—specifically identifying capabilities that OpenClaw, AgentZero, and Hermes possess which PRISM currently lacks or structurally prohibits.</p>
+
+<h2 id="2-technical-gap-analysis-what-prism-cannot-do-today">2. Technical Gap Analysis: What PRISM Cannot Do Today</h2>
+
+<h2 id="21-product-profiles-authoritative">2.1 Product Profiles (Authoritative)</h2>
+
+<p>PRISM is implemented as two operating profiles with a shared core runtime:</p>
+
+<ul class="list-level-0">
+  <li><strong>PRISM Individual (Capability Profile):</strong> maximum capability parity with top agents for tool use, terminal use, virtualization, and containerized execution.</li>
+  <li><strong>PRISM Business (Governance Profile):</strong> same capability surface as Individual, with mandatory tiered policy controls, approval paths, and auditable execution.</li>
+</ul>
+<p>Invariant:</p>
+
+<ul class="list-level-0">
+  <li>Business must never have fewer capabilities than Individual.</li>
+  <li>Individual can run faster defaults; Business enforces stricter safety envelopes.</li>
+</ul>
+<h3 id="gap-1-unconstrained-dynamic-zero-day-tool-generation-vs-agentzero-architecturally-closed">Gap 1: Unconstrained, Dynamic "Zero-Day" Tool Generation (vs. AgentZero) — ARCHITECTURALLY CLOSED</h3>
+
+<ul class="list-level-0">
+  <li><strong>What AgentZero Can Do:</strong> AgentZero has maximum ReAct autonomy. It can dynamically write, compile, and execute entirely new tools entirely on the fly in a single loop without asking for permission.</li>
+  <li><strong>Why PRISM Cannot:</strong> PRISM's Constitutional Causal Compiler (CCC) and 3-Tier Policy Engine intentionally restrict this. Every tool execution must match a defined adapter contract and pass policy validation. PRISM mathematically prevents unconstrained code execution, which makes it safer, but significantly hinders "wild-west" zero-shot creativity compared to AgentZero.</li>
+  <li><strong>Closure Status (April 2026):</strong> Dynamic Tool Staging Pipeline implemented. Three-source extraction (manifest, decorator, dynamic), risk tier auto-assignment via keyword scoring, baseline comparison with breaking-change detection, approval routing for Tier 3. SQLite persistence for contract lifecycle. See <code>src/core/tools/tool-contract-extractor.ts</code> and <code>TOOL<em>CONTRACT</em>EXTRACTION_SPEC.md</code>.</li>
+  <li><strong>Remaining:</strong> ~~Real manifest JSON parsing, TypeScript decorator reflection, and runtime dynamic inspection use structured test data.~~ <strong>Resolved (April 2026):</strong> All three extraction methods now use real implementations — manifest file parsing (<code>tool-contract.json</code>, <code>tool-contract-snapshot.json</code>, subdirectory manifests), ToolRegistry-based decorator extraction, governance-inferred dynamic extraction. Enhanced risk scoring from keyword-only to 6-dimension analysis. 21 tests passing. Remaining: <code>/api/tools/stage</code> HTTP endpoint wiring, approval response handler completion.</li>
+  <li><strong>Parity Closure Design:</strong></li>
+  <li>Add a <strong>Dynamic Tool Staging Pipeline</strong>:</li>
+</ul>
+<p>  1) generate candidate tool in sandbox,</p>
+<p>  2) static contract extraction,</p>
+<p>  3) risk classification,</p>
+<p>  4) policy-tier routing,</p>
+<p>  5) controlled registration.</p>
+<ul class="list-level-0">
+  <li>Individual: can stage and execute transient tools in isolated workspace containers.</li>
+  <li>Business: transient tools require policy-tier checks and approval for mutating/high-risk classes.</li>
+</ul>
+<h3 id="gap-2-raw-inference-speed-and-edge-latency-vs-hermes-agentzero-closed">Gap 2: Raw Inference Speed and Edge-Latency (vs. Hermes / AgentZero) — CLOSED</h3>
+
+<ul class="list-level-0">
+  <li><strong>What Hermes/AgentZero Can Do:</strong> As a pure cognitive model (Hermes) or a minimal wrapper (AgentZero), execution speed is bottlenecked solely by GPU token generation. They can operate locally on the edge with near-zero orchestration overhead.</li>
+  <li><strong>Why PRISM Cannot:</strong> PRISM incurs high latency penalties. Before PRISM takes an action, it must query its Dual-Lens Memory (semantic + causal), pass the schema through the CCC, and log the SHA-256 event to the activity bus. This heavy orchestration makes PRISM too slow for ultra-low-latency edge tasks compared to raw Hermes inference.</li>
+  <li><strong>Closure Status (April 2026):</strong> Execution profiles fully implemented with <code>INDIVIDUAL<em>PROFILE</code> and <code>BUSINESS</em>PROFILE</code>. Orchestrator supports profile-aware policy evaluation with runtime switching via <code>setExecutionProfile()</code>. 20/20 tests passing. See <code>src/core/policy/execution-profiles.ts</code> and <code>EXECUTION<em>PROFILE</em>IMPLEMENTATION.md</code>.</li>
+  <li><strong>Parity Closure Design:</strong></li>
+  <li>Introduce runtime execution modes:</li>
+  <li><code>fast</code>: minimal non-critical checks for low-risk operations,</li>
+  <li><code>balanced</code>: default checks,</li>
+  <li><code>governed</code>: full checks + approval rigor.</li>
+  <li>Individual defaults to <code>balanced</code> with <code>fast</code> allowed in low-risk envelopes.</li>
+  <li>Business defaults to <code>governed</code>; high-risk actions remain fully strict.</li>
+</ul>
+<h3 id="gap-3-native-containerized-sandboxing-vs-openclaw-architecturally-closed">Gap 3: Native Containerized Sandboxing (vs. OpenClaw) — ARCHITECTURALLY CLOSED</h3>
+
+<ul class="list-level-0">
+  <li><strong>What OpenClaw Can Do:</strong> OpenClaw ships with robust, native Docker-environment sandboxing. It creates isolated, disposable virtual file systems and terminal environments seamlessly out-of-the-box for its agents to thrash around in safely.</li>
+  <li><strong>Why PRISM Cannot (Yet):</strong> PRISM relies on explicit adapter boundaries rather than native OS-level container isolation. While PRISM controls <em>what</em> the agent can do via tiers, it does not currently abstract the operating system into a disposable Docker container as fluidly or natively as OpenClaw.</li>
+  <li><strong>Closure Status (April 2026):</strong> Terminal Session Adapter and Container Sandbox Adapter both implemented with full state machines, SQLite persistence, policy tier routing, SIGTERM→SIGKILL signal escalation, and activity bus integration. Container adapter supports snapshot/revert with parent-tracked lineage. See <code>src/adapters/application/terminal-session-adapter.ts</code>, <code>src/adapters/application/container-sandbox-adapter.ts</code>, <code>TERMINAL<em>VIRTUALIZATION</em>DESIGN.md</code>, and <code>CONTAINER<em>VIRTUALIZATION</em>DESIGN.md</code>.</li>
+  <li><strong>Remaining:</strong> Adapters use simulated processes; real Docker Engine API / containerd integration and OS-level resource quota enforcement (cgroups v2) deferred to future hardening.</li>
+  <li><strong>Parity Closure Design:</strong></li>
+  <li>Add a <strong>Container Orchestration Adapter</strong> supporting:</li>
+  <li>workspace sandbox create/start/stop/destroy,</li>
+  <li>snapshot/revert,</li>
+  <li>resource quota policies,</li>
+  <li>network and filesystem guardrails,</li>
+  <li>terminal multiplexing per sandbox.</li>
+  <li>Individual: one-command ephemeral sandbox startup.</li>
+  <li>Business: sandbox actions mapped to tier matrix with approval for privileged escalation.</li>
+</ul>
+<h3 id="gap-4-mature-plugin-ecosystem-community-standardization-vs-openclaw-architecturally-closed">Gap 4: Mature Plugin Ecosystem &amp; Community Standardization (vs. OpenClaw) — ARCHITECTURALLY CLOSED</h3>
+
+<ul class="list-level-0">
+  <li><strong>What OpenClaw Can Do:</strong> As the current 2026 utility standard, OpenClaw has a massive pre-existing community marketplace of plug-and-play skills, third-party API tools, and community-verified agent loops.</li>
+  <li><strong>Why PRISM Cannot:</strong> Being a new, bespoke architecture, PRISM lacks third-party adoption. All adapters (System, HTTP, Neo4j) must currently be built and rigorously tested in-house to meet the strict contract standards of the PRISM orchestrator.</li>
+  <li><strong>Closure Status (April 2026):</strong> Plugin Pack framework implemented: manifest schema (<code>plugin-pack-manifest-schema.json</code>), validator (<code>plugin-pack-validator.ts</code>) with SemVer validation, adapter type/capability/tier-routing checks, compatibility validation, circular dependency detection (DFS), file existence verification, and Business Trust policy (<code>business-trust-validator.ts</code>, <code>business-trust-policy.ts</code>). See <code>src/core/plugins/</code>.</li>
+  <li><strong>Remaining:</strong> Cryptographic signature verification (Ed25519/RSA) for signed adapter packs deferred. Community marketplace infrastructure not yet built.</li>
+  <li><strong>Parity Closure Design:</strong></li>
+  <li>Define <strong>Signed Adapter Packs</strong>:</li>
+  <li>manifest + version pinning,</li>
+  <li>capability scopes,</li>
+  <li>compatibility checks,</li>
+  <li>provenance and trust metadata.</li>
+  <li>Individual: open install policy with warnings and profile-aware limits.</li>
+  <li>Business: signed-only install policy + approval for new capability scopes.</li>
+</ul>
+<h2 id="3-capability-matrix-current-state-vs-planned-state">3. Capability Matrix: Current State vs Planned State</h2>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Feature / Capability</th>
+  <th>PRISM Current</th>
+  <th>PRISM Planned</th>
+  <th>OpenClaw</th>
+  <th>AgentZero</th>
+  <th>Hermes (Model)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Bypass Rules for Creative Problem Solving</strong></td>
+  <td>⚠️ Controlled (staged pipeline)</td>
+  <td>✅ YES (dynamic tool staging)</td>
+  <td>⚠️ Partial</td>
+  <td>✅ YES</td>
+  <td>✅ YES</td>
+</tr>
+<tr>
+  <td><strong>Native Docker / Isolated Sandbox Spawning</strong></td>
+  <td>⚠️ Architectural (adapter-based)</td>
+  <td>✅ YES (container adapter)</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Zero-Overhead Edge Execution</strong></td>
+  <td>⚠️ Partial (execution profiles)</td>
+  <td>✅ YES (profile modes)</td>
+  <td>❌ NO</td>
+  <td>✅ YES</td>
+  <td>✅ YES</td>
+</tr>
+<tr>
+  <td><strong>Dynamic Spontaneous Tool Generation</strong></td>
+  <td>⚠️ Controlled (3-source extraction)</td>
+  <td>✅ YES (tool staging pipeline)</td>
+  <td>⚠️ Partial</td>
+  <td>✅ YES</td>
+  <td>⚠️ Prompt-based</td>
+</tr>
+<tr>
+  <td><strong>Vast Third-Party Plugin Marketplace</strong></td>
+  <td>⚠️ Framework (manifest + validator)</td>
+  <td>✅ YES (signed adapter packs)</td>
+  <td>✅ YES</td>
+  <td>❌ NO (Usually fork-based)</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Multi-Agent Swarm Orchestration</strong></td>
+  <td>✅ YES (4 topologies: mesh/star/pipeline/broadcast)</td>
+  <td>✅ YES</td>
+  <td>⚠️ Partial</td>
+  <td>⚠️ Partial (single-loop)</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Tri-Model Parallel Fan-Out (SR)</strong></td>
+  <td>✅ YES (Left+Right+Main, isolation enforced)</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Structured Multi-Model Aggregation</strong></td>
+  <td>✅ YES (XML-tagged fusion)</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Instance Isolation Enforcement</strong></td>
+  <td>✅ YES (3-level: full/model/insufficient)</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Agent Lifecycle Management</strong></td>
+  <td>✅ YES (ephemeral/semi-permanent/permanent with persistence)</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Intelligent Agent Telemetry &amp; Pattern Learning</strong></td>
+  <td>✅ YES (dispatch pattern detection, promotion recommendations)</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Per-Agent Dynamic Model Routing</strong></td>
+  <td>✅ YES (per-agent model override, hot-swappable)</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>Chat-to-Agent Task Routing</strong></td>
+  <td>✅ YES (classifier-first, majority through agents)</td>
+  <td>✅ YES</td>
+  <td>⚠️ Partial</td>
+  <td>✅ YES</td>
+  <td>❌ NO</td>
+</tr>
+<tr>
+  <td><strong>CLI-First Setup / Headless Configuration</strong></td>
+  <td>✅ YES (web + TUI + CLI basic/advanced + non-interactive)</td>
+  <td>✅ YES</td>
+  <td>✅ YES</td>
+  <td>✅ YES</td>
+  <td>N/A</td>
+</tr>
+</tbody>
+</table></div>
+
+<h2 id="4-strategic-assessment">4. Strategic Assessment</h2>
+
+<p>PRISM currently trades <strong>speed, unconstrained creativity, and out-of-the-box containerization</strong> for <strong>deterministic safety, auditability, and memory consequence tracking</strong>.</p>
+
+<p>To compete directly with OpenClaw and top-tier agent classes, PRISM must close remaining parity gaps in sandboxing, terminal virtualization, dynamic tooling, and extensibility while preserving Business governance rigor. PRISM has closed parity gaps in multi-agent orchestration (swarm with 4 topologies, agent lifecycle management, per-agent model routing, chat-to-agent task routing), tri-model parallel generation (Spectrum Refraction), and intelligent agent telemetry. PRISM is now the only agent platform combining multi-model parallel generation, multi-agent coordination, and constitutional governance. No competitor offers native tri-model fan-out with instance isolation enforcement.</p>
+
+<blockquote><strong>Updated April 20, 2026:</strong> All Phase D2 workstreams (A–L) complete. All 8 gaps now resolved: Gaps 1, 3, 4 are <strong>architecturally closed</strong> with adapter-based implementations and real extraction methods (manifest parsing, registry-based, governance-inferred). Gap 2 <strong>fully closed</strong> with execution profiles. Gap 7 (CLI wizard) <strong>fully closed</strong> with basic + advanced + non-interactive + parity validation. Gaps 5, 6, 8 previously closed (swarm, SR, CAC). All security phases (S1–S3) complete. Remaining production hardening: real Docker/containerd runtime integration, PTY terminal I/O, cryptographic signature verification for plugin packs, <code>/api/tools/stage</code> HTTP endpoint wiring.</blockquote>
+
+<h2 id="5-implementation-roadmap-parity-program">5. Implementation Roadmap (Parity Program)</h2>
+
+<h3 id="milestone-m1-capability-surface-parity">Milestone M1: Capability Surface Parity</h3>
+
+<ul class="list-level-0">
+  <li>Terminal session virtualization with persistent channels and controlled environment injection.</li>
+  <li>Container orchestration adapter with lifecycle, snapshots, and quotas.</li>
+  <li>Dynamic tool staging pipeline for transient tool generation and controlled registration.</li>
+  <li>Adapter pack manifest format and compatibility validator.</li>
+</ul>
+<h3 id="milestone-m2-governance-completion">Milestone M2: Governance Completion</h3>
+
+<ul class="list-level-0">
+  <li>Policy-tier mapping for shell/container/plugin operations.</li>
+  <li>Approval/revoke/timeout behaviors for long-running sessions.</li>
+  <li>Event lineage and reason-code telemetry for every high-risk operation.</li>
+</ul>
+<h3 id="milestone-m3-performance-qualification">Milestone M3: Performance Qualification</h3>
+
+<ul class="list-level-0">
+  <li>Profile-specific SLO targets for Individual and Business.</li>
+  <li>Mode qualification (<code>fast</code>, <code>balanced</code>, <code>governed</code>) with drift alerts.</li>
+</ul>
+<h3 id="milestone-m4-release-and-investor-readiness">Milestone M4: Release and Investor Readiness</h3>
+
+<ul class="list-level-0">
+  <li>Traceability matrix from parity claim to test evidence.</li>
+  <li>Investor appendix and licensing-brand appendix aligned to implementation reality.</li>
+  <li>Go/No-Go checklist for capability parity launch.</li>
+</ul>
+<h3 id="milestone-m5-agent-control-swarm-intelligence">Milestone M5: Agent Control &amp; Swarm Intelligence</h3>
+
+<ul class="list-level-0">
+  <li>Agent lifecycle management with three tiers and persistence across reboots.</li>
+  <li>Per-agent model assignment with dynamic runtime switching.</li>
+  <li>Intelligent telemetry with dispatch pattern detection and promotion recommendations.</li>
+  <li>Swarm orchestration with four topologies (mesh, star, pipeline, broadcast).</li>
+  <li>Chat-to-agent routing with classifier-first intent detection.</li>
+  <li>Workspace persistence reliability hardening.</li>
+</ul>
+<h3 id="milestone-m6-spectrum-refraction-sr-tri-model-orchestration-complete">Milestone M6: Spectrum Refraction (SR) Tri-Model Orchestration — COMPLETE</h3>
+
+<ul class="list-level-0">
+  <li>Compounding tri-model parallel fan-out (Left Logic + Right Creative + Main Coordination).</li>
+  <li>Instance isolation enforcement at configure, activate, and runtime gates.</li>
+  <li>Three isolation quality levels: full, model, insufficient.</li>
+  <li>Structured XML-tagged aggregation pipeline.</li>
+  <li>Model capability validation per hemisphere role.</li>
+  <li>Media artifact extraction from Creative hemisphere.</li>
+  <li>4 SR API endpoints with governance-integrated isolation checks.</li>
+  <li>SR dashboard panel with isolation badge and cost advisory.</li>
+  <li>SR chat rendering with isolation level pill.</li>
+</ul>
+<h3 id="gap-7-setup-wizard-surface-parity-cli-gap-closed">Gap 7: Setup Wizard Surface Parity (CLI Gap) — CLOSED</h3>
+
+<ul class="list-level-0">
+  <li><strong>What Competitors Can Do:</strong> OpenClaw and AgentZero ship with CLI-first setup flows that work headlessly in any terminal, including Docker containers, SSH sessions, and CI pipelines. Configuration can be fully automated via flags/environment variables.</li>
+  <li><strong>Closure Status (April 2026):</strong> Full CLI setup wizard implemented across all three surfaces:</li>
+  <li><strong>CLI Basic Wizard</strong> (4-step): Profile → Workspace → Provider → Summary. Pure Node.js readline, zero UI dependency. See <code>src/cli/setup-wizard.ts</code>.</li>
+  <li><strong>CLI Advanced Wizard</strong> (8-step): Adds Model Routing, Guardian Agent, CAC Identity, Browser/Scheduler, Certificate. See <code>src/cli/setup-wizard-advanced.ts</code>.</li>
+  <li><strong>Non-interactive mode</strong>: <code>--non-interactive</code> flag with <code>--profile</code>, <code>--workspace</code>, <code>--provider</code>, <code>--api-key</code> arguments for CI/Docker.</li>
+  <li>Consumes same <code>/api/setup/*</code> endpoints as web wizard.</li>
+  <li>Produces identical <code>.prism-preferences.json</code> output.</li>
+  <li><code>start<em>wizard.bat --cli</code> / <code>start</em>wizard.sh --cli</code> for CLI invocation.</li>
+  <li><strong>Wizard Parity Validation</strong>: 25 tests across 8 suites (<code>tests/wizard-parity.test.ts</code>) verify identical behavior across web, TUI, and CLI.</li>
+  <li><strong>Documentation</strong>: <code>docs/SETUP<em>WIZARD</em>GUIDE.md</code>, <code>docs/USER<em>GUIDE.md</code> §4A, <code>docs/DEVELOPER</em>GUIDE.md</code> §7E all updated.</li>
+</ul>
+<h3 id="milestone-m7-setup-wizard-completeness">Milestone M7: Setup Wizard Completeness</h3>
+
+<ul class="list-level-0">
+  <li>CLI Setup Wizard (4-step basic) with readline-based interactive prompts.</li>
+  <li>CLI Advanced Wizard (8-step) with model routing, guardian, CAC, and scheduler configuration.</li>
+  <li>Non-interactive mode for CI/Docker headless deployments.</li>
+  <li>Comprehensive wizard documentation: standalone guide, user guide section, developer guide section.</li>
+  <li>Parity validation: identical output across web, TUI, and CLI wizard surfaces.</li>
+</ul>
+<h3 id="gap-5-governed-multi-agent-swarm-orchestration-vs-autogen-crewai-langgraph">Gap 5: Governed Multi-Agent Swarm Orchestration (vs AutoGen / CrewAI / LangGraph)</h3>
+
+<ul class="list-level-0">
+  <li><strong>What AutoGen/CrewAI Can Do:</strong> Multi-agent conversation patterns with role-based agent composition, parallel task execution, and inter-agent messaging. LangGraph supports stateful multi-agent graphs with conditional routing.</li>
+  <li><strong>Why PRISM Cannot (Yet):</strong> PRISM has a static 6-agent pool with stateless dispatch. No runtime spawn/retire, no inter-agent messaging, no swarm-level governance or budget controls.</li>
+  <li><strong>Parity Closure Design:</strong></li>
+  <li>Add <strong>Agent Lifecycle Manager</strong> with three tiers: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop, survives reboots).</li>
+  <li>Add <strong>Swarm Coordinator</strong> with four topologies: mesh (parallel sub-tasks), star (coordinator→workers), pipeline (sequential handoff), broadcast (consensus/best result).</li>
+  <li>Add <strong>Intelligent Telemetry</strong> that learns dispatch patterns and recommends lifecycle promotions.</li>
+  <li>Add <strong>Per-Agent Model Assignment</strong> enabling right-sized model selection per agent role.</li>
+  <li>Add <strong>Chat-to-Agent Router</strong> using classifier-first intent detection for task routing.</li>
+  <li>Individual: full swarm capabilities with standard policy.</li>
+  <li>Business: swarm operations gated by policy; dissolution requires audit trail.</li>
+</ul>
+<h3 id="gap-6-multi-model-orchestration-spectrum-refraction-vs-all-surveyed-frameworks-closed">Gap 6: Multi-Model Orchestration / Spectrum Refraction (vs All Surveyed Frameworks) — CLOSED</h3>
+
+<ul class="list-level-0">
+  <li><strong>What No Competitor Can Do:</strong> No surveyed framework (OpenHands, Agent Zero, AutoGen/MS Agent Framework, LangGraph, CrewAI) offers native multi-model simultaneous parallel generation with structured aggregation and mandatory instance isolation enforcement. All competitors follow sequential agent chains or tool-wrapped agent patterns.</li>
+  <li><strong>What PRISM Now Does (Implemented):</strong> PRISM's Spectrum Refraction (SR) system provides:</li>
+  <li>Compounding tri-model parallel fan-out: Left (Logic) + Right (Creative) + Main (Coordination) generate concurrently.</li>
+  <li>Structured XML-tagged aggregation: hemisphere outputs tagged with <code>&lt;logic<em>analysis&gt;</code> and <code>&lt;creative</em>synthesis&gt;</code> for deterministic fusion.</li>
+  <li>Mandatory instance isolation: Left ≠ Right enforced at configure, activate, and runtime gates with three isolation levels (<code>full</code>, <code>model</code>, <code>insufficient</code>).</li>
+  <li>Model capability validation per hemisphere role.</li>
+  <li>Media artifact extraction from Creative hemisphere.</li>
+  <li>4 SR API endpoints with governance-integrated isolation checks.</li>
+  <li>SR panel in dashboard with isolation badge and cost advisory.</li>
+  <li><strong>D4c (April 2026):</strong> Multi-key slot assignment, per-hemisphere timeouts, circuit breaker, signed audit trail events, cost estimation, show-hemispheres mode. All features SQLite-persisted and covered by 20/20 tests in <code>tests/spectrum-refraction-advanced.test.ts</code>.</li>
+  <li><strong>Evidence:</strong> See <code>docs/MARKET_REVIEW.md</code> for full competitive analysis with citations. See <code>src/core/operator/model-capability-matrix.ts</code> and <code>src/core/operator/llm-provider-manager.ts</code> for implementation. Gap 6 is fully closed with D4c completion.</li>
+</ul>
+<h2 id="6-profile-level-requirements-mandatory">6. Profile-Level Requirements (Mandatory)</h2>
+
+<h3 id="61-prism-individual">6.1 PRISM Individual</h3>
+
+<ul class="list-level-0">
+  <li>Must support top-agent parity in tooling, terminal workflows, virtualization, and containers.</li>
+  <li>Must provide ergonomic defaults and rapid startup flows.</li>
+  <li>Must preserve baseline safety checks for destructive operations.</li>
+</ul>
+<h3 id="62-prism-business">6.2 PRISM Business</h3>
+
+<ul class="list-level-0">
+  <li>Must support the same capability surface as Individual.</li>
+  <li>Must enforce mandatory policy-tier governance and auditable operations.</li>
+  <li>Must require explicit approvals for high-risk operations.</li>
+  <li>Must support incident replay, export, and compliance-aligned traceability.</li>
+</ul>
+<h2 id="7-exit-criteria">7. Exit Criteria</h2>
+
+<p>This gap is considered closed when:</p>
+
+<ol class="list-level-0">
+  <li>Capability parity features are available in both profiles.</li>
+  <li>Business profile governance tests pass for allow/deny/timeout/revoke paths.</li>
+  <li>Release evidence includes performance, safety, and traceability artifacts.</li>
+  <li>Investor/licensing materials reflect validated implementation status, not aspirational claims.</li>
+</ol>
+<h2 id="8-character-accountability-control-cac-identity-gap-closed">8. Character Accountability Control (CAC) — Identity Gap (Closed)</h2>
+
+<h3 id="gap-description">Gap Description</h3>
+
+<p>Prior to CAC, agent actions were attributable only to sessions and tools. There was no formal binding between an agent's character persona, the Prism platform user, the human operator, and the client/session context. This created an identity gap where audit traces could not definitively answer "who authorized this action?" at the operator level.</p>
+
+<h3 id="resolution-implemented">Resolution (Implemented)</h3>
+
+<p>The following capabilities close this gap:</p>
+
+<ul class="list-level-0">
+  <li><strong>Identity chain binding</strong>: every agent action links to <code>characterId</code>, <code>prismUserId</code>, <code>prismUserEmail</code>, <code>operatorId</code>, <code>operatorEmail</code>, <code>clientId</code>, <code>sessionId</code>, and <code>assignmentId</code>.</li>
+  <li><strong>Lifecycle management</strong>: assignments progress through <code>assigned → active → suspended → revoked</code>, with auditable events at each transition.</li>
+  <li><strong>Profile-aware email validation</strong>: business profile enforces domain-matching constraints between Prism user and operator emails; individual profile is permissive.</li>
+  <li><strong>Execution profile normalization</strong>: <code>enterprise</code> and <code>corporate</code> inputs resolve to the canonical <code>business</code> segment.</li>
+  <li><strong>Activity event enrichment</strong>: accountability chain fields propagated into all governed activity events and included in SHA-256 integrity hashes.</li>
+  <li><strong>Query and filtering</strong>: store supports filtering by identity fields for audit and compliance queries.</li>
+</ul>
+<h3 id="remaining-strategic-gaps-roadmap-items">Remaining Strategic Gaps (Roadmap Items)</h3>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Gap</th>
+  <th>Description</th>
+  <th>Target Phase</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Browser identity binding</td>
+  <td>Link headless/user browser sessions to accountability chain with client fingerprint</td>
+  <td>Post-D3</td>
+</tr>
+<tr>
+  <td>Email OAuth verification</td>
+  <td>Validate operator email ownership via OAuth flow before CAC assignment</td>
+  <td>Post-D3</td>
+</tr>
+<tr>
+  <td>Assignment expiry</td>
+  <td>Auto-revoke assignments after configurable TTL with audit event</td>
+  <td>Post-D3</td>
+</tr>
+<tr>
+  <td>Per-character permission scopes</td>
+  <td>Restrict which tools/operations a character assignment can access</td>
+  <td>Post-D3</td>
+</tr>
+<tr>
+  <td>Dashboard CAC panel</td>
+  <td>Visual accountability chain inspector and identity audit export</td>
+  <td>Post-D3</td>
+</tr>
+</tbody>
+</table></div>
+
+<h2 id="9-computer-use-core-gap-register-2026-03-25">9. Computer Use Core Gap Register (2026-03-25)</h2>
+
+<p>Computer use is now treated as a core Prism pillar spanning browser automation, terminal virtualization, and container orchestration.</p>
+
+<h3 id="gap-cu-1-cross-surface-enterprise-hardening-completeness">Gap CU-1: Cross-surface enterprise hardening completeness</h3>
+
+<ul class="list-level-0">
+  <li><strong>Current state:</strong> Prism has meaningful implementation depth across browser/terminal/container surfaces.</li>
+  <li><strong>Gap:</strong> Enterprise assurance language and evidence requirements can drift across docs without a single non-drift gate.</li>
+  <li><strong>Closure path:</strong> Use <code>COMPUTER<em>USE</em>COMPREHENSIVE<em>DEEP</em>DIVE.md</code> as canonical anchor and enforce the Business Security Alignment Gate across test, traceability, and runbook docs.</li>
+</ul>
+<h3 id="gap-cu-2-claim-discipline-for-external-benchmarks">Gap CU-2: Claim discipline for external benchmarks</h3>
+
+<ul class="list-level-0">
+  <li><strong>Current state:</strong> External ecosystem benchmark signals are valuable for market framing.</li>
+  <li><strong>Gap:</strong> Risk of overstating external results as Prism-validated outcomes.</li>
+  <li><strong>Closure path:</strong> Mark all external performance references as <code>vendor-reported</code> unless reproduced in Prism qualification artifacts.</li>
+</ul>
+<h3 id="gap-cu-3-business-gono-go-coupling">Gap CU-3: Business go/no-go coupling</h3>
+
+<ul class="list-level-0">
+  <li><strong>Current state:</strong> Release runbook and traceability matrix are strong but not fully computer-use explicit.</li>
+  <li><strong>Gap:</strong> Computer-use enterprise claim can be made prematurely if release gates are not explicitly coupled to computer-use critical pathways.</li>
+  <li><strong>Closure path:</strong> Require explicit pass status for computer-use allow/deny/timeout/revoke checks before enterprise-ready messaging.</li>
+</ul>
+<h3 id="business-security-alignment-gate-mandatory">Business Security Alignment Gate (Mandatory)</h3>
+
+<p>No computer-use enterprise-ready claim is valid unless all are true:</p>
+
+<ol class="list-level-0">
+  <li>Governance-tier integrity is preserved with deterministic high-risk pathways.</li>
+  <li>CAC accountability chain requirements remain explicit and evidence-backed.</li>
+  <li>Business profile security controls (sandboxing, least privilege, sensitive-action confirmation) remain mandatory.</li>
+  <li>Claims are mapped to first-party artifacts and externally sourced benchmarks are properly labeled.</li>
+</ol>
+<hr />
+
+<h2 id="10-2026-world-class-market-gap-threat-analysis">10. 2026 World-Class Market Gap &amp; Threat Analysis</h2>
+
+<p>This section incorporates recent 2026 market evolutions, including the <strong>NIST AI Agent Standards Initiative (February 2026)</strong>, the rise of <strong>Decoupled Governance-as-a-Service (GaaS)</strong>, and an exhaustive multi-dimensional matrix evaluating PRISM against 14 leading platforms.</p>
+
+<h3 id="101-nist-ai-agent-standards-initiative-feb-2026-alignment-critique">10.1 NIST AI Agent Standards Initiative (Feb 2026) Alignment &amp; Critique</h3>
+
+<p>The February 2026 NIST initiative establishes rigorous guidelines for autonomous agent deployments. PRISM’s architectural design maps directly to these standards, but significant gaps remain before formal compliance can be certified.</p>
+
+<h4 id="1-real-time-security-boundaries-guardrails">1. Real-Time Security Boundaries (Guardrails)</h4>
+<ul class="list-level-0">
+  <li><strong>NIST Guideline:</strong> Autonomous agents must operate within real-time boundary enforcements that prevent escalation of privilege and unmonitored environment mutations.</li>
+  <li><strong>PRISM Posture:</strong> The 3-Tier Policy Engine enforces hard tier caps (e.g., <code>tier3_approval</code> for mutations) at runtime via <code>src/core/policy/engine.ts</code>.</li>
+  <li><strong>Critique &amp; Gap:</strong> While policy is checked before tool execution, PRISM lacks active process sandboxing in its standard Node-only deployment. High-risk shell commands are executed directly in the host OS unless explicitly routed through the simulated <code>container-sandbox-adapter.ts</code>. Real cgroups v2/Docker sandboxing must be fully hardened to secure this boundary.</li>
+</ul>
+<h4 id="2-identity-and-attribution-accountability">2. Identity and Attribution (Accountability)</h4>
+<ul class="list-level-0">
+  <li><strong>NIST Guideline:</strong> Every action executed by an agent must be structurally or cryptographically tied to a verified human operator, a system-level client context, and a persistent agent identity.</li>
+  <li><strong>PRISM Posture:</strong> Handled via the <strong>Character Accountability Control (CAC)</strong> framework. Every action propagates <code>characterId</code>, <code>prismUserEmail</code>, <code>operatorEmail</code>, and <code>assignmentId</code> into the SHA-256 event bus hash.</li>
+  <li><strong>Critique &amp; Gap:</strong> Lacks OAuth-based operator email verification and multi-factor authorization. In a high-trust production environment, an operator's identity could be spoofed in the <code>.env</code> or session configuration since email domain checks rely on self-reported inputs without active directory/OAuth handshakes.</li>
+</ul>
+<h4 id="3-epistemic-traceability-auditability">3. Epistemic Traceability (Auditability)</h4>
+<ul class="list-level-0">
+  <li><strong>NIST Guideline:</strong> Platforms must record complete operational logs that enable deterministic reconstruction of agent reasoning, tool call inputs, and intermediate world states.</li>
+  <li><strong>PRISM Posture:</strong> High-fidelity SQLite event-sourcing with SHA-256 hash chains.</li>
+  <li><strong>Critique &amp; Gap:</strong> The SQLite database has no native cryptographic signature or distributed logging egress (e.g., OTel or syslog). An administrator with database access could theoretically alter historical events and recalculate hashes, compromising forensic integrity.</li>
+</ul>
+<hr />
+
+<h3 id="102-the-decoupled-gaas-governance-as-a-service-paradigm-blueprint">10.2 The Decoupled "GaaS" (Governance-as-a-Service) Paradigm Blueprint</h3>
+
+
+<div class="alert-box alert-tip">
+  <div class="alert-box-header">
+    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.5V19a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.5a3.374 3.374 0 0 0-.918-2.316l-.547-.547z"></path></svg>
+    <span>TIP</span>
+  </div>
+  <div class="alert-box-content">
+    
+  </div>
+</div>
+
+<blockquote><em>"As we Expand our AaaS, we will begin to experience the GaaS."</em>  </blockquote>
+<blockquote>— Kirk LaSalle, Q2 2026</blockquote>
+
+<p>In 2026, the industry has realized that embedding security within agent prompts is a fundamental flaw. Prompts are subject to jailbreaks, prompt injection, and epistemic drift. The state-of-the-art approach is <strong>Decoupled Governance-as-a-Service (GaaS)</strong>—a separate, immutable enforcement layer that stands between the agent runtime and the operational environment.</p>
+
+<div class="mermaid">graph TD
+    User([User Request / Intent]) --> Orchestrator[PRISM Orchestrator]
+    Orchestrator --> Agent[Autonomous Agent / Swarm]
+    Agent -->|Action Attempt: Tool Call / Shell / API| GaaSGate{{"GaaS Security Gate<br/>(3-Tier Policy Engine + PAD Integrity)"}}
+    
+    subgraph "GaaS: Governance-as-a-Service Layer (Decoupled)"
+        GaaSGate -->|Rule Violations / Tier 3| ApprovalQueue[Human Approval Queue]
+        GaaSGate -->|Tier 1/2 Allowed| ExecutionEngine[Isolated Sandbox / Adapter]
+        PAD["Permanent Active Directives (10 Laws)<br/>(SHA-256 Cryptographic Lock)"] -.-> GaaSGate
+        CAC["Character Accountability Control"<br/>(Attribution & Role Scopes)] -.-> GaaSGate
+    end
+    
+    ApprovalQueue -->|Approved| ExecutionEngine
+    ApprovalQueue -->|Denied / Timeout| Reject[Fail-Safe Termination / Rollback]
+    
+    ExecutionEngine -->|Action Execution| Environment[(System / Docker Sandbox / API)]
+    ExecutionEngine -->|SHA-256 Hashed Event| ActivityBus[(Activity Bus / SQLite Audit Chain)]</div>
+
+<p>PRISM is uniquely positioned as the <strong>world's only open-source runtime designed around a GaaS architecture from day one</strong>. By decoupling the <strong>Permanent Active Directives (PAD)</strong> and <strong>Character Accountability Control (CAC)</strong> from LLM prompts and placing them in a strict runtime middleware interceptor, PRISM ensures that even if an agent model is fully compromised or jailbroken, it is physically constrained from executing unauthorized actions (e.g., Business profile cannot execute system mutations without explicit Approval Queue signature).</p>
+
+<hr />
+
+<h3 id="103-2026-world-class-app-comparison-matrix">10.3 2026 World-Class App Comparison Matrix</h3>
+
+<p>This matrix provides an exhaustive, authoritative feature audit of the 15 leading agent platforms, frameworks, and services in 2026 across 12 high-fidelity dimensions.</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Dimension</th>
+  <th>PRISM (SR)</th>
+  <th>OpenHands</th>
+  <th>CrewAI</th>
+  <th>AutoGen / MS Agent</th>
+  <th>LangGraph</th>
+  <th>Phidata</th>
+  <th>AgentZero</th>
+  <th>Docker Agent</th>
+  <th>OpenAI Swarm</th>
+  <th>Lindy.ai</th>
+  <th>Relevance AI</th>
+  <th>Salesforce Agentforce</th>
+  <th>Google ADK</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Governance Architecture</strong></td>
+  <td><strong>World-Class (PAD + CAC + Tiers)</strong></td>
+  <td>❌ None</td>
+  <td>❌ None (Dev-Discipline)</td>
+  <td>⚠️ Middleware</td>
+  <td>⚠️ Guards</td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>⚠️ Client-side (No boundary)</td>
+  <td>❌ None</td>
+  <td>⚠️ Basic Policy</td>
+  <td>⚠️ Basic Policy</td>
+  <td>✅ Strong (Cloud Rules)</td>
+  <td>⚠️ Guardrails</td>
+</tr>
+<tr>
+  <td><strong>Parallel Multi-Model</strong></td>
+  <td><strong>✅ Yes (Spectrum Refraction)</strong></td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+</tr>
+<tr>
+  <td><strong>Swarm Topologies</strong></td>
+  <td><strong>✅ Yes (4 Topologies)</strong></td>
+  <td>❌ No</td>
+  <td>⚠️ Partial (Hierarchical)</td>
+  <td>✅ Yes (Graph-based)</td>
+  <td>✅ Yes (Graph-based)</td>
+  <td>❌ No</td>
+  <td>⚠️ Partial (Superior/Worker)</td>
+  <td>✅ Yes</td>
+  <td>⚠️ Basic</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>⚠️ Basic</td>
+  <td>❌ No</td>
+</tr>
+<tr>
+  <td><strong>Agent Lifecycle</strong></td>
+  <td><strong>✅ Yes (Ephemeral/Perm)</strong></td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>✅ Yes</td>
+  <td>✅ Yes</td>
+  <td>✅ Yes</td>
+  <td>❌ No</td>
+</tr>
+<tr>
+  <td><strong>Identity Trace (CAC)</strong></td>
+  <td><strong>✅ Yes (Full attribution)</strong></td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>⚠️ Basic</td>
+  <td>❌ No</td>
+</tr>
+<tr>
+  <td><strong>OS Sandboxing</strong></td>
+  <td><strong>✅ Yes (Container Adapter)</strong></td>
+  <td>✅ Yes (Docker-native)</td>
+  <td>❌ No</td>
+  <td>✅ Yes</td>
+  <td>❌ No</td>
+  <td>❌ No</td>
+  <td>✅ Yes (Docker-first)</td>
+  <td>✅ Yes</td>
+  <td>❌ No</td>
+  <td>✅ Yes (SaaS)</td>
+  <td>✅ Yes (SaaS)</td>
+  <td>✅ Yes (SaaS)</td>
+  <td>✅ Yes (SaaS)</td>
+</tr>
+<tr>
+  <td><strong>Ecosystem Interface</strong></td>
+  <td><strong>✅ Yes (MCP + 19 Tools)</strong></td>
+  <td>✅ Yes (High)</td>
+  <td>✅ Yes (CrewTools)</td>
+  <td>✅ Yes</td>
+  <td>✅ Yes</td>
+  <td>✅ Yes</td>
+  <td>⚠️ Custom</td>
+  <td>✅ Yes (MCP-native)</td>
+  <td>❌ Low</td>
+  <td>✅ Yes</td>
+  <td>✅ Yes</td>
+  <td>✅ Yes (Mulesoft)</td>
+  <td>✅ Yes (Vertex)</td>
+</tr>
+<tr>
+  <td><strong>Primary Language</strong></td>
+  <td><strong>Node.js (Python planned)</strong></td>
+  <td>Python</td>
+  <td>Python</td>
+  <td>Python / .NET</td>
+  <td>Python</td>
+  <td>Python</td>
+  <td>Python</td>
+  <td>YAML / Go</td>
+  <td>Python</td>
+  <td>No-Code</td>
+  <td>No-Code</td>
+  <td>No-Code</td>
+  <td>Python / Go</td>
+</tr>
+<tr>
+  <td><strong>Deploy Ergonomics</strong></td>
+  <td><strong>⚠️ Script-based (PM2/Docker)</strong></td>
+  <td>✅ Strong</td>
+  <td>✅ Strong</td>
+  <td>✅ Strong</td>
+  <td>✅ Strong</td>
+  <td>✅ Strong</td>
+  <td>⚠️ Shell</td>
+  <td>✅ Strong</td>
+  <td>⚠️ Code</td>
+  <td>✅ SaaS</td>
+  <td>✅ SaaS</td>
+  <td>✅ SaaS</td>
+  <td>✅ SaaS</td>
+</tr>
+<tr>
+  <td><strong>Community Scale</strong></td>
+  <td><strong>⚠️ Small (Early Stage)</strong></td>
+  <td>✅ 71k★</td>
+  <td>✅ 49k★</td>
+  <td>✅ 57k★</td>
+  <td>✅ 29k★</td>
+  <td>✅ 22k★</td>
+  <td>✅ 17k★</td>
+  <td>✅ 20M+ (Docker)</td>
+  <td>⚠️ Medium</td>
+  <td>✅ SaaS (Large)</td>
+  <td>✅ SaaS (Large)</td>
+  <td>✅ Enterprise (Huge)</td>
+  <td>✅ Enterprise</td>
+</tr>
+<tr>
+  <td><strong>Latency Overhead</strong></td>
+  <td><strong>⚠️ High (~3x on SR paths)</strong></td>
+  <td>Low</td>
+  <td>Low</td>
+  <td>Low</td>
+  <td>Low</td>
+  <td>Low</td>
+  <td>Low</td>
+  <td>Low</td>
+  <td>Low</td>
+  <td>Low (Cloud)</td>
+  <td>Low (Cloud)</td>
+  <td>Medium (Cloud)</td>
+  <td>Low</td>
+</tr>
+<tr>
+  <td><strong>Compliance Readiness</strong></td>
+  <td><strong>⚠️ Framework maps (No certs)</strong></td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>❌ None</td>
+  <td>✅ SOC2</td>
+  <td>✅ SOC2</td>
+  <td>✅ SOC2/FedRAMP</td>
+  <td>✅ SOC2/FedRAMP</td>
+</tr>
+<tr>
+  <td><strong>Moat / Core Value</strong></td>
+  <td><strong>Decoupled GaaS + Tri-Model SR</strong></td>
+  <td>SWE-Agent Benchmarks</td>
+  <td>Crews/Flows DSL &amp; Python Reach</td>
+  <td>Multi-Agent Graph Abstractions</td>
+  <td>Stateful Durable Agent Graphs</td>
+  <td>Clean Python Ergonomics</td>
+  <td>Raw Single-Loop Edge Autonomy</td>
+  <td>Declarative YAML &amp; Docker Base</td>
+  <td>Minimal OpenAI Multi-Agent</td>
+  <td>SMB-native SaaS agents</td>
+  <td>Enterprise No-Code Builders</td>
+  <td>Salesforce CRM Integration</td>
+  <td>Vertex Cloud Native ADK</td>
+</tr>
+</tbody>
+</table></div>
+
+
+      </article>
+    </div>
+  </main>
+
+  <script>
+    // Theme toggle logic
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      html.setAttribute('data-theme', newTheme);
+      updateThemeIcon(newTheme);
+      localStorage.setItem('prism-docs-theme', newTheme);
+      
+      // Re-initialize mermaid to match the new theme if needed
+      if (window.mermaid) {
+        mermaid.initialize({ 
+          startOnLoad: true, 
+          theme: newTheme === 'dark' ? 'dark' : 'default' 
+        });
+      }
+    }
+    
+    function updateThemeIcon(theme) {
+      const icon = document.getElementById('theme-icon');
+      if (theme === 'dark') {
+        icon.innerHTML = `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
+      } else {
+        // Render moon icon
+        icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`;
+      }
+    }
+    
+    // Auto-load theme
+    const savedTheme = localStorage.getItem('prism-docs-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+    
+    // Initialize Mermaid
+    mermaid.initialize({ 
+      startOnLoad: true, 
+      theme: savedTheme === 'dark' ? 'dark' : 'default',
+      securityLevel: 'loose'
+    });
+    
+    // Copy code button logic
+    function copyCode(codeId, btnElement) {
+      const codeElement = document.getElementById(codeId);
+      if (!codeElement) return;
+      
+      const textArea = document.createElement("textarea");
+      textArea.value = codeElement.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      
+      try {
+        document.execCommand("copy");
+        // Update button visual state
+        const textSpan = btnElement.querySelector('span');
+        const origText = textSpan.textContent;
+        textSpan.textContent = "Copied!";
+        btnElement.style.borderColor = "var(--alert-tip-border)";
+        btnElement.style.color = "var(--alert-tip-border)";
+        
+        setTimeout(() => {
+          textSpan.textContent = origText;
+          btnElement.style.borderColor = "";
+          btnElement.style.color = "";
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy code: ", err);
+      }
+      
+      document.body.removeChild(textArea);
+    }
+    
+    // Toggle Mobile Sidebar
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('open');
+    }
+    
+    // Active heading tracking in TOC on scroll
+    window.addEventListener('DOMContentLoaded', () => {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('id');
+          if (entry.intersectionRatio > 0) {
+            document.querySelectorAll('.toc-list li').forEach(li => {
+              li.classList.remove('active');
+            });
+            const activeLi = document.querySelector(`.toc-list li a[href="#${id}"]`);
+            if (activeLi) {
+              activeLi.parentElement.classList.add('active');
+            }
+          }
+        });
+      }, { rootMargin: '0px 0px -60% 0px' });
+      
+      // Track all headers
+      document.querySelectorAll('article h1, article h2, article h3, article h4').forEach(header => {
+        observer.observe(header);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -19,6 +19,7 @@
 
 import { createHash } from "node:crypto";
 import type { ActivityBus } from "../activity/bus.js";
+import type { GuardianAgent } from "../agents/guardian-agent.js";
 
 // ── Covenant Articles ────────────────────────────────────────────────────────
 
@@ -179,6 +180,7 @@ export class PrismCovenant {
   private readonly violations: CovenantViolation[] = [];
   private readonly covenantHash: string;
   private readonly activityBus: ActivityBus;
+  private guardian: GuardianAgent | null = null;
   private lastAuditAt: string;
 
   constructor(activityBus: ActivityBus) {
@@ -246,7 +248,18 @@ export class PrismCovenant {
 
     console.warn(`[PRISM][covenant] VIOLATION of ${articleId} (${severity}): ${description}`);
 
+    if (this.guardian && (severity === "breach" || severity === "critical")) {
+      void this.guardian.runTask("covenant_audit");
+    }
+
     return violation;
+  }
+
+  /**
+   * Bind the Guardian Agent to receive immediate intervention triggers on severe violations.
+   */
+  bindGuardian(guardian: GuardianAgent): void {
+    this.guardian = guardian;
   }
 
   /**

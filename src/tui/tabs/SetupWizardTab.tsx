@@ -24,7 +24,9 @@ interface WizardState {
 }
 
 const PROVIDERS = [
+    { id: "llamacpp", label: "Llama.cpp (local)", needsKey: false },
     { id: "ollama", label: "Ollama (local)", needsKey: false },
+    { id: "custom", label: "Custom Provider", needsKey: true },
     { id: "openai", label: "OpenAI", needsKey: true },
     { id: "anthropic", label: "Anthropic", needsKey: true },
     { id: "google", label: "Google AI", needsKey: true },
@@ -48,7 +50,7 @@ export function SetupWizardTab({
     const [wizard, setWizard] = useState<WizardState>({
         profile: null,
         workspaceRoot: "",
-        provider: "ollama",
+        provider: "llamacpp",
         apiKey: "",
     });
     const [prereqs, setPrereqs] = useState<PrerequisiteCheck[]>([]);
@@ -259,7 +261,7 @@ export function SetupWizardTab({
             {/* Step 2: Workspace */}
             {step === 2 && (
                 <Panel title="Step 2 — Workspace Directory">
-                    <Text color={colors.text}>Enter your PRISM workspace path:</Text>
+                    <Text color={colors.text}>Enter your PRISM workspace path, or leave blank to use the default workspace.</Text>
                     <Box marginTop={1}>
                         <Text color={colors.brand}>{symbols.arrow} </Text>
                         <TextInput

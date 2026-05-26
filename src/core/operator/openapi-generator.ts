@@ -189,6 +189,7 @@ function getKnownEndpoints(): EndpointDef[] {
     { path: "/api/models/gguf", method: "GET", operationId: "listGgufModels", summary: "List available GGUF models", tags: ["Models"] },
     { path: "/api/models/download", method: "POST", operationId: "downloadModel", summary: "Initiate model download", tags: ["Models"] },
     { path: "/api/models/download/status", method: "GET", operationId: "getDownloadStatus", summary: "Download progress status", tags: ["Models"] },
+    { path: "/api/models/delete", method: "DELETE", operationId: "deleteModel", summary: "Delete a downloaded model or Ollama tag", tags: ["Models"] },
   ];
 }
 

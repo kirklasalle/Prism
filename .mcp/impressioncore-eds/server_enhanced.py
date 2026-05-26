@@ -653,39 +653,7 @@ async def handle_list_tools() -> List[Tool]:
         ),
         
         # PHASE 2: ImpressionCore B1 Integration Tools
-        Tool(
-            name="create_b1_optimized_dataset",
-            description="🚀 Create ImpressionCore B1-optimized training dataset with GTX 1050 Ti memory constraints",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "topics": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Educational topics for B1 training"
-                    },
-                    "quality_threshold": {
-                        "type": "number",
-                        "description": "Minimum educational quality score (1-10)",
-                        "default": 9.0,
-                        "minimum": 1.0,
-                        "maximum": 10.0
-                    },
-                    "memory_budget": {
-                        "type": "string",
-                        "description": "Target memory budget for GTX 1050 Ti",
-                        "default": "3.5gb",
-                        "enum": ["2gb", "3gb", "3.5gb", "4gb"]
-                    },
-                    "include_multimodal": {
-                        "type": "boolean",
-                        "description": "Include multimodal (text+image) examples",
-                        "default": true
-                    }
-                },
-                "required": ["topics"]
-            }
-        ),
+
         Tool(
             name="verify_sacred_covenant_compliance",
             description="⚖️ Verify content compliance with ImpressionCore Sacred Covenant protocols",
@@ -873,15 +841,7 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> Sequence[Tex
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
             
-        elif name == "create_b1_optimized_dataset":
-            result = await create_b1_optimized_dataset(
-                topics=arguments.get("topics", []),
-                quality_threshold=arguments.get("quality_threshold", 9.0),
-                memory_budget=arguments.get("memory_budget", "3.5gb"),
-                include_multimodal=arguments.get("include_multimodal", True)
-            )
-            return [TextContent(type="text", text=json.dumps(result, indent=2))]
-            
+
         elif name == "verify_sacred_covenant_compliance":
             result = await verify_sacred_covenant_compliance(
                 content_source=arguments.get("content_source", ""),

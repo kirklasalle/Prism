@@ -1,0 +1,57 @@
+{
+  "manifest_version": "1.0",
+  "pack_name": "loc-research",
+  "pack_version": "1.0.0",
+  "description": "Library of Congress research engine adapter for Prism OS providing catalog, Chronicling America newspaper search, and legislative bill tracking.",
+  "author": {
+    "name": "Prism OS Integration Team",
+    "email": "support@prism-os.internal",
+    "url": "https://github.com/kirklasalle/Prism"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kirklasalle/Prism.git"
+  },
+  "adapters": [
+    {
+      "adapter_id": "loc_research_adapter",
+      "adapter_type": "protocol",
+      "entry_file": "index.js",
+      "capabilities": [
+        "loc_catalog_search",
+        "loc_newspaper_search",
+        "loc_legislation_search",
+        "loc_item_metadata"
+      ],
+      "tier_routing": {
+        "default_tier": 2,
+        "tier1_keywords": [
+          "library of congress",
+          "loc catalog",
+          "historic newspapers",
+          "chronicling america"
+        ],
+        "tier2_keywords": [
+          "legislative bills",
+          "congress session",
+          "item metadata"
+        ],
+        "tier3_keywords": []
+      },
+      "description": "Exposes Library of Congress tools to the Prism OS agentic runtime",
+      "trust_level": "verified"
+    }
+  ],
+  "compatibility": {
+    "prism_min_version": "1.0.0",
+    "profiles": ["individual", "business"]
+  },
+  "security": {
+    "review_status": "verified"
+  },
+  "metadata": {
+    "tags": ["research", "library-of-congress", "history", "legislation", "mcp"],
+    "released": "2026-05-19"
+  }
+}

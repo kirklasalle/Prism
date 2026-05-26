@@ -14,9 +14,50 @@ export function dashboardHtml(port: number, authToken?: string): string {
   <div class="app" id="app">
     <aside class="sidebar panel" id="sidebar">
       <div class="brand" id="brand-panel" data-tip-id="shell:brand" data-tip-kind="shell">
-        <div class="eyebrow">Frontier Operator Console</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <div class="eyebrow" style="margin-bottom: 0;">Frontier Operator Console</div>
+          <button id="system-shutdown-btn" onclick="triggerSystemShutdown()" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.45); color: #f87171; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 3px; text-transform: uppercase; letter-spacing: 0.5px; height: 18px; line-height: 1;" onmouseover="this.style.background='rgba(239, 68, 68, 0.28)'; this.style.boxShadow='0 0 8px rgba(239, 68, 68, 0.25)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.12)'; this.style.boxShadow='none'">
+            <span>🛑</span> Shutdown
+          </button>
+        </div>
         <h1>PRISM Chat</h1>
         <a href="http://localhost:${port}" target="_blank" rel="noopener" class="muted" style="display:block;margin-top:0;text-decoration:none;color:var(--muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'" data-tip-id="shell:console-link" data-tip-kind="shell">http://localhost:${port} \u2197</a>
+        
+        <!-- PRISM WebSocket Real-Time Tunnel Indicator -->
+        <div class="ws-connection-panel" style="display:flex;align-items:center;gap:10px;margin-top:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:8px 12px;font-size:11px;">
+          <span id="prism-ws-status" style="width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,0.5);transition:background 0.3s;display:inline-block;" data-tip-id="shell:ws-status" data-tip-kind="shell" tabindex="0" role="status" aria-label="WebSocket connection status"></span>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <span style="font-weight:600;color:#ddd;letter-spacing:0.3px;font-size:10px;text-transform:uppercase;">Frontier WS Tunnel</span>
+            <span id="prism-ws-status-text" style="font-size:9px;color:#34d399;font-weight:700;letter-spacing:0.5px;">CONNECTED (LIVE)</span>
+          </div>
+        </div>
+
+        <!-- PRISM Active Resource Paradigm / Mode Switcher -->
+        <div id="prism-paradigm-panel" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;font-size:11px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:600;color:#ddd;letter-spacing:0.3px;font-size:10px;text-transform:uppercase;">Resource Mode</span>
+            <span id="prism-paradigm-badge" class="badge badge-running" style="font-size:8px;padding:1px 5px;letter-spacing:0.5px;font-weight:800;border-radius:4px;text-transform:uppercase;">LOADING</span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button id="prism-btn-basemode" onclick="setResourceParadigm(true)" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.5px;">
+              ⚡ Base Mode
+            </button>
+            <button id="prism-btn-perfmode" onclick="setResourceParadigm(false)" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.5px;">
+              🚀 Frontier
+            </button>
+          </div>
+          <div id="prism-paradigm-desc" style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:2px;">
+            Querying active constraints...
+          </div>
+          
+          <!-- Persistent Event Logs -->
+          <div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;">
+            <span style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:3px;">Activity Log</span>
+            <div id="prism-paradigm-log" style="font-size:8px;color:#cbd5e1;font-family:monospace;line-height:1.4;max-height:60px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">
+              <div>[SYSTEM] Booting active paradigm...</div>
+            </div>
+          </div>
+        </div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:6px;">
         <button class="secondary-button" onclick="exportSession()" style="flex:1;" data-tip-id="shell:export-session" data-tip-kind="shell">Export Session</button>
@@ -44,7 +85,7 @@ export function dashboardHtml(port: number, authToken?: string): string {
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:logs" data-tip-kind="shell-tab">Logs &amp; Debug</button>
         <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:scheduler" data-tip-kind="shell-tab">Scheduler</button>
         <button id="tab-button-watch" type="button" class="tab-button" data-tab-id="watch" role="tab" aria-selected="false" aria-controls="tab-watch" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:watch" data-tip-kind="shell-tab" title="Watch PRISM run autonomously">👁️ Watch Me</button>
-        <span id="prism-ws-status" title="WebSocket connected" style="width:10px;height:10px;border-radius:50%;background:#22c55e;align-self:center;margin-left:auto;flex:0 0 10px;box-shadow:0 0 6px rgba(34,197,94,0.5);transition:background 0.3s;" data-tip-id="shell:ws-status" data-tip-kind="shell" tabindex="0" role="status" aria-label="WebSocket connection status"></span>
+        <button id="tab-button-wiki" type="button" class="tab-button" data-tab-id="wiki" role="tab" aria-selected="false" aria-controls="tab-wiki" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:wiki" data-tip-kind="shell-tab">Prism Wiki</button>
       </section>
 
       <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat" aria-hidden="false"></section>
@@ -70,6 +111,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
       <section id="tab-scheduler" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-scheduler" aria-hidden="true"></section>
 
       <section id="tab-watch" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-watch" aria-hidden="true"></section>
+
+      <section id="tab-wiki" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-wiki" aria-hidden="true"></section>
 
       <div id="sched-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:520px;width:90%;">
@@ -109,6 +152,9 @@ export function dashboardHtml(port: number, authToken?: string): string {
        removed or modified. -->
   <script src="/public/tab-watch.js"></script>
 
+  <!-- Additive (v0.21): Prism Wiki - serves dynamic docs directory and custom SVG diagrams -->
+  <script src="/public/tab-wiki.js"></script>
+
   <!-- Demonstration Mode: Interactive showcase with Mad Libs prompts,
        9 demos (3 self-control, 3 browser, 3 computer), tab tour,
        and full playback controls (pause/resume/stop/speed). -->
@@ -144,6 +190,216 @@ export function dashboardHtml(port: number, authToken?: string): string {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     });
+  })();
+
+  window.triggerSystemShutdown = function() {
+    if (!confirm("Are you sure you want to perform a graceful system shutdown? This will terminate the entire PRISM daemon.")) {
+      return;
+    }
+    
+    const btn = document.getElementById("system-shutdown-btn");
+    if (btn) {
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      btn.innerText = 'Shutting down...';
+    }
+    
+    const meta = document.querySelector('meta[name="prism-auth-token"]');
+    const token = meta ? meta.getAttribute('content') || '' : '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    
+    fetch('/api/v1/system/shutdown', {
+      method: 'POST',
+      headers: headers,
+      credentials: 'same-origin'
+    })
+    .then(async res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      alert(data.message || "Graceful shutdown initialized. Check terminal console.");
+    })
+    .catch(err => {
+      console.error("Shutdown request failed:", err);
+      alert("Failed to initiate shutdown: " + err.message);
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = '<span>🛑</span> Shutdown';
+      }
+    });
+  };
+
+  // PRISM Dynamic Resource Paradigm Switcher Controller (Additive)
+  (function() {
+    var lastLoggedMode = null;
+
+    function getAuthHeaders() {
+      var meta = document.querySelector('meta[name="prism-auth-token"]');
+      var token = meta ? meta.getAttribute('content') || '' : '';
+      var headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return headers;
+    }
+
+    function logEvent(msg) {
+      var logDiv = document.getElementById('prism-paradigm-log');
+      if (!logDiv) return;
+      
+      // Clean default placeholder if present
+      if (logDiv.children.length === 1 && logDiv.children[0].innerText.includes("Booting active paradigm...")) {
+        logDiv.innerHTML = "";
+      }
+      
+      var now = new Date();
+      var timeStr = now.toTimeString().split(' ')[0];
+      var entry = document.createElement('div');
+      entry.style.display = 'flex';
+      entry.style.gap = '4px';
+      entry.innerHTML = '<span style="color:var(--muted); flex-shrink:0;">[' + timeStr + ']</span> <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + msg + '</span>';
+      
+      logDiv.appendChild(entry);
+      while (logDiv.children.length > 5) {
+        logDiv.removeChild(logDiv.firstChild);
+      }
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    async function checkParadigm() {
+      var badge = document.getElementById('prism-paradigm-badge');
+      var desc = document.getElementById('prism-paradigm-desc');
+      var btnBase = document.getElementById('prism-btn-basemode');
+      var btnPerf = document.getElementById('prism-btn-perfmode');
+      if (!badge || !desc || !btnBase || !btnPerf) return;
+
+      try {
+        var res = await fetch('/api/status', { credentials: 'same-origin', headers: getAuthHeaders() });
+        if (!res.ok) return;
+        var status = await res.json();
+        
+        var modeStr = status.baseMode ? "Base Mode" : "Frontier";
+        if (lastLoggedMode === null) {
+          logEvent("Active paradigm: " + modeStr);
+          lastLoggedMode = status.baseMode;
+        } else if (lastLoggedMode !== status.baseMode) {
+          logEvent("Paradigm shifted externally to: " + modeStr);
+          lastLoggedMode = status.baseMode;
+        }
+        
+        updateUI(status.baseMode);
+      } catch (e) {
+        console.error("Failed to fetch resource paradigm:", e);
+      }
+    }
+
+    function updateUI(isBaseMode) {
+      var badge = document.getElementById('prism-paradigm-badge');
+      var desc = document.getElementById('prism-paradigm-desc');
+      var btnBase = document.getElementById('prism-btn-basemode');
+      var btnPerf = document.getElementById('prism-btn-perfmode');
+      if (!badge || !desc || !btnBase || !btnPerf) return;
+
+      if (isBaseMode) {
+        badge.innerText = 'BASE ACTIVE';
+        badge.style.background = '#eab308';
+        badge.style.color = '#000';
+        badge.style.boxShadow = '0 0 6px rgba(234,179,8,0.4)';
+        desc.innerHTML = '<span style="color:#eab308;font-weight:700;">⚡ Base Mode active:</span> Running Guardian &amp; Planner under severe VRAM constraints (&lt;= 3GB).';
+        
+        btnBase.style.background = 'rgba(234,179,8,0.15)';
+        btnBase.style.borderColor = '#eab308';
+        btnBase.style.color = '#eab308';
+        
+        btnPerf.style.background = 'rgba(255,255,255,0.03)';
+        btnPerf.style.borderColor = 'rgba(255,255,255,0.08)';
+        btnPerf.style.color = '#94a3b8';
+      } else {
+        badge.innerText = 'FRONTIER';
+        badge.style.background = '#3b82f6';
+        badge.style.color = '#fff';
+        badge.style.boxShadow = '0 0 6px rgba(59,130,246,0.4)';
+        desc.innerHTML = '<span style="color:#60a5fa;font-weight:700;">🚀 Frontier mode:</span> All swarms, cloud LLM providers, and full diagnostics active.';
+        
+        btnBase.style.background = 'rgba(255,255,255,0.03)';
+        btnBase.style.borderColor = 'rgba(255,255,255,0.08)';
+        btnBase.style.color = '#94a3b8';
+        
+        btnPerf.style.background = 'rgba(59,130,246,0.15)';
+        btnPerf.style.borderColor = '#3b82f6';
+        btnPerf.style.color = '#60a5fa';
+      }
+    }
+
+    window.setResourceParadigm = async function(targetBaseMode) {
+      var badge = document.getElementById('prism-paradigm-badge');
+      if (badge) {
+        badge.innerText = 'SWITCHING...';
+        badge.style.background = '#a855f7';
+        badge.style.color = '#fff';
+      }
+      
+      var targetStr = targetBaseMode ? "Base Mode" : "Frontier";
+      logEvent("Requesting swap to " + targetStr + "...");
+
+      try {
+        var res = await fetch('/api/mode', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          credentials: 'same-origin',
+          body: JSON.stringify({ baseMode: targetBaseMode })
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+        
+        lastLoggedMode = data.baseMode;
+        updateUI(data.baseMode);
+        logEvent("Swapped successfully to " + targetStr + ".");
+        
+        showSystemToast(targetBaseMode ? 
+          "⚡ PRISM successfully switched to Base Mode! Memory throttles applied." : 
+          "🚀 PRISM elevated to Frontier mode! All services restored."
+        );
+      } catch (e) {
+        logEvent("ERROR: Paradigm swap failed.");
+        alert("Failed to switch resource paradigm: " + e.message);
+        checkParadigm();
+      }
+    };
+
+    function showSystemToast(msg) {
+      var toast = document.createElement('div');
+      toast.style.position = 'fixed';
+      toast.style.bottom = '20px';
+      toast.style.right = '20px';
+      toast.style.background = 'rgba(15,23,42,0.95)';
+      toast.style.border = '1px solid #8b5cf6';
+      toast.style.color = '#fff';
+      toast.style.padding = '12px 20px';
+      toast.style.borderRadius = '10px';
+      toast.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(139,92,246,0.3)';
+      toast.style.fontSize = '12px';
+      toast.style.zIndex = '99999';
+      toast.style.transition = 'all 0.5s ease';
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(20px)';
+      toast.innerHTML = msg;
+      
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+      }, 50);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 500);
+      }, 8000);
+    }
+
+    // Run first check immediately, then poll every 5s
+    setTimeout(checkParadigm, 200);
+    setInterval(checkParadigm, 5000);
   })();
   </script>
 </body>

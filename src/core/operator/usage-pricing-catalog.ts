@@ -35,11 +35,14 @@ export const PRICING_CATALOG: Record<string, ModelPricing> = {
   "anthropic/claude-2": { inputPer1M: 8.00, outputPer1M: 24.00, label: "Claude 2", tier: 4 },
 
   // ── Google ────────────────────────────────────────────────────────────────
+  "google/gemini-3.0-flash": { inputPer1M: 0.10, outputPer1M: 0.40, label: "Gemini 3.0 Flash", tier: 4 },
+  "google/gemini-3-flash": { inputPer1M: 0.10, outputPer1M: 0.40, label: "Gemini 3 Flash", tier: 4 },
+  "google/gemini-2.5-flash": { inputPer1M: 0.10, outputPer1M: 0.40, label: "Gemini 2.5 Flash", tier: 4 },
+  "google/gemini-2.0-flash": { inputPer1M: 0.10, outputPer1M: 0.40, label: "Gemini 2.0 Flash", tier: 4 },
+  "google/gemini-2.0-pro": { inputPer1M: 3.50, outputPer1M: 10.50, label: "Gemini 2.0 Pro", tier: 5 },
   "google/gemini-1.5-pro": { inputPer1M: 3.50, outputPer1M: 10.50, label: "Gemini 1.5 Pro", tier: 5 },
   "google/gemini-1.5-flash": { inputPer1M: 0.075, outputPer1M: 0.30, label: "Gemini 1.5 Flash", tier: 3 },
   "google/gemini-1.5-flash-8b": { inputPer1M: 0.0375, outputPer1M: 0.15, label: "Gemini 1.5 Flash 8B", tier: 2 },
-  "google/gemini-2.0-flash": { inputPer1M: 0.10, outputPer1M: 0.40, label: "Gemini 2.0 Flash", tier: 4 },
-  "google/gemini-2.0-pro": { inputPer1M: 3.50, outputPer1M: 10.50, label: "Gemini 2.0 Pro", tier: 5 },
 
   // ── Mistral ───────────────────────────────────────────────────────────────
   "mistral/mistral-large": { inputPer1M: 2.00, outputPer1M: 6.00, label: "Mistral Large", tier: 5 },

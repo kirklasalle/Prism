@@ -16,6 +16,7 @@ let wizardState = {
   assistantEmail: '',
   importCharacterPreview: null,
 };
+let providerCatalog = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,33 @@ function escHtml(str) {
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+function applyWizardHoverTooltips() {
+  document.querySelectorAll('.wizard-option').forEach((el) => {
+    if (el.getAttribute('title')) return;
+    const heading = el.querySelector('h3');
+    const text = (heading?.textContent || el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text) el.setAttribute('title', text);
+  });
+
+  document.querySelectorAll('button, input, select, textarea, .wizard-toggle').forEach((el) => {
+    if (el.getAttribute('title')) return;
+    if (el.id === 'wizard-next') {
+      el.setAttribute('title', currentStep === TOTAL_STEPS ? 'Launch PRISM with this configuration' : 'Continue to the next setup step');
+      return;
+    }
+    if (el.id === 'wizard-back') {
+      el.setAttribute('title', 'Return to the previous setup step');
+      return;
+    }
+    if (el.id === 'wizard-skip') {
+      el.setAttribute('title', 'Skip setup and launch with defaults');
+      return;
+    }
+    const labelText = (el.getAttribute('aria-label') || el.textContent || el.placeholder || '').replace(/\s+/g, ' ').trim();
+    if (labelText) el.setAttribute('title', labelText);
+  });
 }
 
 // ── Progress dots ────────────────────────────────────────────────────────────
@@ -66,6 +94,7 @@ function showStep(n) {
   if (n === 4) initCharacterStep();
   if (n === 5) initIdentityStep();
   if (n === 6) initSummaryStep();
+  applyWizardHoverTooltips();
 }
 
 // ── Step 1: Profile selection ────────────────────────────────────────────────
@@ -110,9 +139,10 @@ async function validateWorkspace() {
 
 // ── Step 3: Provider ─────────────────────────────────────────────────────────
 
-const PROVIDERS_NEEDING_KEY = ['openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
+const PROVIDERS_NEEDING_KEY = ['custom', 'openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
 
-function initProviderStep() {
+async function initProviderStep() {
+  await loadProviderCatalog();
   updateProviderKeyField();
 }
 
@@ -123,15 +153,27 @@ window.selectProvider = function selectProvider(el, value) {
   updateProviderKeyField();
 };
 
+async function loadProviderCatalog() {
+  try {
+    const data = await api('GET', '/api/llm/catalog');
+    if (data && Array.isArray(data.providers)) {
+      providerCatalog = data.providers;
+    }
+  } catch {
+    providerCatalog = null;
+  }
+}
+
 function updateProviderKeyField() {
   const keyField = document.getElementById('provider-key-field');
   const keyLabel = document.getElementById('provider-key-label');
   const testResult = document.getElementById('provider-test-result');
   if (!keyField) return;
 
-  const needsKey = PROVIDERS_NEEDING_KEY.includes(wizardState.provider);
+  const providerMeta = providerCatalog?.find((p) => p.id === wizardState.provider);
+  const needsKey = providerMeta?.requiresApiKey ?? PROVIDERS_NEEDING_KEY.includes(wizardState.provider);
   keyField.style.display = needsKey ? '' : 'none';
-  if (keyLabel) keyLabel.textContent = `${wizardState.provider.charAt(0).toUpperCase() + wizardState.provider.slice(1)} API Key`;
+  if (keyLabel) keyLabel.textContent = `${providerMeta?.label || wizardState.provider.charAt(0).toUpperCase() + wizardState.provider.slice(1)} API Key`;
   if (testResult) testResult.innerHTML = '';
 
   const keyInput = document.getElementById('provider-api-key');
@@ -146,9 +188,9 @@ async function testProviderConnection() {
   if (!testResult) return false;
   testResult.innerHTML = '<span style="color:var(--muted);">Testing connection...</span>';
   try {
-    const data = await api('POST', '/api/provider/test', {
+    const data = await api('POST', '/api/llm/provider-test', {
       providerId: wizardState.provider,
-      endpoint: undefined,
+      apiKey: wizardState.apiKey || undefined,
     });
     if (data.ok || data.reachable) {
       testResult.innerHTML = '<span style="color:var(--accent-2);">\u2713 Provider is reachable.</span>';
@@ -185,7 +227,8 @@ async function initCharacterStep() {
     if (list) list.innerHTML = '<div style="color:var(--danger);">Failed to load characters.</div>';
   }
   // Default tab = bundled
-  wizardCharacterTab('bundled');
+  window.wizardCharacterTab?.('bundled');
+  applyWizardHoverTooltips();
 }
 
 window.wizardCharacterTab = function wizardCharacterTab(tab) {
@@ -193,6 +236,7 @@ window.wizardCharacterTab = function wizardCharacterTab(tab) {
   const imp = document.getElementById('wizard-character-panel-import');
   if (bundled) bundled.style.display = tab === 'bundled' ? '' : 'none';
   if (imp) imp.style.display = tab === 'import' ? '' : 'none';
+  applyWizardHoverTooltips();
 };
 
 window.wizardSelectCharacter = function wizardSelectCharacter(el, id) {
@@ -201,6 +245,7 @@ window.wizardSelectCharacter = function wizardSelectCharacter(el, id) {
   if (el) el.classList.add('selected');
   const selectedEl = document.getElementById('wizard-character-selected');
   if (selectedEl) selectedEl.textContent = `Selected: ${id}`;
+  applyWizardHoverTooltips();
 };
 
 window.wizardCharacterPreviewImport = async function wizardCharacterPreviewImport() {
@@ -300,9 +345,10 @@ async function initSummaryStep() {
   }
 
   // Save API key if provided
-  if (wizardState.apiKey && PROVIDERS_NEEDING_KEY.includes(wizardState.provider)) {
+  if (wizardState.apiKey && (providerCatalog?.find((p) => p.id === wizardState.provider)?.requiresApiKey ?? PROVIDERS_NEEDING_KEY.includes(wizardState.provider))) {
     try {
-      await api('POST', `/api/provider/${encodeURIComponent(wizardState.provider)}/key`, {
+      await api('POST', '/api/llm/provider-secret', {
+        providerId: wizardState.provider,
         apiKey: wizardState.apiKey,
       });
     } catch { /* key save is best-effort */ }
@@ -415,4 +461,5 @@ window.startAdvancedWizard = function startAdvancedWizard() {
       if (indOpt) indOpt.classList.remove('selected');
     }
   } catch { /* ignore */ }
+  applyWizardHoverTooltips();
 })();

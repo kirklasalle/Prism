@@ -154,4 +154,57 @@ describe("ChatSessionStore", () => {
         assert.ok(cfg);
         assert.equal(cfg.circuitBreakerEnabled, true);
     });
+
+    // ── PRISM Micro Support Desk Tickets ──────────────────────────────────
+
+    it("creates, lists, updates, and deletes support tickets", () => {
+        // Create ticket
+        const ticket = store.createSupportTicket({
+            title: "Database Lock Incident",
+            description: "Concurrent writes locking sqlite journal file.",
+            source: "diagnostics",
+            severity: "high",
+            metadata: { pid: 1042 },
+        });
+        assert.ok(ticket.ticketId.startsWith("TKT-"), "generates a valid TKT ID");
+        assert.equal(ticket.title, "Database Lock Incident");
+        assert.equal(ticket.status, "open");
+        assert.equal(ticket.severity, "high");
+        assert.deepEqual(ticket.metadata, { pid: 1042 });
+
+        // List tickets
+        const list = store.listSupportTickets();
+        const found = list.find((x) => x.ticketId === ticket.ticketId);
+        assert.ok(found, "ticket exists in list");
+        assert.equal(found.title, "Database Lock Incident");
+
+        // Update status to investigating
+        const okUpdate = store.updateSupportTicket(ticket.ticketId, "investigating");
+        assert.ok(okUpdate, "updates status successfully");
+        const list2 = store.listSupportTickets();
+        const found2 = list2.find((x) => x.ticketId === ticket.ticketId);
+        assert.ok(found2, "found2 exists");
+        assert.equal(found2.status, "investigating");
+        assert.equal(found2.resolutionLog, null);
+
+        // Resolve ticket with long-term knowledge base entry
+        const okResolve = store.updateSupportTicket(
+            ticket.ticketId,
+            "resolved",
+            "Configured multi-write retry buffer to resolve locks."
+        );
+        assert.ok(okResolve, "resolves ticket successfully");
+        const list3 = store.listSupportTickets();
+        const found3 = list3.find((x) => x.ticketId === ticket.ticketId);
+        assert.ok(found3, "found3 exists");
+        assert.equal(found3.status, "resolved");
+        assert.equal(found3.resolutionLog, "Configured multi-write retry buffer to resolve locks.");
+
+        // Delete ticket
+        const okDelete = store.deleteSupportTicket(ticket.ticketId);
+        assert.ok(okDelete, "deletes ticket successfully");
+        const list4 = store.listSupportTickets();
+        const found4 = list4.find((x) => x.ticketId === ticket.ticketId);
+        assert.equal(found4, undefined, "ticket is removed from DB");
+    });
 });

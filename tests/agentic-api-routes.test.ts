@@ -145,6 +145,8 @@ describe("Agent Control API Routes (/api/agents/*, /api/swarms/*, /api/guardian/
         const router = new AgentRouter(pool, delegate);
         const swarm = new SwarmCoordinator(pool);
         service.setAgentControl({ lifecycle, telemetry, swarm, pool, router });
+        // Force modelPath to be empty so POST /api/guardian/start fails with 400 as expected
+        service.getGuardianAgent().configure({ modelPath: "" });
 
         service.start();
         await new Promise((resolve) => setTimeout(resolve, 100));

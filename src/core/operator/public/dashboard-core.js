@@ -221,7 +221,8 @@ export const tabs = [
   { id: 'telemetry', label: 'Telemetry' },
   { id: 'logs', label: 'Logs & Debug' },
   { id: 'scheduler', label: 'Scheduler' },
-  { id: 'watch', label: 'Watch Me' }
+  { id: 'watch', label: 'Watch Me' },
+  { id: 'wiki', label: 'Prism Wiki' }
 ];
 
 // ── Auth token (injected via <meta> tag from server) ──────────────────
@@ -333,6 +334,10 @@ export
   function renderMarkdown(text) {
   if (!text) return '';
   var s = String(text);
+  // Auto-link absolute file paths (Windows and Unix)
+  s = s.replace(/(^|\s|`|&gt;)((?:[A-Za-z]:\\[^\s<>"'`]+)|(?:\/(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+))/g, function (_, prefix, path) {
+    return prefix + '<a href="#" class="local-path-link" onclick="window.openLocalPath(\'' + escapeHtml(path.replace(/\\/g, '\\\\')) + '\'); return false;" title="Open in File Explorer">' + escapeHtml(path) + '</a>';
+  });
   // Fenced code blocks
   s = s.replace(/```(\w*?)\n([\s\S]*?)```/g, function (_, lang, code) {
     return '<div class="code-block-wrapper"><div class="code-block-header"><span class="code-block-lang">' + escapeHtml(lang || 'text') + '</span><button class="code-block-copy" onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.innerText); this.innerText=\'Copied!\'; setTimeout(()=>this.innerText=\'Copy\',2000)">Copy</button></div><pre><code class="lang-' + escapeHtml(lang || 'text') + '">' + escapeHtml(code) + '</code></pre></div>';
@@ -605,7 +610,7 @@ export function saveItemNotes(kind, name) {
 }
 
 export function toggleItemExpand(kind, name) {
-  var field = kind === 'tool' ? 'expandedToolId' : kind === 'plugin' ? 'expandedPluginId' : 'expandedUtilityId';
+  var field = kind === 'tool' ? 'expandedToolId' : kind === 'plugin' ? 'expandedPluginId' : kind === 'skill' ? 'expandedSkillId' : 'expandedUtilityId';
   state[field] = state[field] === name ? null : name;
   render();
 }
@@ -633,3 +638,19 @@ export
   }
   return text;
 }
+
+window.openLocalPath = async function (path) {
+  try {
+    const result = await request('/api/workspace/open-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path })
+    });
+    if (result.error) {
+      alert('Failed to open path: ' + result.error);
+    }
+  } catch (err) {
+    alert('Error opening path: ' + String(err));
+  }
+};
+

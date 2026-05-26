@@ -84,6 +84,18 @@
                                                           "PYTHONIOENCODING":  "utf-8",
                                                           "PYTHONUTF8":  "1"
                                                       }
+                                          },
+                       "loc-mcp-server":  {
+                                              "command":  "D:\\Projects\\Prism\\.venv\\Scripts\\python.exe",
+                                              "args":  [
+                                                           "D:\\Projects\\impressioncore\\.mcp\\loc-mcp-server\\server.py"
+                                                       ],
+                                              "cwd":  "D:\\Projects\\impressioncore\\.mcp\\loc-mcp-server",
+                                              "env":  {
+                                                          "PYTHONPATH":  "D:\\Projects\\Prism\\.venv\\Lib\\site-packages",
+                                                          "PYTHONIOENCODING":  "utf-8",
+                                                          "PYTHONUTF8":  "1"
+                                                      }
                                           }
                    }
 }

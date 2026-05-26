@@ -1,0 +1,105 @@
+# Implementation Plan: PRISM Base Mode Configuration
+
+This plan details the technical steps to implement the **PRISM Base Mode**, specifically engineered for extremely resource-constrained edge hardware:
+- **GPU**: Nvidia GTX 1050 Ti (4GB total GDDR5 VRAM, ~2.5-3.0GB ML boundary)
+- **CPU**: Intel Core i5 4460 (Haswell, 4 Cores, 4 Threads, AVX2)
+- **RAM**: 32GB DDR3 (1600 MT/s)
+- **SSD**: SATA III (~550 MB/s)
+
+We will introduce a global configuration variable `PRISM_BASE_MODE=true` that activates hardware optimization flags, sequential context caching, dynamic Ollama resident-model interrogation, on-demand GGUF loading, and strict Guardian Agent task pruning.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> The transition to Base Mode clamps native `llama-server` instances to a **2048 context window** (down from 4096) and completely disables speculative decoding draft models to keep the VRAM usage strictly within the physical **2.5GB to 3.0GB** boundary of the GTX 1050 Ti. 
+
+> [!NOTE]
+> Base Mode implements a **Single-Slot Sequential Runner (SSSR)**. When routing requests to a local GGUF, if the desired model is not loaded in VRAM, the supervisor will dynamically reclaim the slot and load the model on-demand before routing, eliminating duplicate loading/unloading in the UI.
+
+---
+
+## Proposed Changes
+
+We will modify 4 core files in the codebase, order of dependencies respected:
+
+```mermaid
+graph TD
+    A[src/core/operator/llama-cpp-supervisor.ts] --> B[src/core/operator/llm-provider-manager.ts]
+    A --> C[src/core/agents/guardian-agent.ts]
+    B --> D[src/index.ts]
+    C --> D
+```
+
+---
+
+### Component: GGUF Supervisor & Optimization Flags
+
+#### [MODIFY] [llama-cpp-supervisor.ts](file:///d:/Projects/Prism/src/core/operator/llama-cpp-supervisor.ts)
+- Modify `spawnProcess(slot: LlamaModelSlot, ctxSize: number)` to check if `process.env.PRISM_BASE_MODE === "true"`.
+- If Base Mode is enabled, enforce the following optimized spawn arguments:
+  - `--threads 4`: Clamps processing exactly to the 4 physical CPU cores, bypassing context-switch scheduling bottlenecks.
+  - `--batch-size 64`: Cap batch size to optimize prefill latency and reside completely within the i5 CPU's L3 cache.
+  - `--ctx-size 2048`: Force clamp context windows to 2048 to prevent memory growth spikes.
+  - `--flash-attn`: Force-enable flash attention arguments to decrease memory utilization.
+  - `--model-draft`: Ignore slot draft settings and strip out speculative decoding parameters to avoid VRAM over-allocation.
+  - `--n-gpu-layers 99`: Fully offload the small 1.5B parameters model to GTX 1050 Ti VRAM.
+  - Push context state prefix caching parameters (`--grp-attn-n 1 --grp-attn-w 512`) to support instant in-memory context swaps.
+
+---
+
+### Component: LLM Provider Manager & SSSR On-Demand Loading
+
+#### [MODIFY] [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
+- Add a helper `isOllamaModelHot(modelName: string): Promise<boolean>` to query Ollama's REST endpoint `/api/ps` for loaded models.
+- If Ollama has the target model hot, route requests directly to Ollama with `keep_alive: -1` to prevent automatic unloading.
+- In `generate`, implement **Single-Slot Sequential Runner (SSSR) Auto-loading**:
+  - If `catalog.activeProviderId === "llamacpp"` and `this.llamaSupervisor` is attached, check if the slot is empty or in error.
+  - If the requested model is not currently "ready" in the supervisor slot, retrieve the model file path:
+    `const modelPath = this.llamaSupervisor.getModelPath(catalog.activeModel);`
+    If found, block and await on-demand load:
+    `await this.llamaSupervisor.loadModel(modelPath, catalog.activeModel, { ctxSize: 2048 });`
+  - Re-evaluate active port dynamically before routing the Open-AI compatible request. This allows complete sequential multiplexing of the Main LLM and the Guardian Agent on a single slot.
+
+---
+
+### Component: Guardian Task Catalog Pruning
+
+#### [MODIFY] [guardian-agent.ts](file:///d:/Projects/Prism/src/core/agents/guardian-agent.ts)
+- Update `constructor` to check if `process.env.PRISM_BASE_MODE === "true"`.
+- If Base Mode is engaged, filter `GUARDIAN_TASK_CATALOG` on startup, pruning all diagnostic loops and retaining only the **essential survival triad**:
+  - `directive_integrity` (SHA-256 validation of instructions, run at 600,000ms)
+  - `mcp_health_recovery` (Tool-server health-checking, run at 60,000ms)
+  - `aab_ledger_monitor` (Infinite-loop circuit breaker, run at 30,000ms)
+- Automatically disable all other tasks in `this.tasks` so that no secondary logs, system resource snapshots, or disk-checking processes consume CPU cycles on the legacy Haswell CPU.
+
+---
+
+### Component: System Boot logs
+
+#### [MODIFY] [index.ts](file:///d:/Projects/Prism/src/index.ts)
+- Inject a clear boot verification log at startup:
+  ```typescript
+  if (process.env.PRISM_BASE_MODE === "true") {
+      console.log(`[PRISM][startup] ACTIVE CONSTRAINT PARADIGM ENGAGED: Base Mode initialized.`);
+      console.log(`[PRISM][startup] Optimizing GGUF and task scheduling for GTX 1050 Ti & Core i5 Haswell.`);
+  }
+  ```
+
+---
+
+## Verification Plan
+
+### Automated Verification
+1. Run local TypeScript compiler validation to ensure code builds successfully:
+   `npm run build`
+2. Validate GGUF spawn parameters using custom test environment flags:
+   `$env:PRISM_BASE_MODE="true"; npm run dev`
+
+### Manual Verification
+1. Boot the PRISM interface and verify the console outputs:
+   - Check that `ACTIVE CONSTRAINT PARADIGM ENGAGED` logs correctly.
+2. Interrogate the Guardian settings panel to confirm that only 3 active tasks (`directive_integrity`, `mcp_health_recovery`, and `aab_ledger_monitor`) are registered and scheduling.
+3. Switch the Main LLM role to a local GGUF model under Llama.cpp, trigger a prompt, and observe the `llama-server` process spawn arguments in the terminal to verify the optimizations (`--threads 4 --batch-size 64 --ctx-size 2048`).
+4. Query a local Ollama model to verify that the `/api/ps` resident detector correctly interfaces and registers in the provider catalog.

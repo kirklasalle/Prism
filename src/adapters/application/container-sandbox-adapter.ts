@@ -94,18 +94,20 @@ export class ContainerSandboxAdapter {
         this.initializationPromise = this.initializeDatabase();
     }
 
-    /** Backward compatibility: Docker is no longer required for Prism runtime containers. */
+    /** PRISM Computer Use: Docker is now supported for isolated sandboxing. */
     isDockerEnabled(): boolean {
-        return false;
+        return this.getRuntimeBackend() === "docker";
     }
 
-    /** Built-in runtime is always available when filesystem access is available. */
+    /** Built-in runtime or Docker is available. */
     isContainerRuntimeEnabled(): boolean {
         return true;
     }
 
-    getRuntimeBackend(): "builtin-prism" {
-        return "builtin-prism";
+    getRuntimeBackend(): "docker" | "builtin-prism" {
+        return (process.env.PRISM_USE_DOCKER === "true" || process.env.PRISM_USE_DOCKER === "1")
+            ? "docker"
+            : "builtin-prism";
     }
 
     setExecutionProfile(profile: ExecutionProfile): void {
@@ -214,6 +216,7 @@ export class ContainerSandboxAdapter {
 
         const container_id = uuidv4();
         const created_at = new Date().toISOString();
+        const backend = this.getRuntimeBackend();
 
         const container: Container = {
             container_id,
@@ -223,12 +226,31 @@ export class ContainerSandboxAdapter {
             created_at,
         };
 
-        const cDir = this.containerDir(container_id);
-        const wDir = this.workspaceDir(container_id);
-        const sDir = this.snapshotsDir(container_id);
-        mkdirSync(cDir, { recursive: true });
-        mkdirSync(wDir, { recursive: true });
-        mkdirSync(sDir, { recursive: true });
+        if (backend === "docker") {
+            const memoryLimit = resource_quota.memory_limit_mb > 0 ? `${resource_quota.memory_limit_mb}m` : "512m";
+            const cpuLimit = resource_quota.cpu_limit > 0 ? String(resource_quota.cpu_limit) : "0.5";
+
+            // Create the container but don't start it yet.
+            // We use the container_id as the name to avoid collisions.
+            const args = [
+                "create",
+                "--name", container_id,
+                "--memory", memoryLimit,
+                "--cpus", cpuLimit,
+                "--workdir", "/workspace",
+                image,
+                "tail", "-f", "/dev/null" // Keep it alive
+            ];
+
+            await this.runDockerCommand(args);
+        } else {
+            const cDir = this.containerDir(container_id);
+            const wDir = this.workspaceDir(container_id);
+            const sDir = this.snapshotsDir(container_id);
+            mkdirSync(cDir, { recursive: true });
+            mkdirSync(wDir, { recursive: true });
+            mkdirSync(sDir, { recursive: true });
+        }
 
         await this.persistContainer(container);
         this.snapshots.set(container_id, []);
@@ -238,7 +260,7 @@ export class ContainerSandboxAdapter {
             layer: "governance",
             operation: "container_create",
             status: "succeeded",
-            details: { image, resource_quota, runtime: "builtin-prism" },
+            details: { image, resource_quota, runtime: backend },
             authorityTier: "tier1_autonomous",
             policyDecision: "allow",
         });
@@ -254,14 +276,23 @@ export class ContainerSandboxAdapter {
             throw new Error(`Container must be in CREATED or STOPPED state to start (current: ${container.state})`);
         }
 
+        const backend = this.getRuntimeBackend();
         container.state = ContainerState.RUNNING;
         container.started_at = new Date().toISOString();
         container.stopped_at = undefined;
 
-        this.activeContainers.set(container_id, {
-            container,
-            runtimeRoot: this.workspaceDir(container_id),
-        });
+        if (backend === "docker") {
+            await this.runDockerCommand(["start", container_id]);
+            this.activeContainers.set(container_id, {
+                container,
+                runtimeRoot: "/workspace", // Virtual root inside container
+            });
+        } else {
+            this.activeContainers.set(container_id, {
+                container,
+                runtimeRoot: this.workspaceDir(container_id),
+            });
+        }
 
         await this.persistContainer(container);
 
@@ -270,7 +301,7 @@ export class ContainerSandboxAdapter {
             layer: "governance",
             operation: "container_start",
             status: "succeeded",
-            details: { container_id, runtime: "builtin-prism" },
+            details: { container_id, runtime: backend },
             authorityTier: "tier1_autonomous",
             policyDecision: "allow",
         });
@@ -297,13 +328,22 @@ export class ContainerSandboxAdapter {
         container.state = ContainerState.EXECUTING;
         await this.persistContainer(container);
 
-        const isWin = process.platform === "win32";
-        const shell = isWin ? "cmd.exe" : "/bin/sh";
-        const args = isWin ? ["/d", "/s", "/c", command] : ["-lc", command];
+        const backend = this.getRuntimeBackend();
+        let shell: string;
+        let args: string[];
+
+        if (backend === "docker") {
+            shell = "docker";
+            args = ["exec", container_id, "sh", "-c", command];
+        } else {
+            const isWin = process.platform === "win32";
+            shell = isWin ? "cmd.exe" : "/bin/sh";
+            args = isWin ? ["/d", "/s", "/c", command] : ["-lc", command];
+        }
 
         const response = await new Promise<ExecInContainerResponse>((resolve, reject) => {
             const proc = spawn(shell, args, {
-                cwd: runtimeRoot,
+                cwd: backend === "docker" ? process.cwd() : runtimeRoot,
                 env: process.env,
                 stdio: ["ignore", "pipe", "pipe"],
                 windowsHide: true,
@@ -316,6 +356,10 @@ export class ContainerSandboxAdapter {
             const timer = setTimeout(() => {
                 timedOut = true;
                 proc.kill("SIGKILL");
+                if (backend === "docker") {
+                    // Force kill the container process too
+                    spawn("docker", ["kill", container_id]).on("error", () => { });
+                }
                 this.handleTimeout(container_id, timeout_ms);
             }, timeout_ms);
 
@@ -347,13 +391,49 @@ export class ContainerSandboxAdapter {
         container.state = response.exit_code === 124 ? ContainerState.TIMEOUT : ContainerState.RUNNING;
         await this.persistContainer(container);
         await this.persistCommandExecution(response, `tier_${tier}_executed`);
-        await this.monitorResourceUsage(container_id);
+
+        if (backend !== "docker") {
+            await this.monitorResourceUsage(container_id);
+        }
 
         return response;
     }
 
     async snapshotContainer(container_id: string, snapshot_name: string, description?: string): Promise<ContainerSnapshot> {
         await this.initializationPromise;
+        const backend = this.getRuntimeBackend();
+
+        if (backend === "docker") {
+            const snapshot_id = `prism-snap-${uuidv4().slice(0, 12)}`;
+            const created_at = new Date().toISOString();
+
+            await this.runDockerCommand(["commit", container_id, snapshot_id]);
+
+            const snapshot: ContainerSnapshot = {
+                snapshot_id,
+                container_id,
+                snapshot_name,
+                description,
+                snapshot_size_mb: 0, // Placeholder
+                command_count: 0,
+                created_at,
+                parent_snapshot_id: undefined,
+            };
+
+            await this.persistSnapshot(snapshot);
+
+            this.activityBus.emit({
+                sessionId: container_id,
+                layer: "governance",
+                operation: "container_snapshot",
+                status: "succeeded",
+                details: { snapshot_name, snapshot_id, runtime: "docker" },
+                authorityTier: "tier2_conditional",
+                policyDecision: "allow",
+            });
+
+            return snapshot;
+        }
 
         const workspace = this.workspaceDir(container_id);
         const snapshotsDir = this.snapshotsDir(container_id);
@@ -451,20 +531,48 @@ export class ContainerSandboxAdapter {
             throw new Error(`Snapshot ${snapshot_id} not found for container ${container_id}`);
         }
 
-        const workspace = this.workspaceDir(container_id);
-        const snapshotPath = join(this.snapshotsDir(container_id), snapshot_id);
-        if (!existsSync(snapshotPath)) {
-            throw new Error(`Snapshot content is missing: ${snapshot_id}`);
+        const backend = this.getRuntimeBackend();
+        if (backend === "docker") {
+            // To revert in Docker:
+            // 1. Stop and remove current container
+            // 2. Create and start a new container from the snapshot image
+            await this.runDockerCommand(["stop", container_id]).catch(() => { });
+            await this.runDockerCommand(["rm", container_id]).catch(() => { });
+
+            const memoryLimit = container.resource_quota.memory_limit_mb > 0 ? `${container.resource_quota.memory_limit_mb}m` : "512m";
+            const cpuLimit = container.resource_quota.cpu_limit > 0 ? String(container.resource_quota.cpu_limit) : "0.5";
+
+            const args = [
+                "run", "-d",
+                "--name", container_id,
+                "--memory", memoryLimit,
+                "--cpus", cpuLimit,
+                "--workdir", "/workspace",
+                snapshot.snapshot_id,
+                "tail", "-f", "/dev/null"
+            ];
+            await this.runDockerCommand(args);
+
+            container.state = ContainerState.RUNNING;
+            container.started_at = new Date().toISOString();
+            container.stopped_at = undefined;
+            this.activeContainers.set(container_id, { container, runtimeRoot: "/workspace" });
+        } else {
+            const workspace = this.workspaceDir(container_id);
+            const snapshotPath = join(this.snapshotsDir(container_id), snapshot_id);
+            if (!existsSync(snapshotPath)) {
+                throw new Error(`Snapshot content is missing: ${snapshot_id}`);
+            }
+
+            rmSync(workspace, { recursive: true, force: true });
+            mkdirSync(workspace, { recursive: true });
+            cpSync(snapshotPath, workspace, { recursive: true, force: true });
+
+            container.state = ContainerState.RUNNING;
+            container.started_at = new Date().toISOString();
+            container.stopped_at = undefined;
+            this.activeContainers.set(container_id, { container, runtimeRoot: workspace });
         }
-
-        rmSync(workspace, { recursive: true, force: true });
-        mkdirSync(workspace, { recursive: true });
-        cpSync(snapshotPath, workspace, { recursive: true, force: true });
-
-        container.state = ContainerState.RUNNING;
-        container.started_at = new Date().toISOString();
-        container.stopped_at = undefined;
-        this.activeContainers.set(container_id, { container, runtimeRoot: workspace });
 
         await this.persistContainer(container);
 
@@ -473,7 +581,7 @@ export class ContainerSandboxAdapter {
             layer: "governance",
             operation: "container_revert",
             status: "succeeded",
-            details: { snapshot_id, runtime: "builtin-prism" },
+            details: { snapshot_id, runtime: backend },
             authorityTier: "tier2_conditional",
             policyDecision: "allow",
         });
@@ -485,11 +593,16 @@ export class ContainerSandboxAdapter {
         await this.initializationPromise;
 
         const container = await this.getContainerStatus(container_id);
+        const backend = this.getRuntimeBackend();
 
         this.db.run(
             "INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
             [container_id, "SIGTERM", "graceful_stop", new Date().toISOString()],
         );
+
+        if (backend === "docker") {
+            await this.runDockerCommand(["stop", container_id]);
+        }
 
         this.activeContainers.delete(container_id);
 
@@ -502,7 +615,7 @@ export class ContainerSandboxAdapter {
             layer: "governance",
             operation: "container_stop",
             status: "succeeded",
-            details: { container_id, runtime: "builtin-prism" },
+            details: { container_id, runtime: backend },
             authorityTier: "tier1_autonomous",
             policyDecision: "allow",
         });
@@ -512,15 +625,27 @@ export class ContainerSandboxAdapter {
         await this.initializationPromise;
 
         const container = await this.getContainerStatus(container_id);
+        const backend = this.getRuntimeBackend();
 
         if (container.state === ContainerState.RUNNING || container.state === ContainerState.EXECUTING) {
             await this.stopContainer(container_id);
         }
 
+        if (backend === "docker") {
+            await this.runDockerCommand(["rm", "-f", container_id]);
+            // Clean up any snapshot images
+            const snaps = await this.listSnapshots(container_id);
+            for (const s of snaps) {
+                await this.runDockerCommand(["rmi", "-f", s.snapshot_id]).catch(() => { });
+            }
+        }
+
         this.activeContainers.delete(container_id);
         this.snapshots.delete(container_id);
 
-        rmSync(this.containerDir(container_id), { recursive: true, force: true });
+        if (backend !== "docker") {
+            rmSync(this.containerDir(container_id), { recursive: true, force: true });
+        }
 
         this.db.run(
             "INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
@@ -535,7 +660,7 @@ export class ContainerSandboxAdapter {
             layer: "governance",
             operation: "container_destroy",
             status: "succeeded",
-            details: { reason, runtime: "builtin-prism" },
+            details: { reason, runtime: backend },
             authorityTier: "tier3_approval",
             policyDecision: "allow",
         });
@@ -714,6 +839,30 @@ export class ContainerSandboxAdapter {
         return total;
     }
 
+    private async persistSnapshot(snapshot: ContainerSnapshot): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            this.db.run(
+                `INSERT INTO container_snapshots
+                 (snapshot_id, container_id, snapshot_name, description, snapshot_size_mb, command_count, created_at, parent_snapshot_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    snapshot.snapshot_id,
+                    snapshot.container_id,
+                    snapshot.snapshot_name,
+                    snapshot.description,
+                    snapshot.snapshot_size_mb,
+                    snapshot.command_count,
+                    snapshot.created_at,
+                    snapshot.parent_snapshot_id,
+                ],
+                (err: any) => {
+                    if (err) reject(err);
+                    else resolve();
+                },
+            );
+        });
+    }
+
     private async persistContainer(container: Container): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -760,6 +909,35 @@ export class ContainerSandboxAdapter {
                     else resolve();
                 },
             );
+        });
+    }
+
+    private async runDockerCommand(args: string[]): Promise<{ stdout: string; stderr: string }> {
+        return new Promise((resolve, reject) => {
+            const proc = spawn("docker", args, {
+                stdio: ["ignore", "pipe", "pipe"],
+                windowsHide: true,
+            });
+
+            let stdout = "";
+            let stderr = "";
+
+            proc.stdout.on("data", (chunk: Buffer) => {
+                stdout += chunk.toString("utf8");
+            });
+            proc.stderr.on("data", (chunk: Buffer) => {
+                stderr += chunk.toString("utf8");
+            });
+            proc.on("error", (err) => {
+                reject(err);
+            });
+            proc.on("close", (code) => {
+                if (code !== 0) {
+                    reject(new Error(`Docker command failed with code ${code}: ${stderr}`));
+                } else {
+                    resolve({ stdout, stderr });
+                }
+            });
         });
     }
 }

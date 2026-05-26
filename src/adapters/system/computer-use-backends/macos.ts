@@ -90,6 +90,15 @@ for _ in 0..<${repeat} {
         throw new Error("macOS computer-use: click needs `cliclick` or Apple's `swift` toolchain");
     }
 
+    async mouseDrag(x1: number, y1: number, x2: number, y2: number): Promise<void> {
+        if (await commandExists("cliclick")) {
+            await execFileAsync("/usr/bin/env", ["cliclick", `dd:${x1},${y1}`, `du:${x2},${y2}`]);
+            return;
+        }
+        const script = `tell application "System Events" to drag from {${x1}, ${y1}} to {${x2}, ${y2}}`;
+        await execFileAsync("/usr/bin/osascript", ["-e", script]);
+    }
+
     async typeText(text: string): Promise<void> {
         const escaped = appleScriptEscape(text);
         const script = `tell application "System Events" to keystroke "${escaped}"`;

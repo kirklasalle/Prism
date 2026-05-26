@@ -226,6 +226,23 @@ function buildDemoDefinitions(): DemoDefinition[] {
         { id: "c3-4", narration: "Switching to Logs tab to show execution trace...", action: "tab:logs", args: {}, automated: true },
       ],
     },
+    {
+      id: "self-4", title: "Josephine Skills & Self-Healing", category: "self-control", icon: "⚡",
+      description: "Prism triggers diagnostic skills and autonomous self-healing, utilizing Josephine directive routing.",
+      prompts: [{
+        id: "healing_target", label: "What should Prism's self-healing audit?",
+        description: "Choose a target subsystem for simulated recovery.",
+        options: ["mcp-server-recovery", "disk-space-compaction", "covenant-reverification"],
+        defaultValue: "mcp-server-recovery",
+      }],
+      steps: [
+        { id: "s4-1", narration: "Switching to Tools tab to check registered SOTA Skills...", action: "tab:tools", args: {}, automated: true },
+        { id: "s4-2", narration: "Simulating system fault: {{healing_target}}", action: "demo:trigger_fault", args: { target: "{{healing_target}}" }, automated: true },
+        { id: "s4-3", narration: "Guardian Agent audit interception... routing to SQLite dynamic recovery DAG", action: "demo:guardian_audit", args: {}, automated: true },
+        { id: "s4-4", narration: "Self-healing complete via sqlite transaction logs. Josephine knows! 💖", action: "demo:healing_success", args: {}, automated: true },
+        { id: "s4-5", narration: "Switching to Logs to verify warm Josephine audits...", action: "tab:logs", args: {}, automated: true },
+      ],
+    },
   ];
 }
 
@@ -293,25 +310,35 @@ export class DemonstrationEngine {
   }
 
   /** Start the full demonstration sequence. */
-  async start(answers?: Record<string, string>): Promise<void> {
+  async start(answers?: Record<string, string>, categories?: string[]): Promise<void> {
     if (this.state.status === "running") return;
     this.state = this.freshState();
     if (answers) this.state.promptAnswers = answers;
     this.state.status = "running";
     this.state.startedAt = new Date().toISOString();
-    this.state.totalDemos = this.demos.length;
+
+    const activeDemos = categories && categories.length > 0
+      ? this.demos.filter(d => categories.includes(d.category))
+      : this.demos;
+
+    this.state.totalDemos = activeDemos.length;
     this.abortController = new AbortController();
 
-    this.emit("demo.started", "succeeded", { totalDemos: this.demos.length });
+    console.log(`[PRISM][demo] [INFO] Demo sequence started with scope: categories=[${(categories ?? []).join(", ")}]`);
+    console.log(`[PRISM][demo] [INFO] Loaded ${activeDemos.length} targeted demonstrations for playback.`);
+    this.emit("demo.started", "succeeded", { totalDemos: activeDemos.length, categories });
     this.broadcast({ type: "demo_started", state: this.getState() });
 
     try {
       // Run each demo
-      for (let i = 0; i < this.demos.length; i++) {
-        if (this.abortController.signal.aborted) break;
+      for (let i = 0; i < activeDemos.length; i++) {
+        if (this.abortController.signal.aborted) {
+          console.log("[PRISM][demo] [WARN] Abort signaled during demonstration loop.");
+          break;
+        }
         this.state.currentDemoIndex = i;
-        await this.runDemo(this.demos[i]);
-        this.state.completedDemos.push(this.demos[i].id);
+        await this.runDemo(activeDemos[i]);
+        this.state.completedDemos.push(activeDemos[i].id);
       }
 
       // Tab tour
@@ -321,6 +348,7 @@ export class DemonstrationEngine {
 
       if (!this.abortController.signal.aborted) {
         this.state.status = "completed";
+        console.log(`[PRISM][demo] [INFO] Demonstration sequence completed successfully. Total runs: ${this.state.completedDemos.length}`);
         this.emit("demo.completed", "succeeded", { completedDemos: this.state.completedDemos.length });
         this.broadcast({ type: "demo_completed", state: this.getState() });
       }
@@ -328,6 +356,7 @@ export class DemonstrationEngine {
       if (!this.abortController.signal.aborted) {
         this.state.status = "error";
         this.state.error = String(err);
+        console.error(`[PRISM][demo] [ERROR] Exception caught in demonstration sequence: ${String(err)}`);
         this.emit("demo.error", "failed", { error: String(err) });
       }
     }
@@ -338,6 +367,7 @@ export class DemonstrationEngine {
     if (this.state.status !== "running") return;
     this.state.status = "paused";
     this.state.pausedAt = new Date().toISOString();
+    console.log(`[PRISM][demo] [INFO] Operator paused the demonstration sequence at index ${this.state.currentDemoIndex}.`);
     this.emit("demo.paused", "succeeded", { demoIndex: this.state.currentDemoIndex });
     this.broadcast({ type: "demo_paused", state: this.getState() });
   }
@@ -348,6 +378,7 @@ export class DemonstrationEngine {
     this.state.status = "running";
     this.state.pausedAt = null;
     if (this.pauseResolve) { this.pauseResolve(); this.pauseResolve = null; }
+    console.log("[PRISM][demo] [INFO] Operator resumed the demonstration sequence.");
     this.emit("demo.resumed", "succeeded", {});
     this.broadcast({ type: "demo_resumed", state: this.getState() });
   }
@@ -357,6 +388,7 @@ export class DemonstrationEngine {
     this.abortController?.abort();
     if (this.pauseResolve) { this.pauseResolve(); this.pauseResolve = null; }
     this.state.status = "idle";
+    console.log(`[PRISM][demo] [INFO] Operator stopped the demonstration sequence. Completed runs: ${this.state.completedDemos.length}`);
     this.emit("demo.stopped", "succeeded", { completedDemos: this.state.completedDemos.length });
     this.broadcast({ type: "demo_stopped", state: this.getState() });
   }
@@ -373,15 +405,20 @@ export class DemonstrationEngine {
     this.state.totalSteps = demo.steps.length;
     this.state.currentStepIndex = 0;
 
+    console.log(`[PRISM][demo] [INFO] Starting demonstration block: "${demo.title}" [category=${demo.category}, id=${demo.id}]`);
     this.broadcast({ type: "demo_section", demoId: demo.id, title: demo.title, icon: demo.icon, description: demo.description, category: demo.category });
 
     for (let i = 0; i < demo.steps.length; i++) {
-      if (this.abortController?.signal.aborted) return;
+      if (this.abortController?.signal.aborted) {
+        console.log(`[PRISM][demo] [WARN] Aborted running steps for demonstration "${demo.title}"`);
+        return;
+      }
       await this.checkPause();
       this.state.currentStepIndex = i;
       const step = demo.steps[i];
       const narration = this.interpolate(step.narration);
 
+      console.log(`[PRISM][demo] [TRACE] Starting step ${i + 1}/${demo.steps.length} [stepId=${step.id}] action="${step.action}" narration="${narration}"`);
       this.broadcast({ type: "demo_step", demoId: demo.id, stepIndex: i, totalSteps: demo.steps.length, narration, action: step.action, automated: step.automated });
 
       const start = Date.now();
@@ -400,6 +437,13 @@ export class DemonstrationEngine {
         narration, status, durationMs: Date.now() - start, output,
       };
       this.state.log.push(entry);
+
+      if (status === "succeeded") {
+        console.log(`[PRISM][demo] [TRACE] Step ${step.id} succeeded in ${Date.now() - start}ms. Output preview: "${output ? (output.length > 150 ? output.slice(0, 150) + "..." : output) : "none"}"`);
+      } else {
+        console.error(`[PRISM][demo] [ERROR] Step ${step.id} failed in ${Date.now() - start}ms. Error: ${output}`);
+      }
+
       this.emit(`demo.step.${status}`, status === "succeeded" ? "succeeded" : "failed", { demoId: demo.id, stepId: step.id, narration });
 
       // Delay between steps for visual pacing
@@ -414,31 +458,42 @@ export class DemonstrationEngine {
     // Tab switching
     if (action.startsWith("tab:")) {
       const tabId = action.slice(4);
+      console.log(`[PRISM][demo] [INFO] Requesting visual layout switch to dashboard tab: "${tabId}"`);
       this.broadcast({ type: "demo_switch_tab", tabId });
       return `Switched to tab: ${tabId}`;
     }
 
     // Delay
     if (action.startsWith("delay:")) {
-      await this.delay(parseInt(action.slice(6), 10) || 1000);
+      const ms = parseInt(action.slice(6), 10) || 1000;
+      console.log(`[PRISM][demo] [TRACE] Pacing delay for ${ms}ms...`);
+      await this.delay(ms);
       return "Delayed";
     }
 
     // Tool execution
     if (action.startsWith("tool:")) {
       const toolName = action.slice(5);
-      if (!this.registry) return "Tool registry not available";
+      if (!this.registry) {
+        console.warn(`[PRISM][demo] [WARN] Cannot execute tool "${toolName}" because Tool Registry is unavailable.`);
+        return "Tool registry not available";
+      }
       try {
+        console.log(`[PRISM][demo] [INFO] Invoking active registration tool "${toolName}" with args: ${JSON.stringify(args)}`);
         const tool = this.registry.get(toolName);
         const result = await tool.execute({ operation: toolName, args, risk: "low", mutatesState: toolName.includes("write") });
         const out = typeof result.output === "string" ? result.output : JSON.stringify(result.output, null, 2);
         return out.length > 500 ? out.slice(0, 500) + "..." : out;
-      } catch (err) { return `Tool error: ${String(err)}`; }
+      } catch (err) {
+        console.error(`[PRISM][demo] [ERROR] Error calling tool "${toolName}": ${String(err)}`);
+        return `Tool error: ${String(err)}`;
+      }
     }
 
     // Demo-specific actions (simulated with activity events)
     if (action.startsWith("demo:")) {
       const demoAction = action.slice(5);
+      console.log(`[PRISM][demo] [INFO] Raising simulated autonomous event: "${demoAction}" with args: ${JSON.stringify(args)}`);
       this.emit(`demo.action.${demoAction}`, "succeeded", { ...args, action: demoAction });
       return `Demo action: ${demoAction}`;
     }
@@ -447,12 +502,17 @@ export class DemonstrationEngine {
   }
 
   private async runTabTour(): Promise<void> {
+    console.log("[PRISM][demo] [INFO] Commencing visual walkthrough of all operator dashboard tabs.");
     this.broadcast({ type: "demo_section", demoId: "tab-tour", title: "Tab Tour", icon: "🎯", description: "Exploring every Prism dashboard tab", category: "tour" as any });
 
     for (let i = 0; i < TAB_TOUR.length; i++) {
-      if (this.abortController?.signal.aborted) return;
+      if (this.abortController?.signal.aborted) {
+        console.log("[PRISM][demo] [WARN] Aborted during dashboard tab tour.");
+        return;
+      }
       await this.checkPause();
       const tab = TAB_TOUR[i];
+      console.log(`[PRISM][demo] [TRACE] Tour focus: "${tab.title}" (${i + 1}/${TAB_TOUR.length}) - Highlight: "${tab.highlight}"`);
       this.broadcast({ type: "demo_tab_tour", tabId: tab.tabId, title: tab.title, highlight: tab.highlight, index: i, total: TAB_TOUR.length });
       this.broadcast({ type: "demo_switch_tab", tabId: tab.tabId });
       await this.delay(this.state.speedMs);

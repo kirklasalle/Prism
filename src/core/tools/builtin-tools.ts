@@ -3,6 +3,7 @@ import { ContainerSandboxTool } from "../../adapters/system/container-sandbox-to
 import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../../adapters/system/file-tools.js";
 import { ShellTool } from "../../adapters/system/shell-tool.js";
 import { TerminalSessionTool } from "../../adapters/system/terminal-session-tool.js";
+import { WebAssetsOptimizeTool, WebComponentInjectTool, WebPageInitializeTool, WebVisualAuditTool, PrismIdeModifyTool, PrismIdeLintTool } from "../../adapters/system/web-builder-tools.js";
 
 import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
 import { PrismDashboardControlTool } from "../../adapters/application/prism-dashboard-tool.js";
@@ -34,6 +35,12 @@ export function builtinTools(
         new FileWriteTool(),
         new FileDeleteTool(),
         new FileListTool(),
+        new WebPageInitializeTool(),
+        new WebComponentInjectTool(),
+        new WebAssetsOptimizeTool(),
+        new WebVisualAuditTool(),
+        new PrismIdeModifyTool(),
+        new PrismIdeLintTool(),
         // Protocol adapters
         new HttpRequestTool(),
         // Network adapters

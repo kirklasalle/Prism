@@ -7,11 +7,13 @@ import type { AutonomousLlmGenerateFn, LlmToolDef, PlannerResult } from "./auton
 import type { AutonomousBrowserAgent } from "./autonomous-browser-agent.js";
 import type { AutonomousComputerAgent } from "./autonomous-computer-agent.js";
 import type { PrismCovenant } from "../governance/prism-covenant.js";
+import type { UsageMeteringService } from "../operator/usage-metering-service.js";
+
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type GoalSource = "chat" | "scheduler" | "api" | "dashboard" | "browser-autopilot";
-export type GoalStatus = "queued" | "planning" | "executing" | "paused" | "completed" | "failed" | "terminated";
+export type GoalStatus = "queued" | "planning" | "executing" | "paused" | "suspended" | "handing_off" | "completed" | "failed" | "terminated";
 export type StepStatus = "planned" | "executing" | "succeeded" | "failed" | "skipped";
 
 export interface AutonomousGoalConstraints {
@@ -96,6 +98,13 @@ export class AutonomousAgentLoop {
   private browserAgent: AutonomousBrowserAgent | null = null;
   private computerAgent: AutonomousComputerAgent | null = null;
   private covenant: PrismCovenant | null = null;
+  private usageMetering: UsageMeteringService | null = null;
+
+  setUsageMetering(usageMetering?: UsageMeteringService): void {
+    this.usageMetering = usageMetering ?? null;
+  }
+
+
 
   constructor(
     activityBus: ActivityBus,
@@ -322,6 +331,29 @@ export class AutonomousAgentLoop {
       }
     }
 
+    // Cost limit check (SOTA Parity Active Kill-Switch / Hard Ceiling)
+    if (this.usageMetering) {
+      const capCheck = this.usageMetering.checkCap();
+      if (!capCheck.allowed) {
+        goal.status = "failed";
+        goal.error = `Action budget cost ceiling exceeded: reached ${capCheck.capType} spend cap.`;
+        goal.completedAt = new Date().toISOString();
+        this.recordAAB(
+          goalId,
+          "budget_limit_exceeded",
+          `Autonomous execution terminated: ${goal.error}`,
+          "terminate"
+        );
+        this.emit("autonomous.goal.budget_hard_exceeded", "failed", {
+          goalId,
+          capType: capCheck.capType,
+          remainingUsd: capCheck.remainingUsd
+        });
+        throw new Error(goal.error);
+      }
+    }
+
+
     // Tool permission check
     if (!this.isToolAllowed(toolName, goal.constraints)) {
       const step = this.createStep(goalId, toolName, toolArgs, iteration);
@@ -430,6 +462,26 @@ export class AutonomousAgentLoop {
       failedSteps: goal.steps.filter(s => s.status === "failed").length,
     });
     if (this.activeGoalId === goalId) this.activeGoalId = null;
+  }
+
+  /** Suspend a goal — for human-in-the-loop baton passes. */
+  suspendGoal(goalId: string, reason: string): void {
+    const goal = this.goals.get(goalId);
+    if (!goal || (goal.status !== "executing" && goal.status !== "planning")) return;
+    goal.status = "suspended";
+    this.emit("autonomous.goal.suspended", "succeeded", {
+      goalId, reason, correlationId: goal.correlationId,
+    });
+  }
+
+  /** Mark a goal as currently handing off control. */
+  handOffGoal(goalId: string, reason: string): void {
+    const goal = this.goals.get(goalId);
+    if (!goal || (goal.status !== "executing" && goal.status !== "planning")) return;
+    goal.status = "handing_off";
+    this.emit("autonomous.goal.handing_off", "succeeded", {
+      goalId, reason, correlationId: goal.correlationId,
+    });
   }
 
   /** Pause a goal — default Guardian intervention. */

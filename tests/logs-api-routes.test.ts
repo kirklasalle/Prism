@@ -72,7 +72,10 @@ function requestJson(method: string, path: string, body?: unknown): Promise<{ st
 describe("Logs & Debug API Routes", function () {
     this.timeout(60_000);
 
+    const savedAuth = process.env.PRISM_AUTH_DISABLED;
+
     before(async () => {
+        process.env.PRISM_AUTH_DISABLED = "true";
         tmpDir = mkdtempSync(join(tmpdir(), "prism-logs-api-"));
         bus = new ActivityBus();
         approvalQueue = new ApprovalQueue();
@@ -116,6 +119,11 @@ describe("Logs & Debug API Routes", function () {
         await service.stop();
         chatStore.close();
         rmSync(tmpDir, { recursive: true, force: true });
+        if (savedAuth === undefined) {
+            delete process.env.PRISM_AUTH_DISABLED;
+        } else {
+            process.env.PRISM_AUTH_DISABLED = savedAuth;
+        }
     });
 
     /* ── GET /api/events ──────────────────────────────────────────────── */
@@ -281,6 +289,75 @@ describe("Logs & Debug API Routes", function () {
                 body.report === null || (body.summary && body.summary.grandTotal),
                 "should return { report: null } or a report with summary.grandTotal",
             );
+        });
+    });
+
+    /* ── PRISM Micro Support Desk API Routes ────────────────────────────── */
+
+    describe("PRISM Support Desk API Routes", () => {
+        let ticketId: string;
+
+        it("POST /api/support/tickets - creates a new ticket", async () => {
+            const payload = {
+                title: "UI Rendering Lag",
+                description: "Logs view freezes when scrolling with 2000+ items.",
+                severity: "medium",
+                source: "user",
+                metadata: { client: "chrome" },
+            };
+            const { status, body } = await requestJson("POST", "/api/support/tickets", payload);
+            assert.strictEqual(status, 201);
+            assert.ok(body.ticketId.startsWith("TKT-"));
+            ticketId = body.ticketId;
+        });
+
+        it("GET /api/support/tickets - returns list including new ticket", async () => {
+            const { status, body } = await fetchJson("/api/support/tickets");
+            assert.strictEqual(status, 200);
+            assert.ok(Array.isArray(body));
+            const found = body.find((t: any) => t.ticketId === ticketId);
+            assert.ok(found);
+            assert.strictEqual(found.title, "UI Rendering Lag");
+            assert.strictEqual(found.status, "open");
+            assert.strictEqual(found.severity, "medium");
+        });
+
+        it("POST /api/support/tickets/:ticketId/update - modifies status and writes resolution log", async () => {
+            const payload = {
+                status: "resolved",
+                resolutionLog: "Optimized infinite scroll container and added virtualization.",
+            };
+            const { status, body } = await requestJson(
+                "POST",
+                `/api/support/tickets/${encodeURIComponent(ticketId)}/update`,
+                payload
+            );
+            assert.strictEqual(status, 200);
+            assert.ok(body.ok);
+
+            // Verify update
+            const { body: list } = await fetchJson("/api/support/tickets");
+            const updated = list.find((t: any) => t.ticketId === ticketId);
+            assert.ok(updated);
+            assert.strictEqual(updated.status, "resolved");
+            assert.strictEqual(
+                updated.resolutionLog,
+                "Optimized infinite scroll container and added virtualization."
+            );
+        });
+
+        it("POST /api/support/tickets/:ticketId/delete - removes the ticket", async () => {
+            const { status, body } = await requestJson(
+                "POST",
+                `/api/support/tickets/${encodeURIComponent(ticketId)}/delete`
+            );
+            assert.strictEqual(status, 200);
+            assert.ok(body.ok);
+
+            // Verify deletion
+            const { body: list } = await fetchJson("/api/support/tickets");
+            const deleted = list.find((t: any) => t.ticketId === ticketId);
+            assert.strictEqual(deleted, undefined);
         });
     });
 });

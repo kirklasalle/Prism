@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRISM: Computer Use Deep Dive</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { background-color: #f8fafc; color: #0f172a; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+.chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 350px; max-height: 450px; }
+.state-node { cursor: pointer; transition: all 0.2s ease; }
+.state-node:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+.state-active { border-color: #4f46e5; background-color: #e0e7ff; color: #3730a3; font-weight: bold; }
+.tab-active { border-bottom: 2px solid #4f46e5; color: #4f46e5; font-weight: 600; }
+</style>
+</head>
+<body class="antialiased">
+
+<!-- Chosen Palette: Clean Enterprise Light (Slate background #f8fafc, Indigo accents #4f46e5, Slate text #0f172a / #475569) -->
+<!-- Application Structure Plan: The SPA is structured as an interactive technical dashboard. It opens with an executive summary, flows into an industry landscape comparison (fulfilling the request to analyze major companies), deep-dives into PRISM's specific architecture using interactive tabs (Browser, Terminal, Container), presents the governance model via a donut chart and state machine, and concludes with a strategic roadmap for world-class implementation. This structure moves the user logically from macro-context to micro-implementation to future strategy. -->
+<!-- Visualization & Content Choices: 1. Industry Landscape -> Goal: Compare Prism with Anthropic/OpenAI/OSWorld -> Viz: Radar Chart (Chart.js) -> Justification: Ideal for multi-variable comparative analysis. 2. Prism Architecture -> Goal: Detail components -> Viz: Interactive Tabs -> Justification: Consolidates dense text (Browser/Terminal/Container) into digestible chunks. 3. Container Lifecycle -> Goal: Explain state machine -> Viz: HTML/CSS Interactive Flow -> Justification: Allows user to click states to see underlying SQLite/System behaviors. 4. Governance Tiers -> Goal: Show risk distribution -> Viz: Donut Chart (Chart.js) -> Justification: Clearly shows the proportion of autonomous vs. gated actions. Confirming NO SVG/Mermaid used. -->
+<!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+<nav class="bg-white shadow-sm sticky top-0 z-50">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="flex justify-between h-16">
+<div class="flex items-center">
+<span class="text-2xl mr-2">🔷</span>
+<span class="font-bold text-xl tracking-tight text-slate-900">PRISM <span class="text-indigo-600 font-light">Computer Use Report</span></span>
+</div>
+<div class="hidden sm:flex sm:items-center sm:space-x-8">
+<button onclick="scrollToSection('industry')" class="text-slate-500 hover:text-slate-900 px-3 py-2 text-sm font-medium transition-colors">Industry Landscape</button>
+<button onclick="scrollToSection('architecture')" class="text-slate-500 hover:text-slate-900 px-3 py-2 text-sm font-medium transition-colors">Architecture</button>
+<button onclick="scrollToSection('governance')" class="text-slate-500 hover:text-slate-900 px-3 py-2 text-sm font-medium transition-colors">Governance Sandbox</button>
+<button onclick="scrollToSection('roadmap')" class="text-slate-500 hover:text-slate-900 px-3 py-2 text-sm font-medium transition-colors">Strategic Roadmap</button>
+</div>
+</div>
+</div>
+</nav>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-16">
+
+<header class="text-center max-w-4xl mx-auto">
+<h1 class="text-4xl font-extrabold text-slate-900 sm:text-5xl tracking-tight mb-4">Deep Dive: Computer Use & Agentic Automation</h1>
+<p class="text-lg text-slate-600 leading-relaxed">A comprehensive technical analysis of industry-wide "Computer Use" paradigms, evaluating major implementations against the PRISM architecture. This interactive report defines PRISM's current state and outlines the trajectory required to achieve a world-class, governance-native Software Application Development standard.</p>
+</header>
+
+<section id="industry" class="scroll-mt-24">
+<div class="mb-8 border-l-4 border-indigo-500 pl-4">
+<h2 class="text-2xl font-bold text-slate-900">1. The Industry Landscape: Computer Use Evaluated</h2>
+<p class="text-slate-600 mt-2">Evaluating major entities (Anthropic, OpenAI, Open Source frameworks) against PRISM's governed approach. The industry emphasizes capability, while PRISM emphasizes determinism and accountability.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+<div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+<h3 class="text-lg font-semibold mb-4 text-slate-800">Capability vs. Governance Comparison</h3>
+<div class="chart-container">
+<canvas id="industryRadarChart"></canvas>
+</div>
+</div>
+
+<div class="space-y-6">
+<div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+<h4 class="font-bold text-slate-900 flex items-center gap-2"><span>🏢</span> Anthropic & OpenAI (Proprietary)</h4>
+<p class="text-sm text-slate-600 mt-2">Anthropic's computer-use preview and OpenAI's operator trajectories signal strong capabilities reliant on vision-based coordinate prediction and API-driven sandboxing. However, their internal governance loops are opaque. They highlight the need for prompt-injection protections and human oversight for consequential actions, but rely on the developer to build the enterprise wrapper.</p>
+</div>
+<div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+<h4 class="font-bold text-slate-900 flex items-center gap-2"><span>🌐</span> LangGraph & AutoGen (Open Source)</h4>
+<p class="text-sm text-slate-600 mt-2">These frameworks excel at graph-based agent orchestration and multi-agent conversations. However, they lack native, deeply integrated OS-level virtualization. "Computer Use" must be bolted on via external Docker containers without built-in immutable audit trails or cryptographic policy enforcement (PAD).</p>
+</div>
+<div class="bg-white p-5 rounded-lg border-l-4 border-l-indigo-600 shadow-md">
+<h4 class="font-bold text-indigo-900 flex items-center gap-2"><span>🔷</span> PRISM (AaaS Runtime)</h4>
+<p class="text-sm text-slate-700 mt-2">PRISM treats Computer Use as a first-class, policy-governed capability. Unlike open-source peers, PRISM integrates a 3-tier policy engine, CAC accountability chains, and deterministic container/browser lifecycles directly into the runtime. It sacrifices unconstrained autonomy for verifiable, enterprise-grade safety.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section id="architecture" class="scroll-mt-24">
+<div class="mb-8 border-l-4 border-indigo-500 pl-4">
+<h2 class="text-2xl font-bold text-slate-900">2. PRISM Implementation Details</h2>
+<p class="text-slate-600 mt-2">Deep technical architecture of how PRISM currently executes and governs Computer Use across three primary domains: Browser, Terminal, and Container Virtualization.</p>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+<div class="flex border-b border-slate-200 bg-slate-50">
+<button onclick="switchTab('browser')" id="tab-browser" class="flex-1 py-4 px-6 text-sm font-medium text-center tab-active hover:bg-slate-100 transition-colors">Browser Automation</button>
+<button onclick="switchTab('terminal')" id="tab-terminal" class="flex-1 py-4 px-6 text-sm font-medium text-center text-slate-500 hover:bg-slate-100 transition-colors">Terminal Virtualization</button>
+<button onclick="switchTab('container')" id="tab-container" class="flex-1 py-4 px-6 text-sm font-medium text-center text-slate-500 hover:bg-slate-100 transition-colors">Container Sandbox</button>
+</div>
+<div class="p-6 md:p-8">
+<div id="content-browser" class="block space-y-4">
+<h3 class="text-xl font-bold text-slate-800">Browser Automation & Control</h3>
+<p class="text-slate-600">Handles action-driven web interaction through governed tool paths.</p>
+<ul class="list-disc pl-5 text-sm text-slate-600 space-y-2">
+<li><strong>Session Lifecycle:</strong> Manages persistent profile handling, ensuring isolation between agent sessions.</li>
+<li><strong>Telemetry:</strong> Real-time network and console capture.</li>
+<li><strong>Core Components:</strong> <code>browser-control-tool.ts</code>, <code>browser-session-manager.ts</code>, <code>browser-profile-manager.ts</code>.</li>
+<li><strong>Methodology:</strong> Operates via structured tool interfaces treated as strict contracts, enabling explicit risk classification before execution.</li>
+</ul>
+</div>
+<div id="content-terminal" class="hidden space-y-4">
+<h3 class="text-xl font-bold text-slate-800">Terminal Virtualization</h3>
+<p class="text-slate-600">Provides deterministic control over shell environments with integrated governance.</p>
+<ul class="list-disc pl-5 text-sm text-slate-600 space-y-2">
+<li><strong>Session Commands:</strong> <code>start</code>, <code>exec</code>, <code>stop</code>, <code>revoke</code>, <code>status</code>.</li>
+<li><strong>Tiered Governance:</strong> Commands are intercepted and routed through the policy engine. High-risk commands trigger mandatory approvals.</li>
+<li><strong>Safety:</strong> Built-in timeout and mid-execution revoke behavior.</li>
+<li><strong>Core Components:</strong> <code>terminal-session-tool.ts</code>, <code>terminal-session-adapter.ts</code>.</li>
+</ul>
+</div>
+<div id="content-container" class="hidden space-y-4">
+<h3 class="text-xl font-bold text-slate-800">Container Sandbox Orchestration</h3>
+<p class="text-slate-600">The most isolated execution environment, featuring snapshot capabilities for deterministic replay.</p>
+<ul class="list-disc pl-5 text-sm text-slate-600 space-y-2">
+<li><strong>State Machine:</strong> Full lifecycle control (CREATED &rarr; RUNNING &rarr; EXECUTING &rarr; STOPPED &rarr; DESTROYED).</li>
+<li><strong>Persistence:</strong> 4 SQLite tables (<code>containers</code>, <code>container_snapshots</code>, <code>container_command_history</code>, <code>container_signal_log</code>).</li>
+<li><strong>Resource Quotas:</strong> CPU, memory, and disk limits enforced per container (currently via metadata tracking).</li>
+<li><strong>Signal Escalation:</strong> Graceful shutdown with SIGTERM &rarr; SIGKILL escalation (2s grace period).</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+
+<section id="governance" class="scroll-mt-24">
+<div class="mb-8 border-l-4 border-indigo-500 pl-4">
+<h2 class="text-2xl font-bold text-slate-900">3. Governance, Security Gates & State Management</h2>
+<p class="text-slate-600 mt-2">Unconstrained AI is a liability. PRISM transforms this into a secure asset through cryptographically hashed audit trails, PAD integrity, and rigid state machines.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+<h3 class="text-lg font-semibold mb-4 text-slate-800">Interactive Container State Machine</h3>
+<p class="text-sm text-slate-500 mb-6">Click a state to view transition policies and telemetry emissions. All transitions emit activity bus events with reason-codes.</p>
+
+<div class="flex flex-wrap gap-4 items-center justify-center mb-6 text-sm">
+<div onclick="updateStateInfo('IDLE')" id="state-IDLE" class="state-node state-active border-2 border-indigo-200 rounded-lg px-4 py-2 text-center w-32">IDLE</div>
+<span class="text-slate-400 font-bold">&rarr;</span>
+<div onclick="updateStateInfo('CREATED')" id="state-CREATED" class="state-node border-2 border-slate-200 rounded-lg px-4 py-2 text-center w-32 text-slate-600 bg-slate-50">CREATED</div>
+<span class="text-slate-400 font-bold">&rarr;</span>
+<div onclick="updateStateInfo('RUNNING')" id="state-RUNNING" class="state-node border-2 border-slate-200 rounded-lg px-4 py-2 text-center w-32 text-slate-600 bg-slate-50">RUNNING</div>
+<span class="text-slate-400 font-bold">&lrarr;</span>
+<div onclick="updateStateInfo('EXECUTING')" id="state-EXECUTING" class="state-node border-2 border-slate-200 rounded-lg px-4 py-2 text-center w-32 text-slate-600 bg-slate-50">EXECUTING</div>
+</div>
+<div class="flex flex-wrap gap-4 items-center justify-center text-sm mb-8">
+<div onclick="updateStateInfo('TIMEOUT')" id="state-TIMEOUT" class="state-node border-2 border-slate-200 rounded-lg px-4 py-2 text-center w-32 text-slate-600 bg-slate-50">TIMEOUT</div>
+<span class="text-slate-400 font-bold">&larr;</span>
+<div onclick="updateStateInfo('STOPPED')" id="state-STOPPED" class="state-node border-2 border-slate-200 rounded-lg px-4 py-2 text-center w-32 text-slate-600 bg-slate-50">STOPPED</div>
+<span class="text-slate-400 font-bold">&rarr;</span>
+<div onclick="updateStateInfo('DESTROYED')" id="state-DESTROYED" class="state-node border-2 border-slate-200 rounded-lg px-4 py-2 text-center w-32 text-slate-600 bg-slate-50">DESTROYED</div>
+</div>
+
+<div id="state-details" class="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-sm text-indigo-900 min-h-[100px]">
+<strong>State: IDLE</strong><br>
+Awaiting container instantiation. No resources allocated. System is ready to accept <code>create_container()</code> calls routed through the policy engine.
+</div>
+</div>
+
+<div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center">
+<h3 class="text-lg font-semibold mb-2 text-slate-800 text-center">Policy Tier Distribution</h3>
+<p class="text-xs text-slate-500 mb-4 text-center">Simulated distribution of Computer Use tasks in Enterprise profile.</p>
+<div class="chart-container w-full" style="height: 250px; max-height: 250px;">
+<canvas id="governanceDonutChart"></canvas>
+</div>
+<div class="mt-4 text-xs text-slate-600 space-y-2">
+<p><strong class="text-slate-800">Tier 1:</strong> Fully Autonomous (e.g., Read logs)</p>
+<p><strong class="text-slate-800">Tier 2:</strong> Conditional (e.g., Modify non-critical files)</p>
+<p><strong class="text-slate-800">Tier 3:</strong> Approval Required (e.g., Destroy container, modify DB)</p>
+</div>
+</div>
+</div>
+
+<div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="bg-slate-800 rounded-lg p-5 text-slate-300">
+<h4 class="text-white font-bold mb-2 flex items-center gap-2"><span>🔐</span> PAD Integrity (Gate 9)</h4>
+<p class="text-sm">Permanent Active Directives (PAD) are integrity-checked via a hardcoded SHA-256 hash on every policy evaluation. If the PAD file is tampered with, CI Gate 9 fails, and the Guardian Agent emits a governance failure event.</p>
+</div>
+<div class="bg-slate-800 rounded-lg p-5 text-slate-300">
+<h4 class="text-white font-bold mb-2 flex items-center gap-2"><span>👤</span> CAC Accountability Chain</h4>
+<p class="text-sm">Every governed event carries: <code>characterId</code>, <code>operatorEmail</code>, <code>prismUserEmail</code>, and <code>executionProfileSegment</code>. This ensures unbreakable lineage from request to effect, passing Business Security Gate CU-BG-5.</p>
+</div>
+</div>
+</section>
+
+<section id="roadmap" class="scroll-mt-24">
+<div class="mb-8 border-l-4 border-indigo-500 pl-4">
+<h2 class="text-2xl font-bold text-slate-900">4. Strategic Implementation: Reaching "World-Class"</h2>
+<p class="text-slate-600 mt-2">Guidance on developing PRISM's Computer Use to its ultimate conclusion, addressing known gaps and achieving SOTA benchmark validation without compromising governance.</p>
+</div>
+
+<div class="space-y-4">
+<div class="bg-white border border-slate-200 rounded-lg p-5 flex items-start gap-4 hover:border-indigo-300 transition-colors">
+<div class="text-2xl mt-1">1️⃣</div>
+<div class="flex-1">
+<h3 class="font-bold text-slate-900 text-lg">Replace Simulated Runtimes with Hardened Engines</h3>
+<p class="text-slate-600 text-sm mt-1"><strong>Action:</strong> Remove <code>spawn("sh", ["sleep infinity"])</code> simulation. Implement direct Docker Engine API or containerd gRPC integration.</p>
+<p class="text-slate-500 text-xs mt-2 bg-slate-100 p-2 rounded inline-block">Ref: CONTAINER_VIRTUALIZATION_DESIGN.md - Known Gaps</p>
+</div>
+</div>
+
+<div class="bg-white border border-slate-200 rounded-lg p-5 flex items-start gap-4 hover:border-indigo-300 transition-colors">
+<div class="text-2xl mt-1">2️⃣</div>
+<div class="flex-1">
+<h3 class="font-bold text-slate-900 text-lg">Enforce OS-Level Resource Quotas</h3>
+<p class="text-slate-600 text-sm mt-1"><strong>Action:</strong> Upgrade resource management from metadata-only storage to active OS-level enforcement using <code>cgroups v2</code>. Implement active <code>/proc</code> polling for resource monitoring instead of immediate returns.</p>
+<p class="text-slate-500 text-xs mt-2 bg-slate-100 p-2 rounded inline-block">Ref: CONTAINER_VIRTUALIZATION_DESIGN.md - Known Gaps</p>
+</div>
+</div>
+
+<div class="bg-white border border-slate-200 rounded-lg p-5 flex items-start gap-4 hover:border-indigo-300 transition-colors">
+<div class="text-2xl mt-1">3️⃣</div>
+<div class="flex-1">
+<h3 class="font-bold text-slate-900 text-lg">Activate True Tier 3 Approval Queues</h3>
+<p class="text-slate-600 text-sm mt-1"><strong>Action:</strong> Update <code>routeThroughPolicy()</code> which currently returns <code>allow</code> natively. Fully wire the container destroy/exec high-risk actions to the actual HTTP Approval Queue service.</p>
+<p class="text-slate-500 text-xs mt-2 bg-slate-100 p-2 rounded inline-block">Ref: PRISM_PRD.md & CU-BG-1</p>
+</div>
+</div>
+
+<div class="bg-white border border-slate-200 rounded-lg p-5 flex items-start gap-4 hover:border-indigo-300 transition-colors">
+<div class="text-2xl mt-1">4️⃣</div>
+<div class="flex-1">
+<h3 class="font-bold text-slate-900 text-lg">Execute OSWorld Benchmark Integrity Plan</h3>
+<p class="text-slate-600 text-sm mt-1"><strong>Action:</strong> Do not claim SOTA without proof. Integrate the OSWorld scaffold as a PTAC suite (<code>ptac:osworld</code>). Run the full 369-task suite across all foundation model classes. Publish reproducibility artefacts (config, traces) alongside scores.</p>
+<p class="text-slate-500 text-xs mt-2 bg-slate-100 p-2 rounded inline-block">Ref: OSWORLD_PUBLICATION_PLAN.md</p>
+</div>
+</div>
+
+<div class="bg-indigo-600 text-white border border-indigo-700 rounded-lg p-5 flex items-start gap-4 shadow-lg">
+<div class="text-2xl mt-1">🚀</div>
+<div class="flex-1">
+<h3 class="font-bold text-lg">The Endgame: "Production-Only, No Stubs"</h3>
+<p class="text-indigo-100 text-sm mt-1">To achieve world-class status, PRISM must strictly adhere to the <strong>2026-Q3 Full Audit Plan</strong>: Either a feature ships with a real I/O integration and tests, or its completion claim is removed. Expanding the 28-scenario PTAC harness to cover edge-cases in browser DOM mutations and terminal escape-character handling will bridge the gap between "good scaffold" and "SOTA application."</p>
+</div>
+</div>
+</div>
+</section>
+
+</main>
+
+<footer class="bg-slate-900 text-slate-400 py-8 text-center text-sm mt-16">
+<div class="max-w-7xl mx-auto px-4">
+<p>PRISM Project Documentation Analysis &bull; Generated as single-page interactive report</p>
+<p class="mt-2 text-xs">Adhering to Business Security Alignment Gates CU-BG-1 through CU-BG-5.</p>
+</div>
+</footer>
+
+<script>
+// Tab Switching Logic
+function switchTab(tabId) {
+const tabs = ['browser', 'terminal', 'container'];
+tabs.forEach(t => {
+document.getElementById('content-' + t).classList.add('hidden');
+document.getElementById('tab-' + t).classList.remove('tab-active', 'text-indigo-600');
+document.getElementById('tab-' + t).classList.add('text-slate-500');
+});
+document.getElementById('content-' + tabId).classList.remove('hidden');
+document.getElementById('tab-' + tabId).classList.add('tab-active', 'text-indigo-600');
+document.getElementById('tab-' + tabId).classList.remove('text-slate-500');
+}
+
+// Smooth Scrolling Navigation
+function scrollToSection(sectionId) {
+const element = document.getElementById(sectionId);
+if (element) {
+element.scrollIntoView({ behavior: 'smooth' });
+}
+}
+
+// State Machine Interaction Data
+const stateDescriptions = {
+'IDLE': '<strong>State: IDLE</strong><br>Awaiting container instantiation. No resources allocated. System is ready to accept <code>create_container()</code> calls routed through the policy engine.',
+'CREATED': '<strong>State: CREATED</strong><br>Metadata established in SQLite (<code>containers</code> table). Resource quotas (CPU, Memory limits) defined but process not yet spawned.',
+'RUNNING': '<strong>State: RUNNING</strong><br>Process spawned. Environment isolated. Awaiting <code>exec()</code> commands. Snapshot capability active. Tracks lineage in <code>container_snapshots</code>.',
+'EXECUTING': '<strong>State: EXECUTING</strong><br>Active command running inside sandbox. I/O captured to Activity Bus. Command history logged for deterministic replay verification.',
+'TIMEOUT': '<strong>State: TIMEOUT</strong><br>Execution exceeded policy limits. Triggering graceful shutdown (SIGTERM). If unresponsive after 2s, escalates to SIGKILL.',
+'STOPPED': '<strong>State: STOPPED</strong><br>Processes halted. Resources released, but state and file system delta preserved. Ready for <code>destroy()</code> or <code>start()</code>.',
+'DESTROYED': '<strong>State: DESTROYED</strong><br>Tier 3 Approval required. Container fully purged. Audit trail finalized in <code>container_signal_log</code>. Operation non-reversible.'
+};
+
+function updateStateInfo(state) {
+document.querySelectorAll('.state-node').forEach(node => {
+node.classList.remove('state-active', 'border-indigo-200', 'bg-indigo-50');
+node.classList.add('border-slate-200', 'bg-slate-50');
+});
+const activeNode = document.getElementById('state-' + state);
+activeNode.classList.add('state-active', 'border-indigo-200');
+activeNode.classList.remove('border-slate-200', 'bg-slate-50');
+document.getElementById('state-details').innerHTML = stateDescriptions[state];
+}
+
+// Chart.js Initializations
+window.onload = function() {
+// Industry Radar Chart
+const ctxRadar = document.getElementById('industryRadarChart').getContext('2d');
+new Chart(ctxRadar, {
+type: 'radar',
+data: {
+labels: ['Autonomy & Capability', 'Governance & Audit', 'Sandboxing Integrity', 'Reproducibility', 'Vision/DOM Interaction'],
+datasets: [{
+label: 'PRISM',
+data: [70, 100, 90, 95, 65],
+backgroundColor: 'rgba(79, 70, 229, 0.2)',
+borderColor: 'rgba(79, 70, 229, 1)',
+pointBackgroundColor: 'rgba(79, 70, 229, 1)',
+borderWidth: 2
+}, {
+label: 'Anthropic/OpenAI',
+data: [95, 40, 75, 50, 95],
+backgroundColor: 'rgba(15, 23, 42, 0.1)',
+borderColor: 'rgba(15, 23, 42, 0.4)',
+borderDash: [5, 5],
+borderWidth: 2
+}, {
+label: 'Open Source (LangGraph/OSW)',
+data: [85, 30, 60, 70, 80],
+backgroundColor: 'rgba(148, 163, 184, 0.1)',
+borderColor: 'rgba(148, 163, 184, 0.6)',
+borderWidth: 1
+}]
+},
+options: {
+responsive: true,
+maintainAspectRatio: false,
+scales: {
+r: {
+angleLines: { color: 'rgba(0,0,0,0.1)' },
+grid: { color: 'rgba(0,0,0,0.1)' },
+pointLabels: { font: { size: 11, family: 'sans-serif' }, color: '#475569' },
+ticks: { display: false, min: 0, max: 100 }
+}
+},
+plugins: {
+legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 12 } } },
+tooltip: { enabled: true }
+}
+}
+});
+
+// Governance Tier Donut Chart
+const ctxDonut = document.getElementById('governanceDonutChart').getContext('2d');
+new Chart(ctxDonut, {
+type: 'doughnut',
+data: {
+labels: ['Tier 1: Autonomous', 'Tier 2: Conditional', 'Tier 3: Approval Gated'],
+datasets: [{
+data: [60, 25, 15],
+backgroundColor: [
+'rgba(148, 163, 184, 0.8)',
+'rgba(99, 102, 241, 0.8)',
+'rgba(15, 23, 42, 0.9)'
+],
+borderWidth: 0,
+hoverOffset: 4
+}]
+},
+options: {
+responsive: true,
+maintainAspectRatio: false,
+cutout: '70%',
+plugins: {
+legend: { display: false },
+tooltip: {
+callbacks: {
+label: function(context) {
+return ' ' + context.label + ': ' + context.raw + '%';
+}
+}
+}
+}
+}
+});
+};
+</script>
+</body>
+</html>

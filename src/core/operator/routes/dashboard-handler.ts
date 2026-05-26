@@ -15,16 +15,54 @@ export class DashboardHandler implements IRouteHandler {
   async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
     const url = req.url ?? "";
     const prefs = readPreferences();
+    const store = service.getIamStore();
+    const iam = service.getIamHandler();
+    const sessions = service.getSessionManager();
 
-    if (!prefs?.setupComplete && !url.startsWith("/dashboard")) {
+    const qIdx = url.indexOf("?");
+    const params = qIdx >= 0 ? new URLSearchParams(url.slice(qIdx + 1)) : null;
+
+    // Query-token auth is a dev-only bypass (start_web.bat sets PRISM_ALLOW_QUERY_TOKEN=1).
+    // Production startup scripts do NOT set this flag, so operators must use the login page.
+    const allowQueryToken = process.env.PRISM_ALLOW_QUERY_TOKEN === "1";
+    let clientToken = "";
+    if (allowQueryToken) {
+      clientToken = params?.get("token") ?? "";
+    }
+    if (!clientToken) {
+      const authHeader = req.headers["authorization"];
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        clientToken = authHeader.substring(7).trim();
+      }
+    }
+
+    const principal = iam.resolvePrincipalFromCookie(req);
+    const isTokenValid = clientToken ? service.getAuthGate().check({ headers: { authorization: `Bearer ${clientToken}` }, url: "/" } as any).authenticated : false;
+
+    const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
+    if (!principal && !isTokenValid && !authDisabled) {
+      res.writeHead(302, { Location: "/login" });
+      res.end();
+      return;
+    }
+
+    if (principal && !clientToken) {
+      clientToken = service.getAuthGate().getToken();
+    }
+
+    if (!prefs?.setupComplete && !url.startsWith("/setup") && !url.startsWith("/login")) {
       res.writeHead(302, { Location: "/setup" });
       res.end();
       return;
     }
 
-    const qIdx = url.indexOf("?");
-    const params = qIdx >= 0 ? new URLSearchParams(url.slice(qIdx + 1)) : null;
-    const clientToken = params?.get("token") ?? (service as any).extractBearerToken(req) ?? "";
+    if (!principal && isTokenValid) {
+      const adminUser = store.getUserByEmail("default", "admin@prism.ai");
+      if (adminUser) {
+        const { cookie } = sessions.issue(adminUser.id, "default");
+        sessions.writeCookie(res, cookie);
+      }
+    }
 
     if (params?.get("mode") === "advanced") {
       writePreferences({ uiMode: "advanced" });

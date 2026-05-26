@@ -53,9 +53,14 @@ set PRISM_ENV_PROFILE=prod
 set PRISM_MODE=server
 
 if not defined PRISM_DASHBOARD_PORT set "PRISM_DASHBOARD_PORT=7071"
-if not defined PRISM_LLM_PROVIDER set PRISM_LLM_PROVIDER=ollama
-if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemma3:1b
-if not defined PRISM_OLLAMA_MODELS set PRISM_OLLAMA_MODELS=gemma3:1b,granite3.1-moe:1b,driaforall/tiny-agent-a:1.5b,qwen3-vl:2b
+
+REM ── LLM Provider Configuration ─────────────────────────────────────────
+REM To allow database-configured providers (e.g. Google Gemini, OpenAI, etc.) 
+REM to take effect instead of forcing local Ollama, we do not override them here.
+REM If you wish to force local Ollama, uncomment the lines below:
+REM if not defined PRISM_LLM_PROVIDER set PRISM_LLM_PROVIDER=ollama
+REM if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemma3:1b
+REM if not defined PRISM_OLLAMA_MODELS set PRISM_OLLAMA_MODELS=gemma3:1b,granite3.1-moe:1b,driaforall/tiny-agent-a:1.5b,qwen3-vl:2b
 
 REM ── Port cleanup ──────────────────────────────────────────────────────
 echo [SETUP] Clearing any previous instances on port %PRISM_DASHBOARD_PORT%...
@@ -106,45 +111,22 @@ echo [PROFILE] Dashboard port          = %PRISM_DASHBOARD_PORT%
 echo.
 
 echo [START] Launching PRISM Enterprise server...
-start "PRISM Enterprise Server" npm start
+echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will stay open to inspect.
+start "PRISM Enterprise Server" cmd /k npm start
 
 echo [WAIT] Waiting for server on port %PRISM_DASHBOARD_PORT%...
+REM ── Wait for startup ──────────────────────────────────────────────────
 :wait_loop
 timeout /t 1 /nobreak >nul
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %PRISM_DASHBOARD_PORT% -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+if %errorlevel% equ 0 goto :server_ready
 netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
-if errorlevel 1 goto :wait_loop
+if %errorlevel% equ 0 goto :server_ready
+goto :wait_loop
 
-REM ── Resolve workspace root for token file ─────────────────────────────
-if not defined PRISM_WORKSPACE_ROOT (
-  for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "try { $j = Get-Content '%~dp0.prism-preferences.json' -Raw -ErrorAction Stop ^| ConvertFrom-Json; if ($j.workspaceRoot -and (Test-Path $j.workspaceRoot)) { $j.workspaceRoot } } catch {}"`) do (
-    if not "%%P"=="" set "PRISM_WORKSPACE_ROOT=%%P"
-  )
-)
-if not defined PRISM_WORKSPACE_ROOT set "PRISM_WORKSPACE_ROOT=%USERPROFILE%\Documents\Prism_Refraction"
-
-REM ── Read admin auth token ──────────────────────────────────────────────
-set "PRISM_TOKEN_FILE=%PRISM_WORKSPACE_ROOT%\state\admin-token"
-set "PRISM_AUTH_TOKEN="
-set "PRISM_TOKEN_RETRIES=0"
-:token_wait
-if exist "%PRISM_TOKEN_FILE%" goto :token_read
-set /a PRISM_TOKEN_RETRIES+=1
-if %PRISM_TOKEN_RETRIES% GEQ 5 goto :token_read
-timeout /t 1 /nobreak >nul
-goto :token_wait
-:token_read
-if exist "%PRISM_TOKEN_FILE%" (
-  for /f "usebackq delims=" %%T in ("%PRISM_TOKEN_FILE%") do set "PRISM_AUTH_TOKEN=%%T"
-)
-
-if defined PRISM_AUTH_TOKEN (
-  echo [START] Opening dashboard at http://localhost:%PRISM_DASHBOARD_PORT%/dashboard?token=...
-  start "" "http://localhost:%PRISM_DASHBOARD_PORT%/dashboard?token=%PRISM_AUTH_TOKEN%"
-) else (
-  echo [WARN] Could not read auth token. Dashboard may require manual token entry.
-  echo [START] Opening dashboard at http://localhost:%PRISM_DASHBOARD_PORT%
-  start "" "http://localhost:%PRISM_DASHBOARD_PORT%"
-)
+:server_ready
+echo [START] Opening login screen at http://localhost:%PRISM_DASHBOARD_PORT%/login
+start "" "http://localhost:%PRISM_DASHBOARD_PORT%/login"
 
 goto :eof
 

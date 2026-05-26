@@ -970,8 +970,8 @@ export
     : '';
 
   const typing = state.busy && !state.agenticStream.length
-    ? '<div class="message assistant thinking-indicator">'
-    + '<div class="message-label">PRISM <span class="thinking-badge">thinking</span></div>'
+    ? '<div class="message assistant thinking-indicator" onclick="showThinkingTraceModal()" style="cursor:pointer;" title="Click to view live cognitive trace">'
+    + '<div class="message-label">PRISM <span class="thinking-badge" style="background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:2px 6px;border-radius:4px;">thinking</span></div>'
     + '<div class="thinking-dots"><span></span><span></span><span></span></div>'
     + '</div>'
     : '';
@@ -1011,6 +1011,20 @@ export
   var envProfile = s.environmentProfile || 'dev';
   var envDotClass = envProfile === 'prod' ? 'prod' : (envProfile === 'staging' ? 'staging' : 'dev');
 
+  // PRISM WebSocket Real-Time Tunnel Status Extraction
+  var wsStatus = 'CONNECTED (LIVE)';
+  var wsBg = '#22c55e';
+  var wsColor = '#34d399';
+  var existingDot = document.getElementById('prism-ws-status');
+  if (existingDot) {
+    wsBg = existingDot.style.background || '#22c55e';
+    var existingTxt = document.getElementById('prism-ws-status-text');
+    if (existingTxt) {
+      wsStatus = existingTxt.textContent || 'CONNECTED (LIVE)';
+      wsColor = existingTxt.style.color || '#34d399';
+    }
+  }
+
   var html = '<div class="eyebrow">Frontier Operator Console</div>'
     + '<h1>PRISM Chat</h1>'
     + '<div class="brand-profile-badge ' + badgeClass + '">' + badgeLabel + '</div>'
@@ -1022,7 +1036,15 @@ export
     + '<div class="brand-info-item"><span class="brand-info-label">Sessions</span><br><span class="brand-info-value">' + (s.chatSessionCount || 0) + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Events</span><br><span class="brand-info-value">' + (s.eventCount || 0) + '</span></div>'
     + '</div>'
-    + '<div class="muted" style="margin-top:8px;">http://localhost:' + (location.port || '7070') + '</div>';
+    + '<div class="muted" style="margin-top:8px;">http://localhost:' + (location.port || '7070') + '</div>'
+    + '<!-- PRISM WebSocket Real-Time Tunnel Indicator -->'
+    + '<div class="ws-connection-panel" style="display:flex;align-items:center;gap:10px;margin-top:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:8px 12px;font-size:11px;">'
+    + '<span id="prism-ws-status" style="width:8px;height:8px;border-radius:50%;background:' + wsBg + ';box-shadow:0 0 6px rgba(34,197,94,0.5);transition:background 0.3s;display:inline-block;" data-tip-id="shell:ws-status" data-tip-kind="shell" tabindex="0" role="status" aria-label="WebSocket connection status"></span>'
+    + '<div style="display:flex;flex-direction:column;gap:2px;">'
+    + '<span style="font-weight:600;color:#ddd;letter-spacing:0.3px;font-size:10px;text-transform:uppercase;">Frontier WS Tunnel</span>'
+    + '<span id="prism-ws-status-text" style="font-size:9px;color:' + wsColor + ';font-weight:700;letter-spacing:0.5px;">' + wsStatus + '</span>'
+    + '</div>'
+    + '</div>';
 
   if (s.pendingApprovals && s.pendingApprovals > 0) {
     html += '<div class="brand-approvals-badge">' + s.pendingApprovals + ' pending approval' + (s.pendingApprovals > 1 ? 's' : '') + '</div>';
@@ -1522,4 +1544,191 @@ export
     evtSource.close();
     _sseReconnector.schedule();
   };
+}
+
+export function showThinkingTraceModal() {
+  if (document.getElementById('thinking-trace-overlay')) return;
+
+  if (!document.getElementById('thinking-trace-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'thinking-trace-styles';
+    styleEl.textContent = `
+      @keyframes thinking-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes thinking-pulse {
+        0%, 100% { opacity: 0.4; transform: scale(0.9); }
+        50% { opacity: 1; transform: scale(1.1); }
+      }
+      @keyframes modalFadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'thinking-trace-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(8, 8, 16, 0.75);backdrop-filter:blur(12px);z-index:99999;display:flex;align-items:center;justify-content:center;transition:opacity 0.2s ease;padding:20px;box-sizing:border-box;';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:rgba(22, 22, 34, 0.95);border:1px solid rgba(139, 92, 246, 0.35);border-radius:16px;box-shadow:0 12px 40px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255,255,255,0.05);width:100%;max-width:850px;height:80vh;display:flex;flex-direction:column;color:#e2e8f0;font-family:system-ui, -apple-system, sans-serif;overflow:hidden;animation:modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);box-sizing:border-box;';
+
+  // Modal header
+  const header = document.createElement('div');
+  header.style.cssText = 'padding:16px 24px;border-bottom:1px solid rgba(255, 255, 255, 0.08);display:flex;align-items:center;justify-content:space-between;background:rgba(30, 27, 46, 0.5);flex-shrink:0;';
+  header.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:18px;">⚡</span>
+      <span style="font-weight:600;font-size:16px;letter-spacing:0.5px;background:linear-gradient(90deg, #a78bfa, #38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">PRISM Live Cognitive & Action Trace</span>
+    </div>
+    <button id="thinking-trace-close" style="background:transparent;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all 0.2s;">✕</button>
+  `;
+  modal.appendChild(header);
+
+  // Modal body (scrollable)
+  const body = document.createElement('div');
+  body.id = 'thinking-trace-body';
+  body.style.cssText = 'flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px;box-sizing:border-box;';
+  modal.appendChild(body);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const closeModal = () => {
+    clearInterval(updateInterval);
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.remove(), 200);
+  };
+
+  document.getElementById('thinking-trace-close').onclick = closeModal;
+  overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+
+  const renderContent = () => {
+    let html = '';
+
+    // Active Status Card
+    html += `
+      <div style="background:rgba(30,30,46,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:16px;font-size:13px;display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;box-sizing:border-box;flex-shrink:0;">
+        <div><span style="color:#94a3b8;">Active Session:</span> <span style="font-family:monospace;color:#a78bfa;word-break:break-all;">${escapeHtml(state.selectedSessionId || 'none')}</span></div>
+        <div><span style="color:#94a3b8;">Cognitive Mode:</span> <span style="color:#38bdf8;font-weight:600;">Spectrum Refraction</span></div>
+        <div><span style="color:#94a3b8;">Live Event Count:</span> <span style="font-family:monospace;color:#34d399;font-weight:600;">${state.agenticStream.length}</span></div>
+        <div><span style="color:#94a3b8;">Status:</span> <span style="color:#fbbf24;animation:thinking-pulse 1.4s ease-in-out infinite;">🧠 processing...</span></div>
+      </div>
+    `;
+
+    // Cognitive steps section
+    html += `<div><h4 style="margin:0 0 10px;color:#a78bfa;font-size:13px;letter-spacing:0.5px;text-transform:uppercase;font-weight:600;">🧠 Cognitive Processing Pipeline</h4>`;
+    if (!state.agenticStream || state.agenticStream.length === 0) {
+      html += `
+        <div style="padding:32px 24px;border:1px dashed rgba(255,255,255,0.1);border-radius:8px;text-align:center;color:#94a3b8;font-style:italic;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;box-sizing:border-box;">
+          <div style="width:24px;height:24px;border:2px solid #a78bfa;border-top-color:transparent;border-radius:50%;animation:thinking-spin 1s linear infinite;"></div>
+          Refracting request through Creative & Logical hemispheres...
+        </div>
+      `;
+    } else {
+      html += `<div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;">`;
+      state.agenticStream.forEach((ev) => {
+        if (ev.type === 'text') {
+          html += `
+            <div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:8px;padding:12px 16px;box-sizing:border-box;">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#a78bfa;margin-bottom:6px;">
+                <span>🧠</span> <span>Neural Synthesis Feed</span>
+              </div>
+              <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:#e2e8f0;">${escapeHtml(ev.text || '')}</div>
+            </div>
+          `;
+        } else if (ev.type === 'tool_call') {
+          const args = ev.toolCall?.arguments || {};
+          let argsStr = '';
+          try { argsStr = JSON.stringify(args, null, 2); } catch (_) { argsStr = String(args); }
+          html += `
+            <div style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.15);border-radius:8px;padding:12px 16px;box-sizing:border-box;">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#38bdf8;margin-bottom:6px;">
+                <span>🔧</span> <span>Invoking System Tool:</span> <span style="font-family:monospace;background:rgba(56,189,248,0.15);padding:1px 6px;border-radius:4px;">${escapeHtml(ev.toolCall?.name || '')}</span>
+              </div>
+              <pre style="margin:6px 0 0;padding:10px;background:rgba(0,0,0,0.3);border-radius:6px;font-family:monospace;font-size:11px;overflow-x:auto;color:#cbd5e1;border:1px solid rgba(255,255,255,0.05);box-sizing:border-box;">${escapeHtml(argsStr)}</pre>
+            </div>
+          `;
+        } else if (ev.type === 'tool_result') {
+          const ok = ev.toolResult?.ok !== false;
+          const statusColor = ok ? '#34d399' : '#f87171';
+          const out = ev.toolResult?.output || '';
+          const preview = out.length > 500 ? out.substring(0, 500) + '...' : out;
+          html += `
+            <div style="background:rgba(52,211,153,0.04);border:1px solid ${statusColor}30;border-radius:8px;padding:12px 16px;box-sizing:border-box;">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:${statusColor};margin-bottom:6px;">
+                <span>${ok ? '✅' : '❌'}</span> <span>Tool Result:</span> <span style="font-family:monospace;background:${statusColor}15;padding:1px 6px;border-radius:4px;">${escapeHtml(ev.toolResult?.name || 'tool')}</span>
+              </div>
+              <pre style="margin:6px 0 0;padding:10px;background:rgba(0,0,0,0.3);border-radius:6px;font-family:monospace;font-size:11px;overflow-x:auto;color:#cbd5e1;border:1px solid rgba(255,255,255,0.05);box-sizing:border-box;">${escapeHtml(preview)}</pre>
+            </div>
+          `;
+        }
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+
+    // Live Telemetry Logs section
+    html += `
+      <div>
+        <h4 style="margin:0 0 10px;color:#f472b6;font-size:13px;letter-spacing:0.5px;text-transform:uppercase;font-weight:600;">📡 Live Telemetry & Activity Logs</h4>
+        <div style="background:rgba(10,10,16,0.85);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:11px;line-height:1.4;box-sizing:border-box;" id="thinking-trace-logs">
+    `;
+
+    const relevantLogs = state.logEntries.filter(e => 
+      e.source === 'chat' || e.source === 'llm' || e.source === 'tools' || e.source === 'diagnostics' || e.source === 'agent-diagnostics' || e.source === 'logs-diagnostics'
+    ).slice(-25);
+
+    if (relevantLogs.length === 0) {
+      html += `<div style="color:#64748b;font-style:italic;text-align:center;padding:12px;">Waiting for runtime logs...</div>`;
+    } else {
+      relevantLogs.forEach(e => {
+        const time = e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : '';
+        let color = '#94a3b8';
+        if (e.severity === 'error') color = '#f87171';
+        else if (e.severity === 'warn') color = '#fbbf24';
+        else if (e.source === 'llm') color = '#a78bfa';
+        else if (e.source === 'tools') color = '#38bdf8';
+        
+        html += `
+          <div style="display:flex;gap:12px;align-items:flex-start;box-sizing:border-box;">
+            <span style="color:#64748b;flex-shrink:0;">[${time}]</span>
+            <span style="color:${color};font-weight:600;flex-shrink:0;width:95px;">${escapeHtml(e.source || 'system')}</span>
+            <span style="color:#cbd5e1;word-break:break-all;">${escapeHtml(e.summary || e.operation || '')}</span>
+          </div>
+        `;
+      });
+    }
+
+    html += `
+        </div>
+      </div>
+    `;
+
+    // Live refractor pulse footer
+    html += `
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;font-size:12px;color:#a78bfa;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0;box-sizing:border-box;">
+        <span style="display:inline-block;width:10px;height:10px;background:#a78bfa;border-radius:50%;box-shadow:0 0 10px #a78bfa;animation:thinking-pulse 1.4s infinite;"></span>
+        <span style="font-weight:500;letter-spacing:0.3px;">Spectral Triad fanning out and synthesis engine in consensus...</span>
+      </div>
+    `;
+
+    body.innerHTML = html;
+
+    const logsEl = document.getElementById('thinking-trace-logs');
+    if (logsEl) logsEl.scrollTop = logsEl.scrollHeight;
+  };
+
+  renderContent();
+
+  const updateInterval = setInterval(() => {
+    if (document.getElementById('thinking-trace-overlay')) {
+      renderContent();
+    } else {
+      clearInterval(updateInterval);
+    }
+  }, 500);
 }

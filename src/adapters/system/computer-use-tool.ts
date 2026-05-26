@@ -50,6 +50,7 @@ export class ComputerUseTool implements Tool {
       },
       text: { type: "string", required: false },
       coordinate: { type: "array", items: { type: "number" }, required: false } as any,
+      coordinate_to: { type: "array", items: { type: "number" }, required: false } as any,
     }
   } as const;
 
@@ -71,10 +72,11 @@ export class ComputerUseTool implements Tool {
   }
 
   async execute(request: ToolRequest): Promise<ToolResult> {
-    const { action, text, coordinate } = request.args as {
+    const { action, text, coordinate, coordinate_to } = request.args as {
       action: string;
       text?: string;
       coordinate?: [number, number];
+      coordinate_to?: [number, number];
     };
 
     try {
@@ -84,6 +86,10 @@ export class ComputerUseTool implements Tool {
         case "mouse_move":
           if (!coordinate) throw new Error("Coordinate required for mouse_move");
           return await this.handleMouseMove(coordinate[0], coordinate[1]);
+        case "left_click_drag":
+          if (!coordinate) throw new Error("Start coordinate required for left_click_drag");
+          if (!coordinate_to) throw new Error("End coordinate required for left_click_drag");
+          return await this.handleMouseDrag(coordinate[0], coordinate[1], coordinate_to[0], coordinate_to[1]);
         case "left_click":
           return await this.handleClick("left");
         case "right_click":
@@ -108,14 +114,51 @@ export class ComputerUseTool implements Tool {
 
   private async handleScreenshot(): Promise<ToolResult> {
     const result = await this.framebufferCapture.captureSingle();
+    const latestPath = this.framebufferCapture.getLatestPath();
+    if (!latestPath) {
+      return { ok: false, output: { error: "Failed to get latest screenshot path." } };
+    }
+    const fs = await import("node:fs");
+    const buf = fs.readFileSync(latestPath);
     return {
       ok: true,
       output: {
         type: "image",
         filename: result.filename,
-        timestamp: result.timestamp
+        timestamp: result.timestamp,
+        base64: buf.toString("base64"),
+        format: "png"
       }
     };
+  }
+
+  private async handleMouseDrag(x1: number, y1: number, x2: number, y2: number): Promise<ToolResult> {
+    if (this.nonWin32Backend) {
+      await this.nonWin32Backend.mouseDrag(x1, y1, x2, y2);
+      return { ok: true, output: { from: { x: x1, y: y1 }, to: { x: x2, y: y2 }, backend: this.nonWin32Backend.id } };
+    }
+    const script = `
+      Add-Type -AssemblyName System.Windows.Forms
+      Add-Type -TypeDefinition @"
+      using System;
+      using System.Runtime.InteropServices;
+      public class MouseControl {
+          [DllImport("user32.dll")]
+          public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+          public const uint MOUSEEVENTF_LEFTDOWN = 0x02;
+          public const uint MOUSEEVENTF_LEFTUP = 0x04;
+          public const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+          public const uint MOUSEEVENTF_MOVE = 0x0001;
+      }
+"@
+      [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x1}, ${y1})
+      [MouseControl]::mouse_event([MouseControl]::MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+      Start-Sleep -Milliseconds 100
+      [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x2}, ${y2})
+      [MouseControl]::mouse_event([MouseControl]::MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    `;
+    await this.runPowerShell(script);
+    return { ok: true, output: { from: { x: x1, y: y1 }, to: { x: x2, y: y2 } } };
   }
 
   private async handleMouseMove(x: number, y: number): Promise<ToolResult> {

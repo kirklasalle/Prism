@@ -123,7 +123,7 @@ const OPERATION_SOURCE_MAP: ReadonlyArray<[string, string]> = [
   ["agent.", "agentic"],
   ["swarm.", "agentic"],
   ["tab.", "system"],
-  ["iam.", "security"],
+  ["iam.", "auth"],
   ["prism.", "system"],
   ["scheduler.", "scheduler"],
   ["tool.", "tools"],

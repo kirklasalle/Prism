@@ -1,4 +1,94 @@
 <div class="tab-grid">
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       PRISM Micro Support Desk — World-Class Self-Healing & Triage Hub
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <section class="rail-section panel" style="grid-column:1/-1;" data-tip-id="logs:support-desk" data-tip-kind="logs">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('supportDesk')">
+      <h3 style="display:flex;align-items:center;gap:6px;">🏥 PRISM Micro Support Desk & Self-Healing Hub</h3>
+      <span class="muted" style="margin-left:8px;font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.15);color:#a78bfa;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;">guardian-shield</span>
+      <span id="supportDesk-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="supportDesk-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:12px;">Real-time automated incident correlation, active self-healing sweeps, and communication tunnels between Operator and Guardian.</div>
+      
+      <!-- Interactive Grid Layout -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:20px;">
+        
+        <!-- Column 1: Self-Healing Diagnostic Database -->
+        <div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;">
+          <h4 style="margin:0 0 12px;color:#a78bfa;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🧬 Self-Healing Diagnostics Catalog</h4>
+          <div style="display:flex;gap:6px;margin-bottom:12px;">
+            <input type="text" id="support-search" placeholder="Filter signatures (e.g. #telemetry, #auth)..." style="flex:1;padding:6px 10px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#eee;" oninput="filterSupportCatalog()" />
+          </div>
+          
+          <div id="support-catalog-container" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Column 2: Active Support Tickets Queue -->
+        <div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <h4 style="margin:0;color:#f472b6;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🎫 Active Support Tickets Queue</h4>
+            <button class="secondary-button" style="font-size:10px;padding:2px 8px;" onclick="window.toggleCreateTicketForm && window.toggleCreateTicketForm(true)">+ Log Incident</button>
+          </div>
+
+          <!-- Inline Log Incident Form (Hidden by default) -->
+          <div id="create-ticket-form" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;flex-direction:column;gap:8px;">
+            <div style="font-weight:600;font-size:11px;color:#f472b6;">LOG NEW INCIDENT</div>
+            <input type="text" id="ticket-title" placeholder="Incident title (e.g. MCP Connection Failed)" style="width:100%;padding:6px 8px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;" />
+            <textarea id="ticket-description" placeholder="Description & logs..." style="width:100%;height:50px;padding:6px 8px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;resize:none;"></textarea>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <select id="ticket-severity" style="padding:4px 6px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;flex:1;">
+                <option value="low">Low Severity</option>
+                <option value="medium">Medium Severity</option>
+                <option value="high">High Severity</option>
+                <option value="critical">Critical Severity</option>
+              </select>
+              <button class="cta-button mini" style="padding:4px 10px;" onclick="window.submitSupportTicket && window.submitSupportTicket()">Submit</button>
+              <button class="secondary-button" style="font-size:11px;padding:4px 8px;" onclick="window.toggleCreateTicketForm && window.toggleCreateTicketForm(false)">Cancel</button>
+            </div>
+          </div>
+          
+          <div id="support-tickets-container" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
+            <div class="muted" style="font-size:12px;">Loading tickets…</div>
+          </div>
+        </div>
+
+        <!-- Column 3: Guardian Agent Tunnels & Manual Triage -->
+        <div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;gap:16px;">
+          <div>
+            <h4 style="margin:0 0 12px;color:#38bdf8;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🛡️ Guardian Communication Node</h4>
+            
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:11px;color:var(--text-muted);">
+              <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.15);padding:8px 12px;border-radius:6px;">
+                <span>👤 Operator Dashboard → 🧠 Guardian Shield</span>
+                <span style="color:#34d399;font-weight:700;display:flex;align-items:center;gap:4px;">
+                  <span style="display:inline-block;width:6px;height:6px;background:#34d399;border-radius:50%;box-shadow:0 0 8px #34d399;"></span> SECURE
+                </span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);padding:8px 12px;border-radius:6px;">
+                <span>🧠 Guardian → 👤 Sub-Agent Nodes (Josephine)</span>
+                <span style="color:#34d399;font-weight:700;display:flex;align-items:center;gap:4px;">
+                  <span style="display:inline-block;width:6px;height:6px;background:#34d399;border-radius:50%;box-shadow:0 0 8px #34d399;"></span> READY
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="margin:0 0 8px;color:#f472b6;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🗂️ Operator Manual Triage</h4>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="cta-button mini" style="flex:1;background:linear-gradient(135deg, rgba(167,139,250,0.25), rgba(244,114,182,0.25));border:1px solid rgba(167,139,250,0.4);" onclick="triggerSelfHealingSweep()">⚡ Run Diagnostics Sweep</button>
+              <button class="secondary-button" style="font-size:11px;padding:8px 12px;" onclick="captureIncidentBundle()">📦 Export Bundle</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
   <section class="rail-section panel" data-tip-id="logs:actions" data-tip-kind="logs">
     <h3>Quick Actions</h3>
     <div id="actions" class="stack"></div>
@@ -52,6 +142,7 @@
         <option value="scheduler">scheduler</option>
         <option value="hardware">hardware</option>
         <option value="autonomous">autonomous</option>
+        <option value="auth">auth</option>
       </select>
       <label class="muted" style="font-size:11px;">Severity:</label>
       <select id="logs-severity-filter" data-tip-id="logs:filter-severity" data-tip-kind="logs" onchange="filterLogs()">
@@ -106,6 +197,7 @@
           <option value="guardian">guardian</option>
           <option value="console">console</option>
           <option value="autonomous">autonomous</option>
+          <option value="auth">auth</option>
         </select>
         <input id="ut-search" type="text" placeholder="🔍 Search entries…"
           style="flex:1;min-width:120px;padding:4px 8px;font-size:11px;background:var(--surface-2,#222);color:var(--text);border:1px solid var(--border);border-radius:4px;" />
@@ -124,6 +216,8 @@
       </div>
     </div>
   </section>
+
+
 
   <!-- ═══════════════════════════════════════════════════════════════════════
        Operator Identity & Tab Sessions — Phase A1
@@ -186,6 +280,7 @@
     </label>
     <button class="secondary-button" id="live-console-pause" style="font-size:11px;padding:3px 8px;" onclick="window.toggleLiveConsolePause && window.toggleLiveConsolePause()">Pause</button>
     <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="window.clearLiveConsole && window.clearLiveConsole()">Clear</button>
+    <button class="secondary-button" style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;" onclick="window.copyLiveConsole && window.copyLiveConsole()">📋 Copy Logs</button>
   </header>
   <div id="live-console-body"
     style="max-height:420px;min-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.45);padding:6px 8px;font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:11.5px;line-height:1.4;">
@@ -193,207 +288,8 @@
   </div>
 </section>
 
-<script>
-(function () {
-  // ── MCP Servers panel ─────────────────────────────────────────────────────
-  const grid = document.getElementById('mcp-servers-grid');
-  const summary = document.getElementById('mcp-servers-summary');
-  const STATE_COLORS = {
-    connected: '#3ec46d',
-    retrying: '#f0b73f',
-    down: '#ff7a55',
-    failed: '#ff4d4d',
-  };
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[c]));
-  }
-  function renderServers(payload) {
-    if (!payload || !payload.attached) {
-      grid.innerHTML = '<div class="muted" style="font-size:12px;">MCP adapter not attached.</div>';
-      summary.textContent = 'detached';
-      return;
-    }
-    const servers = payload.servers || [];
-    if (servers.length === 0) {
-      grid.innerHTML = '<div class="muted" style="font-size:12px;">No MCP servers configured.</div>';
-      summary.textContent = '0 servers';
-      return;
-    }
-    const counts = { connected: 0, retrying: 0, down: 0, failed: 0 };
-    grid.innerHTML = servers.map(s => {
-      counts[s.state] = (counts[s.state] || 0) + 1;
-      const color = STATE_COLORS[s.state] || '#888';
-      const tail = (s.stderrTail || []).slice(-5);
-      const tailHtml = tail.length
-        ? '<details style="margin-top:6px;"><summary class="muted" style="font-size:11px;cursor:pointer;">stderr tail</summary>'
-          + '<pre style="margin:4px 0 0 0;font-size:10.5px;white-space:pre-wrap;color:#ccc;background:rgba(0,0,0,0.3);padding:4px 6px;border-radius:4px;">'
-          + escapeHtml(tail.join('\n')) + '</pre></details>'
-        : '';
-      const lastErr = s.lastError ? ('<div class="muted" style="font-size:11px;color:#ff9a85;margin-top:4px;">' + escapeHtml(s.lastError) + '</div>') : '';
-      const nextRetry = s.nextRetryAt ? ('<div class="muted" style="font-size:11px;">next retry: ' + escapeHtml(new Date(s.nextRetryAt).toLocaleTimeString()) + '</div>') : '';
-      return ''
-        + '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:rgba(0,0,0,0.2);">'
-        +   '<div style="display:flex;align-items:center;gap:6px;">'
-        +     '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';"></span>'
-        +     '<strong style="font-size:13px;">' + escapeHtml(s.name) + '</strong>'
-        +     '<span class="muted" style="font-size:11px;margin-left:auto;">' + escapeHtml(s.state) + '</span>'
-        +   '</div>'
-        +   '<div class="muted" style="font-size:11px;margin-top:4px;">'
-        +     escapeHtml(String(s.toolCount || 0)) + ' tool(s)'
-        +     (s.retryCount > 0 ? (' · retries: ' + escapeHtml(String(s.retryCount))) : '')
-        +   '</div>'
-        +   nextRetry
-        +   lastErr
-        +   tailHtml
-        +   '<div style="margin-top:6px;">'
-        +     '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" '
-        +       'onclick="window.reconnectMcpServer && window.reconnectMcpServer(' + JSON.stringify(s.name) + ')">Reconnect</button>'
-        +   '</div>'
-        + '</div>';
-    }).join('');
-    summary.textContent = servers.length + ' server(s) · '
-      + counts.connected + ' up · ' + (counts.retrying || 0) + ' retrying · '
-      + ((counts.down || 0) + (counts.failed || 0)) + ' down';
-  }
-  async function refreshMcpServers() {
-    try {
-      const r = await fetch('/api/mcp/servers', { credentials: 'same-origin' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const payload = await r.json();
-      renderServers(payload);
-    } catch (err) {
-      grid.innerHTML = '<div class="muted" style="font-size:12px;color:#ff9a85;">Error: ' + escapeHtml(String(err)) + '</div>';
-    }
-  }
-  window.refreshMcpServers = refreshMcpServers;
-  window.reconnectMcpServer = async function (name) {
-    try {
-      const r = await fetch('/api/mcp/servers/' + encodeURIComponent(name) + '/reconnect',
-        { method: 'POST', credentials: 'same-origin' });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data.ok) {
-        alert('Reconnect failed: ' + (data.error || ('HTTP ' + r.status)));
-      }
-    } catch (err) {
-      alert('Reconnect error: ' + String(err));
-    } finally {
-      refreshMcpServers();
-    }
-  };
-  refreshMcpServers();
-  setInterval(refreshMcpServers, 5000);
-
-  // ── Live Console panel ────────────────────────────────────────────────────
-  const consoleBody = document.getElementById('live-console-body');
-  const consoleStatus = document.getElementById('live-console-status');
-  const sourceFilter = document.getElementById('live-console-source');
-  const autoScrollEl = document.getElementById('live-console-autoscroll');
-  const pauseBtn = document.getElementById('live-console-pause');
-  const CLIENT_CAP = 5000;
-  const buffer = []; // {ts, stream, line}
-  let paused = false;
-  function shouldShow(entry) {
-    const v = sourceFilter.value;
-    if (v === 'all') return true;
-    if (v === 'stdout') return entry.stream === 'stdout';
-    if (v === 'stderr') return entry.stream === 'stderr';
-    if (v === 'mcp') return /^\[MCP[:\]]/.test(entry.line);
-    return true;
-  }
-  function severityClass(line) {
-    if (/\b(FATAL|ERROR)\b/.test(line)) return 'color:#ff7a7a;';
-    if (/\b(WARN|WARNING)\b/.test(line)) return 'color:#f0c46d;';
-    return '';
-  }
-  function renderAll() {
-    if (paused) return;
-    const visible = buffer.filter(shouldShow);
-    if (visible.length === 0) {
-      consoleBody.innerHTML = '<div class="muted" style="font-size:12px;">(no lines)</div>';
-      return;
-    }
-    consoleBody.innerHTML = visible.map(e => {
-      const t = (e.ts || '').slice(11, 23);
-      const tag = e.stream === 'stderr' ? '<span style="color:#ff9a85;">err</span>' : '<span style="color:#7ad0ff;">out</span>';
-      return '<div style="' + severityClass(e.line) + '">'
-        + '<span class="muted" style="font-size:10.5px;">' + escapeHtml(t) + '</span> '
-        + tag + ' ' + escapeHtml(e.line)
-        + '</div>';
-    }).join('');
-    if (autoScrollEl.checked) {
-      consoleBody.scrollTop = consoleBody.scrollHeight;
-    }
-  }
-  function pushEntry(entry) {
-    buffer.push(entry);
-    if (buffer.length > CLIENT_CAP) buffer.splice(0, buffer.length - CLIENT_CAP);
-    renderAll();
-  }
-  sourceFilter.addEventListener('change', renderAll);
-  window.toggleLiveConsolePause = function () {
-    paused = !paused;
-    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
-    if (!paused) renderAll();
-  };
-  window.clearLiveConsole = function () {
-    buffer.length = 0;
-    renderAll();
-  };
-  // Hydrate from REST
-  (async () => {
-    try {
-      const r = await fetch('/api/debug/console?limit=500', { credentials: 'same-origin' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
-      if (!data.attached) {
-        consoleStatus.textContent = 'console interceptor not attached';
-        consoleBody.innerHTML = '<div class="muted" style="font-size:12px;">Console interceptor not attached.</div>';
-        return;
-      }
-      for (const line of (data.lines || [])) buffer.push(line);
-      consoleStatus.textContent = 'live';
-      renderAll();
-    } catch (err) {
-      consoleStatus.textContent = 'error';
-      consoleBody.innerHTML = '<div class="muted" style="font-size:12px;color:#ff9a85;">Error: ' + escapeHtml(String(err)) + '</div>';
-    }
-  })();
-  // Subscribe to existing dashboard WebSocket if present.
-  function attachWs(ws) {
-    if (!ws || ws.readyState > 1) return false;
-    ws.addEventListener('message', (ev) => {
-      try {
-        const msg = JSON.parse(ev.data);
-        if (msg && msg.type === 'console' && typeof msg.line === 'string') {
-          pushEntry({ ts: msg.ts, stream: msg.stream, line: msg.line });
-        }
-      } catch { /* ignore non-JSON */ }
-    });
-    return true;
-  }
-  // Hook into the page's primary WS once it's available. The dashboard
-  // already creates `window.dashboardWs` or similar; fall back to opening
-  // our own only if that hook is missing after a short wait.
-  (function waitForWs() {
-    let attempts = 0;
-    const tryAttach = () => {
-      attempts++;
-      const candidate = window.dashboardWs || window.__prismWs || window.ws;
-      if (attachWs(candidate)) return;
-      if (attempts > 20) {
-        // Open a dedicated socket as a last resort.
-        try {
-          const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-          const own = new WebSocket(proto + '://' + location.host);
-          attachWs(own);
-        } catch { /* ignore */ }
-        return;
-      }
-      setTimeout(tryAttach, 250);
-    };
-    tryAttach();
-  })();
-})();
-</script>
+<!--
+  Live Console and MCP Servers JavaScript logic has been fully moved to
+  src/core/operator/public/tab-logs.js (under initLogsTab()) to bypass
+  browser innerHTML script execution restrictions and enforce production-grade stability.
+-->

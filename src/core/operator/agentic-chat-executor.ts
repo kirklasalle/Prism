@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { resolve, normalize, sep } from "node:path";
+import { resolve, normalize, sep, isAbsolute } from "node:path";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { Tool, ToolRequest, ToolResult } from "../tools/types.js";
 import type {
@@ -43,6 +43,7 @@ interface ConversationEntry {
     content: string;
     tool_call_id?: string;
     tool_calls?: LlmToolCall[];
+    thoughtSignature?: string;
 }
 
 export interface AgenticResult {
@@ -157,6 +158,7 @@ export class AgenticChatExecutor {
                 role: "assistant",
                 content: result.content || "",
                 tool_calls: result.toolCalls,
+                thoughtSignature: (result as any).thoughtSignature,
             });
 
             // Execute each tool call
@@ -282,9 +284,20 @@ function isFileOperation(toolName: string): boolean {
 function isWithinWorkspace(filePath: string): boolean {
     try {
         const wsRoot = resolveWorkspaceRoot();
-        const normalized = normalize(resolve(filePath));
+        // Resolve relative paths against workspace root, not process.cwd()
+        const basePath = isAbsolute(filePath) ? filePath : resolve(wsRoot, filePath);
+        const normalized = normalize(basePath);
         const normalizedRoot = normalize(wsRoot);
-        return normalized.startsWith(normalizedRoot + sep) || normalized === normalizedRoot;
+        // Allow any path under the workspace root tree
+        if (normalized.startsWith(normalizedRoot + sep) || normalized === normalizedRoot) {
+            return true;
+        }
+        // Also allow reading from the source project directory (D:\Projects\Prism)
+        const srcRoot = normalize(process.cwd());
+        if (normalized.startsWith(srcRoot + sep) || normalized === srcRoot) {
+            return true;
+        }
+        return false;
     } catch {
         return false;
     }

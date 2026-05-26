@@ -1,4 +1,18 @@
 import type { ProviderSecretStore } from "./provider-secret-store.js";
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { join as pathJoin } from "node:path";
+
+// ── LLM Trace Logger ─────────────────────────────────────────────────────────
+const LLM_TRACE_DIR = pathJoin(process.cwd(), "logs");
+const LLM_TRACE_FILE = pathJoin(LLM_TRACE_DIR, "llm-trace.log");
+function llmTraceLog(label: string, data: unknown): void {
+    try {
+        if (!existsSync(LLM_TRACE_DIR)) mkdirSync(LLM_TRACE_DIR, { recursive: true });
+        const ts = new Date().toISOString();
+        const serialized = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        appendFileSync(LLM_TRACE_FILE, `\n[${ts}] [${label}]\n${serialized}\n`, "utf-8");
+    } catch { /* never break LLM calls for logging */ }
+}
 import {
     resolveProfile,
     selectModelForRole,
@@ -45,6 +59,8 @@ import type {
 } from "./model-capability-matrix.js";
 import { computeCostUsd } from "./usage-pricing-catalog.js";
 import type { ActivityBus } from "../activity/bus.js";
+import type { UsageMeteringService } from "./usage-metering-service.js";
+
 
 export type RoutingStrategy = "single" | "multi" | "modality";
 
@@ -67,6 +83,12 @@ export type { TaskRole, ModelRouterSelection, AdaptivePromptParams, ModelCapabil
 export interface SRGenerationOutput {
     /** Final aggregated content. */
     content: string;
+    /** Tool calls emitted during synthesis. */
+    toolCalls?: LlmToolCall[];
+    /** Stop reason from synthesis. */
+    stopReason?: string;
+    /** Thought signature or chain of thought. */
+    thoughtSignature?: string;
     /** Individual hemisphere outputs for transparency. */
     hemispheres: {
         left: LlmGenerationOutput | null;
@@ -108,7 +130,7 @@ export type PrismLlmProviderId =
 export const ALL_PROVIDER_IDS: PrismLlmProviderId[] = [
     "openai", "anthropic", "google", "mistral", "cohere", "groq",
     "together", "deepseek", "perplexity", "fireworks", "openrouter",
-    "ollama", "ollama-cloud", "lmstudio", "llamacpp", "bitnetcpp", "custom",
+    "llamacpp", "bitnetcpp", "ollama", "ollama-cloud", "lmstudio", "custom",
 ];
 
 export interface PersistedProviderSettings {
@@ -167,6 +189,7 @@ interface LlmGenerationInput {
         content: string | LlmContentPart[];
         tool_call_id?: string;
         tool_calls?: LlmToolCall[];
+        thoughtSignature?: string;
     }>;
     systemPrompt: string;
     tools?: LlmToolDefinition[];
@@ -181,6 +204,7 @@ export interface LlmGenerationOutput {
     toolCalls?: LlmToolCall[];
     stopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop";
     tokensUsed?: { input: number; output: number; costUsd: number };
+    thoughtSignature?: string;
 }
 
 export interface LlmToolDefinition {
@@ -204,6 +228,10 @@ export interface LlmToolCall {
     id: string;
     name: string;
     arguments: Record<string, unknown>;
+    thought_signature?: string;
+    thoughtSignature?: string;
+    /** Gemini OpenAI-compat: preserves the raw extra_content block for verbatim echo */
+    extra_content?: { google?: { thought_signature?: string } };
 }
 
 export interface LlmContentPart {
@@ -227,12 +255,14 @@ const OPENAI_DEFAULT_MODELS = [
 ];
 
 const ANTHROPIC_DEFAULT_MODELS = [
-    "claude-3-5-sonnet-latest",
-    "claude-3-7-sonnet-latest",
-    "claude-3-5-haiku-latest",
+    "claude-sonnet-4-5-20251022",
+    "claude-haiku-4-5-20251022",
+    "claude-opus-4-5-20251101",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
 ];
 
-const GOOGLE_DEFAULT_MODELS = ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro"];
+const GOOGLE_DEFAULT_MODELS = ["gemini-3.0-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro"];
 const MISTRAL_DEFAULT_MODELS = ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"];
 const COHERE_DEFAULT_MODELS = ["command-r-plus", "command-r", "command-light"];
 const GROQ_DEFAULT_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"];
@@ -299,6 +329,20 @@ export class LlmProviderManager {
         preferredModality: null,
     };
 
+    private usageMetering: UsageMeteringService | null = null;
+
+    public setUsageMetering(usageMetering?: UsageMeteringService): void {
+        this.usageMetering = usageMetering ?? null;
+        if (usageMetering) {
+            const caps = usageMetering.getCaps();
+            if (caps.sessionCap === null && caps.dailyCap === null && caps.monthlyCap === null) {
+                console.warn(`[PRISM][budget] WARNING: PRISM is running with NO active API spending caps. Run the setup wizard or set caps in settings to enable safety limits.`);
+            }
+        }
+    }
+
+
+
     /** Short-lived TTL cache for network-discovered model lists (the expensive part of getCatalog). */
     private discoveredModelsCache: {
         ollama: string[];
@@ -314,6 +358,17 @@ export class LlmProviderManager {
     private readonly srCircuitBreaker = new Map<string, { failures: number; openUntil: number }>();
     private static readonly SR_CB_FAILURE_THRESHOLD = 3;
     private static readonly SR_CB_OPEN_DURATION_MS = 30_000;
+
+    /** SOTA Skills Engine: dynamic tool filtering modifier */
+    private temporaryToolFilter: string[] | null = null;
+
+    public setTemporaryToolFilter(allowedToolNames: string[] | null): void {
+        this.temporaryToolFilter = allowedToolNames;
+    }
+
+    public clearTemporaryToolFilter(): void {
+        this.setTemporaryToolFilter(null);
+    }
 
     constructor(
         private readonly env: NodeJS.ProcessEnv = process.env,
@@ -706,6 +761,34 @@ export class LlmProviderManager {
     }
 
     async generate(input: LlmGenerationInput, selection?: Partial<LlmSelection>): Promise<LlmGenerationOutput | null> {
+        if (this.temporaryToolFilter && input.tools) {
+            input = {
+                ...input,
+                tools: input.tools.filter(t => this.temporaryToolFilter!.includes(t.name))
+            };
+        }
+
+        // Check budget caps (SOTA Centralized Active Kill-Switch / Hard Ceiling)
+        if (this.usageMetering) {
+            const capCheck = this.usageMetering.checkCap();
+            if (!capCheck.allowed) {
+                const errMsg = `Centralized API budget ceiling breached: reached ${capCheck.capType} spend cap. Model generation halted.`;
+                this.activityBus?.emit({
+                    sessionId: "llm-provider-manager",
+                    layer: "llm",
+                    operation: "llm.budget_limit_breached",
+                    status: "failed",
+                    details: {
+                        capType: capCheck.capType,
+                        remainingUsd: capCheck.remainingUsd,
+                        error: errMsg
+                    }
+                });
+                throw new Error(errMsg);
+            }
+        }
+
+
         const catalog = await this.getCatalog(selection);
         if (!catalog.activeProviderId || !catalog.activeModel) {
             return null;
@@ -720,31 +803,95 @@ export class LlmProviderManager {
         const profile = resolveProfile(catalog.activeModel);
         const adaptiveParams = buildAdaptiveParams(profile);
 
-        if (catalog.activeProviderId === "anthropic") {
-            return this.withExponentialRetry(() =>
-                this.generateWithAnthropic(settings, catalog.activeModel!, input));
-        }
+        try {
+            if (catalog.activeProviderId === "anthropic") {
+                return await this.withExponentialRetry(() =>
+                    this.generateWithAnthropic(settings, catalog.activeModel!, input));
+            }
 
-        if (catalog.activeProviderId === "ollama") {
-            return this.withExponentialRetry(() =>
-                this.generateWithOllama(settings, catalog.activeModel!, input, adaptiveParams));
-        }
+            if (catalog.activeProviderId === "ollama") {
+                return await this.withExponentialRetry(() =>
+                    this.generateWithOllama(settings, catalog.activeModel!, input, adaptiveParams));
+            }
 
-        if (catalog.activeProviderId === "ollama-cloud") {
-            return this.withExponentialRetry(() =>
-                this.generateWithOllamaCloud(settings, catalog.activeModel!, input, adaptiveParams));
-        }
+            if (catalog.activeProviderId === "ollama-cloud") {
+                return await this.withExponentialRetry(() =>
+                    this.generateWithOllamaCloud(settings, catalog.activeModel!, input, adaptiveParams));
+            }
 
-        // Apply dynamic port routing if managed by supervisor
-        if (catalog.activeProviderId === "llamacpp" && this.llamaSupervisor) {
-            const dynamicPort = this.llamaSupervisor.getPortForAlias(catalog.activeModel);
-            if (!dynamicPort) return null; // Model not fully loaded
-            settings.baseUrl = `http://127.0.0.1:${dynamicPort}/v1`;
-        }
+            // Apply dynamic port routing if managed by supervisor
+            if (catalog.activeProviderId === "llamacpp" && this.llamaSupervisor) {
+                let dynamicPort = this.llamaSupervisor.getPortForAlias(catalog.activeModel);
+                if (!dynamicPort && process.env.PRISM_BASE_MODE === "true") {
+                    const modelPath = this.llamaSupervisor.getModelPath(catalog.activeModel);
+                    if (modelPath) {
+                        console.log(`[PRISM][SSSR] Dynamic on-demand loading of local GGUF model: ${catalog.activeModel}`);
+                        await this.llamaSupervisor.loadModel(modelPath, catalog.activeModel, { ctxSize: 2048 });
+                        dynamicPort = this.llamaSupervisor.getPortForAlias(catalog.activeModel);
+                    }
+                }
+                if (!dynamicPort) return null; // Model not fully loaded
+                settings.baseUrl = `http://127.0.0.1:${dynamicPort}/v1`;
+            }
 
-        // All other providers use OpenAI-compatible API
-        return this.withExponentialRetry(() =>
-            this.generateWithOpenAiCompatible(settings, catalog.activeModel!, input));
+            // All other providers use OpenAI-compatible API
+            return await this.withExponentialRetry(() =>
+                this.generateWithOpenAiCompatible(settings, catalog.activeModel!, input));
+        } catch (error) {
+            const failedProvider = catalog.activeProviderId;
+            const isRemote = provider.kind === "remote";
+            if (isRemote) {
+                console.warn(`[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Attempting automatic local fallback...`);
+                let fallbackProvider: PrismLlmProviderId | null = null;
+                let fallbackModel: string | null = null;
+
+                // 1. Check llamacpp first (which manages GGUF slots)
+                const llamacppSnapshot = this.snapshotFor("llamacpp");
+                if (llamacppSnapshot.enabled && llamacppSnapshot.models.length > 0) {
+                    fallbackProvider = "llamacpp";
+                    fallbackModel = llamacppSnapshot.defaultModel || llamacppSnapshot.models[0];
+                }
+
+                // 2. Check ollama second
+                if (!fallbackProvider) {
+                    const ollamaSnapshot = this.snapshotFor("ollama");
+                    if (ollamaSnapshot.enabled && ollamaSnapshot.models.length > 0) {
+                        fallbackProvider = "ollama";
+                        fallbackModel = ollamaSnapshot.defaultModel || ollamaSnapshot.models[0];
+                    }
+                }
+
+                // 3. Check lmstudio third
+                if (!fallbackProvider) {
+                    const lmstudioSnapshot = this.snapshotFor("lmstudio");
+                    if (lmstudioSnapshot.enabled && lmstudioSnapshot.models.length > 0) {
+                        fallbackProvider = "lmstudio";
+                        fallbackModel = lmstudioSnapshot.defaultModel || lmstudioSnapshot.models[0];
+                    }
+                }
+
+                if (fallbackProvider && fallbackModel) {
+                    console.log(`[PRISM][llm] Dynamic fallback triggered. Routing request to local provider "${fallbackProvider}" with model "${fallbackModel}".`);
+                    this.activityBus?.emit({
+                        sessionId: selection?.providerId ?? "llm",
+                        layer: "llm",
+                        operation: "llm.provider_fallback",
+                        status: "succeeded",
+                        details: {
+                            failedProvider,
+                            failedModel: catalog.activeModel,
+                            fallbackProvider,
+                            fallbackModel,
+                            error: String(error),
+                        },
+                    });
+
+                    // Recurse with local selection
+                    return this.generate(input, { providerId: fallbackProvider, model: fallbackModel });
+                }
+            }
+            throw error;
+        }
     }
 
     /**
@@ -919,6 +1066,13 @@ export class LlmProviderManager {
         srConfig: SpectrumRefractionConfig,
         mainSelection?: Partial<LlmSelection>,
     ): Promise<SRGenerationOutput | null> {
+        if (this.temporaryToolFilter && input.tools) {
+            input = {
+                ...input,
+                tools: input.tools.filter(t => this.temporaryToolFilter!.includes(t.name))
+            };
+        }
+
         if (!srConfig.enabled || !srConfig.leftModel || !srConfig.rightModel) return null;
 
         // ── Pre-flight guard: enforce instance isolation ──
@@ -1099,8 +1253,10 @@ export class LlmProviderManager {
 
         const aggregationInput: LlmGenerationInput = {
             message: aggregationMessage,
-            conversation: [],
+            conversation: input.conversation,
             systemPrompt: SR_SYSTEM_PROMPTS.aggregation,
+            tools: input.tools,
+            tool_choice: input.tool_choice,
         };
 
         // Aggregation pass — main model synthesizes
@@ -1133,6 +1289,9 @@ export class LlmProviderManager {
 
         return {
             content: aggregationResult?.content ?? mainOutput,
+            toolCalls: aggregationResult?.toolCalls,
+            stopReason: aggregationResult?.stopReason,
+            thoughtSignature: aggregationResult?.thoughtSignature,
             hemispheres: {
                 left: leftResult,
                 right: rightResult,
@@ -1443,6 +1602,7 @@ export class LlmProviderManager {
 
     /** Discover models from a provider by querying its API. */
     async discoverProviderModels(providerId: string): Promise<{
+        models: string[];
         known: string[];
         unknown: string[];
         suggested: ModelCapabilityProfile[];
@@ -1487,7 +1647,12 @@ export class LlmProviderManager {
             registerModelProfile(profile);
         }
 
-        return { known, unknown, suggested };
+        return {
+            models: [...catalogModels],
+            known,
+            unknown,
+            suggested,
+        };
     }
 
     resolveProvider(providerId: string): PrismLlmProviderId | null {
@@ -1787,27 +1952,67 @@ export class LlmProviderManager {
 
         for (const entry of input.conversation) {
             if (entry.role === "tool") {
+                let content: any = entry.content;
+                // OpenAI-compatible providers vary on whether they support array content in tool role.
+                // Anthropic (via shim) and Gemini (via shim) often do. Strict OpenAI expects string.
+                if (typeof entry.content !== "string") {
+                    if (settings.id === "openai") {
+                        // Strict OpenAI: tool content must be a string.
+                        content = entry.content.filter(p => p.type === "text").map(p => p.text).join("\n");
+                        // Note: If we had images in a tool result for strict OpenAI, 
+                        // they are currently dropped here to avoid 400 errors.
+                    } else {
+                        content = entry.content;
+                    }
+                }
                 messages.push({
                     role: "tool",
                     tool_call_id: entry.tool_call_id,
-                    content: typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content),
+                    content,
                 });
             } else if (entry.role === "assistant" && entry.tool_calls?.length) {
-                messages.push({
+                // ── Gemini thought_signature protocol (OpenAI-compat) ────────
+                // Per Google docs: the signature lives at tool_calls[0].extra_content.google.thought_signature
+                // We must echo it back in the exact same location.
+                // For sequential multi-step, each step's first FC has its own signature.
+                const tsSig = entry.thoughtSignature
+                    || (entry as any).googleThoughtSignature
+                    || (entry.tool_calls?.[0] as any)?.extra_content?.google?.thought_signature
+                    || (entry.tool_calls?.[0] as any)?.thought_signature
+                    || (entry.tool_calls?.[0] as any)?.thoughtSignature;
+                const msg: any = {
                     role: "assistant",
                     content: typeof entry.content === "string" ? (entry.content || null) : null,
-                    tool_calls: entry.tool_calls.map((tc) => ({
-                        id: tc.id,
-                        type: "function",
-                        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-                    })),
-                });
+                    tool_calls: entry.tool_calls.map((tc, idx) => {
+                        // Per docs: only the FIRST tool call in a parallel set gets the signature
+                        const tcSig = (tc as any).extra_content?.google?.thought_signature
+                            || (tc as any).thought_signature
+                            || (tc as any).thoughtSignature
+                            || (idx === 0 ? tsSig : undefined);
+                        const tcObj: any = {
+                            id: tc.id,
+                            type: "function",
+                            function: {
+                                name: tc.name,
+                                arguments: typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments),
+                            },
+                        };
+                        // Place signature in the EXACT location Gemini expects: extra_content.google.thought_signature
+                        if (tcSig) {
+                            tcObj.extra_content = { google: { thought_signature: tcSig } };
+                        }
+                        return tcObj;
+                    }),
+                };
+                messages.push(msg);
             } else {
                 messages.push({ role: entry.role, content: entry.content });
             }
         }
 
-        messages.push({ role: "user", content: input.message });
+        if (input.message) {
+            messages.push({ role: "user", content: input.message });
+        }
 
         const usesLegacyMaxTokens = /^(gpt-3\.5|gpt-4-\d{4}|gpt-4-turbo)/.test(model);
         const payloadBody: any = {
@@ -1840,8 +2045,26 @@ export class LlmProviderManager {
             body: JSON.stringify(payloadBody),
         });
 
+        // ── LLM Trace: log outgoing request ──
+        llmTraceLog(`REQUEST → ${settings.id}/${model}`, {
+            url: `${settings.baseUrl}/chat/completions`,
+            model,
+            messageCount: messages.length,
+            hasTools: !!payloadBody.tools?.length,
+            messages: messages.map((m: any, i: number) => ({
+                idx: i,
+                role: m.role,
+                hasToolCalls: !!m.tool_calls?.length,
+                toolCallIds: m.tool_calls?.map((tc: any) => `${tc.function?.name}[${tc.id?.slice(0, 8)}]`),
+                hasExtraContent: m.tool_calls?.map((tc: any) => !!tc.extra_content?.google?.thought_signature),
+                tool_call_id: m.tool_call_id,
+                contentPreview: typeof m.content === "string" ? m.content?.slice(0, 80) : "(non-string)",
+            })),
+        });
+
         if (!response.ok) {
             const errText = await response.text().catch(() => "");
+            llmTraceLog(`ERROR ← ${settings.id}/${model} (${response.status})`, errText);
             throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
@@ -1865,11 +2088,50 @@ export class LlmProviderManager {
         const rawToolCalls = choice?.message?.tool_calls;
         const finishReason = choice?.finish_reason;
 
-        const toolCalls: LlmToolCall[] | undefined = rawToolCalls?.map((tc) => ({
-            id: tc.id,
-            name: tc.function.name,
-            arguments: safeJsonParse(tc.function.arguments),
-        }));
+        // ── Extract thought_signature per official Gemini OpenAI-compat docs ──
+        // Location: tool_calls[i].extra_content.google.thought_signature
+        // For parallel calls, only the FIRST tool_call has the signature.
+        const firstTcSig = rawToolCalls && rawToolCalls.length > 0
+            ? ((rawToolCalls[0] as any).extra_content?.google?.thought_signature
+                || (rawToolCalls[0] as any).thought_signature
+                || (rawToolCalls[0] as any).google?.thought_signature)
+            : undefined;
+
+        const thoughtSignature = (choice?.message as any)?.extra_content?.google?.thought_signature
+            || (choice?.message as any)?.google?.thought_signature
+            || (choice?.message as any)?.thought_signature
+            || firstTcSig;
+
+        const toolCalls: LlmToolCall[] | undefined = rawToolCalls?.map((tc, idx) => {
+            // Per docs: signature is on extra_content.google.thought_signature of each tool call
+            const sig = (tc as any).extra_content?.google?.thought_signature
+                || (tc as any).thought_signature
+                || (tc as any).google?.thought_signature;
+            return {
+                id: tc.id || randomToolCallId(),
+                name: tc.function.name,
+                arguments: safeJsonParse(tc.function.arguments),
+                thought_signature: sig,
+                thoughtSignature: sig,
+                // Preserve the raw extra_content so it can be echoed verbatim
+                extra_content: sig ? { google: { thought_signature: sig } } : undefined,
+            } as LlmToolCall;
+        });
+
+        // ── LLM Trace: log response ──
+        llmTraceLog(`RESPONSE ← ${settings.id}/${model}`, {
+            finishReason,
+            contentLength: content.length,
+            toolCallCount: toolCalls?.length ?? 0,
+            thoughtSignature: thoughtSignature ? `${String(thoughtSignature).slice(0, 40)}...` : null,
+            rawToolCallSignatures: rawToolCalls?.map((tc: any, i: number) => ({
+                idx: i,
+                name: tc.function?.name,
+                hasExtraContent: !!tc.extra_content,
+                extraContentSig: tc.extra_content?.google?.thought_signature ? `${String(tc.extra_content.google.thought_signature).slice(0, 40)}...` : null,
+                directSig: tc.thought_signature ? `${String(tc.thought_signature).slice(0, 40)}...` : null,
+            })),
+        });
 
         const stopReason = finishReason === "tool_calls" || finishReason === "function_call"
             ? "tool_use" as const
@@ -1886,7 +2148,8 @@ export class LlmProviderManager {
         const costUsd = computeCostUsd(settings.id, model, inputTok, outputTok);
         return {
             providerId: settings.id, model, content, toolCalls, stopReason,
-            tokensUsed: { input: inputTok, output: outputTok, costUsd }
+            tokensUsed: { input: inputTok, output: outputTok, costUsd },
+            thoughtSignature
         };
     }
 
@@ -1897,6 +2160,26 @@ export class LlmProviderManager {
     ): Promise<LlmGenerationOutput> {
         const messages: any[] = [];
 
+        const mapContentParts = (content: string | LlmContentPart[]) => {
+            if (typeof content === "string") return content;
+            return content.map(part => {
+                if (part.type === "text") return { type: "text", text: part.text };
+                if (part.type === "image_url" && part.image_url?.url.startsWith("data:")) {
+                    const [header, data] = part.image_url.url.split(",");
+                    const media_type = header.match(/:(.*?);/)?.[1] || "image/png";
+                    return {
+                        type: "image",
+                        source: {
+                            type: "base64",
+                            media_type,
+                            data,
+                        }
+                    };
+                }
+                return { type: "text", text: JSON.stringify(part) };
+            });
+        };
+
         for (const entry of input.conversation) {
             if (entry.role === "tool") {
                 // Anthropic uses tool_result blocks as user messages
@@ -1905,13 +2188,15 @@ export class LlmProviderManager {
                     content: [{
                         type: "tool_result",
                         tool_use_id: entry.tool_call_id,
-                        content: typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content),
+                        content: mapContentParts(entry.content),
                     }],
                 });
             } else if (entry.role === "assistant" && entry.tool_calls?.length) {
                 const contentBlocks: any[] = [];
-                if (typeof entry.content === "string" && entry.content) {
-                    contentBlocks.push({ type: "text", text: entry.content });
+                if (entry.content) {
+                    const mapped = mapContentParts(entry.content);
+                    if (Array.isArray(mapped)) contentBlocks.push(...mapped);
+                    else contentBlocks.push({ type: "text", text: mapped });
                 }
                 for (const tc of entry.tool_calls) {
                     contentBlocks.push({
@@ -1924,11 +2209,13 @@ export class LlmProviderManager {
                 messages.push({ role: "assistant", content: contentBlocks });
             } else {
                 const role = entry.role === "assistant" ? "assistant" : "user";
-                messages.push({ role, content: entry.content });
+                messages.push({ role, content: mapContentParts(entry.content) });
             }
         }
 
-        messages.push({ role: "user", content: input.message });
+        if (input.message) {
+            messages.push({ role: "user", content: input.message });
+        }
 
         const body: any = {
             model,
@@ -2017,7 +2304,8 @@ export class LlmProviderManager {
         input: LlmGenerationInput,
         adaptiveParams?: AdaptivePromptParams,
     ): Promise<LlmGenerationOutput> {
-        const numCtx = adaptiveParams?.numCtx ?? 4096;
+        const isBaseMode = process.env.PRISM_BASE_MODE === "true";
+        const numCtx = isBaseMode ? Math.min(adaptiveParams?.numCtx ?? 4096, 2048) : (adaptiveParams?.numCtx ?? 4096);
         const numPredict = adaptiveParams?.numPredict ?? 512;
         const temperature = adaptiveParams?.temperature ?? 0.3;
 
@@ -2044,7 +2332,9 @@ export class LlmProviderManager {
             }
         }
 
-        messages.push({ role: "user", content: input.message });
+        if (input.message) {
+            messages.push({ role: "user", content: input.message });
+        }
 
         const body: any = {
             model,
@@ -2056,6 +2346,13 @@ export class LlmProviderManager {
                 num_predict: numPredict,
             },
         };
+
+        if (isBaseMode) {
+            const isHot = await this.isOllamaModelHot(settings, model);
+            if (isHot) {
+                body.keep_alive = -1;
+            }
+        }
 
         if (input.tools?.length) {
             body.tools = input.tools.map((t) => ({
@@ -2149,7 +2446,9 @@ export class LlmProviderManager {
             }
         }
 
-        messages.push({ role: "user", content: input.message });
+        if (input.message) {
+            messages.push({ role: "user", content: input.message });
+        }
 
         const body: any = {
             model,
@@ -2216,6 +2515,22 @@ export class LlmProviderManager {
             stopReason: toolCalls?.length ? "tool_use" : "end_turn",
             tokensUsed: { input: inputTokC, output: outputTokC, costUsd: costUsdC },
         };
+    }
+
+    private async isOllamaModelHot(settings: ProviderSettings, modelName: string): Promise<boolean> {
+        try {
+            const response = await fetch(`${settings.baseUrl}/api/ps`, {
+                method: "GET",
+                signal: AbortSignal.timeout(500),
+                headers: { Accept: "application/json" },
+            });
+            if (!response.ok) return false;
+            const payload = await response.json() as { models?: Array<{ name?: string; size_vram?: number }> };
+            const residentModels = payload.models ?? [];
+            return residentModels.some(m => m.name?.toLowerCase().includes(modelName.toLowerCase()) && (m.size_vram ?? 0) > 0);
+        } catch {
+            return false;
+        }
     }
 }
 

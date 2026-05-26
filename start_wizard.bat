@@ -82,15 +82,27 @@ if %ERRORLEVEL% equ 0 (
 echo [START] Starting PRISM server...
 set PRISM_MODE=server
 set PRISM_ENV_PROFILE=dev
-if not defined PRISM_LLM_PROVIDER set PRISM_LLM_PROVIDER=ollama
-if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemma3:1b
-start "PRISM Server" npm start
+
+REM ── LLM Provider Configuration ─────────────────────────────────────────
+REM To allow database-configured providers (e.g. Google Gemini, OpenAI, etc.) 
+REM to take effect instead of forcing local Ollama, we do not override them here.
+REM If you wish to force local Ollama, uncomment the lines below:
+REM if not defined PRISM_LLM_PROVIDER set PRISM_LLM_PROVIDER=ollama
+REM if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemma3:1b
+
+echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will stay open to inspect.
+start "PRISM Server" cmd /k npm start
 
 echo [WAIT] Waiting for PRISM server on port %PRISM_DASHBOARD_PORT%...
 :wait_loop
 timeout /t 1 /nobreak >nul
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %PRISM_DASHBOARD_PORT% -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+if %errorlevel% equ 0 goto :server_ready
 netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
-if errorlevel 1 goto :wait_loop
+if %errorlevel% equ 0 goto :server_ready
+goto :wait_loop
+
+:server_ready
 
 echo [WIZARD] Launching Setup Wizard at http://localhost:%PRISM_DASHBOARD_PORT%/setup
 start "" "http://localhost:%PRISM_DASHBOARD_PORT%/setup?rerun=true"

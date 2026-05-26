@@ -4,6 +4,7 @@ import { IRouteHandler } from "./types.js";
 import { DashboardHandler } from "./dashboard-handler.js";
 import { SetupHandler } from "./setup-handler.js";
 import { ApiHandler } from "./api-handler.js";
+import { WikiHandler } from "./wiki-handler.js";
 import { AutonomousHandler } from "./autonomous-handler.js";
 import { SchedulerHandler } from "./scheduler-handler.js";
 import { WorkspaceHandler } from "./workspace-handler.js";
@@ -12,6 +13,7 @@ import { OpenAiCompatHandler } from "./openai-compat-handler.js";
 import { IamRouteHandler, isEnterpriseIamEnabled } from "./iam-handler.js";
 import { IamAdminRouteHandler } from "./iam-admin-handler.js";
 import { ScimRouteHandler, isScimEnabled } from "./scim-handler.js";
+import { LoginHandler } from "./login-handler.js";
 
 export * from "./types.js";
 export * from "./dashboard-handler.js";
@@ -25,35 +27,27 @@ export * from "./openai-compat-handler.js";
 export * from "./iam-handler.js";
 export * from "./iam-admin-handler.js";
 export * from "./scim-handler.js";
+export * from "./login-handler.js";
 
 export class Router {
   private handlers: IRouteHandler[] = [];
 
-  constructor() {
+  constructor(iam: IamRouteHandler) {
     this.handlers.push(new DashboardHandler());
     this.handlers.push(new SetupHandler());
+    this.handlers.push(new LoginHandler());
     this.handlers.push(new WorkspaceHandler());
     this.handlers.push(new SchedulerHandler());
     this.handlers.push(new TooltipsHandler());
     this.handlers.push(new ApiHandler());
+    this.handlers.push(new WikiHandler());
     this.handlers.push(new AutonomousHandler());
-    // OpenAI Assistants API compatibility surface (/v1/*). Auth is enforced
-    // by the upstream AuthGate before dispatch reaches this handler.
     this.handlers.push(new OpenAiCompatHandler());
-    // Enterprise IAM routes (/api/iam/*) — only registered when the
-    // PRISM_ENTERPRISE_IAM=on flag is set. The legacy single-admin-token
-    // auth path is the only gate when both flags are absent. SCIM
-    // shares the IAM store so user/role state is consistent.
-    if (isEnterpriseIamEnabled()) {
-      const iam = new IamRouteHandler();
-      // Admin handler MUST come before the general IAM handler so
-      // `/api/iam/admin/*` doesn't fall through to the catch-all
-      // `/api/iam/` matcher and 404.
-      this.handlers.push(new IamAdminRouteHandler({ iam }));
-      this.handlers.push(iam);
-      if (isScimEnabled()) {
-        this.handlers.push(new ScimRouteHandler({ iamStore: iam.getStore() }));
-      }
+
+    this.handlers.push(new IamAdminRouteHandler({ iam }));
+    this.handlers.push(iam);
+    if (isScimEnabled()) {
+      this.handlers.push(new ScimRouteHandler({ iamStore: iam.getStore() }));
     }
   }
 

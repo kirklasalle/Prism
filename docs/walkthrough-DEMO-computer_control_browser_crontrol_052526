@@ -1,0 +1,46 @@
+# Walkthrough - Upgraded PRISM Computer & Browser Control Demo
+
+We have completed the implementation of the upgraded **Demo Mode** targeting focused **Computer Control** and **Browser Control** actions. Clicking the **Demo Mode** button in the sidebar now lets the operator run a tailored suite of browser and computer control demos or the full suite of autonomous capabilities.
+
+## 🚀 Changes Accomplished
+
+### 🧠 Backend updates
+1. **[demonstration-engine.ts](file:///d:/Projects/Prism/src/core/runtime/demonstration-engine.ts)**:
+   - Modified `start(answers, categories)` to accept a list of categories.
+   - Filtered active demos dynamically by checking `categories.includes(d.category)` to execute only relevant demos.
+2. **[dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts)**:
+   - Updated the `POST /api/demo/start` route to parse and pass `categories` to the runtime engine.
+
+### 🎨 Frontend and Styling updates
+1. **[demo-mode.js](file:///d:/Projects/Prism/src/core/operator/public/demo-mode.js)**:
+   - Built a dynamic **"Demo Focus"** picker at the top of the Customizer overlay with options: **🖥️ Computer & Browser** (Active by default) and **🧠 Full Suite**.
+   - Implemented dynamic visibility card filtering: selecting "Computer & Browser" automatically triggers micro-animations that hide unrelated self-control prompt cards, displaying only the ones related to computer and browser control.
+   - Passed selected categories array down to the backend on submission.
+2. **[demo-mode.css](file:///d:/Projects/Prism/src/core/operator/public/demo-mode.css)**:
+   - Appended modern premium glassmorphism tabs, subtle hover effects, active border states, and smooth slide/fade card transition animations.
+
+---
+
+## 🎨 Visual Verification
+
+### 1. Interactive Demo Focus Picker
+Selecting the **Computer & Browser** focus immediately hides non-relevant categories (like Swarm or Guardian), leaving a pristine subset of choices for the operator:
+
+![Interactive Demo Focus Selection](C:\Users\kirkl\.gemini\antigravity\brain\2036b678-8219-42f5-8318-e43d2806784d\click_feedback_tab.png)
+
+### 2. Launching Scoped Demos
+Clicking the green **Launch Demo** button triggers a clean, focused demonstration:
+
+![Launching Scoped Demo Suite](C:\Users\kirkl\.gemini\antigravity\brain\2036b678-8219-42f5-8318-e43d2806784d\click_feedback_launch.png)
+
+---
+
+## 🧪 Validation & Test Results
+
+- **Build Quality**: Verified tsc compiles successfully:
+  ```powershell
+  npm run build
+  ```
+  *Result: Exit code 0 (Success).*
+- **Functional Check**: Conducted automated browser testing to verify the toggle functionality, dynamic DOM cards filtering, and successful Demo launch on standard API routes.
+  *Result: Succeeded.*

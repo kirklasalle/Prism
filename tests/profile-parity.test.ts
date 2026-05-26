@@ -17,6 +17,8 @@ import {
     BUSINESS_PROFILE,
 } from "../src/core/policy/execution-profiles.js";
 
+const SHELL = process.platform === "win32" ? "cmd.exe" : "bash";
+
 /**
  * Profile Parity Integration Tests
  *
@@ -74,13 +76,13 @@ describe("Profile Parity Integration Tests", function () {
             );
 
             const sessionIndividual = await adapterIndividual.startSession(
-                "bash",
+                SHELL,
                 process.cwd(),
                 "individual-user"
             );
 
             const sessionBusiness = await adapterBusiness.startSession(
-                "bash",
+                SHELL,
                 process.cwd(),
                 "business-user"
             );
@@ -90,8 +92,8 @@ describe("Profile Parity Integration Tests", function () {
             assert.ok(sessionBusiness.session_id.length > 10);
             assert.strictEqual(sessionIndividual.state, "idle");
             assert.strictEqual(sessionBusiness.state, "idle");
-            assert.strictEqual(sessionIndividual.shell, "bash");
-            assert.strictEqual(sessionBusiness.shell, "bash");
+            assert.strictEqual(sessionIndividual.shell, SHELL);
+            assert.strictEqual(sessionBusiness.shell, SHELL);
         });
 
         it("classifies commands identically under both profiles", async () => {
@@ -427,8 +429,8 @@ describe("Profile Parity Integration Tests", function () {
             );
 
             // Create sessions
-            await adapterIndividual.startSession("bash", process.cwd(), "user1");
-            await adapterBusiness.startSession("bash", process.cwd(), "user2");
+            await adapterIndividual.startSession(SHELL, process.cwd(), "user1");
+            await adapterBusiness.startSession(SHELL, process.cwd(), "user2");
 
             // Check event counts
             const eventsIndividual = busIndividual.listEvents();

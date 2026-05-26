@@ -140,12 +140,23 @@ export class AgentPool {
     private llmDelegate: LlmDelegate | null;
     private onDispatch?: (agentId: string) => void;
     private onDispatchComplete?: (agentId: string, result: SubAgentResult) => void;
+    private josephineMode = true;
 
     constructor(delegate: LlmDelegate | null = null) {
         this.llmDelegate = delegate;
         for (const agent of DEFAULT_AGENTS) {
             this.agents.set(agent.agentId, agent);
         }
+    }
+
+    /** Set whether Josephine Mode is enabled (default: true). */
+    setJosephineMode(enabled: boolean): void {
+        this.josephineMode = enabled;
+    }
+
+    /** Get whether Josephine Mode is enabled. */
+    isJosephineMode(): boolean {
+        return this.josephineMode;
     }
 
     /** Provide or replace the LLM delegate. Call this after construction if
@@ -227,7 +238,7 @@ export class AgentPool {
         }
 
         // ── Build prompt and generate ────────────────────────────────────────
-        const systemPrompt = buildSystemPrompt(agent, request.context);
+        const systemPrompt = this.buildSystemPrompt(agent, request.context);
 
         this.onDispatch?.(agent.agentId);
 
@@ -262,18 +273,28 @@ export class AgentPool {
             return fail;
         }
     }
+
+    private buildSystemPrompt(agent: SubAgentDefinition, extraContext?: string): string {
+        const parts: string[] = [];
+        
+        if (this.josephineMode) {
+            parts.push(
+                `[COGNITIVE DIRECTIVE: JOSEPHINE MODE ENABLED]\n` +
+                `1. Absolute Precision: You are Josephine, the hallmark of flawless execution. You produce fully complete, ready-to-use solutions with zero placeholders, zero hand-waving, and fully realized logic.\n` +
+                `2. Proactive Rigor & Verification: Self-correct intermediate thoughts. Verify all edge cases, imports, syntax, and safety policies before returning your final answer.\n` +
+                `3. Premium Delight: Communicate with warm, helpful, encouraging, yet highly professional and crisp clarity. Emphasize micro-optimizations, elegant structures, and premium typography.`
+            );
+        }
+
+        if (agent.systemContext) parts.push(agent.systemContext);
+        if (extraContext?.trim()) parts.push(`Context:\n${extraContext.trim()}`);
+        return parts.join("\n\n");
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
-
-function buildSystemPrompt(agent: SubAgentDefinition, extraContext?: string): string {
-    const parts: string[] = [];
-    if (agent.systemContext) parts.push(agent.systemContext);
-    if (extraContext?.trim()) parts.push(`Context:\n${extraContext.trim()}`);
-    return parts.join("\n\n");
-}
 
 function failure(
     traceId: string,

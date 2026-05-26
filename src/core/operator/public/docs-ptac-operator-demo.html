@@ -220,6 +220,70 @@ $env:PRISM_PTAC_RECORD_VIDEO = "1"
             rel="noopener">docs/PTAC_OPERATOR_DEMO_GUIDE.md</a>.
     </p>
 
+    <hr style="border: 0; border-top: 1px solid #30363d; margin: 32px 0;">
+
+    <h1>🛡️ Sovereign Sentinel Hyper-Proxy (SSHP)</h1>
+    <p><span class="pill" style="background: #2da44e33; color: #56d364;">active</span> Programmatic visual redactor, DOM scrubber, and Sacred Covenant integrity scanner.</p>
+    
+    <h2>Security Features</h2>
+    <ul>
+        <li><strong>Visual PII Masking</strong>: Draws high-accuracy black rectangles directly onto screenshots when sensitive elements are focused (e.g. passwords, card CVVs, private keys).</li>
+        <li><strong>DOM Sanitization</strong>: Scans and wipes email formats, credit cards, and SSNs from HTML DOM trees before models can ingest them.</li>
+        <li><strong>Sacred Covenant Enforcement</strong>: Pre-scans actions (clicks, types, navigations) to block unsafe URL protocols (e.g., <code>file:///etc/passwd</code>) or destructive evaluations (e.g., <code>localStorage.clear()</code>).</li>
+    </ul>
+
+    <h2>Configuration API</h2>
+    <table>
+        <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td><code>/api/preferences/sshp-redaction</code></td>
+            <td>Toggle SSHP PII redaction on/off dynamically. Default: <code>enabled: true</code>.</td>
+        </tr>
+    </table>
+
+    <hr style="border: 0; border-top: 1px solid #30363d; margin: 32px 0;">
+
+    <h1>🤝 Cognitive Session Handoff (CSH) "Baton Pass"</h1>
+    <p><span class="pill" style="background: #a371f733; color: #d3b3fc;">active</span> Zero-trust Human-in-the-Loop context transfer protocol.</p>
+
+    <h2>FSM Lifecycle & State Flow</h2>
+    <p>When encountering security walls, CAPTCHAs, or operator approval prompts, the agent transitions to <code>handing_off</code> or <code>suspended</code>:</p>
+    <pre>┌───────────────┐        Handoff Trigger        ┌───────────────┐
+│    running    ├──────────────────────────────►│  handing_off  │
+└───────▲───────┘                               └───────┬───────┘
+        │                                               │
+        │               Operator Resolves               │
+        └───────────────────────────────────────────────▼</pre>
+
+    <h2>Interactive Handshake Endpoints</h2>
+    <table>
+        <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td><code>/api/v1/autonomous/session/handoff</code></td>
+            <td>Triggers serialization of cookies, <code>localStorage</code>, <code>sessionStorage</code>, and reason traces.</td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td><code>/api/v1/autonomous/session/resume</code></td>
+            <td>Restores the serialized state into a fresh tab and triggers an FSM resume.</td>
+        </tr>
+        <tr>
+            <td>GET</td>
+            <td><code>/api/v1/autonomous/session/pending</code></td>
+            <td>Lists all active pending handoffs awaiting human interaction.</td>
+        </tr>
+    </table>
+
 </body>
 
 </html>

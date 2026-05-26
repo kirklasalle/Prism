@@ -196,6 +196,25 @@ export class CharacterAccountabilityManager {
     }
 
     /**
+     * Delete an assignment completely from the store.
+     */
+    deleteAssignment(assignmentId: string): boolean {
+        const existing = this.store.get(assignmentId);
+        if (!existing) return false;
+
+        this.store.delete(assignmentId);
+
+        this.emitLifecycleEvent(
+            "character_accountability.deleted",
+            existing,
+            "succeeded",
+            {}
+        );
+
+        return true;
+    }
+
+    /**
      * Scan all active assignments and revoke any that have at least one scope expired.
      * Returns the list of assignments that were revoked.
      */

@@ -28,6 +28,9 @@ export interface ComputerUseBackend {
     /** Synthesize a click at the current pointer location. */
     click(button: "left" | "right" | "double"): Promise<void>;
 
+    /** Synthesize a mouse drag from (x1, y1) to (x2, y2). */
+    mouseDrag(x1: number, y1: number, x2: number, y2: number): Promise<void>;
+
     /** Type a Unicode string into the focused window. */
     typeText(text: string): Promise<void>;
 

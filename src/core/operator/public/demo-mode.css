@@ -183,3 +183,47 @@
 #demo-status-pill[style*="accent"] {
   animation: demo-pulse 2s ease-in-out infinite;
 }
+
+/* Demo Scope Selector */
+.demo-scope-picker {
+  display: flex;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.demo-scope-option {
+  flex: 1;
+  text-align: center;
+  padding: 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted, #8b949e);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.demo-scope-option:hover {
+  color: var(--fg, #c9d1d9);
+  background: rgba(255, 255, 255, 0.04);
+}
+.demo-scope-option.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.15) 0%, rgba(163, 113, 247, 0.15) 100%);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  box-shadow: 0 0 16px rgba(88, 166, 255, 0.12);
+}
+.demo-scope-option span.icon {
+  font-size: 16px;
+}
+.demo-scope-option span.label-text {
+  letter-spacing: 0.02em;
+}

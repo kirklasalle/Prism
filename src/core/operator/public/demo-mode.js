@@ -7,6 +7,7 @@
   let demoState = null;
   let ws = null;
   let definitions = null;
+  let selectedScope = 'comp-browser';
 
   // ── DOM & Auth Helpers ───────────────────────────────────────────────────
   function $(id) { return document.getElementById(id); }
@@ -96,7 +97,15 @@
     const seen = new Set();
     for (const demo of (definitions.demos || [])) {
       for (const p of (demo.prompts || [])) {
-        if (!seen.has(p.id)) { seen.add(p.id); allPrompts.push({ ...p, demoTitle: demo.title, demoIcon: demo.icon }); }
+        if (!seen.has(p.id)) {
+          seen.add(p.id);
+          allPrompts.push({
+            ...p,
+            demoTitle: demo.title,
+            demoIcon: demo.icon,
+            demoCategory: demo.category
+          });
+        }
       }
     }
 
@@ -105,8 +114,23 @@
     let html = '<div style="margin-bottom:12px;font-size:13px;color:var(--fg,#c9d1d9)">' +
       '<strong>🎯 Customize Your Demo</strong><br>' +
       '<span style="font-size:11px;color:var(--muted,#8b949e)">Choose options below to personalize the demonstration. ' +
-      'These choices shape what Prism does during each demo — like Mad Libs for AI! ' +
-      'Some steps remain AI-controlled for the full experience.</span></div>';
+      'These choices shape what Prism does during each demo — like Mad Libs for AI!</span></div>';
+
+    // Premium Scope Picker
+    html += `
+      <div class="demo-scope-picker">
+        <div id="scope-btn-comp-browser" class="demo-scope-option ${selectedScope === 'comp-browser' ? 'active' : ''}" onclick="window.prismDemo.setScope('comp-browser')">
+          <span class="icon">🖥️</span>
+          <span class="label-text">Computer & Browser</span>
+        </div>
+        <div id="scope-btn-full" class="demo-scope-option ${selectedScope === 'full' ? 'active' : ''}" onclick="window.prismDemo.setScope('full')">
+          <span class="icon">🧠</span>
+          <span class="label-text">Full Suite</span>
+        </div>
+      </div>
+    `;
+
+    html += '<div id="demo-prompt-cards-container">';
 
     for (const p of allPrompts) {
       const optionsHtml = p.options.map(o =>
@@ -116,13 +140,15 @@
         </label>`
       ).join('');
 
-      html += `<div style="margin:10px 0;padding:10px;background:var(--card-bg,#161b22);border-radius:6px;border:1px solid var(--border,#30363d)">
+      html += `<div class="demo-prompt-card" data-category="${esc(p.demoCategory)}" style="margin:10px 0;padding:10px;background:var(--card-bg,#161b22);border-radius:6px;border:1px solid var(--border,#30363d);transition:all 0.25s ease-in-out;">
         <div style="font-size:12px;font-weight:600;margin-bottom:4px">${esc(p.demoIcon)} ${esc(p.demoTitle)}</div>
         <div style="font-size:12px;font-weight:500;margin-bottom:2px">${esc(p.label)}</div>
         <div style="font-size:11px;color:var(--muted,#8b949e);margin-bottom:6px">${esc(p.description)}</div>
         ${optionsHtml}
       </div>`;
     }
+
+    html += '</div>';
 
     html += '<button class="demo-btn demo-btn-primary" onclick="window.prismDemo.submitPrompts()" style="width:100%;margin-top:8px">🚀 Launch Demo with These Choices</button>';
 
@@ -132,6 +158,11 @@
     $('demo-narration').textContent = 'Configure your demo experience below...';
     $('demo-status-pill').textContent = 'Configuring';
     $('demo-status-pill').style.color = 'var(--warn,#d29922)';
+
+    // Trigger initial category filter based on selectedScope
+    if (window.prismDemo && window.prismDemo.setScope) {
+      window.prismDemo.setScope(selectedScope);
+    }
   }
 
   function collectPromptAnswers() {
@@ -147,9 +178,12 @@
   // ── API Calls ───────────────────────────────────────────────────────────
   async function startDemo(answers) {
     try {
+      const categories = selectedScope === 'comp-browser'
+        ? ['browser-control', 'computer-control']
+        : [];
       await authFetch('/api/v1/demo/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers, categories }),
       });
       showRunningUI();
     } catch (e) {
@@ -263,6 +297,44 @@
     });
   }
 
+  function setScope(scope) {
+    selectedScope = scope;
+    const compBrowserBtn = $('scope-btn-comp-browser');
+    const fullBtn = $('scope-btn-full');
+    if (compBrowserBtn && fullBtn) {
+      if (scope === 'comp-browser') {
+        compBrowserBtn.classList.add('active');
+        fullBtn.classList.remove('active');
+      } else {
+        fullBtn.classList.add('active');
+        compBrowserBtn.classList.remove('active');
+      }
+    }
+    
+    // Filter prompt cards dynamically
+    const cards = document.querySelectorAll('.demo-prompt-card');
+    cards.forEach(card => {
+      const cat = card.getAttribute('data-category');
+      if (scope === 'comp-browser') {
+        if (cat === 'computer-control' || cat === 'browser-control') {
+          card.style.display = 'block';
+          void card.offsetHeight;
+          card.style.opacity = '1';
+          card.style.transform = 'scale(1)';
+        } else {
+          card.style.display = 'none';
+          card.style.opacity = '0';
+          card.style.transform = 'scale(0.95)';
+        }
+      } else {
+        card.style.display = 'block';
+        void card.offsetHeight;
+        card.style.opacity = '1';
+        card.style.transform = 'scale(1)';
+      }
+    });
+  }
+
   // ── Keyboard Shortcuts ──────────────────────────────────────────────────
   document.addEventListener('keydown', (e) => {
     if (!$('prism-demo-overlay')) return;
@@ -282,6 +354,9 @@
     submitPrompts() {
       const answers = collectPromptAnswers();
       startDemo(answers);
+    },
+    setScope(scope) {
+      setScope(scope);
     },
     async pause() { await authFetch('/api/v1/demo/pause', { method: 'POST' }); },
     async resume() { await authFetch('/api/v1/demo/resume', { method: 'POST' }); },

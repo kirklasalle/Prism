@@ -93,6 +93,17 @@ export function computePanelSummary(kind) {
 }
 
 export function renderPanelSummaries() {
+  // Skills panel summary
+  var skillsSummaryEl = document.getElementById('skillsPanel-summary');
+  if (skillsSummaryEl) {
+    if (state.skillsPanelCollapsed) {
+      var skillCount = state.skills ? state.skills.length : 15;
+      skillsSummaryEl.innerHTML = '<span class="tp-panel-badge badge-healthy" style="background:rgba(163,113,247,0.15);color:#a371f7;border:1px solid rgba(163,113,247,0.3);">\u26A1 ' + skillCount + ' skill' + (skillCount !== 1 ? 's' : '') + ' active</span>';
+      skillsSummaryEl.style.display = '';
+    } else {
+      skillsSummaryEl.style.display = 'none';
+    }
+  }
   // Tools panel summary
   var toolsSummaryEl = document.getElementById('toolsPanel-summary');
   if (toolsSummaryEl) {
@@ -436,7 +447,7 @@ export async function refreshAllToolStatus() {
 // Listen for collapse toggle events to refresh summaries
 document.addEventListener('panel-collapse-toggle', function (e) {
   var detail = e.detail || {};
-  if (detail.panelKey === 'toolsPanel' || detail.panelKey === 'pluginsPanel' || detail.panelKey === 'utilitiesPanel' || detail.panelKey === 'diagnosticsPanel' || detail.panelKey === 'agentDiagnosticsPanel') {
+  if (detail.panelKey === 'skillsPanel' || detail.panelKey === 'toolsPanel' || detail.panelKey === 'pluginsPanel' || detail.panelKey === 'utilitiesPanel' || detail.panelKey === 'diagnosticsPanel' || detail.panelKey === 'agentDiagnosticsPanel') {
     renderPanelSummaries();
   }
 });
@@ -708,7 +719,8 @@ export
     { name: 'impressioncore-goliath', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Large-scale data pipeline orchestration \u2014 batch ETL, partitioned processing, and backpressure control', status: 'Active', trust: 'high', port: 8202 },
     { name: 'impressioncore-vrgc', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Visual Rendering & Graphics Compute \u2014 image generation, chart rendering, and GPU-accelerated transforms', status: 'Active', trust: 'high', port: 8203 },
     { name: 'impressioncore-dpa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Document Processing & Analytics \u2014 PDF extraction, OCR, and document classification', status: 'Active', trust: 'high', port: 8204 },
-    { name: 'web-search-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'Web search provider \u2014 query routing, result aggregation, and safe content filtering', status: 'Active', trust: 'medium', port: 8300 }
+    { name: 'web-search-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'Web search provider \u2014 query routing, result aggregation, and safe content filtering', status: 'Active', trust: 'medium', port: 8300 },
+    { name: 'loc-mcp-server', group: 'In-Repo', type: 'Python MCP Server', desc: 'Library of Congress research engine \u2014 digital catalog, Chronicling America newspapers, and legislative tracker', status: 'Active', trust: 'high', port: 8301 }
   ];
 
   var groupIcon = { 'In-Repo': '\uD83D\uDCC1', 'ImpressionCore Suite': '\uD83E\uDDE9' };
@@ -3222,7 +3234,7 @@ export function renderDemoDiagnosticsPanel() {
 var _pluginHealthPollTimer = null;
 
 /** Plugin names to poll automatically � matches the static plugin list in renderPluginsPanel(). */
-var _KNOWN_PLUGINS = ['ids-mcp', 'impressioncore-eds', 'impressioncore-ipa', 'impressioncore-goliath', 'impressioncore-vrgc', 'impressioncore-dpa', 'web-search-mcp'];
+var _KNOWN_PLUGINS = ['ids-mcp', 'impressioncore-eds', 'impressioncore-ipa', 'impressioncore-goliath', 'impressioncore-vrgc', 'impressioncore-dpa', 'web-search-mcp', 'loc-mcp-server'];
 
 /** Poll health for all known plugins via POST /api/v1/plugins/{name}/health. */
 export function pollPluginHealth() {
@@ -3259,4 +3271,99 @@ export function stopPluginHealthPolling() {
     _pluginHealthPollTimer = null;
   }
 }
+
+export function renderSkillsPanel() {
+  var container = document.getElementById('skills-panel');
+  if (!container) return;
+
+  // If skills aren't loaded yet, trigger loading
+  if (!state.skills && !state.loadingSkills) {
+    state.skills = [];
+    state.loadingSkills = true;
+    request('/api/skills')
+      .then(function (res) {
+        state.skills = res.skills || [];
+        state.loadingSkills = false;
+        renderSkillsPanel();
+        renderPanelSummaries();
+      })
+      .catch(function (err) {
+        state.loadingSkills = false;
+        console.error('Failed to load skills:', err);
+      });
+  }
+
+  if (state.loadingSkills) {
+    container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">\u23F3 Loading PRISM SOTA Skills Registry...</div>';
+    return;
+  }
+
+  var skills = state.skills || [];
+
+  if (skills.length === 0) {
+    container.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">No SOTA skills currently registered.</div>';
+    return;
+  }
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">';
+  html += '<span class="muted">' + skills.length + ' SOTA skill workflows registered.</span></div>';
+
+  for (var i = 0; i < skills.length; i++) {
+    var sk = skills[i];
+    var isExpanded = state.expandedSkillId === sk.name;
+    var safeId = sk.name.replace(/[^a-zA-Z0-9]/g, '_');
+
+    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + ' tp-healthy" style="margin-bottom:6px;">';
+    
+    /* Header */
+    html += '<div class="tp-card-head" onclick="toggleItemExpand(\'skill\', \'' + escapeHtml(sk.name) + '\')">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;">';
+    html += '<span class="tp-card-name">⚡ ' + escapeHtml(sk.name) + '</span>';
+    html += '<span class="tp-status-dot green"></span>';
+    html += '<span class="ps-badge" style="background:rgba(163,113,247,0.12);color:#a371f7;font-size:10px;">' + escapeHtml(sk.group) + '</span>';
+    html += '</div>';
+    html += '<div class="tp-card-desc">' + escapeHtml(sk.description || sk.desc) + '</div>';
+    html += '</div>';
+    html += '<div class="tp-card-badges">';
+    html += '<span class="ps-badge" style="background:rgba(126,207,126,0.15);color:#7ecf7e;">Active</span>';
+    html += '</div></div>';
+
+    /* Expanded body */
+    html += '<div class="tp-card-body">';
+    html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Execution Parameters</div>';
+    html += '<div style="font-size:11px;color:rgba(255,255,255,0.7);line-height:1.6;">';
+    html += '<strong>Engine:</strong> PRISM SOTA Skills Engine (SQLite + Spectrum Refraction)<br>';
+    html += '<strong>ID:</strong> <code>' + escapeHtml(sk.id || '') + '</code><br>';
+    html += '<strong>Version:</strong> ' + escapeHtml(sk.version || '1.0.0') + '<br>';
+    html += '<strong>Rigor Level:</strong> Josephine High-Fidelity & Self-Correcting<br>';
+    html += '<strong>State Store:</strong> SQLite tables in `prism-activity.db`<br>';
+    html += '<strong>Required Authority:</strong> <span class="ps-badge" style="background:rgba(235,166,90,0.12);color:#eba65a;font-size:10px;">' + escapeHtml(sk.tier || 'tier2_conditional') + '</span><br>';
+    if (sk.tags && sk.tags.length > 0) {
+      html += '<strong>Tags:</strong> ' + sk.tags.map(function(t) { return '<span class="ps-badge" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);font-size:10px;margin-right:4px;">' + escapeHtml(t) + '</span>'; }).join('') + '<br>';
+    }
+    html += '</div></div>';
+
+    // If workflow has steps, list them!
+    if (sk.workflow && sk.workflow.steps && sk.workflow.steps.length > 0) {
+      html += '<div class="tp-section" style="margin-top:8px;"><div class="tp-section-title">\uD83D\uDCCB Workflow Steps (' + sk.workflow.steps.length + ')</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">';
+      for (var j = 0; j < sk.workflow.steps.length; j++) {
+        var step = sk.workflow.steps[j];
+        html += '<div style="font-size:11px;color:rgba(255,255,255,0.8);background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;border-left:2px solid #a371f7;">';
+        html += '<strong>' + escapeHtml(step.name || step.id) + '</strong> (' + escapeHtml(step.tool || '') + ')<br>';
+        if (step.description) {
+          html += '<span class="muted">' + escapeHtml(step.description) + '</span>';
+        }
+        html += '</div>';
+      }
+      html += '</div></div>';
+    }
+
+    html += '</div></div>';
+  }
+
+  container.innerHTML = html;
+}
+
 

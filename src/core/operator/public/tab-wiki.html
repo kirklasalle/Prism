@@ -1,0 +1,34 @@
+<div style="display: grid; grid-template-columns: 280px 1fr; gap: 16px; height: calc(100vh - 120px); align-items: stretch; overflow: hidden; margin-top: 10px;">
+  <!-- Sidebar Panel -->
+  <aside class="panel stack" style="padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: rgba(30, 41, 59, 0.25); border-right: 1px solid var(--border);">
+    <div style="font-weight: 700; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+      <span>📚</span> Prism Wiki Index
+    </div>
+    <input id="wiki-search" type="text" placeholder="Search wiki & docs..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px;" oninput="filterWikiDocs(this.value)">
+    <hr style="border: none; border-top: 1px solid var(--border); margin: 4px 0;">
+    <div id="wiki-sidebar-list" style="display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1;">
+      <div class="muted" style="font-size: 12px; text-align: center; padding-top: 16px;">Loading documents...</div>
+    </div>
+  </aside>
+
+  <!-- Content Viewport -->
+  <section class="panel" style="padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: rgba(15, 23, 42, 0.15);">
+    <div id="wiki-header" style="border-bottom: 1px solid var(--border); padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+      <div>
+        <h2 id="wiki-title" style="margin: 0; font-size: 18px; color: var(--text); font-weight: 700;">Welcome to PRISM Wiki Portal</h2>
+        <span id="wiki-meta" class="muted" style="font-size: 11px; margin-top: 3px; display: inline-block;">Select a guide or article from the sidebar to begin reading.</span>
+      </div>
+      <button class="primary-button" onclick="refreshWikiList()" style="font-size: 11px; padding: 4px 10px;">🔄 Refresh List</button>
+    </div>
+    
+    <article id="wiki-viewport" class="stack" style="flex: 1; font-size: 13.5px; line-height: 1.6; color: #cbd5e1; overflow-y: auto; padding-right: 8px;">
+      <div class="stack" style="text-align: center; padding: 64px 20px; align-items: center; justify-content: center; gap: 12px; height: 100%;">
+        <span style="font-size: 48px;">🛡️</span>
+        <h3 style="margin: 0; color: var(--text); font-size: 18px; font-weight: 700;">Dynamic Information Console</h3>
+        <p class="muted" style="max-width: 480px; font-size: 12px; margin: 0 auto; line-height: 1.5;">
+          Browse user guides, developer specifications, security policies, and micro support desk files directly in the operator console. Supports rich vector graphs and SVG trace mappings of active systems.
+        </p>
+      </div>
+    </article>
+  </section>
+</div>

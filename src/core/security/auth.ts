@@ -91,13 +91,23 @@ export class AuthGate {
         // Check Authorization header
         const authHeader = req.headers["authorization"];
         if (!authHeader) {
-            // Also accept token via query param for WebSocket upgrade
-            const qIdx = url.indexOf("?");
-            if (qIdx >= 0) {
-                const params = new URLSearchParams(url.slice(qIdx + 1));
-                const qToken = params.get("token");
-                if (qToken && this.safeCompare(qToken, this.token)) {
-                    return { authenticated: true };
+            // Accept token via query param only when explicitly allowed (dev mode),
+            // OR for WebSocket/SSE/media browser-initiated connections where custom headers are impossible.
+            const isBrowserTransport =
+                urlPath.startsWith("/ws") ||
+                urlPath.startsWith("/api/chat/stream") ||
+                urlPath.startsWith("/api/v1/chat/stream") ||
+                urlPath.startsWith("/api/computer/screengrab/file/") ||
+                urlPath.startsWith("/api/v1/computer/screengrab/file/");
+            const allowQueryToken = process.env.PRISM_ALLOW_QUERY_TOKEN === "1" || isBrowserTransport;
+            if (allowQueryToken) {
+                const qIdx = url.indexOf("?");
+                if (qIdx >= 0) {
+                    const params = new URLSearchParams(url.slice(qIdx + 1));
+                    const qToken = params.get("token");
+                    if (qToken && this.safeCompare(qToken, this.token)) {
+                        return { authenticated: true };
+                    }
                 }
             }
             return { authenticated: false, reason: "Missing Authorization header" };

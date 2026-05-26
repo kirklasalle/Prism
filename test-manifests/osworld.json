@@ -1,0 +1,19 @@
+[
+    {
+        "id": "osworld-suite",
+        "suite": "osworld",
+        "description": "Runs the full OSWorld benchmark suite.",
+        "profile": "host",
+        "steps": [
+            {
+                "id": "osworld-exec",
+                "kind": "osworld",
+                "description": "Execute the OSWorld benchmark harness.",
+                "args": {
+                    "max_steps_per_task": 100,
+                    "max_duration_per_task_ms": 300000
+                }
+            }
+        ]
+    }
+]

@@ -168,6 +168,12 @@ export class CharacterAccountabilityStore {
         return this.toAssignment(row);
     }
 
+    delete(assignmentId: string): void {
+        this.db.prepare(`
+            DELETE FROM character_assignments WHERE assignment_id = :assignmentId
+        `).run({ assignmentId });
+    }
+
     list(filter: CharacterAssignmentFilter = {}): CharacterAssignment[] {
         const conditions: string[] = [];
         const params: Record<string, string> = {};

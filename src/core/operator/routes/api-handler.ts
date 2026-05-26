@@ -16,14 +16,15 @@ export class ApiHandler implements IRouteHandler {
   match(req: IncomingMessage): boolean {
     const url = req.url ?? "";
     const method = req.method?.toUpperCase() ?? "GET";
-    // Only intercept the specific routes this handler owns — do NOT use a broad prefix
-    // so that other modular handlers and the inline DashboardService routes remain reachable.
-    return method === "GET" && (
+    if (method === "GET" && (
       url === "/api/health" || url === "/health" ||
       url === "/api/health/extended" ||
       url === "/api/status" ||
-      url === "/api/system/adapters"
-    );
+      url === "/api/system/adapters" ||
+      url === "/api/skills"
+    )) return true;
+    if (method === "POST" && url === "/api/mode") return true;
+    return false;
   }
 
   async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
@@ -31,6 +32,36 @@ export class ApiHandler implements IRouteHandler {
     const rawUrl = req.url ?? "";
     const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
     const method = req.method?.toUpperCase() ?? "GET";
+
+    if (method === "GET" && url === "/api/skills") {
+      const skillsEngine = service.getSkillsEngine();
+      if (!skillsEngine) {
+        this.json(res, 503, { error: "Skills engine not available" });
+        return;
+      }
+      const loaded = skillsEngine.getLoadedSkills();
+      const skills = loaded.map(sk => ({
+        name: sk.name,
+        id: sk.id,
+        version: sk.version,
+        description: sk.description,
+        tags: sk.tags,
+        tier: sk.governance?.min_policy_tier || "tier2_conditional",
+        workflow: {
+          steps: (sk.workflow?.steps || []).map(st => ({
+            id: st.id,
+            name: st.name,
+            tool: st.tools?.join(", ") || "",
+            action: st.action
+          }))
+        },
+        group: sk.tags[0] || "General",
+        status: "Active",
+        trust: "high"
+      }));
+      this.json(res, 200, { skills });
+      return;
+    }
 
     if (method === "GET" && (url === "/api/health" || url === "/health")) {
       const dbOk = this.checkDb(service);
@@ -105,6 +136,7 @@ export class ApiHandler implements IRouteHandler {
         pendingApprovals: service.getApprovalQueue().list().length,
         dbSizeMb: dbSize,
         nodeEnv: process.env.NODE_ENV ?? "development",
+        baseMode: process.env.PRISM_BASE_MODE === "true",
       });
       return;
     }
@@ -119,6 +151,31 @@ export class ApiHandler implements IRouteHandler {
         eventCount: events.length,
         lastEvent: events[events.length - 1] ?? null,
         workspaceRoot: resolveWorkspaceRoot(),
+        baseMode: process.env.PRISM_BASE_MODE === "true",
+      });
+      return;
+    }
+
+    if (method === "POST" && url === "/api/mode") {
+      let body = "";
+      req.on("data", chunk => { body += chunk; });
+      req.on("end", () => {
+        try {
+          const parsed = JSON.parse(body) as { baseMode?: boolean };
+          const targetBaseMode = parsed.baseMode ?? false;
+          process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
+          
+          console.log(`[PRISM][paradigm] Paradigm dynamically switched by operator. baseMode = ${targetBaseMode}`);
+          
+          const guardian = service.getGuardianAgent();
+          if (guardian) {
+            guardian.syncModeCatalog();
+          }
+          
+          this.json(res, 200, { ok: true, baseMode: targetBaseMode });
+        } catch (e: any) {
+          this.json(res, 400, { error: e.message || "Invalid payload" });
+        }
       });
       return;
     }

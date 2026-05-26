@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>PRISM Operator Dashboard Walkthrough</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            max-width: 960px;
+            margin: 0 auto;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            color: #c9d1d9;
+            background: #0d1117;
+        }
+
+        h1 {
+            color: #ffffff;
+            font-size: 28px;
+            margin-top: 0;
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h2 {
+            color: #58a6ff;
+            font-size: 18px;
+            margin-top: 36px;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 8px;
+        }
+
+        h3 {
+            color: #ffffff;
+            font-size: 15px;
+            margin-top: 24px;
+        }
+
+        p, ul, ol {
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        code {
+            background: #161b22;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-family: "Cascadia Code", Consolas, monospace;
+            font-size: 13px;
+            color: #ff7b72;
+        }
+
+        pre {
+            background: #161b22;
+            padding: 14px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            overflow-x: auto;
+            font-family: "Cascadia Code", Consolas, monospace;
+            font-size: 13px;
+            color: #79c0ff;
+        }
+
+        .step-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .step-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #1f6feb33;
+            color: #58a6ff;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid #1f6feb55;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #23863622;
+            color: #56d364;
+            border: 1px solid #23863644;
+        }
+
+        .tab-box {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .tab-item {
+            background: rgba(33, 38, 45, 0.4);
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .tab-title {
+            font-weight: bold;
+            color: #ffffff;
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        .state-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            background: #161b22;
+            padding: 20px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 20px 0;
+        }
+
+        .state-node {
+            background: #21262d;
+            border: 1px solid #30363d;
+            padding: 8px 16px;
+            border-radius: 4px;
+            color: #ffffff;
+        }
+
+        .state-node.active {
+            background: #1f6feb22;
+            border-color: #1f6feb;
+            color: #58a6ff;
+            box-shadow: 0 0 10px rgba(31, 111, 235, 0.2);
+        }
+
+        .arrow {
+            color: #8b949e;
+        }
+
+        a {
+            color: #58a6ff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🛡️ PRISM Operator Dashboard Walkthrough</h1>
+    <p><span class="pill">Dashboard UI Manual</span> Step-by-step walkthrough for configuring Sovereign Sentinel (SSHP) and managing Cognitive Session Handoff (CSH) "Baton Pass" loops.</p>
+
+    <h2>1. Dashboard Tab Layout Reference</h2>
+    <p>Navigating the PRISM dashboard is partitioned into four primary operator screens:</p>
+    
+    <div class="tab-box">
+        <div class="tab-item">
+            <div class="tab-title">💬 Chat Tab</div>
+            <div style="font-size: 12px; color: #8b949e;">Central natural language prompt interface to task agents.</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-title">🖥️ Computer Tab</div>
+            <div style="font-size: 12px; color: #8b949e;">Local hardware telemetry, live Vision Framebuffer, terminal console, and demos.</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-title">🌐 Browser Tab</div>
+            <div style="font-size: 12px; color: #8b949e;">Zero-trust embedded browser with active security proxy settings.</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-title">🤖 Agentic Tab</div>
+            <div style="font-size: 12px; color: #8b949e;">Tracks goal plans, live execution outputs, and human handoff cues.</div>
+        </div>
+    </div>
+
+    <h2>2. Step-by-Step Operator Playbook</h2>
+
+    <div class="step-card">
+        <div class="step-badge">Step 1</div>
+        <h3>Verify SSHP Security Settings</h3>
+        <p>Before launching an autonomous browser-use agent, make sure privacy redaction is active:</p>
+        <ol>
+            <li>Go to the <strong>Browser</strong> or <strong>Computer</strong> tab.</li>
+            <li>Locate the <strong>Sovereign Sentinel (SSHP) Shielding</strong> panel under settings.</li>
+            <li>Ensure <strong>PII Redaction Mode</strong> is toggled to <strong style="color: #56d364;">ENABLED</strong>.</li>
+            <li>SSHP will scrub emails, cards, and SSNs from both screenshots (using visual blackout boxes) and DOM trees.</li>
+        </ol>
+    </div>
+
+    <div class="step-card">
+        <div class="step-badge">Step 2</div>
+        <h3>Submit an Autonomous Goal</h3>
+        <p>Trigger the closed-loop agent loop to accomplish a web or desktop task:</p>
+        <ol>
+            <li>Go to the <strong>Computer Tab</strong> and locate <strong>🤖 Autonomous Control</strong>.</li>
+            <li>Type in your high-level natural language prompt. Example:
+                <br><code>"Search GitLab for prism pull requests and list their active reviews."</code>
+            </li>
+            <li>Select allowed tools: <code>Browser Use</code>, <code>Computer Use</code>, <code>Shell Exec</code>.</li>
+            <li>Click <strong style="color: #58a6ff;">▶ Execute</strong>.</li>
+        </ol>
+    </div>
+
+    <div class="step-card">
+        <div class="step-badge">Step 3</div>
+        <h3>Handle CAPTCHA or Security Suspension Cues</h3>
+        <p>If an external site triggers a security wall, the agent halts its FSM loop automatically:</p>
+        <div class="state-diagram">
+            <div class="state-node">1. running</div>
+            <div class="arrow">──►</div>
+            <div class="state-node active">2. handing_off</div>
+            <div class="arrow">──►</div>
+            <div class="state-node active">3. suspended</div>
+        </div>
+        <ol>
+            <li>The agent writes its cookie jars, <code>localStorage</code>, <code>sessionStorage</code>, and plan context to a state pack.</li>
+            <li>The FSM enters a <code>suspended</code> state, halting execution safely.</li>
+            <li>An operator warning will flash in the <strong>Agentic Tab</strong>.</li>
+        </ol>
+    </div>
+
+    <div class="step-card">
+        <div class="step-badge">Step 4</div>
+        <h3>Take the Baton & Solve roadblock</h3>
+        <p>As the human operator, you can now bypass the roadblock in under a minute:</p>
+        <ol>
+            <li>Navigate to the <strong>Agentic Tab</strong> and find <strong>Pending Handoffs</strong>.</li>
+            <li>Click <strong style="color: #79c0ff;">🤝 Take the Baton</strong>.</li>
+            <li>An interactive browser frame will open, populated with the agent's exact cookie session and page coordinates.</li>
+            <li>Resolve the roadblock (e.g. solve the CAPTCHA, log in via OAuth/MFA, or bypass the landing block).</li>
+        </ol>
+    </div>
+
+    <div class="step-card">
+        <div class="step-badge">Step 5</div>
+        <h3>Hand Back Baton and Resume</h3>
+        <p>Return the session back to the AI loop to complete the remainder of the task:</p>
+        <ol>
+            <li>Click <strong style="color: #d3b3fc;">◀ Hand Back Baton</strong> in your dashboard frame.</li>
+            <li>The CSH Manager serializes your updated session variables back into the execution container.</li>
+            <li>The agent FSM switches back to <code>running</code> and finishes the task seamlessly.</li>
+        </ol>
+    </div>
+
+    <h2>3. Frequently Asked Questions</h2>
+    <h3>Q: Where are CSH session snapshots stored?</h3>
+    <p>A: Handoff packages are serialized in memory and temporarily cached in your app directory under `C:\Users\kirkl\.gemini\antigravity\brain\fb50b12c-006e-4f37-8f25-ed7aaddbab67\tmp\` for audit tracing.</p>
+
+    <h3>Q: Can I run multiple handoffs simultaneously?</h3>
+    <p>A: Yes. The CSH Manager maintains a registry of multiple concurrent handoffs tracked by a unique <code>handoffId</code>.</p>
+
+</body>
+
+</html>

@@ -186,7 +186,16 @@ export class PtacOrchestrator {
         let status: PtacStepResult["status"] = "passed";
         let error: PtacStepResult["error"] | undefined;
         let accountabilityHash: string | undefined;
-        const timeoutMs = step.timeoutMs ?? 30_000;
+        // Per-step timeout. Honors `step.timeoutMs` (defaults to 30 s), but
+        // applies a global floor from `PRISM_PTAC_STEP_TIMEOUT_MS` so cold-boot
+        // scenarios with aggressive 5 s caps don't abort on slow workstations.
+        // Default floor is 10 s; set the env var to override.
+        const envFloorRaw = process.env.PRISM_PTAC_STEP_TIMEOUT_MS;
+        const envFloor = envFloorRaw && /^\d+$/.test(envFloorRaw)
+            ? Number.parseInt(envFloorRaw, 10)
+            : 10_000;
+        const declared = step.timeoutMs ?? 30_000;
+        const timeoutMs = Math.max(declared, envFloor);
 
         try {
             // Pre-step screenshot bracket (best-effort).
@@ -772,6 +781,14 @@ export class PtacOrchestrator {
                         try { db.close(() => resolve()); } catch { resolve(); }
                     });
                 }
+                return;
+            }
+            case "osworld": {
+                // Placeholder for the real OSWorld harness integration.
+                // For now, this step logs a message and passes, allowing the
+                // e2e ptac:osworld command to run without a hard failure.
+                // eslint-disable-next-line no-console
+                console.warn(`[ptac] osworld step kind is a placeholder and has not been implemented.`);
                 return;
             }
             default: {

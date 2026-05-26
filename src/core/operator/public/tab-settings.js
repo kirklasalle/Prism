@@ -835,27 +835,40 @@ export
     return 0;
   });
 
+  state.matrixExpandedList = state.matrixExpandedList || false;
+  window.toggleMatrixExpandedList = function () {
+    state.matrixExpandedList = !state.matrixExpandedList;
+    renderCapabilityMatrix();
+  };
+
   html += '<div class="panel" style="padding:10px;margin-top:8px;">';
-  html += '<div class="muted" style="font-size:12px;font-weight:600;margin-bottom:8px;">Registered Matrix Entries (' + matrixRows.length + ')</div>';
-  if (!matrixRows.length) {
-    html += '<div class="muted" style="font-size:12px;">No registered model matrix entries.</div>';
-  } else {
-    html += '<table class="events-table"><thead><tr><th>Pattern</th><th>Tier</th><th>Locality</th><th>Strengths</th><th>Actions</th></tr></thead><tbody>';
-    matrixRows.forEach(function (entry) {
-      var pattern = entry.pattern || '';
-      var strengthsText = Array.isArray(entry.strengths) ? entry.strengths.join(', ') : '';
-      html += '<tr>'
-        + '<td class="mono">' + escapeHtml(pattern) + '</td>'
-        + '<td>' + escapeHtml(entry.tier != null ? 'T' + entry.tier : '-') + '</td>'
-        + '<td>' + escapeHtml(entry.locality || '-') + '</td>'
-        + '<td>' + escapeHtml(strengthsText || '-') + '</td>'
-        + '<td style="white-space:nowrap;">'
-        + '<button class="secondary-button" style="padding:3px 8px;font-size:11px;margin-right:6px;" data-pattern="' + escapeHtml(pattern) + '" onclick="startMatrixEdit(this.dataset.pattern)">Edit</button>'
-        + '<button class="danger-button" style="padding:3px 8px;font-size:11px;" data-pattern="' + escapeHtml(pattern) + '" onclick="deleteMatrixEntry(this.dataset.pattern)">Delete</button>'
-        + '</td>'
-        + '</tr>';
-    });
-    html += '</tbody></table>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+  html += '<div class="muted" style="font-size:12px;font-weight:600;cursor:pointer;user-select:none;" onclick="toggleMatrixExpandedList()">'
+    + (state.matrixExpandedList ? '▼' : '▶') + ' Registered Matrix Entries (' + matrixRows.length + ')</div>';
+  html += '<button class="secondary-button" style="padding:3px 8px;font-size:11px;" onclick="refreshOllamaModels()">Refresh</button>';
+  html += '</div>';
+
+  if (state.matrixExpandedList) {
+    if (!matrixRows.length) {
+      html += '<div class="muted" style="font-size:12px;">No registered model matrix entries.</div>';
+    } else {
+      html += '<table class="events-table"><thead><tr><th>Pattern</th><th>Tier</th><th>Locality</th><th>Strengths</th><th>Actions</th></tr></thead><tbody>';
+      matrixRows.forEach(function (entry) {
+        var pattern = entry.pattern || '';
+        var strengthsText = Array.isArray(entry.strengths) ? entry.strengths.join(', ') : '';
+        html += '<tr>'
+          + '<td class="mono">' + escapeHtml(pattern) + '</td>'
+          + '<td>' + escapeHtml(entry.tier != null ? 'T' + entry.tier : '-') + '</td>'
+          + '<td>' + escapeHtml(entry.locality || '-') + '</td>'
+          + '<td>' + escapeHtml(strengthsText || '-') + '</td>'
+          + '<td style="white-space:nowrap;">'
+          + '<button class="secondary-button" style="padding:3px 8px;font-size:11px;margin-right:6px;" data-pattern="' + escapeHtml(pattern) + '" onclick="startMatrixEdit(this.dataset.pattern)">Edit</button>'
+          + '<button class="danger-button" style="padding:3px 8px;font-size:11px;" data-pattern="' + escapeHtml(pattern) + '" onclick="deleteMatrixEntry(this.dataset.pattern)">Delete</button>'
+          + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+    }
   }
   html += '</div>';
 
@@ -1419,6 +1432,7 @@ export
 
       html += '<button class="secondary-button" onclick="testProviderConnection(\'' + escapeHtml(provider.id) + '\')">Test Connection</button>';
       html += '<button class="secondary-button" onclick="discoverModels(\'' + escapeHtml(provider.id) + '\')">\uD83D\uDD0D Discover Models</button>';
+      html += '<button class="secondary-button" onclick="discoverAndSaveModels(\'' + escapeHtml(provider.id) + '\')">\uD83D\uDD0D Discover + Save</button>';
       html += '</div>';
 
       if (testResult) {
@@ -1533,6 +1547,7 @@ export
   const defaultModel = defaultInput ? defaultInput.value.trim() : '';
 
   state.notice = null;
+  var ok = true;
   try {
     await request('/api/llm/provider-settings', {
       method: 'POST',
@@ -1544,9 +1559,39 @@ export
     safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
     state.notice = 'Settings saved for ' + providerId + '.';
   } catch (error) {
+    ok = false;
     state.notice = String(error);
   }
   render();
+  return ok;
+}
+
+function parseDiscoveredModels(result) {
+  if (result && Array.isArray(result.models)) {
+    return result.models;
+  }
+  var known = (result && Array.isArray(result.known)) ? result.known : [];
+  var unknown = (result && Array.isArray(result.unknown)) ? result.unknown : [];
+  return known.concat(unknown);
+}
+
+function applyDiscoveredModels(providerId, result) {
+  var discoveredModels = parseDiscoveredModels(result);
+  if (discoveredModels.length > 0) {
+    const modelsInput = document.getElementById('ps-models-' + providerId);
+    const modelsText = discoveredModels.join(', ');
+    if (modelsInput) modelsInput.value = modelsText;
+    if (!state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId] = {};
+    state.providerSettingsCache[providerId].models = modelsText;
+  }
+  var count = discoveredModels.length;
+  var knownCount = (result && Array.isArray(result.known)) ? result.known.length : count;
+  var unknownCount = (result && Array.isArray(result.unknown)) ? result.unknown.length : 0;
+  return {
+    count: count,
+    knownCount: knownCount,
+    unknownCount: unknownCount,
+  };
 }
 
 export
@@ -1628,20 +1673,43 @@ export
   render();
   try {
     const result = await request('/api/models/discover/' + encodeURIComponent(providerId));
-    if (result && result.models && result.models.length > 0) {
-      const modelsInput = document.getElementById('ps-models-' + providerId);
-      const modelsText = result.models.join(', ');
-      if (modelsInput) modelsInput.value = modelsText;
-      if (!state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId] = {};
-      state.providerSettingsCache[providerId].models = modelsText;
-    }
-    const count = (result && result.models) ? result.models.length : 0;
+    const summary = applyDiscoveredModels(providerId, result);
     state.providerTestResults[providerId] = {
       ok: true,
-      message: 'Discovered ' + count + ' model' + (count === 1 ? '' : 's') + '.'
+      message: 'Discovered ' + summary.count + ' model' + (summary.count === 1 ? '' : 's') + ' (' + summary.knownCount + ' known, ' + summary.unknownCount + ' new).'
     };
   } catch (error) {
     state.providerTestResults[providerId] = { ok: false, message: 'Discovery failed: ' + String(error) };
+  }
+  render();
+}
+
+export
+  async function discoverAndSaveModels(providerId) {
+  state.providerTestResults[providerId] = { ok: false, message: 'Discovering and saving models...' };
+  render();
+  try {
+    const result = await request('/api/models/discover/' + encodeURIComponent(providerId));
+    const summary = applyDiscoveredModels(providerId, result);
+    if (summary.count === 0) {
+      state.providerTestResults[providerId] = {
+        ok: false,
+        message: 'No models discovered to save.'
+      };
+      render();
+      return;
+    }
+    const saved = await saveProviderCardSettings(providerId);
+    state.providerTestResults[providerId] = {
+      ok: saved,
+      message: saved
+        ? 'Discovered and saved ' + summary.count + ' model' + (summary.count === 1 ? '' : 's') + ' (' + summary.knownCount + ' known, ' + summary.unknownCount + ' new).'
+        : 'Discovered models but failed to save settings.'
+    };
+  } catch (error) {
+    state.providerTestResults[providerId] = { ok: false, message: 'Discover + Save failed: ' + String(error) };
+    render();
+    return;
   }
   render();
 }
@@ -2014,6 +2082,20 @@ export
     html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\'])">Save</button>';
     html += '</div>';
   });
+
+  /* ── Section 7b: Sovereign Sentinel Shielding (SSHP) ── */
+  sec('sshp', 'Sovereign Sentinel Shielding (SSHP)', function () {
+    var enabled = rs ? (rs.sshpRedactionEnabled !== false) : true;
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Visual & DOM PII Redaction';
+    html += ' <span class="stg-hint">Mask focused inputs and DOM email/card/SSN snapshots automatically</span>';
+    html += '</span>';
+    html += '<span style="display:flex;align-items:center;">';
+    html += '<input type="checkbox" id="stg-sshpRedactionEnabled"' + (enabled ? ' checked' : '') + ' onchange="toggleSshpPreference(this.checked)" style="width:16px;height:16px;cursor:pointer;" />';
+    html += '</span>';
+    html += '</div>';
+  });
+
 
   /* ── Section 8: Data & Paths ── */
   sec('paths', 'Data & Paths', function () {
@@ -3062,3 +3144,33 @@ export function exportCacAuditJson(assignmentId) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+export async function toggleSshpPreference(checked) {
+  dashboardLog('settings', 'sshp.toggle', 'Toggling SSHP Visual/DOM Redaction: ' + checked);
+  try {
+    await request('/api/preferences/sshp-redaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: checked })
+    });
+    if (state.runtimeSettings) {
+      state.runtimeSettings.sshpRedactionEnabled = checked;
+    } else {
+      state.runtimeSettings = { sshpRedactionEnabled: checked };
+    }
+    state.notice = 'SSHP Redaction is now ' + (checked ? 'ENABLED' : 'DISABLED') + '.';
+    var noticeToast = document.getElementById('global-notice-toast');
+    if (noticeToast) {
+      noticeToast.textContent = state.notice;
+      noticeToast.style.opacity = '1';
+      setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
+    }
+    if (window.updateSshpShieldIndicator) {
+      window.updateSshpShieldIndicator();
+    }
+  } catch (e) {
+    console.error('[settings] sshp toggle failed', e);
+    state.notice = { type: 'error', message: 'Failed to toggle SSHP: ' + String(e) };
+  }
+}
+

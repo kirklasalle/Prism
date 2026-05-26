@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
-import { randomUUID } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve as resolvePath, sep as pathSep } from "node:path";
+import { randomUUID, createHash } from "node:crypto";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from "node:fs";
+import { dirname, join, resolve as resolvePath, sep as pathSep, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { homedir } from "node:os";
@@ -57,6 +57,7 @@ import { importCharacter as importCharacterAdapter } from "../characters/charact
 import { UsageMeteringService, type UsageWindow } from "./usage-metering-service.js";
 import { LlamaCppSupervisor } from "./llama-cpp-supervisor.js";
 import { GuardianAgent } from "../agents/guardian-agent.js";
+import { SkillsEngine } from "../skills/skills-engine.js";
 import type { McpClientAdapter } from "../../adapters/protocol/mcp-client-tool.js";
 import type { ConsoleInterceptor, ConsoleLine } from "../logging/console-interceptor.js";
 import { DashboardControlTool } from "../tools/dashboard-control-tool.js";
@@ -70,6 +71,8 @@ import { AutonomousBrowserAgent } from "../runtime/autonomous-browser-agent.js";
 import { AutonomousComputerAgent } from "../runtime/autonomous-computer-agent.js";
 import type { AutonomousLlmGenerateFn, LlmToolDef } from "../runtime/autonomous-planner.js";
 import { PrismCovenant } from "../governance/prism-covenant.js";
+import { SSHPInterceptor } from "./sshp-interceptor.js";
+import { CSHManager } from "./csh-manager.js";
 
 import { AuthGate } from "../security/auth.js";
 import { RateLimiter } from "../security/rate-limiter.js";
@@ -80,6 +83,9 @@ import { deriveSessionTitle, parseEventFilters, buildSessionConfigDiff, normaliz
 import { dashboardHtml, simpleModeHtml, setupWizardHtml, setupWizardAdvancedHtml } from "./templates/index.js";
 
 import { Router } from "./routes/index.js";
+import { IamStore } from "../iam/store.js";
+import { SessionManager } from "../iam/sso/session.js";
+import { IamRouteHandler } from "./routes/iam-handler.js";
 import { TooltipsRegistry } from "./tooltips-registry.js";
 import { generateOpenApiSpec } from "./openapi-generator.js";
 
@@ -836,6 +842,8 @@ export class DashboardService {
   private mcpAdapter: McpClientAdapter | null = null;
   /** Optional console interceptor for /api/debug/console + live WS stream. */
   private consoleInterceptor: ConsoleInterceptor | null = null;
+  private sshpInterceptor!: SSHPInterceptor;
+  private cshManager!: CSHManager;
   /** Unsubscribe handle for the console-line listener. */
   private consoleUnsubscribe: (() => void) | null = null;
   private readonly openSockets = new Set<Socket>();
@@ -901,7 +909,16 @@ export class DashboardService {
     telemetryWindow: "1d",
   };
   private readonly downloadStatus = new Map<string, DownloadProgress>();
-  private readonly router = new Router();
+  private readonly iamStore: IamStore;
+  private readonly sessionManager: SessionManager;
+  private readonly iamHandler: IamRouteHandler;
+  private readonly router: Router;
+
+  public getIamStore(): IamStore { return this.iamStore; }
+  public getSessionManager(): SessionManager { return this.sessionManager; }
+  public getIamHandler(): IamRouteHandler { return this.iamHandler; }
+  public getSkillsEngine(): SkillsEngine { return this.skillsEngine; }
+  private readonly skillsEngine!: SkillsEngine;
   private readonly tooltipsRegistry: TooltipsRegistry = new TooltipsRegistry(resolvePath(process.cwd(), "docs", "tooltips"));
   private customRecommendedModels: Array<{ name: string; fileName: string; size: string; path: string; source: string; addedAt: string }> = [];
 
@@ -956,6 +973,42 @@ export class DashboardService {
       ? new WindowsProtectedFileProviderSecretStore()
       : new InMemoryProviderSecretStore());
 
+    const iamDbPath = join(resolveWorkspaceRoot(), ".prism", "iam.db");
+    mkdirSync(dirname(iamDbPath), { recursive: true });
+    this.iamStore = new IamStore(iamDbPath);
+    this.sessionManager = new SessionManager(this.iamStore);
+    this.iamHandler = new IamRouteHandler({
+      iamStore: this.iamStore,
+      sessionManager: this.sessionManager,
+      defaultTenantId: "default",
+      activityBus: this.activityBus,
+    });
+    this.router = new Router(this.iamHandler);
+
+    this.iamStore.seedDefaultRoles("default");
+    const existingUsers = this.iamStore.listUsers("default");
+    if (existingUsers.length === 0) {
+      const adminUser = this.iamStore.createUser({
+        tenantId: "default",
+        email: "admin@prism.ai",
+        displayName: "Administrator",
+        status: "active",
+        attrs: { passwordHash: createHash("sha256").update("admin", "utf-8").digest("hex") },
+      });
+      const adminRole = this.iamStore.getRoleByName("default", "admin");
+      if (adminRole) this.iamStore.addMembership(adminUser.id, "default", adminRole.id);
+
+      const testUser = this.iamStore.createUser({
+        tenantId: "default",
+        email: "testing@prism.ai",
+        displayName: "Test Operator",
+        status: "active",
+        attrs: { passwordHash: createHash("sha256").update("testing", "utf-8").digest("hex") },
+      });
+      const operatorRole = this.iamStore.getRoleByName("default", "operator");
+      if (operatorRole) this.iamStore.addMembership(testUser.id, "default", operatorRole.id);
+    }
+
     // ── Security: Auth gate & rate limiter ──────────────────────────────
     const authDisabled = process.env.PRISM_AUTH_DISABLED === "true";
     if (authDisabled && process.env.NODE_ENV === "production") {
@@ -967,8 +1020,25 @@ export class DashboardService {
     this.authGate = new AuthGate({
       tokenFilePath: workspacePath("state", "admin-token"),
       disabled: authDisabled,
-      publicRoutes: ["/health", "/api/health", "/favicon.ico", "/.well-known/agent.json", "/metrics", "/api/v1/openapi.json", "/api/openapi.json"],
-      publicPrefixes: ["/public/", "/setup", "/api/auth/", "/api/iam/sso/", "/scim/v2/"],
+      publicRoutes: ["/health", "/api/health", "/favicon.ico", "/.well-known/agent.json", "/metrics", "/api/v1/openapi.json", "/api/openapi.json",
+        // Dashboard pages — DashboardHandler has its own cookie+token auth
+        // that gracefully redirects to /login; let it handle auth, not the gate.
+        "/",
+        // Setup wizard (step 4): character listing + import
+        "/api/workspace/characters", "/api/workspace/character-import",
+        // Setup wizard (step 3): provider catalog, connection test, API key save
+        "/api/llm/catalog", "/api/llm/provider-test", "/api/llm/provider-secret",
+        // Setup wizard (step 6): readiness recheck
+        "/api/readiness/recheck",
+        // Auth telemetry beacon — login page sends client-side trace events
+        "/api/v1/telemetry/auth-trace",
+      ],
+      publicPrefixes: ["/public/", "/setup", "/login", "/api/auth/", "/api/iam/sso/", "/api/iam/login", "/scim/v2/",
+        // Dashboard pages — DashboardHandler does its own auth (cookie/token → 302 /login)
+        "/dashboard", "/simple",
+        // Setup wizard API — all /api/setup/* endpoints (profile, workspace, character, cac, complete)
+        "/api/setup/",
+      ],
     });
     this.rateLimiter = new RateLimiter({
       maxRequests: Number(process.env.PRISM_RATE_LIMIT ?? 200),
@@ -1040,7 +1110,12 @@ export class DashboardService {
     });
 
     this.llmProviders = new LlmProviderManager(process.env, this.chatStore.listProviderSettings(), this.providerSecretStore, this.llamaSupervisor, this.bitnetSupervisor, this.activityBus);
+    if (this.usageMetering) {
+      this.llmProviders.setUsageMetering(this.usageMetering);
+    }
     this.llmProviders.loadPersistedProfiles(this.chatStore.listModelProfiles());
+
+
     this.characterAccountabilityStore = new CharacterAccountabilityStore(workspaceDbPath());
     this.characterAccountabilityManager = new CharacterAccountabilityManager(this.characterAccountabilityStore, this.activityBus);
     this.sessionPackageStorePath = sessionPackageStorePath;
@@ -1075,6 +1150,14 @@ export class DashboardService {
     this.tools = toolRegistry ? toolRegistry.list() : [];
     if (usageMetering) this.usageMetering = usageMetering;
 
+    // Initialize SOTA Skills Engine (durable sqlite workflows)
+    this.skillsEngine = new SkillsEngine(
+      this.llmProviders,
+      this.activityBus,
+      resolveWorkspaceRoot(),
+      this.chatStore
+    );
+
     // Guardian Agent — permanent autonomous agent powered by llama.cpp
     this.guardianAgent = new GuardianAgent(this.activityBus, this.llamaSupervisor, this.tools, {
       modelAlias: process.env.PRISM_GUARDIAN_MODEL_ALIAS || "guardian",
@@ -1087,6 +1170,7 @@ export class DashboardService {
       flashAttn: process.env.PRISM_GUARDIAN_FLASH_ATTN !== "false",
       dashboardBaseUrl: `http://127.0.0.1:${this.port}`,
     });
+    this.guardianAgent.setSkillsEngine(this.skillsEngine);
 
     this.dashboardControlTool = new DashboardControlTool(this.activityBus);
     if (this.toolRegistry) {
@@ -1143,6 +1227,8 @@ export class DashboardService {
     // specialized agents for browser/computer tasks.
     // These are assigned to the Phase A members declared later in the class.
     this._covenant = new PrismCovenant(this.activityBus);
+    this.sshpInterceptor = new SSHPInterceptor(this._covenant);
+    this.cshManager = new CSHManager();
     this._browserAgent = new AutonomousBrowserAgent(this.activityBus);
     this._computerAgent = new AutonomousComputerAgent(this.activityBus);
 
@@ -1158,7 +1244,12 @@ export class DashboardService {
           actionsPerMinuteLimit: 30,
         },
       );
+      if (this.usageMetering) {
+        loop.setUsageMetering(this.usageMetering);
+      }
       this.autonomousLoop = loop;
+
+
 
       // Wire LLM generate function — adapts LlmProviderManager.generate()
       // to the AutonomousLlmGenerateFn signature expected by the planner.
@@ -1176,6 +1267,7 @@ export class DashboardService {
           content: result.content,
           toolCalls: result.toolCalls,
           stopReason: result.stopReason,
+          thoughtSignature: result.thoughtSignature,
         };
       };
       loop.setLlmGenerateFn(autonomousGenerateFn);
@@ -1280,6 +1372,7 @@ export class DashboardService {
     if (this._covenant) {
       const covenant = this._covenant;
       this.guardianAgent.setCovenantFn(() => covenant.getStatus());
+      covenant.bindGuardian(this.guardianAgent);
     }
 
     for (const t of this.tools) {
@@ -2211,6 +2304,18 @@ export class DashboardService {
     const resolved = this.requireProviderId(providerId);
     this.chatStore.upsertProviderSettings(resolved, settings, source);
     this.refreshProviderConfiguration();
+
+    // Keep the runtime + persisted model matrix aligned with provider config.
+    // This is provider-agnostic and covers manual entry or discovered models.
+    try {
+      const discovery = await this.llmProviders.discoverProviderModels(resolved);
+      for (const profile of discovery.suggested) {
+        this.chatStore.upsertModelProfile(profile);
+      }
+    } catch {
+      // Non-fatal: provider settings should still save even if matrix sync fails.
+    }
+
     const payload = await this.getProviderSettings(resolved);
     this.activityBus.emit({
       sessionId: this.status.sessionId,
@@ -2772,6 +2877,7 @@ export class DashboardService {
         content: result.content,
         toolCalls: result.toolCalls,
         stopReason: result.stopReason,
+        thoughtSignature: result.thoughtSignature,
       };
     });
 
@@ -3020,8 +3126,9 @@ export class DashboardService {
       };
       const client = isHttps ? https : { get: httpGet };
       client.get(options, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          return this.downloadFile(id, res.headers.location!, targetPath).then(resolve).catch(reject);
+        if ([301, 302, 307, 308].includes(res.statusCode ?? 0)) {
+          const nextUrl = new URL(res.headers.location!, url).href;
+          return this.downloadFile(id, nextUrl, targetPath).then(resolve).catch(reject);
         }
         if (res.statusCode !== 200) {
           status.status = "error";
@@ -3129,6 +3236,7 @@ export class DashboardService {
 
   getPort(): number { return this.port; }
   getChatStore(): ChatSessionStore { return this.chatStore; }
+  getGuardianAgent(): GuardianAgent { return this.guardianAgent; }
   getLlmProviders(): LlmProviderManager { return this.llmProviders; }
   getActivityBus(): ActivityBus { return this.activityBus; }
   getApprovalQueue(): ApprovalQueue { return this.queue; }
@@ -3256,7 +3364,8 @@ export class DashboardService {
       if (!safeFile) {
         return this.json(res, 404, { error: "Not found" });
       }
-      const publicRoot = resolvePath(DashboardService.publicDir);
+      const devPublicDir = "D:\\Projects\\Prism\\src\\core\\operator\\public";
+      const publicRoot = existsSync(devPublicDir) ? resolvePath(devPublicDir) : resolvePath(DashboardService.publicDir);
       const filePath = resolvePath(publicRoot, safeFile);
       // Containment check: reject any resolved path that escapes publicDir (defence-in-depth over the `..` strip above).
       if (filePath !== publicRoot && !filePath.startsWith(publicRoot + pathSep)) {
@@ -3291,6 +3400,22 @@ export class DashboardService {
       req.on("close", () => {
         this.sseClients.delete(sseId);
       });
+      return;
+    }
+
+    // ── Graceful Shutdown API Endpoint ──────────────────────────────────
+    if (method === "POST" && url === "/api/system/shutdown") {
+      console.log("[PRISM][system] [INFO] Received shutdown signal from dashboard operator. Initiating graceful termination...");
+      
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify({ success: true, message: "Graceful shutdown sequence initialized by operator console." }));
+
+      setTimeout(() => {
+        process.kill(process.pid, "SIGTERM");
+      }, 500);
       return;
     }
 
@@ -3502,6 +3627,39 @@ export class DashboardService {
         return this.json(res, 200, { message: "Ollama pull initiated", pullId });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    if (method === "DELETE" && url === "/api/models/delete") {
+      try {
+        const body = await this.readJsonBody<{ path: string; source: string }>(req);
+        if (!body?.path || !body?.source) {
+          return this.json(res, 400, { error: "Missing path or source" });
+        }
+
+        const { path: modelPath, source } = body;
+
+        if (source === "ollama") {
+          const { exec: execCb } = await import("node:child_process");
+          await new Promise((resolve, reject) => {
+            execCb(`ollama rm ${modelPath}`, { timeout: 60000 }, (err, stdout, stderr) => {
+              if (err) reject(new Error(stderr?.trim() || err.message));
+              else resolve(stdout);
+            });
+          });
+          return this.json(res, 200, { message: `Ollama model ${modelPath} removed successfully` });
+        } else {
+          if (!existsSync(modelPath)) {
+            return this.json(res, 404, { error: "Model file not found on disk" });
+          }
+          if (statSync(modelPath).isDirectory()) {
+            return this.json(res, 400, { error: "Path is a directory, not a file" });
+          }
+          unlinkSync(modelPath);
+          return this.json(res, 200, { message: `Model file ${basename(modelPath)} deleted successfully` });
+        }
+      } catch (error: any) {
+        return this.json(res, 500, { error: error.message || String(error) });
       }
     }
 
@@ -3737,6 +3895,26 @@ export class DashboardService {
             lastUsedCharacterId: characterId,
           });
         } catch { /* non-fatal */ }
+
+        // Initialize Computer & Browser Control
+        this.framebufferCapture.captureSingle().catch(() => { });
+        const browserTool = this.tools.find(t => t.name === "browser_control") as BrowserControlTool | undefined;
+        if (browserTool) {
+          try {
+            const profMgr = browserTool.getProfileManager();
+            if (profMgr && profMgr.listProfiles().length === 0) {
+              profMgr.createProfile({
+                prismUserEmail: operatorEmail,
+                executionProfileSegment: "individual",
+              });
+            }
+            const mgr = browserTool.getManager();
+            if (mgr && mgr.listSessions().length === 0) {
+              mgr.launch({ headless: true }).catch(() => { });
+            }
+          } catch { /* best-effort non-blocking */ }
+        }
+
         return this.json(res, 201, {
           ok: true,
           session,
@@ -3751,6 +3929,26 @@ export class DashboardService {
     if (method === "POST" && url === "/api/setup/complete") {
       try {
         writePreferences({ setupComplete: true });
+
+        // Initialize Computer & Browser Control
+        this.framebufferCapture.captureSingle().catch(() => { });
+        const browserTool = this.tools.find(t => t.name === "browser_control") as BrowserControlTool | undefined;
+        if (browserTool) {
+          try {
+            const profMgr = browserTool.getProfileManager();
+            if (profMgr && profMgr.listProfiles().length === 0) {
+              profMgr.createProfile({
+                prismUserEmail: "operator@prism.local",
+                executionProfileSegment: "individual",
+              });
+            }
+            const mgr = browserTool.getManager();
+            if (mgr && mgr.listSessions().length === 0) {
+              mgr.launch({ headless: true }).catch(() => { });
+            }
+          } catch { /* best-effort non-blocking */ }
+        }
+
         const snapshot = await this.getReadinessSnapshot();
         this.emitReadinessAudit("setup_wizard_complete", snapshot);
         this.activityBus.emit({
@@ -3954,14 +4152,43 @@ export class DashboardService {
       const filters = parseEventFilters(url, 500);
       const limit = Math.max(1, Math.min(2000, filters.limit));
       const events = this.activityBus.listEvents();
-      const logs = events.slice(-limit).reverse().map((e) => ({
-        type: "log_entry",
-        timestamp: e.timestamp,
-        source: e.layer || "system",
-        operation: e.operation,
-        severity: e.status === "failed" ? "error" : "info",
-        summary: typeof e.details?.summary === "string" ? e.details.summary : e.operation,
-      }));
+      const logs = events.slice(-limit).reverse().map((e) => {
+        let logSource = e.details?.source || e.layer || "system";
+        if (typeof logSource === "string") {
+          logSource = logSource.toLowerCase();
+        }
+        if (e.operation.startsWith("iam.")) {
+          logSource = "auth";
+        } else if (e.operation.startsWith("chat.")) {
+          logSource = "chat";
+        } else if (e.operation.startsWith("agentic.") || e.operation.startsWith("agent.")) {
+          logSource = "agentic";
+        } else if (e.operation.startsWith("computer.") || e.operation.startsWith("cua.")) {
+          logSource = "computer";
+        } else if (e.operation.startsWith("browser.") || e.operation.startsWith("bua.")) {
+          logSource = "browser";
+        } else if (e.operation.startsWith("tool.")) {
+          logSource = "tools";
+        } else if (e.operation.startsWith("workspace.")) {
+          logSource = "workspace";
+        } else if (e.operation.startsWith("scheduler.")) {
+          logSource = "scheduler";
+        } else if (logSource === "governance") {
+          logSource = "auth";
+        } else if (logSource === "causal") {
+          logSource = "chat";
+        } else if (logSource === "llm") {
+          logSource = "agentic";
+        }
+        return {
+          type: "log_entry",
+          timestamp: e.timestamp,
+          source: logSource,
+          operation: e.operation,
+          severity: e.status === "failed" ? "error" : "info",
+          summary: typeof e.details?.summary === "string" ? e.details.summary : e.operation,
+        };
+      });
       return this.json(res, 200, logs);
     }
 
@@ -4005,9 +4232,59 @@ export class DashboardService {
       return this.json(res, 200, this.listChatSessions());
     }
 
+    if (method === "GET" && url === "/api/support/tickets") {
+      return this.json(res, 200, this.chatStore.listSupportTickets());
+    }
+
+    if (method === "POST" && url === "/api/support/tickets") {
+      try {
+        const body = await this.readBody(req);
+        const parsed = JSON.parse(body);
+        if (!parsed.title || !parsed.description) {
+          return this.json(res, 400, { error: "Missing title or description" });
+        }
+        const ticket = this.chatStore.createSupportTicket({
+          title: parsed.title,
+          description: parsed.description,
+          source: parsed.source || "user",
+          severity: parsed.severity || "low",
+          status: parsed.status || "open",
+          metadata: parsed.metadata,
+        });
+        return this.json(res, 201, ticket);
+      } catch (err) {
+        return this.json(res, 500, { error: String(err) });
+      }
+    }
+
+    if (method === "POST" && /^\/api\/support\/tickets\/[^/]+\/update$/.test(url)) {
+      try {
+        const ticketId = url.split("/")[4] ?? "";
+        const body = await this.readBody(req);
+        const parsed = JSON.parse(body);
+        if (!parsed.status) {
+          return this.json(res, 400, { error: "Missing status field" });
+        }
+        const ok = this.chatStore.updateSupportTicket(ticketId, parsed.status, parsed.resolutionLog);
+        return this.json(res, ok ? 200 : 404, { ok });
+      } catch (err) {
+        return this.json(res, 500, { error: String(err) });
+      }
+    }
+
+    if (method === "POST" && /^\/api\/support\/tickets\/[^/]+\/delete$/.test(url)) {
+      try {
+        const ticketId = url.split("/")[4] ?? "";
+        const ok = this.chatStore.deleteSupportTicket(ticketId);
+        return this.json(res, ok ? 200 : 404, { ok });
+      } catch (err) {
+        return this.json(res, 500, { error: String(err) });
+      }
+    }
+
     // ── Phase A: Autonomous Operations API ──────────────────────────────────
 
-    if (method === "POST" && url === "/api/v1/autonomous/goal") {
+    if (method === "POST" && url === "/api/autonomous/goal") {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Autonomous loop not initialized" });
       try {
         const body = await this.readBody(req);
@@ -4039,12 +4316,12 @@ export class DashboardService {
         return this.json(res, 201, goal);
       } catch (err) { return this.json(res, 400, { error: String(err) }); }
     }
-    if (method === "GET" && url === "/api/v1/autonomous/status") {
+    if (method === "GET" && url === "/api/autonomous/status") {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Autonomous loop not initialized" });
       const active = this.autonomousLoop.getActiveGoal();
       return this.json(res, 200, { active, paused: this.autonomousLoop.isPaused() });
     }
-    if (method === "POST" && url === "/api/v1/autonomous/pause") {
+    if (method === "POST" && url === "/api/autonomous/pause") {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
       try {
         const body = await this.readBody(req);
@@ -4054,7 +4331,7 @@ export class DashboardService {
         return this.json(res, 200, { ok: true });
       } catch (err) { return this.json(res, 400, { error: String(err) }); }
     }
-    if (method === "POST" && url === "/api/v1/autonomous/resume") {
+    if (method === "POST" && url === "/api/autonomous/resume") {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
       try {
         const body = await this.readBody(req);
@@ -4064,7 +4341,7 @@ export class DashboardService {
         return this.json(res, 200, { ok: true });
       } catch (err) { return this.json(res, 400, { error: String(err) }); }
     }
-    if (method === "POST" && url === "/api/v1/autonomous/terminate") {
+    if (method === "POST" && url === "/api/autonomous/terminate") {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
       try {
         const body = await this.readBody(req);
@@ -4073,23 +4350,129 @@ export class DashboardService {
         return this.json(res, 200, { ok: true });
       } catch (err) { return this.json(res, 400, { error: String(err) }); }
     }
-    if (method === "GET" && url.startsWith("/api/v1/autonomous/history")) {
+    if (method === "GET" && url.startsWith("/api/autonomous/history")) {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
       return this.json(res, 200, { goals: this.autonomousLoop.listGoals(20) });
     }
-    if (method === "GET" && url === "/api/v1/autonomous/aab-ledger") {
+    if (method === "GET" && url === "/api/autonomous/aab-ledger") {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
       return this.json(res, 200, { entries: this.autonomousLoop.getAABLedger() });
     }
-    if (method === "POST" && url === "/api/v1/autonomous/abort") {
+    if (method === "POST" && url === "/api/autonomous/abort") {
       if (!this.autonomousLoop) return this.json(res, 503, { error: "Not initialized" });
       this.autonomousLoop.requestAbort();
       return this.json(res, 200, { ok: true, message: "Abort requested" });
     }
 
+    // ── CSH Baton Pass Human-in-the-Loop Protocol Endpoints ─────────────────
+    if (method === "POST" && (url === "/api/v1/autonomous/session/handoff" || url === "/api/autonomous/session/handoff")) {
+      const browserTool = this.tools.find(t => t.name === "browser_control") as any;
+      const mgr = browserTool?.getManager();
+      if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+      try {
+        const body = await this.readJsonBody<{
+          sessionId: string;
+          sourceAgentId: string;
+          targetAgentId: "guardian" | "operator" | "developer" | "security";
+          reason: "auth_wall" | "captcha_detected" | "security_violation" | "manual_intervention";
+          objective?: string;
+          history?: string[];
+          completedSteps?: Array<{ action: string; thought: string; success: boolean }>;
+          agentMemoryKeys?: Record<string, any>;
+          activePlanDagJson?: string;
+        }>(req);
+        
+        if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+        
+        const handles = mgr.getSessionPageAndContext(body.sessionId);
+        if (!handles) return this.json(res, 404, { error: "Browser session not found." });
+        
+        const handoffState = await this.cshManager.serialize(handles.page, handles.context, {
+          sessionId: body.sessionId,
+          sourceAgentId: body.sourceAgentId || "developer",
+          targetAgentId: body.targetAgentId || "operator",
+          reason: body.reason || "manual_intervention",
+          objective: body.objective,
+          history: body.history,
+          completedSteps: body.completedSteps,
+          agentMemoryKeys: body.agentMemoryKeys,
+          activePlanDagJson: body.activePlanDagJson,
+        });
+        
+        if (this.autonomousLoop) {
+          this.autonomousLoop.globalPause();
+        }
+        
+        const eventMsg = JSON.stringify({
+          type: "csh.handoff.initiated",
+          handoffId: handoffState.handoffId,
+          sessionId: body.sessionId,
+          reason: handoffState.reason,
+          targetAgentId: handoffState.targetAgentId,
+          timestamp: handoffState.timestamp,
+        });
+        for (const client of this.wsClients) {
+          if (client.readyState === 1) {
+            client.send(eventMsg);
+          }
+        }
+        
+        return this.json(res, 201, { ok: true, handoffState });
+      } catch (err) {
+        return this.json(res, 500, { error: String(err) });
+      }
+    }
+
+    if (method === "POST" && (url === "/api/v1/autonomous/session/resume" || url === "/api/autonomous/session/resume")) {
+      const browserTool = this.tools.find(t => t.name === "browser_control") as any;
+      const mgr = browserTool?.getManager();
+      if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
+      try {
+        const body = await this.readJsonBody<{ handoffId: string; sessionId: string }>(req);
+        if (!body.handoffId) return this.json(res, 400, { error: "handoffId required." });
+        if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
+        
+        const handles = mgr.getSessionPageAndContext(body.sessionId);
+        if (!handles) return this.json(res, 404, { error: "Browser session not found." });
+        
+        const handoffState = await this.cshManager.deserialize(body.handoffId, handles.page, handles.context);
+        
+        if (this.autonomousLoop) {
+          this.autonomousLoop.globalResume();
+        }
+        
+        const eventMsg = JSON.stringify({
+          type: "csh.handoff.resolved",
+          handoffId: handoffState.handoffId,
+          sessionId: body.sessionId,
+          timestamp: new Date().toISOString(),
+        });
+        for (const client of this.wsClients) {
+          if (client.readyState === 1) {
+            client.send(eventMsg);
+          }
+        }
+        
+        this.cshManager.clearHandoff(body.handoffId);
+        
+        return this.json(res, 200, { ok: true, handoffState });
+      } catch (err) {
+        return this.json(res, 500, { error: String(err) });
+      }
+    }
+
+    if (method === "GET" && (url === "/api/v1/autonomous/session/pending" || url === "/api/autonomous/session/pending")) {
+      try {
+        const list = this.cshManager.getPendingHandoffs();
+        return this.json(res, 200, { handoffs: list });
+      } catch (err) {
+        return this.json(res, 500, { error: String(err) });
+      }
+    }
+
     // ── Demonstration Mode API ─────────────────────────────────────────────
 
-    if (url.startsWith("/api/v1/demo/")) {
+    if (url.startsWith("/api/demo/")) {
       // Lazy-init demo engine
       if (!this._demoEngine) {
         const { DemonstrationEngine } = await import("../runtime/demonstration-engine.js");
@@ -4099,31 +4482,31 @@ export class DashboardService {
           for (const ws of this.wsClients) { try { ws.send(payload); } catch { /* */ } }
         });
       }
-      if (method === "GET" && url === "/api/v1/demo/status") {
+      if (method === "GET" && url === "/api/demo/status") {
         return this.json(res, 200, this._demoEngine.getState());
       }
-      if (method === "GET" && url === "/api/v1/demo/definitions") {
+      if (method === "GET" && url === "/api/demo/definitions") {
         return this.json(res, 200, { demos: this._demoEngine.getDefinitions(), tabTour: this._demoEngine.getTabTour() });
       }
-      if (method === "POST" && url === "/api/v1/demo/start") {
+      if (method === "POST" && url === "/api/demo/start") {
         const body = await this.readBody(req).catch(() => "{}");
         const parsed = JSON.parse(body);
-        void this._demoEngine.start(parsed.answers);
+        void this._demoEngine.start(parsed.answers, parsed.categories);
         return this.json(res, 200, { ok: true, state: this._demoEngine.getState() });
       }
-      if (method === "POST" && url === "/api/v1/demo/pause") {
+      if (method === "POST" && url === "/api/demo/pause") {
         this._demoEngine.pause();
         return this.json(res, 200, { ok: true });
       }
-      if (method === "POST" && url === "/api/v1/demo/resume") {
+      if (method === "POST" && url === "/api/demo/resume") {
         this._demoEngine.resume();
         return this.json(res, 200, { ok: true });
       }
-      if (method === "POST" && url === "/api/v1/demo/stop") {
+      if (method === "POST" && url === "/api/demo/stop") {
         this._demoEngine.stop();
         return this.json(res, 200, { ok: true });
       }
-      if (method === "POST" && url === "/api/v1/demo/configure") {
+      if (method === "POST" && url === "/api/demo/configure") {
         const body = await this.readBody(req).catch(() => "{}");
         const parsed = JSON.parse(body);
         if (parsed.answers) this._demoEngine.setPromptAnswers(parsed.answers);
@@ -4134,33 +4517,33 @@ export class DashboardService {
 
     // ── Phase A1: Identity & Tab Sessions API ───────────────────────────────
 
-    if (method === "GET" && url === "/api/v1/identity") {
+    if (method === "GET" && url === "/api/identity") {
       const op = this.devIdentity?.getOperator();
       const ag = this.devIdentity?.getAgent();
       return this.json(res, 200, { operator: op ?? null, agent: ag ?? null });
     }
-    if (method === "GET" && url === "/api/v1/sessions/tabs") {
+    if (method === "GET" && url === "/api/sessions/tabs") {
       if (!this.tabSessionRegistry) return this.json(res, 200, { sessions: [] });
       return this.json(res, 200, { sessions: this.tabSessionRegistry.getSummary() });
     }
-    if (method === "POST" && url.startsWith("/api/v1/sessions/tab/")) {
+    if (method === "POST" && url.startsWith("/api/sessions/tab/")) {
       if (!this.tabSessionRegistry) return this.json(res, 503, { error: "Tab sessions not initialized" });
-      const tabId = url.replace("/api/v1/sessions/tab/", "").split("?")[0];
+      const tabId = url.replace("/api/sessions/tab/", "").split("?")[0];
       try {
         const session = this.tabSessionRegistry.getOrCreate(tabId as any);
         return this.json(res, 200, session);
       } catch (err) { return this.json(res, 400, { error: String(err) }); }
     }
-    if (method === "POST" && url.startsWith("/api/v1/sessions/tab-event/")) {
+    if (method === "POST" && url.startsWith("/api/sessions/tab-event/")) {
       if (!this.tabSessionRegistry) return this.json(res, 503, { error: "Not initialized" });
-      const tabId = url.replace("/api/v1/sessions/tab-event/", "").split("?")[0];
+      const tabId = url.replace("/api/sessions/tab-event/", "").split("?")[0];
       const session = this.tabSessionRegistry.recordEvent(tabId as any);
       return this.json(res, 200, { ok: !!session, session });
     }
 
     // ── Phase A3: Unified Telemetry API ─────────────────────────────────────
 
-    if (method === "GET" && url.startsWith("/api/v1/telemetry/unified")) {
+    if (method === "GET" && url.startsWith("/api/telemetry/unified")) {
       if (!this.telemetryAggregator) return this.json(res, 200, { entries: [], stats: null });
       try {
         const parsed = new URL(`http://localhost${url}`);
@@ -4172,9 +4555,32 @@ export class DashboardService {
         return this.json(res, 200, { entries, stats });
       } catch { return this.json(res, 200, { entries: this.telemetryAggregator.getTail(100), stats: this.telemetryAggregator.getStats() }); }
     }
-    if (method === "GET" && url === "/api/v1/telemetry/stats") {
+    if (method === "GET" && url === "/api/telemetry/stats") {
       if (!this.telemetryAggregator) return this.json(res, 200, { stats: null });
       return this.json(res, 200, { stats: this.telemetryAggregator.getStats() });
+    }
+
+    // ── Auth trace beacon from login page → Logs & Debug tab ────────────
+    if (method === "POST" && url === "/api/telemetry/auth-trace") {
+      try {
+        let bodyText = "";
+        for await (const chunk of req) bodyText += chunk;
+        const payload = JSON.parse(bodyText);
+        if (this.telemetryAggregator && payload.operation) {
+          this.telemetryAggregator.ingestRaw({
+            source: "auth",
+            operation: payload.operation,
+            summary: payload.details?.email
+              ? `${payload.operation} — ${payload.details.email}`
+              : payload.operation,
+            severity: "trace",
+            category: "event",
+            details: payload.details ?? {},
+            timestamp: payload.timestamp ?? new Date().toISOString(),
+          });
+        }
+        return this.json(res, 200, { ok: true });
+      } catch { return this.json(res, 400, { error: "Invalid auth trace payload" }); }
     }
 
     if (method === "GET" && url === "/api/session-packages") {
@@ -5055,7 +5461,12 @@ export class DashboardService {
       try {
         const providerId = decodeURIComponent(url.slice("/api/models/discover/".length));
         const result = await this.llmProviders.discoverProviderModels(providerId);
-        return this.json(res, 200, result);
+        return this.json(res, 200, {
+          models: result.models,
+          known: result.known,
+          unknown: result.unknown,
+          suggested: result.suggested,
+        });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
       }
@@ -5993,6 +6404,12 @@ $r | ConvertTo-Json -Depth 4 -Compress
           const body = await this.readJsonBody<{ sessionId: string; url: string }>(req);
           if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
           if (!body.url) return this.json(res, 400, { error: "url required." });
+
+          const audit = await this.sshpInterceptor.auditAction("navigate", body);
+          if (!audit.allowed) {
+            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
+          }
+
           const result = await mgr.navigate(body.sessionId, body.url);
           return this.json(res, 200, result);
         } catch (err) {
@@ -6005,7 +6422,56 @@ $r | ConvertTo-Json -Depth 4 -Compress
         if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
         try {
           const sessionId = decodeURIComponent(screenshotMatch[1]!);
-          const buf = await mgr.screenshot(sessionId);
+          let buf = await mgr.screenshot(sessionId);
+
+          if (this.sshpInterceptor.isEnabled()) {
+            const handles = mgr.getSessionPageAndContext(sessionId);
+            if (handles && handles.page) {
+              const sensitiveSelectorMatches = [
+                'input[type="password"]',
+                'input[autocomplete*="cc-"]',
+                'input[autocomplete*="ssn"]',
+                'input[autocomplete*="card"]',
+                'input[name*="pass"]',
+                'input[name*="card"]',
+                'input[name*="cvv"]',
+                'input[name*="ssn"]',
+                'input[name*="secret"]',
+                'input[name*="token"]',
+                'input[name*="apikey"]',
+                'input[name*="api-key"]',
+                'input[id*="pass"]',
+                'input[id*="card"]',
+                'input[id*="cvv"]',
+                'input[id*="ssn"]',
+                'input[id*="secret"]',
+                'input[id*="token"]',
+                'input[id*="apikey"]',
+                'input[id*="api-key"]',
+              ];
+              const rects = await handles.page.evaluate((selectors: string[]) => {
+                const results: Array<{ x: number; y: number; width: number; height: number }> = [];
+                for (const selector of selectors) {
+                  const elms = document.querySelectorAll(selector);
+                  for (const el of elms) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                      results.push({
+                        x: rect.left + window.scrollX,
+                        y: rect.top + window.scrollY,
+                        width: rect.width,
+                        height: rect.height
+                      });
+                    }
+                  }
+                }
+                return results;
+              }, sensitiveSelectorMatches);
+
+              buf = await this.sshpInterceptor.redactScreenshot(buf, rects);
+            }
+          }
+
           res.writeHead(200, { "Content-Type": "image/png", "Content-Length": buf.length });
           res.end(buf);
           return;
@@ -6020,6 +6486,12 @@ $r | ConvertTo-Json -Depth 4 -Compress
           const body = await this.readJsonBody<{ sessionId: string; selector: string }>(req);
           if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
           if (!body.selector) return this.json(res, 400, { error: "selector required." });
+
+          const audit = await this.sshpInterceptor.auditAction("click", body);
+          if (!audit.allowed) {
+            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
+          }
+
           await mgr.click(body.sessionId, body.selector);
           return this.json(res, 200, { ok: true });
         } catch (err) {
@@ -6033,6 +6505,12 @@ $r | ConvertTo-Json -Depth 4 -Compress
           const body = await this.readJsonBody<{ sessionId: string; selector: string; text: string }>(req);
           if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
           if (!body.selector) return this.json(res, 400, { error: "selector required." });
+
+          const audit = await this.sshpInterceptor.auditAction("type", body);
+          if (!audit.allowed) {
+            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
+          }
+
           await mgr.type(body.sessionId, body.selector, body.text ?? "");
           return this.json(res, 200, { ok: true });
         } catch (err) {
@@ -6046,6 +6524,12 @@ $r | ConvertTo-Json -Depth 4 -Compress
           const body = await this.readJsonBody<{ sessionId: string; expression: string }>(req);
           if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
           if (!body.expression) return this.json(res, 400, { error: "expression required." });
+
+          const audit = await this.sshpInterceptor.auditAction("evaluate", body);
+          if (!audit.allowed) {
+            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
+          }
+
           const value = await mgr.evaluate(body.sessionId, body.expression);
           return this.json(res, 200, { result: value });
         } catch (err) {
@@ -6072,7 +6556,8 @@ $r | ConvertTo-Json -Depth 4 -Compress
         if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
         try {
           const sessionId = decodeURIComponent(domMatch[1]!);
-          const html = await mgr.domSnapshot(sessionId);
+          let html = await mgr.domSnapshot(sessionId);
+          html = this.sshpInterceptor.sanitizeDom(html);
           return this.json(res, 200, { dom: html });
         } catch (err) {
           return this.json(res, 500, { error: String(err) });
@@ -8131,6 +8616,22 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return;
     }
 
+    // ── SSHP Redaction Toggle preference ──────────────────────────────────────────
+    if (method === "POST" && url === "/api/preferences/sshp-redaction") {
+      const body = await this.readJsonBody<{ enabled?: boolean }>(req);
+      const enabled = body.enabled !== false;
+      const current = readPreferences() || { lastModified: "" };
+      const settings = current.runtimeSettings || {};
+      writePreferences({
+        runtimeSettings: {
+          ...settings,
+          sshpRedactionEnabled: enabled,
+        }
+      });
+      this.json(res, 200, { updated: true, sshpRedactionEnabled: enabled });
+      return;
+    }
+
     // ── E3e-3/E3e-4: GET /api/openapi.json — OpenAPI 3.0 spec ────────────
     if (method === "GET" && url === "/api/openapi.json") {
       const spec = {
@@ -8420,7 +8921,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return this.handleSlashCommand(command, argument);
     }
 
-    if (/(^|\b)(help|capabilities|what can you do)(\b|$)/.test(normalized)) {
+    if (/(^|\b)(help|what can you do)(\b|$)/.test(normalized) || normalized === "capabilities") {
       return {
         content: this.helpResponse(),
         metadata: { intent: "help" },
@@ -8468,8 +8969,14 @@ $r | ConvertTo-Json -Depth 4 -Compress
     try {
       const session = this.chatStore.getSession(sessionId);
       const conversationHistory = conversation
-        .filter((entry) => entry.role === "user" || entry.role === "assistant" || entry.role === "system")
-        .map((entry) => ({ role: entry.role, content: entry.content }));
+        .filter((entry) => entry.role === "user" || entry.role === "assistant" || entry.role === "system" || entry.role === "tool")
+        .map((entry) => ({
+          role: entry.role,
+          content: entry.content,
+          tool_call_id: entry.metadata?.tool_call_id as string | undefined,
+          tool_calls: entry.metadata?.tool_calls as any[] | undefined,
+          thoughtSignature: (entry.metadata?.thoughtSignature || entry.metadata?.googleThoughtSignature) as string | undefined,
+        }));
 
       // If the session has an explicit provider/model override, use it directly.
       // Otherwise, use capability-aware role routing ("chat" role).
@@ -8495,58 +9002,60 @@ $r | ConvertTo-Json -Depth 4 -Compress
       // ── Spectrum Refraction (Prism SR) — check if SR is active for this session ──
       const srConfig = this.chatStore.getSRConfig(sessionId);
       if (srConfig?.enabled && srConfig.leftProviderId && srConfig.leftModel && srConfig.rightProviderId && srConfig.rightModel) {
-        const srResult = await this.llmProviders.generateSR(
-          {
-            message: content,
-            conversation: conversationHistory,
-            systemPrompt,
-          },
-          {
-            enabled: true,
-            leftModel: { providerId: srConfig.leftProviderId, model: srConfig.leftModel },
-            rightModel: { providerId: srConfig.rightProviderId, model: srConfig.rightModel },
-            leftSlot: srConfig.leftSlot ?? undefined,
-            rightSlot: srConfig.rightSlot ?? undefined,
-            leftTimeoutMs: srConfig.leftTimeoutMs ?? undefined,
-            rightTimeoutMs: srConfig.rightTimeoutMs ?? undefined,
-            circuitBreakerEnabled: srConfig.circuitBreakerEnabled,
-            showHemispheres: srConfig.showHemispheres,
-          },
-          selection,
-        );
-        if (srResult?.content?.trim()) {
-          return {
-            content: srResult.content,
-            metadata: {
-              intent: "llm_sr",
-              srEnabled: true,
-              leftModel: srConfig.leftModel,
-              rightModel: srConfig.rightModel,
-              leftProvider: srConfig.leftProviderId,
-              rightProvider: srConfig.rightProviderId,
-              timing: srResult.timing,
-              isolationLevel: srResult.isolationLevel,
-              mediaArtifactCount: srResult.mediaArtifacts.length,
-              showHemispheres: srConfig.showHemispheres,
-              hemispheres: {
-                left: srResult.hemispheres.left ? {
-                  provider: srResult.hemispheres.left.providerId,
-                  model: srResult.hemispheres.left.model,
-                  content: srConfig.showHemispheres ? srResult.hemispheres.left.content : undefined,
-                } : null,
-                right: srResult.hemispheres.right ? {
-                  provider: srResult.hemispheres.right.providerId,
-                  model: srResult.hemispheres.right.model,
-                  content: srConfig.showHemispheres ? srResult.hemispheres.right.content : undefined,
-                } : null,
-                main: srResult.hemispheres.main ? {
-                  provider: srResult.hemispheres.main.providerId,
-                  model: srResult.hemispheres.main.model,
-                  content: srConfig.showHemispheres ? srResult.hemispheres.main.content : undefined,
-                } : null,
-              },
+        if (!this.agenticExecutor) {
+          const srResult = await this.llmProviders.generateSR(
+            {
+              message: content,
+              conversation: conversationHistory,
+              systemPrompt,
             },
-          };
+            {
+              enabled: true,
+              leftModel: { providerId: srConfig.leftProviderId, model: srConfig.leftModel },
+              rightModel: { providerId: srConfig.rightProviderId, model: srConfig.rightModel },
+              leftSlot: srConfig.leftSlot ?? undefined,
+              rightSlot: srConfig.rightSlot ?? undefined,
+              leftTimeoutMs: srConfig.leftTimeoutMs ?? undefined,
+              rightTimeoutMs: srConfig.rightTimeoutMs ?? undefined,
+              circuitBreakerEnabled: srConfig.circuitBreakerEnabled,
+              showHemispheres: srConfig.showHemispheres,
+            },
+            selection,
+          );
+          if (srResult?.content?.trim()) {
+            return {
+              content: srResult.content,
+              metadata: {
+                intent: "llm_sr",
+                srEnabled: true,
+                leftModel: srConfig.leftModel,
+                rightModel: srConfig.rightModel,
+                leftProvider: srConfig.leftProviderId,
+                rightProvider: srConfig.rightProviderId,
+                timing: srResult.timing,
+                isolationLevel: srResult.isolationLevel,
+                mediaArtifactCount: srResult.mediaArtifacts.length,
+                showHemispheres: srConfig.showHemispheres,
+                hemispheres: {
+                  left: srResult.hemispheres.left ? {
+                    provider: srResult.hemispheres.left.providerId,
+                    model: srResult.hemispheres.left.model,
+                    content: srConfig.showHemispheres ? srResult.hemispheres.left.content : undefined,
+                  } : null,
+                  right: srResult.hemispheres.right ? {
+                    provider: srResult.hemispheres.right.providerId,
+                    model: srResult.hemispheres.right.model,
+                    content: srConfig.showHemispheres ? srResult.hemispheres.right.content : undefined,
+                  } : null,
+                  main: srResult.hemispheres.main ? {
+                    provider: srResult.hemispheres.main.providerId,
+                    model: srResult.hemispheres.main.model,
+                    content: srConfig.showHemispheres ? srResult.hemispheres.main.content : undefined,
+                  } : null,
+                },
+              },
+            };
+          }
         }
       }
 
@@ -8557,6 +9066,31 @@ $r | ConvertTo-Json -Depth 4 -Compress
           conversationHistory,
           systemPrompt,
           async (input, sel) => {
+            if (srConfig?.enabled && srConfig.leftProviderId && srConfig.leftModel && srConfig.rightProviderId && srConfig.rightModel) {
+              const srResult = await this.llmProviders.generateSR(
+                input,
+                {
+                  enabled: true,
+                  leftModel: { providerId: srConfig.leftProviderId, model: srConfig.leftModel },
+                  rightModel: { providerId: srConfig.rightProviderId, model: srConfig.rightModel },
+                  leftSlot: srConfig.leftSlot ?? undefined,
+                  rightSlot: srConfig.rightSlot ?? undefined,
+                  leftTimeoutMs: srConfig.leftTimeoutMs ?? undefined,
+                  rightTimeoutMs: srConfig.rightTimeoutMs ?? undefined,
+                  circuitBreakerEnabled: srConfig.circuitBreakerEnabled,
+                  showHemispheres: srConfig.showHemispheres,
+                },
+                sel || selection,
+              );
+              if (!srResult) return null;
+              return {
+                content: srResult.content,
+                toolCalls: srResult.toolCalls,
+                stopReason: srResult.stopReason,
+                thoughtSignature: srResult.thoughtSignature,
+              };
+            }
+
             const result = hasSessionOverride
               ? await this.llmProviders.generate(input, sel)
               : await this.llmProviders.generateForRole(agentRole, input);
@@ -8565,6 +9099,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
               content: result.content,
               toolCalls: result.toolCalls,
               stopReason: result.stopReason,
+              thoughtSignature: result.thoughtSignature,
             };
           },
           selection,
@@ -8750,27 +9285,47 @@ $r | ConvertTo-Json -Depth 4 -Compress
   private buildAgenticSystemPrompt(): string {
     const toolNames = this.tools.map((t) => t.name).join(", ");
     const wsRoot = (() => { try { return resolveWorkspaceRoot(); } catch { return process.cwd(); } })();
+    const wsWorkingDir = join(wsRoot, "workspace");
     return [
-      "You are PRISM, an autonomous agent runtime with governed tool execution.",
-      "You have access to tools that you MUST use to accomplish tasks the user requests.",
-      "When the user asks you to create files, run commands, make HTTP requests, or perform any action, EXECUTE the corresponding tool — do NOT just describe what you would do.",
+      "You are PRISM, a state-of-the-art autonomous software engineering agent with governed tool execution.",
+      "You have access to a rich suite of IDE tools that you MUST use to design, plan, write, build, test, and audit codebase files. Do not just describe what you would do; execute the appropriate tool.",
       "",
+      `Workspace root (parent): ${wsRoot}`,
+      `Working directory: ${wsWorkingDir}`,
+      `Source project (read-only reference): ${process.cwd()}`,
       `Available tools: ${toolNames}`,
       "",
-      "Tool usage guidelines:",
-      "- Use file_write to create or update files. Always provide the full file content.",
-      "- Use file_read to read existing files before modifying them.",
-      "- Use file_list to explore directory structures.",
-      "- Use shell_exec for running commands (build, install, git, etc.).",
-      "- Use http_request for API calls and web requests.",
-      "- For multi-step tasks, execute tools in sequence — plan first, then act.",
+      "=== CRITICAL WORKSPACE RULES ===",
+      `- ALL files you create (websites, plans, code, task lists, implementation_plan.md, task.md, etc.) MUST be placed inside the Working directory: ${wsWorkingDir}`,
+      "- ALWAYS use ABSOLUTE PATHS when calling file_write, file_read, and file_list tools.",
+      `- When creating project directories, create them as subdirectories of ${wsWorkingDir} (e.g. ${join(wsWorkingDir, "prism_website")}).`,
+      `- You may READ from the Source project at ${process.cwd()} (docs, source code) via shell_exec commands (e.g. 'type' or 'cat'), but NEVER write there.`,
+      `- You may also read/write from any path under ${wsRoot} (e.g. ${wsRoot}\\artifacts, ${wsRoot}\\data).`,
       "",
-      `Workspace root: ${wsRoot}`,
+      "=== 1. PLANNING & TASK TRACKING ===",
+      "For all engineering and development tasks (such as writing features, refactoring APIs, adding tests, or creating frontends):",
+      `- You MUST first draft a detailed implementation_plan.md at ${join(wsWorkingDir, "implementation_plan.md")}, outlining the file modifications, dependencies, architectural choices, and verification plan. Present this plan to the operator.`,
+      `- Once approved, initialize a task.md file at ${join(wsWorkingDir, "task.md")} containing a hierarchically formatted TODO checklist.`,
+      "- Update this checklist dynamically (mark items as `[ ]` for pending, `[/]` for in-progress, or `[x]` for completed) as you execute each step.",
+      "",
+      "=== 2. SOFTWARE DESIGN & CODE CRAFTING ===",
+      "Apply world-class software development practices across all languages and frameworks:",
+      "- Write clean, highly modular, dry, and well-documented code. Choose clear, descriptive names for all classes, methods, and variables.",
+      "- Maintain documentation integrity: do not strip or delete existing comments, JSDoc headers, or code docstrings.",
+      "- Never stub out methods or write comments like `// TODO: implement later`. Provide a complete, fully functional, production-ready implementation.",
+      "- Design elegant, responsive visual interfaces: when building frontends, use premium Obsidian-Glass aesthetics (Google Fonts Outfit/Inter, blurred glassmorphic panels, rich HSL color gradients, smooth hover animations, and high-fidelity custom SVGs).",
+      "",
+      "=== 3. SURGICAL IDE OPERATIONS & SAFETY ===",
+      "- Read files fully before making modifications to ensure full contextual awareness.",
+      "- Avoid broad file overrides or rewriting whole files whenever possible. Use precise, surgical edits using the specific tools like `prism_ide_modify`.",
+      "- Always run your built-in syntax and structural checks (`prism_ide_lint`) to perform AST tags validation, missing imports/exports checks, and code reference audits.",
+      "- Compile and verify your builds: proactively run command-line tasks (like `npm run build`, `tsc`, or python tests) via terminal tools to check for syntax and type safety.",
+      "- Execute reference audits and verify page link or console integrity to ensure absolute robustness before completing the task.",
+      "",
       `Runtime mode: ${this.status.mode}. Environment: ${this.status.environmentProfile}.`,
       `Pending approvals: ${this.queue.list().length}.`,
       "",
-      "Respond with concise, actionable information. Show tool results to the user.",
-      "Do not hallucinate. If you don't know, say so.",
+      "Respond with concise, professional information. Show tool results to the user.",
     ].join("\n");
   }
 

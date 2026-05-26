@@ -1,0 +1,75 @@
+# Architecture Gap Analysis: Prism vs. Antigravity
+
+This document outlines the findings of our comprehensive code audit and highlights the structural "gap" between how **Prism** executes autonomous requests (like website creation) and how **Antigravity** executes them. It defines the concrete technical steps to ensure Prism can plan, design, and code at a world-class level.
+
+---
+
+## 🔍 1. Identified Architecture Gaps
+
+Our audit of the Prism core codebase (especially the chat orchestrator in `dashboard-service.ts` and the skills execution system in `skills-engine.ts`) revealed three main technical gaps:
+
+| Category | Prism's Native State | Antigravity's SOTA Standard |
+| :--- | :--- | :--- |
+| **1. Planning & State Tracking** | Starts executing tools immediately without laying out high-level files or folders. Does not generate structured checklists. | **Plan first, then act**. Generates `implementation_plan.md` to gather feedback, and maintains a living `task.md` TODO file to track task steps. |
+| **2. Design & Aesthetics** | Uses basic HTML boilerplates with standard CSS tags and plain background colors (as seen in the original `prism-landing.html` skeleton). | **Premium Obsidian Glass**. Employs curated HSL color scales, dynamic blurred backgrounds (`backdrop-filter`), Outfit/Inter typography, animated SVG artwork, and micro-interactions. |
+| **3. Safety & Linter loops** | Executes raw writes or terminal actions without validating compilation or reference integrity. | **Surgical, Balanced Edits**. Reads context, uses precise AST balance checkers (`prism_ide_lint`), tests local links, and conducts sandboxed audits. |
+
+---
+
+## 🛠️ 2. The Root Cause: System Prompt Simplicity
+
+The core driving force for Prism's agentic chat loops (`AgenticChatExecutor`) is the **system prompt** built dynamically by `buildAgenticSystemPrompt()` in `dashboard-service.ts`. 
+
+Currently, that method returns a highly simplified instruction set:
+```typescript
+    return [
+      "You are PRISM, an autonomous agent runtime with governed tool execution.",
+      "You have access to tools that you MUST use to accomplish tasks...",
+      "Tool usage guidelines:",
+      "- Use file_write to create or update files...",
+      "- For multi-step tasks, execute tools in sequence — plan first, then act.",
+      // ...
+    ].join("\n");
+```
+This prompt completely lacks instructions on:
+1. **Planning Rigor**: Drafting and getting approval for `implementation_plan.md`.
+2. **Quality Checklist**: Maintaining progress in `task.md`.
+3. **Visual Excellence Guidelines**: Styling rules for Obsidian Glass.
+4. **AST/Linter Auditing Loops**: Utilizing `prism_ide_modify` and `prism_ide_lint` safely.
+
+---
+
+## 🎯 3. The Solution: Engineering the Alignment
+
+To close this gap once and for all, we will engineer **System Instruction Upgrades** directly in Prism's prompt compiler.
+
+### A. Upgrading the System Prompt Builder
+We will refactor `buildAgenticSystemPrompt()` in `dashboard-service.ts` to inject a comprehensive, high-fidelity engineering instruction framework:
+
+```markdown
+=== TASK PLANNING & PROGRESS TRACKING ===
+For all complex tasks (especially multi-page creations or refactorings):
+1. You MUST first construct a detailed `implementation_plan.md` in the target workspace detailing the structure, styling variables, and content, and wait for user review.
+2. Once approved, write a detailed `task.md` checklist in the workspace and mark progress dynamically (`[ ]` to `[/]` to `[x]`) as you execute.
+
+=== OBSIDIAN-GLASS DESIGN SPECIFICATIONS ===
+Your websites must look extremely premium, responsive, and alive:
+- Fonts: Google Fonts Outfit (headings) and Inter (body).
+- Colors: Deep obsidian backgrounds (e.g. HSL scales) with frosted-glass containers.
+- Visuals: Vector SVGs with gradient overlays and spectrum refraction motifs. No plain placeholders.
+- Interactive: Include CSS variables, hover transition triggers, and state animations.
+
+=== SAFE SOFTWARE ENGINEERING & COMPILATION ===
+- Before editing files, read them.
+- Avoid large raw overrides. Use precise edits.
+- Use `prism_ide_lint` to verify AST div matching, local page links, and accessibility.
+```
+
+### B. Integrating with the Web Builder Skill
+By linking this upgraded agent prompt with the existing `web-builder-skill.json`, the orchestrator will automatically leverage its tools (`prism_ide_modify`, `prism_ide_lint`, `web_page_initialize`, `web_component_inject`) to execute steps with professional visual and logical precision.
+
+---
+
+## 🚀 Next Steps
+
+We will create a structured implementation plan to deploy this prompt framework. This will allow Prism to dynamically create a beautiful site in `prism_public` using its own agent loops!

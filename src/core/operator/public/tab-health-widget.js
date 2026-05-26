@@ -49,7 +49,12 @@
         var grid = document.getElementById('health-widget-grid');
         if (!grid) return;
         try {
-            var res = await fetch('/api/health/extended', { credentials: 'same-origin' });
+            var meta = document.querySelector('meta[name="prism-auth-token"]');
+            var token = meta ? meta.getAttribute('content') || '' : '';
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            var res = await fetch('/api/health/extended', { credentials: 'same-origin', headers: headers });
             if (!res.ok) {
                 renderError(grid, 'HTTP ' + res.status);
                 return;

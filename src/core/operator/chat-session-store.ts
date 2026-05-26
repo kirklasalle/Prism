@@ -25,6 +25,19 @@ export interface ChatSessionSummary {
     assistantEmail: string | null;
 }
 
+export interface SupportTicket {
+    ticketId: string;
+    title: string;
+    description: string;
+    source: string;
+    status: "open" | "investigating" | "self-healing" | "resolved";
+    severity: "low" | "medium" | "high" | "critical";
+    createdAt: string;
+    updatedAt: string;
+    resolutionLog?: string | null;
+    metadata: Record<string, unknown>;
+}
+
 /**
  * Input for creating a new chat session. As of Phase E3b every new session must
  * be bound to a character; the string overload is retained for backward-compat
@@ -42,7 +55,7 @@ export interface CreateSessionInput {
 export interface ChatMessage {
     messageId: string;
     sessionId: string;
-    role: "user" | "assistant" | "system";
+    role: "user" | "assistant" | "system" | "tool";
     content: string;
     createdAt: string;
     metadata: Record<string, unknown>;
@@ -308,6 +321,22 @@ export class ChatSessionStore implements ISessionStore {
             );
         `);
 
+        // PRISM Micro Support Desk Tickets
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS support_tickets (
+                ticket_id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                source TEXT NOT NULL,
+                status TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                resolution_log TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+        `);
+
         // D4c: extended SR config columns (safe migration for existing DBs)
         this.ensureColumn("sr_config", "left_slot", "TEXT");
         this.ensureColumn("sr_config", "right_slot", "TEXT");
@@ -468,7 +497,7 @@ export class ChatSessionStore implements ISessionStore {
         `).all({ sessionId }) as Array<{
             message_id: string;
             session_id: string;
-            role: "user" | "assistant" | "system";
+            role: "user" | "assistant" | "system" | "tool";
             content: string;
             created_at: string;
             metadata_json: string;
@@ -477,7 +506,7 @@ export class ChatSessionStore implements ISessionStore {
         return rows.map((row) => ({
             messageId: row.message_id,
             sessionId: row.session_id,
-            role: row.role,
+            role: row.role as any,
             content: row.content,
             createdAt: row.created_at,
             metadata: parseMetadata(row.metadata_json),
@@ -486,7 +515,7 @@ export class ChatSessionStore implements ISessionStore {
 
     appendMessage(
         sessionId: string,
-        role: "user" | "assistant" | "system",
+        role: "user" | "assistant" | "system" | "tool",
         content: string,
         metadata: Record<string, unknown> = {},
     ): ChatMessage {
@@ -1307,6 +1336,92 @@ export class ChatSessionStore implements ISessionStore {
             rightProviderId: row.right_provider_id,
             rightModel: row.right_model,
         };
+    }
+
+    createSupportTicket(ticket: {
+        title: string;
+        description: string;
+        source: string;
+        severity: "low" | "medium" | "high" | "critical";
+        status?: "open" | "investigating" | "self-healing" | "resolved";
+        metadata?: Record<string, unknown>;
+    }): SupportTicket {
+        const ticketId = "TKT-" + Math.floor(1000 + Math.random() * 9000);
+        const status = ticket.status || "open";
+        const now = new Date().toISOString();
+        const metaJson = JSON.stringify(ticket.metadata || {});
+
+        this.db.prepare(`
+            INSERT INTO support_tickets (ticket_id, title, description, source, status, severity, created_at, updated_at, resolution_log, metadata_json)
+            VALUES (:ticketId, :title, :description, :source, :status, :severity, :now, :now, NULL, :metaJson)
+        `).run({
+            ticketId,
+            title: ticket.title,
+            description: ticket.description,
+            source: ticket.source,
+            status,
+            severity: ticket.severity,
+            now,
+            metaJson,
+        });
+
+        return {
+            ticketId,
+            title: ticket.title,
+            description: ticket.description,
+            source: ticket.source,
+            status,
+            severity: ticket.severity,
+            createdAt: now,
+            updatedAt: now,
+            resolutionLog: null,
+            metadata: ticket.metadata || {},
+        };
+    }
+
+    listSupportTickets(): SupportTicket[] {
+        const rows = this.db.prepare(`
+            SELECT * FROM support_tickets
+            ORDER BY created_at DESC
+        `).all() as any[];
+
+        return rows.map((r) => ({
+            ticketId: r.ticket_id,
+            title: r.title,
+            description: r.description,
+            source: r.source,
+            status: r.status,
+            severity: r.severity,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            resolutionLog: r.resolution_log,
+            metadata: parseMetadata(r.metadata_json),
+        }));
+    }
+
+    updateSupportTicket(ticketId: string, status: string, resolutionLog?: string | null): boolean {
+        const now = new Date().toISOString();
+        const result = this.db.prepare(`
+            UPDATE support_tickets
+            SET status = :status,
+                resolution_log = COALESCE(:resolutionLog, resolution_log),
+                updated_at = :now
+            WHERE ticket_id = :ticketId
+        `).run({
+            ticketId,
+            status,
+            resolutionLog: resolutionLog !== undefined ? resolutionLog : null,
+            now,
+        });
+        return (result as any).changes > 0;
+    }
+
+    deleteSupportTicket(ticketId: string): boolean {
+        const result = this.db.prepare(`
+            DELETE FROM support_tickets
+            WHERE ticket_id = :ticketId
+        `).run({ ticketId });
+        return (result as any).changes > 0;
     }
 }
 

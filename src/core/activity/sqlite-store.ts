@@ -6,6 +6,8 @@ export class SqliteActivityStore implements IActivityStore {
     private readonly db: DatabaseSync;
     private readonly insertStmt: StatementSync;
     private readonly selectStmt: StatementSync;
+    /** Set to true after close() so late-arriving Guardian/timer events are silently dropped. */
+    private _closed = false;
 
     constructor(readonly dbPath: string = "prism-activity.db") {
         this.db = new DatabaseSync(dbPath);
@@ -103,6 +105,8 @@ export class SqliteActivityStore implements IActivityStore {
     }
 
     onEvent(event: ActivityEvent): void {
+        // Silently drop events after the DB is closed (e.g. Guardian timers firing during shutdown).
+        if (this._closed) return;
         this.insertStmt.run({
             id: event.id,
             timestamp: event.timestamp,
@@ -141,6 +145,7 @@ export class SqliteActivityStore implements IActivityStore {
         clientId?: string;
         assignmentId?: string;
     }): ActivityEvent[] {
+        if (this._closed) return [];
         const conditions: string[] = [];
         const params: Record<string, string> = {};
 
@@ -189,6 +194,8 @@ export class SqliteActivityStore implements IActivityStore {
     }
 
     close(): void {
+        if (this._closed) return;
+        this._closed = true;
         this.db.close();
     }
 }

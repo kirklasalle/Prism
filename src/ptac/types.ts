@@ -10,7 +10,7 @@
 export type PtacProfile = "sandbox" | "host";
 
 /** Suite preset — controls which scenarios run. */
-export type PtacSuite = "fast" | "full" | "demo" | "custom";
+export type PtacSuite = "fast" | "full" | "demo" | "custom" | "osworld";
 
 /* ── Step variants ─────────────────────────────────────────────────────── */
 
@@ -101,7 +101,14 @@ export interface ContainerExecStep extends StepBase {
     readonly command: string[];
     readonly expectExitCode?: number;
 }
-
+export interface OsWorldStep extends StepBase {
+    readonly kind: "osworld";
+    readonly args?: {
+        max_steps_per_task?: number;
+        max_duration_per_task_ms?: number;
+        task_subset?: "full" | "fast" | string;
+    };
+}
 export interface OAuthFlowCanaryStep extends StepBase {
     readonly kind: "oauthFlowCanary";
     readonly provider: "gmail" | "outlook" | "google-calendar";
@@ -274,6 +281,7 @@ export type PtacStep =
     | ScreenshotDiffStep
     | TerminalExecStep
     | ContainerExecStep
+    | OsWorldStep
     | OAuthFlowCanaryStep
     | SrFanOutStep
     | PluginLifecycleStep

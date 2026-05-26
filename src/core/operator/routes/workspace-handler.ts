@@ -194,6 +194,20 @@ export class WorkspaceHandler implements IRouteHandler {
             }
         }
 
+        if (method === "POST" && url === "/api/workspace/character-assignment-delete") {
+            try {
+                const body = await service.readJsonBody<{ assignmentId?: string }>(req);
+                const assignmentId = String(body.assignmentId ?? "").trim();
+                if (!assignmentId) return this.json(res, 400, { error: "assignmentId is required." });
+                const deleted = service.getCharacterAccountabilityManager().deleteAssignment(assignmentId);
+                if (!deleted) return this.json(res, 404, { error: "Assignment not found." });
+                return this.json(res, 200, { ok: true });
+            } catch (err: unknown) {
+                const e = err as { message?: string };
+                return this.json(res, 400, { error: e.message ?? "Delete failed" });
+            }
+        }
+
         if (method === "POST" && url === "/api/workspace/character-import") {
             try {
                 const body = await service.readJsonBody<{
@@ -249,6 +263,23 @@ export class WorkspaceHandler implements IRouteHandler {
                 return results;
             };
             return this.json(res, 200, { root, entries: walkDir(root, "") });
+        }
+
+        if (method === "POST" && url === "/api/workspace/open-path") {
+            try {
+                const payload = await service.readJsonBody<{ path?: string }>(req);
+                const p = (payload.path ?? "").trim();
+                if (!p) return this.json(res, 400, { error: "Path is required." });
+                const { exec: execCb } = await import("node:child_process");
+                const { platform: osPlatform } = await import("node:os");
+                const platform = osPlatform();
+                const cmd = platform === "win32" ? `explorer "${p}"` : platform === "darwin" ? `open "${p}"` : `xdg-open "${p}"`;
+                execCb(cmd, { timeout: 10_000 }, () => { });
+                return this.json(res, 200, { ok: true, path: p });
+            } catch (err: unknown) {
+                const e = err as { message?: string };
+                return this.json(res, 500, { error: e.message ?? "Failed to open path" });
+            }
         }
 
         if (method === "POST" && url === "/api/workspace/open-explorer") {
