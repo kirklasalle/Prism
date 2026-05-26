@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.iam_provisioner",
+  "version": "1.0.0",
+  "name": "Prism IAM & Directory Provisioner",
+  "description": "Orchestrates multi-tenant IAM configurations, SSO setups, SCIM directory synchronization, and secure credentials vault role bindings.",
+  "tags": ["iam", "sso", "scim", "rbac", "security", "credentials", "provisioner"],
+  "governance": {
+    "min_policy_tier": "tier-3",
+    "required_approvals": ["shell_exec", "file_write"],
+    "covenant_rules": [
+      "Strictly prohibit plain-text writing of secrets to configuration profiles.",
+      "Verify all access grants have explicit expiration periods and follow least-privilege rules.",
+      "Log all administrative provisionings and role modifications immediately to the audit database."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate identity grants, SCIM payload fields, and directory scopes for: {query}. Verify zero policy breaches or unapproved rights escalations exist.",
+    "right_hemisphere": "Formulate secure SSO client bindings, robust security policy schemas, and clean directory configurations for: {query}.",
+    "main_hemisphere": "Coordinate provisioning. Scan user catalogs, apply role modifications, execute SCIM sync requests, and audit secure credentials stores: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "audit_existing_roles",
+        "name": "Audit Active Directory Roles",
+        "tools": ["file_read", "run_command"],
+        "action": "Examine target system credentials files and identify active user role maps.",
+        "transitions": {
+          "success": "configure_sso_bindings",
+          "failed": "audit_existing_roles"
+        }
+      },
+      {
+        "id": "configure_sso_bindings",
+        "name": "Configure SSO & SCIM Bindings",
+        "tools": ["file_write"],
+        "action": "Scaffold directory sync rules and set up authed SSO credentials targets securely.",
+        "transitions": {
+          "success": "execute_directory_sync",
+          "failed": "audit_existing_roles"
+        }
+      },
+      {
+        "id": "execute_directory_sync",
+        "name": "Execute SCIM Sync & Log Audit",
+        "tools": ["run_command"],
+        "action": "Trigger identity synchronization endpoints and record audit trails in the security store.",
+        "transitions": {
+          "success": "completed",
+          "failed": "configure_sso_bindings"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Provisioning Session Concluded",
+        "tools": [],
+        "action": "Inform the system administrator that identity provisioning has concluded, showing verified access summaries.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

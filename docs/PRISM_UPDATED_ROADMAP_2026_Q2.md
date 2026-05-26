@@ -1,9 +1,9 @@
 # PRISM Updated Roadmap — 2026 Q2
 
-**Date:** 2026-04-22
-**Baseline release:** v0.4.2 (D4c)
-**Supersedes:** nothing — this document **appends** to [ROADMAP.md](ROADMAP.md). Phases A through D4 remain closed per existing manifests.
-**Companions:** [PRISM_FULL_AUDIT_2026_Q2.md](PRISM_FULL_AUDIT_2026_Q2.md) · [READINESS_RUNBOOK.md](READINESS_RUNBOOK.md)
+**Date:** 2026-05-26  
+**Baseline release:** v0.4.2 (D4c)  
+**Supersedes:** nothing — this document **appends** to [ROADMAP.md](ROADMAP.md). Phases A through D4 remain closed per existing manifests.  
+**Companions:** [PRISM_FULL_AUDIT_2026_Q2.md](PRISM_FULL_AUDIT_2026_Q2.md) · [READINESS_RUNBOOK.md](READINESS_RUNBOOK.md) · [PRISM_PUBLIC_LAUNCH_ROADMAP_AND_CHECKLIST_2026.md](PRISM_PUBLIC_LAUNCH_ROADMAP_AND_CHECKLIST_2026.md)
 
 ---
 

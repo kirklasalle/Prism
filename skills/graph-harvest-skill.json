@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.graph_harvest",
+  "version": "1.0.0",
+  "name": "Prism Knowledge Graph Harvester",
+  "description": "Ingests raw conversation traces and activity log streams, extracting structured knowledge entity triples and storing them in the persistent SQLite brain database.",
+  "tags": ["memory", "graph", "knowledgebase", "harvester", "entities", "extraction", "database"],
+  "governance": {
+    "min_policy_tier": "tier-1",
+    "required_approvals": ["file_write"],
+    "covenant_rules": [
+      "Always redact sensitive credentials, tokens, and personal keys from extracted entity structures.",
+      "Check for duplicate entity entries to prevent database bloating and index lockouts.",
+      "Strictly preserve causal timelines when linking diagnostic records to session logs."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Analyze the log/text content: {query}. Verify the authenticity and causal relationship of entities, ensuring zero redundant metadata is ingested.",
+    "right_hemisphere": "Structure elegant, precise semantic relationship triples [subject -> predicate -> object] and correlation payloads for: {query}.",
+    "main_hemisphere": "Coordinate harvesting. Query log buffers, isolate key developer decisions, parse semantic relationships, and record triples inside the long-term SQLite graph table: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "query_log_streams",
+        "name": "Query Active Log Buffers",
+        "tools": ["file_read", "run_command"],
+        "action": "Fetch log histories from '/api/logs?limit=500' and extract critical developer incidents or resolutions.",
+        "transitions": {
+          "success": "extract_entity_triples",
+          "failed": "query_log_streams"
+        }
+      },
+      {
+        "id": "extract_entity_triples",
+        "name": "Extract Relationship Triples",
+        "tools": [],
+        "action": "Parse names, components, actions, and dates to build structured semantic triple matrices.",
+        "transitions": {
+          "success": "persist_to_graph",
+          "failed": "query_log_streams"
+        }
+      },
+      {
+        "id": "persist_to_graph",
+        "name": "Sync to Brain Database",
+        "tools": ["run_command"],
+        "action": "Submit transactions to the SQLite store to persist the structured knowledge triples and update references.",
+        "transitions": {
+          "success": "completed",
+          "failed": "extract_entity_triples"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Knowledge Synced Successfully",
+        "tools": [],
+        "action": "Provide the operator with a summary of newly indexed knowledge relationships and graph metrics.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

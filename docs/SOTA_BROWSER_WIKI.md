@@ -254,4 +254,18 @@ For deep dives into operational deployment and code architectures, check out the
 * **Operator Walkthrough Guide**: [OPERATOR_DASHBOARD_WALKTHROUGH.md](file:///d:/Projects/Prism/docs/OPERATOR_DASHBOARD_WALKTHROUGH.md) — Detailed runbook on visual settings, CSH handoffs, and agent loops.
 * **Direct Control Reference Guide**: [COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md](file:///d:/Projects/Prism/docs/COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md) — The visual UI control manual.
 * **Developer Guidelines**: [DEVELOPER_GUIDE.md](file:///d:/Projects/Prism/docs/DEVELOPER_GUIDE.md) — Backend routing, TypeScript patterns, and testing frameworks.
+* **Learning Curve Journal**: [learning_curve_journal.md](file:///d:/Projects/Prism/docs/learning_curve_journal.md) — Architectural post-mortems, telemetry refactoring details, self-healing support dictionary, and world-class audit reflections.
 * **Complete Product Index**: [DOCS_INDEX.md](file:///d:/Projects/Prism/docs/DOCS_INDEX.md) — Full listing of all Q2 2026 PRISM artifacts.
+
+---
+
+## 6. Canonical Learning Curve Journal & Reflection Post-Mortem
+
+To maintain operational integrity, prevent historical regressions, and document SOTA engineering reflections, the **PRISM Learning Curve Journal** ([learning_curve_journal.md](file:///d:/Projects/Prism/docs/learning_curve_journal.md)) serves as our central support-desk database and developer feedback log:
+
+### 6.1 Core Sections
+1. **Telemetry Refactoring Post-Mortem**: Analysis and remediation of early browser reference errors, duplicates, and window listener bindings to stabilize dashboard load states.
+2. **Thinking-Trace Feature Analysis**: Explains the design philosophy of the clickable Frosted Obsidian Glass portal modal to display live agent reasoning.
+3. **Web Builder Capability Critique**: Details cognitive-overhead challenges in raw HTML generation tools and recommends vision-driven audits and AST-based injection engines.
+4. **Support Desk & Self-Healing Guidelines**: Operational reference dictionary mapping error signatures to root causes and concrete remediation steps (useful for automated repair).
+5. **World-Class Project Audit (May 2026)**: In-depth due-diligence audit details mapping PRISM's technical posture, core architectural moats (GaaS, SR, PAD), monolithic debt, and product roadmap against SOTA systems in 2026. Useful companion to the interactive [PRISM_WORLD_CLASS_AUDIT_PRESENTATION_2026.html](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_AUDIT_PRESENTATION_2026.html) slideshow.

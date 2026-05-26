@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRISM Ultimate World-Class Project Audit & Presentation</title>
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Sleek Reset and Variable Core */
+    :root {
+      --bg-dark: #090a0f;
+      --bg-card: rgba(18, 20, 29, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-main: #f1f2f6;
+      --text-muted: #9fa4bc;
+      --primary: #9b51e0;
+      --primary-glow: rgba(155, 81, 224, 0.4);
+      --secondary: #00f2fe;
+      --secondary-glow: rgba(0, 242, 254, 0.4);
+      --gold: #f2c94c;
+      --gold-glow: rgba(242, 201, 76, 0.3);
+      --green: #27ae60;
+      --red: #eb5757;
+      --font-title: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --transition-speed: 0.3s;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(155, 81, 224, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(0, 242, 254, 0.08) 0%, transparent 40%);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Presentation Frame */
+    header {
+      background: rgba(9, 10, 15, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 6px;
+      box-shadow: 0 0 10px var(--primary-glow);
+    }
+
+    .logo-text {
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 1.25rem;
+      letter-spacing: 2px;
+      background: linear-gradient(to right, #fff, var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, rgba(155, 81, 224, 0.2), rgba(0, 242, 254, 0.2));
+      border: 1px solid var(--primary);
+      padding: 0.2rem 0.5rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border-radius: 4px;
+      color: var(--secondary);
+      text-transform: uppercase;
+    }
+
+    .nav-progress {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .progress-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      transition: all var(--transition-speed);
+    }
+
+    .progress-dot.active {
+      background: var(--secondary);
+      box-shadow: 0 0 8px var(--secondary-glow);
+      transform: scale(1.3);
+    }
+
+    /* main workspace slide container */
+    main {
+      flex: 1;
+      display: flex;
+      position: relative;
+      width: 100%;
+    }
+
+    /* Collapsible Navigation Sidebar */
+    .sidebar {
+      width: 280px;
+      border-right: 1px solid var(--border-color);
+      background: rgba(9, 10, 15, 0.5);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .sidebar.collapsed {
+      width: 0;
+      padding: 0;
+      border-right: none;
+      overflow: hidden;
+    }
+
+    .sidebar-title {
+      font-family: var(--font-title);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 1rem;
+    }
+
+    .sidebar-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all var(--transition-speed);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sidebar-btn:hover {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-main);
+    }
+
+    .sidebar-btn.active {
+      background: rgba(155, 81, 224, 0.15);
+      border-color: rgba(155, 81, 224, 0.3);
+      color: var(--text-main);
+    }
+
+    .sidebar-btn-num {
+      font-size: 0.75rem;
+      opacity: 0.5;
+    }
+
+    /* Slide Arena */
+    .slide-arena {
+      flex: 1;
+      padding: 3rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .slide {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      padding: 3rem;
+      width: 100%;
+      max-width: 1100px;
+      min-height: 580px;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .slide.active {
+      display: flex;
+    }
+
+    /* Slide Components */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.5rem;
+    }
+
+    .slide-category {
+      font-family: var(--font-title);
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--secondary);
+    }
+
+    .slide-title {
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 2.2rem;
+      background: linear-gradient(135deg, #ffffff 0%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-top: 0.25rem;
+    }
+
+    .slide-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .slide-footer {
+      border-top: 1px solid var(--border-color);
+      padding-top: 1rem;
+      margin-top: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Slide 1: Welcome */
+    .hero-slide {
+      text-align: center;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+
+    .hero-glowing-ring {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      margin-bottom: 1rem;
+    }
+
+    .hero-glowing-ring::after {
+      content: '';
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 2px solid var(--secondary);
+      box-shadow: 0 0 20px var(--secondary-glow);
+      animation: spin 8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hero-prism-logo {
+      font-family: var(--font-title);
+      font-size: 2.5rem;
+      font-weight: 900;
+      color: #fff;
+      z-index: 10;
+    }
+
+    .hero-title {
+      font-family: var(--font-title);
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #fff 30%, var(--secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 650px;
+    }
+
+    .hero-badge-group {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    /* Scorecard Slide 2 */
+    .scorecard-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .scorecard-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      text-align: center;
+      transition: all var(--transition-speed);
+    }
+
+    .scorecard-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-4px);
+    }
+
+    .scorecard-val {
+      font-family: var(--font-title);
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--secondary);
+      margin-bottom: 0.25rem;
+    }
+
+    .scorecard-title {
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .scorecard-desc {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    .meter-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      margin-top: 0.75rem;
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      border-radius: 3px;
+    }
+
+    /* Slide 3: Interactive Matrix */
+    .matrix-tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.25rem;
+      overflow-x: auto;
+    }
+
+    .matrix-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.5rem 1rem;
+      font-family: var(--font-title);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all var(--transition-speed);
+      border-radius: 4px 4px 0 0;
+      white-space: nowrap;
+    }
+
+    .matrix-tab.active {
+      color: var(--secondary);
+      border-bottom: 2px solid var(--secondary);
+    }
+
+    .matrix-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .matrix-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    .matrix-table th {
+      background: rgba(255, 255, 255, 0.02);
+      font-family: var(--font-title);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: left;
+      padding: 0.75rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+
+    .matrix-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: top;
+      line-height: 1.4;
+    }
+
+    .matrix-table tr:hover td {
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    .badge-worldclass {
+      background: rgba(242, 201, 76, 0.15);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 0.1rem 0.4rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      border-radius: 3px;
+      text-transform: uppercase;
+      display: inline-block;
+    }
+
+    .badge-prism {
+      background: linear-gradient(135deg, rgba(155, 81, 224, 0.2), rgba(0, 242, 254, 0.2));
+      border: 1px solid var(--secondary);
+      color: var(--secondary);
+      padding: 0.1rem 0.4rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      border-radius: 3px;
+      text-transform: uppercase;
+      display: inline-block;
+      box-shadow: 0 0 6px rgba(0, 242, 254, 0.2);
+    }
+
+    /* Grid of Moats - Slide 4 */
+    .moats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+      margin: 1rem 0;
+    }
+
+    .moat-card {
+      background: rgba(255, 255, 255, 0.01);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: all var(--transition-speed);
+      position: relative;
+    }
+
+    .moat-card:hover {
+      border-color: var(--secondary);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 242, 254, 0.1);
+    }
+
+    .moat-icon {
+      font-size: 1.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .moat-title {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .moat-text {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Technical Critique - Slide 5 */
+    .critique-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin: 1rem 0;
+    }
+
+    .critique-section {
+      background: rgba(255, 255, 255, 0.01);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .critique-section-title {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 1.15rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .critique-list {
+      list-style-type: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+    }
+
+    .critique-item {
+      font-size: 0.8rem;
+      line-height: 1.4;
+      position: relative;
+      padding-left: 1.25rem;
+    }
+
+    .critique-item::before {
+      content: '⚡';
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+
+    .suggestion-item::before {
+      content: '🚀';
+    }
+
+    /* Slide 6: Market placement */
+    .market-split {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 2rem;
+      margin: 1rem 0;
+    }
+
+    .market-map-box {
+      border: 1px solid var(--border-color);
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      height: 300px;
+      position: relative;
+      padding: 1.5rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .market-axis-y {
+      position: absolute;
+      left: 50%;
+      top: 10px;
+      bottom: 10px;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .market-axis-x {
+      position: absolute;
+      top: 50%;
+      left: 10px;
+      right: 10px;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .axis-label {
+      position: absolute;
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .label-top { top: 5px; left: 52%; transform: translateX(-50%); }
+    .label-bottom { bottom: 5px; left: 52%; transform: translateX(-50%); }
+    .label-left { left: 15px; top: 52%; transform: translateY(-50%); }
+    .label-right { right: 15px; top: 52%; transform: translateY(-50%); }
+
+    .market-dot {
+      position: absolute;
+      padding: 0.3rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all var(--transition-speed);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .market-dot:hover {
+      transform: scale(1.1);
+      z-index: 10;
+    }
+
+    .market-dot.prism {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border: 1px solid var(--secondary);
+      box-shadow: 0 0 15px var(--primary-glow);
+      color: #fff;
+    }
+
+    /* Slide 8: Interactive roadmap */
+    .roadmap-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .roadmap-phase {
+      background: rgba(255, 255, 255, 0.01);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.75rem 1.25rem;
+      display: grid;
+      grid-template-columns: 200px 1fr 120px;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .roadmap-phase-title {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--secondary);
+    }
+
+    .roadmap-phase-tasks {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .roadmap-phase-status {
+      text-align: right;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    /* Fixed Controls Area */
+    .controls {
+      background: rgba(9, 10, 15, 0.9);
+      border-top: 1px solid var(--border-color);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      bottom: 0;
+      z-index: 100;
+    }
+
+    .control-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      font-family: var(--font-title);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all var(--transition-speed);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--text-muted);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-glow));
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 0 12px var(--primary-glow);
+    }
+
+    .slide-index-counter {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .keyboard-guide {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .kbd {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Dashboard Header -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-icon"></div>
+      <div class="logo-text">PRISM</div>
+      <div class="logo-badge">Audit v0.4.2</div>
+    </div>
+    
+    <div class="nav-progress" id="nav-progress">
+      <!-- Generated via JS -->
+    </div>
+
+    <div>
+      <button class="btn" onclick="toggleSidebar()">
+        <span id="sidebar-toggle-text">Index</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Presentation main ground -->
+  <main>
+    <!-- Left Navigation Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-title">Presentation Slides</div>
+      <!-- Generated via JS -->
+    </div>
+
+    <!-- Right Slide Arena -->
+    <div class="slide-arena">
+      
+      <!-- Slide 1: Welcome -->
+      <div class="slide hero-slide active" data-index="0" data-cat="Overview">
+        <div class="hero-glowing-ring">
+          <div class="hero-prism-logo">P</div>
+        </div>
+        <div class="hero-title">PRISM Audit Presentation</div>
+        <div class="hero-subtitle">
+          An authoritative critique, 5-tier multi-dimensional comparison, gap analysis, and roadmap to world-class deployment readiness for the PRISM agent runtime.
+        </div>
+        <div class="hero-badge-group">
+          <span class="badge-prism">Decoupled GaaS</span>
+          <span class="badge-worldclass">Spectrum Refraction</span>
+          <span class="badge-prism">v0.4.2 Hardy</span>
+        </div>
+        <div class="slide-footer">
+          <span>May 2026</span>
+          <span>Press <kbd class="kbd">→</kbd> to Begin</span>
+        </div>
+      </div>
+
+      <!-- Slide 2: Executive Summary & Scorecard -->
+      <div class="slide" data-index="1" data-cat="Assessment">
+        <div class="slide-header">
+          <div>
+            <div class="slide-category">01 / Executive Scorecard</div>
+            <div class="slide-title">Auditor Scorecard & Summary</div>
+          </div>
+        </div>
+        
+        <div class="slide-body">
+          <p style="font-size: 0.9rem; line-height: 1.5; color: var(--text-muted); margin-bottom: 1.25rem;">
+            PRISM is a **substantially feature-complete, well-engineered agent runtime** featuring an exceptionally novel governance layer. The core technical foundation is robust. However, there is a concrete gap between the current capability footprint and enterprise deployment ergonomics.
+          </p>
+          
+          <div class="scorecard-grid">
+            <div class="scorecard-card">
+              <div class="scorecard-val">9.5/10</div>
+              <div class="scorecard-title">Core Architecture</div>
+              <div class="scorecard-desc">Decoupled event-sourced activity bus, 4 swarm topologies.</div>
+              <div class="meter-bar"><div class="meter-fill" style="width: 95%; background: var(--secondary);"></div></div>
+            </div>
+            
+            <div class="scorecard-card">
+              <div class="scorecard-val">10/10</div>
+              <div class="scorecard-title">Governance Engine</div>
+              <div class="scorecard-desc">Permanent Active Directives (10 Laws), CAC chain of custody.</div>
+              <div class="meter-bar"><div class="meter-fill" style="width: 100%; background: var(--primary);"></div></div>
+            </div>
+
+            <div class="scorecard-card">
+              <div class="scorecard-val">5.0/10</div>
+              <div class="scorecard-title">User Readiness</div>
+              <div class="scorecard-desc">Absence of Simple UI, setup failures, missing templates.</div>
+              <div class="meter-bar"><div class="meter-fill" style="width: 50%; background: var(--gold);"></div></div>
+            </div>
+
+            <div class="scorecard-card">
+              <div class="scorecard-val">4.0/10</div>
+              <div class="scorecard-title">Ecosystem Reach</div>
+              <div class="scorecard-desc">Early-stage communities, single Node.js runtime environment.</div>
+              <div class="meter-bar"><div class="meter-fill" style="width: 40%; background: var(--red);"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <span>PRISM Project Audit</span>
+          <span>Slide 2 of 8</span>
+        </div>
+      </div>
+
+      <!-- Slide 3: Interactive 5-Tier Matrix -->
+      <div class="slide" data-index="2" data-cat="Benchmark">
+        <div class="slide-header">
+          <div>
+            <div class="slide-category">02 / Comparative Matrix</div>
+            <div class="slide-title">5-Tier Technical Benchmark</div>
+          </div>
+        </div>
+
+        <div class="slide-body">
+          <div class="matrix-tabs">
+            <button class="matrix-tab active" onclick="switchMatrixTab('standards')">Programming Standards</button>
+            <button class="matrix-tab" onclick="switchMatrixTab('codebase')">Codebase Architecture</button>
+            <button class="matrix-tab" onclick="switchMatrixTab('uiux')">UI / UX</button>
+            <button class="matrix-tab" onclick="switchMatrixTab('documentation')">Documentation</button>
+            <button class="matrix-tab" onclick="switchMatrixTab('market')">Market Strategy</button>
+          </div>
+
+          <div class="matrix-table-wrap">
+            <!-- TAB 1: Standards -->
+            <table class="matrix-table" id="matrix-standards">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">Dimension</th>
+                  <th style="width: 18%;">Less Standard</th>
+                  <th style="width: 22%;">Industry Standard</th>
+                  <th style="width: 22%;">World-Class (SOTA)</th>
+                  <th style="width: 20%;">PRISM Posture</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Typing & Safety</strong></td>
+                  <td>Loose JS, no types.</td>
+                  <td>Basic TS with sporadic <code>any</code> overrides.</td>
+                  <td>Zero-trust, absolute immutability, zero-warnings compiler.</td>
+                  <td><span class="badge-prism">Best in Class</span><br>Strict TypeScript, schema validated inputs.</td>
+                </tr>
+                <tr>
+                  <td><strong>Error Isolation</strong></td>
+                  <td>Console leaking, unhandled exceptions.</td>
+                  <td>Custom error handlers, REST HTTP exceptions.</td>
+                  <td>Mathematical fault isolation, self-healing orchestration.</td>
+                  <td><span class="badge-prism">Best in Class+</span><br>Workflows with fallback routing, signal control.</td>
+                </tr>
+                <tr>
+                  <td><strong>CI Gates</strong></td>
+                  <td>Manual release, no checks.</td>
+                  <td>ESLint, standard unit test coverage (40-60%).</td>
+                  <td>Strict gating, mutation analysis, build attestation.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>9 CI gates including directive hashing.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- TAB 2: Codebase -->
+            <table class="matrix-table" id="matrix-codebase" style="display:none;">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">Dimension</th>
+                  <th style="width: 18%;">Less Standard</th>
+                  <th style="width: 22%;">Industry Standard</th>
+                  <th style="width: 22%;">World-Class (SOTA)</th>
+                  <th style="width: 20%;">PRISM Posture</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Core Design</strong></td>
+                  <td>Monolithic spaghetti.</td>
+                  <td>Modular MVC structures.</td>
+                  <td>Decoupled microservices, self-assembling DAG runtimes.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>Decoupled GaaS, event-sourced activity bus.</td>
+                </tr>
+                <tr>
+                  <td><strong>Orchestration</strong></td>
+                  <td>Sequential execution loops.</td>
+                  <td>Single model routers, basic agent chains.</td>
+                  <td>Dynamic swarms, automated topology switching.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>Spectrum Refraction tri-model fan-out & isolation.</td>
+                </tr>
+                <tr>
+                  <td><strong>Sandbox</strong></td>
+                  <td>Bare metal executions.</td>
+                  <td>Pre-prompt instruction limits.</td>
+                  <td>Secure cgroups v2 boundaries, Docker sandboxes.</td>
+                  <td><span class="badge-prism">Best in Class</span><br>Virtual terminal and container adapters.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- TAB 3: UIUX -->
+            <table class="matrix-table" id="matrix-uiux" style="display:none;">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">Dimension</th>
+                  <th style="width: 18%;">Less Standard</th>
+                  <th style="width: 22%;">Industry Standard</th>
+                  <th style="width: 22%;">World-Class (SOTA)</th>
+                  <th style="width: 20%;">PRISM Posture</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Console View</strong></td>
+                  <td>Plain text dumps.</td>
+                  <td>Clean dashboards, standard fields.</td>
+                  <td>Predictive alert systems, multi-surface dashboards.</td>
+                  <td><span class="badge-prism">Best in Class</span><br>12-tab cockpit, lazy loading, live audit trails.</td>
+                </tr>
+                <tr>
+                  <td><strong>Sync and WS</strong></td>
+                  <td>Manual refresh.</td>
+                  <td>Static REST polling.</td>
+                  <td>Instant streaming SSE, automatic reconnect backoff.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>Robust real-time WebSocket, SSE reconnects.</td>
+                </tr>
+                <tr>
+                  <td><strong>Autonomy view</strong></td>
+                  <td>Invisible decisions.</td>
+                  <td>Developer JSON log viewer.</td>
+                  <td>Visual accountability timeline, session replay files.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>PTAC self-drive slide generators, telemetry page.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- TAB 4: Documentation -->
+            <table class="matrix-table" id="matrix-documentation" style="display:none;">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">Dimension</th>
+                  <th style="width: 18%;">Less Standard</th>
+                  <th style="width: 22%;">Industry Standard</th>
+                  <th style="width: 22%;">World-Class (SOTA)</th>
+                  <th style="width: 20%;">PRISM Posture</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Core Depth</strong></td>
+                  <td>Basic setup instructions.</td>
+                  <td>JSDocs, short user tutorials.</td>
+                  <td>Complete threat model,Whitepapers, PRD alignment tracking.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>53 files, traceability matrices, whitepapers.</td>
+                </tr>
+                <tr>
+                  <td><strong>Audience split</strong></td>
+                  <td>One-size-fits-all text.</td>
+                  <td>Developer vs general user division.</td>
+                  <td>Compliance templates, SRE guides, edge configuration sheets.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>Dedicated guides for SREs, SOTA Wikis, FAQs.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- TAB 5: Market -->
+            <table class="matrix-table" id="matrix-market" style="display:none;">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">Dimension</th>
+                  <th style="width: 18%;">Less Standard</th>
+                  <th style="width: 22%;">Industry Standard</th>
+                  <th style="width: 22%;">World-Class (SOTA)</th>
+                  <th style="width: 20%;">PRISM Posture</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Trust Moat</strong></td>
+                  <td>Zero safety layer.</td>
+                  <td>Prompt-bound limits.</td>
+                  <td>Decoupled GaaS independent of model's smarts.</td>
+                  <td><span class="badge-worldclass">World-Class</span><br>Permanent cryptographical directive gates.</td>
+                </tr>
+                <tr>
+                  <td><strong>Latency</strong></td>
+                  <td>Unoptimized scripts.</td>
+                  <td>Single model standard calls.</td>
+                  <td>Edge-optimized models, hardware aware.</td>
+                  <td><span class="badge-prism">Industry Standard</span><br>High network multiply with tri-model paths.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <span>Interact with matrix tabs</span>
+          <span>Slide 3 of 8</span>
+        </div>
+      </div>
+
+      <!-- Slide 4: Unmatched Technical Moats -->
+      <div class="slide" data-index="3" data-cat="Security">
+        <div class="slide-header">
+          <div>
+            <div class="slide-category">03 / Unmatched Moats</div>
+            <div class="slide-title">Core Technological Advantages</div>
+          </div>
+        </div>
+
+        <div class="slide-body">
+          <div class="moats-grid">
+            <div class="moat-card">
+              <div class="moat-icon">🔮</div>
+              <div class="moat-title">Spectrum Refraction</div>
+              <div class="moat-text">
+                Fuses Left-Logic and Right-Creative reasoning in parallel under a Main Coordinator. Enforces mandatory instance isolation at startup to guarantee multi-model diversity.
+              </div>
+            </div>
+
+            <div class="moat-card">
+              <div class="moat-icon">🔒</div>
+              <div class="moat-title">Permanent Directives</div>
+              <div class="moat-text">
+                The 10 Laws are hardcoded and cryptographically locked. Assured at boot and re-scanned every 10 minutes by local Guardian agents to block prompt-injection escapes.
+              </div>
+            </div>
+
+            <div class="moat-card">
+              <div class="moat-icon">⛓️</div>
+              <div class="moat-title">Causal Event Chaining</div>
+              <div class="moat-text">
+                Every action taken by swarms is packaged into a SHA-256 hashed chain on the Autonomous Activity Bus. Replays incidents forensically for high-trust governance compliance.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <span>Technical Moats</span>
+          <span>Slide 4 of 8</span>
+        </div>
+      </div>
+
+      <!-- Slide 5: Technical Critique & Debt -->
+      <div class="slide" data-index="4" data-cat="Critique">
+        <div class="slide-header">
+          <div>
+            <div class="slide-category">04 / Code Review</div>
+            <div class="slide-title">System Critique & Tech Debt</div>
+          </div>
+        </div>
+
+        <div class="slide-body">
+          <div class="critique-grid">
+            <div class="critique-section">
+              <div class="critique-section-title" style="color: var(--red);">Architectural Debt</div>
+              <ul class="critique-list">
+                <li class="critique-item">
+                  <strong>Dashboard Monolith:</strong> <code>dashboard-service.ts</code> at 528 KiB consolidates WS streaming, static routing, and system APIs, presenting major isolation risks.
+                </li>
+                <li class="critique-item">
+                  <strong>Node-bound Ecosystem:</strong> Being written exclusively in Node.js limits integration surfaces for the 70%+ Python AI community.
+                </li>
+                <li class="critique-item">
+                  <strong>Network Latency:</strong> Resolving parallel tri-model operations multiplies endpoint network times by 3x.
+                </li>
+              </ul>
+            </div>
+
+            <div class="critique-section">
+              <div class="critique-section-title" style="color: var(--secondary);">Enhancement Suggestions</div>
+              <ul class="critique-list">
+                <li class="critique-item suggestion-item">
+                  <strong>Fragment Service:</strong> Break the server codebase into discrete API route chunks (auth, sessions, system).
+                </li>
+                <li class="critique-item suggestion-item">
+                  <strong>Python REST SDK:</strong> Build light REST client bindings (<code>prism-client</code>) for quick Python pipeline deployments.
+                </li>
+                <li class="critique-item suggestion-item">
+                  <strong>OpenAI-Compatible Gateway:</strong> Map standard <code>/v1/assistants</code> models inside PRISM so users can migrate with a simple base URL switch.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <span>Architectural Review</span>
+          <span>Slide 5 of 8</span>
+        </div>
+      </div>
+
+      <!-- Slide 6: Market Landscape & Position -->
+      <div class="slide" data-index="5" data-cat="Market">
+        <div class="slide-header">
+          <div>
+            <div class="slide-category">05 / Market Matrix</div>
+            <div class="slide-title">Competitive Placement Matrix</div>
+          </div>
+        </div>
+
+        <div class="slide-body">
+          <div class="market-split">
+            <div class="market-map-box">
+              <div class="market-axis-y"></div>
+              <div class="market-axis-x"></div>
+              <div class="axis-label label-top">High Security & Trust</div>
+              <div class="axis-label label-bottom">Low Security & Trust</div>
+              <div class="axis-label label-left">Self-Hostable</div>
+              <div class="axis-label label-right">SaaS Cloud</div>
+              
+              <!-- Points -->
+              <div class="market-dot prism" style="top: 15%; left: 15%;">★ PRISM</div>
+              <div class="market-dot" style="top: 65%; left: 10%;">CrewAI</div>
+              <div class="market-dot" style="top: 72%; left: 22%;">LangGraph</div>
+              <div class="market-dot" style="top: 35%; left: 75%;">Agentforce</div>
+              <div class="market-dot" style="top: 45%; left: 82%;">Vertex AI</div>
+              <div class="market-dot" style="top: 55%; left: 62%;">Copilot Studio</div>
+            </div>
+
+            <div style="font-size: 0.8rem; line-height: 1.5; display:flex; flex-direction:column; justify-content:center;">
+              <h3 style="font-family: var(--font-title); font-size: 1.15rem; margin-bottom: 0.5rem; color: var(--secondary);">The GaaS Moat</h3>
+              <p style="margin-bottom: 0.75rem; color: var(--text-muted);">
+                Competitive agent toolkits (CrewAI, LangGraph) expect developers to write safety rules inside the LLM system prompt. These prompts are easily bypassed via basic jailbreak techniques.
+              </p>
+              <p style="color: var(--text-muted);">
+                PRISM decouples governance completely from model intelligence using an immutable **Governance-as-a-Service (GaaS)** interceptor. Violations are blocked at the runtime boundaries, making it highly secure.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <span>Competitive Landscape</span>
+          <span>Slide 6 of 8</span>
+        </div>
+      </div>
+
+      <!-- Slide 7: Greatest Selling Points -->
+      <div class="slide" data-index="6" data-cat="Value">
+        <div class="slide-header">
+          <div>
+            <div class="slide-category">06 / Business Strategy</div>
+            <div class="slide-title">Greatest Selling Points</div>
+          </div>
+        </div>
+
+        <div class="slide-body">
+          <div class="moats-grid">
+            <div class="moat-card" style="border-color: var(--primary);">
+              <div class="moat-icon">🏦</div>
+              <div class="moat-title" style="color: var(--primary);">High-Trust Industries</div>
+              <div class="moat-text">
+                The only open-source runtime that compliance departments (HIPAA, SOC 2, FedRAMP) can approve. The immutable audit bus answers "who mutated what" perfectly.
+              </div>
+            </div>
+
+            <div class="moat-card" style="border-color: var(--secondary);">
+              <div class="moat-icon">🧠</div>
+              <div class="moat-title" style="color: var(--secondary);">Compound Intelligence</div>
+              <div class="moat-text">
+                Spectrum Refraction out-evaluates single models by running analytical and creative passes concurrently, creating comprehensive fused results.
+              </div>
+            </div>
+
+            <div class="moat-card" style="border-color: var(--gold);">
+              <div class="moat-icon">🛠️</div>
+              <div class="moat-title" style="color: var(--gold);">Guardian Agent Healing</div>
+              <div class="moat-text">
+                A localized Guardian agent (llama.cpp) continuously watches system processes and restores collapsed API lines autonomously without operator downtime.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <span>Enterprise Value Propositions</span>
+          <span>Slide 7 of 8</span>
+        </div>
+      </div>
+
+      <!-- Slide 8: Road to World Class -->
+      <div class="slide" data-index="7" data-cat="Roadmap">
+        <div class="slide-header">
+          <div>
+            <div class="slide-category">07 / Execution</div>
+            <div class="slide-title">Suggested Improvement Roadmap</div>
+          </div>
+        </div>
+
+        <div class="slide-body">
+          <div class="roadmap-timeline">
+            <div class="roadmap-phase">
+              <div class="roadmap-phase-title">Phase R: User Readiness</div>
+              <div class="roadmap-phase-tasks">Commented .env.example templates, automated SQLite migration framework, CSRF hardening.</div>
+              <div class="roadmap-phase-status" style="color: var(--secondary);">Active (Q2)</div>
+            </div>
+
+            <div class="roadmap-phase">
+              <div class="roadmap-phase-title">Phase E-Close: Operations</div>
+              <div class="roadmap-phase-tasks">Hardened Dockerode API integrations, active PTY virtualization tests, Prometheus metrics targets.</div>
+              <div class="roadmap-phase-status" style="color: var(--gold);">Planned</div>
+            </div>
+
+            <div class="roadmap-phase">
+              <div class="roadmap-phase-title">Phase F: Platform Expansion</div>
+              <div class="roadmap-phase-tasks">Release thin REST Python SDK bindings, deploy OpenAI Assistants API compatibility gateways.</div>
+              <div class="roadmap-phase-status" style="color: var(--text-muted);">Planned</div>
+            </div>
+
+            <div class="roadmap-phase">
+              <div class="roadmap-phase-title">Phase H: Corporate Scale</div>
+              <div class="roadmap-phase-tasks">SSO (OIDC/SAML), role-based workspace scopes, multi-tenant Postgres configurations, SOC 2 audits.</div>
+              <div class="roadmap-phase-status" style="color: var(--text-muted);">Aspirational</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <span>Production Roadmap</span>
+          <span>Slide 8 of 8</span>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Presentation controls -->
+  <div class="controls">
+    <div class="keyboard-guide">
+      <span>Use <kbd class="kbd">←</kbd> and <kbd class="kbd">→</kbd> or click dots to navigate</span>
+    </div>
+
+    <div class="slide-index-counter" id="slide-counter">
+      1 / 8
+    </div>
+
+    <div class="control-actions">
+      <button class="btn" onclick="prevSlide()">Back</button>
+      <button class="btn btn-primary" onclick="nextSlide()">Next</button>
+    </div>
+  </div>
+
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    const sidebar = document.getElementById('sidebar');
+    const navProgress = document.getElementById('nav-progress');
+
+    // Generate Sidebar Links and Nav Progress Dots
+    function initPresentation() {
+      slides.forEach((slide, idx) => {
+        // Create Progress Dot
+        const dot = document.createElement('div');
+        dot.className = `progress-dot ${idx === 0 ? 'active' : ''}`;
+        dot.title = slide.querySelector('.slide-title')?.textContent || `Slide ${idx+1}`;
+        dot.onclick = () => showSlide(idx);
+        navProgress.appendChild(dot);
+
+        // Create Sidebar button
+        const btn = document.createElement('button');
+        btn.className = `sidebar-btn ${idx === 0 ? 'active' : ''}`;
+        btn.onclick = () => showSlide(idx);
+        
+        const num = document.createElement('span');
+        num.className = 'sidebar-btn-num';
+        num.textContent = `${String(idx+1).padStart(2, '0')}.`;
+        
+        const label = document.createElement('span');
+        label.textContent = slide.querySelector('.slide-title')?.textContent.substring(0, 24) || `Slide ${idx+1}`;
+        
+        btn.appendChild(num);
+        btn.appendChild(label);
+        sidebar.appendChild(btn);
+      });
+      updateControls();
+    }
+
+    function showSlide(index) {
+      if (index < 0 || index >= totalSlides) return;
+      
+      // Deactivate old
+      slides[currentSlide].classList.remove('active');
+      document.querySelectorAll('.progress-dot')[currentSlide].classList.remove('active');
+      document.querySelectorAll('.sidebar-btn')[currentSlide].classList.remove('active');
+
+      // Activate new
+      currentSlide = index;
+      slides[currentSlide].classList.add('active');
+      document.querySelectorAll('.progress-dot')[currentSlide].classList.add('active');
+      document.querySelectorAll('.sidebar-btn')[currentSlide].classList.add('active');
+
+      updateControls();
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        showSlide(currentSlide + 1);
+      } else {
+        showSlide(0); // Loop
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        showSlide(currentSlide - 1);
+      } else {
+        showSlide(totalSlides - 1); // Loop
+      }
+    }
+
+    function updateControls() {
+      document.getElementById('slide-counter').textContent = `${currentSlide + 1} / ${totalSlides}`;
+    }
+
+    function toggleSidebar() {
+      sidebar.classList.toggle('collapsed');
+      const toggleText = document.getElementById('sidebar-toggle-text');
+      toggleText.textContent = sidebar.classList.contains('collapsed') ? 'Show Index' : 'Hide Index';
+    }
+
+    // Keyboard controls
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
+      }
+    });
+
+    // switch matrix tab
+    function switchMatrixTab(tabId) {
+      // deactivate tabs
+      document.querySelectorAll('.matrix-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      // hide tables
+      document.querySelectorAll('.matrix-table').forEach(tbl => {
+        tbl.style.display = 'none';
+      });
+
+      // active current
+      const selectedTab = Array.from(document.querySelectorAll('.matrix-tab')).find(tab => tab.getAttribute('onclick').includes(tabId));
+      if (selectedTab) selectedTab.classList.add('active');
+      
+      const targetTable = document.getElementById(`matrix-${tabId}`);
+      if (targetTable) targetTable.style.display = 'table';
+    }
+
+    // Initialize
+    window.onload = initPresentation;
+  </script>
+</body>
+</html>

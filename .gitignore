@@ -10,6 +10,11 @@ models/
 screengrab/
 *.db.sq
 *.db.sq2
+*.db
+*.db-shm
+*.db-wal
+test_out.txt
+
 
 # Local environment & secrets — never commit
 .env

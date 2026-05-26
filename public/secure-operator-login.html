@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRISM Secure Operator Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 450px;
+            width: 100%;
+        }
+
+        .logo-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .security-badge {
+            display: inline-block;
+            background: rgba(255, 215, 0, 0.2);
+            color: #ffd700;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #ffffff;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        select:focus,
+        input:focus {
+            outline: none;
+            border-color: #ffd700;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        select option {
+            background: #1e3c72;
+            color: #ffffff;
+        }
+
+        .character-selection {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .character-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid transparent;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .character-card:hover {
+            border-color: rgba(255, 215, 0, 0.5);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .character-card.selected {
+            border-color: #ffd700;
+            background: rgba(255, 215, 0, 0.1);
+        }
+
+        .character-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .character-desc {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .login-button {
+            width: 100%;
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            color: #1e3c72;
+            padding: 18px;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .login-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(255, 215, 0, 0.4);
+        }
+
+        .login-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+
+        .status-success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+            color: #4caf50;
+        }
+
+        .status-error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.5);
+            color: #f44336;
+        }
+
+        .status-info {
+            background: rgba(33, 150, 243, 0.2);
+            border: 1px solid rgba(33, 150, 243, 0.5);
+            color: #2196f3;
+        }
+
+        .security-info {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            border-left: 4px solid #ffd700;
+        }
+
+        .security-info h4 {
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
+
+        .security-info ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .security-info li {
+            padding: 5px 0;
+            opacity: 0.9;
+        }
+
+        .security-info li:before {
+            content: "🔒 ";
+            margin-right: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-container">
+        <div class="logo-section">
+            <div class="logo">PRISM</div>
+            <div class="subtitle">Secure Operator Access</div>
+            <div class="security-badge">CAC Authentication Required</div>
+        </div>
+
+        <form id="secureLoginForm">
+            <div class="form-group">
+                <label for="securityLevel">Security Level</label>
+                <select id="securityLevel" required>
+                    <option value="">Select Security Level</option>
+                    <option value="unclassified">Unclassified</option>
+                    <option value="confidential">Confidential</option>
+                    <option value="secret">Secret</option>
+                    <option value="top_secret">Top Secret</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="privilegeLevel">Operator Privilege</label>
+                <select id="privilegeLevel" required>
+                    <option value="">Select Privilege Level</option>
+                    <option value="standard">Standard Operator</option>
+                    <option value="administrator">Administrator</option>
+                    <option value="emergency">Emergency Override</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="sessionType">Session Type</label>
+                <select id="sessionType" required>
+                    <option value="">Select Session Type</option>
+                    <option value="cac_only">CAC Authentication Only</option>
+                    <option value="computer_control">Computer Control</option>
+                    <option value="browser_control">Browser Control</option>
+                    <option value="full_control">Full Control (Computer + Browser)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Character Selection</label>
+                <div class="character-selection" id="characterSelection">
+                    <!-- Characters will be loaded dynamically -->
+                </div>
+            </div>
+
+            <button type="submit" class="login-button" id="loginButton" disabled>
+                🔐 Authenticate with CAC
+            </button>
+        </form>
+
+        <div id="statusMessage" class="status-message"></div>
+
+        <div class="security-info">
+            <h4>Security Features Active</h4>
+            <ul>
+                <li>Certificate-based identity verification</li>
+                <li>Real-time audit trail generation</li>
+                <li>Session isolation and monitoring</li>
+                <li>Character accountability binding</li>
+                <li>Emergency termination controls</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Available characters for selection
+        const characters = {
+            'aria-business': {
+                name: 'Aria Business',
+                description: 'Enterprise operations and analytics'
+            },
+            'phoenix-business': {
+                name: 'Phoenix Business',
+                description: 'Strategic planning and optimization'
+            },
+            'sentinel-business': {
+                name: 'Sentinel Business',
+                description: 'Security and compliance monitoring'
+            },
+            'aria-individual': {
+                name: 'Aria Individual',
+                description: 'Personal productivity and assistance'
+            },
+            'phoenix-individual': {
+                name: 'Phoenix Individual',
+                description: 'Creative and analytical tasks'
+            },
+            'sentinel-individual': {
+                name: 'Sentinel Individual',
+                description: 'Privacy-focused operations'
+            }
+        };
+
+        let selectedCharacter = null;
+
+        // DOM elements
+        const form = document.getElementById('secureLoginForm');
+        const loginButton = document.getElementById('loginButton');
+        const statusMessage = document.getElementById('statusMessage');
+        const characterSelection = document.getElementById('characterSelection');
+
+        // Initialize the interface
+        function initializeInterface() {
+            loadCharacters();
+            setupFormValidation();
+            setupEventListeners();
+        }
+
+        // Load character selection options
+        function loadCharacters() {
+            characterSelection.innerHTML = '';
+
+            Object.entries(characters).forEach(([id, character]) => {
+                const card = document.createElement('div');
+                card.className = 'character-card';
+                card.dataset.characterId = id;
+
+                card.innerHTML = `
+                    <div class="character-name">${character.name}</div>
+                    <div class="character-desc">${character.description}</div>
+                `;
+
+                card.addEventListener('click', () => selectCharacter(id, card));
+                characterSelection.appendChild(card);
+            });
+        }
+
+        // Handle character selection
+        function selectCharacter(characterId, cardElement) {
+            // Remove previous selection
+            document.querySelectorAll('.character-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+
+            // Select new character
+            cardElement.classList.add('selected');
+            selectedCharacter = characterId;
+
+            validateForm();
+        }
+
+        // Setup form validation
+        function setupFormValidation() {
+            const requiredFields = ['securityLevel', 'privilegeLevel', 'sessionType'];
+
+            requiredFields.forEach(fieldId => {
+                document.getElementById(fieldId).addEventListener('change', validateForm);
+            });
+        }
+
+        // Validate form and enable/disable login button
+        function validateForm() {
+            const securityLevel = document.getElementById('securityLevel').value;
+            const privilegeLevel = document.getElementById('privilegeLevel').value;
+            const sessionType = document.getElementById('sessionType').value;
+
+            const isValid = securityLevel && privilegeLevel && sessionType && selectedCharacter;
+
+            loginButton.disabled = !isValid;
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            form.addEventListener('submit', handleLogin);
+        }
+
+        // Handle login submission
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            loginButton.disabled = true;
+            loginButton.textContent = '🔄 Authenticating...';
+
+            showStatus('Initiating CAC authentication...', 'info');
+
+            try {
+                const authRequest = {
+                    clientIp: '127.0.0.1', // Will be determined by server
+                    tenantId: 'default',
+                    securityLevel: document.getElementById('securityLevel').value,
+                    operatorPrivilege: document.getElementById('privilegeLevel').value,
+                    sessionType: document.getElementById('sessionType').value,
+                    userAgent: navigator.userAgent,
+                    characterId: selectedCharacter,
+                    metadata: {
+                        loginTime: new Date().toISOString(),
+                        clientInfo: {
+                            platform: navigator.platform,
+                            language: navigator.language
+                        }
+                    }
+                };
+
+                const response = await fetch('/api/iam/cac/auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(authRequest)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showStatus('Authentication successful! Initializing secure session...', 'success');
+
+                    // Store session information for the dashboard
+                    sessionStorage.setItem('prism_secure_session', JSON.stringify({
+                        sessionId: result.sessionId,
+                        sessionType: result.sessionType,
+                        securityLevel: result.securityLevel,
+                        privilegeLevel: result.privilegeLevel,
+                        characterId: selectedCharacter,
+                        expiresAt: result.expiresAt
+                    }));
+
+                    // Redirect to secure operator dashboard after short delay
+                    setTimeout(() => {
+                        window.location.href = '/secure-operator-dashboard.html';
+                    }, 2000);
+
+                } else {
+                    throw new Error(result.error?.message || 'Authentication failed');
+                }
+
+            } catch (error) {
+                console.error('Login error:', error);
+                showStatus(`Authentication failed: ${error.message}`, 'error');
+
+                loginButton.disabled = false;
+                loginButton.textContent = '🔐 Authenticate with CAC';
+            }
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message status-${type}`;
+            statusMessage.style.display = 'block';
+
+            if (type === 'error') {
+                setTimeout(() => {
+                    statusMessage.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Initialize the interface when page loads
+        document.addEventListener('DOMContentLoaded', initializeInterface);
+
+        // Handle browser back button and session cleanup
+        window.addEventListener('beforeunload', () => {
+            // Clean up any pending authentication attempts
+            sessionStorage.removeItem('prism_auth_pending');
+        });
+    </script>
+</body>
+
+</html>

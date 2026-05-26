@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.personal_scheduler",
+  "version": "1.0.0",
+  "name": "Prism Personal Scheduler & Tracker",
+  "description": "Transforms abstract developer goals into concrete checkable tasks, managing daily checklists and generating summaries.",
+  "tags": ["scheduler", "tracker", "checklist", "tasks", "goals", "management", "productivity"],
+  "governance": {
+    "min_policy_tier": "tier-1",
+    "required_approvals": ["file_write"],
+    "covenant_rules": [
+      "Avoid altering active developer schedules without dynamic confirmation prompts.",
+      "Track task milestones strictly with standard progress markers ([ ], [/], [x]).",
+      "Draft concise, readable summaries to document accomplishments at the end of every daily window."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate user objectives, developer velocity patterns, and task constraints: {query}. Verify task decompositions are realistic.",
+    "right_hemisphere": "Draft elegant, structured daily agendas, prioritized task checklists, and motivational accomplishments briefs for: {query}.",
+    "main_hemisphere": "Coordinate task management. Triage vague developer objectives, generate checklist templates, update active milestone states, and summarize progress: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "triage_user_objectives",
+        "name": "Triage Vague User Goals",
+        "tools": ["file_read"],
+        "action": "Analyze raw user chat statements to identify key goals and deadlines.",
+        "transitions": {
+          "success": "assemble_milestone_checklist",
+          "failed": "triage_user_objectives"
+        }
+      },
+      {
+        "id": "assemble_milestone_checklist",
+        "name": "Assemble Task Checklist",
+        "tools": ["file_write"],
+        "action": "Generate a prioritized checklist inside task.md containing sub-milestones.",
+        "transitions": {
+          "success": "generate_daily_brief",
+          "failed": "triage_user_objectives"
+        }
+      },
+      {
+        "id": "generate_daily_brief",
+        "name": "Generate Productivity Brief",
+        "tools": ["file_write"],
+        "action": "Draft a beautiful summary of daily accomplishments, goals achieved, and next steps.",
+        "transitions": {
+          "success": "completed",
+          "failed": "assemble_milestone_checklist"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Scheduler Cycle Finalized",
+        "tools": [],
+        "action": "Verify task checklist updates, outputting the daily productivity summary directly to the operator console.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

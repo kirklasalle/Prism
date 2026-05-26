@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.diff_gatekeeper",
+  "version": "1.0.0",
+  "name": "Prism Code Diff Gatekeeper",
+  "description": "Reviews staged modifications, verifies style guide alignment, checks AST compliance, and issues formal reviews.",
+  "tags": ["diff", "gatekeeper", "review", "git", "style", "formatting", "quality"],
+  "governance": {
+    "min_policy_tier": "tier-2",
+    "required_approvals": ["file_write", "shell_exec"],
+    "covenant_rules": [
+      "Ensure all proposed patches match company layout styles and eslint configurations.",
+      "Verify code syntax passes absolute clean compilation steps before recommending approvals.",
+      "Log all code reviews and approval suggestions in the local activity registry."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate syntax layouts, variable names, and dependency patterns: {query}. Verify zero style violations are created.",
+    "right_hemisphere": "Formulate optimal code formatting changes, clean structural refinements, and reviews for: {query}.",
+    "main_hemisphere": "Coordinate reviews. Capture Git staged diff files, run code formatting checks, execute validation lints, and register reviews: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "capture_git_diff",
+        "name": "Capture Git Stage Diffs",
+        "tools": ["file_read", "run_command"],
+        "action": "Read the code diffs of target staged files using the git diff command.",
+        "transitions": {
+          "success": "verify_style_conformance",
+          "failed": "capture_git_diff"
+        }
+      },
+      {
+        "id": "verify_style_conformance",
+        "name": "Audit Code Style Conformance",
+        "tools": ["prism_ide_lint"],
+        "action": "Run dynamic style sweeps to ensure that code complies with ESLint and Prettier layout directives.",
+        "transitions": {
+          "success": "submit_review_signoff",
+          "failed": "capture_git_diff"
+        }
+      },
+      {
+        "id": "submit_review_signoff",
+        "name": "Submit Formal Review Signoff",
+        "tools": ["file_write"],
+        "action": "Write the verified code review sign-off payload directly into the system accountability log.",
+        "transitions": {
+          "success": "completed",
+          "failed": "verify_style_conformance"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Code Review Concluded",
+        "tools": [],
+        "action": "Alert the developer that the code diff has successfully passed compliance and styling audits.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

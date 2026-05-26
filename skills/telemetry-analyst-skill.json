@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.telemetry_analyst",
+  "version": "1.0.0",
+  "name": "Prism Telemetry & Metrics Analyst",
+  "description": "Continuously audits performance logs and queries metrics-endpoints, tracking trends and firing alerts on SLO anomalies.",
+  "tags": ["telemetry", "metrics", "observability", "performance", "slo", "anomalies", "logs"],
+  "governance": {
+    "min_policy_tier": "tier-2",
+    "required_approvals": ["shell_exec"],
+    "covenant_rules": [
+      "Ensure all performance logs and latency metrics are parsed using non-blocking asynchronous routines.",
+      "Strictly isolate diagnostic queries from active production transactional channels.",
+      "Send alert notifications immediately if database latency exceeds pre-configured thresholds."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate response metrics, CPU allocations, and latency trends for: {query}. Verify zero false alert triggers are executed.",
+    "right_hemisphere": "Draft detailed anomaly prediction models, performance trend dashboards, and alerts for: {query}.",
+    "main_hemisphere": "Coordinate analysis. Capture log metrics, calculate moving latency averages, evaluate threshold constraints, and update metrics statuses: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "query_metrics_endpoint",
+        "name": "Query Active Metrics Endpoints",
+        "tools": ["file_read", "run_command"],
+        "action": "Fetch the metrics and performance data records from target monitoring ports.",
+        "transitions": {
+          "success": "evaluate_slo_violations",
+          "failed": "query_metrics_endpoint"
+        }
+      },
+      {
+        "id": "evaluate_slo_violations",
+        "name": "Audit SLO Latency Thresholds",
+        "tools": [],
+        "action": "Calculate Latency metrics and compare them to acceptable standard operating thresholds.",
+        "transitions": {
+          "success": "completed",
+          "failed": "raise_telemetry_alert"
+        }
+      },
+      {
+        "id": "raise_telemetry_alert",
+        "name": "Flag Telemetry Latency Alert",
+        "tools": ["run_command"],
+        "action": "Sprout active alerts on the live console buffer and email/ping target notification paths.",
+        "transitions": {
+          "success": "completed",
+          "failed": "query_metrics_endpoint"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Telemetry Cycle Complete",
+        "tools": [],
+        "action": "Update the metrics log registry and wait for the next analysis check window.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

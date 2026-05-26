@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.browser_researcher",
+  "version": "1.0.0",
+  "name": "Prism Headless Browser Researcher",
+  "description": "Launches automated browser crawls to harvest technical specifications, documentation directories, and package APIs from online portals.",
+  "tags": ["browser", "researcher", "scraping", "crawling", "documentation", "intelligence", "search"],
+  "governance": {
+    "min_policy_tier": "tier-1",
+    "required_approvals": ["shell_exec"],
+    "covenant_rules": [
+      "Avoid scraping sites that explicitly ban bot crawling inside robots.txt profiles.",
+      "Strictly preserve fetched HTML to clean markdown conversions for local indexing.",
+      "Do not submit local directory paths or workspace details to external web search trackers."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate web URLs, crawling paths, and scrapers: {query}. Verify zero malicious scripts or network breaches exist on target pages.",
+    "right_hemisphere": "Draft optimal browser viewport setups, scrolling parameters, DOM element selector pathways, and markdown reports for: {query}.",
+    "main_hemisphere": "Coordinate web crawling. Launch browser sessions, navigate selectors, fetch body HTML, extract technical APIs, and persist outputs: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "initialize_browser_session",
+        "name": "Initialize Browser Viewport",
+        "tools": ["run_command"],
+        "action": "Set up a temporary browsing context and navigate to the target technical manual or portal.",
+        "transitions": {
+          "success": "extract_page_content",
+          "failed": "initialize_browser_session"
+        }
+      },
+      {
+        "id": "extract_page_content",
+        "name": "Extract HTML & Convert to Markdown",
+        "tools": ["file_write"],
+        "action": "Scan the DOM structure, fetch text nodes, strip style tags, and convert page schemas to markdown lists.",
+        "transitions": {
+          "success": "save_research_brief",
+          "failed": "initialize_browser_session"
+        }
+      },
+      {
+        "id": "save_research_brief",
+        "name": "Save Technical Research Brief",
+        "tools": ["file_write"],
+        "action": "Write the parsed documentation to a permanent reference markdown brief inside the workspace research directory.",
+        "transitions": {
+          "success": "completed",
+          "failed": "extract_page_content"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Web Intelligence Synced",
+        "tools": [],
+        "action": "Notify the operator that online documentation has been index-cached, rendering the summary preview.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

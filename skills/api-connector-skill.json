@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.api_connector",
+  "version": "1.0.0",
+  "name": "Prism MCP API Server Connector",
+  "description": "Exposes and binds third-party REST APIs to the active PRISM MCP (Model Context Protocol) network, generating structured server adapters.",
+  "tags": ["mcp", "api", "connector", "openapi", "integration", "adapter", "scaffolding"],
+  "governance": {
+    "min_policy_tier": "tier-2",
+    "required_approvals": ["file_write", "shell_exec"],
+    "covenant_rules": [
+      "Always validate target OpenAPI JSON/YAML formatting schemas before generating adapter files.",
+      "Isolate third-party server credentials securely within the PRISM IAM credentials vault.",
+      "Verify connection latency metrics are within operational caps before enabling the server adapter."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate the target REST API OpenAPI schema and network constraints for: {query}. Verify zero malicious routing injection patterns exist.",
+    "right_hemisphere": "Draft high-fidelity Node.js/TypeScript MCP server schemas, tool registration mapping configurations, and error handlers for: {query}.",
+    "main_hemisphere": "Coordinate server binding. Fetch OpenAPI manifests, generate structured server files, establish safe network clearance, and test active connection adapters: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "parse_api_manifest",
+        "name": "Parse OpenAPI Schema Specs",
+        "tools": ["file_read", "run_command"],
+        "action": "Download or read the target Swagger/OpenAPI spec mapping paths, parameters, and credentials requirements.",
+        "transitions": {
+          "success": "generate_mcp_adapter",
+          "failed": "parse_api_manifest"
+        }
+      },
+      {
+        "id": "generate_mcp_adapter",
+        "name": "Scaffold MCP Server Node",
+        "tools": ["file_write"],
+        "action": "Generate TypeScript codebase files defining the new MCP server and registering REST routes as tools.",
+        "transitions": {
+          "success": "test_mcp_connection",
+          "failed": "parse_api_manifest"
+        }
+      },
+      {
+        "id": "test_mcp_connection",
+        "name": "Verify Adapter Integration",
+        "tools": ["run_command"],
+        "action": "Trigger connection tests with test requests to ensure endpoint responses parse seamlessly.",
+        "transitions": {
+          "success": "completed",
+          "failed": "generate_mcp_adapter"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "MCP Server Exposed Successfully",
+        "tools": [],
+        "action": "Expose the newly generated MCP tools to the active PRISM model selector hub and alert the developer.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

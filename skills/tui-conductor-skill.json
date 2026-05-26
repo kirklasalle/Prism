@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.tui_conductor",
+  "version": "1.0.0",
+  "name": "Prism Terminal Conductor",
+  "description": "Guides the solo developer through terminal shell executions, complex builds, and error repairs directly within the PRISM console framework.",
+  "tags": ["terminal", "tui", "shell", "builder", "compile", "interactive", "diagnostics"],
+  "governance": {
+    "min_policy_tier": "tier-1",
+    "required_approvals": ["shell_exec"],
+    "covenant_rules": [
+      "Analyze terminal stderr buffers completely before proposing shell corrections.",
+      "Prioritize safe, non-destructive repair scripts (dry-runs, verification) over brute-force rewrites.",
+      "Log all terminal repair lifecycles to build a localized terminal diagnostics knowledge base."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Analyze the failed compiler logs, syntax breaks, or environment mismatches: {query}. Verify that suggestions comply with clean build rules.",
+    "right_hemisphere": "Craft creative shell repair commands, explanatory summaries, and optimal code correction buffers to resolve: {query}.",
+    "main_hemisphere": "Coordinate shell recovery. Capture terminal history, fetch compiler configurations, execute safe dry-run lints, and output repair scripts: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "capture_terminal_error",
+        "name": "Capture Compiler Error Streams",
+        "tools": ["file_read"],
+        "action": "Read the tail of the active console output buffer and isolate the error stack traces.",
+        "transitions": {
+          "success": "formulate_repair_commands",
+          "failed": "capture_terminal_error"
+        }
+      },
+      {
+        "id": "formulate_repair_commands",
+        "name": "Formulate Terminal Repair Commands",
+        "tools": ["run_command"],
+        "action": "Draft targeted CLI repair commands and test them using dry-run flags inside the terminal sandbox.",
+        "transitions": {
+          "success": "propose_rebuilt_actions",
+          "failed": "capture_terminal_error"
+        }
+      },
+      {
+        "id": "propose_rebuilt_actions",
+        "name": "Propose Rebuilt Executions",
+        "tools": [],
+        "action": "Present the targeted repair script to the developer console and request terminal clearance.",
+        "transitions": {
+          "success": "completed",
+          "failed": "capture_terminal_error"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Terminal Repair Swept",
+        "tools": [],
+        "action": "Verify the compilation builds successfully with exit code 0 and confirm terminal recovery.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

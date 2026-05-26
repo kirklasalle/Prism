@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.setup_wizard",
+  "version": "1.0.0",
+  "name": "Prism Environment Setup Wizard",
+  "description": "Guides the user through local environment configuration, LLM API endpoint connections, and workspace setting assemblies.",
+  "tags": ["setup", "wizard", "configuration", "preferences", "onboarding", "diagnostics", "workspace"],
+  "governance": {
+    "min_policy_tier": "tier-1",
+    "required_approvals": ["file_write"],
+    "covenant_rules": [
+      "Avoid overwriting existing user profiles without generating secure backups.",
+      "Diagnose active network settings and port availability before configuring connections.",
+      "Clearly display all parsed credential mappings for verification before syncing files."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate workspace layout settings, API parameters, and environment settings: {query}. Verify zero invalid settings exist.",
+    "right_hemisphere": "Draft beautiful, premium configuration preferences models, environment variables, and diagnostic reports to configure: {query}.",
+    "main_hemisphere": "Coordinate wizard. Audit system folders, configure settings files, run active API diagnostic calls, and record preference files: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "survey_workspace_layout",
+        "name": "Audit Workspace Folder Layout",
+        "tools": ["file_list"],
+        "action": "Scan the current workspace directory to identify configuration profiles and project types.",
+        "transitions": {
+          "success": "configure_preference_files",
+          "failed": "survey_workspace_layout"
+        }
+      },
+      {
+        "id": "configure_preference_files",
+        "name": "Configure prism-preferences.json",
+        "tools": ["file_write"],
+        "action": "Write the verified preferences maps and configuration settings to the user's home profile.",
+        "transitions": {
+          "success": "run_api_diagnostics",
+          "failed": "survey_workspace_layout"
+        }
+      },
+      {
+        "id": "run_api_diagnostics",
+        "name": "Test LLM API Connectivity",
+        "tools": ["run_command"],
+        "action": "Execute a lightweight test query to ensure that active models respond cleanly on port 7070.",
+        "transitions": {
+          "success": "completed",
+          "failed": "configure_preference_files"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Setup Completed Successfully",
+        "tools": [],
+        "action": "Sprout the configuration brief on the operator hub console, signaling onboarding readiness.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

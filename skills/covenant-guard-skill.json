@@ -1,0 +1,75 @@
+{
+  "id": "prism.skill.covenant_guard",
+  "version": "1.0.0",
+  "name": "Prism Governance Covenant Guard",
+  "description": "Enforces strict organizational policies, security audits, and code covenant guidelines on staged changes before approval signatures are generated.",
+  "tags": ["governance", "security", "policy", "covenant", "soc2", "compliance", "audit"],
+  "governance": {
+    "min_policy_tier": "tier-3",
+    "required_approvals": ["file_write", "shell_exec"],
+    "covenant_rules": [
+      "Ensure zero hardcoded credentials, API tokens, or secrets exist in modified source code files.",
+      "Strictly prohibit direct modification of core security libraries without dual-operator signature clearance.",
+      "Verify all modifications pass strict static AST lints using prism_ide_lint."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Perform strict logic analysis on git diff structures for: {query}. Verify zero policy/covenant overrides or secret leaks exist in the modified blocks.",
+    "right_hemisphere": "Formulate a creative security advisory, descriptive lint alerts, and high-fidelity code compliance reports for the diff: {query}.",
+    "main_hemisphere": "Coordinate diff analysis. Fetch stage records, perform lint runs, flag logical violations, and route results to the active interactive approval queue: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "diff_extraction",
+        "name": "Extract Stage Git Diff",
+        "tools": ["file_read", "run_command"],
+        "action": "Run git diff command to capture modified blocks and parse filenames of modified files.",
+        "transitions": {
+          "success": "covenant_compliance_check",
+          "failed": "diff_extraction"
+        }
+      },
+      {
+        "id": "covenant_compliance_check",
+        "name": "Verify Covenant Compliance",
+        "tools": ["prism_ide_lint"],
+        "action": "Check code diffs against strict SOC2 patterns, API key regexes, and policy rules.",
+        "transitions": {
+          "success": "submit_to_queue",
+          "failed": "quarantine_changes"
+        }
+      },
+      {
+        "id": "submit_to_queue",
+        "name": "Route to Approval Queue",
+        "tools": ["run_command"],
+        "action": "Register a new governed signature request inside the PRISM interactive approval system.",
+        "transitions": {
+          "success": "completed",
+          "failed": "diff_extraction"
+        }
+      },
+      {
+        "id": "quarantine_changes",
+        "name": "Quarantine & Alert Operator",
+        "tools": [],
+        "action": "Flag security warnings, log violations, and reject automated merge approvals until issues are resolved.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Governance Sweep Finalized",
+        "tools": [],
+        "action": "Confirm review is completed, outputting the safety verification logs to the operator terminal.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

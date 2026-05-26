@@ -1,0 +1,75 @@
+{
+  "id": "prism.skill.skill_wizard",
+  "version": "1.0.0",
+  "name": "Prism Skill Wizard",
+  "description": "A meta-skill that empowers PRISM, the Guardian, and agents to dynamically create, register, manage, upgrade, and deprecate robust skills inside the PRISM skills catalog.",
+  "tags": ["skills", "wizard", "meta-skill", "create", "upgrade", "remove", "manage", "registry", "code-generation"],
+  "governance": {
+    "min_policy_tier": "tier-2",
+    "required_approvals": ["shell_exec", "file_write"],
+    "covenant_rules": [
+      "All newly created skills must define explicit, responsive hemispheric templates.",
+      "Do not overwrite active skills without performing semantic regression tests.",
+      "Ensure all generated skill workflows include success and failed transitions for every step."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Validate the structure, logic flow, step transitions, and safety boundaries for the requested skill operation: {query}. Verify that no invalid JSON/YAML formatting is generated and that required approval policies are correctly assigned.",
+    "right_hemisphere": "Design highly creative, elegant, and advanced hemispheric templates (logic, creative, coordination) for the skill operation: {query}. Enforce modern, premium workflows.",
+    "main_hemisphere": "Orchestrate the meta-creation or modification process. Locate existing skill profiles, construct or upgrade the target JSON/YAML skill, save it, and trigger registry re-scans: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "analyze_requirement",
+        "name": "Analyze Skill Request & Scope",
+        "tools": ["file_list", "file_read"],
+        "action": "Scan the skills directory using file_list, locate existing skill profiles to check for overlaps or upgrade candidates, and determine the structural scope of the requested skill.",
+        "transitions": {
+          "success": "scaffold_skill",
+          "failed": "analyze_requirement"
+        }
+      },
+      {
+        "id": "scaffold_skill",
+        "name": "Scaffold Skill Definition",
+        "tools": ["file_write"],
+        "action": "Draft the new or upgraded skill definition structure, incorporating advanced triad templates, strict covenant governance, and robust workflow transitions, writing it to a temporary JSON layout.",
+        "transitions": {
+          "success": "validate_workflow",
+          "failed": "analyze_requirement"
+        }
+      },
+      {
+        "id": "validate_workflow",
+        "name": "Validate Workflow Transitions & Governance",
+        "tools": ["run_command"],
+        "action": "Verify that all workflow steps are linked, transition rules are complete (mapping success and failed states), and syntax validation passes with zero errors.",
+        "transitions": {
+          "success": "persist_skill",
+          "failed": "scaffold_skill"
+        }
+      },
+      {
+        "id": "persist_skill",
+        "name": "Persist to Skills Directory & Trigger Scan",
+        "tools": ["file_write", "run_command"],
+        "action": "Save the verified skill profile to the active skills directory 'skills/' and execute a database test/scan run to register the new skill capability in the PRISM system.",
+        "transitions": {
+          "success": "completed",
+          "failed": "scaffold_skill"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Skill Registry Updated",
+        "tools": [],
+        "action": "Verify the newly loaded skill appears in the active catalog and notify the operator that the new capability is ready for deployment.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

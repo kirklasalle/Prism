@@ -1,0 +1,75 @@
+{
+  "id": "prism.skill.support_desk",
+  "version": "1.0.0",
+  "name": "Prism Support Desk Operations & Incident Healing",
+  "description": "Guides PRISM, the Guardian, and agents to autonomously triage, analyze, self-heal, resolve, and document software incidents using the SQLite-backed Support Desk database and long-term knowledge base.",
+  "tags": ["support", "desk", "triage", "incident", "self-healing", "database", "diagnostics", "logs", "knowledgebase"],
+  "governance": {
+    "min_policy_tier": "tier-1",
+    "required_approvals": ["shell_exec"],
+    "covenant_rules": [
+      "Always log newly discovered issues immediately in the SQLite support_tickets database.",
+      "Analyze live logs and MCP statuses to isolate failure vectors before initiating recovery sweeps.",
+      "Formulate and persist descriptive resolution logs for all resolved incidents to build a long-term knowledge base."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Identify potential logical violations, database locks, network failures, or syntax anomalies related to: {query}. Verify that security standards and code policies are strictly upheld.",
+    "right_hemisphere": "Formulate a creative self-healing diagnostics strategy, virtual repair patches, and database logs for the reported incident: {query}.",
+    "main_hemisphere": "Coordinate the Support Desk lifecycle. Perform database transactions to log, status-update, run self-healing, or manually resolve the incident: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "triage_incident",
+        "name": "Triage & Log Support Ticket",
+        "tools": ["file_write", "run_command"],
+        "action": "Analyze the reported issue and log it to the SQLite support_tickets database by making a REST POST request to '/api/support/tickets' containing title, description, severity, and metadata.",
+        "transitions": {
+          "success": "investigate_logs",
+          "failed": "triage_incident"
+        }
+      },
+      {
+        "id": "investigate_logs",
+        "name": "Investigate Live Console & Diagnostics",
+        "tools": ["file_read", "run_command"],
+        "action": "Fetch the live console interceptor streams from '/api/debug/console?limit=500' and active logs from '/api/logs?limit=500' to pinpoint stack traces or MCP connection drops.",
+        "transitions": {
+          "success": "heal_incident",
+          "failed": "triage_incident"
+        }
+      },
+      {
+        "id": "heal_incident",
+        "name": "Execute Diagnostics & Self-Healing Sweep",
+        "tools": ["run_command"],
+        "action": "Update the ticket status to 'self-healing' via POST '/api/support/tickets/:ticketId/update' and run active diagnostics sweeps or repair routines on the codebase.",
+        "transitions": {
+          "success": "resolve_ticket",
+          "failed": "triage_incident"
+        }
+      },
+      {
+        "id": "resolve_ticket",
+        "name": "Document Resolution & Archive Lifecycle",
+        "tools": ["run_command"],
+        "action": "Mark the ticket as 'resolved' via POST '/api/support/tickets/:ticketId/update' and include a complete, world-class technical resolution log to document the incident in the SQLite database.",
+        "transitions": {
+          "success": "completed",
+          "failed": "heal_incident"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Consensus Support Lifecycle Concluded",
+        "tools": [],
+        "action": "Confirm ticket resolution in the queue and verify that all system metrics have stabilized to 100% operational efficiency.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

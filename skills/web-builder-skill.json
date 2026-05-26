@@ -1,0 +1,75 @@
+{
+  "id": "prism.skill.web_creator",
+  "version": "1.0.0",
+  "name": "Prism Autonomous Web Builder",
+  "description": "Guides PRISM to cooperatively design and build world-class, premium, glassmorphic responsive websites and landing pages with complete audit self-healing.",
+  "tags": ["web", "builder", "website", "landing", "css", "html", "javascript", "design", "refraction"],
+  "governance": {
+    "min_policy_tier": "tier-2",
+    "required_approvals": ["shell_exec"],
+    "covenant_rules": [
+      "Ensure all generated pages use fully responsive, modern semantic HTML5 structure.",
+      "Strictly prohibit direct plain color backgrounds; enforce curated frosted glass and dynamic gradients.",
+      "Run complete DOM console audits using sandbox verification before considering the build complete."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate the visual layout, links, directories, and compliance targets for the page: {query}. Verify that no broken tags or div mismatches occur. Check that security policies are strictly followed.",
+    "right_hemisphere": "Inject creative fluid aesthetics: Outfit fonts, radial blurred moving neon backgrounds, iridescent glow-borders, glassmorphic content cards, and premium responsive layouts for: {query}.",
+    "main_hemisphere": "Synthesize the creative assets and logical compliance checks. Orchestrate the specialized tools to build, inject, optimize, and audit the web page: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "planning",
+        "name": "Establish Site Map & Theme Planning",
+        "tools": ["file_list", "web_page_initialize"],
+        "action": "Plan the folder structure, decide on color palettes, and initialize the boilerplate files using the web_page_initialize tool inside the target Workspace directory.",
+        "transitions": {
+          "success": "design_and_code",
+          "failed": "planning"
+        }
+      },
+      {
+        "id": "design_and_code",
+        "name": "Frosted Obsidian Glass Assembly",
+        "tools": ["web_component_inject", "file_write", "file_read", "prism_ide_modify"],
+        "action": "Inject premium layout structures and make custom surgery edits on landing and portfolio files using the web_component_inject, file_write, and prism_ide_modify tools.",
+        "transitions": {
+          "success": "optimize_assets",
+          "failed": "design_and_code"
+        }
+      },
+      {
+        "id": "optimize_assets",
+        "name": "Visual Asset & Library Optimization",
+        "tools": ["web_assets_optimize", "file_write", "prism_ide_modify"],
+        "action": "Integrate premium visual libraries (GSAP animations, Lucide SVG Icon CDN) and weave custom Web Audio sound synthesis elements via the web_assets_optimize and prism_ide_modify tools.",
+        "transitions": {
+          "success": "visual_sandbox_audit",
+          "failed": "design_and_code"
+        }
+      },
+      {
+        "id": "visual_sandbox_audit",
+        "name": "Autonomous Visual Audit & Refraction check",
+        "tools": ["prism_ide_lint", "web_visual_audit", "browser_control"],
+        "action": "Execute sandbox visual checks, link integrity checks, and browser console audits on index.html using the prism_ide_lint, web_visual_audit, and browser_control tools.",
+        "transitions": {
+          "success": "completed",
+          "failed": "design_and_code"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Consensus Refraction Achieved",
+        "tools": ["dashboard_control"],
+        "action": "Deploy website to the PRISM local dashboard port 7070 and alert the operator that the world-class live preview is ready.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

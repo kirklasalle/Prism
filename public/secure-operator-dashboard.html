@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRISM Secure Operator Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.8em;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-right: 20px;
+        }
+
+        .session-info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        .security-level {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .security-level.confidential {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+            color: #ffc107;
+        }
+
+        .security-level.secret {
+            background: rgba(255, 87, 34, 0.2);
+            border: 1px solid #ff5722;
+            color: #ff5722;
+        }
+
+        .security-level.top_secret {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            color: #f44336;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: calc(100vh - 80px);
+        }
+
+        .sidebar {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 30px 20px;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-section {
+            margin-bottom: 30px;
+        }
+
+        .nav-section h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .nav-item {
+            display: block;
+            padding: 12px 15px;
+            margin-bottom: 5px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-item:hover,
+        .nav-item.active {
+            background: rgba(255, 215, 0, 0.1);
+            color: #ffd700;
+            border-left: 3px solid #ffd700;
+        }
+
+        .content-area {
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .content-section {
+            display: none;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .dashboard-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #ffd700;
+        }
+
+        .card-content {
+            color: rgba(255, 255, 255, 0.9);
+            line-height: 1.5;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-active {
+            background: #4caf50;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+
+        .status-inactive {
+            background: #757575;
+        }
+
+        .action-button {
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            color: #1e3c72;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
+        }
+
+        .danger-button {
+            background: linear-gradient(45deg, #f44336, #e53935);
+            color: white;
+        }
+
+        .audit-log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .log-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-timestamp {
+            color: #ffd700;
+            margin-right: 10px;
+        }
+
+        .log-operation {
+            color: #4caf50;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .log-details {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .computer-controls,
+        .browser-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .control-group h4 {
+            color: #ffd700;
+            margin-bottom: 15px;
+        }
+
+        .coordinate-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .coordinate-input input {
+            flex: 1;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .text-input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .url-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .url-input input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .screenshot-preview {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .emergency-controls {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+        }
+
+        .emergency-controls h3 {
+            color: #f44336;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo-section">
+            <div class="logo">PRISM</div>
+            <div class="session-info">
+                Secure Operator Session
+                <span id="securityBadge" class="security-level"></span>
+            </div>
+        </div>
+        <div>
+            <button class="action-button" onclick="refreshSession()">🔄 Refresh</button>
+            <button class="danger-button" onclick="terminateSession()">🔚 Terminate Session</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="nav-section">
+                <h3>Dashboard</h3>
+                <div class="nav-item active" onclick="showSection('overview')">📊 Overview</div>
+                <div class="nav-item" onclick="showSection('audit')">📋 Audit Trail</div>
+            </div>
+
+            <div class="nav-section">
+                <h3>Controls</h3>
+                <div class="nav-item" onclick="showSection('computer')">🖥️ Computer Control</div>
+                <div class="nav-item" onclick="showSection('browser')">🌐 Browser Control</div>
+            </div>
+
+            <div class="nav-section">
+                <h3>Security</h3>
+                <div class="nav-item" onclick="showSection('session')">🔐 Session Management</div>
+                <div class="nav-item" onclick="showSection('emergency')">🚨 Emergency Controls</div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <!-- Overview Section -->
+            <div id="overview" class="content-section active">
+                <h2>Secure Operator Overview</h2>
+                <div class="dashboard-cards">
+                    <div class="card">
+                        <div class="card-title">Session Status</div>
+                        <div class="card-content">
+                            <div><span class="status-indicator status-active"></span>Active</div>
+                            <div>Session ID: <span id="sessionId">Loading...</span></div>
+                            <div>Character: <span id="characterId">Loading...</span></div>
+                            <div>Expires: <span id="sessionExpiry">Loading...</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Computer Control</div>
+                        <div class="card-content">
+                            <div id="computerStatus"><span class="status-indicator"></span>Checking...</div>
+                            <div>Last Screenshot: <span id="lastScreenshot">None</span></div>
+                            <div>Operations: <span id="computerOps">0</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Browser Control</div>
+                        <div class="card-content">
+                            <div id="browserStatus"><span class="status-indicator"></span>Checking...</div>
+                            <div>Current URL: <span id="currentUrl">None</span></div>
+                            <div>Navigation History: <span id="navHistory">0</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Security & Compliance</div>
+                        <div class="card-content">
+                            <div>Audit Entries: <span id="auditCount">0</span></div>
+                            <div>Security Level: <span id="currentSecLevel">Loading...</span></div>
+                            <div>Screenshots Required: <span id="screenshotReq">Loading...</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Computer Control Section -->
+            <div id="computer" class="content-section">
+                <h2>Computer Control</h2>
+                <div class="computer-controls">
+                    <div class="control-group">
+                        <h4>Screenshot</h4>
+                        <button class="action-button" onclick="takeScreenshot()">📸 Take Screenshot</button>
+                        <img id="screenshotPreview" class="screenshot-preview" style="display: none;" />
+                    </div>
+
+                    <div class="control-group">
+                        <h4>Mouse Control</h4>
+                        <div class="coordinate-input">
+                            <input type="number" id="mouseX" placeholder="X" value="500">
+                            <input type="number" id="mouseY" placeholder="Y" value="300">
+                        </div>
+                        <button class="action-button" onclick="moveMouse()">↗️ Move Mouse</button>
+                        <button class="action-button" onclick="clickMouse('left')">🖱️ Left Click</button>
+                        <button class="action-button" onclick="clickMouse('right')">🖱️ Right Click</button>
+                    </div>
+
+                    <div class="control-group">
+                        <h4>Keyboard Control</h4>
+                        <input type="text" id="textToType" class="text-input" placeholder="Text to type...">
+                        <button class="action-button" onclick="typeText()">⌨️ Type Text</button>
+                        <input type="text" id="keyToPress" class="text-input"
+                            placeholder="Key combination (e.g., Ctrl+C)">
+                        <button class="action-button" onclick="pressKey()">🔑 Press Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Browser Control Section -->
+            <div id="browser" class="content-section">
+                <h2>Browser Control</h2>
+                <div class="browser-controls">
+                    <div class="control-group">
+                        <h4>Navigation</h4>
+                        <div class="url-input">
+                            <input type="url" id="navigationUrl" placeholder="https://example.com">
+                            <button class="action-button" onclick="navigateTo()">🧭 Navigate</button>
+                        </div>
+                        <button class="action-button" onclick="goBack()">⬅️ Back</button>
+                        <button class="action-button" onclick="goForward()">➡️ Forward</button>
+                        <button class="action-button" onclick="reloadPage()">🔄 Reload</button>
+                    </div>
+
+                    <div class="control-group">
+                        <h4>Page Interaction</h4>
+                        <input type="text" id="cssSelector" class="text-input" placeholder="CSS selector">
+                        <button class="action-button" onclick="clickElement()">🖱️ Click Element</button>
+                        <input type="text" id="textToInput" class="text-input" placeholder="Text to input">
+                        <button class="action-button" onclick="typeInElement()">⌨️ Type in Element</button>
+                    </div>
+
+                    <div class="control-group">
+                        <h4>Information</h4>
+                        <button class="action-button" onclick="takePageScreenshot()">📸 Screenshot</button>
+                        <button class="action-button" onclick="getPageInfo()">ℹ️ Page Info</button>
+                        <button class="action-button" onclick="getPageText()">📄 Get Text</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session Management Section -->
+            <div id="session" class="content-section">
+                <h2>Session Management</h2>
+                <div class="dashboard-cards">
+                    <div class="card">
+                        <div class="card-title">Session Controls</div>
+                        <div class="card-content">
+                            <button class="action-button" onclick="suspendSession()">⏸️ Suspend Session</button>
+                            <button class="action-button" onclick="resumeSession()">▶️ Resume Session</button>
+                            <button class="danger-button" onclick="terminateSession()">🔚 Terminate</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Session Details</div>
+                        <div class="card-content" id="sessionDetails">
+                            Loading session information...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audit Trail Section -->
+            <div id="audit" class="content-section">
+                <h2>Audit Trail</h2>
+                <div class="card">
+                    <div class="card-title">Recent Activities</div>
+                    <div class="audit-log" id="auditLog">
+                        Loading audit trail...
+                    </div>
+                </div>
+                <button class="action-button" onclick="refreshAuditTrail()">🔄 Refresh Audit Trail</button>
+            </div>
+
+            <!-- Emergency Controls Section -->
+            <div id="emergency" class="content-section">
+                <h2>Emergency Controls</h2>
+                <div class="emergency-controls">
+                    <h3>⚠️ Emergency Shutdown</h3>
+                    <p>Use these controls only in emergency situations. All active sessions will be terminated
+                        immediately.</p>
+                    <input type="text" id="shutdownReason" class="text-input"
+                        placeholder="Reason for emergency shutdown">
+                    <button class="danger-button" onclick="emergencyShutdown()">🚨 Emergency Shutdown</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSession = null;
+        let auditRefreshInterval = null;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function () {
+            loadSessionInfo();
+            startAuditRefresh();
+        });
+
+        // Load session information from storage
+        function loadSessionInfo() {
+            const sessionData = sessionStorage.getItem('prism_secure_session');
+            if (!sessionData) {
+                alert('No active session found. Redirecting to login...');
+                window.location.href = '/secure-operator-login.html';
+                return;
+            }
+
+            currentSession = JSON.parse(sessionData);
+            updateUIWithSessionInfo();
+        }
+
+        // Update UI with session information
+        function updateUIWithSessionInfo() {
+            document.getElementById('sessionId').textContent = currentSession.sessionId.substring(0, 12) + '...';
+            document.getElementById('characterId').textContent = currentSession.characterId;
+            document.getElementById('sessionExpiry').textContent = new Date(currentSession.expiresAt).toLocaleString();
+            document.getElementById('currentSecLevel').textContent = currentSession.securityLevel;
+
+            const securityBadge = document.getElementById('securityBadge');
+            securityBadge.textContent = currentSession.securityLevel.toUpperCase();
+            securityBadge.className = `security-level ${currentSession.securityLevel}`;
+
+            // Update capabilities based on session type
+            updateCapabilityStatus();
+        }
+
+        // Update capability status indicators
+        function updateCapabilityStatus() {
+            const computerStatus = document.getElementById('computerStatus');
+            const browserStatus = document.getElementById('browserStatus');
+
+            const hasComputer = currentSession.sessionType === 'computer_control' || currentSession.sessionType === 'full_control';
+            const hasBrowser = currentSession.sessionType === 'browser_control' || currentSession.sessionType === 'full_control';
+
+            computerStatus.innerHTML = hasComputer ?
+                '<span class="status-indicator status-active"></span>Available' :
+                '<span class="status-indicator status-inactive"></span>Not Available';
+
+            browserStatus.innerHTML = hasBrowser ?
+                '<span class="status-indicator status-active"></span>Available' :
+                '<span class="status-indicator status-inactive"></span>Not Available';
+        }
+
+        // Show specific content section
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+
+            // Remove active class from nav items
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+
+            // Add active class to clicked nav item
+            event.target.classList.add('active');
+        }
+
+        // Computer control functions
+        async function takeScreenshot() {
+            try {
+                const result = await executeComputerCommand('screenshot');
+                if (result.ok) {
+                    showStatus('Screenshot taken successfully', 'success');
+                    document.getElementById('lastScreenshot').textContent = new Date().toLocaleString();
+                }
+            } catch (error) {
+                showStatus('Failed to take screenshot: ' + error.message, 'error');
+            }
+        }
+
+        async function moveMouse() {
+            const x = parseInt(document.getElementById('mouseX').value);
+            const y = parseInt(document.getElementById('mouseY').value);
+
+            try {
+                const result = await executeComputerCommand('mouse_move', { coordinate: [x, y] });
+                if (result.ok) {
+                    showStatus(`Mouse moved to (${x}, ${y})`, 'success');
+                }
+            } catch (error) {
+                showStatus('Failed to move mouse: ' + error.message, 'error');
+            }
+        }
+
+        async function clickMouse(button) {
+            try {
+                const result = await executeComputerCommand(`${button}_click`);
+                if (result.ok) {
+                    showStatus(`${button} click executed`, 'success');
+                }
+            } catch (error) {
+                showStatus(`Failed to ${button} click: ` + error.message, 'error');
+            }
+        }
+
+        async function typeText() {
+            const text = document.getElementById('textToType').value;
+            if (!text) return;
+
+            try {
+                const result = await executeComputerCommand('type', { text });
+                if (result.ok) {
+                    showStatus('Text typed successfully', 'success');
+                    document.getElementById('textToType').value = '';
+                }
+            } catch (error) {
+                showStatus('Failed to type text: ' + error.message, 'error');
+            }
+        }
+
+        async function pressKey() {
+            const key = document.getElementById('keyToPress').value;
+            if (!key) return;
+
+            try {
+                const result = await executeComputerCommand('key', { text: key });
+                if (result.ok) {
+                    showStatus('Key pressed successfully', 'success');
+                    document.getElementById('keyToPress').value = '';
+                }
+            } catch (error) {
+                showStatus('Failed to press key: ' + error.message, 'error');
+            }
+        }
+
+        // Browser control functions
+        async function navigateTo() {
+            const url = document.getElementById('navigationUrl').value;
+            if (!url) return;
+
+            try {
+                const result = await executeBrowserCommand('navigate', { url });
+                if (result.ok) {
+                    showStatus('Navigation successful', 'success');
+                    document.getElementById('currentUrl').textContent = url;
+                }
+            } catch (error) {
+                showStatus('Failed to navigate: ' + error.message, 'error');
+            }
+        }
+
+        async function goBack() {
+            try {
+                const result = await executeBrowserCommand('go_back');
+                if (result.ok) showStatus('Navigated back', 'success');
+            } catch (error) { showStatus('Failed to go back: ' + error.message, 'error'); }
+        }
+
+        async function goForward() {
+            try {
+                const result = await executeBrowserCommand('go_forward');
+                if (result.ok) showStatus('Navigated forward', 'success');
+            } catch (error) { showStatus('Failed to go forward: ' + error.message, 'error'); }
+        }
+
+        async function reloadPage() {
+            try {
+                const result = await executeBrowserCommand('reload');
+                if (result.ok) showStatus('Page reloaded', 'success');
+            } catch (error) { showStatus('Failed to reload: ' + error.message, 'error'); }
+        }
+
+        async function clickElement() {
+            const selector = document.getElementById('cssSelector').value;
+            if (!selector) return;
+            try {
+                const result = await executeBrowserCommand('click', { selector });
+                if (result.ok) showStatus('Element clicked', 'success');
+            } catch (error) { showStatus('Failed to click element: ' + error.message, 'error'); }
+        }
+
+        async function typeInElement() {
+            const selector = document.getElementById('cssSelector').value;
+            const text = document.getElementById('textToInput').value;
+            if (!selector || !text) return;
+            try {
+                const result = await executeBrowserCommand('type', { selector, text });
+                if (result.ok) {
+                    showStatus('Typed in element', 'success');
+                    document.getElementById('textToInput').value = '';
+                }
+            } catch (error) { showStatus('Failed to type in element: ' + error.message, 'error'); }
+        }
+
+        async function takePageScreenshot() {
+            try {
+                const result = await executeBrowserCommand('screenshot');
+                if (result.ok) showStatus('Page screenshot captured', 'success');
+            } catch (error) { showStatus('Failed to capture screenshot: ' + error.message, 'error'); }
+        }
+
+        async function getPageInfo() {
+            try {
+                const result = await executeBrowserCommand('get_page_info');
+                if (result.ok) {
+                    showStatus('Page info retrieved', 'success');
+                    if (result.output && result.output.url) {
+                        document.getElementById('currentUrl').textContent = result.output.url;
+                    }
+                }
+            } catch (error) { showStatus('Failed to get page info: ' + error.message, 'error'); }
+        }
+
+        async function getPageText() {
+            try {
+                const result = await executeBrowserCommand('get_text_content');
+                if (result.ok) showStatus('Text content retrieved (logged to audit)', 'success');
+            } catch (error) { showStatus('Failed to get text content: ' + error.message, 'error'); }
+        }
+
+        // Execute computer command
+        async function executeComputerCommand(action, additionalArgs = {}) {
+            const response = await fetch('/api/iam/cac/execute/computer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    args: {
+                        operatorSessionId: currentSession.sessionId,
+                        action,
+                        ...additionalArgs
+                    }
+                })
+            });
+
+            return await response.json();
+        }
+
+        // Execute browser command
+        async function executeBrowserCommand(action, additionalArgs = {}) {
+            const response = await fetch('/api/iam/cac/execute/browser', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    args: {
+                        operatorSessionId: currentSession.sessionId,
+                        action,
+                        ...additionalArgs
+                    }
+                })
+            });
+
+            return await response.json();
+        }
+
+        // Session management functions
+        async function refreshSession() {
+            try {
+                const response = await fetch(`/api/iam/cac/session/${currentSession.sessionId}`);
+                if (response.ok) {
+                    const sessionInfo = await response.json();
+                    showStatus('Session refreshed', 'success');
+                } else {
+                    showStatus('Failed to refresh session', 'error');
+                }
+            } catch (error) {
+                showStatus('Error refreshing session: ' + error.message, 'error');
+            }
+        }
+
+        async function terminateSession() {
+            if (!confirm('Are you sure you want to terminate this session?')) return;
+
+            try {
+                const response = await fetch(`/api/iam/cac/session/${currentSession.sessionId}/terminate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: 'User requested termination' })
+                });
+
+                if (response.ok) {
+                    alert('Session terminated successfully. Redirecting to login...');
+                    sessionStorage.removeItem('prism_secure_session');
+                    window.location.href = '/secure-operator-login.html';
+                } else {
+                    showStatus('Failed to terminate session', 'error');
+                }
+            } catch (error) {
+                showStatus('Error terminating session: ' + error.message, 'error');
+            }
+        }
+
+        // Start periodic audit trail refresh
+        function startAuditRefresh() {
+            refreshAuditTrail();
+            auditRefreshInterval = setInterval(refreshAuditTrail, 5000); // Refresh every 5 seconds
+        }
+
+        // Refresh audit trail
+        function refreshAuditTrail() {
+            // Simulate audit entries for demo
+            const auditLog = document.getElementById('auditLog');
+            const now = new Date();
+
+            // This would normally fetch from the server
+            const mockEntries = [
+                { timestamp: now.toISOString(), operation: 'SESSION_ACTIVE', details: 'Session monitoring active' },
+                { timestamp: new Date(now - 30000).toISOString(), operation: 'COMPUTER_SCREENSHOT', details: 'Screenshot captured for compliance' },
+                { timestamp: new Date(now - 60000).toISOString(), operation: 'SESSION_CREATED', details: 'Secure operator session established' }
+            ];
+
+            auditLog.innerHTML = mockEntries.map(entry => `
+                <div class="log-entry">
+                    <span class="log-timestamp">${new Date(entry.timestamp).toLocaleTimeString()}</span>
+                    <span class="log-operation">${entry.operation}</span>
+                    <span class="log-details">${entry.details}</span>
+                </div>
+            `).join('');
+
+            document.getElementById('auditCount').textContent = mockEntries.length;
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            // Create temporary status display
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.position = 'fixed';
+            statusDiv.style.top = '20px';
+            statusDiv.style.right = '20px';
+            statusDiv.style.zIndex = '1000';
+            statusDiv.style.padding = '15px 25px';
+            statusDiv.style.borderRadius = '10px';
+            statusDiv.style.background = type === 'success' ?
+                'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)';
+            statusDiv.style.border = `1px solid ${type === 'success' ? '#4caf50' : '#f44336'}`;
+            statusDiv.style.color = type === 'success' ? '#4caf50' : '#f44336';
+
+            document.body.appendChild(statusDiv);
+
+            setTimeout(() => {
+                document.body.removeChild(statusDiv);
+            }, 3000);
+        }
+
+        // Emergency shutdown
+        async function emergencyShutdown() {
+            const reason = document.getElementById('shutdownReason').value;
+            if (!reason) {
+                alert('Please provide a reason for emergency shutdown');
+                return;
+            }
+
+            if (!confirm(`EMERGENCY SHUTDOWN: This will terminate ALL active sessions. Reason: ${reason}\n\nAre you absolutely sure?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/iam/cac/emergency-shutdown', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason })
+                });
+
+                if (response.ok) {
+                    alert('Emergency shutdown executed. All sessions terminated.');
+                    sessionStorage.clear();
+                    window.location.href = '/secure-operator-login.html';
+                } else {
+                    showStatus('Emergency shutdown failed', 'error');
+                }
+            } catch (error) {
+                showStatus('Error during emergency shutdown: ' + error.message, 'error');
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (auditRefreshInterval) {
+                clearInterval(auditRefreshInterval);
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,65 @@
+{
+  "id": "prism.skill.ast_architect",
+  "version": "1.0.0",
+  "name": "Prism Autonomous AST Architect",
+  "description": "Performs surgical multi-file refactoring, static analysis, and TypeScript compilation validation under strict syntax guidelines.",
+  "tags": ["architect", "ast", "refactoring", "typescript", "lint", "code", "structure"],
+  "governance": {
+    "min_policy_tier": "tier-2",
+    "required_approvals": ["file_write", "shell_exec"],
+    "covenant_rules": [
+      "Analyze full target file AST structures before performing code surgery.",
+      "Strictly prohibit direct modification of unrelated modules to avoid collateral breaking changes.",
+      "Enforce 100% successful static checks and builds on modified files before pushing."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Evaluate the logical structure, type definitions, imports, and safety bounds of target changes: {query}. Verify zero broken references are created.",
+    "right_hemisphere": "Formulate highly optimized, clean-code TypeScript revisions, correct type signatures, and virtual code patches for: {query}.",
+    "main_hemisphere": "Orchestrate refactoring. Capture source file AST states, apply targeted edits, run syntax compilation verifications, and log architectural outcomes: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "analyze_structures",
+        "name": "Analyze AST & References",
+        "tools": ["file_read", "file_list"],
+        "action": "Read the target files to inspect imports, class architectures, and external reference chains.",
+        "transitions": {
+          "success": "generate_patch",
+          "failed": "analyze_structures"
+        }
+      },
+      {
+        "id": "generate_patch",
+        "name": "Draft Code Patch Revisions",
+        "tools": ["file_write"],
+        "action": "Draft surgical modifications, maintaining exact docstrings and formatting rules.",
+        "transitions": {
+          "success": "verify_sandbox_build",
+          "failed": "analyze_structures"
+        }
+      },
+      {
+        "id": "verify_sandbox_build",
+        "name": "Verify Syntax Lint & Build",
+        "tools": ["prism_ide_lint", "run_command"],
+        "action": "Run compiler checks and tsconfig lints to verify that code has zero syntax or type breaks.",
+        "transitions": {
+          "success": "completed",
+          "failed": "generate_patch"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Refactoring Completed Successfully",
+        "tools": [],
+        "action": "Alert the operator that surgical refactoring has completed and passed all static type verifications.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

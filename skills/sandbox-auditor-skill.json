@@ -1,0 +1,75 @@
+{
+  "id": "prism.skill.sandbox_auditor",
+  "version": "1.0.0",
+  "name": "Prism Docker Sandbox Auditor",
+  "description": "Executes untrusted packages and runs security penetration checks inside fully isolated temporary Docker containers.",
+  "tags": ["sandbox", "docker", "security", "auditing", "containment", "vulnerability", "isolate"],
+  "governance": {
+    "min_policy_tier": "tier-3",
+    "required_approvals": ["shell_exec", "file_write"],
+    "covenant_rules": [
+      "Ensure sandbox docker images are verified and contain zero root network backdoors.",
+      "Strictly isolate sandbox host filesystems; mount only target testing subdirectories.",
+      "Enforce execution timeout constraints to prevent sandbox resource hijacking."
+    ]
+  },
+  "triad_templates": {
+    "left_hemisphere": "Analyze the target script or library for malicious indicators: {query}. Verify container isolation configurations are strictly sealed.",
+    "right_hemisphere": "Formulate robust Dockerfile profiles, container mounting structures, network-block directives, and vulnerability scan scripts to isolate: {query}.",
+    "main_hemisphere": "Coordinate containment audits. Build dynamic test images, launch sandbox runs, capture audit stdout logs, scan package structures, and dismantle containers: {query}."
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "scaffold_sandbox_dockerfile",
+        "name": "Scaffold Sandbox Docker Image",
+        "tools": ["file_write"],
+        "action": "Write a secure, network-disabled Dockerfile structure mapped to a lightweight node/python baseline.",
+        "transitions": {
+          "success": "execute_container_audit",
+          "failed": "scaffold_sandbox_dockerfile"
+        }
+      },
+      {
+        "id": "execute_container_audit",
+        "name": "Run Isolated Containment Test",
+        "tools": ["run_command"],
+        "action": "Launch the container with CPU/RAM caps and execute the test package while capturing raw console audits.",
+        "transitions": {
+          "success": "collect_security_report",
+          "failed": "dismantle_sandbox"
+        }
+      },
+      {
+        "id": "collect_security_report",
+        "name": "Analyze Vulnerability Logs",
+        "tools": ["file_write"],
+        "action": "Parse standard audit outputs and construct a security validation summary report.",
+        "transitions": {
+          "success": "dismantle_sandbox",
+          "failed": "dismantle_sandbox"
+        }
+      },
+      {
+        "id": "dismantle_sandbox",
+        "name": "Dismantle Isolate Containment",
+        "tools": ["run_command"],
+        "action": "Kill active sandboxes, prune testing images, and remove temporary container profiles from the daemon.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      },
+      {
+        "id": "completed",
+        "name": "Security Audit Finalized",
+        "tools": [],
+        "action": "Log container dismantle status and present the security auditor brief directly to the operator dashboard.",
+        "transitions": {
+          "success": "completed",
+          "failed": "completed"
+        }
+      }
+    ]
+  }
+}

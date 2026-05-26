@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRISM Public GitHub Launch Dashboard</title>
+  <!-- Premium Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Premium Styling Framework */
+    :root {
+      --bg-dark: #07080c;
+      --bg-surface: rgba(13, 16, 27, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --primary: #9b51e0;
+      --primary-glow: rgba(155, 81, 224, 0.4);
+      --secondary: #00f2fe;
+      --secondary-glow: rgba(0, 242, 254, 0.4);
+      --gold: #f2c94c;
+      --red: #eb5757;
+      --red-glow: rgba(235, 87, 87, 0.2);
+      --green: #27ae60;
+      --font-title: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 5% 5%, rgba(155, 81, 224, 0.07) 0%, transparent 35%),
+        radial-gradient(circle at 95% 95%, rgba(0, 242, 254, 0.07) 0%, transparent 35%);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      line-height: 1.6;
+      padding-bottom: 5rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem;
+    }
+
+    /* Header Panel */
+    header {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2rem;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+
+    .header-logo-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo-glow {
+      width: 45px;
+      height: 45px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      box-shadow: 0 0 15px var(--primary-glow);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 1.5rem;
+      color: #fff;
+    }
+
+    .header-title-group h1 {
+      font-family: var(--font-title);
+      font-size: 1.8rem;
+      font-weight: 800;
+      background: linear-gradient(to right, #ffffff, var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-title-group p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    /* Overall Progress Meter */
+    .progress-widget {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      padding: 1rem 1.5rem;
+      border-radius: 12px;
+    }
+
+    .progress-circle-wrap {
+      position: relative;
+      width: 70px;
+      height: 70px;
+    }
+
+    .progress-circle-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.05);
+      stroke-width: 6;
+    }
+
+    .progress-circle-bar {
+      fill: none;
+      stroke: url(#cyanGrad);
+      stroke-width: 6;
+      stroke-linecap: round;
+      stroke-dasharray: 200.96; /* 2 * pi * 32 */
+      stroke-dashoffset: 200.96;
+      transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+
+    .progress-text-percent {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 1.15rem;
+      color: var(--secondary);
+    }
+
+    .progress-label {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .progress-label-main {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .progress-label-count {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    /* Layout Split */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 2rem;
+    }
+
+    @media(max-width: 900px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Sidebar Navigation */
+    .nav-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .nav-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      backdrop-filter: blur(10px);
+    }
+
+    .nav-section-title {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .nav-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      text-align: left;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: var(--font-title);
+      font-weight: 600;
+      font-size: 0.9rem;
+      width: 100%;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-main);
+    }
+
+    .nav-btn.active {
+      background: rgba(155, 81, 224, 0.12);
+      border-color: rgba(155, 81, 224, 0.25);
+      color: var(--text-main);
+    }
+
+    .nav-btn-badge {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .nav-btn.active .nav-btn-badge {
+      background: rgba(0, 242, 254, 0.15);
+      border-color: var(--secondary);
+      color: var(--secondary);
+    }
+
+    /* Main Area Panels */
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2.5rem;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+      animation: fadeIn 0.4s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .panel-header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-category {
+      font-family: var(--font-title);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--secondary);
+    }
+
+    .panel-title {
+      font-family: var(--font-title);
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin-top: 0.25rem;
+    }
+
+    /* Alerts */
+    .alert-caution {
+      background: var(--red-glow);
+      border: 1px solid var(--red);
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      margin-bottom: 1.5rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .alert-caution-icon {
+      font-size: 1.1rem;
+    }
+
+    /* Timeline Styling */
+    .timeline {
+      position: relative;
+      padding-left: 2rem;
+      margin: 1rem 0;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 0.5rem;
+      bottom: 0.5rem;
+      width: 2px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .timeline-node {
+      position: relative;
+      margin-bottom: 2rem;
+    }
+
+    .timeline-node::before {
+      content: '';
+      position: absolute;
+      left: -2rem;
+      top: 0.35rem;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--bg-dark);
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      transition: var(--transition);
+    }
+
+    .timeline-node.active::before {
+      border-color: var(--secondary);
+      box-shadow: 0 0 10px var(--secondary-glow);
+    }
+
+    .timeline-node.completed::before {
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+
+    .timeline-node-title {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 1.05rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .timeline-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .timeline-badge.active {
+      background: rgba(0, 242, 254, 0.15);
+      border: 1px solid var(--secondary);
+      color: var(--secondary);
+    }
+
+    .timeline-badge.planned {
+      background: rgba(242, 201, 76, 0.15);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+    }
+
+    .timeline-node-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      line-height: 1.4;
+    }
+
+    .timeline-sublist {
+      margin-top: 0.5rem;
+      padding-left: 1.25rem;
+      list-style-type: square;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Checklist Styling */
+    .checklist-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .checklist-item {
+      background: rgba(255, 255, 255, 0.01);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      transition: var(--transition);
+    }
+
+    .checklist-item:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.02);
+      transform: translateX(4px);
+    }
+
+    .checklist-item.checked {
+      border-color: rgba(39, 174, 96, 0.3);
+      background: rgba(39, 174, 96, 0.03);
+    }
+
+    .checkbox-box {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 0.15rem;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+
+    .checklist-item.checked .checkbox-box {
+      border-color: var(--green);
+      background: var(--green);
+    }
+
+    .checkbox-tick {
+      width: 8px;
+      height: 4px;
+      border-left: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(-45deg) translate(1px, -1px);
+      display: none;
+    }
+
+    .checklist-item.checked .checkbox-tick {
+      display: block;
+    }
+
+    .checklist-content {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .checklist-item-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: var(--transition);
+    }
+
+    .checklist-item.checked .checklist-item-title {
+      color: var(--text-muted);
+      text-decoration: line-through;
+    }
+
+    .checklist-item-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+      line-height: 1.4;
+    }
+
+    /* Code Block & Terminal Styling */
+    .terminal-box {
+      background: #040508;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-top: 1rem;
+      overflow: hidden;
+    }
+
+    .terminal-header {
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.5rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .terminal-dots {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .terminal-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .terminal-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+
+    .btn-copy {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.2rem 0.5rem;
+      font-size: 0.65rem;
+      font-family: var(--font-title);
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-copy:hover {
+      border-color: var(--text-muted);
+      color: var(--text-main);
+    }
+
+    .terminal-code {
+      padding: 1rem;
+      font-family: 'Consolas', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      color: #76e1fe;
+      white-space: pre;
+    }
+
+    .tab-script-nav {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .tab-script-btn {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: var(--font-title);
+      transition: var(--transition);
+    }
+
+    .tab-script-btn.active {
+      border-color: var(--secondary);
+      background: rgba(0, 242, 254, 0.1);
+      color: var(--text-main);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SVG Gradient definitions -->
+  <svg style="width:0; height:0; position:absolute;">
+    <defs>
+      <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#00f2fe" />
+        <stop offset="100%" stop-color="#9b51e0" />
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <div class="container">
+    
+    <!-- Top Header -->
+    <header>
+      <div class="header-logo-group">
+        <div class="logo-glow">P</div>
+        <div class="header-title-group">
+          <h1>PRISM Public Launch Portal</h1>
+          <p>Definitive launch preparation, audit integrations, and security verification checklists.</p>
+        </div>
+      </div>
+
+      <!-- Live Progress Tracker -->
+      <div class="progress-widget">
+        <div class="progress-circle-wrap">
+          <svg width="70" height="70">
+            <circle class="progress-circle-bg" cx="35" cy="35" r="32" />
+            <circle class="progress-circle-bar" id="progress-circle" cx="35" cy="35" r="32" />
+          </svg>
+          <div class="progress-text-percent" id="progress-percent">0%</div>
+        </div>
+        <div class="progress-label">
+          <span class="progress-label-main">Readiness Level</span>
+          <span class="progress-label-count" id="progress-count">0 / 12 completed</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content Workspace -->
+    <div class="dashboard-grid">
+      
+      <!-- Sidebar navigation -->
+      <div class="nav-sidebar">
+        
+        <div class="nav-card">
+          <div class="nav-section-title">Core Panels</div>
+          <button class="nav-btn active" onclick="switchPanel('context')">
+            <span>Executive Context</span>
+          </button>
+          <button class="nav-btn" onclick="switchPanel('roadmap')">
+            <span>Integrated Roadmap</span>
+          </button>
+        </div>
+
+        <div class="nav-card">
+          <div class="nav-section-title">Checklists</div>
+          <button class="nav-btn" onclick="switchPanel('stage-a')">
+            <span>A. Security Sweep</span>
+            <span class="nav-btn-badge" id="badge-a">0/4</span>
+          </button>
+          <button class="nav-btn" onclick="switchPanel('stage-b')">
+            <span>B. Open-Source Laws</span>
+            <span class="nav-btn-badge" id="badge-b">0/4</span>
+          </button>
+          <button class="nav-btn" onclick="switchPanel('stage-c')">
+            <span>C. CI/CD Testing</span>
+            <span class="nav-btn-badge" id="badge-c">0/4</span>
+          </button>
+          <button class="nav-btn" onclick="switchPanel('stage-d')">
+            <span>D. Public Branding</span>
+            <span class="nav-btn-badge" id="badge-d">0/3</span>
+          </button>
+        </div>
+
+        <div class="nav-card">
+          <div class="nav-section-title">Verification Scripts</div>
+          <button class="nav-btn" onclick="switchPanel('scripts')">
+            <span>Pre-release Scripts</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Main Panels -->
+      <div class="panel-container">
+        
+        <!-- Panel 1: Executive Context -->
+        <div class="panel active" id="panel-context">
+          <div class="panel-header">
+            <span class="panel-category">Overview</span>
+            <h2 class="panel-title">1. Executive Launch Context</h2>
+          </div>
+          <p style="margin-bottom: 1rem;">
+            Going public on GitHub is a pivotal event for <strong>PRISM</strong>. Because PRISM's primary market differentiator is <strong>cryptographically verified, decoupled Governance-as-a-Service (GaaS)</strong>, any public launch must demonstrate flawless codebase safety, robust security postures, and pristine developer ergonomics.
+          </p>
+          <p style="margin-bottom: 1.5rem; color: var(--text-muted);">
+            This launch preparation roadmap merges the recommendations surfaced by our <strong>May 2026 World-Class Project Audit</strong> with the active <strong>Q2 Roadmap</strong>. The checklist ensures all developer pipelines are green, zero credentials leak, and external developers can bootstrap in under 15 minutes.
+          </p>
+
+          <h3 style="font-family: var(--font-title); font-size: 1.15rem; margin-bottom: 0.75rem;">Core Public Guarantees</h3>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding:1rem; border-radius:8px;">
+              <strong style="color: var(--secondary);">Zero Secrets Leakage</strong>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">Comprehensive local sweeps and commit-history filters to prevent key leakage.</p>
+            </div>
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding:1rem; border-radius:8px;">
+              <strong style="color: var(--secondary);">Mock-Fallback Testing</strong>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">Ensures tests pass on developer machines without external Docker or PTY setups.</p>
+            </div>
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding:1rem; border-radius:8px;">
+              <strong style="color: var(--primary);">Clean Bootstrapping</strong>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">A new team member can boot setup and run an agent session in under 15 minutes.</p>
+            </div>
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding:1rem; border-radius:8px;">
+              <strong style="color: var(--primary);">Branding Excellence</strong>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">High-fidelity diagrams explaining Sentinel privacy shields and Baton Pass handoffs.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 2: Integrated Roadmap -->
+        <div class="panel" id="panel-roadmap">
+          <div class="panel-header">
+            <span class="panel-category">Milestones</span>
+            <h2 class="panel-title">2. Unified Roadmap Forward</h2>
+          </div>
+          <p style="margin-bottom: 1.25rem; font-size:0.85rem; color:var(--text-muted);">
+            We have integrated our Q2 audit findings directly into the launch workflow. The timeline below displays the sequential release milestones leading to the public launch.
+          </p>
+
+          <div class="timeline">
+            
+            <div class="timeline-node completed">
+              <div class="timeline-node-title">
+                <span>Phase E-Close: Integration Hardening</span>
+                <span class="timeline-badge active">Active</span>
+              </div>
+              <div class="timeline-node-desc">
+                Finalizing Docker sandboxing, virtual terminal setups, and full manual approval UI controls.
+              </div>
+              <ul class="timeline-sublist">
+                <li>PTY integration test pipelines</li>
+                <li>Sovereign Sentinel logs dashboard configuration</li>
+              </ul>
+            </div>
+
+            <div class="timeline-node active">
+              <div class="timeline-node-title">
+                <span>Phase R: Readiness Stabilization</span>
+                <span class="timeline-badge planned">June - July</span>
+              </div>
+              <div class="timeline-node-desc">
+                Implementing production fail-fast check bounds, CSRF middlewares, and SRE backup/restore scripts.
+              </div>
+            </div>
+
+            <div class="timeline-node">
+              <div class="timeline-node-title">
+                <span>Phase P: Public Launch Gate (NEW)</span>
+                <span class="timeline-badge planned">July 2026</span>
+              </div>
+              <div class="timeline-node-desc">
+                Executing history scrubs, configuring AGPL/Apache licenses, and launching the CI pipeline workflows.
+              </div>
+            </div>
+
+            <div class="timeline-node">
+              <div class="timeline-node-title">
+                <span>Phase F: Ecosystem & Scale</span>
+                <span class="timeline-badge">Planned</span>
+              </div>
+              <div class="timeline-node-desc">
+                Publishing pypi:prism-client, splitting dashboard monolith routines, and adding native desktop installers.
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Panel 3: Stage A Checklist -->
+        <div class="panel" id="panel-stage-a">
+          <div class="panel-header">
+            <span class="panel-category">Stage A</span>
+            <h2 class="panel-title">Security & Cryptographic Sweep</h2>
+          </div>
+          
+          <div class="alert-caution">
+            <span class="alert-caution-icon">⚠️</span>
+            <div>
+              <strong>Critical Security Caution:</strong>
+              A single leaked API key in your public Git history can compromise your corporate accounts, ruin trust, and trigger automated security takedowns.
+            </div>
+          </div>
+
+          <div class="checklist-container">
+            <div class="checklist-item" onclick="toggleItem('a1')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-a1">Scan Historical Git Objects</span>
+                <span class="checklist-item-desc">Run trufflehog or gitleaks locally over the entire commit history to verify no raw tokens remain.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('a2')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-a2">Scrub History on Leaks Detection</span>
+                <span class="checklist-item-desc">Use git-filter-repo to programmatically purge sensitive files or variables from all historical trees.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('a3')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-a3">Validate .gitignore Coverage</span>
+                <span class="checklist-item-desc">Confirm that *.db, workspace/logs/, .env, *.pem, and config/plugin-signing-keys.json are fully blocked.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('a4')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-a4">Sanitize .env.example</span>
+                <span class="checklist-item-desc">Provide a comprehensive env example template with comments explaining all 25 variables.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 4: Stage B Checklist -->
+        <div class="panel" id="panel-stage-b">
+          <div class="panel-header">
+            <span class="panel-category">Stage B</span>
+            <h2 class="panel-title">Legal & Open-Source Foundations</h2>
+          </div>
+
+          <div class="checklist-container">
+            <div class="checklist-item" onclick="toggleItem('b1')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-b1">License Selection</span>
+                <span class="checklist-item-desc">Place an Apache 2.0 or AGPL-3.0 License file in the repository root to establish commercial boundaries.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('b2')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-b2">Security Policy Setup</span>
+                <span class="checklist-item-desc">Create SECURITY.md detailing private contact emails for responsible vulnerability disclosures.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('b3')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-b3">Contribution Rules</span>
+                <span class="checklist-item-desc">Draft CONTRIBUTING.md outlining style requirements and pull-request build verification mandates.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('b4')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-b4">Signed Directives Invariant Documentation</span>
+                <span class="checklist-item-desc">Document the cryptographic 10 Laws boot-checking mechanism to inform prospective PR submitters.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 5: Stage C Checklist -->
+        <div class="panel" id="panel-stage-c">
+          <div class="panel-header">
+            <span class="panel-category">Stage C</span>
+            <h2 class="panel-title">Rigorous Testing & CI/CD Validation</h2>
+          </div>
+
+          <div class="checklist-container">
+            <div class="checklist-item" onclick="toggleItem('c1')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-c1">Verify Mock-Fallback Environments</span>
+                <span class="checklist-item-desc">Assert that integration tests skip or trigger mocks gracefully if node-pty or Docker is missing locally.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('c2')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-c2">Implement E2E Smoke Tests</span>
+                <span class="checklist-item-desc">Commit a 60s tests/e2e-smoke.test.ts verifying auth, chat, tool mock, and policy interception.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('c3')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-c3">Create GitHub Actions Workflow</span>
+                <span class="checklist-item-desc">Commit .github/workflows/ci.yml covering lints, builds, unit-tests, and release qualification checks.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('c4')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-c4">Prebuild Qualification hook</span>
+                <span class="checklist-item-desc">Wire npm run prebuild as a pre-commit check to prevent compiling outdated directive hashes.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 6: Stage D Checklist -->
+        <div class="panel" id="panel-stage-d">
+          <div class="panel-header">
+            <span class="panel-category">Stage D</span>
+            <h2 class="panel-title">Premium Branding & UX</h2>
+          </div>
+
+          <div class="checklist-container">
+            <div class="checklist-item" onclick="toggleItem('d1')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-d1">Revamp README.md UI</span>
+                <span class="checklist-item-desc">Embed high-quality SSHP and CSH Baton Pass SVGs, value propositions, and 3-step setup guides.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('d2')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-d2">Publish and Expose the Wiki</span>
+                <span class="checklist-item-desc">Publish SOTA_BROWSER_WIKI.md to the repo wiki and provide direct, searchable tables of contents.</span>
+              </div>
+            </div>
+
+            <div class="checklist-item" onclick="toggleItem('d3')">
+              <div class="checkbox-box"><div class="checkbox-tick"></div></div>
+              <div class="checklist-content">
+                <span class="checklist-item-title" id="title-d3">Provide Self-Driving Demo Asset</span>
+                <span class="checklist-item-desc">Generate a clean browse-ready HTML slideshow run and link it in the README as proof-of-concept.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 7: Scripts -->
+        <div class="panel" id="panel-scripts">
+          <div class="panel-header">
+            <span class="panel-category">Verification</span>
+            <h2 class="panel-title">Pre-release scripts and checklists</h2>
+          </div>
+          <p style="margin-bottom: 1rem; font-size: 0.85rem; color:var(--text-muted);">
+            Execute these commands sequentially to guarantee codebase packaging sanity before toggling GitHub to "Public."
+          </p>
+
+          <div class="tab-script-nav">
+            <button class="tab-script-btn active" onclick="switchScript(1)">1. Clean Build</button>
+            <button class="tab-script-btn" onclick="switchScript(2)">2. Test Suite</button>
+            <button class="tab-script-btn" onclick="switchScript(3)">3. Secrets Dry-Run</button>
+            <button class="tab-script-btn" onclick="switchScript(4)">4. Release Check</button>
+          </div>
+
+          <div class="terminal-box" id="terminal-s1">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <div class="terminal-dot" style="background:#ff5f56;"></div>
+                <div class="terminal-dot" style="background:#ffbd2e;"></div>
+                <div class="terminal-dot" style="background:#27c93f;"></div>
+              </div>
+              <div class="terminal-title">powershell — clean_build.ps1</div>
+              <button class="btn-copy" onclick="copyCode('code-s1')">Copy</button>
+            </div>
+            <div class="terminal-code" id="code-s1"># Clean node modules and rebuild from scratch
+rm -Recurse -Force node_modules, package-lock.json
+npm install
+npm run prebuild
+npm run build</div>
+          </div>
+
+          <div class="terminal-box" id="terminal-s2" style="display:none;">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <div class="terminal-dot" style="background:#ff5f56;"></div>
+                <div class="terminal-dot" style="background:#ffbd2e;"></div>
+                <div class="terminal-dot" style="background:#27c93f;"></div>
+              </div>
+              <div class="terminal-title">powershell — test_run.ps1</div>
+              <button class="btn-copy" onclick="copyCode('code-s2')">Copy</button>
+            </div>
+            <div class="terminal-code" id="code-s2"># Set dry-run or mock environments
+$env:NODE_ENV="test"
+$env:PRISM_PTAC_SAFE="1"
+npm test</div>
+          </div>
+
+          <div class="terminal-box" id="terminal-s3" style="display:none;">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <div class="terminal-dot" style="background:#ff5f56;"></div>
+                <div class="terminal-dot" style="background:#ffbd2e;"></div>
+                <div class="terminal-dot" style="background:#27c93f;"></div>
+              </div>
+              <div class="terminal-title">powershell — check_leaks.ps1</div>
+              <button class="btn-copy" onclick="copyCode('code-s3')">Copy</button>
+            </div>
+            <div class="terminal-code" id="code-s3"># Check for uncommitted database, log, or key files
+git status --ignored</div>
+          </div>
+
+          <div class="terminal-box" id="terminal-s4" style="display:none;">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <div class="terminal-dot" style="background:#ff5f56;"></div>
+                <div class="terminal-dot" style="background:#ffbd2e;"></div>
+                <div class="terminal-dot" style="background:#27c93f;"></div>
+              </div>
+              <div class="terminal-title">powershell — validate.ps1</div>
+              <button class="btn-copy" onclick="copyCode('code-s4')">Copy</button>
+            </div>
+            <div class="terminal-code" id="code-s4"># Execute PRISM's internal release validator
+npm run release:validate:strict</div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // State management using localStorage
+    const items = {
+      a1: false, a2: false, a3: false, a4: false,
+      b1: false, b2: false, b3: false, b4: false,
+      c1: false, c2: false, c3: false, c4: false,
+      d1: false, d2: false, d3: false
+    };
+
+    const categories = {
+      a: ['a1', 'a2', 'a3', 'a4'],
+      b: ['b1', 'b2', 'b3', 'b4'],
+      c: ['c1', 'c2', 'c3', 'c4'],
+      d: ['d1', 'd2', 'd3']
+    };
+
+    function loadState() {
+      const saved = localStorage.getItem('prism_launch_state');
+      if (saved) {
+        Object.assign(items, JSON.parse(saved));
+      }
+      updateUI();
+    }
+
+    function saveState() {
+      localStorage.setItem('prism_launch_state', JSON.stringify(items));
+    }
+
+    function toggleItem(id) {
+      items[id] = !items[id];
+      saveState();
+      updateUI();
+    }
+
+    function updateUI() {
+      let totalChecked = 0;
+      let totalItems = 0;
+
+      // Update checkboxes in DOM
+      for (const id in items) {
+        totalItems++;
+        const itemDom = document.querySelector(`[onclick="toggleItem('${id}')"]`);
+        if (itemDom) {
+          if (items[id]) {
+            itemDom.classList.add('checked');
+            totalChecked++;
+          } else {
+            itemDom.classList.remove('checked');
+          }
+        }
+      }
+
+      // Update category badges
+      for (const cat in categories) {
+        const catItems = categories[cat];
+        const catChecked = catItems.filter(id => items[id]).length;
+        const catTotal = catItems.length;
+        document.getElementById(`badge-${cat}`).textContent = `${catChecked}/${catTotal}`;
+      }
+
+      // Update progress rings and text
+      const percent = Math.round((totalChecked / totalItems) * 100);
+      document.getElementById('progress-percent').textContent = `${percent}%`;
+      document.getElementById('progress-count').textContent = `${totalChecked} / ${totalItems} completed`;
+
+      // SVG dash offset
+      const circle = document.getElementById('progress-circle');
+      const radius = 32;
+      const circumference = 2 * Math.PI * radius; // 200.96
+      const offset = circumference - (percent / 100) * circumference;
+      circle.style.strokeDashoffset = offset;
+    }
+
+    function switchPanel(panelId) {
+      // Toggle sidebar button styles
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      const currentBtn = Array.from(document.querySelectorAll('.nav-btn')).find(btn => btn.getAttribute('onclick').includes(panelId));
+      if (currentBtn) currentBtn.classList.add('active');
+
+      // Toggle active panel
+      document.querySelectorAll('.panel').forEach(p => {
+        p.classList.remove('active');
+      });
+      const targetPanel = document.getElementById(`panel-${panelId}`);
+      if (targetPanel) targetPanel.classList.add('active');
+    }
+
+    function switchScript(stepId) {
+      // Buttons
+      document.querySelectorAll('.tab-script-btn').forEach((btn, index) => {
+        if (index === (stepId - 1)) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      // Boxes
+      document.querySelectorAll('.terminal-box').forEach((box, index) => {
+        if (index === (stepId - 1)) {
+          box.style.display = 'block';
+        } else {
+          box.style.display = 'none';
+        }
+      });
+    }
+
+    function copyCode(id) {
+      const codeText = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(codeText).then(() => {
+        const btn = document.querySelector(`[onclick="copyCode('${id}')"]`);
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+        }, 1500);
+      });
+    }
+
+    // Init onload
+    window.onload = loadState;
+  </script>
+</body>
+</html>
