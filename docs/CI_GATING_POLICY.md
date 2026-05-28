@@ -97,3 +97,36 @@ This policy defines mandatory CI checks that must pass before merge/release prom
 - Stage 2 aggregate qualification is required to ensure E1-E4 continuity and deterministic profile behavior.
 - Computer-use enterprise claims are blocked in CI unless Business gate evidence is present and marked pass.
 - Directive integrity (Gate 9) is non-negotiable: the PAD hash must match at all times. This is the cryptographic guarantee that Prism's governance has not been tampered with.
+
+## Suggested GitHub Actions job (example)
+
+Add the following job to your CI workflows to enforce Gate 9 and the CI gate checks. This example mirrors `.github/workflows/quality-gates.yml` in this repository.
+
+```yaml
+name: Quality Gates
+
+on:
+   pull_request:
+      branches: [ main ]
+   push:
+      branches: [ main ]
+
+jobs:
+   quality-gates:
+      name: Run quality gates
+      runs-on: ubuntu-latest
+      steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-node@v4
+            with:
+               node-version: '20'
+         - run: npm ci
+         - run: npm run prebuild
+         - run: npm run ci:gate:check
+         - uses: actions/upload-artifact@v4
+            with:
+               name: ci-gate-summary
+               path: prism-output/ci-gate-summary.json
+```
+
+Place this job in your PR and release workflows and ensure branch protection requires the job to be green before merging.

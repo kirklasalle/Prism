@@ -89,6 +89,25 @@ Where `scripts/compute-directive-hash.js` reads `Permanent_Active_Directives.txt
 
 **Acceptance:** `cat config/plugin-signing-keys.json | jq .` shows no `_note` field; verification unit test signs and verifies a sample payload.
 
+### R1-3a — PAD amendment & build automation (M)
+
+When the Governance Council approves a PAD amendment, follow this checklist to ensure CI and runtime integrity:
+
+1. Edit `Permanent_Active_Directives.txt` with the approved amendment.
+2. Locally run:
+
+```bash
+npm run prebuild
+npm run build
+```
+
+1. Confirm `src/core/security/directive-hash.generated.ts` updates and contains the new `DIRECTIVE_SHA256` value.
+2. Run `npm run test` (or at minimum `npm run ci:gate:check`) and confirm the directive-integrity tests pass.
+3. Commit the PAD edit and the generated hash file in the same commit. Do not commit private signing keys.
+4. Open a PR and ensure the CI job `quality-gates` (or equivalent) runs `npm run prebuild` and `npm run ci:gate:check` — CI must pass before merge.
+
+**Acceptance:** PAD amendment PR contains both the edited `Permanent_Active_Directives.txt` and the generated `directive-hash.generated.ts` file in the same commit, CI gate 9 passes, and no directive integrity tests fail.
+
 ### R1-4 — Enforce JWT secret in production (S)
 
 In [src/index.ts](../src/index.ts), change the current warning to a fail-fast when `NODE_ENV === "production"`:
