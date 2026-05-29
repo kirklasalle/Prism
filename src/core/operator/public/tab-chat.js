@@ -1046,6 +1046,57 @@ export
     + '</div>'
     + '</div>';
 
+  // ── Preserve existing paradigm panel state before re-render ──
+  var existingBadge = document.getElementById('prism-paradigm-badge');
+  var badgeText = existingBadge ? existingBadge.innerText : 'LOADING';
+  var badgeBg = existingBadge ? (existingBadge.style.background || '#3b82f6') : '#3b82f6';
+  var badgeColor = existingBadge ? (existingBadge.style.color || '#fff') : '#fff';
+  var badgeShadow = existingBadge ? (existingBadge.style.boxShadow || '') : '';
+  var existingDesc = document.getElementById('prism-paradigm-desc');
+  var descHtml = existingDesc ? existingDesc.innerHTML : 'Querying active constraints...';
+  var existingLog = document.getElementById('prism-paradigm-log');
+  var logHtml = existingLog ? existingLog.innerHTML : '<div>[SYSTEM] Booting active paradigm...</div>';
+
+  // Preserve button highlight states
+  var btnStates = {};
+  ['prism-btn-basemode', 'prism-btn-perfmode', 'prism-btn-automode'].forEach(function (id) {
+    var btn = document.getElementById(id);
+    if (btn) {
+      btnStates[id] = { bg: btn.style.background, border: btn.style.borderColor, color: btn.style.color };
+    }
+  });
+  var baseBtnStyle = btnStates['prism-btn-basemode'] || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
+  var perfBtnStyle = btnStates['prism-btn-perfmode'] || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
+  var autoBtnStyle = btnStates['prism-btn-automode'] || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
+
+  // ── PRISM Active Resource Paradigm / Mode Switcher (persisted across renders) ──
+  html += '<div id="prism-paradigm-panel" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;font-size:11px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+    + '<span style="font-weight:600;color:#ddd;letter-spacing:0.3px;font-size:10px;text-transform:uppercase;">Resource Mode</span>'
+    + '<span id="prism-paradigm-badge" class="badge badge-running" style="font-size:8px;padding:1px 5px;letter-spacing:0.5px;font-weight:800;border-radius:4px;text-transform:uppercase;background:' + badgeBg + ';color:' + badgeColor + ';box-shadow:' + badgeShadow + ';">' + badgeText + '</span>'
+    + '</div>'
+    + '<div style="display:flex;gap:4px;">'
+    + '<button id="prism-btn-basemode" onclick="setResourceParadigm(true)" style="flex:1;background:' + baseBtnStyle.bg + ';border:1px solid ' + baseBtnStyle.border + ';color:' + baseBtnStyle.color + ';border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">'
+    + '\u26A1 Base'
+    + '</button>'
+    + '<button id="prism-btn-perfmode" onclick="setResourceParadigm(false)" style="flex:1;background:' + perfBtnStyle.bg + ';border:1px solid ' + perfBtnStyle.border + ';color:' + perfBtnStyle.color + ';border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">'
+    + '\uD83D\uDE80 Frontier'
+    + '</button>'
+    + '<button id="prism-btn-automode" onclick="setResourceParadigm(\'auto\')" style="flex:1;background:' + autoBtnStyle.bg + ';border:1px solid ' + autoBtnStyle.border + ';color:' + autoBtnStyle.color + ';border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">'
+    + '\uD83D\uDD0D Auto'
+    + '</button>'
+    + '</div>'
+    + '<div id="prism-paradigm-desc" style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:2px;">'
+    + descHtml
+    + '</div>'
+    + '<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;">'
+    + '<span style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:3px;">Activity Log</span>'
+    + '<div id="prism-paradigm-log" style="font-size:8px;color:#cbd5e1;font-family:monospace;line-height:1.4;max-height:60px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">'
+    + logHtml
+    + '</div>'
+    + '</div>'
+    + '</div>';
+
   if (s.pendingApprovals && s.pendingApprovals > 0) {
     html += '<div class="brand-approvals-badge">' + s.pendingApprovals + ' pending approval' + (s.pendingApprovals > 1 ? 's' : '') + '</div>';
   }
@@ -1331,6 +1382,12 @@ export
   state.agenticStream = [];
   composer.value = '';
   composer.style.height = 'auto';
+  // Inform operator that some requests (purchases, transfers, orders) may
+  // require approval and will run automatically after approval.
+  if (/\b(buy|purchase|order|pay|transfer|wire)\b/i.test(content)) {
+    state.notice = 'Note: This request may require operator approval; it will run automatically when approved.';
+    render();
+  }
   // ── Optimistic display: show the user's message immediately ──
   state.messages.push({
     role: 'user',
@@ -1426,7 +1483,16 @@ export
     if (readiness) {
       state.readiness = readiness;
     }
-    state.notice = 'Provider applied: ' + providerId + ' / ' + (model || 'default') + '.';
+    if (providerId === 'llamacpp' || providerId === 'bitnetcpp') {
+      var guardianHint = '';
+      var gs = state.guardianStatus;
+      if (!gs || gs.modelPath !== 'active-chat-model') {
+        guardianHint = ' \uD83D\uDD17 Tip: In the Agentic Control tab, select \"\uD83D\uDD17 Share Active Chat Model\" for Guardian to share this model with zero extra memory.';
+      }
+      state.notice = 'Provider applied and local GGUF model loaded successfully: ' + providerId + ' / ' + (model || 'default') + '.' + guardianHint;
+    } else {
+      state.notice = 'Provider applied: ' + providerId + ' / ' + (model || 'default') + '.';
+    }
   } catch (error) {
     state.notice = String(error);
   }
@@ -1678,7 +1744,7 @@ export function showThinkingTraceModal() {
         <div style="background:rgba(10,10,16,0.85);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:11px;line-height:1.4;box-sizing:border-box;" id="thinking-trace-logs">
     `;
 
-    const relevantLogs = state.logEntries.filter(e => 
+    const relevantLogs = state.logEntries.filter(e =>
       e.source === 'chat' || e.source === 'llm' || e.source === 'tools' || e.source === 'diagnostics' || e.source === 'agent-diagnostics' || e.source === 'logs-diagnostics'
     ).slice(-25);
 
@@ -1692,7 +1758,7 @@ export function showThinkingTraceModal() {
         else if (e.severity === 'warn') color = '#fbbf24';
         else if (e.source === 'llm') color = '#a78bfa';
         else if (e.source === 'tools') color = '#38bdf8';
-        
+
         html += `
           <div style="display:flex;gap:12px;align-items:flex-start;box-sizing:border-box;">
             <span style="color:#64748b;flex-shrink:0;">[${time}]</span>
