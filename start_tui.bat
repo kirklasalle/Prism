@@ -35,4 +35,5 @@ echo.
 :: ---- Launch TUI ----
 npx tsx src/tui/app.tsx --port %TUI_PORT%
 
+pause
 endlocal

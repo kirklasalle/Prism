@@ -121,6 +121,7 @@ goto :post_preflight
 :post_preflight
 if /I "%PRISM_SKIP_LAUNCH%"=="1" (
   echo [INFO] PRISM_SKIP_LAUNCH=1 detected; startup checks completed, launch skipped.
+  pause
   goto :eof
 )
 
@@ -196,6 +197,7 @@ if defined PRISM_AUTH_TOKEN (
   start "" "http://localhost:%PRISM_DASHBOARD_PORT%"
 )
 
+pause
 goto :eof
 
 :fail

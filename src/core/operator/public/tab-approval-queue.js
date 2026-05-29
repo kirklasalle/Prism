@@ -53,6 +53,8 @@
             '<div style="display:flex;gap:8px;">' +
             '<button type="button" data-approve="' + escapeHtml(item.id) + '"' +
             ' style="font-size:12px;padding:4px 10px;background:#2a7;color:#fff;border:0;border-radius:4px;cursor:pointer;">✓ Approve</button>' +
+            '<button type="button" data-approve-run="' + escapeHtml(item.id) + '"' +
+            ' style="font-size:12px;padding:4px 10px;background:#265bff;color:#fff;border:0;border-radius:4px;cursor:pointer;">▶ Approve & Run</button>' +
             '<button type="button" data-deny="' + escapeHtml(item.id) + '"' +
             ' style="font-size:12px;padding:4px 10px;background:#a33;color:#fff;border:0;border-radius:4px;cursor:pointer;">✗ Deny</button>' +
             '</div>' +
@@ -128,8 +130,13 @@
                 if (!(t instanceof Element)) return;
                 var approveId = t.getAttribute('data-approve');
                 var denyId = t.getAttribute('data-deny');
-                if (approveId) decide(approveId, 'approve');
-                else if (denyId) decide(denyId, 'deny');
+                    if (approveId) decide(approveId, 'approve');
+                    else if (t.getAttribute('data-approve-run')) {
+                        var id = t.getAttribute('data-approve-run');
+                        // Approve the request and switch to Agentic tab to follow execution
+                        decide(id, 'approve');
+                        if (typeof window.setActiveTab === 'function') setActiveTab('agentic');
+                    } else if (denyId) decide(denyId, 'deny');
             });
         }
     }

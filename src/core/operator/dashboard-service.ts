@@ -912,6 +912,10 @@ export class DashboardService {
     telemetryWindow: "1d",
     llamacppBin: "llama-server",
     bitnetBin: "bitnet-server",
+    // When true, approved Tier-2 chat requests automatically continue
+    // and are executed by the AgenticChatExecutor. Set to false to
+    // require manual operator follow-up after approval.
+    autoRunApprovedTier2: true,
   };
   private readonly downloadStatus = new Map<string, DownloadProgress>();
   private readonly iamStore: IamStore;
@@ -3561,8 +3565,16 @@ export class DashboardService {
               details: { approvalId, approved, reason_code: classification.reasonCode },
             });
 
-            if (!approved) return;
-            if (!this.agenticExecutor) return;
+        if (!approved) return;
+        // Honor runtime flag to allow operators to opt-out of automatic
+        // continuation after approval.
+        if (!Boolean(this.runtimeSettings.autoRunApprovedTier2)) return;
+        if (!this.agenticExecutor) return;
+
+        // Telemetry: increment auto-run counter
+        try {
+          this.metricsStore?.inc('prism_auto_run_approved_tier2_total');
+        } catch { /* best-effort telemetry */ }
 
             const systemPrompt = this.buildAgenticSystemPrompt();
 

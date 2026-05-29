@@ -355,7 +355,16 @@ export
     safeRenderStep('header', renderHeader);
     safeRenderStep('llm', renderLlm);
     await fetchReadinessAndRefresh();
-    state.notice = 'Provider switched to ' + providerId + ' / ' + (model || 'default') + '.';
+    if (providerId === 'llamacpp' || providerId === 'bitnetcpp') {
+      var guardianHint = '';
+      var gs = state.guardianStatus;
+      if (!gs || gs.modelPath !== 'active-chat-model') {
+        guardianHint = ' \uD83D\uDD17 Tip: In the Agentic Control tab, select "\uD83D\uDD17 Share Active Chat Model" for Guardian to share this model with zero extra memory.';
+      }
+      state.notice = 'Provider switched and local model loaded successfully: ' + providerId + ' / ' + (model || 'default') + '.' + guardianHint;
+    } else {
+      state.notice = 'Provider switched to ' + providerId + ' / ' + (model || 'default') + '.';
+    }
     safeRenderStep('notice', renderNotice);
   } catch (err) {
     console.error(err);
@@ -377,7 +386,17 @@ export
     safeRenderStep('header', renderHeader);
     safeRenderStep('llm', renderLlm);
     await fetchReadinessAndRefresh();
-    state.notice = 'Model switched to ' + model + '.';
+    const activeP = state.llmCatalog.activeProviderId;
+    if (activeP === 'llamacpp' || activeP === 'bitnetcpp') {
+      var guardianHint = '';
+      var gs = state.guardianStatus;
+      if (!gs || gs.modelPath !== 'active-chat-model') {
+        guardianHint = ' \uD83D\uDD17 Tip: In the Agentic Control tab, select "\uD83D\uDD17 Share Active Chat Model" for Guardian to share this model with zero extra memory.';
+      }
+      state.notice = 'Model switched and local model loaded successfully to ' + model + '.' + guardianHint;
+    } else {
+      state.notice = 'Model switched to ' + model + '.';
+    }
     safeRenderStep('notice', renderNotice);
   } catch (err) {
     console.error(err);
@@ -1915,6 +1934,16 @@ export
     html += '</div>';
   }
 
+  function textRow(label, key, hint) {
+    var val = rs ? (rs[key] != null ? rs[key] : '') : '';
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">' + escapeHtml(label);
+    if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
+    html += '</span>';
+    html += '<input class="stg-input" type="text" id="stg-' + key + '" value="' + escapeHtml(String(val)) + '" onchange="markSettingDirty(\'' + key + '\')" style="width:240px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:4px;color:var(--fg);padding:4px 8px;font-size:12px;" />';
+    html += '</div>';
+  }
+
   function numberRow(label, key, hint, suffix) {
     var val = rs ? (rs[key] != null ? rs[key] : '') : '';
     html += '<div class="stg-row">';
@@ -2020,6 +2049,12 @@ export
   /* ── Section 3: Approval & Orchestration ── */
   sec('approval', 'Approval & Orchestration', function () {
     numberRow('Approval Timeout', 'approvalTimeoutMs', 'PRISM_APPROVAL_TIMEOUT_MS', 'ms');
+    // Auto-run approved Tier-2 toggle
+    var autoRun = state.runtimeSettings ? (state.runtimeSettings.autoRunApprovedTier2 !== false) : true;
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">' + escapeHtml('Auto-run approved Tier-2 chat prompts') + ' <span class="stg-hint">Automatically continue approved Tier-2 chat prompts via Agentic Executor</span></span>';
+    html += '<input id="stg-autoRunApprovedTier2" type="checkbox" ' + (autoRun ? 'checked' : '') + ' onchange="toggleAutoRunApprovedTier2(this.checked)" />';
+    html += '</div>';
     if (s && s.pendingApprovals > 0) {
       html += '<div class="stg-row"><span class="stg-label">Pending Approvals</span>';
       html += '<span class="stg-badge stg-badge-amber">' + s.pendingApprovals + '</span></div>';
@@ -2103,6 +2138,11 @@ export
       readonlyRow('Workspace Root', s.workspaceRoot, 'PRISM_WORKSPACE_ROOT');
     }
     readonlyRow('Dashboard URL', 'http://localhost:' + (location.port || '7070'));
+    textRow('llama.cpp Binary Path', 'llamacppBin', 'PRISM_LLAMACPP_BIN');
+    textRow('BitNet.cpp Binary Path', 'bitnetBin', 'PRISM_BITNET_BIN');
+    html += '<div style="margin-top:8px;text-align:right;">';
+    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'llamacppBin' + '\', \'' + 'bitnetBin' + '\'])">Save Paths</button>';
+    html += '</div>';
   });
 
   /* ── Section 9: Readiness Requirements ── */
@@ -2357,6 +2397,30 @@ export
     console.error('[settings] save failed', e);
   }
   state.settingsSaving = false;
+  render();
+}
+
+export
+  async function toggleAutoRunApprovedTier2(checked) {
+  dashboardLog('settings', 'auto_run_tier2.toggle', 'Auto-run approved Tier-2: ' + checked);
+  try {
+    await request('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ autoRunApprovedTier2: checked }) });
+    if (state.runtimeSettings) {
+      state.runtimeSettings.autoRunApprovedTier2 = checked;
+    } else {
+      state.runtimeSettings = { autoRunApprovedTier2: checked };
+    }
+    state.notice = 'Auto-run on approval is now ' + (checked ? 'ENABLED' : 'DISABLED') + '.';
+    var noticeToast = document.getElementById('global-notice-toast');
+    if (noticeToast) {
+      noticeToast.textContent = state.notice;
+      noticeToast.style.opacity = '1';
+      setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
+    }
+  } catch (e) {
+    console.error('[settings] toggle auto-run failed', e);
+    state.notice = { type: 'error', message: 'Failed to toggle auto-run: ' + String(e) };
+  }
   render();
 }
 

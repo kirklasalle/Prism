@@ -39,11 +39,14 @@ export function dashboardHtml(port: number, authToken?: string): string {
             <span id="prism-paradigm-badge" class="badge badge-running" style="font-size:8px;padding:1px 5px;letter-spacing:0.5px;font-weight:800;border-radius:4px;text-transform:uppercase;">LOADING</span>
           </div>
           <div style="display:flex;gap:4px;">
-            <button id="prism-btn-basemode" onclick="setResourceParadigm(true)" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.5px;">
-              ⚡ Base Mode
+            <button id="prism-btn-basemode" onclick="setResourceParadigm(true)" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">
+              ⚡ Base
             </button>
-            <button id="prism-btn-perfmode" onclick="setResourceParadigm(false)" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.5px;">
+            <button id="prism-btn-perfmode" onclick="setResourceParadigm(false)" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">
               🚀 Frontier
+            </button>
+            <button id="prism-btn-automode" onclick="setResourceParadigm('auto')" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">
+              🔍 Auto
             </button>
           </div>
           <div id="prism-paradigm-desc" style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:2px;">
@@ -134,6 +137,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
        additive panel injected into tab-computer.html. Self-hides when the
        feature gates are not set; never modifies existing dashboard state. -->
   <script src="/public/tab-ptac-demo.js"></script>
+  <!-- Additive (v0.21.0): PRISM Release Validation Suite controller -->
+  <script src="/public/tab-release-validation.js"></script>
 
   <!-- Additive (v0.20.2): R6-2 Process Health widget controller. Polls
        /api/health/extended every 10s into the additive #health-widget
@@ -270,7 +275,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
       var desc = document.getElementById('prism-paradigm-desc');
       var btnBase = document.getElementById('prism-btn-basemode');
       var btnPerf = document.getElementById('prism-btn-perfmode');
-      if (!badge || !desc || !btnBase || !btnPerf) return;
+      var btnAuto = document.getElementById('prism-btn-automode');
+      if (!badge || !desc || !btnBase || !btnPerf || !btnAuto) return;
 
       try {
         var res = await fetch('/api/status', { credentials: 'same-origin', headers: getAuthHeaders() });
@@ -278,6 +284,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
         var status = await res.json();
         
         var modeStr = status.baseMode ? "Base Mode" : "Frontier";
+        if (status.baseModeAuto) modeStr = "Auto (" + modeStr + ")";
+        
         if (lastLoggedMode === null) {
           logEvent("Active paradigm: " + modeStr);
           lastLoggedMode = status.baseMode;
@@ -286,47 +294,67 @@ export function dashboardHtml(port: number, authToken?: string): string {
           lastLoggedMode = status.baseMode;
         }
         
-        updateUI(status.baseMode);
+        updateUI(status.baseMode, status.baseModeAuto);
       } catch (e) {
         console.error("Failed to fetch resource paradigm:", e);
       }
     }
 
-    function updateUI(isBaseMode) {
+    function updateUI(isBaseMode, isAuto) {
       var badge = document.getElementById('prism-paradigm-badge');
       var desc = document.getElementById('prism-paradigm-desc');
       var btnBase = document.getElementById('prism-btn-basemode');
       var btnPerf = document.getElementById('prism-btn-perfmode');
-      if (!badge || !desc || !btnBase || !btnPerf) return;
+      var btnAuto = document.getElementById('prism-btn-automode');
+      if (!badge || !desc || !btnBase || !btnPerf || !btnAuto) return;
 
-      if (isBaseMode) {
-        badge.innerText = 'BASE ACTIVE';
-        badge.style.background = '#eab308';
-        badge.style.color = '#000';
-        badge.style.boxShadow = '0 0 6px rgba(234,179,8,0.4)';
-        desc.innerHTML = '<span style="color:#eab308;font-weight:700;">⚡ Base Mode active:</span> Running Guardian &amp; Planner under severe VRAM constraints (&lt;= 3GB).';
-        
-        btnBase.style.background = 'rgba(234,179,8,0.15)';
-        btnBase.style.borderColor = '#eab308';
-        btnBase.style.color = '#eab308';
-        
-        btnPerf.style.background = 'rgba(255,255,255,0.03)';
-        btnPerf.style.borderColor = 'rgba(255,255,255,0.08)';
-        btnPerf.style.color = '#94a3b8';
+      // Reset all buttons to default inactive state
+      [btnBase, btnPerf, btnAuto].forEach(function(btn) {
+        btn.style.background = 'rgba(255,255,255,0.03)';
+        btn.style.borderColor = 'rgba(255,255,255,0.08)';
+        btn.style.color = '#94a3b8';
+      });
+
+      if (isAuto) {
+        btnAuto.style.background = 'rgba(168,85,247,0.15)';
+        btnAuto.style.borderColor = '#a855f7';
+        btnAuto.style.color = '#c084fc';
+
+        if (isBaseMode) {
+          badge.innerText = 'AUTO: BASE';
+          badge.style.background = '#eab308';
+          badge.style.color = '#000';
+          badge.style.boxShadow = '0 0 6px rgba(234,179,8,0.4)';
+          desc.innerHTML = '<span style="color:#eab308;font-weight:700;">🔍 Auto Base Mode:</span> Model locality constraints automatically engaged Base Mode throttles.';
+        } else {
+          badge.innerText = 'AUTO: FRONTIER';
+          badge.style.background = '#3b82f6';
+          badge.style.color = '#fff';
+          badge.style.boxShadow = '0 0 6px rgba(59,130,246,0.4)';
+          desc.innerHTML = '<span style="color:#60a5fa;font-weight:700;">🔍 Auto Frontier:</span> Model locality constraints automatically elevated to full Frontier capabilities.';
+        }
       } else {
-        badge.innerText = 'FRONTIER';
-        badge.style.background = '#3b82f6';
-        badge.style.color = '#fff';
-        badge.style.boxShadow = '0 0 6px rgba(59,130,246,0.4)';
-        desc.innerHTML = '<span style="color:#60a5fa;font-weight:700;">🚀 Frontier mode:</span> All swarms, cloud LLM providers, and full diagnostics active.';
-        
-        btnBase.style.background = 'rgba(255,255,255,0.03)';
-        btnBase.style.borderColor = 'rgba(255,255,255,0.08)';
-        btnBase.style.color = '#94a3b8';
-        
-        btnPerf.style.background = 'rgba(59,130,246,0.15)';
-        btnPerf.style.borderColor = '#3b82f6';
-        btnPerf.style.color = '#60a5fa';
+        if (isBaseMode) {
+          badge.innerText = 'BASE ACTIVE';
+          badge.style.background = '#eab308';
+          badge.style.color = '#000';
+          badge.style.boxShadow = '0 0 6px rgba(234,179,8,0.4)';
+          desc.innerHTML = '<span style="color:#eab308;font-weight:700;">⚡ Base Mode active:</span> Running Guardian &amp; Planner under severe VRAM constraints (&lt;= 3GB).';
+          
+          btnBase.style.background = 'rgba(234,179,8,0.15)';
+          btnBase.style.borderColor = '#eab308';
+          btnBase.style.color = '#eab308';
+        } else {
+          badge.innerText = 'FRONTIER';
+          badge.style.background = '#3b82f6';
+          badge.style.color = '#fff';
+          badge.style.boxShadow = '0 0 6px rgba(59,130,246,0.4)';
+          desc.innerHTML = '<span style="color:#60a5fa;font-weight:700;">🚀 Frontier mode:</span> All swarms, cloud LLM providers, and full diagnostics active.';
+          
+          btnPerf.style.background = 'rgba(59,130,246,0.15)';
+          btnPerf.style.borderColor = '#3b82f6';
+          btnPerf.style.color = '#60a5fa';
+        }
       }
     }
 
@@ -338,7 +366,7 @@ export function dashboardHtml(port: number, authToken?: string): string {
         badge.style.color = '#fff';
       }
       
-      var targetStr = targetBaseMode ? "Base Mode" : "Frontier";
+      var targetStr = targetBaseMode === "auto" ? "Auto-Detect" : (targetBaseMode ? "Base Mode" : "Frontier");
       logEvent("Requesting swap to " + targetStr + "...");
 
       try {
@@ -352,12 +380,15 @@ export function dashboardHtml(port: number, authToken?: string): string {
         var data = await res.json();
         
         lastLoggedMode = data.baseMode;
-        updateUI(data.baseMode);
+        updateUI(data.baseMode, data.auto);
         logEvent("Swapped successfully to " + targetStr + ".");
         
-        showSystemToast(targetBaseMode ? 
-          "⚡ PRISM successfully switched to Base Mode! Memory throttles applied." : 
-          "🚀 PRISM elevated to Frontier mode! All services restored."
+        showSystemToast(targetBaseMode === "auto" ?
+          "🔍 PRISM Auto-Detect Mode engaged! Resource paradigm adapts to active model." :
+          (targetBaseMode ? 
+            "⚡ PRISM successfully switched to Base Mode! Memory throttles applied." : 
+            "🚀 PRISM elevated to Frontier mode! All services restored."
+          )
         );
       } catch (e) {
         logEvent("ERROR: Paradigm swap failed.");

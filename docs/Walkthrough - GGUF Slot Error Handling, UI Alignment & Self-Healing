@@ -1,0 +1,175 @@
+# Walkthrough - GGUF Slot Error Handling, UI Alignment & Self-Healing
+
+We have successfully resolved the misleading tool-calling iterations error, introduced self-healing GGUF slot recovery, fixed critical field mismatches in the Hardware tab, and aligned frontend actions with robust, backward-compatible backend API endpoints.
+
+## Changes Made
+
+### 1. Robust Executor Early Return
+
+#### [agentic-chat-executor.ts](file:///d:/Projects/Prism/src/core/operator/agentic-chat-executor.ts)
+
+- Replaced the loop `break` statement upon encountering an empty LLM response (`!result`) with an early return block.
+- This immediately notifies the user chat that `"LLM returned no response"` instead of falling through to the end of the execution loop and displaying the misleading `"Reached maximum iteration limit"` error.
+
+### 2. Self-Healing Model Reloading/Restarting
+
+#### [llama-cpp-supervisor.ts](file:///d:/Projects/Prism/src/core/operator/llama-cpp-supervisor.ts)
+
+- Enhanced the `loadModel` method to check if an existing matching model slot is in the `"error"` state.
+- If it is, the supervisor now automatically attempts to restart the process and reload the model, allowing the system to seamlessly self-heal once underlying issues (e.g., system PATH, binary availability) are resolved.
+
+### 3. Informative Error Bubbling with Deep Links
+
+#### [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
+
+- Instead of silently returning `null` when a GGUF model fails to bind to a dynamic port, `LlmProviderManager` now checks the slot status.
+- It bubbles up the actual start-up error with an interactive dashboard deep link: `[Agentic Control / Hardware](prism://tab/agentic#tab-hardware)`.
+- Clicking this deep link within the chat switches the active panel to the **Agentic Control** tab and smooth-scrolls directly to the **Hardware** slot viewer.
+
+### 4. Front-to-Back Hardware Slot Alignment
+
+#### [tab-hardware.js](file:///d:/Projects/Prism/src/core/operator/public/tab-hardware.js)
+
+- Aligned slot properties with the actual `LlamaModelSlot` snapshot shape returned by the backend:
+  - Replaced all instances of `slot.slotId` with the correct `slot.id`.
+  - Replaced the incorrect `slot.model` check with `slot.modelAlias` to properly detect whether a slot is occupied.
+  - Expose slot-level startup error logs inline within the slot card if a slot enters the `"error"` state.
+
+#### [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts)
+
+- Made `/api/hardware/swarm/load` and `/api/hardware/swarm/unload` endpoints extremely robust and backward-compatible.
+- They now seamlessly handle both standard `{ modelPath, modelAlias, ctxSize }` arguments and the frontend's `{ slotId, model }` parameters (automatically resolving the `modelPath` from the local `modelsDir` when needed).
+- Integrated **dynamic settings-triggered model pre-loading** directly inside `setSessionLlmSelection`:
+  - When the provider is switched to `llamacpp` or `bitnetcpp`, the service immediately scans the local models directory, resolves the GGUF model path, and triggers `loadModel` to initialize the service and mount the model dynamically *before* the first chat interaction occurs.
+  - If dynamic slot loading fails (e.g. `llama-server` binary is missing), the apply action immediately throws the error, causing a detailed error alert to pop up in the settings tab itself rather than silently failing and delaying the error to the chat interface.
+
+### 5. Settings Tab Loading Notifications
+
+#### [tab-chat.js](file:///d:/Projects/Prism/src/core/operator/public/tab-chat.js) & [tab-settings.js](file:///d:/Projects/Prism/src/core/operator/public/tab-settings.js)
+
+- Enhanced success notices within settings selectors and header fast-switch dropdowns.
+- When applying or switching to a local GGUF provider and model, the operator is now explicitly notified: `"Provider applied/switched and local GGUF model loaded successfully!"` rather than receiving a generic application message.
+
+---
+
+## Verification & Testing
+
+### Automated Unit Tests
+
+We executed the unit tests to ensure that error propagation, tool-use boundaries, and API endpoints remain intact:
+
+```bash
+npm run build
+node --test dist/tests/agentic-chat-executor.test.js
+node --test dist/tests/llm-provider-manager.test.js
+npx mocha dist/tests/agentic-api-routes.test.js
+```
+
+**Results:**
+
+- **`AgenticChatExecutor`**: All 9 unit tests passed successfully.
+- **`LlmProviderManager`**: Unit tests passed successfully.
+- **`Agent Control API Routes`**: All 28 mocha tests passed successfully!
+
+```text
+  Agent Control API Routes (/api/agents/*, /api/swarms/*, /api/guardian/*)
+    GET /api/agents
+      √ returns default agents list with telemetry and swarms
+    POST /api/agents/launch
+      ...
+    GET /api/hardware/swarm
+      √ returns llama-server slot snapshot
+    POST /api/hardware/swarm/load
+      √ returns 400 when required fields are missing
+    POST /api/hardware/swarm/unload
+      √ returns 400 when modelAlias is missing
+    ...
+  28 passing (2s)
+```
+
+---
+
+## 🚀 NEW: Dynamic Binary Paths & Readiness Auto-Healing
+
+To address the `llama-server ENOENT` error dynamically, we have implemented a robust, user-configurable binary paths architecture and a proactive readiness auto-fix system:
+
+### 1. Dynamic Binary Path Settings
+- Added configurable text inputs for **`llama.cpp Binary Path`** and **`BitNet.cpp Binary Path`** under the **Data & Paths** section in the Settings panel.
+- These settings allow you to specify the absolute path to your local `llama-server` binary (e.g., `C:\llama.cpp\llama-server.exe`) directly in the UI.
+- Saving these paths immediately updates the runtime preferences and dynamically changes the supervisor's active binary configuration—**no server restarts required!**
+
+### 2. Proactive System Readiness Checks
+- Enhanced the **System Readiness** checklist in the Settings tab to run a fast validation check whenever `llamacpp` or `bitnetcpp` is the active provider.
+- It tests if the configured binary path exists or is globally available in the system PATH, and checks if any active slot is currently in an `"error"` status.
+- If a problem is detected, it reports a clear, descriptive warning and offers an **"Auto-Fix"** action.
+
+### 3. One-Click Slot Reset (Auto-Fix)
+- Implemented the `/api/readiness/fix/local-llm-service-ready` backend endpoint.
+- Clicking the **"Fix"** button on a failed local service readiness check automatically unloads any errored slots and resets their statuses.
+- Dynamic slot loading will then cleanly re-attempt starting the server and mounting your chosen model on your very next chat message!
+
+---
+
+## 🔗 Option 1: Shared Model & Port Sharing (Guardian ↔ Chat Session)
+
+Resolved the critical resource contention where the Guardian Agent and the User Chat Session each spawned a **separate** `llama-server` process when both were configured for local `llama.cpp`. On machines with limited VRAM/RAM, this caused memory exhaustion and crashes.
+
+### Problem
+
+- **User Chat Session**: Spawns `llama-server` Slot 0 on Port 8081 with the active chat model.
+- **Guardian Agent**: Calls `supervisor.loadModel()` on `start()` with its own alias, spawning a **second** `llama-server` Slot 1 on Port 8082.
+- Result: Two concurrent processes fighting for GPU memory → crashes, `ENOENT`, or OOM.
+
+### Solution: Sentinel Path `"active-chat-model"`
+
+Instead of spawning its own process, the Guardian can now **share the exact same slot/port** as the user's active chat model.
+
+#### [guardian-agent.ts](file:///d:/Projects/Prism/src/core/agents/guardian-agent.ts)
+
+**`start()` method** (L226–L280):
+- When `config.modelPath === "active-chat-model"`, the Guardian resolves the sentinel by looking up the **first ready slot** in the supervisor's snapshot.
+- If a ready slot exists, Guardian targets that slot's `modelPath` and `modelAlias` directly — `loadModel()` returns the existing slot immediately (no second process spawned).
+- If no ready slot exists, throws a clear error: *"No active local chat model is currently loaded. Please select and apply a local model in the Provider & Settings tab first."*
+
+**`getStatus()` method** (L290–L312):
+- Dynamically resolves the display alias when in shared mode, showing the real model name (e.g., `gemma-2-2b-it-Q4_K_M`) instead of a generic placeholder.
+- Slot lookup now matches by both `modelAlias` AND `modelPath` to correctly find the shared slot.
+
+**`runHealthCheck()` method** (L320–L365):
+- Health check slot resolution now also handles the sentinel path, finding the shared slot by path match.
+
+**`attemptSelfHeal()` method** (L393–L422):
+- Self-heal model recovery properly resolves the sentinel before attempting reload.
+
+#### [tab-agentic.js](file:///d:/Projects/Prism/src/core/operator/public/tab-agentic.js)
+
+- Added `🔗 -- Share Active Chat Model --` as the first option in the Guardian model selection dropdown (L50–L52).
+- When selected, it configures the Guardian with `modelPath: "active-chat-model"` instead of a filesystem path (L569–L575).
+- The option shows as `selected` when the Guardian is already in shared mode.
+
+### How It Works (End-to-End Flow)
+
+```
+1. Operator selects a model in Provider & Settings → Apply
+   → Chat session loads model into Slot 0, Port 8081
+
+2. Operator selects "🔗 Share Active Chat Model" in Guardian panel
+   → Guardian configured with modelPath = "active-chat-model"
+
+3. Guardian starts → resolves sentinel → finds Slot 0 already "ready"
+   → supervisor.loadModel() returns existing Slot 0 (zero overhead)
+   → Guardian health checks monitor the same Slot 0
+
+4. Result: ONE llama-server process, ZERO additional VRAM/RAM
+```
+
+### Verification
+
+All test suites pass with the new shared-slot logic:
+
+```text
+AgenticChatExecutor:       9/9 passing
+LlmProviderManager:       1/1 passing  
+Agent Control API Routes: 28/28 passing
+```
+

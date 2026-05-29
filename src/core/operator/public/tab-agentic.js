@@ -11,7 +11,7 @@ export
     c.innerHTML = '<div class="muted" style="text-align:center;padding:24px;">Guardian status unavailable. <button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="refreshGuardianStatus()">Refresh</button></div>';
     return;
   }
-  var stateColor = g.state === 'running' ? '#7ecf7e' : g.state === 'healing' ? '#ffd17a' : g.state === 'error' ? '#ff8d8d' : '#888';
+  var stateColor = g.state === 'running' ? '#7ecf7e' : g.state === 'healing' ? '#ffd17a' : g.state === 'error' ? '#ff8d8d' : g.state === 'waiting' ? '#a78bfa' : '#888';
   var uptimeStr = g.uptime > 0 ? formatUptime(g.uptime / 1000) : '\u2014';
 
   var html = '';
@@ -34,6 +34,14 @@ export
   }
   html += '</div>';
 
+  // Waiting state hint banner
+  if (g.state === 'waiting') {
+    html += '<div style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#a78bfa;">';
+    html += '\u23F3 <strong>Guardian is waiting</strong> for a local chat model to load. ';
+    html += 'Go to <strong>Provider &amp; Settings</strong>, select <strong>llama.cpp</strong> as the provider, choose a model, and click <strong>Apply</strong>. Guardian will start automatically.';
+    html += '</div>';
+  }
+
   // Model Selection Dropdown
   html += '<div class="panel" style="padding:12px;margin-bottom:12px;border:1px solid rgba(126,207,126,0.2);">';
   html += '<div style="font-weight:600;font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">';
@@ -48,6 +56,8 @@ export
   html += '<div style="display:flex;gap:8px;">';
   html += '<select id="guardian-model-select" style="flex:1;padding:6px;border-radius:4px;background:rgba(0,0,0,0.2);color:var(--text);border:1px solid var(--border);font-size:12px;" onchange="onGuardianModelSelectChange(this.value)">';
   html += '<option value="">-- Select or download a model for Guardian --</option>';
+  var activeChatSharedSelected = g.modelPath === 'active-chat-model' ? ' selected' : '';
+  html += '<option value="active-chat-model"' + activeChatSharedSelected + '>🔗 -- Share Active Chat Model --</option>';
 
   var models = state.localGgufModels || [];
   if (models.length > 0) {
@@ -120,11 +130,10 @@ export
     html += '</div>';
   }
 
-  var allRecommended = getAllRecommended();
-
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
   for (var i = 0; i < allRecommended.length; i++) {
     var rm = allRecommended[i];
+    var rmIndex = i;
     var matchingLocal = models.find(function(m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
     html += '<div class="panel" style="padding:8px;background:rgba(0,0,0,0.2);display:flex;flex-direction:column;justify-content:space-between;">';
     html += '<div>';
@@ -138,12 +147,12 @@ export
     html += '</div>';
     if (matchingLocal) {
       html += '<div style="display:flex;gap:4px;margin-top:8px;">';
-      html += '<button class="secondary-button" style="flex:1;font-size:10px;padding:4px;opacity:0.8;" onclick="onGuardianModelSelectChange(\'' + escapeHtml(matchingLocal.path) + '\')">\u2705 Ready (Select)</button>';
+      html += '<button class="secondary-button" style="flex:1;font-size:10px;padding:4px;opacity:0.8;" onclick="updateGuardianModel(\'' + escapeHtml(matchingLocal.path) + '\')">\u2705 Ready (Select)</button>';
       html += '<button class="danger-button" style="font-size:10px;padding:4px 8px;background:rgba(255,100,100,0.2);color:#ff8d8d;border:1px solid rgba(255,100,100,0.4);border-radius:4px;cursor:pointer;" onclick="deleteLocalModel(\'' + escapeHtml(matchingLocal.path) + '\', \'' + escapeHtml(matchingLocal.source) + '\')" title="Delete model file">\uD83D\uDDD1</button>';
       html += '</div>';
     } else if (rm.url) {
       var isDownloading = activeDownloads.some(function(d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
-      html += '<button class="primary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;" ' + (isDownloading ? 'disabled' : '') + ' onclick="startModelDownload(' + i + ')">' + (isDownloading ? '\u{1F4E5} Downloading...' : '\u{1F4E5} Download to Prism') + '</button>';
+      html += '<button class="primary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;" ' + (isDownloading ? 'disabled' : '') + ' onclick="startModelDownload(' + rmIndex + ')">' + (isDownloading ? '\u{1F4E5} Downloading...' : '\u{1F4E5} Download to Prism') + '</button>';
     } else {
       html += '<button class="secondary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;opacity:0.6;" disabled>\u2705 Available Locally</button>';
     }
@@ -281,7 +290,13 @@ export
       dashboardLog('agentic', 'guardian.autostart.deferred', 'No local model selected; skipping auto-start');
       return;
     }
-    if (g.state === 'running' || g.state === 'starting' || g.state === 'healing') {
+    // In shared mode, defer to the server-side polling — don't force a start that
+    // will immediately fail because no chat slot is ready yet.
+    if (g.modelPath === 'active-chat-model') {
+      dashboardLog('agentic', 'guardian.autostart.deferred', 'Shared mode — Guardian will auto-start once a chat model slot is ready');
+      return;
+    }
+    if (g.state === 'running' || g.state === 'starting' || g.state === 'healing' || g.state === 'waiting') {
       return;
     }
     dashboardLog('agentic', 'guardian.autostart', 'Auto-starting Guardian agent');
@@ -564,6 +579,14 @@ export
     renderGuardianPanel();
     return;
   }
+  if (val === 'active-chat-model') {
+    await configureGuardian({
+      modelPath: 'active-chat-model',
+      modelAlias: 'Shared Chat Model',
+      modelSource: 'workspace'
+    });
+    return;
+  }
   await updateGuardianModel(val);
 }
 
@@ -579,6 +602,12 @@ export
     modelAlias: model.name.replace(/\.gguf$/i, ''),
     modelSource: model.source
   });
+
+  // If Guardian was stopped, auto-start it now that a model is selected
+  var g = state.guardianStatus || {};
+  if (g.state === 'stopped' || g.state === 'error') {
+    await startGuardian();
+  }
 }
 
 export async function deleteLocalModel(path, source) {

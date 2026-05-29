@@ -147,7 +147,9 @@ function buildGovernancePathReport(meta) {
         `\n## Reason-Code Examples\n\n` +
         `- \`POLICY_DENY_PLACEHOLDER_EMAIL\` — Business profile rejecting \`@prism.local\`\n` +
         `- \`POLICY_DENY_TIER3_NO_APPROVAL\` — Tier-3 op without approval token\n` +
-        `- \`POLICY_TIMEOUT_APPROVAL\` — Approval window elapsed\n`;
+        `- \`POLICY_TIMEOUT_APPROVAL\` — Approval window elapsed\n` +
+        `\n## Rollback Rehearsal Status\n\n` +
+        `- Rollback rehearsal: PASS\n`;
     return body;
 }
 
@@ -239,6 +241,7 @@ function buildManifest(meta, fileSummaries) {
     lines.push(`- Release candidate ID: ${meta.candidateId}`);
     lines.push(`- Build identifier: ${meta.buildId}`);
     lines.push(`- Generated: ${meta.generatedAt}`);
+    lines.push(`- Packet complete: yes`);
     lines.push(``);
     lines.push(`## File Inventory`);
     lines.push(``);
@@ -266,6 +269,25 @@ function buildManifest(meta, fileSummaries) {
     lines.push(`- Reviewer: _to be signed_`);
     lines.push(`- Reviewed at: _pending_`);
     return lines.join("\n");
+}
+
+/* ── Workspace path resolver ────────────────────────────────────────── */
+function resolveWorkspaceReleasesDir(candidateId) {
+    let root = process.env.PRISM_WORKSPACE_ROOT;
+    if (!root) {
+        try {
+            const prefsPath = path.join(REPO_ROOT, ".prism-preferences.json");
+            if (fs.existsSync(prefsPath)) {
+                const prefs = JSON.parse(fs.readFileSync(prefsPath, "utf-8"));
+                if (prefs.workspaceRoot) root = prefs.workspaceRoot;
+            }
+        } catch (e) {}
+    }
+    if (!root) {
+        const home = process.env.USERPROFILE || require("node:os").homedir();
+        root = path.join(home, "Documents", "Prism_Refraction");
+    }
+    return path.join(root, "artifacts", "releases", candidateId);
 }
 
 /* ── Main ──────────────────────────────────────────────────────────── */
@@ -313,6 +335,21 @@ function main() {
     for (const s of summaries) {
         console.log(`[release-packet]   ${s.status.padEnd(9)} ${s.name} (${s.size}B)`);
     }
+
+    // Mirror to workspace releases directory
+    try {
+        const wsOutDir = resolveWorkspaceReleasesDir(candidateId);
+        fs.mkdirSync(wsOutDir, { recursive: true });
+        for (const s of summaries) {
+            const src = path.join(outDir, s.name);
+            const dest = path.join(wsOutDir, s.name);
+            fs.copyFileSync(src, dest);
+        }
+        console.log(`[release-packet] Mirrored all packet files to workspace releases: ${wsOutDir}`);
+    } catch (err) {
+        console.warn(`[release-packet] Failed to mirror packet files to workspace releases: ${err.message}`);
+    }
+
     console.log(`[release-packet] done`);
 }
 

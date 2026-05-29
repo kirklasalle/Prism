@@ -18,6 +18,7 @@ call npm run release:validate:strict
 if errorlevel 1 goto :fail
 
 echo [OK] Strict release validation completed successfully.
+pause
 goto :eof
 
 :fail

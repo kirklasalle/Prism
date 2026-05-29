@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PRISM World-Class Quiet Release Master Plan</title>
+    <meta name="description"
+        content="World-class audit, market strategy, testing, and quiet GitHub release plan for PRISM." />
+    <style>
+        :root {
+            --bg: #f5f7fb;
+            --surface: #ffffff;
+            --surface-2: #f0f4ff;
+            --ink: #0d1b2a;
+            --muted: #4a5a6a;
+            --line: #d8e1ec;
+            --brand: #0f4c81;
+            --brand-2: #2a9d8f;
+            --warn: #b45309;
+            --danger: #b42318;
+            --ok: #0f766e;
+            --shadow: 0 8px 30px rgba(16, 24, 40, 0.08);
+            --radius: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background:
+                radial-gradient(1200px 700px at 10% -20%, #d7e3ff 0%, transparent 60%),
+                radial-gradient(900px 600px at 90% 0%, #cbeee9 0%, transparent 55%),
+                var(--bg);
+            color: var(--ink);
+            font-family: "Segoe UI", "Aptos", "Helvetica Neue", sans-serif;
+            line-height: 1.55;
+        }
+
+        .shell {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 20px;
+            align-items: stretch;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .hero-left {
+            padding: 28px;
+            background:
+                linear-gradient(140deg, rgba(15, 76, 129, 0.08), rgba(42, 157, 143, 0.08)),
+                var(--surface);
+        }
+
+        .eyebrow {
+            display: inline-block;
+            font-size: 12px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--brand);
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            margin: 0 0 8px 0;
+            font-size: clamp(1.8rem, 2.6vw, 2.8rem);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 1.05rem;
+        }
+
+        .meta {
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: .95rem;
+        }
+
+        .meta div {
+            background: var(--surface-2);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+
+        .meta strong {
+            color: var(--brand);
+        }
+
+        .hero-right {
+            position: relative;
+            overflow: hidden;
+            min-height: 360px;
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            background: linear-gradient(160deg, #0f172a, #0a2540 55%, #12355b);
+        }
+
+        .hero-right::before {
+            content: "";
+            position: absolute;
+            inset: -30% -10%;
+            background:
+                radial-gradient(circle at 25% 25%, rgba(120, 190, 255, 0.22), transparent 38%),
+                radial-gradient(circle at 75% 65%, rgba(72, 229, 197, 0.16), transparent 40%);
+            filter: blur(20px);
+            animation: drift-aurora 10s ease-in-out infinite alternate;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .hero-right::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+                radial-gradient(2px 2px at 10% 20%, rgba(255, 255, 255, 0.5), transparent 60%),
+                radial-gradient(1.5px 1.5px at 35% 65%, rgba(170, 220, 255, 0.5), transparent 60%),
+                radial-gradient(2px 2px at 75% 30%, rgba(180, 255, 240, 0.45), transparent 60%),
+                radial-gradient(1.4px 1.4px at 85% 75%, rgba(210, 230, 255, 0.35), transparent 60%);
+            opacity: 0.5;
+            animation: twinkle 3.8s ease-in-out infinite alternate;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #three-stage {
+            width: 100%;
+            height: 100%;
+            min-height: 360px;
+            display: block;
+            position: relative;
+            z-index: 2;
+        }
+
+        .three-fallback {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            perspective: 900px;
+            overflow: hidden;
+            background: radial-gradient(circle at 30% 20%, rgba(140, 231, 222, 0.15), transparent 45%);
+            z-index: 2;
+        }
+
+        .three-fallback.active {
+            display: flex;
+        }
+
+        .fallback-core {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            transform-style: preserve-3d;
+            animation: spin-core 8s linear infinite;
+            filter: drop-shadow(0 0 24px rgba(126, 205, 255, 0.45));
+        }
+
+        .fallback-core::before {
+            content: "";
+            position: absolute;
+            inset: -18px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(76, 163, 255, 0.24), rgba(42, 157, 143, 0.08) 55%, transparent 70%);
+            transform: translateZ(-35px);
+            animation: pulse-glow 2.8s ease-in-out infinite;
+        }
+
+        .fallback-face {
+            position: absolute;
+            inset: 0;
+            border: 1px solid rgba(200, 232, 255, 0.72);
+            background: linear-gradient(150deg, rgba(76, 163, 255, 0.35), rgba(42, 157, 143, 0.18));
+            box-shadow: 0 0 18px rgba(116, 193, 255, 0.22) inset;
+        }
+
+        .fallback-face.f1 {
+            transform: translateZ(60px);
+        }
+
+        .fallback-face.f2 {
+            transform: rotateY(180deg) translateZ(60px);
+        }
+
+        .fallback-face.f3 {
+            transform: rotateY(90deg) translateZ(60px);
+        }
+
+        .fallback-face.f4 {
+            transform: rotateY(-90deg) translateZ(60px);
+        }
+
+        .fallback-face.f5 {
+            transform: rotateX(90deg) translateZ(60px);
+        }
+
+        .fallback-face.f6 {
+            transform: rotateX(-90deg) translateZ(60px);
+        }
+
+        .fallback-orbit {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            border: 1px dashed rgba(138, 182, 255, 0.45);
+            border-radius: 50%;
+            transform-style: preserve-3d;
+            animation: spin-orbit 10s linear infinite;
+        }
+
+        .fallback-orbit.o3 {
+            width: 210px;
+            height: 210px;
+            transform: rotateY(72deg) rotateX(55deg);
+            animation-duration: 6.5s;
+            border-color: rgba(162, 236, 255, 0.52);
+        }
+
+        .fallback-orbit.o2 {
+            width: 320px;
+            height: 320px;
+            transform: rotateX(68deg) rotateZ(22deg);
+            animation-duration: 14s;
+        }
+
+        .fallback-dot {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #9de0ff;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 16px rgba(157, 224, 255, 0.8);
+        }
+
+        .fallback-orbit.o1 .fallback-dot {
+            margin-left: 125px;
+        }
+
+        .fallback-orbit.o2 .fallback-dot {
+            margin-left: 160px;
+            background: #7ef0d4;
+            box-shadow: 0 0 16px rgba(126, 240, 212, 0.8);
+        }
+
+        .fallback-orbit.o3 .fallback-dot {
+            margin-left: 105px;
+            width: 10px;
+            height: 10px;
+            background: #c0e2ff;
+            box-shadow: 0 0 14px rgba(192, 226, 255, 0.8);
+        }
+
+        @keyframes spin-core {
+            from {
+                transform: rotateX(0deg) rotateY(0deg);
+            }
+
+            to {
+                transform: rotateX(360deg) rotateY(360deg);
+            }
+        }
+
+        @keyframes spin-orbit {
+            from {
+                transform: rotateX(75deg) rotateZ(0deg);
+            }
+
+            to {
+                transform: rotateX(75deg) rotateZ(360deg);
+            }
+        }
+
+        @keyframes drift-aurora {
+            from {
+                transform: translate3d(-2%, -1.5%, 0) scale(1);
+            }
+
+            to {
+                transform: translate3d(2.5%, 2%, 0) scale(1.04);
+            }
+        }
+
+        @keyframes twinkle {
+            from {
+                opacity: 0.28;
+            }
+
+            to {
+                opacity: 0.58;
+            }
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                opacity: 0.55;
+                transform: translateZ(-35px) scale(1);
+            }
+
+            50% {
+                opacity: 0.95;
+                transform: translateZ(-35px) scale(1.08);
+            }
+        }
+
+        .overlay-note {
+            position: absolute;
+            left: 12px;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(255, 255, 255, 0.92);
+            color: #0b2236;
+            border-radius: 10px;
+            border: 1px solid rgba(15, 76, 129, 0.28);
+            font-size: 13px;
+            padding: 10px;
+            backdrop-filter: blur(4px);
+            z-index: 3;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            .hero-right::before,
+            .hero-right::after,
+            .fallback-core,
+            .fallback-core::before,
+            .fallback-orbit {
+                animation: none !important;
+            }
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 290px 1fr;
+            gap: 20px;
+        }
+
+        nav {
+            position: sticky;
+            top: 16px;
+            align-self: start;
+            padding: 16px;
+        }
+
+        nav h2 {
+            margin: 0 0 10px 0;
+            font-size: 1rem;
+            color: var(--brand);
+        }
+
+        nav a {
+            display: block;
+            padding: 8px 10px;
+            border-radius: 8px;
+            color: #1b2b3c;
+            text-decoration: none;
+            font-size: .93rem;
+            border: 1px solid transparent;
+        }
+
+        nav a:hover {
+            background: var(--surface-2);
+            border-color: var(--line);
+        }
+
+        main {
+            padding: 0;
+        }
+
+        section {
+            margin-bottom: 16px;
+            padding: 22px;
+        }
+
+        section h2 {
+            margin-top: 0;
+            font-size: 1.35rem;
+            color: var(--brand);
+            letter-spacing: -0.01em;
+        }
+
+        section h3 {
+            margin-bottom: 8px;
+            color: #10314d;
+            font-size: 1.03rem;
+        }
+
+        ul,
+        ol {
+            margin-top: 8px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .pill {
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #f8fafc;
+            font-size: .92rem;
+        }
+
+        .pass {
+            border-left: 4px solid var(--ok);
+        }
+
+        .fail {
+            border-left: 4px solid var(--danger);
+        }
+
+        .warn {
+            border-left: 4px solid var(--warn);
+        }
+
+        .code {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: .9rem;
+            background: #eef3fb;
+            border: 1px solid var(--line);
+            padding: 2px 6px;
+            border-radius: 6px;
+            word-break: break-all;
+        }
+
+        .kpi {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .kpi .item {
+            background: linear-gradient(180deg, #f8fbff, #edf5ff);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .kpi .value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--brand);
+        }
+
+        .appendix-media {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .media-card {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #f8fbff;
+            padding: 14px;
+        }
+
+        footer {
+            text-align: center;
+            color: var(--muted);
+            padding: 20px 8px 40px;
+            font-size: .9rem;
+        }
+
+        @media (max-width: 980px) {
+
+            .hero,
+            .layout,
+            .appendix-media {
+                grid-template-columns: 1fr;
+            }
+
+            nav {
+                position: static;
+            }
+
+            .kpi {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="shell">
+        <header class="hero">
+            <div class="hero-left card">
+                <span class="eyebrow">PRISM Quiet Release Program</span>
+                <h1>World-Class Quiet Release Master Plan</h1>
+                <p class="subtitle">Complete audit, market strategy, testing architecture, and GitHub publication plan
+                    with strict evidence-first standards.</p>
+                <div class="meta">
+                    <div><strong>Date</strong><br />2026-05-27</div>
+                    <div><strong>Prepared For</strong><br />Kirk LaSalle</div>
+                    <div><strong>Release Mode</strong><br />RC-quiet (Controlled)</div>
+                    <div><strong>Primary Goal</strong><br />Trust-first public launch</div>
+                </div>
+                <div id="release-gates" style="margin-top:14px; display:flex; gap:10px; align-items:center;">
+                    <label style="font-size:13px; color:var(--muted);">Gates:</label>
+                    <label style="display:flex; gap:6px; align-items:center; font-size:13px;">
+                        <input type="checkbox" id="gate-doctor" /> Doctor
+                    </label>
+                    <label style="display:flex; gap:6px; align-items:center; font-size:13px;">
+                        <input type="checkbox" id="gate-ptac" /> PTAC
+                    </label>
+                    <label style="display:flex; gap:6px; align-items:center; font-size:13px;">
+                        <input type="checkbox" id="gate-release" /> Release
+                    </label>
+                    <div id="gate-pill"
+                        style="margin-left:auto; padding:6px 10px; border-radius:8px; background:#eef6ff; border:1px solid var(--line); font-weight:600; color:var(--brand);">
+                        Status: <span id="gate-status">Partial</span></div>
+                </div>
+                <div style="margin-top:8px; display:flex; gap:10px;">
+                    <button id="export-pdf"
+                        style="margin-left:auto; padding:8px 12px; border-radius:8px; border:1px solid var(--line); background:#0f4c81; color:white; cursor:pointer;">Export
+                        PDF</button>
+                </div>
+            </div>
+            <div class="hero-right">
+                <canvas id="three-stage" aria-label="3D PRISM governance and orchestration illustration"></canvas>
+                <div id="three-fallback" class="three-fallback" aria-label="Fallback 3D governance illustration">
+                    <div class="fallback-orbit o1"><span class="fallback-dot"></span></div>
+                    <div class="fallback-orbit o2"><span class="fallback-dot"></span></div>
+                    <div class="fallback-orbit o3"><span class="fallback-dot"></span></div>
+                    <div class="fallback-core">
+                        <div class="fallback-face f1"></div>
+                        <div class="fallback-face f2"></div>
+                        <div class="fallback-face f3"></div>
+                        <div class="fallback-face f4"></div>
+                        <div class="fallback-face f5"></div>
+                        <div class="fallback-face f6"></div>
+                    </div>
+                </div>
+                <div class="overlay-note">
+                    <strong>3D Illustration:</strong> Central prism = governance core, orbiting nodes = testing, market,
+                    operations, and release tracks. Animation is intentionally subtle for an executive artifact context.
+                </div>
+            </div>
+        </header>
+
+        <div class="layout">
+            <nav class="card">
+                <h2>Document Navigation</h2>
+                <a href="#sec1">1. Executive Summary</a>
+                <a href="#sec2">2. Due Diligence Evidence</a>
+                <a href="#sec3">3. Complete Prism Audit</a>
+                <a href="#sec4">4. Market Audit</a>
+                <a href="#sec5">5. Market Document</a>
+                <a href="#sec6">6. World-Class Testing Plan</a>
+                <a href="#sec7">7. Quiet GitHub Release Plan</a>
+                <a href="#sec8">8. Enhancements</a>
+                <a href="#sec9">9. Financing Readiness</a>
+                <a href="#sec10">10. 90-Day Execution Plan</a>
+                <a href="#sec11">11. Claims Discipline</a>
+                <a href="#sec12">12. Immediate Checklist</a>
+                <a href="#sec13">13. Closing Guidance</a>
+            </nav>
+
+            <main>
+                <section id="sec1" class="card">
+                    <h2>1. Executive Summary</h2>
+                    <p>This plan consolidates a complete operational audit, market audit, commercialization strategy,
+                        testing architecture, quiet GitHub release path, and financing readiness guidance.</p>
+                    <h3>Bottom-line readiness decision</h3>
+                    <p><strong>Do not publicly launch yet as broad GA.</strong> Proceed as <strong>RC-quiet</strong>
+                        with evidence-backed constraints.</p>
+                    <div class="kpi">
+                        <div class="item">
+                            <div class="value">7 / 7</div>
+                            <div>Doctor Checks</div>
+                        </div>
+                        <div class="item">
+                            <div class="value">3.1 / 5</div>
+                            <div>Launch Confidence</div>
+                        </div>
+                        <div class="item">
+                            <div class="value">87 / 87</div>
+                            <div>Release Tests Passed</div>
+                        </div>
+                        <div class="item">
+                            <div class="value">3</div>
+                            <div>Release Blockers</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="sec2" class="card">
+                    <h2>2. Due Diligence Evidence Base</h2>
+                    <h3>Runtime checks executed</h3>
+                    <div class="status-grid">
+                        <div class="pill pass"><strong>Doctor:</strong> PASS<br />PAD hash, writable dirs, SQLite
+                            checks, signing-key placeholder checks all green.</div>
+                        <div class="pill fail"><strong>PTAC Fast:</strong> FAIL<br />All scenarios fail at <span
+                                class="code">boot-pad-verify</span> with <span class="code">TypeError: fetch
+                                failed</span>.</div>
+                        <div class="pill fail"><strong>Release Validate Strict:</strong> FAIL<br />Operational release
+                            gates remain open.</div>
+                    </div>
+                    <h3>Strict release validation outcomes</h3>
+                    <ul>
+                        <li>Passed: full suite, contract snapshot, performance qualification, computer-use business
+                            gate.</li>
+                        <li>Failed: staging validation confirmed, rollback rehearsal confirmed, runbook/doc currency
+                            confirmed.</li>
+                        <li>Artifact: <span
+                                class="code">C:\Users\kirkl\Documents\Prism_Refraction\artifacts\benchmarks\release-validation.json</span>
+                        </li>
+                    </ul>
+                </section>
+
+                <section id="sec3" class="card">
+                    <h2>3. Complete Prism Audit (Technical + Product + Operations)</h2>
+                    <h3>Strengths</h3>
+                    <ul>
+                        <li>Governance-native substrate: PAD integrity, tiered policy engine, CAC accountability chain.
+                        </li>
+                        <li>Advanced orchestration depth: agent lifecycle/swarm and Spectrum Refraction tri-model
+                            architecture.</li>
+                        <li>Operator-grade control surfaces: rich dashboard, TUI, telemetry and logs.</li>
+                        <li>Broad adapter/tool footprint supporting practical task execution.</li>
+                    </ul>
+                    <h3>Release risks</h3>
+                    <ul>
+                        <li>Some implemented capabilities do not yet have clean-machine proof quality artifacts.</li>
+                        <li>Demo reliability depends on environment assumptions in some paths.</li>
+                        <li>Large code surface demands stricter deterministic gates for public confidence.</li>
+                    </ul>
+                    <h3>Readiness scorecard</h3>
+                    <ul>
+                        <li>Governance architecture: 5/5</li>
+                        <li>Security controls implemented: 4/5</li>
+                        <li>Security evidence completeness: 2/5</li>
+                        <li>Test breadth: 4/5</li>
+                        <li>Test determinism: 2/5</li>
+                        <li>Demo reliability for public: 2/5</li>
+                    </ul>
+                </section>
+
+                <section id="sec4" class="card">
+                    <h2>4. Market Audit (2026 Landscape)</h2>
+                    <p>PRISM operates in a crowded landscape with cloud incumbents and open-source frameworks. The
+                        winning strategy is not generic “best agent” positioning but trust-anchored differentiation.</p>
+                    <h3>Reality and positioning</h3>
+                    <ul>
+                        <li>Cloud platforms compete on ecosystem and distribution.</li>
+                        <li>Open-source frameworks compete on developer speed and simplicity.</li>
+                        <li>PRISM must lead with governance, traceability, and self-hosted control boundaries.</li>
+                    </ul>
+                    <h3>Demand signals aligned to PRISM</h3>
+                    <ul>
+                        <li>Human-in-the-loop approvals</li>
+                        <li>Auditability and policy controls</li>
+                        <li>Data sovereignty and controlled deployment models</li>
+                        <li>Pre-deployment evaluation harnesses</li>
+                    </ul>
+                </section>
+
+                <section id="sec5" class="card">
+                    <h2>5. Prism Market Document (Positioning + GTM + Monetization)</h2>
+                    <h3>Positioning statement</h3>
+                    <p>PRISM is the operator-trust layer for autonomous work: a governance-native runtime where agent
+                        actions are inspectable, accountable, and policy-bounded.</p>
+                    <h3>Initial ICPs</h3>
+                    <ol>
+                        <li>Compliance-sensitive mid-market software companies.</li>
+                        <li>Enterprise innovation/security teams requiring self-hosted controls.</li>
+                        <li>AI services partners delivering governed automation to clients.</li>
+                    </ol>
+                    <h3>Monetization path</h3>
+                    <ol>
+                        <li>0-6 months: services-led revenue (hardening/support/training).</li>
+                        <li>6-12 months: productized support tiers and SLAs.</li>
+                        <li>12+ months: optional managed control-plane add-ons.</li>
+                    </ol>
+                </section>
+
+                <section id="sec6" class="card">
+                    <h2>6. World-Class Testing Plan (Including PRISM Testing Itself)</h2>
+                    <h3>Quality doctrine</h3>
+                    <ol>
+                        <li>Reproducible from clean clone.</li>
+                        <li>Deterministic pass/fail semantics.</li>
+                        <li>Traceable artifacts and signatures.</li>
+                        <li>Policy-aware behavior validation.</li>
+                        <li>Public-safe demo path.</li>
+                    </ol>
+                    <h3>Gate architecture</h3>
+                    <ul>
+                        <li>Gate 0: doctor + integrity</li>
+                        <li>Gate 1: build/type/contracts</li>
+                        <li>Gate 2: core unit/integration</li>
+                        <li>Gate 3: governance behavior</li>
+                        <li>Gate 4: PTAC fast deterministic</li>
+                        <li>Gate 5: demo qualification</li>
+                        <li>Gate 6: strict release/security signatures</li>
+                    </ul>
+                    <h3>Immediate PTAC remediation</h3>
+                    <ol>
+                        <li>Add PTAC preflight endpoint reachability checks and diagnostics.</li>
+                        <li>Enable optional local auto-start of target server for PTAC.</li>
+                        <li>Add explicit token/endpoint diagnostics to logs before scenarios begin.</li>
+                        <li>Add regression test for unreachable endpoint error quality.</li>
+                    </ol>
+                </section>
+
+                <section id="sec7" class="card">
+                    <h2>7. Quiet GitHub Public Release Plan</h2>
+                    <h3>Publication phases</h3>
+                    <ol>
+                        <li>Pre-public hardening: secrets scan, self-test stabilization, docs coherence, demo classes.
+                        </li>
+                        <li>Soft public release: publish quietly with known limitations and issue templates.</li>
+                        <li>Trust expansion: reproducibility kits, governance verification docs, reliability artifact
+                            index.</li>
+                    </ol>
+                    <h3>Mandatory checklist</h3>
+                    <ul>
+                        <li>Doctor green on clean machine</li>
+                        <li>PTAC fast green on clean machine</li>
+                        <li>Deterministic demo smoke green</li>
+                        <li>Strict release validation green + archived</li>
+                        <li>Secrets/history scan green</li>
+                        <li>Public onboarding under 15 minutes verified</li>
+                    </ul>
+                </section>
+
+                <section id="sec8" class="card">
+                    <h2>8. Enhancements and Improvements</h2>
+                    <h3>Priority 0</h3>
+                    <ol>
+                        <li>PTAC preflight + auto-target reliability fix.</li>
+                        <li>Deterministic public self-test command.</li>
+                        <li>Demo Class A deterministic subset.</li>
+                        <li>Secrets-history clean evidence.</li>
+                        <li>Close strict release blockers: staging, rollback rehearsal, runbook/doc currency.</li>
+                        <li>Re-run strict release gate with green archived artifact.</li>
+                    </ol>
+                    <h3>Priority 1 / 2</h3>
+                    <ul>
+                        <li>Onboarding diagnostics and UX hardening.</li>
+                        <li>Automated release packet generation in CI.</li>
+                        <li>Commercial support package rollout and customer proof workflows.</li>
+                    </ul>
+                </section>
+
+                <section id="sec9" class="card">
+                    <h2>9. Financing, Loans, and Investment Readiness</h2>
+                    <p>Guidance is strategic and operational, not legal/financial advice.</p>
+                    <h3>Funding ladder</h3>
+                    <ol>
+                        <li>Revenue-first services.</li>
+                        <li>Non-dilutive options (grants/contracts).</li>
+                        <li>Selective equity conversations after proof packet maturity.</li>
+                    </ol>
+                    <h3>Required readiness packet</h3>
+                    <ul>
+                        <li>Narrative deck and moat explanation.</li>
+                        <li>Technical proof packet with self-test evidence.</li>
+                        <li>Commercial traction and LOI structure.</li>
+                        <li>Conservative unit economics and cash-flow model.</li>
+                    </ul>
+                </section>
+
+                <section id="sec10" class="card">
+                    <h2>10. 90-Day Execution Plan</h2>
+                    <h3>Days 1-15</h3>
+                    <ul>
+                        <li>Fix PTAC startup coupling and preflight.</li>
+                        <li>Build and document public self-test command.</li>
+                        <li>Stabilize Demo Class A.</li>
+                        <li>Capture clean-machine evidence packet.</li>
+                    </ul>
+                    <h3>Days 16-30</h3>
+                    <ul>
+                        <li>Finalize public narrative and limitations sections.</li>
+                        <li>Add issue templates and governance docs.</li>
+                        <li>Run two dry-run publication rehearsals.</li>
+                    </ul>
+                    <h3>Days 31-90</h3>
+                    <ul>
+                        <li>Quiet public launch, then rapid hardening loop.</li>
+                        <li>Commercial activation via support offerings and design partner outreach.</li>
+                    </ul>
+                </section>
+
+                <section id="sec11" class="card">
+                    <h2>11. Public Claims Discipline</h2>
+                    <ol>
+                        <li>Never claim benchmark superiority without reproducible artifacts.</li>
+                        <li>Never imply unsupervised autonomy where oversight remains required.</li>
+                        <li>Separate “implemented” from “publicly validated on clean environments.”</li>
+                        <li>Publish staged capability maturity honestly.</li>
+                    </ol>
+                </section>
+
+                <section id="sec12" class="card">
+                    <h2>12. Immediate Action Checklist</h2>
+                    <ul>
+                        <li>Complete staging validation evidence.</li>
+                        <li>Execute rollback rehearsal and archive artifact.</li>
+                        <li>Sign off runbook/doc currency review.</li>
+                        <li>Re-run strict release validation for green artifact capture.</li>
+                        <li>Implement PTAC preflight + optional auto-start.</li>
+                        <li>Add <span class="code">npm run prism:selftest:public</span> wrapper.</li>
+                        <li>Create public self-test guide and Demo Class A report.</li>
+                    </ul>
+                </section>
+
+                <section id="sec13" class="card">
+                    <h2>13. Closing Guidance</h2>
+                    <p>PRISM already has substantial technical depth. The decisive factor for a world-class quiet
+                        release is not more features; it is reproducible trust evidence under clean-machine conditions.
+                        This plan is optimized to deliver exactly that outcome.</p>
+                </section>
+
+                <section class="card">
+                    <h2>Appended Media Illustration</h2>
+                    <p><strong>Wiki Context:</strong> This 3D executive surface is documented for architectural intent,
+                        reliability behavior, and maintenance guidance in
+                        <span class="code">docs/SOTA_BROWSER_WIKI.md</span> under
+                        <em>"World-Class 3D Release Visualization (Executive Briefing Surface)"</em>.
+                    </p>
+                    <div class="appendix-media">
+                        <div class="media-card">
+                            <h3>3D Scene Legend</h3>
+                            <ul>
+                                <li><strong>Central prism object:</strong> governance and trust core.</li>
+                                <li><strong>Orbiting nodes:</strong> audit, market, testing, release execution lanes.
+                                </li>
+                                <li><strong>Animated paths:</strong> cross-functional synchronization required for
+                                    RC-quiet maturity.</li>
+                            </ul>
+                        </div>
+                        <div class="media-card">
+                            <h3>Suggested next media upgrades</h3>
+                            <ul>
+                                <li>Embed recorded PTAC class-A demo reel as muted autoplay loop.</li>
+                                <li>Add benchmark trend chart from qualification JSON artifacts.</li>
+                                <li>Add “gate status timeline” mini-dashboard for stakeholder reviews.</li>
+                            </ul>
+                        </div>
+                        <div class="media-card" id="demo-video-card" style="display:none;">
+                            <h3>Class-A Demo Reel</h3>
+                            <video id="demo-video" width="100%" muted playsinline loop controls
+                                style="border-radius:8px; background:#000;">
+                                <source src="prism-output/demo.mp4" type="video/mp4">
+                                Your browser does not support embedded video.
+                            </video>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <footer>
+            PRISM World-Class Quiet Release Program • Generated as an executive HTML artifact with Three.js appended
+            illustration
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/three@0.164.1/build/three.min.js"></script>
+    <script>
+        function activateFallback3D(reason) {
+            const fallback = document.getElementById('three-fallback');
+            const canvas = document.getElementById('three-stage');
+            const note = document.querySelector('.overlay-note');
+            if (canvas) {
+                canvas.style.display = 'none';
+            }
+            if (fallback) {
+                fallback.classList.add('active');
+            }
+            if (note && reason) {
+                // show concise fallback text; gate status appended by updateGateVisuals()
+                note.textContent = '3D Illustration (Fallback): ' + reason + ' A local animated 3D scene is shown to keep this panel visually active.';
+            }
+        }
+
+        // Gate visual system: persists gates and updates visual cues
+        function readGates() {
+            return {
+                doctor: !!(localStorage.getItem('gate-doctor') === '1'),
+                ptac: !!(localStorage.getItem('gate-ptac') === '1'),
+                release: !!(localStorage.getItem('gate-release') === '1')
+            };
+        }
+
+        function writeGate(key, value) {
+            localStorage.setItem(key, value ? '1' : '0');
+        }
+
+        function computeReadiness(gates) {
+            const vals = [gates.doctor, gates.ptac, gates.release];
+            const sum = vals.reduce((s, v) => s + (v ? 1 : 0), 0);
+            return sum / vals.length;
+        }
+
+        function updateGateVisuals(sceneObjects) {
+            const gates = readGates();
+            const readiness = computeReadiness(gates);
+            const statusEl = document.getElementById('gate-status');
+            let statusText = 'Partial';
+            let colorHex = 0xb45309; // amber
+            if (readiness >= 1) { statusText = 'Green'; colorHex = 0x0f766e; }
+            else if (readiness >= 0.66) { statusText = 'Amber'; colorHex = 0xb45309; }
+            else { statusText = 'Red'; colorHex = 0xb42318; }
+            if (statusEl) statusEl.textContent = statusText;
+
+            // update Three.js pulse if available
+            try {
+                if (sceneObjects && sceneObjects.pulseLight) {
+                    sceneObjects.pulseLight.color.setHex(colorHex);
+                    sceneObjects.pulseLight.intensity = 0.48 + readiness * 1.2;
+                }
+            } catch (e) { /* no-op */ }
+
+            // update fallback glow color
+            const fallback = document.getElementById('three-fallback');
+            if (fallback && fallback.classList.contains('active')) {
+                const note = document.querySelector('.overlay-note');
+                if (note) note.textContent = `3D Illustration (Fallback): ${statusText} readiness — ${Math.round(readiness * 100)}%`;
+            }
+
+            // trigger a pulse animation when transitioning to full readiness
+            try {
+                const prev = (sceneObjects && sceneObjects._lastReadiness) || 0;
+                if (readiness >= 1 && prev < 1) {
+                    triggerPulse(sceneObjects);
+                }
+                if (sceneObjects) sceneObjects._lastReadiness = readiness;
+            } catch (e) { /* no-op */ }
+        }
+
+        // wire UI controls
+        function initGateControls(sceneObjects) {
+            const ids = ['gate-doctor', 'gate-ptac', 'gate-release'];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                // initialize from storage
+                el.checked = localStorage.getItem(id) === '1';
+                el.addEventListener('change', () => {
+                    writeGate(id, el.checked);
+                    updateGateVisuals(sceneObjects);
+                });
+            });
+            // initial update
+            updateGateVisuals(sceneObjects);
+        }
+
+        // small visual pulse animation for Three.js objects
+        function triggerPulse(sceneObjects) {
+            if (!sceneObjects) return;
+            const { prism, ring } = sceneObjects;
+            if (!prism) return;
+            const dur = 300; // ms
+            const start = performance.now();
+            const fromScale = 1;
+            const toScale = 1.12;
+            function animate(now) {
+                const t = Math.min(1, (now - start) / dur);
+                const eased = 1 - Math.pow(1 - t, 3);
+                const s = fromScale + (toScale - fromScale) * eased;
+                prism.scale.set(s, s, s);
+                if (ring) ring.scale.set(1 + (s - 1) * 0.6, 1 + (s - 1) * 0.6, 1);
+                if (t < 1) requestAnimationFrame(animate);
+                else {
+                    // revert
+                    const start2 = performance.now();
+                    function animateBack(now2) {
+                        const t2 = Math.min(1, (now2 - start2) / dur);
+                        const eased2 = 1 - Math.pow(1 - t2, 3);
+                        const s2 = toScale - (toScale - fromScale) * eased2;
+                        prism.scale.set(s2, s2, s2);
+                        if (ring) ring.scale.set(1 + (s2 - 1) * 0.6, 1 + (s2 - 1) * 0.6, 1);
+                        if (t2 < 1) requestAnimationFrame(animateBack);
+                    }
+                    requestAnimationFrame(animateBack);
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        (function initThree() {
+            const canvas = document.getElementById('three-stage');
+            const panel = document.querySelector('.hero-right');
+            if (!canvas) return;
+            if (!window.THREE) {
+                activateFallback3D('Three.js could not be loaded from CDN.');
+                return;
+            }
+
+            let renderer;
+            try {
+                renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+            } catch (error) {
+                activateFallback3D('WebGL renderer initialization failed.');
+                return;
+            }
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+            camera.position.set(0, 0, 7.5);
+            const targetCamera = { x: 0, y: 0 };
+            const smoothCamera = { x: 0, y: 0 };
+
+            if (panel) {
+                panel.addEventListener('mousemove', (event) => {
+                    const rect = panel.getBoundingClientRect();
+                    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                    const y = ((event.clientY - rect.top) / rect.height) * 2 - 1;
+                    targetCamera.x = x * 0.38;
+                    targetCamera.y = y * 0.28;
+                });
+                panel.addEventListener('mouseleave', () => {
+                    targetCamera.x = 0;
+                    targetCamera.y = 0;
+                });
+            }
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+            scene.add(ambient);
+
+            const key = new THREE.DirectionalLight(0x91d5ff, 0.95);
+            key.position.set(3, 4, 5);
+            scene.add(key);
+
+            const rim = new THREE.PointLight(0x2a9d8f, 1.2, 30);
+            rim.position.set(-4, -2, 3);
+            scene.add(rim);
+
+            const pulseLight = new THREE.PointLight(0x6ac8ff, 0.65, 25);
+            pulseLight.position.set(0, 0.4, 2.4);
+            scene.add(pulseLight);
+
+            const prismGeo = new THREE.IcosahedronGeometry(1.25, 0);
+            const prismMat = new THREE.MeshPhysicalMaterial({
+                color: 0x4aa3ff,
+                transmission: 0.35,
+                roughness: 0.2,
+                metalness: 0.35,
+                thickness: 0.8,
+                clearcoat: 0.7,
+                clearcoatRoughness: 0.15
+            });
+            const prism = new THREE.Mesh(prismGeo, prismMat);
+            scene.add(prism);
+
+            const wire = new THREE.LineSegments(
+                new THREE.EdgesGeometry(prismGeo),
+                new THREE.LineBasicMaterial({ color: 0xd8ecff, transparent: true, opacity: 0.55 })
+            );
+            prism.add(wire);
+
+            const nodeMaterial = new THREE.MeshStandardMaterial({ color: 0x8ce7de, metalness: 0.3, roughness: 0.35 });
+            const nodeGeo = new THREE.SphereGeometry(0.16, 20, 20);
+            const orbits = [];
+
+            for (let i = 0; i < 7; i++) {
+                const node = new THREE.Mesh(nodeGeo, nodeMaterial.clone());
+                node.material.color.setHSL(0.54 + i * 0.03, 0.68, 0.65);
+                scene.add(node);
+                orbits.push({
+                    mesh: node,
+                    radius: 2.2 + (i % 3) * 0.5,
+                    speed: 0.45 + i * 0.08,
+                    phase: i * 0.85,
+                    tilt: i * 0.28
+                });
+            }
+
+            const ringGeo = new THREE.TorusGeometry(2.65, 0.016, 8, 180);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x75aadb, transparent: true, opacity: 0.35 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI * 0.62;
+            scene.add(ring);
+
+            const ring2 = new THREE.Mesh(
+                new THREE.TorusGeometry(1.9, 0.012, 8, 180),
+                new THREE.MeshBasicMaterial({ color: 0x6ddfd0, transparent: true, opacity: 0.32 })
+            );
+            ring2.rotation.set(Math.PI * 0.25, Math.PI * 0.18, 0);
+            scene.add(ring2);
+
+            function resize() {
+                const w = canvas.clientWidth;
+                const h = canvas.clientHeight;
+                renderer.setSize(w, h, false);
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+            }
+
+            resize();
+            window.addEventListener('resize', resize);
+
+            // Initialize gate controls with a reference to scene objects we want to update
+            const sceneObjects = { pulseLight, prism, ring, ring2, _lastReadiness: 0 };
+            try { initGateControls(sceneObjects); } catch (e) { /* ignore if UI not present */ }
+
+            const clock = new THREE.Clock();
+
+            // wire export PDF button
+            try {
+                const exportBtn = document.getElementById('export-pdf');
+                if (exportBtn) exportBtn.addEventListener('click', () => window.print());
+            } catch (e) { /* no-op */ }
+
+            // attempt to show demo video if available; reveal card if video loads
+            try {
+                const demoVideo = document.getElementById('demo-video');
+                const demoCard = document.getElementById('demo-video-card');
+                if (demoVideo && demoCard) {
+                    demoVideo.addEventListener('error', () => { demoCard.style.display = 'none'; });
+                    demoVideo.addEventListener('loadedmetadata', () => { demoCard.style.display = 'block'; });
+                }
+            } catch (e) { /* no-op */ }
+
+            function tick() {
+                const t = clock.getElapsedTime();
+
+                smoothCamera.x += (targetCamera.x - smoothCamera.x) * 0.045;
+                smoothCamera.y += (targetCamera.y - smoothCamera.y) * 0.045;
+                camera.position.x = smoothCamera.x;
+                camera.position.y = smoothCamera.y;
+                camera.lookAt(0, 0, 0);
+
+                prism.rotation.x = t * 0.22;
+                prism.rotation.y = t * 0.34;
+
+                ring.rotation.z = t * 0.12;
+                ring2.rotation.z = -t * 0.18;
+                pulseLight.intensity = 0.48 + Math.sin(t * 2.1) * 0.16;
+
+                for (let i = 0; i < orbits.length; i++) {
+                    const o = orbits[i];
+                    const a = t * o.speed + o.phase;
+                    o.mesh.position.set(
+                        Math.cos(a) * o.radius,
+                        Math.sin(a * 0.9 + o.tilt) * 0.9,
+                        Math.sin(a) * o.radius * 0.55
+                    );
+                }
+
+                renderer.render(scene, camera);
+                requestAnimationFrame(tick);
+            }
+
+            tick();
+        })();
+    </script>
+</body>
+
+</html>

@@ -442,11 +442,7 @@ export class TerminalSessionAdapter {
             }
         }
 
-        this.db.run(
-            "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-            [session_id, process.platform === "win32" ? "NtSuspendProcess" : "SIGSTOP", "pause_session", new Date().toISOString()],
-            () => { }
-        );
+        await this.logSignal(session_id, process.platform === "win32" ? "NtSuspendProcess" : "SIGSTOP", "pause_session");
 
         session.state = TerminalSessionState.SUSPENDED;
         session.last_activity = new Date().toISOString();
@@ -495,11 +491,7 @@ export class TerminalSessionAdapter {
             }
         }
 
-        this.db.run(
-            "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-            [session_id, process.platform === "win32" ? "NtResumeProcess" : "SIGCONT", "resume_session", new Date().toISOString()],
-            () => { }
-        );
+        await this.logSignal(session_id, process.platform === "win32" ? "NtResumeProcess" : "SIGCONT", "resume_session");
 
         session.state = TerminalSessionState.ACTIVE;
         session.last_activity = new Date().toISOString();
@@ -569,11 +561,7 @@ exit 0;
         const { ptyProcess, session } = sessionEntry;
 
         ptyProcess.kill();
-        this.db.run(
-            "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-            [session_id, "SIGTERM", "graceful_stop", new Date().toISOString()],
-            () => { }
-        );
+        await this.logSignal(session_id, "SIGTERM", "graceful_stop");
 
         // Update session state
         session.state = TerminalSessionState.TERMINATED;
@@ -614,11 +602,7 @@ exit 0;
         ptyProcess.kill();
 
         // Log signal
-        this.db.run(
-            "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-            [session_id, "SIGKILL", `revocation: ${reason}`, new Date().toISOString()],
-            () => { }
-        );
+        await this.logSignal(session_id, "SIGKILL", `revocation: ${reason}`);
 
         // Update session state
         session.state = TerminalSessionState.REVOKED;
@@ -849,6 +833,20 @@ exit 0;
                     if (err) reject(err);
                     else resolve();
                 }
+            );
+        });
+    }
+
+    /**
+     * Persist signal metadata to signal log
+     * @private
+     */
+    private logSignal(session_id: string, signal: string, reason: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
+                [session_id, signal, reason, new Date().toISOString()],
+                (err) => err ? reject(err) : resolve()
             );
         });
     }

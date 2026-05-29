@@ -90,6 +90,10 @@ export class LlamaCppSupervisor extends EventEmitter {
         return { ...this.config };
     }
 
+    public setBinaryPath(path: string): void {
+        this.config.binaryPath = path;
+    }
+
     public getSnapshot(): LlamaModelSlot[] {
         return this.slots.map(s => ({ ...s }));
     }
@@ -140,8 +144,31 @@ export class LlamaCppSupervisor extends EventEmitter {
         // 1. Is it already loaded?
         let slot = this.slots.find(s => s.modelAlias === modelAlias || s.modelPath === modelPath);
         if (slot) {
-            // Might be loading or ready
-            slot.lastActive = Date.now();
+            if (slot.status === "error") {
+                const ctxSize = opts.ctxSize ?? slot.contextSize;
+                slot.status = "loading";
+                slot.error = undefined;
+                slot.lastActive = Date.now();
+                if (opts.draftModelPath !== undefined) slot.draftModelPath = opts.draftModelPath;
+                if (opts.draftMax !== undefined) slot.draftMax = opts.draftMax;
+                if (opts.draftMin !== undefined) slot.draftMin = opts.draftMin;
+                if (opts.draftPMin !== undefined) slot.draftPMin = opts.draftPMin;
+                if (opts.gpuLayers !== undefined) slot.gpuLayers = opts.gpuLayers;
+                if (opts.flashAttn !== undefined) slot.flashAttn = opts.flashAttn;
+                slot.contextSize = ctxSize;
+                this.emit("slot_updated", slot);
+                try {
+                    await this.spawnProcess(slot, ctxSize);
+                    slot.status = "ready";
+                    this.emit("slot_updated", slot);
+                } catch (error) {
+                    slot.status = "error";
+                    slot.error = String(error);
+                    this.emit("slot_updated", slot);
+                }
+            } else {
+                slot.lastActive = Date.now();
+            }
             return slot;
         }
 

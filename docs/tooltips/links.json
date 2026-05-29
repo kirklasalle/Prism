@@ -83,6 +83,24 @@
         {
             "label": "Wiki Home",
             "href": "https://github.com/kirklasalle/Prism/wiki"
+        },
+        {
+            "label": "Quiet Release Master Plan (3D)",
+            "href": "/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html"
+        }
+    ],
+    "shell:tab:wiki": [
+        {
+            "label": "SOTA Browser Wiki",
+            "href": "/docs/SOTA_BROWSER_WIKI.md"
+        },
+        {
+            "label": "Wiki: 3D Release Visualization Context",
+            "href": "/docs/SOTA_BROWSER_WIKI.md#7-world-class-3d-release-visualization-executive-briefing-surface"
+        },
+        {
+            "label": "Quiet Release Master Plan (3D)",
+            "href": "/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html"
         }
     ],
     "shell:setup-wizard": [

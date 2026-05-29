@@ -19,6 +19,7 @@
 | D3 | Agent Control & Swarm | Closed (2026-04-20) | — | — |
 | D4 | Spectrum Refraction (SR) | Closed (2026-04-25) | — | — |
 | **E** | **Integration Hardening** | **Active** | **May–Jun 2026** | Core team |
+| **P** | **Public Presentation Parity (Quiet Release)** | **Completed** | **May 2026** | Core team |
 | **R** | **Readiness** (NEW) | **Planned** | **Jun–Jul 2026** | Core team |
 | F | Expansion (A2A, OCI, Python SDK, monolith split) | Planned | Aug–Oct 2026 | Core team |
 | G | Ecosystem (marketplace, docs site, beta) | Planned | Nov 2026 – Q1 2027 | Core + community |
@@ -195,6 +196,28 @@ Phase R is organized into 8 workstreams (R1 through R8). R1 and R2 block everyth
 2. `npm run release:validate:strict` passes on a clean clone after only following [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 3. CI green on `main`; release-workflow artifact produced.
 4. Every gap G-1 through G-17 in [PRISM_FULL_AUDIT_2026_Q2.md](PRISM_FULL_AUDIT_2026_Q2.md) §5 is resolved.
+
+---
+
+---
+
+## 3.5 Phase P — Public Presentation Parity (Quiet Release) (NEW)
+
+**Goal:** Establish immediate, verifiable trust through automated validation, local resilience, and robust credentials hygiene. Executes the "PRISM World-Class Quiet Release Master Plan."
+
+### Workstream QR — Quiet Release Preparation (May 2026)
+
+| Task | File / Target | Status |
+|---|---|---|
+| QR-1 PTAC preflight diagnostic checks and dashboard auto-start | [cli.ts](../src/ptac/cli.ts) | **Completed** |
+| QR-2 Resolve strict validation path bug for runbooks | [release-validation.ts](../src/benchmarks/release-validation.ts) | **Completed** |
+| QR-3 Mirror stage 2 & CI gate summary artifacts to workspace | [e-stage2-qualification.ts](../src/benchmarks/e-stage2-qualification.ts), [ci-gate-check.ts](../src/benchmarks/ci-gate-check.ts) | **Completed** |
+| QR-4 Mirror and configure release packet generator | [generate-release-packet.cjs](../scripts/generate-release-packet.cjs) | **Completed** |
+| QR-5 Unified public self-test diagnostics command | [prism-selftest-public.cjs](../scripts/prism-selftest-public.cjs) | **Completed** |
+| QR-6 Public self-test operator guide | [PUBLIC_SELF_TEST_GUIDE.md](PUBLIC_SELF_TEST_GUIDE.md) | **Completed** |
+| QR-7 Credentials and secrets history scanner | [secrets-scan.cjs](../scripts/secrets-scan.cjs) | **Completed** |
+
+**Acceptance:** All strict validation gates pass natively, `npm run prism:selftest:public` produces a 100% successful interactive HTML diagnostic package, and credentials scanner reports 0 hardcoded secrets.
 
 ---
 

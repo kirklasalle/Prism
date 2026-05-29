@@ -138,7 +138,8 @@ export class AgenticChatExecutor {
 
             if (!result) {
                 emit({ type: "error", error: "LLM returned no response.", iteration });
-                break;
+                emit({ type: "done", iteration });
+                return { finalContent: finalContent || "LLM returned no response.", toolCallsExecuted: totalToolCalls, iterations: iteration + 1, events };
             }
 
             // Accumulate text content

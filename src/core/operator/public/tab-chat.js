@@ -1388,6 +1388,33 @@ export
     state.notice = 'Note: This request may require operator approval; it will run automatically when approved.';
     render();
   }
+  // Add a small 'learn more' link to explain approval+auto-run lifecycle
+  const helpLink = document.getElementById('approval-help-link');
+  if (!helpLink) {
+    const bar = document.getElementById('right-rail');
+    if (bar) {
+      const el = document.createElement('div');
+      el.id = 'approval-help-link';
+      el.style.cssText = 'margin-top:8px;color:#a6adc8;cursor:pointer;font-size:0.9em;';
+      el.textContent = 'Why might this require approval?';
+      el.onclick = async () => {
+        const overlay = document.createElement('div');
+        overlay.id = 'approval-modal-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML = '<div style="background:#1e1e2e;border:1px solid #f38ba8;border-radius:12px;padding:24px;max-width:640px;width:90%;color:#cdd6f4;font-family:inherit;">' +
+          '<h3 style="margin:0 0 12px;color:#f38ba8;">Approval & Auto-Run</h3>' +
+          '<p style="margin:0 0 12px;line-height:1.5;">Certain requests that may perform purchases, transfers, or other external actions are routed through an operator approval queue for safety. When an operator approves a request, PRISM can automatically continue and execute the task using the Agentic Executor. This preserves audit trails and requires explicit operator consent.</p>' +
+          '<p style="margin:0 0 12px;color:#a6adc8;font-size:0.9em;">You can disable automatic continuation in the server runtime settings (runtime setting: <strong>autoRunApprovedTier2</strong>).</p>' +
+          '<div style="display:flex;gap:12px;justify-content:flex-end;">' +
+          '<button id="approval-modal-close" style="padding:8px 16px;border:1px solid #585b70;background:transparent;color:#cdd6f4;border-radius:6px;cursor:pointer;">Close</button>' +
+          '</div>' +
+          '</div>';
+        document.body.appendChild(overlay);
+        document.getElementById('approval-modal-close').onclick = () => { overlay.remove(); };
+      };
+      bar.appendChild(el);
+    }
+  }
   // ── Optimistic display: show the user's message immediately ──
   state.messages.push({
     role: 'user',

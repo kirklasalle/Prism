@@ -1,0 +1,64 @@
+# Client-Side Release Validation Suite Plan
+
+Expose the PRISM Strict Release Validation tests to the operator/agent console. This enables the operator to run strict gate validation directly from the web interface, monitor the real-time execution console, and view the status of each validation gate with premium UI visuals.
+
+## User Review Required
+
+> [!NOTE]
+> We will add a new **PRISM Release Validation Suite** panel directly to the **Computer Control** tab (`tab-computer.html`). This keeps local system execution actions grouped together under a unified interface.
+
+## Proposed Changes
+
+We will introduce a background execution system for release validation, expose the required backend routes, and build a beautiful, reactive frontend panel.
+
+---
+
+### Backend Components
+
+#### [MODIFY] [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts)
+- Implement `activeValidationPid` to track background execution.
+- Implement `/api/release-validation/run` (`POST`):
+  - Check if validation is already running (returns 409).
+  - Clear any previous run log (`artifacts/benchmarks/release-validation.log`).
+  - Spawn `node dist/src/benchmarks/release-validation.js --strict` detached.
+  - Pipe/redirect stdout and stderr to the log file.
+  - Return `202 Accepted` with PID.
+- Implement `/api/release-validation/status` (`GET`):
+  - Check if the process is running using `process.kill(activePid, 0)`.
+  - Read `artifacts/benchmarks/release-validation.log` (if it exists) to supply console logs.
+  - Read `artifacts/benchmarks/release-validation.json` (if it exists) to supply structural gate status data.
+  - Return a consolidated JSON payload containing `running`, `pid`, `log`, `gates`, `passed`, and `generatedAt`.
+
+---
+
+### Frontend Components
+
+#### [MODIFY] [tab-computer.html](file:///d:/Projects/Prism/src/core/operator/public/tab-computer.html)
+- Append a new premium collapsable panel: **🧪 PRISM Release Validation Suite**.
+- Define UI placeholders for the Status Pill, Run button, Grid of gates, and Real-time Console output.
+
+#### [NEW] [tab-release-validation.js](file:///d:/Projects/Prism/src/core/operator/public/tab-release-validation.js)
+- Create a modular, dependency-free script loaded on console boot.
+- Hydrate and manage state for the Release Validation panel using a `MutationObserver`.
+- Poll `/api/release-validation/status` every 1 second when active to stream console output and update gate states.
+- Support action buttons: **▶ Run Strict Validation** (POSTs to run API) and **🔄 Refresh**.
+
+#### [MODIFY] [dashboard.ts](file:///d:/Projects/Prism/src/core/operator/templates/dashboard.ts)
+- Register `tab-release-validation.js` so it is imported on startup in the console template.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Build the project (`npm run build`) to compile the TS code.
+- Run the PRISM local server and access the Frontier Console.
+
+### Manual Verification
+- Navigate to the **Computer Control** tab.
+- Click **🧪 PRISM Release Validation Suite** to expand it.
+- Click **▶ Run Strict Validation** and verify:
+  1. The status pill transitions to a blinking `RUNNING` state.
+  2. The console log displays the prebuild, hash computation, build, and test steps in real-time.
+  3. Once finished, the status pill changes to `PASSED` or `FAILED` with matching HSL glowing colors.
+  4. The gate matrix populates with checkboxes and checkmarks reflecting the actual gates.

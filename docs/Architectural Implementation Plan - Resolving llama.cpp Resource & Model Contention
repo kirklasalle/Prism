@@ -1,0 +1,82 @@
+# Architectural Implementation Plan - Resolving llama.cpp Resource & Model Contention
+
+## Objective
+
+In low-resource environments (e.g., standard consumer laptops or machines with limited VRAM), running the **Guardian Agent** (which acts as a permanent, always-on system auditor) concurrently with the **User Chat Session** using local `llama.cpp` causes resource contention. 
+
+Because `llama.cpp` spawns a separate `llama-server` process per slot/model, running two distinct models simultaneously leads to RAM/VRAM exhaustion, process crashes (`spawn llama-server ENOENT` or memory allocations failing), or severe system slowness.
+
+We need a clean, stable architecture to resolve this conflict so you can use the local GGUF provider and model without overloading your hardware.
+
+---
+
+## Technical Analysis of the Contention
+
+Currently, PRISM's layout is as follows:
+- **User Chat Session**: Spawns an instance of `llama-server` under a dynamic port managed by `LlamaCppSupervisor` (e.g., Slot 0, Port `8081`) loading your active chat model (e.g., `gemma-2-2b-it-Q4_K_M`).
+- **Guardian Agent**: In `dashboard-service.ts`, the Guardian is hardcoded to start via `this.guardianAgent.start()` which invokes `this.supervisor.loadModel(...)`. This spawns a **second** concurrent `llama-server` process (e.g., Slot 1, Port `8082`) loading the Guardian's safety model.
+
+When both try to run locally on a machine that cannot run multiple concurrent LLMs, VRAM/RAM is overwhelmed.
+
+---
+
+## Proposed Options for Resolution
+
+We have designed **4 distinct architectural solutions** to resolve this conflict. Please review them and let us know which approach best fits your needs.
+
+### 🌟 Option 1: Shared Model & Port Sharing (Highly Recommended)
+* **Concept**: If the Guardian and the user Chat Session are configured to use the **same model**, they can share the **exact same running slot/port**.
+* **How it works**:
+  - The supervisor only spawns **one** `llama-server` instance.
+  - When the Guardian needs to evaluate system security/integrity, it makes requests to the *already active* chat slot instead of launching a separate slot.
+* **Pros**: 
+  - **Zero additional VRAM/RAM overhead** beyond running a single model.
+  - Perfect performance; no loading latency.
+* **Cons**: 
+  - Requires both the Guardian and User Chat to target the same local model file (e.g., both use `gemma-2-2b-it-Q4_K_M`).
+
+---
+
+### 💻 Option 2: CPU-Only Fallback for the Guardian
+* **Concept**: Split the hardware load. Run your main user Chat model on the GPU (fast response, high VRAM usage) and run the background Guardian model strictly on the CPU (using standard system RAM).
+* **How it works**:
+  - Add a configuration switch in settings (or auto-detect low-resource environments) to set `PRISM_GUARDIAN_GPU_LAYERS=0`.
+  - The supervisor spawns the Guardian's `llama-server` with `--gpu-layers 0` (or `-ngl 0`), forcing it to reside completely in system RAM.
+* **Pros**:
+  - Allows you to run two different models concurrently without exceeding GPU VRAM limits.
+  - Guardian tasks run in the background asynchronously, so their slightly slower CPU execution speed will not affect your interactive chat experience.
+* **Cons**:
+  - Consumes system RAM (requires the host machine to have enough standard RAM to hold both models, e.g., 16GB+).
+
+---
+
+### 🌐 Option 3: Remote/Hybrid Provider for the Guardian
+* **Concept**: Keep your user Chat session 100% local (fast and secure), but offload the Guardian's auditing calls to a remote lightweight endpoint (e.g., Gemini API, OpenAI API, or a remote Ollama server on another machine).
+* **How it works**:
+  - Enhance `GuardianAgent` to support external LLM providers in addition to local `llama.cpp` supervisors.
+  - Update `GuardianConfig` to leverage lightweight/free tiers of external APIs.
+* **Pros**:
+  - **0 additional VRAM/RAM overhead** on your local machine.
+  - Instantaneous response times and absolute stability.
+* **Cons**:
+  - The Guardian's background audits require an internet connection and an API key.
+
+---
+
+### ⏱️ Option 4: On-Demand Time-Slicing (Model Swapping)
+* **Concept**: Swap models in and out of VRAM dynamically so that only one model is ever loaded at any single millisecond.
+* **How it works**:
+  - The system loads the Guardian, performs safety/maintenance audits, unloads it, then loads the chat model to respond to your prompt.
+* **Pros**:
+  - Allows two different local models on a low-resource GPU without simultaneous VRAM allocation.
+* **Cons**:
+  - **Terrible user experience.** Loading a GGUF model into VRAM takes between 3 to 10 seconds. Swapping models on every single prompt would introduce massive, unacceptable lag. **(Not recommended)**
+
+---
+
+## Open Questions & Operator Feedback Required
+
+> [!IMPORTANT]
+> **Please let us know:**
+> 1. Which of the options above (Option 1: Shared Model/Port, Option 2: CPU-Only Guardian, Option 3: Remote Guardian API) do you prefer?
+> 2. What is your system's hardware configuration (approximate system RAM and GPU VRAM)? This helps us tailor the defaults for you.
