@@ -3535,95 +3535,7 @@ export class DashboardService {
       }
 
       if (classification.tier === 2) {
-        // Enqueue an approval request. ApprovalQueue assigns the id internally;
-        // we snapshot the queue before/after to recover the new id without
-        // changing the queue API. The returned promise resolves true/false
-        // when the operator approves/denies — attach a background handler so
-        // that approved Tier-2 chat prompts automatically continue as an
-        // agentic execution (browser/computer control) once approved.
-        const before = new Set(this.queue.list().map((entry) => entry.id));
-        const approvalPromise = this.queue.request(
-          sessionId,
-          "chat.tier2",
-          { prompt, reason_code: classification.reasonCode, matched_pattern: classification.matchedPattern },
-          120_000,
-        );
-        const after = this.queue.list().map((entry) => entry.id);
-        const newIds = after.filter((id) => !before.has(id));
-
-        // Background handler: when approved, run the agentic executor to
-        // perform the requested work (e.g., browsing/shopping). Fire-and-
-        // forget but emit activity/agentic events for auditing and UI.
-        approvalPromise.then(async (approved) => {
-          try {
-            const approvalId = newIds.length > 0 ? newIds[0] : undefined;
-            this.activityBus.emit({
-              sessionId,
-              layer: "governance",
-              operation: "approval.resolved",
-              status: "succeeded",
-              details: { approvalId, approved, reason_code: classification.reasonCode },
-            });
-
-        if (!approved) return;
-        // Honor runtime flag to allow operators to opt-out of automatic
-        // continuation after approval.
-        if (!Boolean(this.runtimeSettings.autoRunApprovedTier2)) return;
-        if (!this.agenticExecutor) return;
-
-        // Telemetry: increment auto-run counter and record start time
-        try {
-          this.metricsStore?.inc('prism_auto_run_approved_tier2_total');
-        } catch { /* best-effort telemetry */ }
-        const autoRunStart = Date.now();
-
-        const systemPrompt = this.buildAgenticSystemPrompt();
-
-        const agenticResult = await this.agenticExecutor.execute(
-              prompt,
-              [],
-              systemPrompt,
-              async (input, sel) => {
-                const result = await this.llmProviders.generate(input, sel);
-                if (!result) return null;
-                return {
-                  content: result.content,
-                  toolCalls: result.toolCalls,
-                  stopReason: result.stopReason,
-                  thoughtSignature: result.thoughtSignature,
-                };
-              },
-              undefined,
-              (event) => {
-                this.broadcastEvent({
-                  type: "agentic_event",
-                  sessionId,
-                  event: {
-                    type: event.type,
-                    text: event.text,
-                    toolCall: event.toolCall,
-                    toolResult: event.toolResult,
-                    error: event.error,
-                    iteration: event.iteration,
-                  },
-                  timestamp: new Date().toISOString(),
-                });
-              },
-            );
-
-            if (agenticResult.finalContent?.trim()) {
-              this.broadcastEvent({
-                type: "agentic_event",
-                sessionId,
-                event: { type: "done", text: agenticResult.finalContent, iterations: agenticResult.iterations },
-                timestamp: new Date().toISOString(),
-              });
-            }
-          } catch (err) {
-            console.error("[APPROVAL HANDLER] Failed to continue approved request:", err);
-          }
-        }).catch((e) => console.error("[APPROVAL HANDLER] Unexpected error:", e));
-
+        const newIds = this.enqueueApprovalAndAutoRun(sessionId, prompt, classification);
         return this.json(res, 202, {
           tier: 2,
           approval_pending_ids: newIds,
@@ -9649,9 +9561,15 @@ $r | ConvertTo-Json -Depth 4 -Compress
         });
 
         if (!approved) return;
+        if (!Boolean(this.runtimeSettings.autoRunApprovedTier2)) return;
         if (!this.agenticExecutor) return;
 
+        try {
+          this.metricsStore?.inc("prism_auto_run_approved_tier2_total");
+        } catch { /* best-effort telemetry */ }
+
         const systemPrompt = this.buildAgenticSystemPrompt();
+        const autoRunStart = Date.now();
 
         const agenticResult = await this.agenticExecutor.execute(
           prompt,
@@ -9697,10 +9615,9 @@ $r | ConvertTo-Json -Depth 4 -Compress
         // Telemetry: record auto-run duration and structured server log
         try {
           const dur = Date.now() - autoRunStart;
-          this.metricsStore?.observe('prism_auto_run_duration_ms', dur);
-          // Structured log for auditing
+          this.metricsStore?.observe("prism_auto_run_duration_ms", dur);
           console.log(JSON.stringify({
-            event: 'auto_run_completed',
+            event: "auto_run_completed",
             sessionId,
             approvalId: approvalId ?? null,
             durationMs: dur,

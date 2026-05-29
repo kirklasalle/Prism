@@ -1,12 +1,12 @@
 {
-  "title": "Auto-Run Approval Executions",
-  "type": "timeseries",
-  "targets": [
-    {
-      "expr": "prism_auto_run_approved_tier2_total",
-      "legendFormat": "auto_runs_total",
-      "refId": "A"
-    }
-  ],
-  "description": "Counts of auto-run executions triggered after Tier-2 approvals. Use alongside prism_auto_run_duration_ms for latency insights."
+    "title": "Auto-Run Approval Executions",
+    "type": "timeseries",
+    "targets": [
+        {
+            "expr": "prism_auto_run_approved_tier2_total",
+            "legendFormat": "auto_runs_total",
+            "refId": "A"
+        }
+    ],
+    "description": "Counts of auto-run executions triggered after Tier-2 approvals. Use alongside prism_auto_run_duration_ms for latency insights."
 }
