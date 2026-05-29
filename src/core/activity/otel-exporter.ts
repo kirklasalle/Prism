@@ -113,6 +113,7 @@ export class OtelExporter {
         m.registerCounter("prism_governance_hooks_total", "Total governance hook evaluations");
         m.registerCounter("prism_tool_executions_total", "Total tool execution attempts");
         m.registerCounter("prism_agent_lifecycle_total", "Total agent lifecycle transitions");
+        m.registerCounter("prism_auto_run_approved_tier2_total", "Total auto-run executions triggered after Tier-2 approval");
 
         // Histograms (latency in ms)
         m.registerHistogram(
