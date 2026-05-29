@@ -3571,14 +3571,15 @@ export class DashboardService {
         if (!Boolean(this.runtimeSettings.autoRunApprovedTier2)) return;
         if (!this.agenticExecutor) return;
 
-        // Telemetry: increment auto-run counter
+        // Telemetry: increment auto-run counter and record start time
         try {
           this.metricsStore?.inc('prism_auto_run_approved_tier2_total');
         } catch { /* best-effort telemetry */ }
+        const autoRunStart = Date.now();
 
-            const systemPrompt = this.buildAgenticSystemPrompt();
+        const systemPrompt = this.buildAgenticSystemPrompt();
 
-            const agenticResult = await this.agenticExecutor.execute(
+        const agenticResult = await this.agenticExecutor.execute(
               prompt,
               [],
               systemPrompt,
@@ -9692,6 +9693,20 @@ $r | ConvertTo-Json -Depth 4 -Compress
             timestamp: new Date().toISOString(),
           });
         }
+
+        // Telemetry: record auto-run duration and structured server log
+        try {
+          const dur = Date.now() - autoRunStart;
+          this.metricsStore?.observe('prism_auto_run_duration_ms', dur);
+          // Structured log for auditing
+          console.log(JSON.stringify({
+            event: 'auto_run_completed',
+            sessionId,
+            approvalId: approvalId ?? null,
+            durationMs: dur,
+            iterations: agenticResult.iterations ?? null,
+          }));
+        } catch { /* best-effort telemetry/logging */ }
       } catch (err) {
         console.error("[APPROVAL HANDLER] Failed to continue approved request:", err);
       }
