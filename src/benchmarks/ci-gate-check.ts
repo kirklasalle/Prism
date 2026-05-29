@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { workspacePath } from "../core/config/workspace-resolver.js";
 
 interface GateCheck {
     id: string;
@@ -124,7 +125,20 @@ function run(): void {
     };
 
     const summaryPath = path.join(outputDir, "ci-gate-summary.json");
-    fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2), "utf8");
+    const content = JSON.stringify(summary, null, 2);
+    fs.writeFileSync(summaryPath, content, "utf8");
+
+    try {
+        const workspaceTarget = workspacePath("artifacts", "ci-gates", "ci-gate-summary.json");
+        const wsDir = path.dirname(workspaceTarget);
+        if (!fs.existsSync(wsDir)) {
+            fs.mkdirSync(wsDir, { recursive: true });
+        }
+        fs.writeFileSync(workspaceTarget, content, "utf8");
+        console.log(`- Mirrored CI Gate artifact to workspace: ${workspaceTarget}`);
+    } catch (err) {
+        console.warn(`- Failed to mirror CI Gate artifact to workspace: ${(err as Error).message}`);
+    }
 
     if (!passed) {
         const failed = requiredChecks.filter((check) => !check.passed);

@@ -1,0 +1,63 @@
+# Implementation Plan - Fixing Misleading "Maximum Iterations" Error
+
+## Goals
+
+1. **Provide clear error visibility**: When the LLM provider fails to load, fails to start, or returns an empty response, bubble the actual error or `"LLM returned no response"` back to the chat interface instead of the misleading `"I reached the maximum number of tool-calling iterations."` message.
+2. **Propagate GGUF local model loading errors**: When `llama-server` fails to start (e.g. not installed or not in system PATH), propagate the actual slot error message rather than silently returning `null` port assignments.
+
+---
+
+## Technical Analysis & Discovery
+
+1. **The Fallthrough Bug in `AgenticChatExecutor`**:
+   In `src/core/operator/agentic-chat-executor.ts` (lines 139-142), if `generateFn` returns `null` (e.g. LLM returned no response), the loop breaks using `break;`:
+   ```typescript
+   if (!result) {
+       emit({ type: "error", error: "LLM returned no response.", iteration });
+       break;
+   }
+   ```
+   However, after the loop finishes (either naturally or via `break`), it executes the fallthrough logic:
+   ```typescript
+   // Max iterations hit
+   emit({ type: "error", error: `Reached maximum iteration limit (${this.config.maxIterations}).` });
+   emit({ type: "done" });
+   return { 
+       finalContent: finalContent || "I reached the maximum number of tool-calling iterations.", 
+       toolCallsExecuted: totalToolCalls, 
+       iterations: this.config.maxIterations, 
+       events 
+   };
+   ```
+   Since `break` was used, `finalContent` is empty, causing the chat interface to display the misleading `"I reached the maximum number of tool-calling iterations."` string.
+
+2. **The Dynamic GGUF Loading Port Routing Issue**:
+   When PRISM tries to dynamically load a GGUF model in Base Mode via `llama-server` (e.g., `gemma-2-2b-it-Q4_K_M`), if `llama-server` is not installed or crashes during startup, the supervisor marks the model slot as `"error"` and records the failure.
+   However, `llm-provider-manager.ts` simply checks:
+   ```typescript
+   if (!dynamicPort) return null; // Model not fully loaded
+   ```
+   This returns `null` without throwing or bubbling up the actual startup failure reason (e.g. `"Failed to start llama-server"`).
+
+---
+
+## Proposed Changes
+
+### Operator Core
+
+#### [MODIFY] [agentic-chat-executor.ts](file:///d:/Projects/Prism/src/core/operator/agentic-chat-executor.ts)
+- Replace the `break;` statement when `!result` is true with an early return that includes `"LLM returned no response."` or the actual accumulated content.
+
+#### [MODIFY] [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
+- Inspect the supervisor's slot status when `dynamicPort` is missing. If the slot status is `"error"`, throw a detailed `Error` bubbling the actual slot startup failure reason.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `npm run test` or compile and run the `agentic-chat-executor.test.ts` test using:
+  ```powershell
+  npx tsx src/index.ts --test
+  ```
+- Compile the TypeScript changes via `npm run build` and run unit tests.

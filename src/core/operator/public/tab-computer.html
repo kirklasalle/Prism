@@ -221,6 +221,45 @@
     </div>
   </section>
 
+  <!-- PRISM Release Validation Suite (v0.21.0) -->
+  <section id="release-validation-panel" class="rail-section panel" style="grid-column:1/-1;margin-top:16px;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('releaseValidation')"
+      data-tip-id="computer:validation" data-tip-kind="computer">
+      <h3>🧪 PRISM Release Validation Suite</h3>
+      <span id="validation-status-pill" class="muted" style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,0.06);color:var(--muted);">idle</span>
+      <span id="releaseValidation-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="releaseValidation-collapsible" class="collapsible-body">
+      <div class="muted" style="margin-bottom:8px;">
+        Execute strict release gates validation end-to-end. Runs all PRISM unit tests, builds the TypeScript compiler outputs, Qualifications, and business gate checks.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button id="validation-run-button" class="primary-button" onclick="startReleaseValidation()" style="font-size:13px;font-weight:600;">▶ Run Strict Validation</button>
+        <button class="secondary-button" onclick="refreshReleaseValidationStatus()" style="font-size:13px;">🔄 Refresh Status</button>
+      </div>
+      
+      <!-- Gate Grid -->
+      <div style="margin-bottom:12px;">
+        <h4 style="margin:0 0 8px 0;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;">Gate Matrix Status</h4>
+        <div id="validation-gates-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px;">
+          <!-- Hydrated by JS -->
+          <div class="muted" style="grid-column:1/-1;padding:8px;text-align:center;">No validation run data. Click <strong>Run Strict Validation</strong> to begin.</div>
+        </div>
+      </div>
+
+      <!-- Log Console -->
+      <div>
+        <h4 style="margin:0 0 6px 0;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;">Validation Console Logs</h4>
+        <pre id="validation-console-output"
+          style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;max-height:250px;overflow:auto;font-size:11px;font-family:monospace;white-space:pre-wrap;color:var(--text-muted);">Ready — click Run to start gates validation.</pre>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;" class="muted">
+        <span>📁 Artifact:</span>
+        <span id="validation-artifact-path" style="font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:400px;">Not generated yet</span>
+      </div>
+    </div>
+  </section>
+
   <!--
     PTAC Operator Demo (additive — v0.20).
     This section is hydrated by tab-ptac-demo.js. It calls
@@ -238,15 +277,14 @@
       <div class="muted" style="margin-bottom:8px;">
         End-to-end self-driven demonstration. PRISM exercises its own dashboard, real PTY,
         real Docker, and computer-use surfaces — recording every step as a portable HTML
-        slideshow you can replay or share. <a href="/public/docs-ptac-operator-demo.html" target="_blank"
-          rel="noopener">Walkthrough &amp; documentation →</a>
+        slideshow you can replay or share. <a href="#" onclick="setActiveTab('wiki'); setTimeout(() => { if (typeof window.loadWikiDoc === 'function') window.loadWikiDoc('PTAC_OPERATOR_DEMO_GUIDE.md'); }, 150); return false;">Walkthrough &amp; documentation →</a>
       </div>
       <div id="ptac-demo-gates" class="stack" style="font-size:12px;margin-bottom:10px;"></div>
       <div id="ptac-demo-controls" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
         <select id="ptac-demo-suite"
           style="font-size:12px;padding:4px 8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-          <option value="demo">demo (default — curated showcase)</option>
-          <option value="fast">fast (~2 min — smoke)</option>
+          <option value="fast" selected>baseline (default — ~2 min smoke)</option>
+          <option value="demo">demo (curated showcase)</option>
           <option value="full">full (~10 min — every scenario)</option>
         </select>
         <button id="ptac-demo-run-button" class="primary-button" onclick="startPtacDemo()" style="font-size:13px;"

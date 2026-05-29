@@ -1,0 +1,108 @@
+# Implementation Plan — PRISM Dashboard Monolith Decomposition (Phase F5)
+
+## Executive Summary
+
+The PRISM SOTA Operator Dashboard currently relies on [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts) as a central hub. Over successive development iterations, this file has evolved into a colossal vertical monolith (~528 KiB, over 9,800 lines of code) incorporating:
+1.  **Low-level Node HTTP/HTTPS servers** and WebSocket routing.
+2.  **Telemetry algorithms** (percentile histogram calculation, self-healing diagnostic triggers, correlation tracking).
+3.  **Active swarms & agents orchestration** loops.
+4.  **Session packages compilation** and SQLite exporter frameworks.
+5.  **Inline HTML serving and static assets templates**.
+
+This monolith concentrates system risks: an error in a telemetry plotting endpoint can crash the master WebSocket connection, destabilizing ongoing agent runs.
+
+This plan details the **Phase F5 Decomposition Solution**, breaking down the monolith into a lightweight controller shell and cleanly decoupled, domain-specific services and sub-routers, keeping all generated modules **strictly under the 120 KiB threshold**.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> Because the dashboard serves as the central runtime coordinator, any modularization must preserve:
+> 1.  **WebSocket Handshakes**: Ongoing terminal sessions, framebuffer streams, and console logs must experience zero interruption.
+> 2.  **API Version Parity**: Public/internal endpoints served at `/api/v1/*` must keep exact parameter shapes to prevent breaking the operator TUI or the upcoming Python SDK.
+> 3.  **Core Performance**: Latencies of the decoupled policy and telemetry paths must remain below strict CI thresholds ($\le$ 50ms and $\le$ 30ms, respectively).
+
+---
+
+## Proposed Changes
+
+We will restructure the operator module by introducing a clean **Services & Routers** architectural boundary. The code will be grouped logically into decoupled subsystems.
+
+```mermaid
+graph TD
+    Dashboard[dashboard-service.ts: HTTP/WS Controller Shell] --> Router[Router Pipeline]
+    Router --> ChatRouter[routes/chat.ts]
+    Router --> TelemetryRouter[routes/telemetry.ts]
+    Router --> PackageRouter[routes/packages.ts]
+    Router --> SystemRouter[routes/system.ts]
+
+    ChatRouter --> ChatService[services/chat-service.ts]
+    TelemetryRouter --> TelemetryService[services/telemetry-service.ts]
+    PackageRouter --> PackageService[services/package-service.ts]
+```
+
+### Component: Core Business Services (`/src/core/operator/services/`)
+We will extract high-computational algorithms and state storage definitions from the monolith into independent, unit-testable services.
+
+#### [NEW] [telemetry-service.ts](file:///d:/Projects/Prism/src/core/operator/services/telemetry-service.ts)
+*   **Role**: Computes windowed telemetry, trace correlation indexing, and self-healing recommendation rules.
+*   *Size Target*: ~45 KiB.
+
+#### [NEW] [slo-service.ts](file:///d:/Projects/Prism/src/core/operator/services/slo-service.ts)
+*   **Role**: Extracts linear interpolation percentile logic (`histogramPercentile()`) and matches Prometheus metric observations against `SLO_TARGETS`.
+*   *Size Target*: ~25 KiB.
+
+#### [NEW] [package-service.ts](file:///d:/Projects/Prism/src/core/operator/services/package-service.ts)
+*   **Role**: Compiles session package envelopes, aggregates historic timeline transition logs, and coordinates trace export packaging.
+*   *Size Target*: ~55 KiB.
+
+#### [NEW] [chat-service.ts](file:///d:/Projects/Prism/src/core/operator/services/chat-service.ts)
+*   **Role**: Standardizes completions triggers, model provider registrations, key slot assignments, and executor run environments.
+*   *Size Target*: ~60 KiB.
+
+---
+
+### Component: API Route Handlers (`/src/core/operator/routes/`)
+We will separate route matching and request parsing logic into modular routers sub-delegated by Node's URL dispatcher.
+
+#### [NEW] [telemetry-router.ts](file:///d:/Projects/Prism/src/core/operator/routes/telemetry-router.ts)
+*   **Role**: Registers REST endpoints for `GET /api/v1/telemetry/summary`, `GET /api/v1/telemetry/slo`, and trace diagnostics.
+*   *Size Target*: ~30 KiB.
+
+#### [NEW] [chat-router.ts](file:///d:/Projects/Prism/src/core/operator/routes/chat-router.ts)
+*   **Role**: Registers REST endpoints for sessions history, completion requests, and agent executions.
+*   *Size Target*: ~40 KiB.
+
+#### [NEW] [packages-router.ts](file:///d:/Projects/Prism/src/core/operator/routes/packages-router.ts)
+*   **Role**: Handles package CRUD, state timeline logs, and download exports.
+*   *Size Target*: ~35 KiB.
+
+#### [NEW] [system-router.ts](file:///d:/Projects/Prism/src/core/operator/routes/system-router.ts)
+*   **Role**: Manages default landing templates (dashboard, wizard), health probes, settings management, and physician doctors endpoints.
+*   *Size Target*: ~30 KiB.
+
+---
+
+### Component: Core Controller Shell
+#### [MODIFY] [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts)
+*   **Role**: Shrunk from 528 KiB to ~60 KiB. Acts exclusively as the lightweight server shell. It initializes the `http/https` listener, wires up the WebSocket server for real-time terminal and log feeds, applies the `AuthGate` and `RateLimiter` middlewares, and forwards all REST traffic to the new `Router` pipeline.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+To confirm that this decomposition introduces zero functional regressions, we will execute our master validation suite:
+```powershell
+# 1. Rebuild all TS modules
+npm run build
+
+# 2. Execute strict release validation gates
+.\release_strict_ready.bat
+```
+*   **Acceptance Criteria**: The strict script must return `Exit Code: 0` and all 87 tests must report `Passed: 87`.
+
+### Manual Verification
+*   **TUI Check**: Boot the terminal interface (`start_tui.bat`) and verify it connects to the WebSocket stream, displaying real-time agent lists without failures.
+*   **Dashboard Check**: Launch the operator cockpit in your local browser and verify all metrics tabs (Logs, Telemetry, Settings, Scheduler) populate cleanly.

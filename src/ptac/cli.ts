@@ -142,6 +142,70 @@ async function main(): Promise<number> {
         return 3;
     }
 
+    // Preflight connectivity check and optional auto-start
+    let isReachable = false;
+    try {
+        const res = await globalThis.fetch(`${args.dashboard}/api/health`);
+        if (res.ok) {
+            isReachable = true;
+        }
+    } catch {
+        // Not reachable
+    }
+
+    let childServerProcess: any = null;
+    if (!isReachable) {
+        console.log(`[ptac] Target dashboard at ${args.dashboard} is not reachable.`);
+        console.log(`[ptac] Attempting to auto-start local dashboard server...`);
+
+        try {
+            const { spawn } = await import("node:child_process");
+            const env = {
+                ...process.env,
+                PRISM_MODE: "server",
+                PRISM_DASHBOARD_PORT: "7070",
+                PRISM_AUTH_DISABLED: "true",
+            };
+            childServerProcess = spawn(process.execPath, ["dist/src/index.js"], {
+                env,
+                stdio: "ignore",
+                detached: false,
+            });
+
+            console.log(`[ptac] Waiting for dashboard server to bind to port...`);
+            for (let i = 0; i < 120; i++) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                try {
+                    const res = await globalThis.fetch(`${args.dashboard}/api/health`);
+                    if (res.ok) {
+                        isReachable = true;
+                        console.log(`[ptac] Auto-started server successfully bound to port.`);
+                        break;
+                    }
+                } catch {
+                    // Continue polling
+                }
+            }
+        } catch (err) {
+            console.warn(`[ptac] Failed to spawn auto-start process: ${(err as Error).message}`);
+        }
+
+        if (!isReachable) {
+            console.error(
+                `\n[ptac] [ERROR] Target dashboard server at ${args.dashboard} is not running and auto-start timed out.\n` +
+                `Please ensure the server is started before running PTAC:\n` +
+                `  On Windows:  start_web.bat\n` +
+                `  On Unix:     ./start_web.sh\n`
+            );
+            if (childServerProcess) {
+                try {
+                    childServerProcess.kill();
+                } catch {}
+            }
+            return 1;
+        }
+    }
+
     console.log(
         `[ptac] starting profile=${args.profile} suite=${args.suite} ` +
         `scenarios=${scenarios.length} dashboard=${args.dashboard}`,
@@ -161,12 +225,25 @@ async function main(): Promise<number> {
         recordVideoFps: args.recordVideoFps,
     };
 
-    const orchestrator = new PtacOrchestrator();
-    const result = await orchestrator.run(request, scenarios);
+    let exitCode = 1;
+    try {
+        const orchestrator = new PtacOrchestrator();
+        const result = await orchestrator.run(request, scenarios);
 
-    console.log(`[ptac] run ${result.runId}: ${result.status.toUpperCase()}`);
-    console.log(`[ptac] report: ${result.reportHtmlPath}`);
-    return result.status === "passed" ? 0 : 1;
+        console.log(`[ptac] run ${result.runId}: ${result.status.toUpperCase()}`);
+        console.log(`[ptac] report: ${result.reportHtmlPath}`);
+        exitCode = result.status === "passed" ? 0 : 1;
+    } finally {
+        if (childServerProcess) {
+            console.log(`[ptac] Stopping auto-started local dashboard server...`);
+            try {
+                childServerProcess.kill();
+            } catch (err) {
+                console.warn(`[ptac] Failed to stop auto-started server process: ${(err as Error).message}`);
+            }
+        }
+    }
+    return exitCode;
 }
 
 main().then(

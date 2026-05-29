@@ -1,11 +1,22 @@
 // PRISM Operator Dashboard: Wiki Tab Frontend Controller
 (function () {
   let documents = []; // Loaded documents registry
+  let currentSearchQuery = '';
+  let collapsedCategories = {};
+  try {
+    collapsedCategories = JSON.parse(localStorage.getItem('wiki_collapsed_categories') || '{}');
+  } catch (e) {
+    collapsedCategories = {};
+  }
 
   // Expose methods globally for HTML bindings
   window.refreshWikiList = refreshWikiList;
   window.filterWikiDocs = filterWikiDocs;
+  window.handleWikiFilterSortChange = handleWikiFilterSortChange;
   window.loadWikiDoc = loadWikiDoc;
+  window.expandAllWikiCategories = expandAllWikiCategories;
+  window.collapseAllWikiCategories = collapseAllWikiCategories;
+  window.toggleWikiSidebarDrawer = toggleWikiSidebarDrawer;
 
   // Initialize on tab click / dashboard bootstrap
   document.addEventListener('DOMContentLoaded', () => {
@@ -14,6 +25,12 @@
     if (activeTabButton && activeTabButton.dataset.tabId === 'wiki') {
       refreshWikiList();
     }
+    
+    // Wire premium draggable divider resizing
+    initSidebarResizer();
+
+    // Attach premium keyboard navigation traversal listener
+    document.addEventListener('keydown', handleWikiKeyboardNav);
   });
 
   // Also hook into tab switching in dashboard-app
@@ -23,6 +40,7 @@
       const btn = e.target.closest('.tab-button');
       if (btn && btn.dataset.tabId === 'wiki') {
         refreshWikiList();
+        setTimeout(initSidebarResizer, 50); // Ensure elements are mounted
       }
     });
   }
@@ -44,7 +62,7 @@
       
       const data = await response.json();
       documents = data.documents || [];
-      renderSidebarList(documents);
+      applyFiltersAndSort();
     } catch (err) {
       console.error('[WikiTab] Failed to fetch documents list:', err);
       if (listContainer) {
@@ -54,50 +72,267 @@
   }
 
   /**
-   * Renders the sidebar document buttons
+   * Triggers sorting and filtering update when dropdown options change
    */
-  function renderSidebarList(list) {
+  function handleWikiFilterSortChange() {
+    applyFiltersAndSort();
+  }
+
+  /**
+   * Updates currentSearchQuery and applies filters
+   */
+  function filterWikiDocs(searchQuery) {
+    currentSearchQuery = searchQuery;
+    applyFiltersAndSort();
+  }
+
+  /**
+   * Applies active search, sorting, and type filters, then categorizes the results
+   */
+  function applyFiltersAndSort() {
+    const sortVal = document.getElementById('wiki-sort')?.value || 'title-asc';
+    const filterVal = document.getElementById('wiki-filter-type')?.value || 'all';
+    
+    // 1. Search query filter
+    let filtered = documents;
+    if (currentSearchQuery.trim()) {
+      const q = currentSearchQuery.toLowerCase().trim();
+      filtered = documents.filter(doc => 
+        doc.title.toLowerCase().includes(q) || 
+        doc.filename.toLowerCase().includes(q)
+      );
+    }
+
+    // 2. Separate into Guides & FAQ (Pinned) and Remaining
+    const pinned = [];
+    const remaining = [];
+
+    filtered.forEach(doc => {
+      const isGuideOrFaq = doc.filename.toLowerCase().includes('guide') || 
+                           doc.filename.toLowerCase() === 'prism_faq.md' ||
+                           doc.title.toLowerCase().includes('guide') ||
+                           doc.title.toLowerCase().includes('faq');
+      if (isGuideOrFaq) {
+        pinned.push(doc);
+      } else {
+        remaining.push(doc);
+      }
+    });
+
+    // 3. Sort Pinned items by title alphabetically (A-Z)
+    pinned.sort((a, b) => a.title.localeCompare(b.title));
+
+    // 4. Sort Remaining items based on user selection
+    if (sortVal === 'title-asc') {
+      remaining.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortVal === 'title-desc') {
+      remaining.sort((a, b) => b.title.localeCompare(a.title));
+    } else if (sortVal === 'date-desc') {
+      remaining.sort((a, b) => b.mtime - a.mtime);
+    } else if (sortVal === 'date-asc') {
+      remaining.sort((a, b) => a.mtime - b.mtime);
+    }
+
+    // 5. Group Remaining items by Type
+    const categorized = {
+      runbook: [],
+      policy: [],
+      spec: [],
+      plan: [],
+      other: []
+    };
+
+    remaining.forEach(doc => {
+      const filename = doc.filename.toLowerCase();
+      const title = doc.title.toLowerCase();
+
+      if (filename.includes('runbook')) {
+        categorized.runbook.push(doc);
+      } else if (filename.includes('policy')) {
+        categorized.policy.push(doc);
+      } else if (filename.includes('spec') || filename.includes('design') || filename.includes('schema')) {
+        categorized.spec.push(doc);
+      } else if (filename.includes('plan') || filename.includes('manifest') || filename.includes('roadmap')) {
+        categorized.plan.push(doc);
+      } else {
+        categorized.other.push(doc);
+      }
+    });
+
+    // 6. Render sidebar list container
     const listContainer = document.getElementById('wiki-sidebar-list');
     if (!listContainer) return;
 
-    if (list.length === 0) {
+    if (pinned.length === 0 && remaining.length === 0) {
       listContainer.innerHTML = '<div class="muted" style="font-size: 11px; text-align: center; padding-top: 16px;">No articles found.</div>';
       return;
     }
 
     listContainer.innerHTML = '';
-    list.forEach(doc => {
+
+    // Always render Pinned section first if there are matching items
+    if (pinned.length > 0) {
+      renderCategorySection(listContainer, 'pinned', '⭐ Guides & FAQ', pinned);
+    }
+
+    // Render remaining categorized sections (respecting type filters)
+    const categoryConfigs = [
+      { key: 'runbook', label: '🚨 Runbooks & SRE', data: categorized.runbook },
+      { key: 'policy', label: '📋 System Policies', data: categorized.policy },
+      { key: 'spec', label: '⚙️ Specs & Designs', data: categorized.spec },
+      { key: 'plan', label: '📅 Plans & Roadmaps', data: categorized.plan },
+      { key: 'other', label: '📄 Reference & Others', data: categorized.other }
+    ];
+
+    categoryConfigs.forEach(cfg => {
+      if (filterVal === 'all' || filterVal === cfg.key) {
+        if (cfg.data.length > 0) {
+          renderCategorySection(listContainer, cfg.key, cfg.label, cfg.data);
+        }
+      }
+    });
+  }
+
+  /**
+   * Helper to render a collapsible tree section
+   */
+  function renderCategorySection(container, key, title, items) {
+    const sectionWrapper = document.createElement('div');
+    sectionWrapper.style.display = 'flex';
+    sectionWrapper.style.flexDirection = 'column';
+    sectionWrapper.style.marginBottom = '6px';
+    sectionWrapper.style.width = '100%';
+    sectionWrapper.style.flex = 'none';
+    sectionWrapper.style.height = 'auto';
+
+    // Detect search mode auto-expansion (ignore collapse state when searching)
+    const isSearching = currentSearchQuery.trim().length > 0;
+    const isCollapsed = !isSearching && collapsedCategories[key];
+    // Clickable header panel
+    const header = document.createElement('div');
+    header.className = 'wiki-tree-row';
+    header.tabIndex = 0;
+    header.dataset.type = 'category';
+    header.dataset.key = key;
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.justifyContent = 'space-between';
+    header.style.cursor = 'pointer';
+    header.style.padding = '6px 8px';
+    header.style.borderRadius = '6px';
+    header.style.userSelect = 'none';
+    header.style.transition = 'background 0.2s';
+    header.style.background = 'transparent';
+
+    header.onmouseenter = () => {
+      header.style.background = 'rgba(255, 255, 255, 0.05)';
+    };
+    header.onmouseleave = () => {
+      header.style.background = 'transparent';
+    };
+
+    // Label with matching article count
+    const labelContainer = document.createElement('div');
+    labelContainer.style.display = 'flex';
+    labelContainer.style.alignItems = 'center';
+    labelContainer.style.gap = '6px';
+
+    const titleEl = document.createElement('span');
+    titleEl.style.fontSize = '9.5px';
+    titleEl.style.fontWeight = '800';
+    titleEl.style.textTransform = 'uppercase';
+    titleEl.style.color = 'var(--accent)';
+    titleEl.style.letterSpacing = '0.5px';
+    titleEl.textContent = title;
+
+    const countEl = document.createElement('span');
+    countEl.style.fontSize = '9px';
+    countEl.style.color = 'var(--text-muted)';
+    countEl.style.opacity = '0.65';
+    countEl.textContent = `(${items.length})`;
+
+    labelContainer.appendChild(titleEl);
+    labelContainer.appendChild(countEl);
+
+    // Chevron rotation
+    const chevron = document.createElement('span');
+    chevron.style.fontSize = '8px';
+    chevron.style.color = 'var(--text-muted)';
+    chevron.style.transition = 'transform 0.2s';
+    chevron.textContent = '▼';
+    if (isCollapsed) {
+      chevron.style.transform = 'rotate(-90deg)';
+    }
+
+    header.appendChild(labelContainer);
+    header.appendChild(chevron);
+    sectionWrapper.appendChild(header);
+
+    // Items wrapper
+    const itemsWrapper = document.createElement('div');
+    itemsWrapper.style.display = isCollapsed ? 'none' : 'flex';
+    itemsWrapper.style.flexDirection = 'column';
+    itemsWrapper.style.gap = '2px';
+    itemsWrapper.style.paddingLeft = '8px';
+    itemsWrapper.style.marginTop = '4px';
+    itemsWrapper.style.flex = 'none';
+    itemsWrapper.style.height = 'auto';
+
+    // Click handler to toggle section smoothly
+    header.onclick = () => {
+      if (isSearching) return; // Search forces all open
+      const currentlyCollapsed = collapsedCategories[key];
+      if (currentlyCollapsed) {
+        delete collapsedCategories[key];
+        chevron.style.transform = 'rotate(0deg)';
+        itemsWrapper.style.display = 'flex';
+      } else {
+        collapsedCategories[key] = true;
+        chevron.style.transform = 'rotate(-90deg)';
+        itemsWrapper.style.display = 'none';
+      }
+      localStorage.setItem('wiki_collapsed_categories', JSON.stringify(collapsedCategories));
+    };
+
+    // Render tree node buttons
+    items.forEach(doc => {
       const btn = document.createElement('button');
-      btn.className = 'tab-button';
+      btn.className = 'tab-button wiki-tree-row';
+      btn.tabIndex = 0;
+      btn.dataset.type = 'document';
+      btn.dataset.filename = doc.filename;
       btn.style.width = '100%';
       btn.style.textAlign = 'left';
-      btn.style.padding = '8px 10px';
-      btn.style.fontSize = '12px';
+      btn.style.alignItems = 'flex-start'; // Perfect left-justification
+      btn.style.padding = '6px 8px';
+      btn.style.fontSize = '11.5px';
       btn.style.border = 'none';
       btn.style.background = 'transparent';
       btn.style.borderRadius = '4px';
       btn.style.display = 'flex';
       btn.style.flexDirection = 'column';
-      btn.style.gap = '2px';
+      btn.style.gap = '1px';
       btn.style.cursor = 'pointer';
       btn.style.transition = 'background 0.2s';
+      btn.style.marginBottom = '2px';
+      btn.style.flex = 'none';
+      btn.style.height = 'auto';
+      btn.style.minHeight = 'unset';
       
-      // Highlight Micro Support Desk files specially
       const isMicroDesk = doc.filename.toLowerCase().includes('micro-support') || doc.filename.toLowerCase().includes('support-desk');
       const emoji = isMicroDesk ? '🎧' : '📄';
 
       btn.innerHTML = `
-        <div style="font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px;">
+        <div style="font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:5px; text-align:left; width:100%;">
           <span>${emoji}</span> ${doc.title}
         </div>
-        <div class="muted" style="font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        <div class="muted" style="font-size:9.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-left:16px; text-align:left; width:100%;">
           ${doc.filename}
         </div>
       `;
 
       btn.onclick = () => {
-        // Toggle active styling
-        const activeBtn = listContainer.querySelector('.tab-button-active');
+        const activeBtn = container.querySelector('.tab-button-active');
         if (activeBtn) {
           activeBtn.classList.remove('tab-button-active');
           activeBtn.style.background = 'transparent';
@@ -108,24 +343,32 @@
         loadWikiDoc(doc.filename);
       };
 
-      listContainer.appendChild(btn);
+      itemsWrapper.appendChild(btn);
     });
+
+    sectionWrapper.appendChild(itemsWrapper);
+    container.appendChild(sectionWrapper);
   }
 
   /**
-   * Filters the document list on sidebar search
+   * Expands all collapsible categories
    */
-  function filterWikiDocs(searchQuery) {
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) {
-      renderSidebarList(documents);
-      return;
-    }
-    const filtered = documents.filter(doc => 
-      doc.title.toLowerCase().includes(query) || 
-      doc.filename.toLowerCase().includes(query)
-    );
-    renderSidebarList(filtered);
+  function expandAllWikiCategories() {
+    collapsedCategories = {};
+    localStorage.setItem('wiki_collapsed_categories', JSON.stringify(collapsedCategories));
+    applyFiltersAndSort();
+  }
+
+  /**
+   * Collapses all collapsible categories
+   */
+  function collapseAllWikiCategories() {
+    const keys = ['pinned', 'runbook', 'policy', 'spec', 'plan', 'other'];
+    keys.forEach(k => {
+      collapsedCategories[k] = true;
+    });
+    localStorage.setItem('wiki_collapsed_categories', JSON.stringify(collapsedCategories));
+    applyFiltersAndSort();
   }
 
   /**
@@ -377,6 +620,149 @@
         <div>${parseInlineStyling(cleanContent)}</div>
       </div>
     `;
+  }
+
+  /**
+   * Toggles the overlay sidebar drawer state on mobile viewports
+   */
+  function toggleWikiSidebarDrawer() {
+    const sidebar = document.querySelector('.wiki-sidebar-drawer');
+    sidebar?.classList.toggle('drawer-open');
+  }
+
+  /**
+   * Advanced keyboard navigation listener supporting tree traversal, expanding and collapsing
+   */
+  function handleWikiKeyboardNav(e) {
+    const activeTabButton = document.querySelector('.tab-button.active');
+    if (!activeTabButton || activeTabButton.dataset.tabId !== 'wiki') return;
+
+    const isSearchFocused = document.activeElement === document.getElementById('wiki-search');
+    
+    if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
+      // Find all visible and focusable tree rows
+      const rows = Array.from(document.querySelectorAll('.wiki-tree-row')).filter(el => {
+        // If it's a document inside a collapsed category itemsWrapper, ignore
+        const parentItemsWrapper = el.parentElement;
+        if (parentItemsWrapper && parentItemsWrapper.style.display === 'none') {
+          return false;
+        }
+        return el.offsetWidth > 0 && el.offsetHeight > 0;
+      });
+
+      if (rows.length === 0) return;
+
+      let currentIndex = rows.indexOf(document.activeElement);
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % rows.length;
+        rows[nextIndex].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevIndex = currentIndex <= 0 ? rows.length - 1 : currentIndex - 1;
+        rows[prevIndex].focus();
+      } else if (e.key === 'ArrowLeft') {
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.dataset.type === 'category') {
+          e.preventDefault();
+          if (!collapsedCategories[activeEl.dataset.key]) {
+            activeEl.click();
+          }
+        }
+      } else if (e.key === 'ArrowRight') {
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.dataset.type === 'category') {
+          e.preventDefault();
+          if (collapsedCategories[activeEl.dataset.key]) {
+            activeEl.click();
+          }
+        }
+      } else if (e.key === 'Enter') {
+        const activeEl = document.activeElement;
+        if (activeEl && !isSearchFocused) {
+          e.preventDefault();
+          activeEl.click();
+        }
+      }
+    }
+  }
+
+  // Dismiss overlay drawer when clicking outside it
+  document.addEventListener('click', (e) => {
+    const sidebar = document.querySelector('.wiki-sidebar-drawer');
+    const toggleBtn = document.getElementById('wiki-toggle-sidebar');
+    if (sidebar && sidebar.classList.contains('drawer-open')) {
+      if (!sidebar.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) {
+        sidebar.classList.remove('drawer-open');
+      }
+    }
+  });
+
+  /**
+   * Premium mouse draggable divider logic to resize sidebar
+   */
+  function initSidebarResizer() {
+    const resizer = document.getElementById('wiki-sidebar-resizer');
+    const sidebar = document.querySelector('.wiki-sidebar-drawer');
+    const container = document.querySelector('.wiki-container');
+    if (!resizer || !sidebar || !container) return;
+
+    // Prevent duplicate binding
+    if (resizer.dataset.bound === 'true') {
+      // Restore layout width if dynamically initialized
+      const savedWidth = localStorage.getItem('wiki_sidebar_width');
+      if (savedWidth) {
+        sidebar.style.width = savedWidth;
+        sidebar.style.flexBasis = savedWidth;
+      }
+      return;
+    }
+    resizer.dataset.bound = 'true';
+
+    let isResizing = false;
+
+    resizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isResizing = true;
+      resizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none'; // prevent text selection
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      
+      const containerRect = container.getBoundingClientRect();
+      // Calculate mouse position relative to container
+      let newWidth = e.clientX - containerRect.left;
+      
+      // Enforce robust boundaries (200px min, 600px max)
+      if (newWidth < 200) newWidth = 200;
+      if (newWidth > 600) newWidth = 600;
+      
+      sidebar.style.width = `${newWidth}px`;
+      sidebar.style.flexBasis = `${newWidth}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        resizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        
+        // Save preferred width dynamically
+        localStorage.setItem('wiki_sidebar_width', sidebar.style.width);
+      }
+    });
+    
+    // Restore preferred width from localStorage
+    const savedWidth = localStorage.getItem('wiki_sidebar_width');
+    if (savedWidth) {
+      sidebar.style.width = savedWidth;
+      sidebar.style.flexBasis = savedWidth;
+    }
   }
 
   /**

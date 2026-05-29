@@ -74,7 +74,7 @@ const TIER3_PATTERNS: ReadonlyArray<{ readonly re: RegExp; readonly label: strin
 const TIER2_PATTERNS: ReadonlyArray<{ readonly re: RegExp; readonly label: string }> = [
     { re: /\bsend\s+(an?\s+)?email\b/i, label: "send email" },
     { re: /\bemail\s+\S+@\S+/i, label: "email <addr>" },
-    { re: /\b(create|write|save)\s+(a\s+)?(new\s+)?(file|document|note)\b/i, label: "create/write file" },
+    { re: /\b(create|write|save)\s+(?:[\w-]+\s+){0,3}(file|document|note)\b/i, label: "create/write file" },
     { re: /\b(delete|remove)\s+(the\s+)?(file|document|folder|directory)\b/i, label: "delete file/folder" },
     { re: /\b(install|uninstall)\s+\S+/i, label: "install/uninstall" },
     { re: /\b(deploy|publish|push|commit)\s+/i, label: "deploy/publish/push/commit" },

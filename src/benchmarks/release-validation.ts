@@ -138,7 +138,7 @@ async function main(): Promise<void> {
     const governancePathReportPath = latestReleaseCandidate
         ? `${latestReleaseCandidate}/governance-path-report.md`
         : undefined;
-    const runbookPath = "PRODUCTION_RELEASE_RUNBOOK.md";
+    const runbookPath = "docs/PRODUCTION_RELEASE_RUNBOOK.md";
 
     const commands = [
         "node dist/tests/index.js",

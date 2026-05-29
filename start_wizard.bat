@@ -25,6 +25,7 @@ if not exist "node_modules" (
 )
 echo [WIZARD] Starting CLI Setup Wizard...
 npx tsx src/cli/setup-wizard.ts %2 %3 %4 %5 %6 %7 %8 %9
+pause
 exit /b %ERRORLEVEL%
 
 :browser_mode
@@ -76,6 +77,7 @@ if %ERRORLEVEL% equ 0 (
   echo [OK] PRISM server already running on port %PRISM_DASHBOARD_PORT%.
   echo [WIZARD] Launching Setup Wizard...
   start "" "http://localhost:%PRISM_DASHBOARD_PORT%/setup?rerun=true"
+  pause
   goto :eof
 )
 
@@ -107,6 +109,7 @@ goto :wait_loop
 echo [WIZARD] Launching Setup Wizard at http://localhost:%PRISM_DASHBOARD_PORT%/setup
 start "" "http://localhost:%PRISM_DASHBOARD_PORT%/setup?rerun=true"
 
+pause
 goto :eof
 
 :fail

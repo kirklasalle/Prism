@@ -67,7 +67,7 @@ function renderHardwareSwarmPanel() {
   }
 
   container.innerHTML = state.hardwareSwarm.map(slot => {
-    const isOccupied = slot.model !== null;
+    const isOccupied = slot.modelAlias !== null;
     const isLoading = slot.status === 'loading';
     const isError = slot.status === 'error';
     const isReady = slot.status === 'ready';
@@ -99,7 +99,7 @@ function renderHardwareSwarmPanel() {
       <div class="action-card" style="display:flex;flex-direction:column;gap:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;">
-            ${escapeHtml(slot.slotId)}
+            Slot ${escapeHtml(String(slot.id))}
             ${statusHtml}
           </div>
           <div style="font-family:monospace;font-size:12px;color:var(--muted);">
@@ -108,20 +108,21 @@ function renderHardwareSwarmPanel() {
         </div>
         ${isOccupied ? `
           <div style="font-size:13px;color:var(--text);margin-top:4px;word-break:break-all;">
-            <strong>Model:</strong> ${escapeHtml(slot.model)}
+            <strong>Model:</strong> ${escapeHtml(slot.modelAlias)}
           </div>
           ${progressHtml}
           ${memoryHtml}
+          ${slot.error ? `<div style="font-size:11px;color:#ff8787;margin-top:4px;word-break:break-all;background:rgba(220,53,69,0.1);padding:6px;border-radius:4px;border:1px solid rgba(220,53,69,0.2);">Error: ${escapeHtml(slot.error)}</div>` : ''}
           <div style="display:flex;gap:8px;margin-top:10px;">
-            <button class="danger-button" style="font-size:12px;padding:6px 12px;flex:1;" onclick="unloadModelSlot('${escapeHtml(slot.slotId)}')">Unload Process</button>
+            <button class="danger-button" style="font-size:12px;padding:6px 12px;flex:1;" onclick="unloadModelSlot('${escapeHtml(String(slot.id))}')">Unload Process</button>
           </div>
         ` : `
           <div style="font-size:12px;color:var(--muted);margin-top:4px;">
             Slot available. Awaiting workload.
           </div>
           <div style="display:flex;gap:8px;margin-top:10px;">
-            <input type="text" id="hardware-load-input-${escapeHtml(slot.slotId)}" placeholder="Model repository/path..." style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:rgba(0,0,0,0.2);color:var(--text);font-size:12px;" onkeydown="if(event.key==='Enter') loadModelToSlot('${escapeHtml(slot.slotId)}')">
-            <button class="primary-button" style="font-size:12px;padding:6px 12px;" onclick="loadModelToSlot('${escapeHtml(slot.slotId)}')">Load Model</button>
+            <input type="text" id="hardware-load-input-${escapeHtml(String(slot.id))}" placeholder="Model repository/path..." style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:rgba(0,0,0,0.2);color:var(--text);font-size:12px;" onkeydown="if(event.key==='Enter') loadModelToSlot('${escapeHtml(String(slot.id))}')">
+            <button class="primary-button" style="font-size:12px;padding:6px 12px;" onclick="loadModelToSlot('${escapeHtml(String(slot.id))}')">Load Model</button>
           </div>
         `}
       </div>

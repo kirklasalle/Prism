@@ -1,22 +1,97 @@
-<div style="display: grid; grid-template-columns: 280px 1fr; gap: 16px; height: calc(100vh - 120px); align-items: stretch; overflow: hidden; margin-top: 10px;">
+<style>
+  /* Premium visual styling for interactive tree rows */
+  .wiki-tree-row:focus-visible {
+    outline: 2px solid var(--accent) !important;
+    outline-offset: -1px;
+    background: rgba(105, 210, 255, 0.08) !important;
+  }
+  
+  /* Drag Resizer Hover & Glow Effects */
+  #wiki-sidebar-resizer:hover,
+  #wiki-sidebar-resizer.resizing {
+    background: rgba(105, 210, 255, 0.08) !important;
+  }
+  #wiki-sidebar-resizer:hover > div,
+  #wiki-sidebar-resizer.resizing > div {
+    background: var(--accent) !important;
+    opacity: 1 !important;
+    height: 60px !important;
+  }
+  
+  /* Responsive viewport drawer rules */
+  @media (max-width: 900px) {
+    #wiki-sidebar-resizer {
+      display: none !important;
+    }
+    .wiki-sidebar-drawer {
+      position: absolute !important;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 290px !important;
+      z-index: 1000;
+      background: #0b1329 !important; /* solid panel backdrop */
+      box-shadow: 6px 0 28px rgba(0, 0, 0, 0.65);
+      border-right: 1px solid var(--border) !important;
+      transform: translateX(-105%);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .wiki-sidebar-drawer.drawer-open {
+      transform: translateX(0) !important;
+    }
+    .wiki-sidebar-toggle-btn {
+      display: inline-flex !important;
+    }
+  }
+</style>
+
+<div class="wiki-container" style="display: flex; gap: 0; height: calc(100vh - 120px); align-items: stretch; overflow: hidden; margin-top: 10px; position: relative;">
   <!-- Sidebar Panel -->
-  <aside class="panel stack" style="padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: rgba(30, 41, 59, 0.25); border-right: 1px solid var(--border);">
-    <div style="font-weight: 700; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-      <span>📚</span> Prism Wiki Index
+  <aside class="panel wiki-sidebar-drawer" style="padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; justify-content: flex-start !important; background: rgba(30, 41, 59, 0.25); border-right: 1px solid var(--border); width: 280px; min-width: 200px; max-width: 600px; flex-shrink: 0;">
+    <div style="font-weight: 700; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+      <span style="display: flex; align-items: center; gap: 6px;">📚 Prism Wiki Index</span>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button onclick="expandAllWikiCategories()" style="background: none; border: none; color: var(--text-muted); font-size: 10px; cursor: pointer; padding: 2px 4px; opacity: 0.7; transition: opacity 0.2s;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Expand All">📂</button>
+        <button onclick="collapseAllWikiCategories()" style="background: none; border: none; color: var(--text-muted); font-size: 10px; cursor: pointer; padding: 2px 4px; opacity: 0.7; transition: opacity 0.2s;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Collapse All">📁</button>
+      </div>
     </div>
     <input id="wiki-search" type="text" placeholder="Search wiki & docs..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px;" oninput="filterWikiDocs(this.value)">
+    <div style="display: flex; gap: 6px; align-items: center; width: 100%;">
+      <select id="wiki-sort" style="flex: 1; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 11px; cursor: pointer; min-width: 0;" onchange="handleWikiFilterSortChange()">
+        <option value="title-asc">Sort: A-Z</option>
+        <option value="title-desc">Sort: Z-A</option>
+        <option value="date-desc">Newest First</option>
+        <option value="date-asc">Oldest First</option>
+      </select>
+      <select id="wiki-filter-type" style="flex: 1; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 11px; cursor: pointer; min-width: 0;" onchange="handleWikiFilterSortChange()">
+        <option value="all">Filter: All Types</option>
+        <option value="runbook">Runbooks</option>
+        <option value="policy">Policies</option>
+        <option value="spec">Specs & Designs</option>
+        <option value="plan">Plans & Manifests</option>
+        <option value="other">Reference & Others</option>
+      </select>
+    </div>
     <hr style="border: none; border-top: 1px solid var(--border); margin: 4px 0;">
-    <div id="wiki-sidebar-list" style="display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1;">
+    <div id="wiki-sidebar-list" style="display: flex; flex-direction: column; gap: 4px; justify-content: flex-start !important; overflow-y: auto; flex: 1;">
       <div class="muted" style="font-size: 12px; text-align: center; padding-top: 16px;">Loading documents...</div>
     </div>
   </aside>
 
+  <!-- Drag Resizer Handle -->
+  <div id="wiki-sidebar-resizer" style="width: 10px; cursor: col-resize; background: transparent; transition: background 0.2s; position: relative; z-index: 10; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin: 0 4px;">
+    <div style="width: 2px; height: 30px; background: var(--border); border-radius: 1px; opacity: 0.5; transition: background 0.2s, height 0.2s;"></div>
+  </div>
+
   <!-- Content Viewport -->
-  <section class="panel" style="padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: rgba(15, 23, 42, 0.15);">
+  <section class="panel" style="padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: rgba(15, 23, 42, 0.15); flex: 1; min-width: 0;">
     <div id="wiki-header" style="border-bottom: 1px solid var(--border); padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
-      <div>
-        <h2 id="wiki-title" style="margin: 0; font-size: 18px; color: var(--text); font-weight: 700;">Welcome to PRISM Wiki Portal</h2>
-        <span id="wiki-meta" class="muted" style="font-size: 11px; margin-top: 3px; display: inline-block;">Select a guide or article from the sidebar to begin reading.</span>
+      <div style="display: flex; align-items: center;">
+        <button id="wiki-toggle-sidebar" class="wiki-sidebar-toggle-btn secondary-button" onclick="toggleWikiSidebarDrawer()" style="display: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; font-size: 14px; margin-right: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer;">☰</button>
+        <div>
+          <h2 id="wiki-title" style="margin: 0; font-size: 18px; color: var(--text); font-weight: 700;">Welcome to PRISM Wiki Portal</h2>
+          <span id="wiki-meta" class="muted" style="font-size: 11px; margin-top: 3px; display: inline-block;">Select a guide or article from the sidebar to begin reading.</span>
+        </div>
       </div>
       <button class="primary-button" onclick="refreshWikiList()" style="font-size: 11px; padding: 4px 10px;">🔄 Refresh List</button>
     </div>

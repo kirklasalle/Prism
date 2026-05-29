@@ -830,7 +830,13 @@ export class LlmProviderManager {
                         dynamicPort = this.llamaSupervisor.getPortForAlias(catalog.activeModel);
                     }
                 }
-                if (!dynamicPort) return null; // Model not fully loaded
+                if (!dynamicPort) {
+                    const slot = this.llamaSupervisor.getSnapshot().find(s => s.modelAlias === catalog.activeModel);
+                    if (slot && slot.status === "error") {
+                        throw new Error(`Failed to load local GGUF model "${catalog.activeModel}": ${slot.error}. You can inspect logs, manage slots, and restart the service in the [Agentic Control / Hardware](prism://tab/agentic#tab-hardware) panel.`);
+                    }
+                    throw new Error(`Local GGUF model "${catalog.activeModel}" is not fully loaded. Current status: ${slot ? slot.status : 'unknown'}. Please wait a few seconds and try again, or manage slots in the [Agentic Control / Hardware](prism://tab/agentic#tab-hardware) panel.`);
+                }
                 settings.baseUrl = `http://127.0.0.1:${dynamicPort}/v1`;
             }
 

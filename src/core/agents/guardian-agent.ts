@@ -62,7 +62,7 @@ export interface GuardianActionEntry {
     detail: string;
 }
 
-export type GuardianState = "stopped" | "starting" | "running" | "error" | "healing";
+export type GuardianState = "stopped" | "starting" | "waiting" | "running" | "error" | "healing";
 
 export type GuardianTaskCategory = "maintenance" | "security" | "diagnostics" | "monitoring";
 
@@ -128,6 +128,7 @@ export class GuardianAgent extends EventEmitter {
 
     private _state: GuardianState = "stopped";
     private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+    private waitingTimer: ReturnType<typeof setInterval> | null = null;
     private startedAt: number = 0;
     private healthChecks: number = 0;
     private issuesDetected: number = 0;
@@ -182,12 +183,14 @@ export class GuardianAgent extends EventEmitter {
 
     /** Update Guardian configuration at runtime. */
     public configure(update: Partial<GuardianConfig>): void {
-        const wasRunning = this._state === "running";
+        const wasRunning = this._state === "running" || this._state === "waiting";
         if (wasRunning && (update.modelAlias || update.modelPath || update.contextSize)) {
             // Restart needed if model changes
             this.stop();
         }
         this.config = { ...this.config, ...update };
+        // When switching to shared mode, don't restart immediately — start() will
+        // enter 'waiting' state until a chat model slot becomes available.
         if (wasRunning && this._state === "stopped") {
             void this.start();
         }
@@ -225,7 +228,7 @@ export class GuardianAgent extends EventEmitter {
 
     /** Start the Guardian Agent. Loads the model into a supervisor slot. */
     public async start(): Promise<void> {
-        if (this._state === "running" || this._state === "starting") return;
+        if (this._state === "running" || this._state === "starting" || this._state === "waiting") return;
 
         if (!this.config.modelPath) {
             this._state = "error";
@@ -237,9 +240,36 @@ export class GuardianAgent extends EventEmitter {
         this.emitEvent("guardian.starting", `Loading model ${this.config.modelAlias}`);
 
         try {
+            let targetPath = this.config.modelPath;
+            let targetAlias = this.config.modelAlias;
+
+            if (targetPath === "active-chat-model") {
+                const activeSlot = this.supervisor.getSnapshot().find(s => s.status === "ready");
+                if (activeSlot) {
+                    targetPath = activeSlot.modelPath || "";
+                    targetAlias = activeSlot.modelAlias || "shared";
+                } else {
+                    // No ready slot yet — enter waiting state and poll until one becomes available.
+                    this._state = "waiting";
+                    this.emitEvent("guardian.waiting", "Waiting for a local chat model slot to become ready. Apply a local model in Provider & Settings first.");
+                    this.waitingTimer = setInterval(() => {
+                        const readySlot = this.supervisor.getSnapshot().find(s => s.status === "ready");
+                        if (readySlot && this._state === "waiting") {
+                            if (this.waitingTimer) {
+                                clearInterval(this.waitingTimer);
+                                this.waitingTimer = null;
+                            }
+                            this._state = "stopped"; // allow start() to proceed
+                            void this.start();
+                        }
+                    }, 5000);
+                    return;
+                }
+            }
+
             await this.supervisor.loadModel(
-                this.config.modelPath,
-                this.config.modelAlias,
+                targetPath,
+                targetAlias,
                 {
                     ctxSize: this.config.contextSize,
                     draftModelPath: this.config.draftModelPath,
@@ -250,7 +280,7 @@ export class GuardianAgent extends EventEmitter {
 
             this._state = "running";
             this.startedAt = Date.now();
-            this.emitEvent("guardian.started", `Guardian active with model ${this.config.modelAlias}`);
+            this.emitEvent("guardian.started", `Guardian active with model ${targetAlias}`);
 
             // Begin health monitoring loop
             this.healthCheckTimer = setInterval(() => {
@@ -272,6 +302,10 @@ export class GuardianAgent extends EventEmitter {
             clearInterval(this.healthCheckTimer);
             this.healthCheckTimer = null;
         }
+        if (this.waitingTimer) {
+            clearInterval(this.waitingTimer);
+            this.waitingTimer = null;
+        }
         this.stopTaskRunners();
         this._state = "stopped";
         this.emitEvent("guardian.stopped", "Guardian stopped by operator");
@@ -279,10 +313,22 @@ export class GuardianAgent extends EventEmitter {
 
     /** Get a full status snapshot. */
     public getStatus(): GuardianStatus {
-        const slot = this.supervisor.getSnapshot().find(s => s.modelAlias === this.config.modelAlias) ?? null;
+        const targetPath = this.config.modelPath === "active-chat-model" 
+            ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelPath ?? "active-chat-model")
+            : this.config.modelPath;
+            
+        const targetAlias = this.config.modelPath === "active-chat-model" 
+            ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelAlias ?? "Shared Chat Model")
+            : this.config.modelAlias;
+
+        const slot = this.supervisor.getSnapshot().find(s => 
+            s.modelAlias === this.config.modelAlias || 
+            (targetPath && s.modelPath === targetPath)
+        ) ?? null;
+
         return {
             state: this._state,
-            modelAlias: this.config.modelAlias,
+            modelAlias: targetAlias,
             modelPath: this.config.modelPath,
             modelSource: this.config.modelSource || "",
             authorityTier: this.config.authorityTier,
@@ -312,7 +358,14 @@ export class GuardianAgent extends EventEmitter {
 
         try {
             // 1. Verify the supervisor slot is still healthy
-            const slot = this.supervisor.getSnapshot().find(s => s.modelAlias === this.config.modelAlias);
+            const targetPath = this.config.modelPath === "active-chat-model"
+                ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelPath ?? "active-chat-model")
+                : this.config.modelPath;
+
+            const slot = this.supervisor.getSnapshot().find(s => 
+                s.modelAlias === this.config.modelAlias || 
+                (targetPath && s.modelPath === targetPath)
+            );
             if (!slot || slot.status !== "ready") {
                 this.issuesDetected++;
                 this.recordAction("health_check", "failure", "Model slot not ready — attempting recovery");
@@ -379,10 +432,21 @@ export class GuardianAgent extends EventEmitter {
             }
 
             if (issue === "model_slot_down") {
+                let targetPath = this.config.modelPath;
+                let targetAlias = this.config.modelAlias;
+                
+                if (targetPath === "active-chat-model") {
+                    const activeSlot = this.supervisor.getSnapshot().find(s => s.status === "ready");
+                    if (activeSlot) {
+                        targetPath = activeSlot.modelPath || "";
+                        targetAlias = activeSlot.modelAlias || "shared";
+                    }
+                }
+
                 // Re-load the model
                 await this.supervisor.loadModel(
-                    this.config.modelPath,
-                    this.config.modelAlias,
+                    targetPath,
+                    targetAlias,
                     {
                         ctxSize: this.config.contextSize,
                         draftModelPath: this.config.draftModelPath,
@@ -392,8 +456,8 @@ export class GuardianAgent extends EventEmitter {
                 );
                 this.issuesResolved++;
                 this._state = "running";
-                this.recordAction("self_heal", "success", `Recovered model slot: ${this.config.modelAlias}. Josephine knows!`);
-                this.emitEvent("guardian.healed", `Model slot recovered: ${this.config.modelAlias}. Josephine knows!`);
+                this.recordAction("self_heal", "success", `Recovered model slot: ${targetAlias}. Josephine knows!`);
+                this.emitEvent("guardian.healed", `Model slot recovered: ${targetAlias}. Josephine knows!`);
                 return;
             }
 

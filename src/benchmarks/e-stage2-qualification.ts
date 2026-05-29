@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { workspacePath } from "../core/config/workspace-resolver.js";
 
 interface QualificationCheck {
     name: string;
@@ -115,7 +116,18 @@ async function writeArtifact(artifact: Stage2QualificationArtifact): Promise<voi
     const outputDir = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex) : ".";
 
     await mkdir(outputDir, { recursive: true });
-    await writeFile(normalizedPath, JSON.stringify(artifact, null, 2), "utf-8");
+    const content = JSON.stringify(artifact, null, 2);
+    await writeFile(normalizedPath, content, "utf-8");
+
+    try {
+        const workspaceTarget = workspacePath("artifacts", "ci-gates", "e-stage2-qualification-summary.json");
+        const wsDir = workspaceTarget.replaceAll("\\", "/").slice(0, workspaceTarget.replaceAll("\\", "/").lastIndexOf("/"));
+        await mkdir(wsDir, { recursive: true });
+        await writeFile(workspaceTarget, content, "utf-8");
+        console.log(`- Mirrored Stage 2 artifact to workspace: ${workspaceTarget}`);
+    } catch (err) {
+        console.warn(`- Failed to mirror Stage 2 artifact to workspace: ${(err as Error).message}`);
+    }
 }
 
 async function main(): Promise<void> {

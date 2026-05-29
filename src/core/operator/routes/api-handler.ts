@@ -11,6 +11,7 @@ import {
   verifyDirectiveIntegrity,
 } from "../../security/directive-integrity.js";
 import { probeOptionalDeps, summarizeOptionalDeps } from "../../system/optional-deps.js";
+import { resolveProfile } from "../model-capability-matrix.js";
 
 export class ApiHandler implements IRouteHandler {
   match(req: IncomingMessage): boolean {
@@ -137,6 +138,7 @@ export class ApiHandler implements IRouteHandler {
         dbSizeMb: dbSize,
         nodeEnv: process.env.NODE_ENV ?? "development",
         baseMode: process.env.PRISM_BASE_MODE === "true",
+        baseModeAuto: process.env.PRISM_BASE_MODE_AUTO === "true",
       });
       return;
     }
@@ -152,6 +154,7 @@ export class ApiHandler implements IRouteHandler {
         lastEvent: events[events.length - 1] ?? null,
         workspaceRoot: resolveWorkspaceRoot(),
         baseMode: process.env.PRISM_BASE_MODE === "true",
+        baseModeAuto: process.env.PRISM_BASE_MODE_AUTO === "true",
       });
       return;
     }
@@ -159,20 +162,38 @@ export class ApiHandler implements IRouteHandler {
     if (method === "POST" && url === "/api/mode") {
       let body = "";
       req.on("data", chunk => { body += chunk; });
-      req.on("end", () => {
+      req.on("end", async () => {
         try {
-          const parsed = JSON.parse(body) as { baseMode?: boolean };
-          const targetBaseMode = parsed.baseMode ?? false;
+          const parsed = JSON.parse(body) as { baseMode?: boolean | "auto" };
+          let targetBaseMode = false;
+          let isAuto = false;
+
+          if (parsed.baseMode === "auto") {
+            isAuto = true;
+            process.env.PRISM_BASE_MODE_AUTO = "true";
+
+            // Resolve the current active model from LLM Catalog
+            const catalog = await service.getLlmProviders().getCatalog();
+            if (catalog.activeModel) {
+              const profile = resolveProfile(catalog.activeModel);
+              targetBaseMode = profile.locality === "local" && profile.tier <= 2;
+            }
+          } else {
+            isAuto = false;
+            process.env.PRISM_BASE_MODE_AUTO = "false";
+            targetBaseMode = parsed.baseMode ?? false;
+          }
+
           process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
           
-          console.log(`[PRISM][paradigm] Paradigm dynamically switched by operator. baseMode = ${targetBaseMode}`);
+          console.log(`[PRISM][paradigm] Paradigm dynamically switched by operator. baseMode = ${targetBaseMode} (auto = ${isAuto})`);
           
           const guardian = service.getGuardianAgent();
           if (guardian) {
             guardian.syncModeCatalog();
           }
           
-          this.json(res, 200, { ok: true, baseMode: targetBaseMode });
+          this.json(res, 200, { ok: true, baseMode: targetBaseMode, auto: isAuto });
         } catch (e: any) {
           this.json(res, 400, { error: e.message || "Invalid payload" });
         }

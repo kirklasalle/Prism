@@ -35,6 +35,7 @@
 - PRISM_WORLD_CLASS_AUDIT_PRESENTATION_2026.html: interactive, highly animated HTML slideshow deck detailing full matrix tiers, moats, and Q2 SOTA audits
 - PRISM_PUBLIC_LAUNCH_ROADMAP_AND_CHECKLIST_2026.md: definitive public GitHub launch guide, secrets sweeps, legal models, CI workflows, and clean clone testing checklists
 - PRISM_PUBLIC_LAUNCH_ROADMAP_AND_CHECKLIST_2026.html: highly interactive, styled HTML dashboard version of the public launch checklist with built-in progress meters, local state persistence, and copyable pre-release terminal commands
+- PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html: executive-grade quiet-release master plan with integrated 3D hero visualization (Three.js primary + local animated fallback)
 
 ## User and Operator Guides (NEW)
 

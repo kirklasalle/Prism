@@ -86,6 +86,7 @@ if errorlevel 1 goto :fail
 REM ── Launch ────────────────────────────────────────────────────────────
 if /I "%PRISM_SKIP_LAUNCH%"=="1" (
   echo [INFO] PRISM_SKIP_LAUNCH=1 detected; build completed, launch skipped.
+  pause
   goto :eof
 )
 
@@ -113,6 +114,7 @@ goto :wait_loop
 echo [START] Opening login screen at http://localhost:%PRISM_DASHBOARD_PORT%/login
 start "" "http://localhost:%PRISM_DASHBOARD_PORT%/login"
 
+pause
 goto :eof
 
 :fail
