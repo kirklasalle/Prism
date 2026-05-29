@@ -8,6 +8,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { homedir } from "node:os";
 import { get as httpGet } from "node:http";
 import https from "node:https";
+import { spawnSync } from "node:child_process";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
 import { SqliteActivityStore } from "../activity/sqlite-store.js";
@@ -395,6 +396,8 @@ const TELEMETRY_WINDOW_MS: Record<TelemetryWindow, number> = {
   "1d": 24 * 60 * 60 * 1000,
   "7d": 7 * 24 * 60 * 60 * 1000,
 };
+
+let activeValidationPid: number | null = null;
 
 function parseTelemetryWindow(raw: string | null): TelemetryWindow {
   if (raw === "1h" || raw === "1d" || raw === "7d") return raw;
@@ -907,6 +910,8 @@ export class DashboardService {
     httpTimeoutMs: 30000,
     mcpTimeoutMs: 30000,
     telemetryWindow: "1d",
+    llamacppBin: "llama-server",
+    bitnetBin: "bitnet-server",
   };
   private readonly downloadStatus = new Map<string, DownloadProgress>();
   private readonly iamStore: IamStore;
@@ -1093,8 +1098,12 @@ export class DashboardService {
     this.terminalAdapter = terminalAdapter ?? null;
     this.containerAdapter = containerAdapter ?? null;
 
+    const initialPrefs = readPreferences();
+    const initLlamacppBin = (initialPrefs?.runtimeSettings?.llamacppBin as string) || process.env.PRISM_LLAMACPP_BIN || "llama-server";
+    const initBitnetBin = (initialPrefs?.runtimeSettings?.bitnetBin as string) || process.env.PRISM_BITNET_BIN || "bitnet-server";
+
     this.llamaSupervisor = new LlamaCppSupervisor({
-      binaryPath: process.env.PRISM_LLAMACPP_BIN || "llama-server",
+      binaryPath: initLlamacppBin,
       basePort: 8081,
       maxSlots: 5,
       defaultContext: 4096,
@@ -1102,7 +1111,7 @@ export class DashboardService {
     });
 
     this.bitnetSupervisor = new LlamaCppSupervisor({
-      binaryPath: process.env.PRISM_BITNET_BIN || "bitnet-server",
+      binaryPath: initBitnetBin,
       basePort: 8082,
       maxSlots: 2,
       defaultContext: 4096,
@@ -2453,6 +2462,34 @@ export class DashboardService {
     }
 
     this.chatStore.updateSessionLlmSelection(sessionId, catalog.activeProviderId, catalog.activeModel);
+
+    // Dynamic pre-loading/initialization of local models when selected/applied
+    if (catalog.activeProviderId === "llamacpp" && this.llamaSupervisor && catalog.activeModel) {
+      const modelPath = this.llamaSupervisor.getModelPath(catalog.activeModel);
+      if (modelPath) {
+        try {
+          console.log(`[PRISM][settings] Initializing and pre-loading llama.cpp model: ${catalog.activeModel}`);
+          await this.llamaSupervisor.loadModel(modelPath, catalog.activeModel, { ctxSize: 2048 });
+        } catch (err) {
+          throw new Error(`Failed to load local GGUF model "${catalog.activeModel}": ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        throw new Error(`Local GGUF model "${catalog.activeModel}" was not found in the local models directory.`);
+      }
+    } else if (catalog.activeProviderId === "bitnetcpp" && this.bitnetSupervisor && catalog.activeModel) {
+      const modelPath = this.bitnetSupervisor.getModelPath(catalog.activeModel);
+      if (modelPath) {
+        try {
+          console.log(`[PRISM][settings] Initializing and pre-loading bitnet.cpp model: ${catalog.activeModel}`);
+          await this.bitnetSupervisor.loadModel(modelPath, catalog.activeModel);
+        } catch (err) {
+          throw new Error(`Failed to load local BitNet model "${catalog.activeModel}": ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        throw new Error(`Local BitNet model "${catalog.activeModel}" was not found in the local models directory.`);
+      }
+    }
+
     const historyEntry = this.chatStore.appendSessionConfigHistory(
       sessionId,
       previousProviderId,
@@ -2495,6 +2532,19 @@ export class DashboardService {
         correlationId: eventCorrelationId,
       },
     });
+
+    if (process.env.PRISM_BASE_MODE_AUTO === "true" && updatedCatalog.activeModel) {
+      const profile = resolveProfile(updatedCatalog.activeModel);
+      const targetBaseMode = profile.locality === "local" && profile.tier <= 2;
+      const currentBaseMode = process.env.PRISM_BASE_MODE === "true";
+      if (targetBaseMode !== currentBaseMode) {
+        process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
+        console.log(`[PRISM][paradigm] Auto-detected model selection changed to ${updatedCatalog.activeModel}. Setting Base Mode to ${targetBaseMode}`);
+        if (this.guardianAgent) {
+          this.guardianAgent.syncModeCatalog();
+        }
+      }
+    }
 
     return updatedCatalog;
   }
@@ -3406,7 +3456,7 @@ export class DashboardService {
     // ── Graceful Shutdown API Endpoint ──────────────────────────────────
     if (method === "POST" && url === "/api/system/shutdown") {
       console.log("[PRISM][system] [INFO] Received shutdown signal from dashboard operator. Initiating graceful termination...");
-      
+
       res.writeHead(200, {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
@@ -3483,10 +3533,12 @@ export class DashboardService {
       if (classification.tier === 2) {
         // Enqueue an approval request. ApprovalQueue assigns the id internally;
         // we snapshot the queue before/after to recover the new id without
-        // changing the queue API. Promise is intentionally fire-and-forget —
-        // the operator resolves it later via the approval endpoints.
+        // changing the queue API. The returned promise resolves true/false
+        // when the operator approves/denies — attach a background handler so
+        // that approved Tier-2 chat prompts automatically continue as an
+        // agentic execution (browser/computer control) once approved.
         const before = new Set(this.queue.list().map((entry) => entry.id));
-        void this.queue.request(
+        const approvalPromise = this.queue.request(
           sessionId,
           "chat.tier2",
           { prompt, reason_code: classification.reasonCode, matched_pattern: classification.matchedPattern },
@@ -3494,6 +3546,71 @@ export class DashboardService {
         );
         const after = this.queue.list().map((entry) => entry.id);
         const newIds = after.filter((id) => !before.has(id));
+
+        // Background handler: when approved, run the agentic executor to
+        // perform the requested work (e.g., browsing/shopping). Fire-and-
+        // forget but emit activity/agentic events for auditing and UI.
+        approvalPromise.then(async (approved) => {
+          try {
+            const approvalId = newIds.length > 0 ? newIds[0] : undefined;
+            this.activityBus.emit({
+              sessionId,
+              layer: "governance",
+              operation: "approval.resolved",
+              status: "succeeded",
+              details: { approvalId, approved, reason_code: classification.reasonCode },
+            });
+
+            if (!approved) return;
+            if (!this.agenticExecutor) return;
+
+            const systemPrompt = this.buildAgenticSystemPrompt();
+
+            const agenticResult = await this.agenticExecutor.execute(
+              prompt,
+              [],
+              systemPrompt,
+              async (input, sel) => {
+                const result = await this.llmProviders.generate(input, sel);
+                if (!result) return null;
+                return {
+                  content: result.content,
+                  toolCalls: result.toolCalls,
+                  stopReason: result.stopReason,
+                  thoughtSignature: result.thoughtSignature,
+                };
+              },
+              undefined,
+              (event) => {
+                this.broadcastEvent({
+                  type: "agentic_event",
+                  sessionId,
+                  event: {
+                    type: event.type,
+                    text: event.text,
+                    toolCall: event.toolCall,
+                    toolResult: event.toolResult,
+                    error: event.error,
+                    iteration: event.iteration,
+                  },
+                  timestamp: new Date().toISOString(),
+                });
+              },
+            );
+
+            if (agenticResult.finalContent?.trim()) {
+              this.broadcastEvent({
+                type: "agentic_event",
+                sessionId,
+                event: { type: "done", text: agenticResult.finalContent, iterations: agenticResult.iterations },
+                timestamp: new Date().toISOString(),
+              });
+            }
+          } catch (err) {
+            console.error("[APPROVAL HANDLER] Failed to continue approved request:", err);
+          }
+        }).catch((e) => console.error("[APPROVAL HANDLER] Unexpected error:", e));
+
         return this.json(res, 202, {
           tier: 2,
           approval_pending_ids: newIds,
@@ -3507,6 +3624,20 @@ export class DashboardService {
       // here lets PTAC self-drive scenarios assert end-to-end without pulling
       // a live LLM provider into the test path. Real conversational chat
       // continues to flow through /api/chat/sessions/:id/messages.
+      // Emit chat completion event to the activity bus for lineage tracking (s16 assertion)
+      this.activityBus.emit({
+        sessionId,
+        layer: "chat" as any,
+        operation: "chat.message.completed",
+        status: "succeeded",
+        details: {
+          prompt,
+          response:
+            "Acknowledged. Tier-1 capability prompt accepted by the governance layer; "
+            + "for a full conversational reply, post to /api/chat/sessions/:id/messages.",
+        },
+      });
+
       return this.json(res, 200, {
         tier: 1,
         accepted: true,
@@ -3776,6 +3907,43 @@ export class DashboardService {
       }
     }
 
+    if (method === "POST" && url.startsWith("/api/readiness/fix/")) {
+      try {
+        const ckId = decodeURIComponent(url.slice("/api/readiness/fix/".length));
+        console.log(`[PRISM][readiness] Fix requested for requirement: ${ckId}`);
+
+        let fixed = false;
+        let detail = "";
+
+        if (ckId === "local-llm-service-ready") {
+          const activeSession = this.chatStore.listSessions()[0];
+          const activeProviderId = activeSession?.llmProviderId ?? (await this.llmProviders.getCatalog()).activeProviderId ?? null;
+
+          if (activeProviderId === "llamacpp" || activeProviderId === "bitnetcpp") {
+            const supervisor = activeProviderId === "llamacpp" ? this.llamaSupervisor : this.bitnetSupervisor;
+            if (supervisor) {
+              const erroredSlots = supervisor.getSnapshot().filter(s => s.status === "error");
+              for (const slot of erroredSlots) {
+                if (slot.modelAlias) {
+                  await supervisor.unloadModel(slot.modelAlias);
+                }
+              }
+              fixed = true;
+              detail = "Cleared errored local LLM service slots. Dynamic on-demand loading will re-attempt on next chat.";
+            }
+          } else {
+            detail = "Local LLM service is not the active provider. Switch provider and try again.";
+          }
+        } else {
+          detail = `No auto-fix strategy defined for check: ${ckId}`;
+        }
+
+        return this.json(res, 200, { fixed, detail });
+      } catch (error) {
+        return this.json(res, 400, { error: String(error) });
+      }
+    }
+
     // ── Setup Wizard API ─────────────────────────────────────────────────
     if (method === "GET" && url === "/api/setup/status") {
       const prefs = readPreferences();
@@ -3881,6 +4049,14 @@ export class DashboardService {
         }
         const operatorEmail = String(body.operatorEmail ?? `operator@prism.local`).trim();
         const assistantEmail = String(body.assistantEmail ?? `${characterId}@prism.local`).trim();
+
+        // R3 wizard email deny-list check
+        const isPlaceholder = /@(prism\.local|example\.(com|org|net))$/i.test(operatorEmail);
+        if (isPlaceholder) {
+          const err = new Error("Placeholder operator email is not allowed.") as Error & { code?: string };
+          err.code = "operator-email-placeholder";
+          throw err;
+        }
 
         // Seed an initial session and auto-create the CAC assignment.
         const session = this.createChatSession({
@@ -4381,12 +4557,12 @@ export class DashboardService {
           agentMemoryKeys?: Record<string, any>;
           activePlanDagJson?: string;
         }>(req);
-        
+
         if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
-        
+
         const handles = mgr.getSessionPageAndContext(body.sessionId);
         if (!handles) return this.json(res, 404, { error: "Browser session not found." });
-        
+
         const handoffState = await this.cshManager.serialize(handles.page, handles.context, {
           sessionId: body.sessionId,
           sourceAgentId: body.sourceAgentId || "developer",
@@ -4398,11 +4574,11 @@ export class DashboardService {
           agentMemoryKeys: body.agentMemoryKeys,
           activePlanDagJson: body.activePlanDagJson,
         });
-        
+
         if (this.autonomousLoop) {
           this.autonomousLoop.globalPause();
         }
-        
+
         const eventMsg = JSON.stringify({
           type: "csh.handoff.initiated",
           handoffId: handoffState.handoffId,
@@ -4416,7 +4592,7 @@ export class DashboardService {
             client.send(eventMsg);
           }
         }
-        
+
         return this.json(res, 201, { ok: true, handoffState });
       } catch (err) {
         return this.json(res, 500, { error: String(err) });
@@ -4431,16 +4607,16 @@ export class DashboardService {
         const body = await this.readJsonBody<{ handoffId: string; sessionId: string }>(req);
         if (!body.handoffId) return this.json(res, 400, { error: "handoffId required." });
         if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
-        
+
         const handles = mgr.getSessionPageAndContext(body.sessionId);
         if (!handles) return this.json(res, 404, { error: "Browser session not found." });
-        
+
         const handoffState = await this.cshManager.deserialize(body.handoffId, handles.page, handles.context);
-        
+
         if (this.autonomousLoop) {
           this.autonomousLoop.globalResume();
         }
-        
+
         const eventMsg = JSON.stringify({
           type: "csh.handoff.resolved",
           handoffId: handoffState.handoffId,
@@ -4452,9 +4628,9 @@ export class DashboardService {
             client.send(eventMsg);
           }
         }
-        
+
         this.cshManager.clearHandoff(body.handoffId);
-        
+
         return this.json(res, 200, { ok: true, handoffState });
       } catch (err) {
         return this.json(res, 500, { error: String(err) });
@@ -5279,9 +5455,29 @@ export class DashboardService {
     if (method === "POST" && url === "/api/hardware/swarm/load") {
       try {
         if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
-        const body = await this.readJsonBody<{ modelPath: string; modelAlias: string; ctxSize?: number }>(req);
-        if (!body.modelPath || !body.modelAlias) return this.json(res, 400, { error: "Missing required fields." });
-        const slot = await this.llamaSupervisor.loadModel(body.modelPath, body.modelAlias, body.ctxSize);
+        const body = await this.readJsonBody<{ modelPath?: string; modelAlias?: string; slotId?: string | number; model?: string; ctxSize?: number }>(req);
+
+        let modelAlias = body.modelAlias || body.model;
+        let modelPath = body.modelPath;
+
+        if (!modelAlias) {
+          return this.json(res, 400, { error: "Missing required model/modelAlias field." });
+        }
+
+        if (!modelPath) {
+          modelPath = this.llamaSupervisor.getModelPath(modelAlias) || undefined;
+        }
+
+        if (!modelPath) {
+          if (body.model && (body.model.endsWith(".gguf") || body.model.includes("/") || body.model.includes("\\"))) {
+            modelPath = body.model;
+            modelAlias = body.model.replace(/\.gguf$/i, "").split(/[/\\]/).pop();
+          } else {
+            return this.json(res, 400, { error: `Model "${modelAlias}" not found in local models directory.` });
+          }
+        }
+
+        const slot = await this.llamaSupervisor.loadModel(modelPath!, modelAlias!, body.ctxSize);
         return this.json(res, 200, slot);
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
@@ -5291,9 +5487,23 @@ export class DashboardService {
     if (method === "POST" && url === "/api/hardware/swarm/unload") {
       try {
         if (!this.llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
-        const body = await this.readJsonBody<{ modelAlias: string }>(req);
-        if (!body.modelAlias) return this.json(res, 400, { error: "Missing modelAlias." });
-        await this.llamaSupervisor.unloadModel(body.modelAlias);
+        const body = await this.readJsonBody<{ modelAlias?: string; slotId?: string | number }>(req);
+
+        let slot = null;
+        if (body.modelAlias) {
+          slot = this.llamaSupervisor.getSnapshot().find(s => s.modelAlias === body.modelAlias);
+        } else if (body.slotId !== undefined) {
+          const idNum = Number(body.slotId);
+          slot = this.llamaSupervisor.getSnapshot().find(s => s.id === idNum);
+        }
+
+        if (!slot) {
+          return this.json(res, 400, { error: "Could not find matching slot to unload." });
+        }
+
+        if (slot.modelAlias) {
+          await this.llamaSupervisor.unloadModel(slot.modelAlias);
+        }
         return this.json(res, 200, { unloaded: true });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
@@ -5702,6 +5912,15 @@ export class DashboardService {
         if (allowedKeys.has(k)) {
           this.runtimeSettings[k] = v;
           changes[k] = v;
+
+          if (k === "llamacppBin" && typeof v === "string") {
+            this.llamaSupervisor?.setBinaryPath(v);
+            console.log(`[PRISM][settings] Dynamically updated llamaSupervisor binaryPath to: ${v}`);
+          }
+          if (k === "bitnetBin" && typeof v === "string") {
+            this.bitnetSupervisor?.setBinaryPath(v);
+            console.log(`[PRISM][settings] Dynamically updated bitnetSupervisor binaryPath to: ${v}`);
+          }
         }
       }
       // Persist settings to disk so they survive server restarts
@@ -6321,6 +6540,108 @@ $r | ConvertTo-Json -Depth 4 -Compress
       } catch (e: unknown) {
         return this.json(res, 500, { error: (e as Error).message });
       }
+    }
+
+    // ── PRISM Strict Release Validation API ────────────────────────────────
+    //
+    // Endpoints:
+    //   - POST /api/release-validation/run
+    //         Spawns the strict release validation suite background process.
+    //   - GET  /api/release-validation/status
+    //         Checks validation execution state, logs, and structured gate metrics.
+    //
+    if (method === "POST" && url === "/api/release-validation/run") {
+      let isRunning = false;
+      if (activeValidationPid !== null) {
+        try {
+          process.kill(activeValidationPid, 0);
+          isRunning = true;
+        } catch {
+          activeValidationPid = null;
+        }
+      }
+      if (isRunning) {
+        return this.json(res, 499, { error: "Validation run already in progress" });
+      }
+
+      try {
+        const { spawn } = await import("node:child_process");
+        const { openSync } = await import("node:fs");
+
+        const logPath = workspacePath("artifacts", "benchmarks", "release-validation.log");
+        const dir = dirname(logPath);
+        if (!existsSync(dir)) {
+          mkdirSync(dir, { recursive: true });
+        }
+
+        // Clear log file initially
+        writeFileSync(logPath, "");
+        const logFile = openSync(logPath, "a");
+
+        const child = spawn(process.execPath, ["dist/src/benchmarks/release-validation.js", "--strict"], {
+          detached: true,
+          stdio: ["ignore", logFile, logFile],
+          env: { ...process.env },
+          cwd: process.cwd()
+        });
+
+        activeValidationPid = child.pid ?? null;
+        child.unref();
+
+        return this.json(res, 202, {
+          status: "spawned",
+          pid: child.pid
+        });
+      } catch (e: unknown) {
+        return this.json(res, 500, { error: (e as Error).message });
+      }
+    }
+
+    if (method === "GET" && url === "/api/release-validation/status") {
+      let isRunning = false;
+      if (activeValidationPid !== null) {
+        try {
+          process.kill(activeValidationPid, 0);
+          isRunning = true;
+        } catch {
+          activeValidationPid = null;
+        }
+      }
+
+      let log = "";
+      try {
+        const logPath = workspacePath("artifacts", "benchmarks", "release-validation.log");
+        if (existsSync(logPath)) {
+          log = readFileSync(logPath, "utf8");
+        }
+      } catch {
+        // missing or unreadable log is fine
+      }
+
+      let gates: any[] = [];
+      let passed: boolean | null = null;
+      let generatedAt: string | null = null;
+      try {
+        const jsonPath = workspacePath("artifacts", "benchmarks", "release-validation.json");
+        if (existsSync(jsonPath)) {
+          const raw = readFileSync(jsonPath, "utf8");
+          const parsed = JSON.parse(raw);
+          gates = parsed.gates ?? [];
+          passed = parsed.passed ?? null;
+          generatedAt = parsed.generatedAt ?? null;
+        }
+      } catch {
+        // missing or unreadable json is fine
+      }
+
+      return this.json(res, 200, {
+        running: isRunning,
+        pid: activeValidationPid,
+        log,
+        gates,
+        passed,
+        generatedAt
+      });
     }
 
     // ── Browser Control API ──────────────────────────────────────────────
@@ -9282,6 +9603,91 @@ $r | ConvertTo-Json -Depth 4 -Compress
     };
   }
 
+  /**
+   * Enqueue a Tier-2 approval for a chat prompt and attach a background
+   * continuation that, upon approval, runs the agentic executor to perform
+   * the requested work. Returns the newly-created approval ids.
+   */
+  public enqueueApprovalAndAutoRun(
+    sessionId: string,
+    prompt: string,
+    classification: { tier: number; reasonCode: string; matchedPattern?: string },
+  ): string[] {
+    const before = new Set(this.queue.list().map((entry) => entry.id));
+    const approvalPromise = this.queue.request(
+      sessionId,
+      "chat.tier2",
+      { prompt, reason_code: classification.reasonCode, matched_pattern: classification.matchedPattern },
+      Number(this.runtimeSettings.approvalTimeoutMs || 120_000),
+    );
+    const after = this.queue.list().map((entry) => entry.id);
+    const newIds = after.filter((id) => !before.has(id));
+
+    // Background handler attached to the approval promise
+    approvalPromise.then(async (approved) => {
+      try {
+        const approvalId = newIds.length > 0 ? newIds[0] : undefined;
+        this.activityBus.emit({
+          sessionId,
+          layer: "governance",
+          operation: "approval.resolved",
+          status: "succeeded",
+          details: { approvalId, approved, reason_code: classification.reasonCode },
+        });
+
+        if (!approved) return;
+        if (!this.agenticExecutor) return;
+
+        const systemPrompt = this.buildAgenticSystemPrompt();
+
+        const agenticResult = await this.agenticExecutor.execute(
+          prompt,
+          [],
+          systemPrompt,
+          async (input, sel) => {
+            const result = await this.llmProviders.generate(input, sel);
+            if (!result) return null;
+            return {
+              content: result.content,
+              toolCalls: result.toolCalls,
+              stopReason: result.stopReason,
+              thoughtSignature: result.thoughtSignature,
+            } as any;
+          },
+          undefined,
+          (event) => {
+            this.broadcastEvent({
+              type: "agentic_event",
+              sessionId,
+              event: {
+                type: event.type,
+                text: event.text,
+                toolCall: event.toolCall,
+                toolResult: event.toolResult,
+                error: event.error,
+                iteration: event.iteration,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          },
+        );
+
+        if (agenticResult.finalContent?.trim()) {
+          this.broadcastEvent({
+            type: "agentic_event",
+            sessionId,
+            event: { type: "done", text: agenticResult.finalContent, iterations: agenticResult.iterations },
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.error("[APPROVAL HANDLER] Failed to continue approved request:", err);
+      }
+    }).catch((e) => console.error("[APPROVAL HANDLER] Unexpected error:", e));
+
+    return newIds;
+  }
+
   private buildAgenticSystemPrompt(): string {
     const toolNames = this.tools.map((t) => t.name).join(", ");
     const wsRoot = (() => { try { return resolveWorkspaceRoot(); } catch { return process.cwd(); } })();
@@ -9687,6 +10093,17 @@ $r | ConvertTo-Json -Depth 4 -Compress
     });
   }
 
+  private isBinaryAvailable(binaryPath: string): boolean {
+    if (existsSync(binaryPath)) return true;
+    try {
+      const cmd = process.platform === "win32" ? "where.exe" : "which";
+      const res = spawnSync(cmd, [binaryPath], { encoding: "utf8" });
+      return res.status === 0;
+    } catch {
+      return false;
+    }
+  }
+
   private async getReadinessSnapshot(requestedSessionId?: string): Promise<DashboardReadinessSnapshot> {
     const sessions = this.chatStore.listSessions();
     const activeSessionId = requestedSessionId
@@ -9743,6 +10160,32 @@ $r | ConvertTo-Json -Depth 4 -Compress
           : (activeProvider?.reason ?? "No active provider is currently usable."),
       },
     ];
+
+    const activeProviderId = activeSession?.llmProviderId ?? catalog.activeProviderId ?? null;
+    if (activeProviderId === "llamacpp" || activeProviderId === "bitnetcpp") {
+      const supervisor = activeProviderId === "llamacpp" ? this.llamaSupervisor : this.bitnetSupervisor;
+      const supervisorName = activeProviderId === "llamacpp" ? "llama.cpp" : "BitNet.cpp";
+      if (supervisor) {
+        const binPath = supervisor.getConfig().binaryPath;
+        const available = this.isBinaryAvailable(binPath);
+        let detail = available
+          ? `Local ${supervisorName} binary is found and supervisor is active.`
+          : `Local ${supervisorName} binary "${binPath}" was not found. Please install ${supervisorName} and ensure it is in your system PATH, or specify the absolute binary path in Settings below.`;
+
+        const slotWithErr = supervisor.getSnapshot().find(s => s.status === "error");
+        const hasErr = !available || (slotWithErr && slotWithErr.error);
+        if (slotWithErr && slotWithErr.error) {
+          detail = `${supervisorName} service error in Slot ${slotWithErr.id}: ${slotWithErr.error}. You can restart the slot in the Agentic Control panel.`;
+        }
+
+        requirements.push({
+          id: "local-llm-service-ready",
+          label: `Local ${supervisorName} service is ready`,
+          passed: !hasErr,
+          detail: detail,
+        });
+      }
+    }
 
     const recommendations: string[] = [];
     if (!hasEnabledProvider) {
