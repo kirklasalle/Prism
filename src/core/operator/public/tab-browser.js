@@ -271,6 +271,7 @@ export async function browserLaunchSession(headless) {
     });
     browserLogAction('launch', 'Session started: ' + (session.sessionId || 'unknown'));
     await refreshSessionsList();
+    setBrowserView('viewport');
   } catch (e) {
     browserLogAction('launch', 'Failed: ' + e.message);
   }
@@ -599,6 +600,10 @@ export function browserSessionChanged() {
     } else {
       banner.style.display = 'none';
     }
+  }
+
+  if (sessionId && currentBrowserView === 'viewport') {
+    browserTakeScreenshot().catch(function (e) { console.error('[browser] auto-screenshot failed', e); });
   }
 }
 

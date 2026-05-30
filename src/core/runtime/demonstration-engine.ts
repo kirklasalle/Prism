@@ -9,6 +9,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import * as path from "node:path";
+import { workspacePath } from "../config/workspace-resolver.js";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ToolRegistry } from "../tools/registry.js";
 
@@ -509,9 +511,25 @@ export class DemonstrationEngine {
         return "Tool registry not available";
       }
       try {
-        console.log(`[PRISM][demo] [INFO] Invoking active registration tool "${toolName}" with args: ${JSON.stringify(args)}`);
+        let resolvedArgs = { ...args };
+        if (["file_write", "file_read", "file_delete", "file_list"].includes(toolName)) {
+          const rawPath = String(args.path ?? "");
+          if (rawPath) {
+            if (rawPath.startsWith("./prism-output/") || rawPath.startsWith("prism-output/")) {
+              const base = rawPath.replace(/^\.?\/?prism-output\//, "");
+              resolvedArgs.path = workspacePath("workspace", base);
+            } else if (rawPath === "./prism-output" || rawPath === "prism-output") {
+              resolvedArgs.path = workspacePath("workspace");
+            } else if (!path.isAbsolute(rawPath)) {
+              resolvedArgs.path = workspacePath("workspace", rawPath);
+            }
+            console.log(`[PRISM][demo] [INFO] Intercepted file tool "${toolName}" path "${rawPath}" -> resolved to "${resolvedArgs.path}"`);
+          }
+        }
+
+        console.log(`[PRISM][demo] [INFO] Invoking active registration tool "${toolName}" with args: ${JSON.stringify(resolvedArgs)}`);
         const tool = this.registry.get(toolName);
-        const result = await tool.execute({ operation: toolName, args, risk: "low", mutatesState: toolName.includes("write") });
+        const result = await tool.execute({ operation: toolName, args: resolvedArgs, risk: "low", mutatesState: toolName.includes("write") });
         const out = typeof result.output === "string" ? result.output : JSON.stringify(result.output, null, 2);
         return out.length > 500 ? out.slice(0, 500) + "..." : out;
       } catch (err) {

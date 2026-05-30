@@ -413,6 +413,21 @@ function connectWebSocket() {
       if (window._onDashboardWsMessage) {
         try { window._onDashboardWsMessage(data); } catch (e) { console.error('[ws] hook error:', e); }
       }
+      if (data.type === 'demo_step' || data.type === 'demo_section' || data.type === 'telemetry') {
+        const action = String(data.action ?? '');
+        const detail = String(data.detail ?? '');
+        const nar = String(data.narration ?? '');
+        if (action.includes('browser') || detail.includes('browser') || nar.includes('browser') || nar.includes('Browser')) {
+          refreshSessionsList().then(() => {
+            if (state.activeBrowserSessionId) {
+              browserTakeScreenshot().catch(e => {});
+            }
+          }).catch(e => {});
+        }
+        if (action.includes('file') || detail.includes('file') || nar.includes('file') || nar.includes('Workspace') || nar.includes('Workspace Files')) {
+          refreshWorkspaceFiles().catch(e => {});
+        }
+      }
       if (data.type === 'ui_action' && data.action === 'switch_tab' && data.tabId) {
         setActiveTab(data.tabId);
         // Optional: scroll to + flash a panel anchor; surface an optional toast message.
