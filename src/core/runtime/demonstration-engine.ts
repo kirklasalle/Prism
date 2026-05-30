@@ -272,6 +272,7 @@ export class DemonstrationEngine {
   private abortController: AbortController | null = null;
   private pauseResolve: (() => void) | null = null;
   private broadcastFn: ((msg: Record<string, unknown>) => void) | null = null;
+  private demoSessionId: string | null = null;
 
   constructor(activityBus: ActivityBus, registry?: ToolRegistry) {
     this.activityBus = activityBus;
@@ -330,35 +331,39 @@ export class DemonstrationEngine {
     this.broadcast({ type: "demo_started", state: this.getState() });
 
     try {
-      // Run each demo
-      for (let i = 0; i < activeDemos.length; i++) {
-        if (this.abortController.signal.aborted) {
-          console.log("[PRISM][demo] [WARN] Abort signaled during demonstration loop.");
-          break;
+      try {
+        // Run each demo
+        for (let i = 0; i < activeDemos.length; i++) {
+          if (this.abortController.signal.aborted) {
+            console.log("[PRISM][demo] [WARN] Abort signaled during demonstration loop.");
+            break;
+          }
+          this.state.currentDemoIndex = i;
+          await this.runDemo(activeDemos[i]);
+          this.state.completedDemos.push(activeDemos[i].id);
         }
-        this.state.currentDemoIndex = i;
-        await this.runDemo(activeDemos[i]);
-        this.state.completedDemos.push(activeDemos[i].id);
-      }
 
-      // Tab tour
-      if (!this.abortController.signal.aborted) {
-        await this.runTabTour();
-      }
+        // Tab tour
+        if (!this.abortController.signal.aborted) {
+          await this.runTabTour();
+        }
 
-      if (!this.abortController.signal.aborted) {
-        this.state.status = "completed";
-        console.log(`[PRISM][demo] [INFO] Demonstration sequence completed successfully. Total runs: ${this.state.completedDemos.length}`);
-        this.emit("demo.completed", "succeeded", { completedDemos: this.state.completedDemos.length });
-        this.broadcast({ type: "demo_completed", state: this.getState() });
+        if (!this.abortController.signal.aborted) {
+          this.state.status = "completed";
+          console.log(`[PRISM][demo] [INFO] Demonstration sequence completed successfully. Total runs: ${this.state.completedDemos.length}`);
+          this.emit("demo.completed", "succeeded", { completedDemos: this.state.completedDemos.length });
+          this.broadcast({ type: "demo_completed", state: this.getState() });
+        }
+      } catch (err) {
+        if (!this.abortController.signal.aborted) {
+          this.state.status = "error";
+          this.state.error = String(err);
+          console.error(`[PRISM][demo] [ERROR] Exception caught in demonstration sequence: ${String(err)}`);
+          this.emit("demo.error", "failed", { error: String(err) });
+        }
       }
-    } catch (err) {
-      if (!this.abortController.signal.aborted) {
-        this.state.status = "error";
-        this.state.error = String(err);
-        console.error(`[PRISM][demo] [ERROR] Exception caught in demonstration sequence: ${String(err)}`);
-        this.emit("demo.error", "failed", { error: String(err) });
-      }
+    } finally {
+      await this.cleanupBrowserSession();
     }
   }
 
@@ -391,6 +396,31 @@ export class DemonstrationEngine {
     console.log(`[PRISM][demo] [INFO] Operator stopped the demonstration sequence. Completed runs: ${this.state.completedDemos.length}`);
     this.emit("demo.stopped", "succeeded", { completedDemos: this.state.completedDemos.length });
     this.broadcast({ type: "demo_stopped", state: this.getState() });
+
+    this.cleanupBrowserSession().catch(err => {
+      console.error("[PRISM][demo] [ERROR] Stop cleanup failed:", err);
+    });
+  }
+
+  private async cleanupBrowserSession(): Promise<void> {
+    if (this.demoSessionId) {
+      const sid = this.demoSessionId;
+      this.demoSessionId = null;
+      try {
+        console.log(`[PRISM][demo] [INFO] Cleaning up demo browser session ${sid}...`);
+        const tool = this.registry?.get("browser_control");
+        if (tool) {
+          await tool.execute({
+            operation: "browser_control",
+            args: { action: "close_session", sessionId: sid },
+            risk: "low",
+            mutatesState: true,
+          });
+        }
+      } catch (err) {
+        console.error(`[PRISM][demo] [ERROR] Failed to close demo browser session ${sid}:`, err);
+      }
+    }
   }
 
   /** Skip to a specific demo by ID. */
@@ -490,12 +520,98 @@ export class DemonstrationEngine {
       }
     }
 
-    // Demo-specific actions (simulated with activity events)
+    // Demo-specific actions (simulated with activity events + optional real browser control)
     if (action.startsWith("demo:")) {
       const demoAction = action.slice(5);
-      console.log(`[PRISM][demo] [INFO] Raising simulated autonomous event: "${demoAction}" with args: ${JSON.stringify(args)}`);
-      this.emit(`demo.action.${demoAction}`, "succeeded", { ...args, action: demoAction });
-      return `Demo action: ${demoAction}`;
+      console.log(`[PRISM][demo] [INFO] Raising autonomous event: "${demoAction}" with args: ${JSON.stringify(args)}`);
+      
+      let realResult: string | undefined;
+
+      if (this.registry && this.registry.has("browser_control")) {
+        const browserTool = this.registry.get("browser_control");
+        try {
+          if (demoAction === "browser_open") {
+            console.log("[PRISM][demo] [INFO] DEMO ACTION: Launching real headed browser session...");
+            const res = await browserTool.execute({
+              operation: "browser_control",
+              args: { action: "launch_session", headless: false },
+              risk: "medium",
+              mutatesState: true,
+            });
+            if (res.ok && res.output && typeof res.output === "object") {
+              const session = res.output as { id?: string; sessionId?: string };
+              this.demoSessionId = session.id ?? session.sessionId ?? null;
+              console.log(`[PRISM][demo] [INFO] Launched real demo session ID: ${this.demoSessionId}`);
+              realResult = `Launched real headed browser session: ${this.demoSessionId}`;
+            } else {
+              realResult = `Launch failed: ${JSON.stringify(res.output)}`;
+            }
+          }
+          else if (demoAction === "browser_navigate") {
+            if (this.demoSessionId) {
+              const url = String(args.url ?? "about:blank");
+              console.log(`[PRISM][demo] [INFO] DEMO ACTION: Navigating session ${this.demoSessionId} to ${url}...`);
+              await browserTool.execute({
+                operation: "browser_control",
+                args: { action: "navigate", sessionId: this.demoSessionId, url },
+                risk: "medium",
+                mutatesState: false,
+              });
+              realResult = `Navigated to ${url}`;
+            } else {
+              realResult = "No active demo session ID to navigate";
+            }
+          }
+          else if (demoAction === "browser_a11y") {
+            if (this.demoSessionId) {
+              console.log(`[PRISM][demo] [INFO] DEMO ACTION: Retrieving accessibility tree...`);
+              await browserTool.execute({
+                operation: "browser_control",
+                args: { action: "get_accessibility_tree", sessionId: this.demoSessionId },
+                risk: "low",
+                mutatesState: false,
+              });
+              realResult = `Accessibility tree retrieved.`;
+            } else {
+              realResult = "No active demo session ID";
+            }
+          }
+          else if (demoAction === "browser_screenshot") {
+            if (this.demoSessionId) {
+              console.log(`[PRISM][demo] [INFO] DEMO ACTION: Capturing screenshot...`);
+              await browserTool.execute({
+                operation: "browser_control",
+                args: { action: "screenshot", sessionId: this.demoSessionId },
+                risk: "low",
+                mutatesState: false,
+              });
+              realResult = `Screenshot captured.`;
+            } else {
+              realResult = "No active demo session ID";
+            }
+          }
+          else if (demoAction === "browser_interact") {
+            if (this.demoSessionId) {
+              console.log(`[PRISM][demo] [INFO] DEMO ACTION: Scrolling page dynamically...`);
+              await browserTool.execute({
+                operation: "browser_control",
+                args: { action: "scroll", sessionId: this.demoSessionId, x: 0, y: 300 },
+                risk: "low",
+                mutatesState: false,
+              });
+              realResult = `Interaction completed (scrolled to y=300).`;
+            } else {
+              realResult = "No active demo session ID";
+            }
+          }
+        } catch (err) {
+          console.error(`[PRISM][demo] [ERROR] Failed executing real browser action ${demoAction}:`, err);
+          realResult = `Real execution error: ${String(err)}`;
+        }
+      }
+
+      this.emit(`demo.action.${demoAction}`, "succeeded", { ...args, action: demoAction, realResult });
+      return realResult ?? `Demo action: ${demoAction}`;
     }
 
     return undefined;

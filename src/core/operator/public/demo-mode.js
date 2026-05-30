@@ -228,9 +228,10 @@
       }
       case 'demo_switch_tab': {
         // Programmatically click the sidebar tab button
-        const tabBtns = document.querySelectorAll('[data-tab]');
+        const tabBtns = document.querySelectorAll('[data-tab-id], [data-tab]');
         tabBtns.forEach(btn => {
-          if (btn.dataset.tab === inner.tabId || btn.getAttribute('data-tab') === inner.tabId) btn.click();
+          const tid = btn.dataset.tabId || btn.getAttribute('data-tab-id') || btn.dataset.tab || btn.getAttribute('data-tab');
+          if (tid === inner.tabId) btn.click();
         });
         break;
       }
