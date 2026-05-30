@@ -1098,7 +1098,7 @@ function renderActiveGoal(goal) {
   var container = document.getElementById('autonomous-active-goal');
   if (!container || !goal) return;
   var statusColor = goal.status === 'executing' ? '#3ec46d' : goal.status === 'paused' ? '#ffd17a' : goal.status === 'failed' ? '#ff6b6b' : 'var(--text-muted)';
-  var html = '<div style="border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;">';
+  var html = '<div id="' + escapeHtml(goal.goalId) + '" style="border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;">';
   html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
   html += '<span style="font-weight:600;">🎯 ' + escapeHtml(goal.objective) + '</span>';
   html += '<span style="margin-left:auto;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,0.06);color:' + statusColor + ';font-size:11px;">' + goal.status + '</span>';

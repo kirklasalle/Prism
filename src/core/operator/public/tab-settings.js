@@ -1023,7 +1023,7 @@ export
 
     // Fetch dynamic power mode preference
     var pmData = await request('/api/preferences/power-mode').catch(() => null);
-    state.powerMode = pmData ? pmData.powerMode : 'performance';
+    state.powerMode = pmData && pmData.powerMode ? pmData.powerMode : 'adaptive';
 
     safeRenderStep('modelRouting', renderModelRouting);
   } catch (_) { }
@@ -2042,7 +2042,7 @@ export
 
   /* ── Section 1c: LLM Power & VRAM Manager ── */
   sec('powerManager', '\u{1F50B} LLM Power & VRAM Manager', function () {
-    var currentMode = state.powerMode || 'performance';
+    var currentMode = state.powerMode || 'adaptive';
     
     html += '<div class="power-manager-panel" style="background: linear-gradient(135deg, rgba(20,20,35,0.8), rgba(10,10,20,0.9)); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; padding: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); backdrop-filter: blur(8px); margin-bottom: 8px; overflow: hidden; position: relative;">';
     html += '<div style="position: absolute; top: -50px; right: -50px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(0,0,0,0) 70%); pointer-events: none;"></div>';
@@ -3383,7 +3383,7 @@ export async function updatePowerTelemetry() {
   
   try {
     // 1. Update Mode badge based on active state
-    var currentMode = state.powerMode || 'performance';
+    var currentMode = state.powerMode || 'adaptive';
     if (modeBadge) {
       modeBadge.textContent = currentMode.toUpperCase();
       if (currentMode === 'eco') {

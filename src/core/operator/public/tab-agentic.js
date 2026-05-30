@@ -285,9 +285,51 @@ export
     }
     var g = state.guardianStatus;
     if (!g) return;
+
+    let modelToSelect = g.modelPath;
+    if (!modelToSelect) {
+      // Fetch available local/Ollama models if not loaded yet
+      if (!state.localGgufModels || state.localGgufModels.length === 0) {
+        try {
+          const mData = await request('/api/models/gguf');
+          state.localGgufModels = mData.models || [];
+        } catch (_) {}
+      }
+      
+      const models = state.localGgufModels || [];
+      if (models.length > 0) {
+        // Find first recommended model that is already downloaded/present locally
+        const recs = getAllRecommended();
+        let matched = null;
+        for (const rm of recs) {
+          const found = models.find(m => m.name === rm.fileName);
+          if (found) {
+            matched = found;
+            break;
+          }
+        }
+        const bestModel = matched || models[0];
+        if (bestModel) {
+          modelToSelect = bestModel.path;
+          // Configure it on the backend
+          state.guardianStatus = await request('/api/guardian/configure', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modelPath: bestModel.path,
+              modelAlias: bestModel.name.replace(/\.gguf$/i, ''),
+              modelSource: bestModel.source
+            })
+          });
+          g = state.guardianStatus;
+          dashboardLog('agentic', 'guardian.autostart.default', `Defaulted Guardian model to suggested: ${bestModel.name}`);
+        }
+      }
+    }
+
     // Only autostart if a model is configured and Guardian is not already up.
     if (!g.modelPath) {
-      dashboardLog('agentic', 'guardian.autostart.deferred', 'No local model selected; skipping auto-start');
+      dashboardLog('agentic', 'guardian.autostart.deferred', 'No local model selected or available; skipping auto-start');
       return;
     }
     // In shared mode, defer to the server-side polling — don't force a start that

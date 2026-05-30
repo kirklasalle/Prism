@@ -334,6 +334,44 @@ export
   function renderMarkdown(text) {
   if (!text) return '';
   var s = String(text);
+
+  // Auto-link goals like goal-3a4 or goal-3a4-tasks
+  s = s.replace(/\bgoal-[a-zA-Z0-9]{3,12}\b/gi, function (match, offset, fullText) {
+    var before = fullText.substring(0, offset);
+    if (/\[[^\]]*$|\([^)]*$|href="[^"]*$|data-prism-tab="[^"]*$|`[^`]*$/.test(before)) {
+      return match;
+    }
+    return '[' + match + '](prism://tab/computer#' + match + ')';
+  });
+
+  // Auto-link explicit tab keywords to their corresponding tab IDs
+  var tabKeywords = [
+    { id: 'browser', patterns: [/@browser/gi, /\bBrowser Tab\b/gi, /\bBrowser Control\b/gi] },
+    { id: 'computer', patterns: [/@computer/gi, /\bComputer Tab\b/gi, /\bComputer Control\b/gi] },
+    { id: 'agentic', patterns: [/@agentic/gi, /\bAgentic Tab\b/gi, /\bAgentic Control\b/gi] },
+    { id: 'workspace', patterns: [/@workspace/gi, /\bWorkspace Tab\b/gi] },
+    { id: 'network', patterns: [/@network/gi, /\bNetwork Tab\b/gi] },
+    { id: 'telemetry', patterns: [/@telemetry/gi, /\bTelemetry Tab\b/gi] },
+    { id: 'logs', patterns: [/@logs/gi, /\bLogs Tab\b/gi, /\bLogs & Debug\b/gi] },
+    { id: 'settings', patterns: [/@settings/gi, /\bSettings Tab\b/gi, /\bProvider & Settings\b/gi, /\bProvider settings\b/gi] },
+    { id: 'chat', patterns: [/@chat/gi, /\bChat Tab\b/gi, /\bChat Interface\b/gi] },
+    { id: 'wiki', patterns: [/@wiki/gi, /\bWiki Tab\b/gi, /\bPrism Wiki\b/gi] },
+    { id: 'scheduler', patterns: [/@scheduler/gi, /\bScheduler Tab\b/gi] },
+    { id: 'watch', patterns: [/@watch/gi, /\bWatch Me Tab\b/gi] },
+    { id: 'tools', patterns: [/@tools/gi, /\bTools Tab\b/gi, /\bTools & Plugins\b/gi] }
+  ];
+
+  tabKeywords.forEach(function (t) {
+    t.patterns.forEach(function (pat) {
+      s = s.replace(pat, function (match, offset, fullText) {
+        var before = fullText.substring(0, offset);
+        if (/\[[^\]]*$|\([^)]*$|href="[^"]*$|data-prism-tab="[^"]*$|`[^`]*$/.test(before)) {
+          return match;
+        }
+        return '[' + match + '](prism://tab/' + t.id + ')';
+      });
+    });
+  });
   // Auto-link absolute file paths (Windows and Unix)
   s = s.replace(/(^|\s|`|&gt;)((?:[A-Za-z]:\\[^\s<>"'`]+)|(?:\/(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+))/g, function (_, prefix, path) {
     return prefix + '<a href="#" class="local-path-link" onclick="window.openLocalPath(\'' + escapeHtml(path.replace(/\\/g, '\\\\')) + '\'); return false;" title="Open in File Explorer">' + escapeHtml(path) + '</a>';

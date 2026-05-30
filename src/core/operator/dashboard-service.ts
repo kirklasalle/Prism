@@ -8899,7 +8899,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
     // ── Power Mode (Eco / Performance / Adaptive VRAM) preferences ───────────────────
     if (method === "GET" && url === "/api/preferences/power-mode") {
       const prefs = readPreferences();
-      this.json(res, 200, { powerMode: prefs?.powerMode || "performance" });
+      this.json(res, 200, { powerMode: prefs?.powerMode || "adaptive" });
       return;
     }
 
