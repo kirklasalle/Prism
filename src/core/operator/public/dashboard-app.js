@@ -410,6 +410,9 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      if (window._onDashboardWsMessage) {
+        try { window._onDashboardWsMessage(data); } catch (e) { console.error('[ws] hook error:', e); }
+      }
       if (data.type === 'ui_action' && data.action === 'switch_tab' && data.tabId) {
         setActiveTab(data.tabId);
         // Optional: scroll to + flash a panel anchor; surface an optional toast message.

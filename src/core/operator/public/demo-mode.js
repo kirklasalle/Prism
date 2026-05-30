@@ -84,7 +84,7 @@
     ensureOverlay();
     if (!definitions) {
       try {
-        const r = await authFetch('/api/v1/demo/definitions');
+        const r = await authFetch('/api/demo/definitions');
         definitions = await r.json();
       } catch { definitions = { demos: [], tabTour: [] }; }
     }
@@ -181,7 +181,7 @@
       const categories = selectedScope === 'comp-browser'
         ? ['browser-control', 'computer-control']
         : [];
-      await authFetch('/api/v1/demo/start', {
+      await authFetch('/api/demo/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answers, categories }),
       });
@@ -358,10 +358,10 @@
     setScope(scope) {
       setScope(scope);
     },
-    async pause() { await authFetch('/api/v1/demo/pause', { method: 'POST' }); },
-    async resume() { await authFetch('/api/v1/demo/resume', { method: 'POST' }); },
+    async pause() { await authFetch('/api/demo/pause', { method: 'POST' }); },
+    async resume() { await authFetch('/api/demo/resume', { method: 'POST' }); },
     async stop() {
-      await authFetch('/api/v1/demo/stop', { method: 'POST' });
+      await authFetch('/api/demo/stop', { method: 'POST' });
       resetButtons();
       const pill = $('demo-status-pill');
       if (pill) { pill.textContent = 'Stopped'; pill.style.color = 'var(--muted,#8b949e)'; }
@@ -380,7 +380,7 @@
     setSpeed(ms) {
       const label = $('demo-speed-label');
       if (label) label.textContent = (ms / 1000).toFixed(1) + 's';
-      authFetch('/api/v1/demo/configure', {
+      authFetch('/api/demo/configure', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ speedMs: parseInt(ms, 10) }),
       }).catch(() => {});
