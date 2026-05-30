@@ -478,8 +478,10 @@ export class DemonstrationEngine {
 
       this.emit(`demo.step.${status}`, status === "succeeded" ? "succeeded" : "failed", { demoId: demo.id, stepId: step.id, narration });
 
-      // Delay between steps for visual pacing
-      await this.delay(this.state.speedMs);
+      // Delay between steps for visual pacing (actual agent task runtime runs in real-time)
+      const isAgentAction = step.action.startsWith("tool:") || step.action.startsWith("demo:");
+      const pacingMs = isAgentAction ? Math.max(3000, this.state.speedMs) : this.state.speedMs;
+      await this.delay(pacingMs);
     }
   }
 
@@ -549,20 +551,29 @@ export class DemonstrationEngine {
         const browserTool = this.registry.get("browser_control");
         try {
           if (demoAction === "browser_open") {
-            console.log("[PRISM][demo] [INFO] DEMO ACTION: Launching real headed browser session...");
-            const res = await browserTool.execute({
+            console.log("[PRISM][demo] [INFO] DEMO ACTION: Searching for existing active browser session from Browser Tab...");
+            const listRes = await browserTool.execute({
               operation: "browser_control",
-              args: { action: "launch_session", headless: false },
-              risk: "medium",
-              mutatesState: true,
+              args: { action: "list_sessions" },
+              risk: "low",
+              mutatesState: false,
             });
-            if (res.ok && res.output && typeof res.output === "object") {
-              const session = res.output as { id?: string; sessionId?: string };
-              this.demoSessionId = session.id ?? session.sessionId ?? null;
-              console.log(`[PRISM][demo] [INFO] Launched real demo session ID: ${this.demoSessionId}`);
-              realResult = `Launched real headed browser session: ${this.demoSessionId}`;
+            let existingSessionId: string | null = null;
+            if (listRes.ok && listRes.output && typeof listRes.output === "object") {
+              const sessions = (listRes.output as any).sessions || [];
+              if (sessions.length > 0) {
+                existingSessionId = sessions[0].id;
+              }
+            }
+
+            if (existingSessionId) {
+              this.demoSessionId = existingSessionId;
+              console.log(`[PRISM][demo] [INFO] Reused existing active browser session ID: ${this.demoSessionId}`);
+              realResult = `Reused existing active browser session: ${this.demoSessionId}`;
             } else {
-              realResult = `Launch failed: ${JSON.stringify(res.output)}`;
+              const errMsg = "No active browser session detected. For audit safety, please go to the Browser Tab and click 'Launch Headed' first to establish a controlled session.";
+              console.error(`[PRISM][demo] [ERROR] ${errMsg}`);
+              throw new Error(errMsg);
             }
           }
           else if (demoAction === "browser_navigate") {
