@@ -6,7 +6,7 @@ import { renderRoutingStrategyControls, renderLlm, onHeaderProviderChanged, onHe
 import { testTool, checkPluginHealth, updateToolsFilter, renderToolsOverviewBar, renderToolsPanel, renderSkillsPanel, showRegisterToolForm, cancelRegisterTool, submitRegisterTool, renderPluginsPanel, showInstallPluginForm, cancelInstallPlugin, submitInstallPlugin, renderUtilitiesPanel, computePanelSummary, renderPanelSummaries, switchToolsSubTab, setToolsSort, setPluginsSort, setUtilitiesSort, refreshAllToolStatus, renderDiagnosticsPanel, runBrowserDiagnostics, loadDiagnosticsReport, computeDiagnosticsSummary, handleDiagnosticsWsMessage, toggleDiagnosticSuite, computeAgentDiagnosticsSummary, loadAgentDiagnosticsReport, runAgentDiagnostics, handleAgentDiagnosticsWsMessage, toggleAgentDiagnosticSuite, renderAgentDiagnosticsPanel, computeComputerDiagnosticsSummary, loadComputerDiagnosticsReport, runComputerDiagnostics, handleComputerDiagnosticsWsMessage, toggleComputerDiagnosticSuite, renderComputerDiagnosticsPanel, computeKnowledgeGraphDiagnosticsSummary, loadKnowledgeGraphDiagnosticsReport, runKnowledgeGraphDiagnostics, handleKnowledgeGraphDiagnosticsWsMessage, toggleKnowledgeGraphDiagnosticSuite, renderKnowledgeGraphDiagnosticsPanel, computeWorkspaceDiagnosticsSummary, loadWorkspaceDiagnosticsReport, runWorkspaceDiagnostics, handleWorkspaceDiagnosticsWsMessage, toggleWorkspaceDiagnosticSuite, renderWorkspaceDiagnosticsPanel, computeNetworkDiagnosticsSummary, loadNetworkDiagnosticsReport, runNetworkDiagnostics, handleNetworkDiagnosticsWsMessage, toggleNetworkDiagnosticSuite, renderNetworkDiagnosticsPanel, computeTelemetryDiagnosticsSummary, loadTelemetryDiagnosticsReport, runTelemetryDiagnostics, handleTelemetryDiagnosticsWsMessage, toggleTelemetryDiagnosticSuite, renderTelemetryDiagnosticsPanel, computeLogsDiagnosticsSummary, loadLogsDiagnosticsReport, runLogsDiagnostics, handleLogsDiagnosticsWsMessage, toggleLogsDiagnosticSuite, renderLogsDiagnosticsPanel, computeSchedulerDiagnosticsSummary, loadSchedulerDiagnosticsReport, runSchedulerDiagnostics, handleSchedulerDiagnosticsWsMessage, toggleSchedulerDiagnosticSuite, renderSchedulerDiagnosticsPanel, computeDemoDiagnosticsSummary, loadDemoDiagnosticsReport, runDemoDiagnostics, handleDemoDiagnosticsWsMessage, toggleDemoDiagnosticSuite, renderDemoDiagnosticsPanel, pollPluginHealth, startPluginHealthPolling, stopPluginHealthPolling } from './tab-tools.js';
 import { renderGuardianPanel, refreshGuardianStatus, startGuardian, stopGuardian, configureGuardian, refreshLocalModels, updateGuardianModel, onGuardianModelSelectChange, deleteLocalModel, addToRecommended, removeFromRecommended, loadCustomRecommendedModels, downloadRecommendedModels, startModelDownload, refreshGuardianTasks, runGuardianTask, toggleGuardianTask, runAllGuardianTasks, renderAgentList, renderSubAgentTree, renderSwarmTopology, renderAgentTelemetry, refreshAgentList, launchNewAgent, stopAgent, promoteAgent, demoteAgent, createSwarm, refreshSwarmStatus, initAgenticTab, autoStartGuardianIfConfigured, refreshCshHandoffs, takeCshControl, resumeCshAgent } from './tab-agentic.js';
 import { renderLocalSystemInfo, renderUsageMetrics, drawSparkline, runLocalCommand, refreshEnvVars, renderEnvVarsList, openPolicyEditor, refreshPolicyStatus, refreshDeviceManager, renderDeviceTree, openSystemDeviceManager, toggleDeviceProperties, filterDeviceTree, generateDeviceReport, captureScreengrab, burstCapture, showCaptureDiagnostics, runFramebufferDiagnostics, refreshFramebufferViewer, clearFramebufferPreviewVideo, setFramebufferPreviewSource, setFramebufferPreviewVideoSource, detectBurstVideoMimeType, loadFramebufferImage, buildBurstVideoPreview, formatFramebufferTimestamp, formatBurstTimestamp, summarizeFramebufferSelection, previewSelectedFramebufferItem, refreshFramebufferGallery, selectFramebufferFile, openFramebufferFile, revealFramebufferFile, openFramebufferFolder, toggleFramebufferAutoRefresh, toggleBurstPlayPause, stopBurstFromUI, setBurstSpeed, initComputerTab, pollUsage, updateBurstMediaBar, stopBurstFrameAnimation, startBurstFrameAnimation, submitAutonomousGoal, pauseAutonomousGoal, resumeAutonomousGoal, terminateAutonomousGoal, pollAutonomousStatus } from './tab-computer.js';
-import { launchBrowserPreview, openBrowserDevTools, refreshBrowserInfo, setBrowserView, toggleBrowserDevTools, browserRefreshStorage, setStorageSubView, renderStorageContent, browserRefreshProfiles, renderBrowserProfiles, browserRefreshLaunchProfiles, browserCreateProfile, browserDeleteProfile, browserLaunchSession, browserCloseSession, browserNavigate, browserTakeScreenshot, browserClickElement, browserTypeText, browserEvaluate, browserRefreshNetwork, browserRefreshConsole, browserRefreshDom, browserRunDiagnostics, browserSessionChanged, populateBrowserSessionDropdowns, renderBrowserSessions, browserLogAction, initBrowserTab, refreshSessionsList, submitBrowserAutopilot, stopBrowserAutopilot, resumeActiveCsh, updateSshpShieldIndicator } from './tab-browser.js';
+import { getCurrentBrowserView, launchBrowserPreview, openBrowserDevTools, refreshBrowserInfo, setBrowserView, toggleBrowserDevTools, browserRefreshStorage, setStorageSubView, renderStorageContent, browserRefreshProfiles, renderBrowserProfiles, browserRefreshLaunchProfiles, browserCreateProfile, browserDeleteProfile, browserLaunchSession, browserCloseSession, browserNavigate, browserTakeScreenshot, browserClickElement, browserTypeText, browserEvaluate, browserRefreshNetwork, browserRefreshConsole, browserRefreshDom, browserRunDiagnostics, browserSessionChanged, populateBrowserSessionDropdowns, renderBrowserSessions, browserLogAction, initBrowserTab, refreshSessionsList, submitBrowserAutopilot, stopBrowserAutopilot, resumeActiveCsh, updateSshpShieldIndicator } from './tab-browser.js';
 import { renderSelfReview, renderRetrievalObservability, setTelemetryWindow, renderRuntimeExcellence, renderReleaseReadiness, renderWhatChanged, deltaLabel, pct, renderPackageHistory, renderChatTelemetry, renderUsagePanel, refreshUsagePanel, setUsageSort, saveUsageCaps, clearUsageCaps, refreshSloGauges, startSloAutoRefresh, stopSloAutoRefresh } from './tab-telemetry.js';
 import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket } from './tab-logs.js';
 import { initSchedulerTab, refreshSchedulerData, switchSchedulerView, renderSchedulerPanel, setCalMode, schedCalNav, daysInMonth, eventsForDate, formatDateStr, isToday, renderSchedulerCalendar, mondayOfWeek, renderMiniMonth, renderFullMonth, renderWeekView, renderDayView, renderSchedulerProjects, openProjectDetail, renderSchedulerBoard, initBoardDragDrop, renderSchedulerGantt, openSchedulerModal, closeSchedulerModal, saveSchedulerModal } from './tab-scheduler.js';
@@ -413,17 +413,60 @@ function connectWebSocket() {
       if (window._onDashboardWsMessage) {
         try { window._onDashboardWsMessage(data); } catch (e) { console.error('[ws] hook error:', e); }
       }
-      if (data.type === 'demo_step' || data.type === 'demo_section' || data.type === 'telemetry') {
-        const action = String(data.action ?? '');
-        const detail = String(data.detail ?? '');
+      if (data.type === 'demo_step' || data.type === 'demo_section' || data.type === 'telemetry' || data.operation === 'browser_control' || (data.details && data.details.source === 'browser-session-manager')) {
+        const action = String(data.action ?? data.operation ?? '');
+        const detail = String(data.detail ?? (data.details ? JSON.stringify(data.details) : ''));
         const nar = String(data.narration ?? '');
-        if (action.includes('browser') || detail.includes('browser') || nar.includes('browser') || nar.includes('Browser')) {
+        
+        const isBrowserEvent = action.includes('browser') || detail.includes('browser') || nar.includes('browser') || nar.includes('Browser') || action.includes('click') || action.includes('navigate') || action.includes('type') || action.includes('scroll') || action.includes('hover') || action.includes('cookie') || action.includes('storage') || action.includes('screenshot');
+        
+        if (isBrowserEvent) {
+          // Identify browser event kind and log it to the Browser Action Log
+          let actionKind = 'agent';
+          let logMsg = nar || detail || action;
+          
+          if (action.includes('click') || detail.includes('click') || nar.includes('click')) {
+            actionKind = 'click';
+            logMsg = `Agent clicked element: ${detail || action}`;
+          } else if (action.includes('type') || detail.includes('type') || nar.includes('type') || action.includes('fill') || detail.includes('fill')) {
+            actionKind = 'type';
+            logMsg = `Agent typed input: ${detail || action}`;
+          } else if (action.includes('navigate') || detail.includes('navigate') || nar.includes('navigate') || action.includes('goto')) {
+            actionKind = 'navigate';
+            logMsg = `Agent navigated to: ${detail || action}`;
+          } else if (action.includes('screenshot') || detail.includes('screenshot') || nar.includes('screenshot')) {
+            actionKind = 'screenshot';
+            logMsg = `Agent captured screenshot`;
+          } else if (action.includes('scroll') || detail.includes('scroll') || nar.includes('scroll')) {
+            actionKind = 'scroll';
+            logMsg = `Agent scrolled viewport`;
+          } else if (action.includes('hover') || detail.includes('hover') || nar.includes('hover')) {
+            actionKind = 'hover';
+            logMsg = `Agent hovered element`;
+          }
+          
+          browserLogAction(actionKind, logMsg);
+
+          // Update active session dropdown and live sub-view content
           refreshSessionsList().then(() => {
-            if (state.activeBrowserSessionId) {
-              browserTakeScreenshot().catch(e => {});
+            const activeId = state.activeBrowserSessionId;
+            if (activeId) {
+              const currentView = getCurrentBrowserView();
+              if (currentView === 'viewport') {
+                browserTakeScreenshot().catch(e => {});
+              } else if (currentView === 'network') {
+                browserRefreshNetwork().catch(e => {});
+              } else if (currentView === 'console') {
+                browserRefreshConsole().catch(e => {});
+              } else if (currentView === 'dom') {
+                browserRefreshDom().catch(e => {});
+              } else if (currentView === 'storage') {
+                browserRefreshStorage().catch(e => {});
+              }
             }
           }).catch(e => {});
         }
+        
         if (action.includes('file') || detail.includes('file') || nar.includes('file') || nar.includes('Workspace') || nar.includes('Workspace Files')) {
           refreshWorkspaceFiles().catch(e => {});
         }

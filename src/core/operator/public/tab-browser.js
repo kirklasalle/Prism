@@ -6,6 +6,10 @@ let currentStorageSubView = 'cookies';
 let browserDevToolsOpen = false;
 const actionLog = [];
 
+export function getCurrentBrowserView() {
+  return currentBrowserView;
+}
+
 /* ── Helpers ── */
 
 function getActiveSessionId() {
