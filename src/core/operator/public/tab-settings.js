@@ -1020,6 +1020,11 @@ export
     state.routingSuggestions = data.suggestions || {};
     state.routingModalitySuggestions = data.modalitySuggestions || {};
     state.availableModalities = data.modalities || [];
+
+    // Fetch dynamic power mode preference
+    var pmData = await request('/api/preferences/power-mode').catch(() => null);
+    state.powerMode = pmData ? pmData.powerMode : 'performance';
+
     safeRenderStep('modelRouting', renderModelRouting);
   } catch (_) { }
 }
@@ -2035,6 +2040,87 @@ export
     }
   });
 
+  /* ── Section 1c: LLM Power & VRAM Manager ── */
+  sec('powerManager', '\u{1F50B} LLM Power & VRAM Manager', function () {
+    var currentMode = state.powerMode || 'performance';
+    
+    html += '<div class="power-manager-panel" style="background: linear-gradient(135deg, rgba(20,20,35,0.8), rgba(10,10,20,0.9)); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; padding: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); backdrop-filter: blur(8px); margin-bottom: 8px; overflow: hidden; position: relative;">';
+    html += '<div style="position: absolute; top: -50px; right: -50px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(0,0,0,0) 70%); pointer-events: none;"></div>';
+
+    html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">';
+    html += '<div style="display: flex; align-items: center; gap: 10px;">';
+    html += '<span style="font-size: 24px; filter: drop-shadow(0 0 8px #8b5cf6);">\u{1F50B}</span>';
+    html += '<div>';
+    html += '<div style="font-size: 14px; font-weight: 700; color: #a78bfa; letter-spacing: 0.5px; text-transform: uppercase;">LLM Power Manager</div>';
+    html += '<div style="font-size: 11px; color: var(--fg-muted);">Dynamic battery-like capacity & VRAM routing</div>';
+    html += '</div></div>';
+    
+    html += '<div style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);">';
+    html += '<div id="power-battery-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></div>';
+    html += '<span id="power-battery-text" style="font-size: 10px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.5px;">MONITORING</span>';
+    html += '</div></div>';
+
+    html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 16px;">';
+    html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
+    html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Dynamic Profile</div>';
+    html += '<div id="power-mode-badge" style="font-size: 12px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">' + escapeHtml(currentMode) + '</div>';
+    html += '</div>';
+    
+    html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
+    html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Est. Free VRAM</div>';
+    html += '<div id="power-vram-text" style="font-size: 12px; font-weight: 700; color: #10b981;">-- / -- MB</div>';
+    html += '</div>';
+    
+    html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
+    html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Usage Footprint</div>';
+    html += '<div id="power-cost-badge" style="font-size: 12px; font-weight: 700; color: #a78bfa;">MINIMAL</div>';
+    html += '</div></div>';
+
+    html += '<div style="margin-bottom: 18px;">';
+    html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">';
+    html += '<span style="font-size: 11px; font-weight: 600; color: var(--fg-muted);">Active VRAM Utilization</span>';
+    html += '<span id="power-vram-percentage" style="font-size: 11px; font-weight: 700; color: #10b981;">0%</span>';
+    html += '</div>';
+    html += '<div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; border: 1px solid rgba(255,255,255,0.04);">';
+    html += '<div id="power-vram-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #10b981, #3b82f6); border-radius: 3px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);"></div>';
+    html += '</div></div>';
+
+    html += '<div>';
+    html += '<div style="font-size: 11px; font-weight: 700; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Switch Capacity Profile</div>';
+    html += '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">';
+
+    // Performance Button
+    var perfActive = currentMode === 'performance';
+    html += '<button id="power-btn-performance" onclick="savePowerModePreference(\'performance\')" style="background: ' + (perfActive ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)') + '; border: 1px solid ' + (perfActive ? '#3b82f6' : 'rgba(255,255,255,0.08)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (perfActive ? '#fff' : 'var(--fg-muted)') + ';">';
+    html += '<span style="font-size: 16px;">⚡</span>';
+    html += '<span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Performance</span>';
+    html += '<span style="font-size: 9px; color: var(--fg-muted); text-align: center;">Maximize IQ & capability</span>';
+    html += '</button>';
+
+    // Eco Button
+    var ecoActive = currentMode === 'eco';
+    html += '<button id="power-btn-eco" onclick="savePowerModePreference(\'eco\')" style="background: ' + (ecoActive ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.02)') + '; border: 1px solid ' + (ecoActive ? '#10b981' : 'rgba(255,255,255,0.08)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (ecoActive ? '#fff' : 'var(--fg-muted)') + ';">';
+    html += '<span style="font-size: 16px;">🌱</span>';
+    html += '<span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Eco Mode</span>';
+    html += '<span style="font-size: 9px; color: var(--fg-muted); text-align: center;">Prioritize local & shift down</span>';
+    html += '</button>';
+
+    // Adaptive Button
+    var adaptiveActive = currentMode === 'adaptive';
+    html += '<button id="power-btn-adaptive" onclick="savePowerModePreference(\'adaptive\')" style="background: ' + (adaptiveActive ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.02)') + '; border: 1px solid ' + (adaptiveActive ? '#8b5cf6' : 'rgba(255,255,255,0.08)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (adaptiveActive ? '#fff' : 'var(--fg-muted)') + ';">';
+    html += '<span style="font-size: 16px;">⚙️</span>';
+    html += '<span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Adaptive VRAM</span>';
+    html += '<span style="font-size: 9px; color: var(--fg-muted); text-align: center;">Failover dynamically on low VRAM</span>';
+    html += '</button>';
+
+    html += '</div></div></div>';
+    
+    // Trigger telemetry update shortly after render
+    setTimeout(function() {
+      if (window.updatePowerTelemetry) window.updatePowerTelemetry();
+    }, 10);
+  });
+
   /* ── Section 2: LLM Summary ── */
   sec('llm', 'LLM Configuration (Summary)', function () {
     var provider = state.llmCatalog ? (state.llmCatalog.activeProviderId || 'none') : 'unknown';
@@ -2605,6 +2691,7 @@ async function refreshSRStatus() {
     state.srValidation = data.validation || null;
     state.srIsolationLevel = data.isolationLevel || null;
     state.srIsolationAdvisory = data.isolationAdvisory || null;
+    state.srTelemetry = data.telemetry || null;
   } catch (e) {
     dashboardLog('SR status fetch failed: ' + e);
   }
@@ -2639,6 +2726,7 @@ function renderSRPanel() {
   var validation = state.srValidation || { left: null, right: null };
   var catalog = state.srCatalog || [];
   var presets = state.srPresets || [];
+  var telemetry = state.srTelemetry || null;
 
   var html = '';
 
@@ -2697,8 +2785,15 @@ function renderSRPanel() {
   html += buildSRModelDropdown('left', config, candidates.left, catalog);
   if (validation.left) {
     var lvColor = validation.left.valid ? (validation.left.level === 'optimal' ? '#7cf1c8' : validation.left.level === 'standard' ? '#4dabf7' : '#ffd43b') : '#ff8787';
-    html += '<div style="font-size:10px;padding:4px 8px;border-radius:4px;background:' + lvColor + '20;color:' + lvColor + ';border:1px solid ' + lvColor + '40;">';
+    html += '<div style="font-size:10px;padding:4px 8px;border-radius:4px;background:' + lvColor + '20;color:' + lvColor + ';border:1px solid ' + lvColor + '40;margin-bottom:8px;">';
     html += escapeHtml(validation.left.advisoryText);
+    html += '</div>';
+  }
+  if (telemetry && telemetry.left) {
+    html += '<div style="padding:10px;background:linear-gradient(135deg, rgba(20,20,35,0.4), rgba(77,171,247,0.05));border:1px solid rgba(77,171,247,0.3);border-radius:8px;display:flex;align-items:center;justify-content:space-between;font-size:11px;box-shadow:inset 0 0 10px rgba(77,171,247,0.05);">';
+    html += '<div><span class="muted" style="font-size:9px;text-transform:uppercase;display:block;margin-bottom:2px;">Latency</span><span style="font-weight:800;color:#4dabf7;font-size:13px;font-family:monospace;">' + telemetry.left.latencyMs + ' ms</span></div>';
+    html += '<div><span class="muted" style="font-size:9px;text-transform:uppercase;display:block;margin-bottom:2px;">Throughput</span><span style="font-weight:800;color:#7cf1c8;font-size:13px;font-family:monospace;">' + telemetry.left.tokensPerSec + ' t/s</span></div>';
+    html += '<div><span class="muted" style="font-size:9px;text-transform:uppercase;display:block;margin-bottom:2px;">Status</span><span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(124,241,200,0.15);color:#7cf1c8;border:1px solid rgba(124,241,200,0.4);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">' + telemetry.left.status + '</span></div>';
     html += '</div>';
   }
   html += '</div>';
@@ -2711,8 +2806,15 @@ function renderSRPanel() {
   html += buildSRModelDropdown('right', config, candidates.right, catalog);
   if (validation.right) {
     var rvColor = validation.right.valid ? (validation.right.level === 'optimal' ? '#7cf1c8' : validation.right.level === 'standard' ? '#4dabf7' : '#ffd43b') : '#ff8787';
-    html += '<div style="font-size:10px;padding:4px 8px;border-radius:4px;background:' + rvColor + '20;color:' + rvColor + ';border:1px solid ' + rvColor + '40;">';
+    html += '<div style="font-size:10px;padding:4px 8px;border-radius:4px;background:' + rvColor + '20;color:' + rvColor + ';border:1px solid ' + rvColor + '40;margin-bottom:8px;">';
     html += escapeHtml(validation.right.advisoryText);
+    html += '</div>';
+  }
+  if (telemetry && telemetry.right) {
+    html += '<div style="padding:10px;background:linear-gradient(135deg, rgba(20,20,35,0.4), rgba(240,101,149,0.05));border:1px solid rgba(240,101,149,0.3);border-radius:8px;display:flex;align-items:center;justify-content:space-between;font-size:11px;box-shadow:inset 0 0 10px rgba(240,101,149,0.05);">';
+    html += '<div><span class="muted" style="font-size:9px;text-transform:uppercase;display:block;margin-bottom:2px;">Latency</span><span style="font-weight:800;color:#f06595;font-size:13px;font-family:monospace;">' + telemetry.right.latencyMs + ' ms</span></div>';
+    html += '<div><span class="muted" style="font-size:9px;text-transform:uppercase;display:block;margin-bottom:2px;">Throughput</span><span style="font-weight:800;color:#7cf1c8;font-size:13px;font-family:monospace;">' + telemetry.right.tokensPerSec + ' t/s</span></div>';
+    html += '<div><span class="muted" style="font-size:9px;text-transform:uppercase;display:block;margin-bottom:2px;">Status</span><span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(124,241,200,0.15);color:#7cf1c8;border:1px solid rgba(124,241,200,0.4);font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">' + telemetry.right.status + '</span></div>';
     html += '</div>';
   }
   html += '</div>';
@@ -3235,6 +3337,129 @@ export async function toggleSshpPreference(checked) {
   } catch (e) {
     console.error('[settings] sshp toggle failed', e);
     state.notice = { type: 'error', message: 'Failed to toggle SSHP: ' + String(e) };
+  }
+}
+
+export async function savePowerModePreference(mode) {
+  dashboardLog('settings', 'power-mode.save', 'Setting power mode preference to: ' + mode);
+  try {
+    var data = await request('/api/preferences/power-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ powerMode: mode })
+    });
+    state.powerMode = data.powerMode || mode;
+    state.notice = 'LLM Power Manager switched to: ' + mode.toUpperCase() + '.';
+    var noticeToast = document.getElementById('global-notice-toast');
+    if (noticeToast) {
+      noticeToast.textContent = state.notice;
+      noticeToast.style.opacity = '1';
+      setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
+    }
+    
+    // Rerender Settings panel to apply styling
+    renderSettingsPanel();
+    
+    // Trigger matrix update in case dynamic model routing preferences changed!
+    if (window.updateModelMatrix) {
+      window.updateModelMatrix();
+    }
+  } catch (e) {
+    console.error('[settings] power mode change failed', e);
+    state.notice = { type: 'error', message: 'Failed to switch Power Mode: ' + String(e) };
+  }
+}
+
+export async function updatePowerTelemetry() {
+  var modeBadge = document.getElementById('power-mode-badge');
+  var vramText = document.getElementById('power-vram-text');
+  var vramPercentage = document.getElementById('power-vram-percentage');
+  var vramBarFill = document.getElementById('power-vram-bar-fill');
+  var costBadge = document.getElementById('power-cost-badge');
+  var batteryText = document.getElementById('power-battery-text');
+  var batteryDot = document.getElementById('power-battery-dot');
+  
+  if (!vramText) return; // Tab not active or element not rendered yet
+  
+  try {
+    // 1. Update Mode badge based on active state
+    var currentMode = state.powerMode || 'performance';
+    if (modeBadge) {
+      modeBadge.textContent = currentMode.toUpperCase();
+      if (currentMode === 'eco') {
+        modeBadge.style.color = '#10b981';
+      } else if (currentMode === 'adaptive') {
+        modeBadge.style.color = '#a78bfa';
+      } else {
+        modeBadge.style.color = '#3b82f6';
+      }
+    }
+    
+    // 2. Fetch latest Ollama / System Telemetry
+    var data = await request('/api/system/hardware').catch(() => null);
+    if (!data || !data.gpu) {
+      vramText.textContent = 'NO GPU DETECTED';
+      vramText.style.color = 'var(--fg-muted)';
+      if (vramPercentage) vramPercentage.textContent = '0%';
+      if (vramBarFill) vramBarFill.style.width = '0%';
+      if (costBadge) {
+        costBadge.textContent = currentMode === 'eco' ? 'SUPER ECO' : 'STANDARD';
+        costBadge.style.color = currentMode === 'eco' ? '#10b981' : '#3b82f6';
+      }
+      if (batteryText) batteryText.textContent = 'HOST ONLY';
+      if (batteryDot) {
+        batteryDot.style.background = '#3b82f6';
+        batteryDot.style.boxShadow = '0 0 8px #3b82f6';
+      }
+      return;
+    }
+
+    var totalMb = data.gpu.vramTotalMb || 4096;
+    var usedMb = data.gpu.vramUsedMb || 0;
+    var freeMb = Math.max(0, totalMb - usedMb);
+    var pct = Math.round((usedMb / totalMb) * 100);
+
+    if (vramText) {
+      vramText.textContent = Math.round(freeMb) + ' / ' + Math.round(totalMb) + ' MB';
+      vramText.style.color = freeMb < 1500 ? '#f87171' : '#10b981';
+    }
+    if (vramPercentage) vramPercentage.textContent = pct + '%';
+    if (vramBarFill) {
+      vramBarFill.style.width = pct + '%';
+      vramBarFill.style.background = pct > 85 ? 'linear-gradient(90deg, #f87171, #ef4444)' : pct > 65 ? 'linear-gradient(90deg, #f59e0b, #f87171)' : 'linear-gradient(90deg, #10b981, #3b82f6)';
+    }
+
+    // 3. Update battery status & cost footprint
+    if (batteryText && batteryDot) {
+      if (pct > 90) {
+        batteryText.textContent = 'VRAM OVERLOAD';
+        batteryDot.style.background = '#ef4444';
+        batteryDot.style.boxShadow = '0 0 8px #ef4444';
+      } else if (freeMb < 1524) {
+        batteryText.textContent = 'LOW CAPACITY';
+        batteryDot.style.background = '#f59e0b';
+        batteryDot.style.boxShadow = '0 0 8px #f59e0b';
+      } else {
+        batteryText.textContent = 'NOMINAL POWER';
+        batteryDot.style.background = '#10b981';
+        batteryDot.style.boxShadow = '0 0 8px #10b981';
+      }
+    }
+
+    if (costBadge) {
+      if (currentMode === 'eco') {
+        costBadge.textContent = 'MINIMAL';
+        costBadge.style.color = '#10b981';
+      } else if (currentMode === 'adaptive') {
+        costBadge.textContent = freeMb < 1524 ? 'CLOUD FALLOVER' : 'HYBRID';
+        costBadge.style.color = freeMb < 1524 ? '#a78bfa' : '#3b82f6';
+      } else {
+        costBadge.textContent = 'OPTIMAL';
+        costBadge.style.color = '#3b82f6';
+      }
+    }
+  } catch (err) {
+    // silence
   }
 }
 

@@ -10,6 +10,8 @@
 // Types
 // ---------------------------------------------------------------------------
 
+import { readPreferences } from "../config/workspace-resolver.js";
+
 /** Capability tier: T1 (minimal) → T5 (frontier). */
 export type CapabilityTier = 1 | 2 | 3 | 4 | 5;
 
@@ -1227,7 +1229,16 @@ export function selectModelForRole(
 ): ModelRouterSelection | null {
     if (available.length === 0) return null;
 
-    const requirements = getRoleRequirements(role);
+    const prefs = readPreferences();
+    const powerMode = prefs?.powerMode || "performance";
+
+    const requirements = { ...getRoleRequirements(role) };
+
+    // Eco-mode active: shift requirement tiers down to conserve cost
+    if (powerMode === "eco") {
+        requirements.idealTier = Math.max(1, requirements.idealTier - 1) as CapabilityTier;
+        requirements.minimumTier = Math.max(1, requirements.minimumTier - 1) as CapabilityTier;
+    }
 
     // Build scored list
     const scored = available
@@ -1240,6 +1251,22 @@ export function selectModelForRole(
             const aDeprecated = getDeprecationStatus(a.profile) !== "active" ? 1 : 0;
             const bDeprecated = getDeprecationStatus(b.profile) !== "active" ? 1 : 0;
             if (aDeprecated !== bDeprecated) return aDeprecated - bDeprecated;
+
+            // Adaptive VRAM-Aware mode active: shift high-VRAM local models to the bottom if free VRAM is insufficient
+            if (powerMode === "adaptive" && cachedHardwareSnapshot) {
+                const aOom = a.profile.locality === "local" && a.profile.estimatedVramMb > cachedHardwareSnapshot.estimatedFreeVramMb;
+                const bOom = b.profile.locality === "local" && b.profile.estimatedVramMb > cachedHardwareSnapshot.estimatedFreeVramMb;
+                if (aOom !== bOom) {
+                    return aOom ? 1 : -1; // Push OOM-risk local models to the end
+                }
+            }
+
+            // Eco mode: force local models to take priority over cloud models to avoid external API charges
+            if (powerMode === "eco") {
+                const aLocal = a.profile.locality === "local" ? 1 : 0;
+                const bLocal = b.profile.locality === "local" ? 1 : 0;
+                if (aLocal !== bLocal) return bLocal - aLocal; // Local first
+            }
 
             // Local preferred over cloud when tiers are equal
             if (a.profile.tier === b.profile.tier) {
@@ -1551,6 +1578,19 @@ export function buildAdaptiveSystemPrompt(
     }
 
     return base;
+}
+
+// Global cache for hardware state
+let cachedHardwareSnapshot: HardwareSnapshot | null = null;
+let lastHardwareUpdate = 0;
+
+export function updateCachedHardwareSnapshot(snapshot: HardwareSnapshot): void {
+    cachedHardwareSnapshot = snapshot;
+    lastHardwareUpdate = Date.now();
+}
+
+export function getCachedHardwareSnapshot(): HardwareSnapshot | null {
+    return cachedHardwareSnapshot;
 }
 
 // ---------------------------------------------------------------------------

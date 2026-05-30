@@ -6,6 +6,7 @@ import type {
     LlmToolDefinition,
     LlmToolCall,
     LlmStreamChunk,
+    LlmContentPart,
 } from "./llm-provider-manager.js";
 import { toolsToLlmDefinitions } from "../tools/tool-schema-converter.js";
 import { resolveWorkspaceRoot } from "../config/workspace-resolver.js";
@@ -40,7 +41,7 @@ export type AgenticEventCallback = (event: AgenticTurnEvent) => void;
 
 interface ConversationEntry {
     role: "user" | "assistant" | "system" | "tool";
-    content: string;
+    content: string | LlmContentPart[];
     tool_call_id?: string;
     tool_calls?: LlmToolCall[];
     thoughtSignature?: string;
@@ -188,10 +189,30 @@ export class AgenticChatExecutor {
                     iteration,
                 });
 
+                // Assemble multimodal content parts if the output contains base64 image data
+                let contentVal: string | LlmContentPart[] = outputStr;
+                if (toolResult.ok && toolResult.output && typeof toolResult.output === "object" && typeof (toolResult.output as any).base64 === "string") {
+                    const format = (toolResult.output as any).format || "png";
+                    const toolContentParts: LlmContentPart[] = [
+                        { type: "text", text: "" },
+                        {
+                            type: "image_url",
+                            image_url: { url: `data:image/${format};base64,${(toolResult.output as any).base64}` }
+                        }
+                    ];
+
+                    const shallowCopy = { ...toolResult.output } as any;
+                    delete shallowCopy.base64;
+                    let cleanOutput = JSON.stringify(shallowCopy, null, 2);
+                    if (cleanOutput.length > 3000) cleanOutput = cleanOutput.slice(0, 3000) + "\n...[truncated]";
+                    toolContentParts[0] = { type: "text", text: cleanOutput };
+                    contentVal = toolContentParts;
+                }
+
                 // Add tool result to conversation
                 conversation.push({
                     role: "tool",
-                    content: outputStr,
+                    content: contentVal,
                     tool_call_id: toolCall.id,
                 });
             }

@@ -82,7 +82,7 @@ let _resolvedRoot: string | undefined;
 // Preferences persistence
 // ──────────────────────────────────────────────────────────────────────────────
 
-interface PrismPreferences {
+export interface PrismPreferences {
     workspaceRoot?: string;
     runtimeSettings?: Record<string, unknown>;
     setupComplete?: boolean;
@@ -99,6 +99,8 @@ interface PrismPreferences {
      * Stored as a free-form record so we don't have to import the GuardianConfig type into
      * the workspace-resolver layer; dashboard-service shape-checks before applying. */
     guardianConfig?: Record<string, unknown>;
+    /** Phase 4: Dynamic power mode preference for LLM execution routing. */
+    powerMode?: "performance" | "eco" | "adaptive";
     lastModified: string;
 }
 

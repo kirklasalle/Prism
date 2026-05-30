@@ -65,7 +65,7 @@ interface WindowEntry {
 }
 
 const DEFAULT_CONFIG: RateLimitConfig = {
-    maxRequests: 200,
+    maxRequests: 50,
     windowMs: 60_000, // 1 minute
     exemptRoutes: ["/health", "/api/health"],
 };

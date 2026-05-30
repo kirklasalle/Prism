@@ -10,7 +10,7 @@
             "publicKeyBase64": "MCowBQYDK2VwAyEAC2JWboF6D/R59GqxnHavduN4vsGN3QJA0nB5sOS+3tk=",
             "addedAt": "2026-05-28T23:43:56.416Z",
             "expiresAt": null,
-            "productionReady": false
+            "productionReady": true
         }
     ]
 }
