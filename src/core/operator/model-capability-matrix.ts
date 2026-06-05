@@ -734,6 +734,46 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         locality: "cloud",
     },
     {
+        pattern: "gpt-5.5-pro",
+        label: "GPT-5.5 Pro",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        adaptivePromptBudget: 6000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-5.5",
+        label: "GPT-5.5",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        adaptivePromptBudget: 6000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "realtime", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-realtime-2",
+        label: "GPT Realtime 2",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
+        modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gpt-realtime-mini",
+        label: "GPT Realtime Mini",
+        tier: 3, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 2000,
+        strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
+        modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
+        locality: "cloud",
+    },
+    {
         pattern: "gpt-realtime",
         label: "GPT Realtime",
         tier: 4, parameterSize: "frontier", parametersBillions: 0,
@@ -744,6 +784,16 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         locality: "cloud",
     },
     // ---- Cloud: OpenAI — Reasoning (o-series) ----
+    {
+        pattern: "o1-pro",
+        label: "OpenAI o1 Pro",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        adaptivePromptBudget: 6000,
+        strengths: ["reasoning", "code", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
     {
         pattern: "o1",
         label: "OpenAI o1",
@@ -785,6 +835,16 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         locality: "cloud",
     },
     {
+        pattern: "o4-mini-deep-research",
+        label: "OpenAI o4 Mini Deep Research",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        adaptivePromptBudget: 4000,
+        strengths: ["reasoning", "code", "tool-use", "fast", "agentic"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
+    {
         pattern: "o4-mini",
         label: "OpenAI o4 Mini",
         tier: 4, parameterSize: "frontier", parametersBillions: 0,
@@ -794,7 +854,57 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         modalities: ["text", "code", "image-understanding"],
         locality: "cloud",
     },
+    {
+        pattern: "sora-2-pro",
+        label: "Sora 2 Pro",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: ["multimodal"],
+        modalities: ["video-generation"],
+        locality: "cloud",
+    },
+    {
+        pattern: "sora-2",
+        label: "Sora 2",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: ["multimodal"],
+        modalities: ["video-generation"],
+        locality: "cloud",
+    },
     // ---- Cloud: Anthropic ----
+    {
+        pattern: "claude-opus-4-8",
+        label: "Claude Opus 4.8",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 128000,
+        adaptivePromptBudget: 8000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "claude-sonnet-4-6",
+        label: "Claude Sonnet 4.6",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 64000,
+        adaptivePromptBudget: 6000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "claude-haiku-4-5",
+        label: "Claude Haiku 4.5",
+        tier: 3, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 64000,
+        adaptivePromptBudget: 3000,
+        strengths: ["instruction-following", "reasoning", "code", "fast"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
     {
         pattern: "claude-3-5-haiku",
         label: "Claude 3.5 Haiku",
@@ -847,6 +957,36 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     },
     // ---- Cloud: Google ----
     {
+        pattern: "gemini-3.5-flash",
+        label: "Gemini 3.5 Flash",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use", "agentic"],
+        modalities: ["text", "code", "image-understanding", "video-understanding", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gemini-3.1-pro",
+        label: "Gemini 3.1 Pro",
+        tier: 5, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        adaptivePromptBudget: 6000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
+        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gemini-3.1-flash-lite",
+        label: "Gemini 3.1 Flash Lite",
+        tier: 3, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        adaptivePromptBudget: 2000,
+        strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use"],
+        modalities: ["text", "code", "image-understanding"],
+        locality: "cloud",
+    },
+    {
         pattern: "gemini-3.0-flash",
         label: "Gemini 3.0 Flash",
         tier: 4, parameterSize: "frontier", parametersBillions: 0,
@@ -864,6 +1004,26 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use", "agentic"],
         modalities: ["text", "code", "image-understanding", "video-understanding", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gemini-2.5-pro",
+        label: "Gemini 2.5 Pro",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
+        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "gemini-2.5-flash-lite",
+        label: "Gemini 2.5 Flash Lite",
+        tier: 3, parameterSize: "large", parametersBillions: 0,
+        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        adaptivePromptBudget: 2000,
+        strengths: ["instruction-following", "fast", "long-context"],
+        modalities: ["text", "code", "image-understanding"],
         locality: "cloud",
     },
     {
@@ -904,6 +1064,16 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "long-context", "multimodal"],
         modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "multimodal-reasoning"],
+        locality: "cloud",
+    },
+    {
+        pattern: "computer-use-preview",
+        label: "Computer Use Preview",
+        tier: 4, parameterSize: "frontier", parametersBillions: 0,
+        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "tool-use", "agentic"],
+        modalities: ["text", "code", "image-understanding"],
         locality: "cloud",
     },
     // ---- Cloud: Groq (fast inference) ----
@@ -1027,6 +1197,157 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
         contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "agentic", "long-context"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "whisper-1",
+        label: "Whisper 1",
+        tier: 1, parameterSize: "tiny", parametersBillions: 0,
+        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["stt"],
+        locality: "cloud",
+    },
+    {
+        pattern: "tts-1",
+        label: "TTS 1",
+        tier: 1, parameterSize: "tiny", parametersBillions: 0,
+        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["tts"],
+        locality: "cloud",
+    },
+    {
+        pattern: "tts-1-hd",
+        label: "TTS 1 HD",
+        tier: 1, parameterSize: "tiny", parametersBillions: 0,
+        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["tts"],
+        locality: "cloud",
+    },
+    {
+        pattern: "text-embedding-3-small",
+        label: "Text Embedding 3 Small",
+        tier: 1, parameterSize: "tiny", parametersBillions: 0,
+        contextWindow: 8191, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["embedding"],
+        locality: "cloud",
+    },
+    {
+        pattern: "text-embedding-3-large",
+        label: "Text Embedding 3 Large",
+        tier: 1, parameterSize: "tiny", parametersBillions: 0,
+        contextWindow: 8191, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["embedding"],
+        locality: "cloud",
+    },
+    {
+        pattern: "text-embedding-ada-002",
+        label: "Ada 002 Embedding",
+        tier: 1, parameterSize: "tiny", parametersBillions: 0,
+        contextWindow: 8191, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["embedding"],
+        locality: "cloud",
+    },
+    {
+        pattern: "dall-e-2",
+        label: "DALL-E 2",
+        tier: 1, parameterSize: "tiny", parametersBillions: 0,
+        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["image-generation"],
+        locality: "cloud",
+    },
+    {
+        pattern: "dall-e-3",
+        label: "DALL-E 3",
+        tier: 2, parameterSize: "small", parametersBillions: 0,
+        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        adaptivePromptBudget: 0,
+        strengths: [],
+        modalities: ["image-generation"],
+        locality: "cloud",
+    },
+    // ---- Cloud: OpenRouter (Aggregated) ----
+    {
+        pattern: "deepseek/deepseek-chat",
+        label: "DeepSeek V3 (OpenRouter)",
+        tier: 5, parameterSize: "frontier", parametersBillions: 671,
+        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 8192,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "code", "agentic"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "deepseek/deepseek-r1",
+        label: "DeepSeek R1 (OpenRouter)",
+        tier: 5, parameterSize: "frontier", parametersBillions: 671,
+        contextWindow: 163840, estimatedVramMb: 0, maxOutputTokens: 16384,
+        adaptivePromptBudget: 6000,
+        strengths: ["reasoning", "code", "agentic", "long-context"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "qwen/qwen-2.5-72b-instruct",
+        label: "Qwen 2.5 72B (OpenRouter)",
+        tier: 4, parameterSize: "large", parametersBillions: 72,
+        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 3000,
+        strengths: ["instruction-following", "reasoning", "code", "multilingual"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "meta-llama/llama-3.3-70b-instruct",
+        label: "Llama 3.3 70B (OpenRouter)",
+        tier: 4, parameterSize: "large", parametersBillions: 70,
+        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 3000,
+        strengths: ["instruction-following", "reasoning", "code", "fast"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "meta-llama/llama-3.3-70b-instruct:free",
+        label: "Llama 3.3 70B Free (OpenRouter)",
+        tier: 4, parameterSize: "large", parametersBillions: 70,
+        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 3000,
+        strengths: ["instruction-following", "reasoning", "code", "fast"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "mistralai/mistral-large-2512",
+        label: "Mistral Large 3 (OpenRouter)",
+        tier: 5, parameterSize: "frontier", parametersBillions: 123,
+        contextWindow: 262144, estimatedVramMb: 0, maxOutputTokens: 8192,
+        adaptivePromptBudget: 4000,
+        strengths: ["instruction-following", "reasoning", "code", "multilingual", "agentic", "long-context"],
+        modalities: ["text", "code"],
+        locality: "cloud",
+    },
+    {
+        pattern: "mistralai/mistral-small-2603",
+        label: "Mistral Small 4 (OpenRouter)",
+        tier: 3, parameterSize: "large", parametersBillions: 24,
+        contextWindow: 262144, estimatedVramMb: 0, maxOutputTokens: 4096,
+        adaptivePromptBudget: 2000,
+        strengths: ["instruction-following", "fast", "multilingual"],
         modalities: ["text", "code"],
         locality: "cloud",
     },
@@ -1189,6 +1510,30 @@ function inferProfileFromName(modelName: string): ModelCapabilityProfile {
         maxOutputTokens = 2048; adaptivePromptBudget = 1000;
     }
 
+    const lower = modelName.toLowerCase();
+    let modalities: ModelModality[] = ["text"];
+    let strengths: ModelStrength[] = ["instruction-following"];
+
+    if (lower.includes("whisper")) {
+        modalities = ["stt"];
+        strengths = [];
+    } else if (lower.includes("tts-") || lower === "tts-1" || lower === "tts-1-hd") {
+        modalities = ["tts"];
+        strengths = [];
+    } else if (lower.includes("embedding")) {
+        modalities = ["embedding"];
+        strengths = [];
+    } else if (lower.includes("dall-e") || lower.includes("imagen-")) {
+        modalities = ["image-generation"];
+        strengths = [];
+    } else if (lower.includes("veo-")) {
+        modalities = ["video-generation"];
+        strengths = [];
+    } else if (lower.includes("moderation")) {
+        modalities = ["text"];
+        strengths = [];
+    }
+
     return {
         pattern: modelName,
         label: modelName,
@@ -1199,8 +1544,8 @@ function inferProfileFromName(modelName: string): ModelCapabilityProfile {
         estimatedVramMb,
         maxOutputTokens,
         adaptivePromptBudget,
-        strengths: ["instruction-following"],
-        modalities: ["text"],
+        strengths,
+        modalities,
         locality: estimatedVramMb > 0 ? "local" : "cloud",
     };
 }
@@ -1223,11 +1568,26 @@ export function getRoleRequirements(role: TaskRole): RoleTierRequirements {
  *  4. Accept cloud models that meet the minimum tier (degraded).
  *  5. If nothing meets minimum, pick the highest-tier model available and flag degraded.
  */
+/** Get required modality for a task role. */
+export function getRoleRequiredModality(role: TaskRole): ModelModality {
+    switch (role) {
+        case "speech-recognition": return "stt";
+        case "speech-synthesis": return "tts";
+        case "realtime-voice": return "realtime";
+        case "image-creation": return "image-generation";
+        case "video-creation": return "video-generation";
+        case "audio-production": return "sound-effects";
+        default: return "text";
+    }
+}
+
 export function selectModelForRole(
     role: TaskRole,
     available: AvailableModel[],
 ): ModelRouterSelection | null {
     if (available.length === 0) return null;
+
+    const requiredModality = getRoleRequiredModality(role);
 
     const prefs = readPreferences();
     const powerMode = prefs?.powerMode || "performance";
@@ -1240,12 +1600,13 @@ export function selectModelForRole(
         requirements.minimumTier = Math.max(1, requirements.minimumTier - 1) as CapabilityTier;
     }
 
-    // Build scored list
+    // Build scored list and filter by required modality
     const scored = available
         .map((entry) => ({
             ...entry,
             profile: resolveProfile(entry.model),
         }))
+        .filter((entry) => entry.profile.modalities.includes(requiredModality))
         .sort((a, b) => {
             // De-prioritize deprecated/sunset models
             const aDeprecated = getDeprecationStatus(a.profile) !== "active" ? 1 : 0;
@@ -1275,6 +1636,8 @@ export function selectModelForRole(
             }
             return b.profile.tier - a.profile.tier; // higher tier first
         });
+
+    if (scored.length === 0) return null;
 
     // 1. Local that meets ideal
     const idealLocal = scored.find(
@@ -2070,7 +2433,7 @@ export function validateSRLeftModel(profile: ModelCapabilityProfile): SRValidati
 
 /**
  * Validate a model profile for the SR Right (Creative) hemisphere.
- * Requires image-generation modality at minimum; optimal includes video + audio.
+ * Requires image-generation or video-generation modality at minimum; optimal includes video + audio.
  */
 export function validateSRRightModel(profile: ModelCapabilityProfile): SRValidationResult {
     const missing: string[] = [];
@@ -2079,11 +2442,11 @@ export function validateSRRightModel(profile: ModelCapabilityProfile): SRValidat
     const hasVideoGen = modalities.includes("video-generation");
     const hasAudioOut = modalities.includes("voice-output") || modalities.includes("tts");
 
-    if (!hasImageGen) {
-        missing.push("Requires image-generation modality");
+    if (!hasImageGen && !hasVideoGen) {
+        missing.push("Requires image-generation or video-generation modality");
     }
 
-    const valid = hasImageGen;
+    const valid = hasImageGen || hasVideoGen;
     const optimalCount = [hasImageGen, hasVideoGen, hasAudioOut].filter(Boolean).length;
     const level: SRValidationResult["level"] = !valid
         ? "insufficient"
@@ -2098,15 +2461,15 @@ export function validateSRRightModel(profile: ModelCapabilityProfile): SRValidat
         : level === "optimal"
             ? `Optimal: Image + video + audio generation at T${profile.tier}.`
             : level === "standard"
-                ? `Standard: Image generation + ${hasVideoGen ? "video" : "audio"}. Full media suite recommended.`
-                : `Minimum: Image generation only. Add video/audio models for richer SR output.`;
+                ? `Standard: ${hasImageGen ? "Image" : "Video"} generation + ${hasVideoGen && hasImageGen ? "video" : hasAudioOut ? "audio" : "image"}.`
+                : `Minimum: ${hasImageGen ? "Image" : "Video"} generation only.`;
 
     return { valid, tier: profile.tier, level, missingCapabilities: missing, advisoryText };
 }
 
 /**
  * Filter available models to those qualified for the SR Left (Logic) hemisphere.
- * Returns models sorted by tier descending (best first).
+ * Returns models sorted by tier descending (best first), prioritizing code/agentic strengths.
  */
 export function filterSRLogicModels(available: AvailableModel[]): Array<AvailableModel & { profile: ModelCapabilityProfile; validation: SRValidationResult }> {
     return available
@@ -2116,12 +2479,26 @@ export function filterSRLogicModels(available: AvailableModel[]): Array<Availabl
             return { ...entry, profile, validation };
         })
         .filter(entry => entry.validation.valid)
-        .sort((a, b) => b.profile.tier - a.profile.tier);
+        .sort((a, b) => {
+            if (b.profile.tier !== a.profile.tier) {
+                return b.profile.tier - a.profile.tier;
+            }
+            const aHasCode = a.profile.strengths.includes("code");
+            const aHasAgentic = a.profile.strengths.includes("agentic");
+            const bHasCode = b.profile.strengths.includes("code");
+            const bHasAgentic = b.profile.strengths.includes("agentic");
+            const aScore = (aHasCode ? 2 : 0) + (aHasAgentic ? 2 : 0);
+            const bScore = (bHasCode ? 2 : 0) + (bHasAgentic ? 2 : 0);
+            if (bScore !== aScore) {
+                return bScore - aScore;
+            }
+            return b.profile.contextWindow - a.profile.contextWindow;
+        });
 }
 
 /**
  * Filter available models to those qualified for the SR Right (Creative) hemisphere.
- * Returns models sorted by capability coverage descending (best first).
+ * Returns models sorted by capability coverage descending (best first), prioritizing multimodal generation.
  */
 export function filterSRCreativeModels(available: AvailableModel[]): Array<AvailableModel & { profile: ModelCapabilityProfile; validation: SRValidationResult }> {
     return available
@@ -2132,10 +2509,15 @@ export function filterSRCreativeModels(available: AvailableModel[]): Array<Avail
         })
         .filter(entry => entry.validation.valid)
         .sort((a, b) => {
-            // Sort by validation level quality, then tier
             const levelOrder = { optimal: 3, standard: 2, minimum: 1, insufficient: 0 };
             const diff = levelOrder[b.validation.level] - levelOrder[a.validation.level];
-            return diff !== 0 ? diff : b.profile.tier - a.profile.tier;
+            if (diff !== 0) return diff;
+            const aHasBoth = a.profile.modalities.includes("image-generation") && a.profile.modalities.includes("video-generation");
+            const bHasBoth = b.profile.modalities.includes("image-generation") && b.profile.modalities.includes("video-generation");
+            if (aHasBoth !== bHasBoth) {
+                return bHasBoth ? 1 : -1;
+            }
+            return b.profile.tier - a.profile.tier;
         });
 }
 

@@ -22,7 +22,7 @@ export class ApprovalService {
     }
 
     start(): void {
-        this.server.listen(this.port, "127.0.0.1", () => {
+        this.server.listen(this.port, "0.0.0.0", () => {
             console.log(`[APPROVAL SERVICE] Listening at http://localhost:${this.port}`);
         });
     }

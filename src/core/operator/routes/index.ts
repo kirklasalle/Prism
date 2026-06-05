@@ -14,6 +14,11 @@ import { IamRouteHandler, isEnterpriseIamEnabled } from "./iam-handler.js";
 import { IamAdminRouteHandler } from "./iam-admin-handler.js";
 import { ScimRouteHandler, isScimEnabled } from "./scim-handler.js";
 import { LoginHandler } from "./login-handler.js";
+import { BrowserHandler } from "./browser-handler.js";
+import { ComputerHandler } from "./computer-handler.js";
+import { AgenticHandler } from "./agentic-handler.js";
+import { ChatHandler } from "./chat-handler.js";
+import { SettingsHandler } from "./settings-handler.js";
 
 export * from "./types.js";
 export * from "./dashboard-handler.js";
@@ -43,6 +48,11 @@ export class Router {
     this.handlers.push(new WikiHandler());
     this.handlers.push(new AutonomousHandler());
     this.handlers.push(new OpenAiCompatHandler());
+    this.handlers.push(new BrowserHandler());
+    this.handlers.push(new ComputerHandler());
+    this.handlers.push(new AgenticHandler());
+    this.handlers.push(new ChatHandler());
+    this.handlers.push(new SettingsHandler());
 
     this.handlers.push(new IamAdminRouteHandler({ iam }));
     this.handlers.push(iam);

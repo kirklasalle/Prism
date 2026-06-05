@@ -1,0 +1,62 @@
+# PRISM LLM Power & VRAM Manager Integration Architecture
+
+The **LLM Power & VRAM Manager** is a sophisticated, self-healing routing controller designed to dynamically balance intelligence quality, compute efficiency, and hardware resource availability. It acts as a real-time policy layer on top of the **Model Capability Matrix** (`src/core/operator/model-capability-matrix.ts`).
+
+---
+
+## 1. Core Mechanisms & Power Modes
+
+PRISM's router (`selectModelForRole`) queries the system-wide power configuration from workspace preferences to adjust its model matching and sorting policies across three distinct profiles:
+
+```mermaid
+graph TD
+    A[selectModelForRole] --> B{Power Mode Preference}
+    B -->|Performance| C[Frontier Priority: Max IQ]
+    B -->|Eco Mode| D[Local First & Tier Shifting]
+    B -->|Adaptive VRAM| E[Dynamic VRAM-Aware Failover]
+    
+    C --> F[Sort by Tier Descending T5 -> T1]
+    
+    D --> G[Shift Target Tiers Down by -1]
+    D --> H[Force Local Locality to the Top]
+    
+    E --> I{VRAM Footprint > Free VRAM?}
+    I -->|Yes| J[Demote Local Model to Bottom]
+    I -->|No| K[Route Normally to Local Model]
+```
+
+### A. Performance Mode (`"performance"`)
+* **Objective**: Maximum intelligence quality (IQ), accuracy, and instruction adherence.
+* **Routing Policy**: Routes tasks strictly to the highest capability tier models (T5/T4 frontier cloud systems) according to role requirements, regardless of cost.
+* **Integration**: Sorted descending by `profile.tier` to guarantee the best available model is always matched first.
+
+### B. Eco Mode (`"eco"`)
+* **Objective**: Minimize external API costs and run locally whenever possible.
+* **Routing Policy**:
+  1. **Tier Downgrade**: Shifts the required task role tiers down by `1` (e.g., an ideal T4 role is satisfied by a T3 model, and minimum T2 is satisfied by T1, with a floor of T1) to target smaller, cheaper models.
+  2. **Local Locality Priority**: Forces all local models (Ollama, Llama.cpp, etc.) to the absolute top of the sorted candidate list, regardless of tier, to avoid external API calls.
+
+### C. Adaptive VRAM Mode (`"adaptive"`)
+* **Objective**: Intelligent self-healing hardware failover on low-memory systems.
+* **Routing Policy**:
+  1. **Hardware Scanning**: Periodically polls the local GPU/system memory state (caching a `HardwareSnapshot`).
+  2. **Memory Constraint Checking**: For each candidate local model, it compares the model's metadata in the capability matrix (`profile.estimatedVramMb`) with the system's available free VRAM (`cachedHardwareSnapshot.estimatedFreeVramMb`).
+  3. **Out-of-Memory (OOM) Protection**: If a local model's VRAM requirements exceed the free VRAM space, it is marked as an OOM risk and pushed to the absolute bottom of the candidate list. This triggers an immediate, seamless failover to equivalent cloud models, preventing system freezes and driver crashes.
+
+---
+
+## 2. Capability Matrix Data Mapping
+
+The LLM Power Manager is driven entirely by the rich metadata defined in each **Model Capability Profile** within the Model Matrix:
+
+| Metadata Field | Type | Description | LLM Power Manager Usage |
+| :--- | :--- | :--- | :--- |
+| `tier` | `CapabilityTier` | Capability tier (T1 - T5) | Used to sort candidates and shift target requirements in Eco/Performance modes. |
+| `locality` | `ModelLocality` | `"local"` or `"cloud"` | Used in Eco mode to prioritize local runtimes over paid cloud APIs. |
+| `estimatedVramMb` | `number` | Required VRAM in Megabytes | Used in Adaptive mode to compare against active free memory space. |
+| `modalities` | `ModelModality[]` | Supported I/O channels | Filters out unqualified models before applying power-saving sorting. |
+
+---
+
+> [!TIP]
+> **Production Best Practice**: Enable **Adaptive VRAM** mode when pairing lightweight local companion models (e.g., Llama 3.2 3B or Gemma 3 1B) with high-horsepower cloud endpoints. This maximizes local processing efficiency while fully safeguarding the orchestrator loop against out-of-memory crashes.

@@ -751,6 +751,26 @@ export function copyLiveConsole() {
   });
 }
 
+export function copyActivityLogs() {
+  const logs = state.logEntries || [];
+  const text = logs.map(e => `[${e.timestamp || ''}] [${(e.severity || 'info').toUpperCase()}] [${e.source || ''}] ${e.operation || ''} - ${e.summary || ''}`).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Activity logs copied to clipboard!');
+  }).catch(err => {
+    alert('Failed to copy logs: ' + err);
+  });
+}
+
+export function copyUnifiedTelemetry() {
+  const visible = utBuffer.filter(utShouldShow);
+  const text = visible.map(e => `[${e.timestamp || ''}] [${(e.severity || 'info').toUpperCase()}] [${e.source || ''}] ${e.operation || ''} - ${e.summary || ''}${e.aiContext && e.aiContext.suggestedAction ? ' (AI Suggested: ' + e.aiContext.suggestedAction + ')' : ''}`).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Unified telemetry logs copied to clipboard!');
+  }).catch(err => {
+    alert('Failed to copy logs: ' + err);
+  });
+}
+
 // ── Support Tickets Queue & Lifecycle persistence ──────────────────────────
 export function toggleCreateTicketForm(show) {
   const form = document.getElementById('create-ticket-form');

@@ -1,0 +1,131 @@
+# PRISM World-Class Autonomous Architecture — Integrated Plan
+
+Kirk, I have analyzed your requests, conducted a deep architectural review of the codebase, and prepared a comprehensive implementation plan to achieve the fully autonomous operation and complete checks-and-balances system you envision.
+
+---
+
+## 1. Executive Summary & Core Paradigm
+
+PRISM contains the structural building blocks of an agentic system (ReAct engines, Win32/Playwright controls, safety ledgers, and multi-model capability routing). However, a series of logic disconnects between the operator UI, the orchestration layers, and the execution loops prevent these components from acting as a cohesive, self-healing agentic swarm.
+
+By introducing a battery-like **LLM Power Manager**, wiring up the **Swarm Topology execution loops**, verifying **Spectrum Refraction (SR) Hemisphere configurations** with real-time checks and balances, and bridging **Chat-to-Autonomous Escalation**, we will transform PRISM into a highly responsive, resource-aware autonomous agent.
+
+```mermaid
+graph TD
+    A[Chat Input / Schedule Trigger] --> B{Intent Classifier}
+    B -- Simple Chat / Q&A --> C[AgenticChatExecutor]
+    B -- Complex Browser/Computer Control --> D[AutonomousAgentLoop]
+    
+    C --> E[Model Capability Matrix]
+    D --> E
+    
+    E --> F{Routing & Power Manager}
+    F -- High Power/Complex --> G[Frontier Cloud Models]
+    F -- Mid Power/Standard --> H[Standard Cloud / Large Local]
+    F -- Low Power/Efficient --> I[Local 1-4B Models]
+    
+    G & H & I --> J{Cognitive Mode}
+    J -- Standard --> K[Single Model Generation]
+    J -- Spectrum Refraction --> L[SR Triad Validation]
+    
+    L --> M[Logic Left Hemisphere]
+    L --> N[Creative Right Hemisphere]
+    L --> O[Main Coordinator Hemisphere]
+    
+    M & N & O --> P[SR Aggregation & Synthesis]
+    P --> Q[Unified Response / Artifacts]
+```
+
+---
+
+## 2. Core Remediations & Architectural Integrations
+
+### A. Intent-Aware Chat-to-Autonomous Escalation
+*   **The Disconnect:** When you ask PRISM to "shop for shoes on Amazon," the request goes through a simple text-only chat executor that lacks standard visual reasoning, resulting in base64 strings instead of image parsing, and fails to submit a goal to the autonomous runtime.
+*   **The Integration:**
+    1.  Create an `IntentClassifier` within the orchestrator that scans chat inputs. If it detects shopping, scheduling, or active operating system tasks, it triggers the `AutonomousAgentLoop.submitGoal()`.
+    2.  Port the vision-aware multimodal response builder from `AutonomousPlanner` directly into `AgenticChatExecutor`. This guarantees that screenshots are sent as standard image-understanding content parts (`image_url`) to supporting models instead of raw base64 text, giving PRISM a true visual feedback loop.
+
+### B. LLM "Power Manager" Battery-Like Dynamic Routing
+*   **The Concept:** PRISM will treat its model selections like a power management system. Cloud frontier models (T5) are "high-drain/high-cost," whereas local 1-4B models (T1/T2) are "low-drain/zero-cost."
+*   **The Integration:**
+    1.  Introduce an **Agentic Power Profile** setting:
+        *   `Performance Mode`: Prioritizes frontier models (Claude 3.7 Sonnet, Gemini 1.5/2.0 Pro) for all reasoning roles.
+        *   `Eco-Mode`: Automatically routes low-risk, structured roles (e.g., classification, summarization, memory indexing) to local 1-4B parameter models (e.g., Gemma 2 2B, Qwen 2.5 1.5B/3B, Phi-3.5-mini), reserving cloud frontier models exclusively for high-tier orchestrator or code-generation tasks.
+        *   `Adaptive Mode (VRAM-Aware)`: Integrates real-time hardware telemetry from `fetchHardwareSnapshot()` and `/api/computer/system-info`. If local VRAM usage is above 85% or available system memory is low, it dynamically shifts routing from local models to lightweight cloud API endpoints to prevent local server freeze-ups or out-of-memory failures.
+
+### C. Enhanced Spectrum Refraction (SR) Checks & Balances
+*   **The Concept:** A rigorous, real-time verification system to prevent invalid SR configurations and coordinate up to 8 hemispheres.
+*   **The Integration:**
+    1.  **Enforce Triad Isolation:** Implement frontend and backend validation that prevents saving or activating SR if `validateSRTriad` flags the configuration as `insufficient` (i.e., Left and Right hemispheres mapping to the exact same provider + model combination).
+    2.  **Telemetry-Driven N-Model Fan-Out:** Extend `/api/sr/status` to return real-time metrics (tokens/sec, latency, cost per hemisphere) and map them directly into a newly redesigned **Spectrum Refraction Telemetry Dashboard Panel**.
+    3.  **Hemispheric Array Configuration:** Support the new `hemispheres[]` array schema (Phase A) within `/api/sr/configure` to allow advanced operators to scale up from 2 to 8 isolated generation slots.
+
+### D. Swarm Coordinator & Agent Pool Wiring
+*   **The Disconnect:** The UI displays empty swarm topologies and static agent lists. Launch, stop, promote, and demote operations are not fully tied to live pipeline executions.
+*   **The Integration:**
+    1.  Wire the frontend agent actions (Spawn, Stop, Promote, Demote) directly to backend instances in `AgentPool` and `AgentLifecycle`.
+    2.  Tie the `createSwarm` API call (`/api/swarms/create`) to actual swarm-coordinator pipelines (Mesh, Star, Pipeline, Broadcast). When a swarm is created, trigger the `SwarmCoordinator.execute(swarmId)` loop to decompose the task, run sub-agent worker processes in parallel or sequence, and log the execution state to the `ActivityBus`.
+
+---
+
+## 3. Proposed Changes
+
+### [Component: Orchestrator & Chat Logic]
+
+#### [MODIFY] [agentic-chat-executor.ts](file:///d:/Projects/Prism/src/core/operator/agentic-chat-executor.ts)
+*   Integrate multimodal `image_url` assembly into `handleToolResult` for vision-capable models (e.g., Qwen VL, Claude Sonnet).
+*   Enrich the core agentic system prompt to teach the model how to sequence Playwright navigation actions and reason step-by-step from page elements.
+
+#### [NEW] [intent-classifier.ts](file:///d:/Projects/Prism/src/core/operator/intent-classifier.ts)
+*   Implement heuristic and LLM-driven classification to differentiate simple conversational tasks from multi-step autonomous actions (e.g., e-commerce shopping, operating system changes, scheduled reports).
+*   Add an escalation bridge that maps classified intents directly to `AutonomousAgentLoop.submitGoal()`.
+
+---
+
+### [Component: LLM Routing & Power Manager]
+
+#### [MODIFY] [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
+*   Add power-aware selection logic inside `selectModelForRole`. Read active battery/VRAM profiles to determine whether a task role should scale down to a T1-T2 local model or scale up to a cloud frontier T5 model.
+*   Prevent race conditions: Check if `llama-server` is in the process of loading a model. If it is, redirect request traffic to a cloud model or block with a "Waiting for local provider" state rather than returning a connection error.
+
+---
+
+### [Component: Dashboard UI & Checks]
+
+#### [MODIFY] [tab-settings.js](file:///d:/Projects/Prism/src/core/operator/public/tab-settings.js)
+*   Add a visual "Model Matrix Power Mode" controller (Performance, Eco, Adaptive VRAM-Aware) that dynamically posts configuration updates to `/api/settings`.
+*   Integrate real-time `validateSRTriad` feedback in the Spectrum Refraction panel. Render active badges ("Full Isolation," "Model Isolation," "Insufficient Isolation") and display warnings when isolated instances are missing.
+*   Render real-time telemetry panels showing Left, Right, and Aggregator latencies and tokens/sec.
+
+#### [MODIFY] [tab-agentic.js](file:///d:/Projects/Prism/src/core/operator/public/tab-agentic.js)
+*   Wire the agent spawn, stop, and swarm actions directly to the `AgentPool` and `SwarmCoordinator` endpoints.
+*   Represent active swarms dynamically, showing the current execution topology (Mesh, Star, Pipeline, Broadcast) and worker progression.
+
+---
+
+## 4. Verification Plan
+
+### Automated Assertions
+```powershell
+# Verify Matrix profile resolution
+npx node --test tests/model-capability-matrix.test.ts
+
+# Verify Provider manager and battery-like eco-mode routing
+npx node --test tests/llm-provider-manager.test.ts
+
+# Verify Swarm coordinator and topology executions
+npx node --test tests/swarm-coordinator.test.ts
+```
+
+### Manual Interactive Scenario (Checks & Balances)
+1.  **Matrix Eco-Mode Verification:** Set routing preference to `Eco-Mode` on the Settings tab. Dispatch a minor chat query ("Summarize our session"). Verify via logs that PRISM routes this to a local 1-4B parameter model.
+2.  **SR Isolation Safeguard:** Select the identical local provider and model for both Left and Right hemispheres in the Settings tab. Confirm that the UI flags "Insufficient Isolation" and prevents activation.
+3.  **Swarm Topology Pipeline execution:** Create a Pipeline-based swarm of 3 agents (Researcher → Coder → Writer) to solve a complex coding goal. Verify that the task flows sequentially, transmitting outputs from stage to stage in the Agentic tab tree view.
+4.  **End-to-End Visual Shopping:** In the Chat tab, enter: "Shop for running shoes on Amazon". Confirm that PRISM classifies the autonomous intent, escalates to the autonomous loop, boots Playwright, takes screenshots, passes them as image parts to the vision model, and delivers a formatted shoes report.
+
+---
+
+Kirk, this plan delivers deep integration, optimized resource control, and a solid checks-and-balances feedback loop between the dashboard and the runtime logic. 
+
+Please review and let me know if you would like me to begin coding Phase 1 and Phase 2.

@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector } from './dashboard-core.js';
+import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector, trimAgenticEvent } from './dashboard-core.js';
 import { renderToolCallLog } from './tab-logs.js';
 
 // Holds files staged for upload prior to server ACK. Ensure initialized.
@@ -911,7 +911,7 @@ export
       extraHtml += '</div>';
     }
 
-    const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : escapeHtml(message.content);
+    const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : renderMarkdown(escapeHtml(message.content));
 
     // ── v0.20.3: render attachment chips on user message bubbles ──
     // Additive — only emits markup when attachments are present, so messages
@@ -962,14 +962,24 @@ export
     ? '<div class="message assistant"><div class="message-label">PRISM</div>'
     + state.agenticStream.map(function (ev) {
       if (ev.type === 'text') return '<div>' + renderMarkdown(ev.text || '') + '</div>';
-      if (ev.type === 'tool_call') { var tn = (ev.toolCall && ev.toolCall.name) || ''; return '<div class="tool-block"><div class="tool-block-header"><span class="tool-block-icon">\u{1F527}</span><span class="tool-block-name">' + escapeHtml(tn) + '</span><span class="streaming-dot"></span></div></div>'; }
+      if (ev.type === 'tool_call') {
+        var tn = (ev.toolCall && ev.toolCall.name) || 'tool';
+        var iter = ev.iteration != null ? ev.iteration : '';
+        return '<div class="tool-block" title="' + escapeHtml(tn) + (iter ? ' (iteration ' + iter + ')' : '') + '">'
+          + '<div class="tool-block-header"><span class="tool-block-icon">\u{1F527}</span>'
+          + '<span class="tool-block-name" style="margin-left:8px;font-weight:600;">' + escapeHtml(tn) + '</span>'
+          + '<span class="muted" style="margin-left:8px;font-size:11px;">' + (iter ? 'iter ' + iter : '') + '</span>'
+          + '<span class="streaming-dot" style="margin-left:8px"></span>'
+          + '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'agentic\'); } if(typeof refreshAutonomousGoals===\'function\'){ refreshAutonomousGoals(); } }catch(e){console.error(e);} return false;">View in Agentic</button>'
+          + '</div></div>';
+      }
       if (ev.type === 'tool_result') { var rn = (ev.toolResult && ev.toolResult.name) || 'tool'; return '<div class="muted" style="font-size:11px;">\u2713 ' + escapeHtml(rn) + ' done</div>'; }
       return '';
     }).join('')
     + '</div>'
     : '';
 
-  const typing = state.busy && !state.agenticStream.length
+  const typing = (state.busy && !state.agenticStream.length) || (state.lastThinkingTrace && state.lastThinkingTrace.length)
     ? '<div class="message assistant thinking-indicator" onclick="showThinkingTraceModal()" style="cursor:pointer;" title="Click to view live cognitive trace">'
     + '<div class="message-label">PRISM <span class="thinking-badge" style="background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:2px 6px;border-radius:4px;">thinking</span></div>'
     + '<div class="thinking-dots"><span></span><span></span><span></span></div>'
@@ -1600,6 +1610,12 @@ export
       if (data.type === 'agentic_event') {
         var ev = data.event || data;
         if (ev.type === 'done') {
+          // Preserve the just-finished live trace for post-mortem inspection
+          try {
+            state.lastThinkingTrace = (state.agenticStream && state.agenticStream.length) ? state.agenticStream.slice(-500).map(function (x) { return typeof trimAgenticEvent === 'function' ? trimAgenticEvent(x) : x; }) : [];
+            if (state.lastThinkingTrace && state.lastThinkingTrace.length > 500) state.lastThinkingTrace = state.lastThinkingTrace.slice(-500);
+          } catch (_) { state.lastThinkingTrace = state.agenticStream ? state.agenticStream.slice() : []; }
+          // Clear live stream for next run
           state.agenticStream = [];
           loadMessages().then(() => safeRenderStep('messages', renderMessages));
         } else if (ev.type === 'error') {
@@ -1701,6 +1717,7 @@ export function showThinkingTraceModal() {
 
   const renderContent = () => {
     let html = '';
+    const trace = (state.lastThinkingTrace && state.lastThinkingTrace.length) ? state.lastThinkingTrace : (state.agenticStream || []);
 
     // Active Status Card
     html += `
@@ -1714,7 +1731,7 @@ export function showThinkingTraceModal() {
 
     // Cognitive steps section
     html += `<div><h4 style="margin:0 0 10px;color:#a78bfa;font-size:13px;letter-spacing:0.5px;text-transform:uppercase;font-weight:600;">🧠 Cognitive Processing Pipeline</h4>`;
-    if (!state.agenticStream || state.agenticStream.length === 0) {
+    if (!trace || trace.length === 0) {
       html += `
         <div style="padding:32px 24px;border:1px dashed rgba(255,255,255,0.1);border-radius:8px;text-align:center;color:#94a3b8;font-style:italic;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;box-sizing:border-box;">
           <div style="width:24px;height:24px;border:2px solid #a78bfa;border-top-color:transparent;border-radius:50%;animation:thinking-spin 1s linear infinite;"></div>
@@ -1723,7 +1740,7 @@ export function showThinkingTraceModal() {
       `;
     } else {
       html += `<div style="display:flex;flex-direction:column;gap:10px;box-sizing:border-box;">`;
-      state.agenticStream.forEach((ev) => {
+      trace.forEach((ev) => {
         if (ev.type === 'text') {
           html += `
             <div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:8px;padding:12px 16px;box-sizing:border-box;">

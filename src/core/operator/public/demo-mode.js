@@ -59,12 +59,6 @@
           <button id="demo-btn-pause" class="demo-btn" onclick="window.prismDemo.pause()" style="display:none">⏸ Pause</button>
           <button id="demo-btn-resume" class="demo-btn demo-btn-primary" onclick="window.prismDemo.resume()" style="display:none">▶ Resume</button>
           <button id="demo-btn-stop" class="demo-btn demo-btn-danger" onclick="window.prismDemo.stop()" style="display:none">⏹ Stop</button>
-          <div id="demo-speed-control" style="display:none">
-            <label style="font-size:11px;color:var(--muted,#8b949e)">Speed:</label>
-            <input type="range" id="demo-speed-slider" min="500" max="8000" value="3000" step="500"
-              oninput="window.prismDemo.setSpeed(this.value)">
-            <span id="demo-speed-label" style="font-size:11px;min-width:32px">3.0s</span>
-          </div>
         </div>
         <div id="demo-prompts" style="display:none"></div>
         <div id="demo-log" style="display:none"></div>
@@ -197,7 +191,6 @@
     const play = $('demo-btn-play'); if (play) play.style.display = 'none';
     const pause = $('demo-btn-pause'); if (pause) pause.style.display = '';
     const stop = $('demo-btn-stop'); if (stop) stop.style.display = '';
-    const speed = $('demo-speed-control'); if (speed) speed.style.display = 'flex';
     const pill = $('demo-status-pill');
     if (pill) { pill.textContent = 'Running'; pill.style.color = 'var(--accent,#2da44e)'; }
   }
@@ -377,14 +370,6 @@
       if (inner) inner.style.display = inner.style.display === 'none' ? '' : 'none';
       const btn = $('demo-minimize-btn');
       if (btn) btn.textContent = inner?.style.display === 'none' ? '▲' : '▼';
-    },
-    setSpeed(ms) {
-      const label = $('demo-speed-label');
-      if (label) label.textContent = (ms / 1000).toFixed(1) + 's';
-      authFetch('/api/demo/configure', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ speedMs: parseInt(ms, 10) }),
-      }).catch(() => {});
     },
     handleEvent: handleDemoEvent,
   };

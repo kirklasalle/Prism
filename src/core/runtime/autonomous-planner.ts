@@ -28,6 +28,8 @@ import type { AutonomousAgentLoop, AutonomousGoal } from "./autonomous-agent-loo
 import type { AutonomousBrowserAgent, BrowserAgentPerception } from "./autonomous-browser-agent.js";
 import type { AutonomousComputerAgent } from "./autonomous-computer-agent.js";
 import type { LlmContentPart } from "../operator/llm-provider-manager.js";
+import { LLRETelemetry } from "../llre/telemetry.js";
+import { LLRECompiler } from "../llre/ast.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +40,7 @@ export type AutonomousLlmGenerateFn = (input: {
     systemPrompt: string;
     tools?: LlmToolDef[];
     tool_choice?: "auto" | "none" | "required";
+    goal?: AutonomousGoal;
 }) => Promise<{
     content: string;
     toolCalls?: LlmToolCallResult[];
@@ -104,11 +107,12 @@ const PLANNER_SYSTEM_PROMPT = `You are PRISM Autonomous Planner — an expert AI
 ## Rules
 - Always explain your reasoning before calling a tool.
 - Use the most specific tool available for each task.
-- If a tool call fails, analyze the error and try a different approach.
+- If a tool call fails, diagnose the failure cause, execute rollback or compensating action, then continue toward the objective.
 - Never repeat the same failed tool call with identical arguments.
 - If you cannot make progress after 3 failed attempts, summarize what you achieved and stop.
 - When the objective is complete, provide a clear summary of what was accomplished.
 - Be concise in reasoning — focus on what to do next, not lengthy analysis.
+- Treat tool outputs containing autonomousRecovery details as mandatory recovery instructions.
 
 ## Safety
 - Do not execute destructive commands (rm -rf, format, etc.) unless explicitly instructed.
@@ -170,20 +174,20 @@ export class AutonomousPlanner {
                 // Check abort
                 if (this.abortRequested) {
                     loop.terminateGoal(goal.goalId, "Operator requested abort");
-                    return this.buildResult(goal.goalId, "terminated", "Aborted by operator", iteration, totalToolCalls, startTime);
+                    return this.buildResult(goal.goalId, "terminated", "Aborted by operator", iteration, totalToolCalls, startTime, loop);
                 }
 
                 // Check if goal was paused/terminated externally
                 const currentGoal = loop.getGoal(goal.goalId);
                 if (!currentGoal || currentGoal.status === "terminated" || currentGoal.status === "completed") {
                     return this.buildResult(goal.goalId, currentGoal?.status === "completed" ? "completed" : "terminated",
-                        currentGoal?.error || "Goal ended externally", iteration, totalToolCalls, startTime);
+                        currentGoal?.error || "Goal ended externally", iteration, totalToolCalls, startTime, loop);
                 }
                 if (currentGoal.status === "paused" || currentGoal.status === "suspended" || currentGoal.status === "handing_off") {
                     // Wait for resume — poll every 2s, max 5min
                     const resumed = await this.waitForResume(loop, goal.goalId, 5 * 60 * 1000);
                     if (!resumed) {
-                        return this.buildResult(goal.goalId, "terminated", "Goal execution was not resumed within 5 minutes", iteration, totalToolCalls, startTime);
+                        return this.buildResult(goal.goalId, "terminated", "Goal execution was not resumed within 5 minutes", iteration, totalToolCalls, startTime, loop);
                     }
                 }
 
@@ -209,6 +213,7 @@ export class AutonomousPlanner {
                         systemPrompt,
                         tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
                         tool_choice: toolDefinitions.length > 0 ? "auto" : undefined,
+                        goal,
                     });
                 } catch (llmError) {
                     this.emit("planner.llm.error", "failed", {
@@ -223,16 +228,17 @@ export class AutonomousPlanner {
                             systemPrompt,
                             tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
                             tool_choice: toolDefinitions.length > 0 ? "auto" : undefined,
+                            goal,
                         });
                     } catch (retryError) {
                         loop.terminateGoal(goal.goalId, `LLM error after retry: ${String(retryError)}`);
-                        return this.buildResult(goal.goalId, "failed", `LLM error: ${String(retryError)}`, iteration, totalToolCalls, startTime);
+                        return this.buildResult(goal.goalId, "failed", `LLM error: ${String(retryError)}`, iteration, totalToolCalls, startTime, loop);
                     }
                 }
 
                 if (!llmResult) {
                     loop.terminateGoal(goal.goalId, "LLM returned null response");
-                    return this.buildResult(goal.goalId, "failed", "LLM returned no response", iteration, totalToolCalls, startTime);
+                    return this.buildResult(goal.goalId, "failed", "LLM returned no response", iteration, totalToolCalls, startTime, loop);
                 }
 
                 // Process text content (reasoning)
@@ -246,7 +252,7 @@ export class AutonomousPlanner {
                 // If no tool calls → goal is complete
                 if (!llmResult.toolCalls?.length || llmResult.stopReason !== "tool_use") {
                     loop.completeGoal(goal.goalId, llmResult.content || "Objective completed");
-                    return this.buildResult(goal.goalId, "completed", llmResult.content || "Objective completed", iteration + 1, totalToolCalls, startTime);
+                    return this.buildResult(goal.goalId, "completed", llmResult.content || "Objective completed", iteration + 1, totalToolCalls, startTime, loop);
                 }
 
                 // Add assistant message with tool calls to conversation
@@ -336,11 +342,11 @@ export class AutonomousPlanner {
             loop.completeGoal(goal.goalId, `Reached max iterations (${this.config.maxIterations})`);
             return this.buildResult(goal.goalId, "budget_exhausted",
                 `Reached maximum iterations (${this.config.maxIterations})`,
-                iteration, totalToolCalls, startTime);
+                iteration, totalToolCalls, startTime, loop);
 
         } catch (fatalError) {
             loop.terminateGoal(goal.goalId, String(fatalError));
-            return this.buildResult(goal.goalId, "failed", String(fatalError), iteration, totalToolCalls, startTime);
+            return this.buildResult(goal.goalId, "failed", String(fatalError), iteration, totalToolCalls, startTime, loop);
         }
     }
 
@@ -419,6 +425,7 @@ export class AutonomousPlanner {
         iterations: number,
         toolCallsExecuted: number,
         startTime: number,
+        loop?: AutonomousAgentLoop,
     ): PlannerResult {
         const result: PlannerResult = {
             goalId, status, summary, iterations, toolCallsExecuted,
@@ -427,6 +434,54 @@ export class AutonomousPlanner {
         this.emit(`planner.goal.${status}`, status === "completed" ? "succeeded" : "failed", {
             ...result,
         });
+
+        if (loop) {
+            try {
+                const freshGoal = loop.getGoal(goalId);
+                if (freshGoal) {
+                    const steps = freshGoal.steps.map((s) => ({
+                        tool: s.tool,
+                        success: s.status === "succeeded",
+                        summary: typeof s.output === "string" ? s.output.slice(0, 100) : undefined,
+                    }));
+
+                    const latencyMs = Date.now() - startTime;
+                    const tokensConsumed = toolCallsExecuted * 250 + 100;
+                    const costUsd = tokensConsumed * 0.0000025; // estimated at $2.50 per 1M tokens
+
+                    const llreMetrics = LLRETelemetry.calculate({
+                        objective: { successCriteria: [] },
+                        steps,
+                        latencyMs,
+                        tokensConsumed,
+                        costUsd,
+                    });
+
+                    // Compile and Lint objective string
+                    const compiledAst = LLRECompiler.compile(freshGoal.objective);
+
+                    this.emit("llre.telemetry.recorded", "succeeded", {
+                        sessionId: goalId,
+                        correlationId: freshGoal.correlationId,
+                        modelName: "standard-react-planner",
+                        tokensConsumed,
+                        latencyMs,
+                        costUsd,
+                        rsi: llreMetrics.rsi,
+                        csr: llreMetrics.csr,
+                        tca: llreMetrics.tca,
+                        teq: llreMetrics.teq,
+                        details: {
+                            lintErrors: compiledAst.lintErrors,
+                            signalDensity: compiledAst.signalDensity,
+                        },
+                    });
+                }
+            } catch (err) {
+                // Silently swallow calculation errors so it never crashes execution
+            }
+        }
+
         return result;
     }
 

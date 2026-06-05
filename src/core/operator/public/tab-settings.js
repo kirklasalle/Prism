@@ -2520,9 +2520,9 @@ export
   render();
   try {
     var sessionId = state.selectedSessionId || '';
-    var response = await fetch('/api/readiness/recheck', {
+    var response = await fetch('/api/v1/readiness/recheck', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ sessionId: sessionId, source: 'dashboard_settings_panel', stream: true })
     });
     if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -3150,7 +3150,17 @@ export
 export
   async function suggestSRModels() {
   try {
-    var data = await request('/api/sr/suggest');
+    var leftProvEl = document.getElementById('sr-left-provider');
+    var rightProvEl = document.getElementById('sr-right-provider');
+    var leftProviderId = leftProvEl ? leftProvEl.value : '';
+    var rightProviderId = rightProvEl ? rightProvEl.value : '';
+    
+    var query = [];
+    if (leftProviderId) query.push('leftProviderId=' + encodeURIComponent(leftProviderId));
+    if (rightProviderId) query.push('rightProviderId=' + encodeURIComponent(rightProviderId));
+    var url = '/api/sr/suggest' + (query.length > 0 ? '?' + query.join('&') : '');
+
+    var data = await request(url);
     if (!data.left && !data.right) {
       state.notice = { message: data.reasoning || 'No qualified models available.', type: 'error' };
       renderNotice();
@@ -3184,6 +3194,10 @@ export function initSettingsTab() {
   if (!divider || !leftPanel || !row) return;
   _settingsTabInitialized = true;
   refreshCacChain();
+
+  // Periodically refresh LLRE Telemetry
+  refreshLlreTelemetry();
+  setInterval(refreshLlreTelemetry, 5000);
 
   // Restore saved split
   var savedPct = localStorage.getItem('prism-provider-matrix-split');
@@ -3228,14 +3242,60 @@ export function initSettingsTab() {
   });
 }
 
+export async function refreshLlreTelemetry() {
+  const sessionId = state.selectedSessionId || '';
+  try {
+    const data = await request('/api/llre/summary?sessionId=' + encodeURIComponent(sessionId));
+    
+    const teqEl = document.getElementById('llre-teq-value');
+    const rsiEl = document.getElementById('llre-rsi-value');
+    const csrEl = document.getElementById('llre-csr-value');
+    const tcaEl = document.getElementById('llre-tca-value');
+    const costEl = document.getElementById('llre-cost-accumulated');
+    const lastSyncEl = document.getElementById('llre-last-sync');
+    const snrEl = document.getElementById('llre-snr-rating');
+
+    if (teqEl) teqEl.textContent = typeof data.teq === 'number' && data.count > 0 ? data.teq.toFixed(2) : '--';
+    if (rsiEl) rsiEl.textContent = typeof data.rsi === 'number' && data.count > 0 ? data.rsi.toFixed(2) : '--';
+    if (csrEl) csrEl.textContent = typeof data.csr === 'number' && data.count > 0 ? data.csr.toFixed(2) : '--';
+    if (tcaEl) tcaEl.textContent = typeof data.tca === 'number' && data.count > 0 ? data.tca.toFixed(2) : '--';
+    
+    if (costEl) {
+      costEl.textContent = typeof data.costUsd === 'number' ? '$' + data.costUsd.toFixed(4) : '$0.0000';
+    }
+
+    if (snrEl) {
+      if (typeof data.csr === 'number' && data.count > 0) {
+        if (data.csr >= 0.8) {
+          snrEl.textContent = 'HIGH (Optimal)';
+          snrEl.style.color = '#34d399';
+        } else if (data.csr >= 0.5) {
+          snrEl.textContent = 'MEDIUM (Sufficient)';
+          snrEl.style.color = '#fbbf24';
+        } else {
+          snrEl.textContent = 'LOW (Noisy / Under-specified)';
+          snrEl.style.color = '#f87171';
+        }
+      } else {
+        snrEl.textContent = 'No Active Runs';
+        snrEl.style.color = '#c7d2fe';
+      }
+    }
+
+    if (lastSyncEl) {
+      lastSyncEl.textContent = 'Last synced: ' + new Date().toLocaleTimeString();
+    }
+  } catch (err) {
+    console.error('[LLRE] Telemetry fetch failed:', err);
+  }
+}
+
 // ── OAuth Integration helpers (Phase E2) ─────────────────────────────────────
 
 export async function refreshOAuthStatus() {
   try {
-    var gmailResp = await fetch('/api/auth/gmail/status');
-    var outlookResp = await fetch('/api/auth/outlook/status');
-    var gmail = gmailResp.ok ? await gmailResp.json() : null;
-    var outlook = outlookResp.ok ? await outlookResp.json() : null;
+    var gmail = await request('/api/auth/gmail/status');
+    var outlook = await request('/api/auth/outlook/status');
     state.oauthStatus = { gmail: gmail, outlook: outlook };
   } catch (e) {
     /* Silently ignore — panel will show unavailable */
@@ -3245,9 +3305,7 @@ export async function refreshOAuthStatus() {
 
 export async function oauthConnect(provider) {
   try {
-    var resp = await fetch('/api/auth/' + provider + '/authorize');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    var data = await resp.json();
+    var data = await request('/api/auth/' + provider + '/authorize');
     if (data.authUrl) {
       window.open(data.authUrl, '_blank', 'width=520,height=640,noopener');
       // Poll for status change — after the popup completes the callback, the
@@ -3269,7 +3327,7 @@ export async function oauthConnect(provider) {
 
 export async function oauthDisconnect(provider) {
   try {
-    await fetch('/api/auth/' + provider + '/disconnect', { method: 'DELETE' });
+    await request('/api/auth/' + provider + '/disconnect', { method: 'DELETE' });
     await refreshOAuthStatus();
     render();
   } catch (e) {

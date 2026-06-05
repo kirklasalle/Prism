@@ -153,8 +153,20 @@
     }
     function fmtNum(n) { return (typeof n === "number") ? n.toLocaleString() : "—"; }
 
+    function getAuthToken() {
+      const meta = document.querySelector('meta[name="prism-auth-token"]');
+      return meta ? meta.getAttribute('content') || '' : '';
+    }
+
     async function fetchJson(url) {
-      const r = await fetch(url, { credentials: "same-origin" });
+      const token = getAuthToken();
+      const headers = {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const requestUrl = url.startsWith('/api/') && !url.startsWith('/api/v1/') ? '/api/v1' + url.substring(4) : url;
+      const r = await fetch(requestUrl, {
+        headers: headers,
+        credentials: "same-origin"
+      });
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     }

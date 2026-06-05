@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, dashboardLog } from './dashboard-core.js';
+import { state, request, escapeHtml, dashboardLog, authHeaders } from './dashboard-core.js';
 
 /* ── Local state ── */
 let currentBrowserView = 'sessions';
@@ -367,7 +367,9 @@ export async function browserTakeScreenshot() {
   var container = document.getElementById('browser-viewport-container');
   if (container) container.innerHTML = '<span class="muted">Capturing screenshot...</span>';
   try {
-    var response = await fetch('/api/browser/screenshot/' + encodeURIComponent(sessionId));
+    var response = await fetch('/api/v1/browser/screenshot/' + encodeURIComponent(sessionId), {
+      headers: authHeaders()
+    });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     var blob = await response.blob();
     var url = URL.createObjectURL(blob);
@@ -576,7 +578,7 @@ export function browserSessionChanged() {
   var sessionId = getActiveSessionId();
   if (sessionId) state.activeBrowserSessionId = sessionId;
   // Sync all other panel dropdowns to the same session
-  var dropdownIds = ['browser-network-session', 'browser-console-session', 'browser-dom-session', 'browser-storage-session'];
+  var dropdownIds = ['browser-network-session', 'browser-console-session', 'browser-dom-session', 'browser-storage-session', 'browser-autopilot-session'];
   for (var di = 0; di < dropdownIds.length; di++) {
     var otherSel = document.getElementById(dropdownIds[di]);
     if (otherSel && sessionId) otherSel.value = sessionId;
@@ -619,7 +621,7 @@ export function populateBrowserSessionDropdowns() {
   var defaultId = persistedValid ? persistedId : (sessions.length > 0 ? (sessions[0].sessionId || sessions[0].id || '') : '');
   var isSingle = sessions.length === 1;
 
-  var dropdownIds = ['browser-active-session', 'browser-network-session', 'browser-console-session', 'browser-dom-session', 'browser-storage-session'];
+  var dropdownIds = ['browser-active-session', 'browser-network-session', 'browser-console-session', 'browser-dom-session', 'browser-storage-session', 'browser-autopilot-session'];
   var autoSelected = false;
   for (var di = 0; di < dropdownIds.length; di++) {
     var sel = document.getElementById(dropdownIds[di]);

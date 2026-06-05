@@ -141,6 +141,7 @@ export const state = {
   framebufferAutoRefresh: false,
   framebufferPollInterval: null,
   agenticStream: [],
+  lastThinkingTrace: [],
   chatTelemetry: [],
   toolCallLog: [],
   logEntries: [],
@@ -550,6 +551,103 @@ export
   state.logEntries.push(entry);
   if (state.logEntries.length > 2000) state.logEntries = state.logEntries.slice(-2000);
   if (state.activeTab === 'logs') safeRenderStep('logsPanel', renderLogsPanel);
+}
+
+export function showTransientNotice(message, severity = 'info', timeout = 4000) {
+  try {
+    state.notice = { type: severity, message };
+    // Notify any host renderer to update UI immediately
+    try { document.dispatchEvent(new CustomEvent('prism:state-changed', { detail: { notice: state.notice } })); } catch (_) { }
+  } catch (_) {
+    state.notice = { type: severity, message };
+  }
+  setTimeout(() => {
+    try {
+      if (state.notice && state.notice.message === message) {
+        state.notice = null;
+        try { document.dispatchEvent(new CustomEvent('prism:state-changed', { detail: { notice: null } })); } catch (_) { }
+      }
+    } catch (_) { state.notice = null; }
+  }, timeout);
+}
+
+export function trimAgenticEvent(ev, maxLen = 800) {
+  if (!ev || typeof ev !== 'object') return ev;
+  const out = { type: ev.type, timestamp: ev.timestamp || new Date().toISOString() };
+  if (ev.toolCall && ev.toolCall.name) out.toolName = ev.toolCall.name;
+  if (ev.iteration != null) out.iteration = ev.iteration;
+  if (typeof ev.text === 'string') {
+    out.text = ev.text.length > maxLen ? ev.text.slice(0, maxLen) + '…' : ev.text;
+  }
+  if (ev.toolResult) {
+    out.toolResult = { name: ev.toolResult.name || null, ok: ev.toolResult.ok };
+    if (typeof ev.toolResult.output === 'string') out.toolResult.output = ev.toolResult.output.length > maxLen ? ev.toolResult.output.slice(0, maxLen) + '…' : ev.toolResult.output;
+    else out.toolResult.output = ev.toolResult.output ? '[object]' : null;
+  }
+  return out;
+}
+
+/**
+ * Run an async function while providing button feedback and transient notices.
+ * @param {Element|string} btnEl - Button element or selector
+ * @param {Function} fn - Async function to execute
+ * @param {Object} opts - { pending, success, error }
+ */
+export async function withButtonFeedback(btnEl, fn, opts = {}) {
+  const pendingMsg = opts.pending || 'Processing…';
+  const successMsg = opts.success || 'Done';
+  const errorMsg = opts.error || 'Failed';
+  let el = null;
+  try {
+    if (typeof btnEl === 'string') el = document.querySelector(btnEl);
+    else el = btnEl;
+  } catch (_) { el = null; }
+
+  const origDisabled = el ? el.disabled : null;
+  try {
+    if (el) { el.disabled = true; el.setAttribute('aria-busy', 'true'); }
+    showTransientNotice(pendingMsg, 'info', opts.timeout || 10000);
+    if (el && typeof showAnchoredToast === 'function') {
+      try { showAnchoredToast(pendingMsg, el, 'info', opts.timeout || 10000); } catch (_) { }
+    }
+    const res = await fn();
+    showTransientNotice(successMsg, 'success', 3000);
+    return res;
+  } catch (err) {
+    showTransientNotice(errorMsg + ': ' + (err && err.message ? err.message : String(err)), 'error', 6000);
+    throw err;
+  } finally {
+    if (el) { el.disabled = !!origDisabled; el.removeAttribute('aria-busy'); }
+  }
+}
+
+// Simple toast manager (non-blocking) — anchors to element if provided
+export function showAnchoredToast(message, el, severity = 'info', timeout = 4000) {
+  try {
+    const toast = document.createElement('div');
+    toast.className = 'prism-toast prism-toast-' + severity;
+    toast.style.position = 'absolute';
+    toast.style.zIndex = 99999;
+    toast.style.padding = '8px 12px';
+    toast.style.borderRadius = '8px';
+    toast.style.background = severity === 'error' ? '#ff7a7a' : severity === 'success' ? '#7ef0b5' : '#a78bfa';
+    toast.style.color = '#07203a';
+    toast.style.boxShadow = '0 8px 20px rgba(2,6,23,0.6)';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    // Position near element
+    const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    if (rect) {
+      const top = rect.top + window.scrollY - toast.offsetHeight - 8;
+      const left = Math.min(window.innerWidth - 220, Math.max(8, rect.left + window.scrollX + (rect.width / 2) - 110));
+      toast.style.top = (top > 8 ? top : rect.top + window.scrollY + rect.height + 8) + 'px';
+      toast.style.left = left + 'px';
+    } else {
+      toast.style.bottom = '18px';
+      toast.style.right = '18px';
+    }
+    setTimeout(() => { try { toast.remove(); } catch (_) { } }, timeout);
+  } catch (_) { /* best-effort */ }
 }
 
 export

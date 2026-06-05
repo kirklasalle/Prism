@@ -162,16 +162,36 @@ export class AutonomousComputerAgent {
 
     try {
       if (!execFn) {
-        // Fallback to child_process
-        const { execSync } = await import("node:child_process");
-        const output = execSync(command, {
-          encoding: "utf-8",
-          timeout: 30_000,
-          cwd: this.goalState.workingDirectory,
-          maxBuffer: 1024 * 1024,
+        // Fallback to child_process exec (asynchronous)
+        const { exec } = await import("node:child_process");
+        const result = await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
+          exec(
+            command,
+            {
+              timeout: 30_000,
+              cwd: this.goalState!.workingDirectory,
+              maxBuffer: 1024 * 1024,
+            },
+            (error, stdout, stderr) => {
+              const exitCode = error ? (typeof error.code === "number" ? error.code : 1) : 0;
+              if (error && !error.code) {
+                // System/spawn or timeout error
+                reject(error);
+              } else {
+                resolve({
+                  stdout: String(stdout),
+                  stderr: String(stderr),
+                  exitCode,
+                });
+              }
+            }
+          );
         });
-        action.output = output;
-        action.exitCode = 0;
+        action.output = result.stdout + (result.stderr ? `\n${result.stderr}` : "");
+        action.exitCode = result.exitCode;
+        if (result.exitCode !== 0) {
+          throw new Error(`Command failed with exit code ${result.exitCode}`);
+        }
       } else {
         const result = await execFn(command);
         action.output = result.stdout + (result.stderr ? `\n${result.stderr}` : "");

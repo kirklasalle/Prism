@@ -2,9 +2,11 @@
 
 PRISM is a policy-governed, full-computer-use agent runtime designed to evolve into a world-class, state-of-the-art (SOTA), and novel agent platform for high-trust autonomous operations.
 
-Current named release: **Prism v0.4.2 — Phase D4c: SR Advanced Features + Production Hardening**.
+Current named release: **Prism v0.4.3 — Phase E: LLRE Integration & Cognitive Economics**.
 
-PRISM positions itself as a **governance-native, self-hostable Agents-as-a-Service (AaaS) runtime** — the only open-source platform with cryptographically enforced directives (PAD), a profile-aware 3-tier policy engine, and Spectrum Refraction tri-model fan-out. See [docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md](docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md) for the market landscape.
+PRISM positions itself as a **governance-native, self-hostable Agents-as-a-Service (AaaS) runtime** — the only open-source platform with cryptographically enforced directives (PAD), a profile-aware 3-tier policy engine, Spectrum Refraction tri-model fan-out, and Low-Level Reasoning Engine (LLRE) Cognitive Economics. See [docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md](docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md) for the market landscape.
+
+> **May 2026 — LLRE Cognitive Economics Integrated:** Active telemetry tracking (TEQ, RSI, CSR, TCA), prompt AST signal density linting, SQLite persistence, and premium visual dashboard panel are now fully operational.
 
 > **April 2026 — Security Hardening Complete:** Token-based authentication, rate limiting, optional HTTPS/TLS, and security headers are now enforced on all dashboard endpoints.
 
@@ -88,6 +90,12 @@ It is a next-generation agent operating system focused on five differentiators:
    - CI Gate 9 blocks merge/release when directives are modified without updating the integrity constant.
    - Governance preamble injected into all Tier 2+ model system prompts, ensuring every LLM interaction operates within the 10 Laws.
 
+10. **LLRE Cognitive Economics Engine**
+    - High-integrity low-level prompt optimization and effectiveness instrumentation.
+    - Measure planning token consumption, duration, and exact financial cost.
+    - Calculate effectiveness metrics: Tool Call Accuracy (TCA), Request Satisfaction Index (RSI), Context Saturation Ratio (CSR), and Token Efficacy Quotient (TEQ).
+    - Expose interactive performance rings and aggregate averages directly inside the operator console.
+
 ## Current Capabilities
 
 - Activity bus with SHA-256 event hashing
@@ -134,6 +142,12 @@ It is a next-generation agent operating system focused on five differentiators:
   - Media artifact extraction from Creative hemisphere
   - 4 SR API endpoints: `/api/sr/status`, `/api/sr/configure`, `/api/sr/activate`, `/api/sr/deactivate`
   - SR panel in Provider & Settings tab with isolation badge and cost advisory
+- **LLRE Cognitive Economics Engine:**
+  - Prompt AST Compiler (`src/core/llre/ast.ts`) with `<objective>` and `<constraints>` tag parsing and signal density checks.
+  - Performance telemetries (`src/core/llre/telemetry.ts`): TCA, RSI, CSR, and TEQ computations.
+  - Background database persistence (`src/core/activity/sqlite-store.ts`) via event interception.
+  - Premium Cognitive Economics UI panel inside Provider & Settings tab.
+  - REST endpoints querying session and aggregate stats (`GET /api/llre/summary`).
 - **Agent Control & Intelligent Orchestration:**
   - Agent lifecycle management with three tiers: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop)
   - Per-agent model assignment: dynamic provider/model override per agent, hot-swappable at runtime

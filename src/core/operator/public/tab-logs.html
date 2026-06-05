@@ -153,6 +153,7 @@
       </select>
       <div style="flex:1;"></div>
       <span class="muted" style="font-size:10px;">Last 500 entries · auto-scroll</span>
+      <button class="secondary-button" style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;" onclick="window.copyActivityLogs && window.copyActivityLogs()">📋 Copy Logs</button>
       <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="clearLogs()">Clear</button>
     </div>
     <div id="logs-panel-body"
@@ -208,6 +209,7 @@
           <input type="checkbox" id="ut-ai-context" checked> AI context
         </label>
         <button class="secondary-button" id="ut-pause" style="font-size:11px;padding:3px 8px;">Pause</button>
+        <button class="secondary-button" style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;" onclick="window.copyUnifiedTelemetry && window.copyUnifiedTelemetry()">📋 Copy Logs</button>
         <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="clearUnifiedTelemetry()">Clear</button>
       </div>
       <div id="unified-telemetry-body"

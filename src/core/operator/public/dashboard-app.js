@@ -1,14 +1,14 @@
 // Dashboard App — entry point, imports all modules, wires window.*
 import { loadTabHtml, prefetchTabHtml } from './tab-loader.js';
-import { state, tabs, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, formatUptime, togglePanelCollapse, safeRenderStep, dashboardLog, renderLogsPanel, filterLogs, clearLogs, getToolState, getPluginState, getUtilityState, getReview, setItemRating, setItemApproval, saveItemNotes, toggleItemExpand, toggleItemEnabled, toCsvValue, authHeaders, wsUrl, createReconnector } from './dashboard-core.js';
+import { state, tabs, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, formatUptime, togglePanelCollapse, safeRenderStep, dashboardLog, renderLogsPanel, filterLogs, clearLogs, getToolState, getPluginState, getUtilityState, getReview, setItemRating, setItemApproval, saveItemNotes, toggleItemExpand, toggleItemEnabled, toCsvValue, authHeaders, wsUrl, createReconnector, trimAgenticEvent, withButtonFeedback, showAnchoredToast } from './dashboard-core.js';
 import { reconcileExpandedSessionPackages, loadSessionPackages, loadSessionPackageHistory, mutateSessionPackage, getPackagedSessionIdSet, buildSessionTimeline, exportSession, importSession, packageSessions, toggleSessionPackage, getSessionsForPackage, runPackageWorkflow, setPackageStatus, cyclePackageStatus, exportPackageTrace, unpackageSessionPackage, getLocalLlmSelection, setLocalLlmSelection, clearLocalLlmSelection, loadSessions, createSession, openNewSessionModal, loadMessages, refreshChrome, renderSessions, renderOnboarding, renderToolBlocks, renderMessages, renderOverview, renderBrandPanel, selectSession, deleteSession, renameSession, copySession, handleFileSelect, pasteFromClipboard, removeAttachment, renderAttachmentPreview, uploadAttachments, sendMessage, runAction, quickApplyLlm, refreshOllamaModels, rollbackLlmConfig, approve, deny, connectAgenticStream, showThinkingTraceModal } from './tab-chat.js';
-import { renderRoutingStrategyControls, renderLlm, onHeaderProviderChanged, onHeaderModelChanged, renderHeader, fetchReadinessAndRefresh, toggleCapabilityMatrix, setMatrixSort, setMatrixFilter, setMatrixDraftField, clearMatrixDraft, startMatrixEdit, saveMatrixEntry, deleteMatrixEntry, updateModelMatrix, renderCapabilityMatrix, guessTier, resolveMatrixEntry, sortArrow, getModelProficiencyBadges, getModelModalityBadges, fetchModelProfiles, fetchRoutingState, saveRoutingConfig, suggestOptimalRouting, setRoutingStrategy, setSessionRoutingStrategy, onModalitySelected, onModalityFilterToggle, setModalityOverride, getModelsForModalityFilter, setRoleOverride, renderModelRouting, setAgentOverride, onLlmProviderChanged, onLlmModelChanged, renderProviderCards, toggleProviderCard, toggleApiKeyVisibility, saveProviderCardSettings, saveProviderCardApiKey, removeProviderCardApiKey, testProviderConnection, discoverModels, renderLlmAudit, exportLlmAuditJson, copyLlmAuditJson, buildLlmAuditPayload, exportLlmAuditCsv, renderSettingsPanel, sec, readonlyRow, badgeRow, numberRow, selectRow, toggleSettingsSection, markSettingDirty, saveSettings, recheckReadiness, toggleReadinessCat, toggleReadinessCheck, fixReadinessCheck, resolveReadinessCheck, toggleOnboardingExpand, initSettingsTab, toggleSRPanel, onSRLeftProviderChanged, onSRRightProviderChanged, onSRModelChanged, saveSRConfig, toggleSRActivation, onSRPresetSelected, promptSaveSRPreset, cancelSaveSRPreset, confirmSaveSRPreset, deleteSRPreset, suggestSRModels, refreshOAuthStatus, oauthConnect, oauthDisconnect, refreshCacChain, exportCacAuditJson as exportCacAuditJsonHandler, toggleSshpPreference, savePowerModePreference, updatePowerTelemetry } from './tab-settings.js';
+import { renderRoutingStrategyControls, renderLlm, onHeaderProviderChanged, onHeaderModelChanged, renderHeader, fetchReadinessAndRefresh, toggleCapabilityMatrix, setMatrixSort, setMatrixFilter, setMatrixDraftField, clearMatrixDraft, startMatrixEdit, saveMatrixEntry, deleteMatrixEntry, updateModelMatrix, renderCapabilityMatrix, guessTier, resolveMatrixEntry, sortArrow, getModelProficiencyBadges, getModelModalityBadges, fetchModelProfiles, fetchRoutingState, saveRoutingConfig, suggestOptimalRouting, setRoutingStrategy, setSessionRoutingStrategy, onModalitySelected, onModalityFilterToggle, setModalityOverride, getModelsForModalityFilter, setRoleOverride, renderModelRouting, setAgentOverride, onLlmProviderChanged, onLlmModelChanged, renderProviderCards, toggleProviderCard, toggleApiKeyVisibility, saveProviderCardSettings, saveProviderCardApiKey, removeProviderCardApiKey, testProviderConnection, discoverModels, renderLlmAudit, exportLlmAuditJson, copyLlmAuditJson, buildLlmAuditPayload, exportLlmAuditCsv, renderSettingsPanel, sec, readonlyRow, badgeRow, numberRow, selectRow, toggleSettingsSection, markSettingDirty, saveSettings, recheckReadiness, toggleReadinessCat, toggleReadinessCheck, fixReadinessCheck, resolveReadinessCheck, toggleOnboardingExpand, initSettingsTab, toggleSRPanel, onSRLeftProviderChanged, onSRRightProviderChanged, onSRModelChanged, saveSRConfig, toggleSRActivation, onSRPresetSelected, promptSaveSRPreset, cancelSaveSRPreset, confirmSaveSRPreset, deleteSRPreset, suggestSRModels, refreshOAuthStatus, oauthConnect, oauthDisconnect, refreshCacChain, exportCacAuditJson as exportCacAuditJsonHandler, toggleSshpPreference, savePowerModePreference, updatePowerTelemetry, refreshLlreTelemetry } from './tab-settings.js';
 import { testTool, checkPluginHealth, updateToolsFilter, renderToolsOverviewBar, renderToolsPanel, renderSkillsPanel, showRegisterToolForm, cancelRegisterTool, submitRegisterTool, renderPluginsPanel, showInstallPluginForm, cancelInstallPlugin, submitInstallPlugin, renderUtilitiesPanel, computePanelSummary, renderPanelSummaries, switchToolsSubTab, setToolsSort, setPluginsSort, setUtilitiesSort, refreshAllToolStatus, renderDiagnosticsPanel, runBrowserDiagnostics, loadDiagnosticsReport, computeDiagnosticsSummary, handleDiagnosticsWsMessage, toggleDiagnosticSuite, computeAgentDiagnosticsSummary, loadAgentDiagnosticsReport, runAgentDiagnostics, handleAgentDiagnosticsWsMessage, toggleAgentDiagnosticSuite, renderAgentDiagnosticsPanel, computeComputerDiagnosticsSummary, loadComputerDiagnosticsReport, runComputerDiagnostics, handleComputerDiagnosticsWsMessage, toggleComputerDiagnosticSuite, renderComputerDiagnosticsPanel, computeKnowledgeGraphDiagnosticsSummary, loadKnowledgeGraphDiagnosticsReport, runKnowledgeGraphDiagnostics, handleKnowledgeGraphDiagnosticsWsMessage, toggleKnowledgeGraphDiagnosticSuite, renderKnowledgeGraphDiagnosticsPanel, computeWorkspaceDiagnosticsSummary, loadWorkspaceDiagnosticsReport, runWorkspaceDiagnostics, handleWorkspaceDiagnosticsWsMessage, toggleWorkspaceDiagnosticSuite, renderWorkspaceDiagnosticsPanel, computeNetworkDiagnosticsSummary, loadNetworkDiagnosticsReport, runNetworkDiagnostics, handleNetworkDiagnosticsWsMessage, toggleNetworkDiagnosticSuite, renderNetworkDiagnosticsPanel, computeTelemetryDiagnosticsSummary, loadTelemetryDiagnosticsReport, runTelemetryDiagnostics, handleTelemetryDiagnosticsWsMessage, toggleTelemetryDiagnosticSuite, renderTelemetryDiagnosticsPanel, computeLogsDiagnosticsSummary, loadLogsDiagnosticsReport, runLogsDiagnostics, handleLogsDiagnosticsWsMessage, toggleLogsDiagnosticSuite, renderLogsDiagnosticsPanel, computeSchedulerDiagnosticsSummary, loadSchedulerDiagnosticsReport, runSchedulerDiagnostics, handleSchedulerDiagnosticsWsMessage, toggleSchedulerDiagnosticSuite, renderSchedulerDiagnosticsPanel, computeDemoDiagnosticsSummary, loadDemoDiagnosticsReport, runDemoDiagnostics, handleDemoDiagnosticsWsMessage, toggleDemoDiagnosticSuite, renderDemoDiagnosticsPanel, pollPluginHealth, startPluginHealthPolling, stopPluginHealthPolling } from './tab-tools.js';
-import { renderGuardianPanel, refreshGuardianStatus, startGuardian, stopGuardian, configureGuardian, refreshLocalModels, updateGuardianModel, onGuardianModelSelectChange, deleteLocalModel, addToRecommended, removeFromRecommended, loadCustomRecommendedModels, downloadRecommendedModels, startModelDownload, refreshGuardianTasks, runGuardianTask, toggleGuardianTask, runAllGuardianTasks, renderAgentList, renderSubAgentTree, renderSwarmTopology, renderAgentTelemetry, refreshAgentList, launchNewAgent, stopAgent, promoteAgent, demoteAgent, createSwarm, refreshSwarmStatus, initAgenticTab, autoStartGuardianIfConfigured, refreshCshHandoffs, takeCshControl, resumeCshAgent } from './tab-agentic.js';
+import { renderGuardianPanel, refreshGuardianStatus, startGuardian, stopGuardian, configureGuardian, refreshLocalModels, updateGuardianModel, onGuardianModelSelectChange, deleteLocalModel, addToRecommended, removeFromRecommended, loadCustomRecommendedModels, downloadRecommendedModels, startModelDownload, refreshGuardianTasks, runGuardianTask, toggleGuardianTask, runAllGuardianTasks, renderAgentList, renderSubAgentTree, renderSwarmTopology, renderAgentTelemetry, refreshAgentList, launchNewAgent, stopAgent, promoteAgent, demoteAgent, createSwarm, refreshSwarmStatus, initAgenticTab, autoStartGuardianIfConfigured, refreshCshHandoffs, takeCshControl, resumeCshAgent, refreshAABLedger, refreshAutonomousGoals, viewAutonomousGoalTrace } from './tab-agentic.js';
 import { renderLocalSystemInfo, renderUsageMetrics, drawSparkline, runLocalCommand, refreshEnvVars, renderEnvVarsList, openPolicyEditor, refreshPolicyStatus, refreshDeviceManager, renderDeviceTree, openSystemDeviceManager, toggleDeviceProperties, filterDeviceTree, generateDeviceReport, captureScreengrab, burstCapture, showCaptureDiagnostics, runFramebufferDiagnostics, refreshFramebufferViewer, clearFramebufferPreviewVideo, setFramebufferPreviewSource, setFramebufferPreviewVideoSource, detectBurstVideoMimeType, loadFramebufferImage, buildBurstVideoPreview, formatFramebufferTimestamp, formatBurstTimestamp, summarizeFramebufferSelection, previewSelectedFramebufferItem, refreshFramebufferGallery, selectFramebufferFile, openFramebufferFile, revealFramebufferFile, openFramebufferFolder, toggleFramebufferAutoRefresh, toggleBurstPlayPause, stopBurstFromUI, setBurstSpeed, initComputerTab, pollUsage, updateBurstMediaBar, stopBurstFrameAnimation, startBurstFrameAnimation, submitAutonomousGoal, pauseAutonomousGoal, resumeAutonomousGoal, terminateAutonomousGoal, pollAutonomousStatus } from './tab-computer.js';
 import { getCurrentBrowserView, launchBrowserPreview, openBrowserDevTools, refreshBrowserInfo, setBrowserView, toggleBrowserDevTools, browserRefreshStorage, setStorageSubView, renderStorageContent, browserRefreshProfiles, renderBrowserProfiles, browserRefreshLaunchProfiles, browserCreateProfile, browserDeleteProfile, browserLaunchSession, browserCloseSession, browserNavigate, browserTakeScreenshot, browserClickElement, browserTypeText, browserEvaluate, browserRefreshNetwork, browserRefreshConsole, browserRefreshDom, browserRunDiagnostics, browserSessionChanged, populateBrowserSessionDropdowns, renderBrowserSessions, browserLogAction, initBrowserTab, refreshSessionsList, submitBrowserAutopilot, stopBrowserAutopilot, resumeActiveCsh, updateSshpShieldIndicator } from './tab-browser.js';
 import { renderSelfReview, renderRetrievalObservability, setTelemetryWindow, renderRuntimeExcellence, renderReleaseReadiness, renderWhatChanged, deltaLabel, pct, renderPackageHistory, renderChatTelemetry, renderUsagePanel, refreshUsagePanel, setUsageSort, saveUsageCaps, clearUsageCaps, refreshSloGauges, startSloAutoRefresh, stopSloAutoRefresh } from './tab-telemetry.js';
-import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket } from './tab-logs.js';
+import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, copyActivityLogs, copyUnifiedTelemetry, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket } from './tab-logs.js';
 import { initSchedulerTab, refreshSchedulerData, switchSchedulerView, renderSchedulerPanel, setCalMode, schedCalNav, daysInMonth, eventsForDate, formatDateStr, isToday, renderSchedulerCalendar, mondayOfWeek, renderMiniMonth, renderFullMonth, renderWeekView, renderDayView, renderSchedulerProjects, openProjectDetail, renderSchedulerBoard, initBoardDragDrop, renderSchedulerGantt, openSchedulerModal, closeSchedulerModal, saveSchedulerModal } from './tab-scheduler.js';
 import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWorkspaceFileTree, formatFileSize, filterWorkspaceFiles, openWorkspaceInExplorer, changeWorkspaceLocation, showImportStatus, triggerWorkspaceImport, triggerGeneralImport, triggerRegisteredImport, triggerFolderImport, readFileAsBase64, refreshImportHistory, renderImportHistory, initWorkspaceTab } from './tab-workspace.js';
 import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick } from './tab-characters.js';
@@ -113,6 +113,34 @@ async function bootstrap() {
       setTimeout(prefetchNext, 1500);
     }
   }
+
+  // Auto-wrap inline onclick handlers on primary/secondary buttons to provide feedback
+  function autoWrapInlineButtons() {
+    try {
+      const buttons = Array.from(document.querySelectorAll('button.primary-button, button.secondary-button'));
+      buttons.forEach(btn => {
+        try {
+          if (btn.dataset && btn.dataset.autowrap === 'false') return;
+          const onclick = btn.getAttribute('onclick');
+          if (!onclick) return;
+          // Build a handler that executes original onclick code and returns its result
+          const originalCode = onclick;
+          btn.removeAttribute('onclick');
+          btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            const fn = new Function(originalCode);
+            const exec = () => Promise.resolve().then(() => fn.call(btn));
+            if (typeof withButtonFeedback === 'function') {
+              withButtonFeedback(btn, exec, { pending: btn.getAttribute('data-pending') || 'Processing…', success: btn.getAttribute('data-success') || 'Done', error: btn.getAttribute('data-error') || 'Failed' }).catch(() => { });
+            } else {
+              exec().catch(() => { });
+            }
+          }, { passive: false });
+        } catch (_) { }
+      });
+    } catch (_) { }
+  }
+  try { autoWrapInlineButtons(); } catch (_) { }
 }
 
 
@@ -173,6 +201,11 @@ function render() {
     sendButton.disabled = state.busy;
   }
 }
+
+// Listen for core state changes invoked by helpers (showTransientNotice)
+document.addEventListener('prism:state-changed', function () {
+  try { render(); } catch (_) { /* best-effort */ }
+});
 
 // PRISM in-app deep-link plumbing: scroll to a panel anchor and pulse it briefly so
 // the operator's eye lands on the right card after a tab switch (used by both the
@@ -417,14 +450,14 @@ function connectWebSocket() {
         const action = String(data.action ?? data.operation ?? '');
         const detail = String(data.detail ?? (data.details ? JSON.stringify(data.details) : ''));
         const nar = String(data.narration ?? '');
-        
+
         const isBrowserEvent = action.includes('browser') || detail.includes('browser') || nar.includes('browser') || nar.includes('Browser') || action.includes('click') || action.includes('navigate') || action.includes('type') || action.includes('scroll') || action.includes('hover') || action.includes('cookie') || action.includes('storage') || action.includes('screenshot');
-        
+
         if (isBrowserEvent) {
           // Identify browser event kind and log it to the Browser Action Log
           let actionKind = 'agent';
           let logMsg = nar || detail || action;
-          
+
           if (action.includes('click') || detail.includes('click') || nar.includes('click')) {
             actionKind = 'click';
             logMsg = `Agent clicked element: ${detail || action}`;
@@ -444,7 +477,7 @@ function connectWebSocket() {
             actionKind = 'hover';
             logMsg = `Agent hovered element`;
           }
-          
+
           browserLogAction(actionKind, logMsg);
 
           // Update active session dropdown and live sub-view content
@@ -453,22 +486,22 @@ function connectWebSocket() {
             if (activeId) {
               const currentView = getCurrentBrowserView();
               if (currentView === 'viewport') {
-                browserTakeScreenshot().catch(e => {});
+                browserTakeScreenshot().catch(e => { });
               } else if (currentView === 'network') {
-                browserRefreshNetwork().catch(e => {});
+                browserRefreshNetwork().catch(e => { });
               } else if (currentView === 'console') {
-                browserRefreshConsole().catch(e => {});
+                browserRefreshConsole().catch(e => { });
               } else if (currentView === 'dom') {
-                browserRefreshDom().catch(e => {});
+                browserRefreshDom().catch(e => { });
               } else if (currentView === 'storage') {
-                browserRefreshStorage().catch(e => {});
+                browserRefreshStorage().catch(e => { });
               }
             }
-          }).catch(e => {});
+          }).catch(e => { });
         }
-        
+
         if (action.includes('file') || detail.includes('file') || nar.includes('file') || nar.includes('Workspace') || nar.includes('Workspace Files')) {
-          refreshWorkspaceFiles().catch(e => {});
+          refreshWorkspaceFiles().catch(e => { });
         }
       }
       if (data.type === 'ui_action' && data.action === 'switch_tab' && data.tabId) {
@@ -544,6 +577,43 @@ function connectWebSocket() {
       // Phase A3B: Unified telemetry real-time stream from server
       if (data.type === 'telemetry') {
         handleTelemetryWsMessage(data);
+      }
+
+      // Real-time autonomous step events broadcast from server
+      if (data.type === 'autonomous_step') {
+        try {
+          dashboardLog('agentic', 'autonomous.step', `Step: ${data.goalId || ''} ${data.tool || ''} #${data.iteration || ''}`);
+        } catch (_) { }
+        try {
+          // Normalize into the same stream shape that SSE uses
+          const evRaw = {
+            type: data.type === 'autonomous_step' ? (data.tool ? 'tool_call' : 'text') : 'text',
+            toolCall: data.tool ? { name: data.tool, arguments: data.arguments || {} } : undefined,
+            iteration: data.iteration || 0,
+            text: data.summary || data.text || '',
+            timestamp: data.timestamp || new Date().toISOString(),
+          };
+          const ev = typeof trimAgenticEvent === 'function' ? trimAgenticEvent(evRaw) : evRaw;
+          state.agenticStream.push(ev);
+          if (state.agenticStream.length > 500) state.agenticStream = state.agenticStream.slice(-500);
+          safeRenderStep('messages', renderMessages);
+        } catch (e) { console.error('[ws] autonomous_step handle error', e); }
+        try { refreshAutonomousGoals(); refreshAABLedger(); } catch (_) { }
+      }
+
+      if (data.type === 'autonomous_goal_complete' || data.type === 'autonomous_goal_complete') {
+        try { dashboardLog('agentic', 'autonomous.goal_complete', `Goal ${data.goalId || ''} ${data.status || ''}`); } catch (_) { }
+        try {
+          const ev = { type: 'done', goalId: data.goalId || '', status: data.status || 'completed', summary: data.summary || '', timestamp: data.timestamp || new Date().toISOString() };
+          // preserve final trace for inspection (trimmed)
+          state.lastThinkingTrace = (state.agenticStream && state.agenticStream.length) ? state.agenticStream.slice(-500).map(function (x) { return typeof trimAgenticEvent === 'function' ? trimAgenticEvent(x) : x; }) : [];
+          if (state.lastThinkingTrace.length > 500) state.lastThinkingTrace = state.lastThinkingTrace.slice(-500);
+          // push a done sentinel so renderMessages can show completion context
+          state.agenticStream.push(ev);
+          if (state.agenticStream.length > 500) state.agenticStream = state.agenticStream.slice(-500);
+          safeRenderStep('messages', renderMessages);
+        } catch (e) { console.error('[ws] autonomous_goal_complete handle error', e); }
+        try { refreshAutonomousGoals(); refreshAABLedger(); } catch (_) { }
       }
     } catch (e) {
       console.error('[ws] message error:', e);
@@ -800,6 +870,7 @@ Object.assign(window, {
   resolveReadinessCheck,
   toggleOnboardingExpand,
   initSettingsTab,
+  refreshLlreTelemetry,
   toggleSRPanel,
   onSRLeftProviderChanged,
   onSRRightProviderChanged,
@@ -912,6 +983,7 @@ Object.assign(window, {
   takeCshControl,
   resumeCshAgent,
   initAgenticTab,
+  viewAutonomousGoalTrace,
   renderLocalSystemInfo,
   renderUsageMetrics,
   drawSparkline,
@@ -1204,6 +1276,8 @@ window.reconnectMcpServer = reconnectMcpServer;
 window.toggleLiveConsolePause = toggleLiveConsolePause;
 window.clearLiveConsole = clearLiveConsole;
 window.copyLiveConsole = copyLiveConsole;
+window.copyActivityLogs = copyActivityLogs;
+window.copyUnifiedTelemetry = copyUnifiedTelemetry;
 window.toggleCreateTicketForm = toggleCreateTicketForm;
 window.submitSupportTicket = submitSupportTicket;
 window.investigateSupportTicket = investigateSupportTicket;

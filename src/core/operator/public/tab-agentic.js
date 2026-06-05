@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, dashboardLog, formatUptime } from './dashboard-core.js';
+import { state, request, escapeHtml, dashboardLog, formatUptime, showTransientNotice, withButtonFeedback, trimAgenticEvent, showAnchoredToast } from './dashboard-core.js';
 
 // ── Guardian Agent Panel ────────────────────────────────────────────
 
@@ -74,12 +74,12 @@ export
     html += '<optgroup label="Recommended Models (Click to Download)">';
     for (var i = 0; i < allRecommended.length; i++) {
       var rm = allRecommended[i];
-      var matchingLocal = models.find(function(m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
+      var matchingLocal = models.find(function (m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
       if (matchingLocal) {
         var selected = g.modelPath === matchingLocal.path ? ' selected' : '';
         html += '<option value="' + escapeHtml(matchingLocal.path) + '"' + selected + '>\u2705 ' + escapeHtml(rm.name) + ' (' + escapeHtml(matchingLocal.source) + ')</option>';
       } else {
-        var isDownloading = activeDownloads.some(function(d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
+        var isDownloading = activeDownloads.some(function (d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
         var label = isDownloading ? '\u23F3 Downloading ' + escapeHtml(rm.name) + '...' : '\u{1F4E5} Download ' + escapeHtml(rm.name) + ' (' + rm.size + ')';
         html += '<option value="download:' + i + '" ' + (isDownloading ? 'disabled' : '') + '>' + label + '</option>';
       }
@@ -134,7 +134,7 @@ export
   for (var i = 0; i < allRecommended.length; i++) {
     var rm = allRecommended[i];
     var rmIndex = i;
-    var matchingLocal = models.find(function(m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
+    var matchingLocal = models.find(function (m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
     html += '<div class="panel" style="padding:8px;background:rgba(0,0,0,0.2);display:flex;flex-direction:column;justify-content:space-between;">';
     html += '<div>';
     html += '<div style="font-weight:700;font-size:11px;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;">';
@@ -151,7 +151,7 @@ export
       html += '<button class="danger-button" style="font-size:10px;padding:4px 8px;background:rgba(255,100,100,0.2);color:#ff8d8d;border:1px solid rgba(255,100,100,0.4);border-radius:4px;cursor:pointer;" onclick="deleteLocalModel(\'' + escapeHtml(matchingLocal.path) + '\', \'' + escapeHtml(matchingLocal.source) + '\')" title="Delete model file">\uD83D\uDDD1</button>';
       html += '</div>';
     } else if (rm.url) {
-      var isDownloading = activeDownloads.some(function(d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
+      var isDownloading = activeDownloads.some(function (d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
       html += '<button class="primary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;" ' + (isDownloading ? 'disabled' : '') + ' onclick="startModelDownload(' + rmIndex + ')">' + (isDownloading ? '\u{1F4E5} Downloading...' : '\u{1F4E5} Download to Prism') + '</button>';
     } else {
       html += '<button class="secondary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;opacity:0.6;" disabled>\u2705 Available Locally</button>';
@@ -255,11 +255,13 @@ export
 
 export
   async function startGuardian() {
+  showTransientNotice('Starting Guardian...', 'info', 10000);
   try {
     state.guardianStatus = await request('/api/guardian/start', { method: 'POST' });
     renderGuardianPanel();
     dashboardLog('agentic', 'guardian.start', 'Guardian agent started');
-  } catch (e) { console.error('[guardian] start failed', e); }
+    showTransientNotice('Guardian started', 'success', 3000);
+  } catch (e) { console.error('[guardian] start failed', e); showTransientNotice('Guardian start failed: ' + (e && e.message ? e.message : e), 'error', 6000); }
 }
 
 // v0.20.5 — Auto-start the Guardian Agent on client load when a local model is
@@ -293,9 +295,9 @@ export
         try {
           const mData = await request('/api/models/gguf');
           state.localGgufModels = mData.models || [];
-        } catch (_) {}
+        } catch (_) { }
       }
-      
+
       const models = state.localGgufModels || [];
       if (models.length > 0) {
         // Find first recommended model that is already downloaded/present locally
@@ -351,11 +353,13 @@ export
 
 export
   async function stopGuardian() {
+  showTransientNotice('Stopping Guardian...', 'info', 10000);
   try {
     state.guardianStatus = await request('/api/guardian/stop', { method: 'POST' });
     renderGuardianPanel();
     dashboardLog('agentic', 'guardian.stop', 'Guardian agent stopped');
-  } catch (e) { console.error('[guardian] stop failed', e); }
+    showTransientNotice('Guardian stopped', 'success', 3000);
+  } catch (e) { console.error('[guardian] stop failed', e); showTransientNotice('Guardian stop failed: ' + (e && e.message ? e.message : e), 'error', 6000); }
 }
 
 export
@@ -985,20 +989,31 @@ export async function submitAutonomousGoal() {
   objectiveEl.value = '';
 
   try {
-    var result = await request('/api/autonomous/goals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        objective: objective,
-        source: 'dashboard',
-        maxActions: maxActions,
-        allowBrowserUse: allowBrowser,
-        allowComputerUse: allowComputer,
-      })
-    });
-    dashboardLog('agentic', 'goal.submitted', 'Goal submitted: ' + (result.goalId || 'unknown'));
-    if (badge) badge.textContent = 'Active: ' + (result.goalId || '').substring(0, 8);
-    refreshAutonomousGoals();
+    // Find submit button for feedback
+    const submitBtn = document.querySelector('#autonomousGoals-collapsible button.primary-button');
+    const doSubmit = async () => {
+      const result = await request('/api/autonomous/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          objective: objective,
+          source: 'dashboard',
+          maxActions: maxActions,
+          allowBrowserUse: allowBrowser,
+          allowComputerUse: allowComputer,
+        })
+      });
+      dashboardLog('agentic', 'goal.submitted', 'Goal submitted: ' + (result.goalId || 'unknown'));
+      if (badge) badge.textContent = 'Active: ' + (result.goalId || '').substring(0, 8);
+      refreshAutonomousGoals();
+      return result;
+    };
+
+    if (submitBtn && typeof withButtonFeedback === 'function') {
+      await withButtonFeedback(submitBtn, doSubmit, { pending: 'Submitting goal...', success: 'Goal submitted', error: 'Submit failed' });
+    } else {
+      await doSubmit();
+    }
   } catch (e) {
     dashboardLog('agentic', 'goal.error', 'Failed to submit goal: ' + (e.message || e));
     if (badge) badge.textContent = 'Error';
@@ -1032,7 +1047,8 @@ export async function refreshAutonomousGoals() {
       var statusColor = g.status === 'completed' ? '#7ecf7e' : g.status === 'executing' || g.status === 'planning' ? '#7ec8e3' : g.status === 'failed' || g.status === 'terminated' ? '#ff8d8d' : g.status === 'paused' ? '#ffd17a' : '#888';
       var statusIcon = g.status === 'completed' ? '✅' : g.status === 'executing' ? '🔄' : g.status === 'planning' ? '🧠' : g.status === 'failed' ? '❌' : g.status === 'terminated' ? '⛔' : g.status === 'paused' ? '⏸' : '⏳';
 
-      html += '<div class="panel" style="padding:10px;margin-bottom:6px;border-left:3px solid ' + statusColor + ';">';
+      // Make goal panel clickable to view its trace
+      html += '<div class="panel" style="padding:10px;margin-bottom:6px;border-left:3px solid ' + statusColor + ';" onclick="viewAutonomousGoalTrace(\'' + escapeHtml(g.goalId || '') + '\')">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
       html += '<div style="display:flex;align-items:center;gap:8px;">';
       html += '<span>' + statusIcon + '</span>';
@@ -1044,9 +1060,16 @@ export async function refreshAutonomousGoals() {
         html += '<button class="secondary-button" style="font-size:10px;padding:1px 6px;" onclick="abortAutonomousGoal(\'' + escapeHtml(g.goalId) + '\')">⏹ Abort</button>';
       }
       html += '</div></div>';
-      html += '<div style="font-size:11px;color:var(--muted);display:flex;gap:12px;">';
+      html += '<div style="font-size:11px;color:var(--muted);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">';
       html += '<span>ID: ' + escapeHtml((g.goalId || '').substring(0, 8)) + '</span>';
-      html += '<span>Actions: ' + (g.totalActions || 0) + '/' + (g.constraints?.maxActions || '—') + '</span>';
+      html += '<span style="cursor:pointer;text-decoration:underline;color:var(--accent);" onclick="(function(e){e.stopPropagation(); viewAutonomousGoalTrace(\'' + escapeHtml(g.goalId || '') + '\');})(event)">Actions: ' + (g.totalActions || 0) + '/' + (g.constraints?.maxActions || '—') + '</span>';
+      // Browser/Computer use badges
+      if (g.constraints && g.constraints.allowBrowserUse) {
+        html += '<span style="background:rgba(56,189,248,0.08);color:#38bdf8;padding:2px 6px;border-radius:6px;font-size:11px;">Browser</span>';
+      }
+      if (g.constraints && g.constraints.allowComputerUse) {
+        html += '<span style="background:rgba(126,207,126,0.06);color:#7ecf7e;padding:2px 6px;border-radius:6px;font-size:11px;">Computer</span>';
+      }
       if (g.startedAt) html += '<span>Started: ' + new Date(g.startedAt).toLocaleTimeString() + '</span>';
       if (g.completedAt) html += '<span>Completed: ' + new Date(g.completedAt).toLocaleTimeString() + '</span>';
       html += '</div>';
@@ -1066,6 +1089,33 @@ export async function abortAutonomousGoal(goalId) {
     refreshAABLedger();
   } catch (e) {
     dashboardLog('agentic', 'goal.abort.error', 'Failed to abort goal: ' + (e.message || e));
+  }
+}
+
+// Fetch a specific goal's steps and show them in the thinking trace modal
+export async function viewAutonomousGoalTrace(goalId) {
+  try {
+    if (!goalId) return;
+    const data = await request('/api/autonomous/goals/' + encodeURIComponent(goalId));
+    const goal = data.goal || data;
+    if (!goal) {
+      showTransientNotice('Goal not found: ' + goalId, 'error', 5000);
+      return;
+    }
+    const steps = goal.steps || [];
+    // Map steps to the agentic stream event shape and trim
+    const events = steps.map(s => {
+      const ev = { type: 'tool_call', toolCall: { name: s.tool, arguments: s.arguments || {} }, iteration: s.iteration || 0, text: '', timestamp: s.startedAt || s.completedAt || new Date().toISOString() };
+      return typeof trimAgenticEvent === 'function' ? trimAgenticEvent(ev) : ev;
+    });
+    // Preserve in state for the modal to show
+    state.lastThinkingTrace = events.slice(-500);
+    try { if (typeof showAnchoredToast === 'function') showAnchoredToast('Loaded trace for ' + (goalId || '').substring(0, 8), document.querySelector('#autonomous-goals-badge') || document.body, 'info', 3000); } catch (_) { }
+    // Open modal
+    try { if (typeof window.showThinkingTraceModal === 'function') window.showThinkingTraceModal(); else showThinkingTraceModal(); } catch (e) { showTransientNotice('Unable to open trace modal', 'error', 4000); }
+  } catch (err) {
+    console.error('[agentic] view trace failed', err);
+    showTransientNotice('Failed to load trace: ' + (err && err.message ? err.message : String(err)), 'error', 6000);
   }
 }
 
@@ -1118,7 +1168,7 @@ export async function takeCshControl(handoffId, sessionId) {
   dashboardLog('agentic', 'csh.take-control', 'Taking control of session: ' + sessionId);
   state.activeCshHandoffId = handoffId;
   state.activeCshSessionId = sessionId;
-  
+
   // Find handoff details
   try {
     var data = await request('/api/v1/autonomous/session/pending');
@@ -1128,19 +1178,19 @@ export async function takeCshControl(handoffId, sessionId) {
       state.activeCshObjective = h.objective || 'Autonomous Task';
       state.activeCshReason = h.reason || 'manual_intervention';
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Switch active session to this sessionId
   if (window.selectSession) {
     await window.selectSession(sessionId);
   }
-  
+
   // Switch to the Browser tab
   var tabBtn = document.querySelector('.nav-tab[data-tab="browser"]');
   if (tabBtn) {
     tabBtn.click();
   }
-  
+
   // Trigger update to show the banner in browser view
   if (window.browserSessionChanged) {
     window.browserSessionChanged();

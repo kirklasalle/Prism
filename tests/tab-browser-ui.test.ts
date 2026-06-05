@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Frontend Unit Tests for tab-browser.js â€” DOM rendering logic.
  *
  * Uses jsdom to provide a minimal browser-like environment, then loads
@@ -109,6 +109,7 @@ export function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 export function dashboardLog() {}
+export function authHeaders(extra) { return extra || {}; }
 `;
 
 /* â”€â”€ Module types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */

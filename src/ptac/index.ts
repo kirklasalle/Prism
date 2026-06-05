@@ -89,3 +89,4 @@ import "./scenarios/s27-real-docker-lifecycle.js";
 // AgenticChatExecutor loop through `/api/chat` via a single Tier-1
 // prompt and asserts a non-empty terminal answer.
 import "./scenarios/s28-autonomous-self-test.js";
+import "./scenarios/osworld.js";

@@ -3,7 +3,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { IRouteHandler } from "./types.js";
 import { DashboardService } from "../dashboard-service.js";
-import { resolveWorkspaceRoot } from "../../config/workspace-resolver.js";
+import { resolveWorkspaceRoot, writePreferences } from "../../config/workspace-resolver.js";
 import { PRISM_VERSION } from "../../version.js";
 import {
   DIRECTIVE_SHA256,
@@ -11,18 +11,21 @@ import {
   verifyDirectiveIntegrity,
 } from "../../security/directive-integrity.js";
 import { probeOptionalDeps, summarizeOptionalDeps } from "../../system/optional-deps.js";
-import { resolveProfile } from "../model-capability-matrix.js";
+import { resolveProfile, getCachedHardwareSnapshot, fetchHardwareSnapshot, updateCachedHardwareSnapshot } from "../model-capability-matrix.js";
 
 export class ApiHandler implements IRouteHandler {
   match(req: IncomingMessage): boolean {
     const url = req.url ?? "";
+    const pathname = url.split("?")[0];
     const method = req.method?.toUpperCase() ?? "GET";
     if (method === "GET" && (
       url === "/api/health" || url === "/health" ||
       url === "/api/health/extended" ||
       url === "/api/status" ||
       url === "/api/system/adapters" ||
-      url === "/api/skills"
+      url === "/api/system/hardware" ||
+      url === "/api/skills" ||
+      pathname === "/api/llre/summary"
     )) return true;
     if (method === "POST" && url === "/api/mode") return true;
     return false;
@@ -167,10 +170,12 @@ export class ApiHandler implements IRouteHandler {
           const parsed = JSON.parse(body) as { baseMode?: boolean | "auto" };
           let targetBaseMode = false;
           let isAuto = false;
+          let powerMode: "performance" | "eco" | "adaptive" = "performance";
 
           if (parsed.baseMode === "auto") {
             isAuto = true;
             process.env.PRISM_BASE_MODE_AUTO = "true";
+            powerMode = "adaptive";
 
             // Resolve the current active model from LLM Catalog
             const catalog = await service.getLlmProviders().getCatalog();
@@ -182,9 +187,11 @@ export class ApiHandler implements IRouteHandler {
             isAuto = false;
             process.env.PRISM_BASE_MODE_AUTO = "false";
             targetBaseMode = parsed.baseMode ?? false;
+            powerMode = targetBaseMode ? "eco" : "performance";
           }
 
           process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
+          writePreferences({ powerMode });
           
           console.log(`[PRISM][paradigm] Paradigm dynamically switched by operator. baseMode = ${targetBaseMode} (auto = ${isAuto})`);
           
@@ -214,6 +221,96 @@ export class ApiHandler implements IRouteHandler {
           backend: container?.getRuntimeBackend() ?? "in-memory (fallback)",
         }
       });
+      return;
+    }
+
+    if (method === "GET" && url === "/api/system/hardware") {
+      try {
+        // Try to refresh the cached hardware snapshot from Ollama
+        let snapshot = getCachedHardwareSnapshot();
+        if (!snapshot) {
+          try {
+            snapshot = await fetchHardwareSnapshot("http://localhost:11434");
+            updateCachedHardwareSnapshot(snapshot);
+          } catch {
+            // Ollama not available — return null gpu to trigger "NO GPU DETECTED" in UI
+          }
+        }
+        if (!snapshot) {
+          this.json(res, 200, { gpu: null });
+          return;
+        }
+        const usedVramMb = snapshot.loadedModels.reduce(
+          (sum, m) => sum + m.vramBytes / (1024 * 1024), 0,
+        );
+        this.json(res, 200, {
+          gpu: {
+            vramTotalMb: snapshot.totalVramMb,
+            vramUsedMb: Math.round(usedVramMb * 100) / 100,
+            vramFreeMb: Math.round(snapshot.estimatedFreeVramMb * 100) / 100,
+            loadedModels: snapshot.loadedModels.map(m => ({
+              name: m.name,
+              sizeMb: Math.round(m.sizeBytes / (1024 * 1024)),
+              vramMb: Math.round(m.vramBytes / (1024 * 1024)),
+            })),
+          },
+        });
+      } catch (error) {
+        this.json(res, 500, { error: String(error) });
+      }
+      return;
+    }
+
+    const pathname = url.split("?")[0];
+    if (method === "GET" && pathname === "/api/llre/summary") {
+      const searchParams = new URL(url, "http://localhost").searchParams;
+      const sessionId = searchParams.get("sessionId") ?? "";
+
+      const store = service.getActivityStore();
+      if (!store || typeof (store as any).queryLlreTelemetry !== "function") {
+        this.json(res, 503, { error: "LLRE activity store interface is not initialized." });
+        return;
+      }
+
+      try {
+        const rows = (store as any).queryLlreTelemetry(sessionId);
+        if (!rows || rows.length === 0) {
+          this.json(res, 200, {
+            teq: 0.0,
+            rsi: 0.0,
+            csr: 0.0,
+            tca: 0.0,
+            costUsd: 0.0,
+            count: 0
+          });
+          return;
+        }
+
+        let sumTeq = 0;
+        let sumRsi = 0;
+        let sumCsr = 0;
+        let sumTca = 0;
+        let sumCost = 0;
+
+        for (const row of rows) {
+          sumTeq += row.teq_score;
+          sumRsi += row.rsi_score;
+          sumCsr += row.csr_score;
+          sumTca += row.tca_score;
+          sumCost += row.cost_usd;
+        }
+
+        this.json(res, 200, {
+          teq: sumTeq / rows.length,
+          rsi: sumRsi / rows.length,
+          csr: sumCsr / rows.length,
+          tca: sumTca / rows.length,
+          costUsd: sumCost,
+          count: rows.length
+        });
+      } catch (err: any) {
+        this.json(res, 500, { error: err.message || "Failed to query telemetry database" });
+      }
       return;
     }
 

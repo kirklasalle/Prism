@@ -205,6 +205,13 @@ describe("GuardianAgent", () => {
         assert.ok(events.some(e => e.operation === "guardian.stopped"));
     });
 
+    it("recordAction emits guardian.action event", async () => {
+        const events: Array<{ operation: string; detail: string }> = [];
+        guardian.on("guardian_event", (evt) => events.push(evt));
+        await guardian.executeTool("test_tool", { action: "test_action" });
+        assert.ok(events.some(e => e.operation === "guardian.action"));
+    });
+
     it("emits start_failed event when no model path", async () => {
         const noModelGuardian = new GuardianAgent(bus, supervisor as any, [], {
             modelPath: "",
@@ -275,7 +282,7 @@ describe("GuardianAgent", () => {
         guardian.setMcpAdapterFn(() => ({
             getServerStates: () => [
                 { name: "alpha", state: "connected" as const, retryCount: 0, lastError: null },
-                { name: "beta",  state: "connected" as const, retryCount: 0, lastError: null },
+                { name: "beta", state: "connected" as const, retryCount: 0, lastError: null },
             ],
             forceReconnect: async () => ({ ok: true }),
         }));
@@ -289,8 +296,8 @@ describe("GuardianAgent", () => {
         guardian.setMcpAdapterFn(() => ({
             getServerStates: () => [
                 { name: "alpha", state: "connected" as const, retryCount: 0, lastError: null },
-                { name: "beta",  state: "down" as const,      retryCount: 1, lastError: "exited" },
-                { name: "gamma", state: "failed" as const,    retryCount: 10, lastError: "max attempts" },
+                { name: "beta", state: "down" as const, retryCount: 1, lastError: "exited" },
+                { name: "gamma", state: "failed" as const, retryCount: 10, lastError: "max attempts" },
             ],
             forceReconnect: async (n) => {
                 reconnected.push(n);

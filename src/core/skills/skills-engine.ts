@@ -213,11 +213,20 @@ ${rightPrompt}
 ${mainPrompt}
         `.trim();
 
+        const parentSession = session.parentChatSession && this.chatStore
+          ? this.chatStore.getSession(session.parentChatSession)
+          : null;
+
+        const selection = parentSession?.llmProviderId ? {
+          providerId: parentSession.llmProviderId,
+          model: parentSession.llmModel ?? null
+        } : undefined;
+
         const genResult = await this.providerManager.generate({
           message: `Execute step action: ${step.action}`,
           conversation: [],
           systemPrompt: fusedSystemPrompt
-        });
+        }, selection);
 
         if (genResult) {
           content = genResult.content;

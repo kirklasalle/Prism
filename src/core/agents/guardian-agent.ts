@@ -163,7 +163,7 @@ export class GuardianAgent extends EventEmitter {
     ) {
         super();
         this.config = { ...DEFAULT_CONFIG, ...config };
-        
+
         // Base Mode catalog pruning: retain only directive_integrity, mcp_health_recovery, and aab_ledger_monitor
         if (process.env.PRISM_BASE_MODE === "true") {
             const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(t =>
@@ -202,7 +202,7 @@ export class GuardianAgent extends EventEmitter {
         if (wasRunning) {
             this.stopTaskRunners();
         }
-        
+
         if (process.env.PRISM_BASE_MODE === "true") {
             const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(t =>
                 t.id === "directive_integrity" ||
@@ -219,7 +219,7 @@ export class GuardianAgent extends EventEmitter {
                 return { ...t, lastRunAt: old ? old.lastRunAt : null, lastResult: old ? old.lastResult : null, lastDetail: old ? old.lastDetail : null };
             });
         }
-        
+
         if (wasRunning) {
             this.startTaskRunners();
         }
@@ -313,16 +313,16 @@ export class GuardianAgent extends EventEmitter {
 
     /** Get a full status snapshot. */
     public getStatus(): GuardianStatus {
-        const targetPath = this.config.modelPath === "active-chat-model" 
+        const targetPath = this.config.modelPath === "active-chat-model"
             ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelPath ?? "active-chat-model")
             : this.config.modelPath;
-            
-        const targetAlias = this.config.modelPath === "active-chat-model" 
+
+        const targetAlias = this.config.modelPath === "active-chat-model"
             ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelAlias ?? "Shared Chat Model")
             : this.config.modelAlias;
 
-        const slot = this.supervisor.getSnapshot().find(s => 
-            s.modelAlias === this.config.modelAlias || 
+        const slot = this.supervisor.getSnapshot().find(s =>
+            s.modelAlias === this.config.modelAlias ||
             (targetPath && s.modelPath === targetPath)
         ) ?? null;
 
@@ -362,8 +362,8 @@ export class GuardianAgent extends EventEmitter {
                 ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelPath ?? "active-chat-model")
                 : this.config.modelPath;
 
-            const slot = this.supervisor.getSnapshot().find(s => 
-                s.modelAlias === this.config.modelAlias || 
+            const slot = this.supervisor.getSnapshot().find(s =>
+                s.modelAlias === this.config.modelAlias ||
                 (targetPath && s.modelPath === targetPath)
             );
             if (!slot || slot.status !== "ready") {
@@ -434,7 +434,7 @@ export class GuardianAgent extends EventEmitter {
             if (issue === "model_slot_down") {
                 let targetPath = this.config.modelPath;
                 let targetAlias = this.config.modelAlias;
-                
+
                 if (targetPath === "active-chat-model") {
                     const activeSlot = this.supervisor.getSnapshot().find(s => s.status === "ready");
                     if (activeSlot) {
@@ -1035,6 +1035,11 @@ export class GuardianAgent extends EventEmitter {
         if (this.recentActions.length > 50) {
             this.recentActions = this.recentActions.slice(-50);
         }
+        // Mirror action immediately to observers (dashboard, activity bus)
+        try {
+            this.lastAction = `${entry.action} ${entry.result} @ ${entry.timestamp}`;
+            this.emitEvent('guardian.action', `${entry.action} ${entry.result}: ${entry.detail}`);
+        } catch (_) { /* best-effort mirror — don't throw on UI emit failures */ }
     }
 
     private emitEvent(operation: string, detail: string): void {

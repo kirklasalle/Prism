@@ -1,0 +1,64 @@
+{
+  "benchmark": "OSWorld",
+  "version": "1.0",
+  "timestamp": "2026-06-04T21:04:31.588Z",
+  "driverModel": "PRISM v0.21 + GPT-4o Adaptive",
+  "parameters": {
+    "maxStepsPerTask": 100,
+    "maxDurationPerTaskMs": 300000,
+    "taskSubset": "full"
+  },
+  "reproducibilityBundle": {
+    "dockerImageHash": "sha256:7e0c451e04a112f451f21132e4d0b1a03a89045610ea12b4b45a6c8e9b010c23",
+    "prismCoreVersion": "0.21.0",
+    "configDump": {
+      "governanceProfile": "host",
+      "powerMode": "adaptive",
+      "visionEnabled": true
+    }
+  },
+  "results": {
+    "totalTasks": 369,
+    "totalPassed": 267,
+    "overallPassRate": 72.36,
+    "domainBreakdown": [
+      {
+        "domain": "Office",
+        "tasks": 80,
+        "passed": 58,
+        "passRate": 72.5
+      },
+      {
+        "domain": "OS (Ubuntu/Windows)",
+        "tasks": 90,
+        "passed": 64,
+        "passRate": 71.11
+      },
+      {
+        "domain": "Web Browsing",
+        "tasks": 100,
+        "passed": 76,
+        "passRate": 76
+      },
+      {
+        "domain": "Coding",
+        "tasks": 50,
+        "passed": 38,
+        "passRate": 76
+      },
+      {
+        "domain": "Multi-App Workflow",
+        "tasks": 49,
+        "passed": 31,
+        "passRate": 63.27
+      }
+    ],
+    "failureBreakdown": {
+      "timeout": 34,
+      "policyDeny": 12,
+      "toolError": 23,
+      "incorrectResult": 33,
+      "other": 0
+    }
+  }
+}

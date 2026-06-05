@@ -46,7 +46,7 @@ export function dashboardHtml(port: number, authToken?: string): string {
               🚀 Frontier
             </button>
             <button id="prism-btn-automode" onclick="setResourceParadigm('auto')" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">
-              🔍 Auto
+              � Auto
             </button>
           </div>
           <div id="prism-paradigm-desc" style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:2px;">

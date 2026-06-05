@@ -114,19 +114,6 @@
   gap: 6px;
   flex-wrap: wrap;
 }
-#demo-speed-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-#demo-speed-slider {
-  width: 80px;
-  height: 3px;
-  accent-color: #58a6ff;
-  cursor: pointer;
-}
-
 /* Buttons */
 .demo-btn {
   padding: 6px 14px;

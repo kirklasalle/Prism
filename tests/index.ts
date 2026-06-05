@@ -82,6 +82,9 @@ import {
 import { testScimRoutes, testIamAdminRoutes } from "./iam-scim-admin.test.js";
 import { testHelmLint } from "./helm-lint.test.js";
 import { testSoc2Exporter } from "./soc2-exporter.test.js";
+import { testLlreSuite } from "./llre.test.js";
+import { testDsvarSuite } from "./dsvar.test.js";
+import { testGuiRlSuite } from "./gui-rl.test.js";
 import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -225,6 +228,9 @@ async function runTests(): Promise<void> {
         { name: "IamAdminRoutes", fn: testIamAdminRoutes },
         { name: "HelmLint", fn: testHelmLint },
         { name: "Soc2Exporter", fn: testSoc2Exporter },
+        { name: "LlreSuite", fn: testLlreSuite },
+        { name: "DsvarSuite", fn: testDsvarSuite },
+        { name: "GuiRlSuite", fn: testGuiRlSuite },
     ];
 
     let passed = 0;

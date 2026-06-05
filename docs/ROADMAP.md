@@ -302,6 +302,14 @@ Establish a two-mode dashboard experience: Simple Mode for individual users (cha
 - PagerDuty webhook integration for critical governance alerts (tier3 approval timeouts)
 - See: `src/core/activity/bus.ts`, `src/core/operator/dashboard-service.ts`
 
+### E8: Low-Level Reasoning Engine (LLRE) & Cognitive Economics (P1 — Done)
+
+- Prompt AST linter & compiler to parse prompt directives and signal density ratios (`src/core/llre/ast.ts`)
+- Core math model formulating Tool Call Accuracy, Request Satisfaction Index, Context Saturation Ratio, and Token Efficacy Quotient (`src/core/llre/telemetry.ts`)
+- Event-driven background telemetry store (`src/core/activity/sqlite-store.ts`)
+- REST Gateway endpoint providing aggregated statistics (`src/core/operator/routes/api-handler.ts`)
+- Premium operators setting panel with dynamic metrics visualization (`tab-settings.html`, `tab-settings.js`)
+
 ### E: Exit Criteria
 
 - `node-pty` PTY terminal executes real shell commands (`ls`, `pwd`, `cat`) with correct output
@@ -311,6 +319,7 @@ Establish a two-mode dashboard experience: Simple Mode for individual users (cha
 - `/api/v1/openapi.json` returns valid OpenAPI 3.0 spec
 - Plugin packs with invalid Ed25519 signatures rejected by validator
 - OpenTelemetry spans visible in collector; Prometheus `/metrics` returns valid metrics
+- LLRE integration test suite (`tests/llre.test.ts`) compiles and passes successfully (`✓ LLRE tests passed`)
 
 ---
 

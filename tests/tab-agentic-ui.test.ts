@@ -77,6 +77,10 @@ export function formatUptime(secs) {
   if (secs < 3600) return Math.round(secs / 60) + 'm';
   return Math.round(secs / 3600) + 'h';
 }
+export function showTransientNotice(message, duration = 3000) {}
+export function withButtonFeedback(btn, promise) { return promise; }
+export function trimAgenticEvent(evt) { return evt; }
+export function showAnchoredToast(message, el, severity = 'info', timeout = 4000) {}
 `;
 
 /* ── Module types ─────────────────────────────────────────────────────── */

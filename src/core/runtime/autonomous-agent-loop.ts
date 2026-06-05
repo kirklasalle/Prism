@@ -39,6 +39,7 @@ export interface AutonomousGoal {
   steps: AutonomousStep[];
   totalActions: number;
   error: string | null;
+  chatSessionId?: string;
 }
 
 export interface AutonomousStep {
@@ -151,6 +152,7 @@ export class AutonomousAgentLoop {
     source: GoalSource,
     operatorId: string,
     constraints?: Partial<AutonomousGoalConstraints>,
+    chatSessionId?: string,
   ): AutonomousGoal {
     const goalId = `goal-${randomUUID().slice(0, 12)}`;
     const correlationId = `auto-${randomUUID().slice(0, 8)}`;
@@ -177,6 +179,7 @@ export class AutonomousAgentLoop {
       steps: [],
       totalActions: 0,
       error: null,
+      chatSessionId,
     };
 
     this.goals.set(goalId, goal);
@@ -414,10 +417,21 @@ export class AutonomousAgentLoop {
         args: toolArgs,
         risk: "medium",
         mutatesState: true,
+        rollbackPlan: this.buildRollbackPlan(toolName, toolArgs),
       };
       const result = await tool.execute(request);
       step.status = result.ok ? "succeeded" : "failed";
-      step.output = result.output;
+      step.output = result.ok
+        ? result.output
+        : {
+          ...(result.output ?? {}),
+          autonomousRecovery: {
+            diagnosis: "Tool execution returned ok=false.",
+            rollbackPlan: this.buildRollbackPlan(toolName, toolArgs, result.sideEffects),
+            continueObjective: true,
+            recommendedNextAction: "Diagnose root cause, run rollback or compensating action, then continue toward the objective.",
+          },
+        };
       step.completedAt = new Date().toISOString();
       step.durationMs = Date.now() - Date.parse(step.startedAt!);
 
@@ -428,7 +442,15 @@ export class AutonomousAgentLoop {
       });
     } catch (err) {
       step.status = "failed";
-      step.output = { error: String(err) };
+      step.output = {
+        error: String(err),
+        autonomousRecovery: {
+          diagnosis: "Tool execution threw an exception.",
+          rollbackPlan: this.buildRollbackPlan(toolName, toolArgs),
+          continueObjective: true,
+          recommendedNextAction: "Identify the failing assumption, execute rollback or compensating action, and continue with a revised step.",
+        },
+      };
       step.completedAt = new Date().toISOString();
       step.durationMs = step.startedAt ? Date.now() - Date.parse(step.startedAt) : 0;
 
@@ -447,6 +469,30 @@ export class AutonomousAgentLoop {
     }
 
     return step;
+  }
+
+  private buildRollbackPlan(
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+    sideEffects?: Array<{
+      type: "file" | "process" | "network" | "database" | "api";
+      description: string;
+      action?: string;
+      resource?: string;
+      mutating?: boolean;
+      reversible?: boolean;
+      rollbackPlan?: string;
+    }>,
+  ): string {
+    const effectPlans = (sideEffects ?? [])
+      .map((effect) => effect.rollbackPlan)
+      .filter((plan): plan is string => typeof plan === "string" && plan.trim().length > 0);
+
+    if (effectPlans.length > 0) {
+      return effectPlans.join("; ");
+    }
+
+    return `Rollback strategy for ${toolName}: verify side effects from arguments ${JSON.stringify(toolArgs)}; reverse changed state before retrying with revised arguments.`;
   }
 
   /** Complete a goal successfully. */

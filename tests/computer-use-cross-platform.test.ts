@@ -17,6 +17,8 @@
 
 import assert from "node:assert/strict";
 import { ComputerUseTool } from "../src/adapters/system/computer-use-tool.js";
+import { AutonomousComputerAgent } from "../src/core/runtime/autonomous-computer-agent.js";
+import { ActivityBus } from "../src/core/activity/bus.js";
 
 export async function testComputerUseCrossPlatformDispatch(): Promise<void> {
     const tool = new ComputerUseTool();
@@ -38,6 +40,30 @@ export async function testComputerUseCrossPlatformDispatch(): Promise<void> {
     }
 }
 
+export async function testAutonomousComputerAgentExecution(): Promise<void> {
+    const bus = new ActivityBus();
+    const agent = new AutonomousComputerAgent(bus);
+
+    // Initialize goal
+    agent.initGoal("test-goal-id", "verify echo output");
+
+    // Execute command with async fallback
+    const command = process.platform === "win32" ? "cmd /c echo hello" : "echo hello";
+    const result = await agent.executeCommand(command);
+
+    assert.ok(result.success, "Echo command should succeed");
+    assert.strictEqual(result.exitCode, 0, "Exit code should be 0");
+    assert.match(result.output || "", /hello/, "Output should contain 'hello'");
+
+    // Execute invalid command and verify it fails but completes
+    const invalidCommand = "invalid_command_name_that_does_not_exist";
+    const resultFail = await agent.executeCommand(invalidCommand);
+    assert.ok(!resultFail.success, "Invalid command should fail");
+    assert.notStrictEqual(resultFail.exitCode, 0, "Exit code should not be 0");
+    assert.ok(resultFail.error, "Error details should be present");
+}
+
 export async function testComputerUseCrossPlatform(): Promise<void> {
     await testComputerUseCrossPlatformDispatch();
+    await testAutonomousComputerAgentExecution();
 }

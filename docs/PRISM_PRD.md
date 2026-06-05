@@ -1,4 +1,4 @@
-﻿# PRISM Product Requirements Document (PRD)
+# PRISM Product Requirements Document (PRD)
 
 Date: 2026-03-11  
 Status: Phase C Active  
@@ -133,6 +133,11 @@ Implemented today:
   - profile-aware email domain validation (business enforces matching domains; individual is permissive)
   - execution profile segment normalization (`enterprise`/`corporate` → canonical `business`)
   - accountability chain propagated into activity events and SHA-256 integrity hashes
+- **LLRE Cognitive Economics Engine**:
+  - Prompt AST Compiler (`src/core/llre/ast.ts`) checking prompt objective/constraint densities
+  - Unified effectiveness analytics calculating TCA, RSI, CSR, and TEQ performance indexes
+  - Background SQLite data layer persistence with query/aggregation endpoints
+  - Real-time Cognitive Economics operator settings dashboard panel
 
 ## 7. Novelty Roadmap (PRISM-specific)
 
@@ -667,6 +672,37 @@ Acceptance criteria:
 - SR panel renders correctly in Provider & Settings tab,
 - isolation badge updates in real-time,
 - chat messages show SR attribution.
+
+### 8.10 Low-Level Reasoning Engine (LLRE) & Cognitive Economics Requirements
+
+The PRISM architecture integrates Low-Level Reasoning Engine (LLRE) telemetry to measure, audit, and optimize prompt structures and cognitive resource expenditures.
+
+#### 8.10.1 Mathematical Performance Matrices
+LLRE computes unified operational indexes at the low-level execution loop:
+- **Tool Call Accuracy (TCA)**: Direct ratio of verified tool executions relative to attempted calls.
+- **Request Satisfaction Index (RSI)**: Ratio of completed tasks relative to the goal's criteria constraints.
+- **Context Saturation Ratio (CSR)**: Normalized factor checking token consumption efficiency ($CSR = \min(1.0, \frac{500}{\text{Tokens Consumed}})$).
+- **Token Efficacy Quotient (TEQ)**: The unified economic index mapping satisfaction, accuracy, and operational cost ($\frac{RSI \times TCA}{\text{Cost USD} \times \text{Latency Seconds}}$).
+
+#### 8.10.2 System Prompt AST Compilation
+- Enforce strict envelope boundaries using `<objective>` and `<constraints>` XML elements.
+- Analyze system prompts for **Signal Density** (the ratio of actionable directives to descriptive padding text).
+- Generate linter warnings inside system logs if descriptive padding dilutes instruction clarity.
+
+#### 8.10.3 Background DB Logging & Activity Bus
+- Capture `llre.telemetry.recorded` event payloads off the central Activity Bus.
+- Commit structured records into `prism_llre_telemetry` using prepared SQLite statement queues.
+- Ensure type-safe defaults and robust parameter binders preventing structural EPERM lock resource leaks or binding exceptions.
+
+#### 8.10.4 Gateway API & UI Dashboard
+- Provide `GET /api/llre/summary?sessionId=<id>` returning running session aggregate averages.
+- Expose a premium visual Cognitive Economics dashboard panel at the top of the Settings & Provider tab.
+- Wire animated progress wheels, latency status, token volumes, and total session expenditures directly in the UI.
+
+#### 8.10.5 Acceptance Criteria
+- AST compiler successfully processes formatted and unformatted prompts.
+- Database layer commits event records correctly and avoids SQLite binding failures.
+- Front-end fetches, handles, and renders consolidated telemetry values securely.
 
 ## 9-continued. Quality Gates (SLO/SLA Targets)
 

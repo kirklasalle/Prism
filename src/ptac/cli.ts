@@ -63,8 +63,8 @@ function parseArgs(argv: string[]): CliArgs {
         throw new Error(`--profile must be "sandbox" or "host" (got "${profile}")`);
     }
     const suite = (get("suite") ?? "fast") as PtacSuite;
-    if (!["fast", "full", "demo", "custom"].includes(suite)) {
-        throw new Error(`--suite must be one of fast|full|demo|custom (got "${suite}")`);
+    if (!["fast", "full", "demo", "custom", "osworld"].includes(suite)) {
+        throw new Error(`--suite must be one of fast|full|demo|custom|osworld (got "${suite}")`);
     }
     const dataDir = process.env.PRISM_PTAC_OUTPUT_DIR
         ?? (process.env.PRISM_DATA_DIR ? join(process.env.PRISM_DATA_DIR, "ptac") : join(process.cwd(), "prism-output", "ptac"));

@@ -1,0 +1,38 @@
+# Propagated Session LLM Selection to Autonomous Loops & Skills
+
+We successfully completed the implementation to propagate the active chat session's configured LLM provider and model (`openai / gpt-5-mini`) to the PRISM Autonomous Loop and Skills Engine.
+
+## Changes Made
+
+### 1. Skills Engine
+- **File modified:** [skills-engine.ts](file:///d:/Projects/Prism/src/core/skills/skills-engine.ts)
+- Retrieved the parent chat session details using `this.chatStore` and `session.parentChatSession`.
+- Constructed a selection object containing the session's active `llmProviderId` and `llmModel`.
+- Passed the selection as the second parameter to `this.providerManager.generate(..., selection)`.
+
+### 2. Autonomous Agent Loop
+- **File modified:** [autonomous-agent-loop.ts](file:///d:/Projects/Prism/src/core/runtime/autonomous-agent-loop.ts)
+- Added an optional `chatSessionId?: string;` property to the `AutonomousGoal` interface.
+- Updated `submitGoal` method signature to accept `chatSessionId` as the fifth optional parameter and store it in the queued goal.
+
+### 3. Planner & Specialised Agents
+- **File modified:** [autonomous-planner.ts](file:///d:/Projects/Prism/src/core/runtime/autonomous-planner.ts)
+- Added an optional `goal?: AutonomousGoal;` parameter to the `AutonomousLlmGenerateFn` type definition.
+- Modified the ReAct loop inside `executeGoal()` to pass the `goal` object to the bound `generateFn()`.
+
+### 4. Intent Classification and API Routing
+- **File modified:** [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts)
+- Updated autonomous escalation block to pass `sessionId` to the autonomous loop's `submitGoal` call.
+- Updated `/api/autonomous/goal` handler to extract and pass `sessionId` or `chatSessionId` to the `submitGoal` call.
+- Modified the bound `setLlmGenerateFn` callback to:
+  1. Check if `input.goal?.chatSessionId` is present.
+  2. Query `this.chatStore` to fetch the session's active provider selection.
+  3. Propagate the session's active provider and model to the `llmProviders.generate(..., selection)` call.
+- **File modified:** [autonomous-handler.ts](file:///d:/Projects/Prism/src/core/operator/routes/autonomous-handler.ts)
+- Updated `/api/autonomous/goals` POST route to extract `sessionId`/`chatSessionId` from the payload and pass it to `submitGoal()`.
+
+---
+
+## Verification
+- Verified that all TypeScript and build pipelines compile successfully by running `npm run build` which returned exit code `0`.
+- Confirming that all skills and autonomous actions executed in that session will strictly respect and target the configured provider (e.g. OpenAI) instead of falling back to Google Gemini.

@@ -1,5 +1,48 @@
 <div class="tab-grid" style="grid-template-columns:1fr;">
 
+  <section class="rail-section panel llre-cognitive-widget" style="border: 1px solid rgba(79, 70, 229, 0.4); background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); margin-bottom: 24px; padding: 18px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(49, 46, 129, 0.6); padding-bottom: 12px; margin-bottom: 16px;">
+      <h3 style="margin: 0; color: #c7d2fe; font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+        ⚡ Cognitive Economics & Prompt Efficacy <span style="background: #4f46e5; font-size: 10px; color: #fff; padding: 3px 8px; border-radius: 9999px; font-weight: 600;">LLRE Port Active</span>
+      </h3>
+      <span id="llre-last-sync" style="color: #64748b; font-size: 11px; font-weight: 500;">Last synced: Just now</span>
+    </div>
+
+    <!-- Metric Dial Grid -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
+      
+      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Token Efficacy (TEQ)</div>
+        <div id="llre-teq-value" style="font-size: 26px; font-weight: 800; color: #38bdf8; margin: 4px 0; font-family: monospace;">--</div>
+        <div style="color: #475569; font-size: 9px; font-weight: 500;">Quality / ($ * Latency)</div>
+      </div>
+
+      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Satisfaction Index (RSI)</div>
+        <div id="llre-rsi-value" style="font-size: 26px; font-weight: 800; color: #34d399; margin: 4px 0; font-family: monospace;">--</div>
+        <div style="color: #475569; font-size: 9px; font-weight: 500;">Goal criteria passed</div>
+      </div>
+
+      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Context Saturation (CSR)</div>
+        <div id="llre-csr-value" style="font-size: 26px; font-weight: 800; color: #fbbf24; margin: 4px 0; font-family: monospace;">--</div>
+        <div style="color: #475569; font-size: 9px; font-weight: 500;">Instruction SNR Density</div>
+      </div>
+
+      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Tool Call Accuracy (TCA)</div>
+        <div id="llre-tca-value" style="font-size: 26px; font-weight: 800; color: #f87171; margin: 4px 0; font-family: monospace;">--</div>
+        <div style="color: #475569; font-size: 9px; font-weight: 500;">Valid tool executions</div>
+      </div>
+
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; color: #94a3b8; font-size: 12px; padding: 4px 4px 0;">
+      <div><strong>Accumulated Session Cost:</strong> <span id="llre-cost-accumulated" style="color: #f1f5f9; font-weight: 700; font-family: monospace; font-size: 13px;">$0.0000</span></div>
+      <div><strong>Signal-to-Noise Rating:</strong> <span id="llre-snr-rating" style="color: #c7d2fe; font-weight: 700;">No Active Runs</span></div>
+    </div>
+  </section>
+
   <section class="rail-section panel" id="sr-section" data-tip-id="settings:sr-toggle" data-tip-kind="settings"
     style="border:1px solid rgba(139,92,246,0.25);background:linear-gradient(135deg,rgba(139,92,246,0.06),rgba(59,130,246,0.04));">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 8px;">

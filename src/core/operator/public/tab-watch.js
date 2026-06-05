@@ -25,6 +25,17 @@
     let screenshotTimer = null;
     let ownWs = null;
 
+    function getAuthToken() {
+        const meta = document.querySelector('meta[name="prism-auth-token"]');
+        return meta ? meta.getAttribute('content') || '' : '';
+    }
+    function authHeaders(extra) {
+        const token = getAuthToken();
+        const headers = extra ? Object.assign({}, extra) : {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        return headers;
+    }
+
     function $(id) { return document.getElementById(id); }
     function escapeHtml(s) {
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -116,7 +127,10 @@
         const ph = $('watch-screenshot-placeholder');
         if (!img) return;
         try {
-            const r = await fetch('/api/computer/screengrab/latest', { cache: 'no-store' });
+            const r = await fetch('/api/v1/computer/screengrab/latest', {
+                headers: authHeaders(),
+                cache: 'no-store'
+            });
             if (!r.ok) return;
             const blob = await r.blob();
             const url = URL.createObjectURL(blob);
@@ -143,7 +157,9 @@
         const sel = $('watch-session');
         if (!sel) return;
         try {
-            const r = await fetch('/api/chat/sessions');
+            const r = await fetch('/api/v1/chat/sessions', {
+                headers: authHeaders()
+            });
             if (!r.ok) throw new Error('HTTP ' + r.status);
             const list = await r.json();
             sel.innerHTML = '';
@@ -210,9 +226,9 @@
         setStatus(`Running… session=${sessionId.slice(0, 8)}`);
         ensureSubscribedToAgenticEvents();
         try {
-            const r = await fetch('/api/chat', {
+            const r = await fetch('/api/v1/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ sessionId, prompt }),
             });
             const data = await r.json().catch(() => ({}));
@@ -251,9 +267,9 @@
         try {
             // Best-effort: the abort surface mirrors PTAC's. If not yet wired,
             // we still flip local state and stop polling.
-            await fetch('/api/agentic/abort', {
+            await fetch('/api/v1/agentic/abort', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ sessionId: activeSessionId }),
             }).catch(() => null);
         } finally {

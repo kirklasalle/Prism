@@ -6,6 +6,7 @@ export class SqliteActivityStore implements IActivityStore {
     private readonly db: DatabaseSync;
     private readonly insertStmt: StatementSync;
     private readonly selectStmt: StatementSync;
+    private readonly insertLlreStmt: StatementSync;
     /** Set to true after close() so late-arriving Guardian/timer events are silently dropped. */
     private _closed = false;
 
@@ -34,6 +35,15 @@ export class SqliteActivityStore implements IActivityStore {
       SELECT * FROM activity_events
       ORDER BY timestamp DESC
       LIMIT 1000
+    `);
+
+        this.insertLlreStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO prism_llre_telemetry
+        (id, timestamp, session_id, correlation_id, model_name,
+         tokens_consumed, latency_ms, cost_usd, rsi_score, csr_score, tca_score, teq_score, details)
+      VALUES
+        (:id, :timestamp, :sessionId, :correlationId, :modelName,
+         :tokensConsumed, :latencyMs, :costUsd, :rsiScore, :csrScore, :tcaScore, :teqScore, :details)
     `);
     }
 
@@ -66,6 +76,25 @@ export class SqliteActivityStore implements IActivityStore {
       CREATE INDEX IF NOT EXISTS idx_ae_session   ON activity_events(session_id);
       CREATE INDEX IF NOT EXISTS idx_ae_operation ON activity_events(operation);
       CREATE INDEX IF NOT EXISTS idx_ae_timestamp ON activity_events(timestamp);
+
+      CREATE TABLE IF NOT EXISTS prism_llre_telemetry (
+        id             TEXT PRIMARY KEY,
+        timestamp      TEXT NOT NULL,
+        session_id     TEXT NOT NULL,
+        correlation_id TEXT,
+        model_name     TEXT NOT NULL,
+        tokens_consumed INTEGER NOT NULL,
+        latency_ms     INTEGER NOT NULL,
+        cost_usd       REAL NOT NULL,
+        rsi_score      REAL NOT NULL,
+        csr_score      REAL NOT NULL,
+        tca_score      REAL NOT NULL,
+        teq_score      REAL NOT NULL,
+        details        TEXT DEFAULT '{}'
+      );
+      CREATE INDEX IF NOT EXISTS idx_llre_session    ON prism_llre_telemetry(session_id);
+      CREATE INDEX IF NOT EXISTS idx_llre_timestamp  ON prism_llre_telemetry(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_llre_teq        ON prism_llre_telemetry(teq_score);
     `);
 
         this.ensureColumns("activity_events", [
@@ -107,6 +136,25 @@ export class SqliteActivityStore implements IActivityStore {
     onEvent(event: ActivityEvent): void {
         // Silently drop events after the DB is closed (e.g. Guardian timers firing during shutdown).
         if (this._closed) return;
+
+        if (event.operation === "llre.telemetry.recorded") {
+            const metrics = event.details as any;
+            this.saveLlreTelemetry({
+                sessionId: metrics.sessionId ?? event.sessionId,
+                correlationId: metrics.correlationId ?? null,
+                modelName: metrics.modelName ?? "unknown-model",
+                tokensConsumed: Number(metrics.tokensConsumed ?? 0),
+                latencyMs: Number(metrics.latencyMs ?? event.durationMs ?? 0),
+                costUsd: Number(metrics.costUsd ?? 0.0),
+                rsi: Number(metrics.rsi ?? metrics.rsiScore ?? 1.0),
+                csr: Number(metrics.csr ?? metrics.csrScore ?? 1.0),
+                tca: Number(metrics.tca ?? metrics.tcaScore ?? 1.0),
+                teq: Number(metrics.teq ?? metrics.teqScore ?? 0.0),
+                details: metrics.details ?? metrics,
+            });
+            return;
+        }
+
         this.insertStmt.run({
             id: event.id,
             timestamp: event.timestamp,
@@ -191,6 +239,47 @@ export class SqliteActivityStore implements IActivityStore {
             rollbackPlan: row.rollback_plan != null ? String(row.rollback_plan) : undefined,
             hash: row.hash != null ? String(row.hash) : undefined,
         }));
+    }
+
+    saveLlreTelemetry(metrics: {
+        sessionId: string;
+        correlationId?: string;
+        modelName: string;
+        tokensConsumed: number;
+        latencyMs: number;
+        costUsd: number;
+        rsi: number;
+        csr: number;
+        tca: number;
+        teq: number;
+        details?: Record<string, unknown>;
+    }): void {
+        if (this._closed) return;
+        const id = "llre-" + Math.random().toString(36).substring(2, 14);
+        this.insertLlreStmt.run({
+            id,
+            timestamp: new Date().toISOString(),
+            sessionId: metrics.sessionId,
+            correlationId: metrics.correlationId ?? null,
+            modelName: metrics.modelName,
+            tokensConsumed: metrics.tokensConsumed,
+            latencyMs: metrics.latencyMs,
+            costUsd: metrics.costUsd,
+            rsiScore: metrics.rsi,
+            csrScore: metrics.csr,
+            tcaScore: metrics.tca,
+            teqScore: metrics.teq,
+            details: JSON.stringify(metrics.details ?? {}),
+        });
+    }
+
+    queryLlreTelemetry(sessionId: string): any[] {
+        if (this._closed) return [];
+        return this.db.prepare(`
+            SELECT * FROM prism_llre_telemetry
+            WHERE session_id = :sessionId
+            ORDER BY timestamp DESC
+        `).all({ sessionId }) as any[];
     }
 
     close(): void {
