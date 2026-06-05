@@ -819,8 +819,8 @@ export class DashboardService {
   private readonly rateLimiter: RateLimiter;
   private readonly corsCsrfConfig: CorsCsrfConfig;
   private tlsEnabled = false;
-  private readonly actionsByName = new Map<string, DashboardAction>();
-  private readonly actionStates = new Map<string, DashboardActionState>();
+  public readonly actionsByName = new Map<string, DashboardAction>();
+  public readonly actionStates = new Map<string, DashboardActionState>();
   private readonly actionHistory: DashboardActionHistoryEntry[] = [];
   private readonly actionHistoryLimit = 25;
   private readonly sessionPackageStorePath: string;
@@ -838,21 +838,21 @@ export class DashboardService {
   private readonly guardianAgent: GuardianAgent;
   private readonly agenticExecutor: AgenticChatExecutor | null;
   private readonly dashboardControlTool: DashboardControlTool;
-  private readonly tools: Tool[];
+  public readonly tools: Tool[];
   private readonly framebufferCapture = new FramebufferCapture();
   private readonly wsServer: WebSocketServer;
-  private readonly wsClients = new Set<WebSocket>();
+  public readonly wsClients = new Set<WebSocket>();
   /** Optional MCP adapter for /api/mcp/servers and Guardian self-heal task. */
-  private mcpAdapter: McpClientAdapter | null = null;
+  public mcpAdapter: McpClientAdapter | null = null;
   /** Optional console interceptor for /api/debug/console + live WS stream. */
   private consoleInterceptor: ConsoleInterceptor | null = null;
-  private sshpInterceptor!: SSHPInterceptor;
+  public sshpInterceptor!: SSHPInterceptor;
   private cshManager!: CSHManager;
   /** Unsubscribe handle for the console-line listener. */
   private consoleUnsubscribe: (() => void) | null = null;
   private readonly openSockets = new Set<Socket>();
-  private readonly sseClients = new Map<string, ServerResponse>();
-  private readonly networkCommandHistory: Array<{ command: string; tier?: string; ok: boolean; timestamp: string }> = [];
+  public readonly sseClients = new Map<string, ServerResponse>();
+  public readonly networkCommandHistory: Array<{ command: string; tier?: string; ok: boolean; timestamp: string }> = [];
   private toolStates: Record<string, { enabled: boolean; invocations: number; successes: number; failures: number; avgLatencyMs: number; lastInvoked: string | null; lastError: string | null }> = {};
   private pluginStates: Record<string, { enabled: boolean; healthy: boolean; requests: number; errors: number; avgResponseMs: number; lastChecked: string | null }> = {};
   private utilityStates: Record<string, Record<string, unknown>> = {};
@@ -863,26 +863,26 @@ export class DashboardService {
   private agentPool: AgentPool | null = null;
   private agentRouter: AgentRouter | null = null;
   private importHistory: Array<{ id: string; timestamp: string; mode: string; fileName: string; targetDir: string; registeredType: string | null; status: string; message: string; size: number }> = [];
-  private diagnosticsRunning = false;
-  private diagnosticsLastRunAt: string | null = null;
-  private agentDiagnosticsRunning = false;
-  private agentDiagnosticsLastRunAt: string | null = null;
-  private computerDiagnosticsRunning = false;
-  private computerDiagnosticsLastRunAt: string | null = null;
-  private knowledgeGraphDiagnosticsRunning = false;
-  private knowledgeGraphDiagnosticsLastRunAt: string | null = null;
-  private workspaceDiagnosticsRunning = false;
-  private workspaceDiagnosticsLastRunAt: string | null = null;
-  private networkDiagnosticsRunning = false;
-  private networkDiagnosticsLastRunAt: string | null = null;
-  private telemetryDiagnosticsRunning = false;
-  private telemetryDiagnosticsLastRunAt: string | null = null;
-  private logsDiagnosticsRunning = false;
-  private logsDiagnosticsLastRunAt: string | null = null;
-  private schedulerDiagnosticsRunning = false;
-  private schedulerDiagnosticsLastRunAt: string | null = null;
-  private demoDiagnosticsRunning = false;
-  private demoDiagnosticsLastRunAt: string | null = null;
+  public diagnosticsRunning = false;
+  public diagnosticsLastRunAt: string | null = null;
+  public agentDiagnosticsRunning = false;
+  public agentDiagnosticsLastRunAt: string | null = null;
+  public computerDiagnosticsRunning = false;
+  public computerDiagnosticsLastRunAt: string | null = null;
+  public knowledgeGraphDiagnosticsRunning = false;
+  public knowledgeGraphDiagnosticsLastRunAt: string | null = null;
+  public workspaceDiagnosticsRunning = false;
+  public workspaceDiagnosticsLastRunAt: string | null = null;
+  public networkDiagnosticsRunning = false;
+  public networkDiagnosticsLastRunAt: string | null = null;
+  public telemetryDiagnosticsRunning = false;
+  public telemetryDiagnosticsLastRunAt: string | null = null;
+  public logsDiagnosticsRunning = false;
+  public logsDiagnosticsLastRunAt: string | null = null;
+  public schedulerDiagnosticsRunning = false;
+  public schedulerDiagnosticsLastRunAt: string | null = null;
+  public demoDiagnosticsRunning = false;
+  public demoDiagnosticsLastRunAt: string | null = null;
   private readonly characterAccountabilityStore: CharacterAccountabilityStore;
   private readonly characterAccountabilityManager: CharacterAccountabilityManager;
   private readonly utilityRegistry!: UtilityRegistry;
@@ -898,7 +898,7 @@ export class DashboardService {
     history: import("../incubation/shws/history-index.js").WorkflowHistoryIndex;
     constitution: import("../incubation/ccc/types.js").Constitution;
   };
-  private usageMetering?: UsageMeteringService;
+  public usageMetering?: UsageMeteringService;
   private runtimeSettings: Record<string, unknown> = {
     approvalTimeoutMs: 30000,
     selfReviewDailyMs: 86400000,
@@ -923,14 +923,16 @@ export class DashboardService {
   private readonly sessionManager: SessionManager;
   private readonly iamHandler: IamRouteHandler;
   private readonly router: Router;
+  private readonly activityStore: SqliteActivityStore | null = null;
 
   public getIamStore(): IamStore { return this.iamStore; }
   public getSessionManager(): SessionManager { return this.sessionManager; }
   public getIamHandler(): IamRouteHandler { return this.iamHandler; }
+  public getActivityStore(): SqliteActivityStore | null { return this.activityStore; }
   public getSkillsEngine(): SkillsEngine { return this.skillsEngine; }
   private readonly skillsEngine!: SkillsEngine;
   private readonly tooltipsRegistry: TooltipsRegistry = new TooltipsRegistry(resolvePath(process.cwd(), "docs", "tooltips"));
-  private customRecommendedModels: Array<{ name: string; fileName: string; size: string; path: string; source: string; addedAt: string }> = [];
+  public customRecommendedModels: Array<{ name: string; fileName: string; size: string; path: string; source: string; addedAt: string }> = [];
 
 
   /* ── A2A Protocol adapters (Phase F) ───────────────────────────────── */
@@ -962,7 +964,7 @@ export class DashboardService {
   constructor(
     private readonly queue: ApprovalQueue,
     private readonly activityBus: ActivityBus,
-    private readonly status: DashboardRuntimeStatus,
+    public readonly status: DashboardRuntimeStatus,
     private readonly chatStore: ChatSessionStore,
     actions: DashboardAction[] = [],
     private readonly port = 7070,
@@ -979,6 +981,7 @@ export class DashboardService {
     terminalAdapter?: TerminalSessionAdapter,
     containerAdapter?: ContainerSandboxAdapter,
   ) {
+    this.activityStore = activityStore ?? null;
     this.providerSecretStore = providerSecretStore ?? (process.platform === "win32"
       ? new WindowsProtectedFileProviderSecretStore()
       : new InMemoryProviderSecretStore());
@@ -1128,6 +1131,33 @@ export class DashboardService {
       this.llmProviders.setUsageMetering(this.usageMetering);
     }
     this.llmProviders.loadPersistedProfiles(this.chatStore.listModelProfiles());
+
+    // Load and apply powerMode preference at server startup
+    try {
+      const prefs = readPreferences();
+      const powerMode = prefs?.powerMode || "adaptive";
+      let isAuto = false;
+      let targetBaseMode = false;
+
+      if (powerMode === "adaptive") {
+        isAuto = true;
+        process.env.PRISM_BASE_MODE_AUTO = "true";
+        const activeModel = this.llmProviders.activeModel;
+        if (activeModel) {
+          const profile = resolveProfile(activeModel);
+          targetBaseMode = profile.locality === "local" && profile.tier <= 2;
+        }
+      } else {
+        isAuto = false;
+        process.env.PRISM_BASE_MODE_AUTO = "false";
+        targetBaseMode = powerMode === "eco";
+      }
+
+      process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
+      console.log(`[PRISM][startup] Hydrated powerMode preference: '${powerMode}' -> baseMode=${targetBaseMode} (auto=${isAuto})`);
+    } catch (err) {
+      console.warn("[PRISM][startup] Failed to hydrate powerMode preference:", err);
+    }
 
 
     this.characterAccountabilityStore = new CharacterAccountabilityStore(workspaceDbPath());
@@ -2890,6 +2920,8 @@ export class DashboardService {
   private _browserAgent: import("../runtime/autonomous-browser-agent.js").AutonomousBrowserAgent | null = null;
   private _computerAgent: import("../runtime/autonomous-computer-agent.js").AutonomousComputerAgent | null = null;
   private _demoEngine: import("../runtime/demonstration-engine.js").DemonstrationEngine | null = null;
+  // Cache for expensive model matrix computation to avoid repeated work
+  private modelMatrixCache: { ts: number; matrix: any } | null = null;
 
   /**
    * Wire autonomous control dependencies after construction.
@@ -2913,20 +2945,34 @@ export class DashboardService {
     this.tabSessionRegistry = deps.tabSessionRegistry;
     this.telemetryAggregator = deps.telemetryAggregator;
     if (deps.covenant) this._covenant = deps.covenant;
-    if (deps.browserAgent) this._browserAgent = deps.browserAgent;
+    if (deps.browserAgent) {
+      this._browserAgent = deps.browserAgent;
+      this._browserAgent.setCSHManager(this.cshManager);
+    }
     if (deps.computerAgent) this._computerAgent = deps.computerAgent;
 
     // ── Bind LLM reasoning engine to the autonomous loop ──────────────────
     // This connects the planner brain to the configured LLM provider so
     // autonomous goals can think and act via the ReAct loop.
     deps.autonomousLoop.setLlmGenerateFn(async (input) => {
+      let selection: { providerId: string | null; model: string | null } | undefined = undefined;
+      if (input.goal?.chatSessionId && this.chatStore) {
+        const parentSession = this.chatStore.getSession(input.goal.chatSessionId);
+        if (parentSession?.llmProviderId) {
+          selection = {
+            providerId: parentSession.llmProviderId,
+            model: parentSession.llmModel ?? null
+          };
+        }
+      }
+
       const result = await this.llmProviders.generate({
         message: input.message,
         conversation: input.conversation as any,
         systemPrompt: input.systemPrompt,
         tools: input.tools as any,
         tool_choice: input.tool_choice,
-      });
+      }, selection);
       if (!result) return null;
       return {
         content: result.content,
@@ -3052,7 +3098,7 @@ export class DashboardService {
       });
     }
 
-    this.server.listen(this.port, "127.0.0.1", () => {
+    this.server.listen(this.port, "0.0.0.0", () => {
       const proto = this.tlsEnabled ? "https" : "http";
       console.log(`[DASHBOARD] Listening at ${proto}://localhost:${this.port}`);
       if (this.tlsEnabled) console.log(`[SECURITY] TLS enabled`);
@@ -3078,6 +3124,16 @@ export class DashboardService {
             },
           });
         });
+      // Warm the model matrix cache asynchronously so the first UI request is fast.
+      setTimeout(() => {
+        try {
+          const m = this.llmProviders.getFullModelMatrix();
+          this.modelMatrixCache = { ts: Date.now(), matrix: m };
+          console.log(`[PERF] Warmed modelMatrixCache (known=${(m.known || []).length})`);
+        } catch (e) {
+          /* best-effort warm; ignore */
+        }
+      }, 0);
     });
   }
 
@@ -3146,7 +3202,7 @@ export class DashboardService {
     }
   }
 
-  private async fetchOllamaTags(): Promise<Array<{ name: string; source: string }>> {
+  public async fetchOllamaTags(): Promise<Array<{ name: string; source: string }>> {
     return new Promise((resolve) => {
       const req = httpGet("http://localhost:11434/api/tags", (res) => {
         let body = "";
@@ -3163,7 +3219,7 @@ export class DashboardService {
     });
   }
 
-  private async downloadFile(id: string, url: string, targetPath: string): Promise<void> {
+  public async downloadFile(id: string, url: string, targetPath: string): Promise<void> {
     const status = this.downloadStatus.get(id);
     if (!status) return;
 
@@ -3245,7 +3301,7 @@ export class DashboardService {
     });
   }
 
-  private scanForGgufs(dir: string, source: string, models: Array<{ name: string; path: string; source: string }>): void {
+  public scanForGgufs(dir: string, source: string, models: Array<{ name: string; path: string; source: string }>): void {
     if (!existsSync(dir)) return;
     try {
       const entries = readdirSync(dir, { withFileTypes: true });
@@ -3279,7 +3335,7 @@ export class DashboardService {
     } catch { /* best-effort — use empty list */ }
   }
 
-  private saveCustomRecommendedModels(): void {
+  public saveCustomRecommendedModels(): void {
     try {
       const dir = join(process.cwd(), "prism-output");
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -3304,6 +3360,8 @@ export class DashboardService {
   getSchedulerEngine(): SchedulerEngine { return this.schedulerEngine; }
   getSchedulerEvents(): Map<string, { id: string; title: string; start: string; end?: string; description?: string; createdAt: string }> { return this.schedulerEvents; }
   getSchedulerProjects(): Map<string, any> { return this.schedulerProjects; }
+  getLlamaSupervisor(): any { return this.llamaSupervisor; }
+  getBitnetSupervisor(): any { return this.bitnetSupervisor; }
   getImportHistory(): Array<{ id: string; timestamp: string; mode: string; fileName: string; targetDir: string; registeredType: string | null; status: string; message: string; size: number }> { return this.importHistory; }
   public listWorkspaceCharacters(): Array<{ id: string; name: string; displayName: string; executionProfile: string | null; persona: string | null; greeting: string | null; systemPrompt: string | null; tags: string[]; maxRiskTier: number | null; allowedTools: string[]; deniedTools: string[]; defaultEmail: string | null; sourcePath: string; tooltipTips: string[] }> {
     const dir = workspaceCharactersDir();
@@ -3341,6 +3399,8 @@ export class DashboardService {
   }
   getGmailOAuth(): GmailOAuthAdapter { return this.gmailOAuth; }
   getOutlookOAuth(): OutlookOAuthAdapter { return this.outlookOAuth; }
+  getActiveValidationPid(): number | null { return activeValidationPid; }
+  setActiveValidationPid(pid: number | null): void { activeValidationPid = pid; }
   /** Public access to the framebuffer capture surface, used by the Workflow Demo
    *  to fire a real CUA screengrab as part of the Option-C automation tour. */
   public getFramebufferCapture(): FramebufferCapture { return this.framebufferCapture; }
@@ -4397,6 +4457,7 @@ export class DashboardService {
           parsed.source ?? "dashboard",
           op?.operatorId ?? "unknown",
           parsed.constraints,
+          parsed.sessionId || parsed.chatSessionId || undefined
         );
         // Fire-and-forget: begin autonomous execution in background.
         // The planner drives the ReAct loop via LLM + tool calls.
@@ -5065,6 +5126,32 @@ export class DashboardService {
       }
     }
 
+    // Audit trail: return recent LLM-related activity events as structured audit entries.
+    // Accept both versioned and non-versioned URL forms.
+    if (method === "GET" && (url === "/api/llm/audit-trail" || rawUrl === "/api/v1/llm/audit-trail")) {
+      try {
+        // Allow optional sessionId filter and limit
+        const parsed = new URL(`http://localhost${rawUrl.startsWith('/api/v1/') ? rawUrl : url}`);
+        const sessionId = parsed.searchParams.get("sessionId") || "";
+        const limit = Math.min(200, Number(parsed.searchParams.get("limit") || "100"));
+
+        // Pull events from ActivityBus and filter LLM-related operations
+        const events = this.activityBus.listEvents();
+        const candidates = events
+          .filter((e) => {
+            if (sessionId && e.sessionId !== sessionId) return false;
+            // include llm-related events and dashboard.llm_selection audit events
+            return (typeof e.operation === 'string' && (e.operation.includes('llm') || e.operation.startsWith('dashboard.llm')));
+          })
+          .slice(-limit)
+          .map((e) => ({ timestamp: e.timestamp, action: e.operation, detail: e.details }));
+
+        return this.json(res, 200, candidates);
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
     // ── Spectrum Refraction (Prism SR) API ───────────────────────────
 
     if (method === "GET" && url.startsWith("/api/sr/status")) {
@@ -5309,18 +5396,36 @@ export class DashboardService {
 
     // ── SR Suggest (heuristic model selection) ────────────────────────
 
-    if (method === "GET" && url === "/api/sr/suggest") {
+    if (method === "GET" && url.startsWith("/api/sr/suggest")) {
       try {
+        const parsedUrl = new URL(url, "http://localhost");
+        const leftProviderId = parsedUrl.searchParams.get("leftProviderId");
+        const rightProviderId = parsedUrl.searchParams.get("rightProviderId");
+
         const candidates = await this.llmProviders.getSRModelCandidates();
-        if (candidates.left.length === 0 && candidates.right.length === 0) {
-          return this.json(res, 200, { left: null, right: null, reasoning: "No qualified SR models available. Configure providers with API keys and ensure models meet SR tier requirements." });
+
+        let leftList = candidates.left;
+        if (leftProviderId) {
+          leftList = leftList.filter(c => c.providerId === leftProviderId);
         }
-        const bestLeft = candidates.left.length > 0 ? candidates.left[0] : null;
-        let bestRight = candidates.right.length > 0 ? candidates.right[0] : null;
+
+        let rightList = candidates.right;
+        if (rightProviderId) {
+          rightList = rightList.filter(c => c.providerId === rightProviderId);
+        }
+
+        if (leftList.length === 0 && rightList.length === 0) {
+          return this.json(res, 200, { left: null, right: null, reasoning: "No qualified SR models available for the selected providers. Ensure they are enabled and configured." });
+        }
+
+        const bestLeft = leftList.length > 0 ? leftList[0] : null;
+        let bestRight = rightList.length > 0 ? rightList[0] : null;
+
         // Enforce isolation: if top left and right are same provider+model, pick next-best right
         if (bestLeft && bestRight && bestLeft.providerId === bestRight.providerId && bestLeft.model === bestRight.model) {
-          bestRight = candidates.right.length > 1 ? candidates.right[1] : null;
+          bestRight = rightList.length > 1 ? rightList[1] : null;
         }
+
         const parts: string[] = [];
         if (bestLeft) parts.push(`Left: ${bestLeft.providerId}/${bestLeft.model} (T${bestLeft.tier} ${bestLeft.level})`);
         else parts.push("Left: no qualified logic models available");
@@ -5555,7 +5660,32 @@ export class DashboardService {
 
     if (method === "GET" && url === "/api/models/matrix") {
       try {
+        // Quick summary response when requested to avoid large payloads
+        const parsed = new URL(url, "http://localhost");
+        const summaryOnly = parsed.searchParams.get("summary") === "true";
+
+        // Use a short-lived cache to avoid repeated expensive assembly
+        const now = Date.now();
+        if (this.modelMatrixCache && (now - this.modelMatrixCache.ts) < 30_000 && !summaryOnly) {
+          return this.json(res, 200, this.modelMatrixCache.matrix);
+        }
+
+        const startMs = Date.now();
         const matrix = this.llmProviders.getFullModelMatrix();
+        const dur = Date.now() - startMs;
+        if (dur > 500) console.warn(`[PERF] getFullModelMatrix took ${dur}ms`);
+        if (summaryOnly) {
+          const resp = {
+            knownCount: (matrix.known || []).length,
+            runtimeCount: (matrix.runtime || []).length,
+            deprecatedCount: (matrix.deprecated || []).length,
+            promptStrategiesCount: (matrix.promptStrategies || []).length,
+          };
+          return this.json(res, 200, resp);
+        }
+
+        // Cache full matrix for short window to reduce repeated CPU/IO
+        this.modelMatrixCache = { ts: now, matrix };
         return this.json(res, 200, matrix);
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
@@ -6587,356 +6717,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
       });
     }
 
-    // ── Browser Control API ──────────────────────────────────────────────
-    {
-      const browserTool = this.tools.find(t => t.name === "browser_control") as BrowserControlTool | undefined;
-      const mgr = browserTool?.getManager();
-      const profMgr = browserTool?.getProfileManager();
 
-      if (method === "GET" && url === "/api/browser/sessions") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        const sessions = mgr.listSessions();
-        return this.json(res, 200, { sessions: sessions.map(s => ({ ...s, sessionId: s.id } as Record<string, unknown>)) });
-      }
-
-      if (method === "GET" && url === "/api/browser/profiles") {
-        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
-        return this.json(res, 200, { profiles: profMgr.listProfiles() });
-      }
-
-      if (method === "POST" && url === "/api/browser/profiles") {
-        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
-        try {
-          const body = await this.readJsonBody<{
-            email?: string;
-            prismUserEmail?: string;
-            segment?: string;
-            executionProfileSegment?: string;
-            displayName?: string;
-            assignmentId?: string;
-          }>(req);
-          const email = (body.email || body.prismUserEmail || "").trim();
-          const segment = (body.segment || body.executionProfileSegment || "individual").trim();
-          if (!email) return this.json(res, 400, { error: "email is required." });
-          if (segment !== "individual" && segment !== "business") {
-            return this.json(res, 400, { error: "segment must be 'individual' or 'business'." });
-          }
-          const profile = profMgr.createProfile({
-            prismUserEmail: email,
-            executionProfileSegment: segment as "individual" | "business",
-            displayName: body.displayName || undefined,
-            assignmentId: body.assignmentId || undefined,
-          });
-          return this.json(res, 201, { ok: true, profile });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      if (method === "GET" && url === "/api/browser/diagnostics") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        const diag = await mgr.diagnostics();
-        return this.json(res, 200, diag);
-      }
-
-      if (method === "POST" && url === "/api/browser/launch") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const body = await this.readJsonBody<{ headless?: boolean; profileId?: string; sessionId?: string }>(req);
-          const session = await mgr.launch(body);
-          return this.json(res, 200, { session: { ...session, sessionId: session.id } });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      const sessionsDeleteMatch = /^\/api\/browser\/sessions\/([^/]+)$/.exec(url);
-      if (sessionsDeleteMatch && method === "DELETE") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const sessionId = decodeURIComponent(sessionsDeleteMatch[1]!);
-          await mgr.closeSession(sessionId);
-          return this.json(res, 200, { ok: true });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      if (method === "POST" && url === "/api/browser/navigate") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const body = await this.readJsonBody<{ sessionId: string; url: string }>(req);
-          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
-          if (!body.url) return this.json(res, 400, { error: "url required." });
-
-          const audit = await this.sshpInterceptor.auditAction("navigate", body);
-          if (!audit.allowed) {
-            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
-          }
-
-          const result = await mgr.navigate(body.sessionId, body.url);
-          return this.json(res, 200, result);
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      const screenshotMatch = /^\/api\/browser\/screenshot\/([^/]+)$/.exec(url);
-      if (screenshotMatch && method === "GET") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const sessionId = decodeURIComponent(screenshotMatch[1]!);
-          let buf = await mgr.screenshot(sessionId);
-
-          if (this.sshpInterceptor.isEnabled()) {
-            const handles = mgr.getSessionPageAndContext(sessionId);
-            if (handles && handles.page) {
-              const sensitiveSelectorMatches = [
-                'input[type="password"]',
-                'input[autocomplete*="cc-"]',
-                'input[autocomplete*="ssn"]',
-                'input[autocomplete*="card"]',
-                'input[name*="pass"]',
-                'input[name*="card"]',
-                'input[name*="cvv"]',
-                'input[name*="ssn"]',
-                'input[name*="secret"]',
-                'input[name*="token"]',
-                'input[name*="apikey"]',
-                'input[name*="api-key"]',
-                'input[id*="pass"]',
-                'input[id*="card"]',
-                'input[id*="cvv"]',
-                'input[id*="ssn"]',
-                'input[id*="secret"]',
-                'input[id*="token"]',
-                'input[id*="apikey"]',
-                'input[id*="api-key"]',
-              ];
-              const rects = await handles.page.evaluate((selectors: string[]) => {
-                const results: Array<{ x: number; y: number; width: number; height: number }> = [];
-                for (const selector of selectors) {
-                  const elms = document.querySelectorAll(selector);
-                  for (const el of elms) {
-                    const rect = el.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                      results.push({
-                        x: rect.left + window.scrollX,
-                        y: rect.top + window.scrollY,
-                        width: rect.width,
-                        height: rect.height
-                      });
-                    }
-                  }
-                }
-                return results;
-              }, sensitiveSelectorMatches);
-
-              buf = await this.sshpInterceptor.redactScreenshot(buf, rects);
-            }
-          }
-
-          res.writeHead(200, { "Content-Type": "image/png", "Content-Length": buf.length });
-          res.end(buf);
-          return;
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      if (method === "POST" && url === "/api/browser/click") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const body = await this.readJsonBody<{ sessionId: string; selector: string }>(req);
-          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
-          if (!body.selector) return this.json(res, 400, { error: "selector required." });
-
-          const audit = await this.sshpInterceptor.auditAction("click", body);
-          if (!audit.allowed) {
-            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
-          }
-
-          await mgr.click(body.sessionId, body.selector);
-          return this.json(res, 200, { ok: true });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      if (method === "POST" && url === "/api/browser/type") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const body = await this.readJsonBody<{ sessionId: string; selector: string; text: string }>(req);
-          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
-          if (!body.selector) return this.json(res, 400, { error: "selector required." });
-
-          const audit = await this.sshpInterceptor.auditAction("type", body);
-          if (!audit.allowed) {
-            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
-          }
-
-          await mgr.type(body.sessionId, body.selector, body.text ?? "");
-          return this.json(res, 200, { ok: true });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      if (method === "POST" && url === "/api/browser/evaluate") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const body = await this.readJsonBody<{ sessionId: string; expression: string }>(req);
-          if (!body.sessionId) return this.json(res, 400, { error: "sessionId required." });
-          if (!body.expression) return this.json(res, 400, { error: "expression required." });
-
-          const audit = await this.sshpInterceptor.auditAction("evaluate", body);
-          if (!audit.allowed) {
-            return this.json(res, 403, { error: "SSHP_COVENANT_BLOCKED", message: audit.reason });
-          }
-
-          const value = await mgr.evaluate(body.sessionId, body.expression);
-          return this.json(res, 200, { result: value });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      const consoleMatch = /^\/api\/browser\/console-logs\/([^/]+)$/.exec(url);
-      if (consoleMatch && method === "GET") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        const sessionId = decodeURIComponent(consoleMatch[1]!);
-        return this.json(res, 200, { logs: mgr.getConsoleLogs(sessionId) });
-      }
-
-      const networkMatch = /^\/api\/browser\/network-log\/([^/]+)$/.exec(url);
-      if (networkMatch && method === "GET") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        const sessionId = decodeURIComponent(networkMatch[1]!);
-        return this.json(res, 200, { log: mgr.getNetworkLog(sessionId) });
-      }
-
-      const domMatch = /^\/api\/browser\/dom-snapshot\/([^/]+)$/.exec(url);
-      if (domMatch && method === "GET") {
-        if (!mgr) return this.json(res, 503, { error: "Browser tool not available." });
-        try {
-          const sessionId = decodeURIComponent(domMatch[1]!);
-          let html = await mgr.domSnapshot(sessionId);
-          html = this.sshpInterceptor.sanitizeDom(html);
-          return this.json(res, 200, { dom: html });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-
-      const profilesDeleteMatch = /^\/api\/browser\/profiles\/([^/]+)$/.exec(url);
-      if (profilesDeleteMatch && method === "DELETE") {
-        if (!profMgr) return this.json(res, 503, { error: "Browser profile manager not available." });
-        try {
-          const profileId = decodeURIComponent(profilesDeleteMatch[1]!);
-          profMgr.deleteProfile(profileId);
-          return this.json(res, 200, { ok: true });
-        } catch (err) {
-          return this.json(res, 500, { error: String(err) });
-        }
-      }
-    }
-    // ── End Browser Control API ──────────────────────────────────────────
-
-    // ── Diagnostics API ──────────────────────────────────────────────────
-    if (method === "GET" && url === "/api/diagnostics/browser/report") {
-      try {
-        const reportPath = join(process.cwd(), "prism-output", "browser-diagnostics-report.json");
-        if (existsSync(reportPath)) {
-          const raw = readFileSync(reportPath, "utf8");
-          return this.json(res, 200, JSON.parse(raw));
-        }
-        return this.json(res, 200, { report: null });
-      } catch (e: unknown) {
-        return this.json(res, 500, { error: (e as Error).message });
-      }
-    }
-
-    if (method === "GET" && url === "/api/diagnostics/browser/status") {
-      return this.json(res, 200, {
-        running: this.diagnosticsRunning,
-        lastRunAt: this.diagnosticsLastRunAt,
-      });
-    }
-
-    if (method === "POST" && url === "/api/diagnostics/browser/run") {
-      if (this.diagnosticsRunning) {
-        return this.json(res, 409, { error: "Diagnostics already running." });
-      }
-      this.diagnosticsRunning = true;
-      this.json(res, 200, { status: "started" });
-
-      const { spawn: spawnChild } = await import("node:child_process");
-      const child = spawnChild("node", ["scripts/run-browser-tests.cjs", "--no-build"], {
-        cwd: process.cwd(),
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-
-      let gotStdoutComplete = false;
-      const stderrNoiseRe = /^\s*(at\s|generatedMessage|code:|actual:|expected:|operator:|diff:)|^\s*$/;
-
-      let stderrBuf = "";
-      child.stderr!.on("data", (chunk: Buffer) => {
-        try {
-          stderrBuf += chunk.toString();
-          const lines = stderrBuf.split("\n");
-          stderrBuf = lines.pop() || "";
-          for (const line of lines) {
-            if (stderrNoiseRe.test(line)) continue;
-            const msg = { type: "diagnostics_log", source: "stderr", message: line.slice(0, 1024), timestamp: new Date().toISOString() };
-            for (const ws of this.wsClients) {
-              try { ws.send(JSON.stringify(msg)); } catch { /* client gone */ }
-            }
-          }
-        } catch { /* defensive */ }
-      });
-
-      let stdoutBuf = "";
-      child.stdout!.on("data", (chunk: Buffer) => {
-        try {
-          stdoutBuf += chunk.toString();
-          const lines = stdoutBuf.split("\n");
-          stdoutBuf = lines.pop() || "";
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const msg = JSON.parse(line);
-              if (msg.type === "diagnostics_complete") gotStdoutComplete = true;
-              for (const ws of this.wsClients) {
-                try {
-                  ws.send(JSON.stringify({ ...msg, timestamp: new Date().toISOString() }));
-                } catch { /* client gone */ }
-              }
-            } catch { /* not JSON — ignore */ }
-          }
-        } catch { /* defensive */ }
-      });
-
-      child.on("close", () => {
-        try {
-          this.diagnosticsRunning = false;
-          this.diagnosticsLastRunAt = new Date().toISOString();
-          if (!gotStdoutComplete) {
-            for (const ws of this.wsClients) {
-              try {
-                ws.send(JSON.stringify({ type: "diagnostics_complete", timestamp: new Date().toISOString() }));
-              } catch { /* client gone */ }
-            }
-          }
-        } catch { /* defensive */ }
-      });
-
-      child.on("error", () => {
-        this.diagnosticsRunning = false;
-      });
-
-      return; // response already sent
-    }
-    // ── End Diagnostics API ──────────────────────────────────────────────
 
     // ── Agent Diagnostics API ────────────────────────────────────────────
     if (method === "GET" && url === "/api/diagnostics/agent/report") {
@@ -8912,13 +8693,35 @@ $r | ConvertTo-Json -Depth 4 -Compress
       }
       writePreferences({ powerMode: mode as "performance" | "eco" | "adaptive" });
 
+      let targetBaseMode = false;
+      let isAuto = false;
+
       if (mode === "adaptive") {
+        isAuto = true;
+        process.env.PRISM_BASE_MODE_AUTO = "true";
+        const activeModel = this.llmProviders.activeModel;
+        if (activeModel) {
+          const profile = resolveProfile(activeModel);
+          targetBaseMode = profile.locality === "local" && profile.tier <= 2;
+        }
+
         try {
           const snapshot = await fetchHardwareSnapshot("http://localhost:11434");
           updateCachedHardwareSnapshot(snapshot);
         } catch {
           // ignore
         }
+      } else {
+        isAuto = false;
+        process.env.PRISM_BASE_MODE_AUTO = "false";
+        targetBaseMode = mode === "eco";
+      }
+
+      process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
+      console.log(`[PRISM][paradigm] Power mode preference updated to '${mode}'. Setting baseMode=${targetBaseMode} (auto=${isAuto})`);
+
+      if (this.guardianAgent) {
+        this.guardianAgent.syncModeCatalog();
       }
 
       this.json(res, 200, { updated: true, powerMode: mode });
@@ -9214,28 +9017,28 @@ $r | ConvertTo-Json -Depth 4 -Compress
       return this.handleSlashCommand(command, argument);
     }
 
-    if (/(^|\b)(help|what can you do)(\b|$)/.test(normalized) || normalized === "capabilities") {
+    if (/^(help|capabilities|what can you do|show help|prism help)$/.test(normalized)) {
       return {
         content: this.helpResponse(),
         metadata: { intent: "help" },
       };
     }
 
-    if (/(show|give|what'?s|what is|summarize).*(status|health)|\bstatus\b|\bhealth\b/.test(normalized)) {
+    if (/^(status|health|show status|show health|get status|get health|prism status)$/.test(normalized)) {
       return {
         content: this.statusResponse(),
         metadata: { intent: "status" },
       };
     }
 
-    if (/(pending|show|list).*(approval|approvals)|\bapprovals\b/.test(normalized)) {
+    if (/^(approvals|show approvals|list approvals|pending approvals|get approvals)$/.test(normalized)) {
       return {
         content: this.approvalsResponse(),
         metadata: { intent: "approvals" },
       };
     }
 
-    if (/(recent|show|list).*(action history|actions|runs)|\bhistory\b/.test(normalized)) {
+    if (/^(history|show history|list history|recent actions|recent history|action history)$/.test(normalized)) {
       return {
         content: this.actionHistoryResponse(),
         metadata: { intent: "action_history" },
@@ -9274,7 +9077,8 @@ $r | ConvertTo-Json -Depth 4 -Compress
             maxActions: 60,
             allowBrowserUse: classification.requiresBrowser,
             allowComputerUse: classification.requiresComputer,
-          }
+          },
+          sessionId
         );
         // Start background execution of the autonomous loop
         void this.autonomousLoop.executeGoal(goal.goalId, (step) => {
@@ -9775,7 +9579,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
     ].join("\n");
   }
 
-  private async handleAttachmentUpload(
+  public async handleAttachmentUpload(
     req: IncomingMessage,
     res: ServerResponse,
     sessionId: string,
@@ -9835,7 +9639,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
     return this.json(res, 201, { attachment });
   }
 
-  private serveAttachmentFile(res: ServerResponse, attachmentId: string, thumbnail = false): void {
+  public serveAttachmentFile(res: ServerResponse, attachmentId: string, thumbnail = false): void {
     const attachment = this.chatStore.getAttachmentById(attachmentId);
     if (!attachment) {
       res.writeHead(404).end("Not found");
@@ -10144,7 +9948,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
     }
   }
 
-  private async getReadinessSnapshot(requestedSessionId?: string): Promise<DashboardReadinessSnapshot> {
+  public async getReadinessSnapshot(requestedSessionId?: string): Promise<DashboardReadinessSnapshot> {
     const sessions = this.chatStore.listSessions();
     const activeSessionId = requestedSessionId
       ?? sessions[0]?.sessionId
@@ -10249,7 +10053,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
     };
   }
 
-  private emitReadinessAudit(
+  public emitReadinessAudit(
     source: string,
     snapshot: DashboardReadinessSnapshot,
     correlationId: string = `readiness:${randomUUID()}`,

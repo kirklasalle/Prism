@@ -247,11 +247,11 @@ export type LlmStreamChunk =
     | { type: "done"; stopReason: string };
 
 const OPENAI_DEFAULT_MODELS = [
-    "gpt-4.1",
     "gpt-4o",
     "gpt-4o-mini",
-    "gpt-5-mini",
-    "gpt-5",
+    "o3-mini",
+    "o1-mini",
+    "gpt-4-turbo",
 ];
 
 const ANTHROPIC_DEFAULT_MODELS = [
@@ -314,13 +314,68 @@ function normalizeModels(models: string[]): string[] {
     return normalized;
 }
 
+function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null {
+    const lower = modelPattern.toLowerCase();
+
+    // OpenAI Reasoning and GPT series
+    if (lower.startsWith("gpt-") ||
+        lower.startsWith("o1-") ||
+        lower.startsWith("o3-") ||
+        lower.startsWith("o4-") ||
+        lower.startsWith("whisper-") ||
+        lower.startsWith("tts-") ||
+        lower.startsWith("sora-") ||
+        lower === "o1" ||
+        lower === "o3" ||
+        lower === "o4") {
+        return "openai";
+    }
+
+    // Anthropic Claude
+    if (lower.startsWith("claude-")) {
+        return "anthropic";
+    }
+
+    // Google Gemini
+    if (lower.startsWith("gemini-")) {
+        return "google";
+    }
+
+    // Mistral AI
+    if (lower.startsWith("mistral-") || lower.startsWith("pixtral-") || lower.startsWith("codestral-")) {
+        return "mistral";
+    }
+
+    // DeepSeek
+    if (lower.startsWith("deepseek-")) {
+        return "deepseek";
+    }
+
+    // Perplexity Sonar
+    if (lower.startsWith("sonar-")) {
+        return "perplexity";
+    }
+
+    // Cohere Command
+    if (lower.startsWith("cohere-") || lower.startsWith("command-")) {
+        return "cohere";
+    }
+
+    // OpenRouter (contains a slash /)
+    if (lower.includes("/")) {
+        return "openrouter";
+    }
+
+    return null;
+}
+
 import { LlamaCppSupervisor } from "./llama-cpp-supervisor.js";
 
 export class LlmProviderManager {
     private readonly defaults: Record<PrismLlmProviderId, ProviderSettings>;
     private readonly persistedSettings = new Map<PrismLlmProviderId, PersistedProviderSettings>();
-    private activeProviderId: PrismLlmProviderId | null;
-    private activeModel: string | null;
+    public activeProviderId: PrismLlmProviderId | null;
+    public activeModel: string | null;
     private routingConfig: RoutingConfig = {
         strategy: "single",
         roleOverrides: {},
@@ -661,7 +716,22 @@ export class LlmProviderManager {
             if (id === "lmstudio") return this.snapshotFor(id, discovered.lmstudio);
             if (id === "llamacpp") return this.snapshotFor(id, discovered.llamacpp);
             if (id === "bitnetcpp") return this.snapshotFor(id, discovered.bitnetcpp);
-            return this.snapshotFor(id);
+
+            // For remote cloud providers, dynamically populate their models with active profiles from the Model Matrix!
+            const settings = this.getResolvedSettings(id);
+            const baseModels = [...settings.defaultModels];
+            const activeProfiles = [...getRuntimeProfiles(), ...getKnownProfiles()]
+                .filter(p => getDeprecationStatus(p) === "active");
+
+            for (const profile of activeProfiles) {
+                if (detectProviderForModel(profile.pattern) === id) {
+                    if (!baseModels.includes(profile.pattern)) {
+                        baseModels.push(profile.pattern);
+                    }
+                }
+            }
+
+            return this.snapshotFor(id, baseModels);
         });
 
         let effectiveProviderId: PrismLlmProviderId | null = this.activeProviderId;
@@ -847,7 +917,18 @@ export class LlmProviderManager {
             const failedProvider = catalog.activeProviderId;
             const isRemote = provider.kind === "remote";
             if (isRemote) {
-                console.warn(`[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Attempting automatic local fallback...`);
+                console.warn(`[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Attempting same-provider recovery first...`);
+
+                const sameProviderRecovery = await this.trySameProviderModelFallbacks(
+                    input,
+                    catalog,
+                    failedProvider,
+                    catalog.activeModel,
+                );
+                if (sameProviderRecovery) {
+                    return sameProviderRecovery;
+                }
+
                 let fallbackProvider: PrismLlmProviderId | null = null;
                 let fallbackModel: string | null = null;
 
@@ -877,7 +958,7 @@ export class LlmProviderManager {
                 }
 
                 if (fallbackProvider && fallbackModel) {
-                    console.log(`[PRISM][llm] Dynamic fallback triggered. Routing request to local provider "${fallbackProvider}" with model "${fallbackModel}".`);
+                    console.log(`[PRISM][llm] Same-provider recovery exhausted. Routing request to local provider "${fallbackProvider}" with model "${fallbackModel}".`);
                     this.activityBus?.emit({
                         sessionId: selection?.providerId ?? "llm",
                         layer: "llm",
@@ -1582,12 +1663,26 @@ export class LlmProviderManager {
         deprecated: readonly ModelCapabilityProfile[];
         promptStrategies: readonly ProviderPromptStrategy[];
     } {
-        return {
-            known: getKnownProfiles(),
-            runtime: getRuntimeProfiles(),
-            deprecated: getDeprecatedProfiles(),
+        const start = Date.now();
+        const t1 = Date.now();
+        const known = getKnownProfiles();
+        const t2 = Date.now();
+        const runtime = getRuntimeProfiles();
+        const t3 = Date.now();
+        const deprecated = getDeprecatedProfiles();
+        const t4 = Date.now();
+        const matrix = {
+            known,
+            runtime,
+            deprecated,
             promptStrategies: PROVIDER_PROMPT_STRATEGIES,
         };
+        const dur = Date.now() - start;
+        // Emit perf logs when assembly is slow or to provide tracing information
+        if (dur > 200) {
+            console.warn(`[PERF] getFullModelMatrix total=${dur}ms (known=${t2 - t1}ms runtime=${t3 - t2}ms deprecated=${t4 - t3}ms)`);
+        }
+        return matrix;
     }
 
     registerModel(profile: ModelCapabilityProfile): void {
@@ -2537,6 +2632,95 @@ export class LlmProviderManager {
         } catch {
             return false;
         }
+    }
+
+    private async invokeProviderModel(
+        providerId: PrismLlmProviderId,
+        model: string,
+        input: LlmGenerationInput,
+    ): Promise<LlmGenerationOutput | null> {
+        const settings = this.getResolvedSettings(providerId);
+        const adaptiveParams = buildAdaptiveParams(resolveProfile(model));
+
+        if (providerId === "anthropic") {
+            return this.withExponentialRetry(() => this.generateWithAnthropic(settings, model, input));
+        }
+        if (providerId === "ollama") {
+            return this.withExponentialRetry(() => this.generateWithOllama(settings, model, input, adaptiveParams));
+        }
+        if (providerId === "ollama-cloud") {
+            return this.withExponentialRetry(() => this.generateWithOllamaCloud(settings, model, input, adaptiveParams));
+        }
+
+        return this.withExponentialRetry(() => this.generateWithOpenAiCompatible(settings, model, input));
+    }
+
+    /**
+     * Keep provider affinity by trying alternate models within the same provider.
+     */
+    private async trySameProviderModelFallbacks(
+        input: LlmGenerationInput,
+        catalog: LlmProviderCatalog,
+        failedProviderId: PrismLlmProviderId,
+        failedModel: string | null,
+    ): Promise<LlmGenerationOutput | null> {
+        const provider = catalog.providers.find((p) => p.id === failedProviderId && p.enabled);
+        if (!provider) {
+            return null;
+        }
+
+        const modelCandidates = new Set<string>();
+        if (provider.defaultModel && provider.defaultModel !== failedModel) {
+            modelCandidates.add(provider.defaultModel);
+        }
+        for (const model of provider.models) {
+            if (model !== failedModel) {
+                modelCandidates.add(model);
+            }
+        }
+
+        for (const candidateModel of modelCandidates) {
+            try {
+                this.activityBus?.emit({
+                    sessionId: "llm-provider-manager",
+                    layer: "llm",
+                    operation: "llm.same_provider_model_recovery",
+                    status: "started",
+                    details: {
+                        provider: failedProviderId,
+                        fromModel: failedModel,
+                        candidateModel,
+                    },
+                });
+
+                const result = await this.invokeProviderModel(failedProviderId, candidateModel, input);
+                if (!result) {
+                    continue;
+                }
+
+                this.activityBus?.emit({
+                    sessionId: "llm-provider-manager",
+                    layer: "llm",
+                    operation: "llm.same_provider_model_recovery",
+                    status: "succeeded",
+                    details: {
+                        provider: failedProviderId,
+                        fromModel: failedModel,
+                        candidateModel,
+                    },
+                });
+                return result;
+            } catch (error) {
+                llmTraceLog("same_provider_model_recovery.error", {
+                    provider: failedProviderId,
+                    fromModel: failedModel,
+                    candidateModel,
+                    error: String(error),
+                });
+            }
+        }
+
+        return null;
     }
 }
 
