@@ -679,6 +679,7 @@ export class LlmProviderManager {
         if (this.discoveredModelsCache && Date.now() < this.discoveredModelsCache.expiresAt) {
             discovered = this.discoveredModelsCache;
         } else {
+            const startProbe = Date.now();
             const [ollamaModels, ollamaCloudModels, lmStudioModels, llamacppRunning, bitnetRunning] = await Promise.all([
                 this.fetchOllamaModels(this.getResolvedSettings("ollama")),
                 this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")),
@@ -690,6 +691,10 @@ export class LlmProviderManager {
                     ? Promise.resolve(this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
                     : Promise.resolve([] as string[]),
             ]);
+            const probeDur = Date.now() - startProbe;
+            try {
+                console.log(`[PERF] Provider discovery probe completed in ${probeDur}ms — ollama=${ollamaModels.length}, ollama-cloud=${ollamaCloudModels.length}, lmstudio=${lmStudioModels.length}, llamacpp_running=${llamacppRunning.length}, bitnet_running=${bitnetRunning.length}`);
+            } catch { }
 
             // Merge discovered local GGUF models with running models (deduplicated)
             const llamacppDiscovered = this.llamaSupervisor?.discoverLocalModels() ?? [];
