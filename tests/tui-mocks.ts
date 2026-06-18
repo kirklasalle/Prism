@@ -69,7 +69,7 @@ export const MOCK_EVENTS: EventRecord[] = [
 ];
 
 export const MOCK_SYSTEM_INFO: SystemInfo = {
-    os: "win32", arch: "x64", cpus: 8, totalMemory: 17179869184, freeMemory: 8589934592, uptime: 86400, nodeVersion: "v22.0.0",
+    os: "win32", arch: "x64", cpus: 8, totalMemory: 17179869184, freeMemory: 8589934592, uptime: 86400, nodeVersion: "v22.0.0", platform: "win32",
 };
 
 export const MOCK_NETWORK_INTERFACES: NetworkInterface[] = [

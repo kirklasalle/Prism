@@ -11,7 +11,7 @@ import { renderSelfReview, renderRetrievalObservability, setTelemetryWindow, ren
 import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, copyActivityLogs, copyUnifiedTelemetry, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket } from './tab-logs.js';
 import { initSchedulerTab, refreshSchedulerData, switchSchedulerView, renderSchedulerPanel, setCalMode, schedCalNav, daysInMonth, eventsForDate, formatDateStr, isToday, renderSchedulerCalendar, mondayOfWeek, renderMiniMonth, renderFullMonth, renderWeekView, renderDayView, renderSchedulerProjects, openProjectDetail, renderSchedulerBoard, initBoardDragDrop, renderSchedulerGantt, openSchedulerModal, closeSchedulerModal, saveSchedulerModal } from './tab-scheduler.js';
 import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWorkspaceFileTree, formatFileSize, filterWorkspaceFiles, openWorkspaceInExplorer, changeWorkspaceLocation, showImportStatus, triggerWorkspaceImport, triggerGeneralImport, triggerRegisteredImport, triggerFolderImport, readFileAsBase64, refreshImportHistory, renderImportHistory, initWorkspaceTab } from './tab-workspace.js';
-import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick } from './tab-characters.js';
+import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick, showCustomCharacterModal, closeCustomCharacterModal, onCustomCharProfileChange, submitCustomCharacter } from './tab-characters.js';
 import { renderNetworkToolsPanel, renderNetworkSettingsPanel, renderNetworkTelemetryPanel, renderNetworkConsolePanel, runNetworkCommand, refreshNetworkInterfaces, refreshNetworkTelemetry, renderNetworkIntelligencePanel, checkVrgcStatus, runVrgcResearch, runVrgcSecurityScan, runVrgcPerformanceTest, runVrgcFtpBrowse } from './tab-network.js';
 import { initHardwareTab, refreshHardwareSwarm, loadModelToSlot, unloadModelSlot } from './tab-hardware.js';
 import { initPrismTooltips, pushGuardianTip } from './prism-tooltips.js';
@@ -425,6 +425,41 @@ function debouncedPanelSummaryRefresh() {
   }, 100);
 }
 
+async function syncActiveAutonomousGoal() {
+  try {
+    const data = await request('/api/autonomous/goals');
+    const goals = data.goals || [];
+    const active = goals.find(function (g) { return g.status === 'executing' || g.status === 'planning'; });
+    if (active && active.steps && active.steps.length > 0) {
+      console.log('[ws] syncing active autonomous goal steps:', active.goalId, active.steps.length);
+      const events = active.steps.map(s => {
+        const eventsForStep = [];
+        eventsForStep.push({
+          type: 'tool_call',
+          toolCall: { name: s.tool, arguments: s.arguments || {} },
+          iteration: s.iteration || 0,
+          text: '',
+          timestamp: s.startedAt || new Date().toISOString()
+        });
+        if (s.status === 'succeeded' || s.status === 'failed') {
+          eventsForStep.push({
+            type: 'tool_result',
+            toolResult: { name: s.tool, ok: s.status === 'succeeded', output: typeof s.output === 'string' ? s.output : JSON.stringify(s.output) },
+            iteration: s.iteration || 0,
+            text: '',
+            timestamp: s.completedAt || new Date().toISOString()
+          });
+        }
+        return eventsForStep;
+      }).flat();
+      state.agenticStream = events.slice(-500);
+      safeRenderStep('messages', renderMessages);
+    }
+  } catch (err) {
+    console.warn('[ws] syncActiveAutonomousGoal failed:', err);
+  }
+}
+
 var _wsReconnector = createReconnector(connectWebSocket, { label: 'ws', baseDelay: 1000, maxDelay: 30000, maxRetries: 50 });
 
 function connectWebSocket() {
@@ -438,6 +473,7 @@ function connectWebSocket() {
     if (dot) { dot.style.background = '#22c55e'; dot.title = 'WebSocket connected'; }
     var txt = document.getElementById('prism-ws-status-text');
     if (txt) { txt.textContent = 'CONNECTED (LIVE)'; txt.style.color = '#34d399'; }
+    syncActiveAutonomousGoal();
   };
 
   ws.onmessage = (event) => {
@@ -1149,6 +1185,10 @@ Object.assign(window, {
   onWorkspaceHubBlur,
   initCharacterPanel,
   onCharacterChipClick,
+  showCustomCharacterModal,
+  closeCustomCharacterModal,
+  onCustomCharProfileChange,
+  submitCustomCharacter,
   renderNetworkToolsPanel,
   renderNetworkSettingsPanel,
   renderNetworkTelemetryPanel,

@@ -208,7 +208,10 @@ export class AutonomousAgentLoop {
     const goal = this.goals.get(goalId);
     if (!goal) throw new Error(`Goal ${goalId} not found`);
 
+    console.log(`[PRISM][AgentLoop] ▶ executeGoal called. GoalId: ${goalId}, Objective: "${goal.objective.slice(0, 100)}", Source: ${goal.source}, Constraints: browser=${goal.constraints.allowBrowserUse}, computer=${goal.constraints.allowComputerUse}, shell=${goal.constraints.allowShellExec}, maxActions=${goal.constraints.maxActions}`);
+
     if (!this.generateFn) {
+      console.error(`[PRISM][AgentLoop] ✖ generateFn not bound — cannot execute goal ${goalId}`);
       goal.status = "failed";
       goal.error = "LLM generate function not bound. Configure a provider in Settings.";
       goal.completedAt = new Date().toISOString();
@@ -228,6 +231,7 @@ export class AutonomousAgentLoop {
     // Mark active
     this.activeGoalId = goalId;
     goal.status = "planning";
+    console.log(`[PRISM][AgentLoop] Goal ${goalId.slice(0, 8)} status → planning. Tools available: ${this.toolDefinitions.length}, generateFn bound: true`);
 
     this.emit("autonomous.goal.executing", "succeeded", {
       goalId, objective: goal.objective, source: goal.source,
@@ -243,6 +247,47 @@ export class AutonomousAgentLoop {
     }
     if (!goal.constraints.allowShellExec) {
       activeDefs = activeDefs.filter(t => t.name !== "shell_exec" && t.name !== "terminal_session");
+    }
+
+    // Adaptive tool pruning: Gemini has a schema complexity limit (hits 400 Bad Request if too many tools are provided).
+    // We prune MCP tools (starting with 'mcp_') unless the objective explicitly mentions terms related to them.
+    const objectiveLower = goal.objective.toLowerCase();
+    const originalCount = activeDefs.length;
+    activeDefs = activeDefs.filter(t => {
+      if (!t.name.startsWith("mcp_")) {
+        return true; // Keep all core/builtin tools
+      }
+      
+      // Keep if the objective mentions the full tool name
+      if (objectiveLower.includes(t.name.toLowerCase())) {
+        return true;
+      }
+      
+      // Clean tool name for match check (e.g. mcp_scrape_wikipedia_enhanced -> scrape wikipedia enhanced)
+      const cleanName = t.name.replace(/^mcp_/, "").replace(/_/g, " ");
+      const parts = cleanName.split(" ");
+      
+      // Match if any significant keyword from the tool name is in the objective
+      const matchesKeyword = parts.some(part => {
+        if (part.length <= 2) return false;
+        if (["enhanced", "tool", "mcp", "search", "scrape", "get", "post", "read", "write", "sync"].includes(part)) return false;
+        return objectiveLower.includes(part);
+      });
+      
+      if (matchesKeyword) {
+        return true;
+      }
+      
+      // Check for explicit "mcp" keyword in the objective to keep all MCP tools if requested
+      if (objectiveLower.includes("mcp")) {
+        return true;
+      }
+      
+      return false;
+    });
+
+    if (activeDefs.length < originalCount) {
+      console.log(`[PRISM][AgentLoop] Tools pruned from ${originalCount} to ${activeDefs.length} based on objective relevance`);
     }
 
     try {
@@ -410,6 +455,7 @@ export class AutonomousAgentLoop {
 
     // Execute the tool
     try {
+      console.log(`[PRISM][AgentLoop] Executing step: tool="${toolName}", iteration=${iteration}, args=${JSON.stringify(toolArgs)}`);
       if (!this.registry) throw new Error("Tool registry not available");
       const tool = this.registry.get(toolName);
       const request: ToolRequest = {
@@ -434,6 +480,7 @@ export class AutonomousAgentLoop {
         };
       step.completedAt = new Date().toISOString();
       step.durationMs = Date.now() - Date.parse(step.startedAt!);
+      console.log(`[PRISM][AgentLoop] Step execution completed: status=${step.status}, duration=${step.durationMs}ms`);
 
       this.emit(`autonomous.step.${step.status}`, step.status === "succeeded" ? "succeeded" : "failed", {
         goalId, stepId: step.stepId, tool: toolName, iteration,
@@ -441,6 +488,7 @@ export class AutonomousAgentLoop {
         ok: result.ok,
       });
     } catch (err) {
+      console.error(`[PRISM][AgentLoop] Step execution threw exception:`, err);
       step.status = "failed";
       step.output = {
         error: String(err),

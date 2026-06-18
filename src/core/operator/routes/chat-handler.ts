@@ -26,6 +26,28 @@ export class ChatHandler implements IRouteHandler {
     const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
     const method = req.method?.toUpperCase() ?? "GET";
 
+    const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
+    const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
+    const isAdmin = authDisabled || (principal ? principal.roles.includes("admin") : true);
+
+    // If not admin and we have a principal, enforce session ownership on endpoints referencing specific session IDs
+    if (!isAdmin && principal) {
+      let extractedSessionId: string | null = null;
+      const m1 = /^\/api\/chat\/sessions\/([^/]+)/.exec(url);
+      const m2 = /^\/api\/session\/([^/]+)/.exec(url);
+      if (m1) extractedSessionId = decodeURIComponent(m1[1]!);
+      else if (m2) extractedSessionId = decodeURIComponent(m2[1]!);
+
+      if (extractedSessionId) {
+        const session = service.getChatStore().getSession(extractedSessionId);
+        if (session && session.operatorEmail !== principal.email) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "forbidden", message: "You do not have access to this session." }));
+          return;
+        }
+      }
+    }
+
     // 1. GET /api/chat/stream
     if (method === "GET" && url.startsWith("/api/chat/stream")) {
       const sseId = randomUUID();
@@ -61,6 +83,13 @@ export class ChatHandler implements IRouteHandler {
           message: "Request body must include a non-empty 'prompt' field.",
         });
       }
+
+      // Check session ownership if it exists
+      const session = service.getChatStore().getSession(sessionId);
+      if (session && !isAdmin && principal && session.operatorEmail !== principal.email) {
+        return this.json(res, 403, { error: "forbidden", message: "You do not have access to this session." });
+      }
+
       const classification = classifyChatTier(prompt);
 
       service.getActivityBus().emit({
@@ -123,7 +152,11 @@ export class ChatHandler implements IRouteHandler {
 
     // 3. GET /api/chat/sessions
     if (method === "GET" && url === "/api/chat/sessions") {
-      return this.json(res, 200, service.listChatSessions());
+      let sessions = service.listChatSessions();
+      if (!isAdmin && principal) {
+        sessions = sessions.filter(s => s.operatorEmail === principal.email);
+      }
+      return this.json(res, 200, sessions);
     }
 
     // 4. POST /api/chat/sessions
@@ -136,11 +169,12 @@ export class ChatHandler implements IRouteHandler {
           operatorEmail?: string;
           assistantEmail?: string;
         }>(req);
+        const operatorEmail = (!isAdmin && principal) ? principal.email : (body.operatorEmail || undefined);
         const session = service.createChatSession({
           title: body.title,
           characterId: body.characterId,
           cacAssignmentId: body.cacAssignmentId,
-          operatorEmail: body.operatorEmail,
+          operatorEmail,
           assistantEmail: body.assistantEmail,
         });
         return this.json(res, 201, { session });
@@ -185,8 +219,10 @@ export class ChatHandler implements IRouteHandler {
         let assistantEmailFinal = body.assistantEmail ?? null;
 
         if (!cacAssignmentId) {
-          const operatorEmail = (body.operatorEmail ?? `operator@prism.local`).toString().trim();
-          const assistantEmail = (body.assistantEmail ?? `${characterId}@prism.local`).toString().trim();
+          const rawEmail = (!isAdmin && principal && principal.email) ? principal.email : (body.operatorEmail ?? `operator@prism.local`);
+          const operatorEmail = String(rawEmail).trim();
+          const rawAssistantEmail = body.assistantEmail ?? `${characterId}@prism.local`;
+          const assistantEmail = String(rawAssistantEmail).trim();
           try {
             const assignment = service.getCharacterAccountabilityManager().assign({
               characterId,
@@ -207,6 +243,12 @@ export class ChatHandler implements IRouteHandler {
             return this.json(res, 400, { error: e.message ?? "CAC assignment failed" });
           }
         } else {
+          if (!isAdmin && principal) {
+            const assignmentInfo = service.getCharacterAccountabilityManager().getAssignmentChain(cacAssignmentId);
+            if (assignmentInfo && assignmentInfo.assignment.operatorEmail !== principal.email) {
+              return this.json(res, 403, { error: "forbidden", message: "You do not own this assignment." });
+            }
+          }
           service.getCharacterAccountabilityManager().recordDispatch(cacAssignmentId);
         }
 

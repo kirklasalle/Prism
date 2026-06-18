@@ -7,7 +7,12 @@ export const state = {
   messages: [],
   status: null,
   readiness: null,
-  llmCatalog: null,
+  llmCatalog: (function () {
+    try {
+      var cached = localStorage.getItem('prism-llm-catalog');
+      return cached ? JSON.parse(cached) : null;
+    } catch (_) { return null; }
+  })(),
   llmConfig: null,
   llmAuditEvents: [],
   actions: [],
@@ -222,7 +227,6 @@ export const tabs = [
   { id: 'telemetry', label: 'Telemetry' },
   { id: 'logs', label: 'Logs & Debug' },
   { id: 'scheduler', label: 'Scheduler' },
-  { id: 'watch', label: 'Watch Me' },
   { id: 'wiki', label: 'Prism Wiki' }
 ];
 
@@ -308,9 +312,37 @@ export
   if (url.startsWith('/api/') && !url.startsWith('/api/v1/')) {
     requestUrl = '/api/v1' + url.substring(4);
   }
-  const response = await fetch(requestUrl, opts);
+  // Apply a default timeout to prevent any single request from hanging
+  // indefinitely and blocking Promise.all chains like refreshChrome().
+  // Raised to 30s to accommodate slower local diagnostic queries.
+  var timeoutMs = opts.timeoutMs || 30000;
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  var fetchOpts = Object.assign({}, opts, { signal: controller.signal });
+  delete fetchOpts.timeoutMs;
+  var response;
+  try {
+    response = await fetch(requestUrl, fetchOpts);
+  } catch (err) {
+    clearTimeout(timer);
+    if (err && err.name === 'AbortError') {
+      console.warn('[request] timeout after ' + timeoutMs + 'ms for: ' + requestUrl);
+      throw new Error('Request timed out after ' + timeoutMs + 'ms: ' + url);
+    }
+    throw err;
+  }
+  clearTimeout(timer);
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch (parseErr) {
+      // Return raw text in the payload.error when JSON parse fails so
+      // callers can inspect non-JSON responses without unhandled exceptions.
+      payload = { error: 'Invalid JSON response', text: text };
+    }
+  }
   if (!response.ok) {
     if (response.status === 401) {
       document.title = 'PRISM — Session Expired';
@@ -358,7 +390,6 @@ export
     { id: 'chat', patterns: [/@chat/gi, /\bChat Tab\b/gi, /\bChat Interface\b/gi] },
     { id: 'wiki', patterns: [/@wiki/gi, /\bWiki Tab\b/gi, /\bPrism Wiki\b/gi] },
     { id: 'scheduler', patterns: [/@scheduler/gi, /\bScheduler Tab\b/gi] },
-    { id: 'watch', patterns: [/@watch/gi, /\bWatch Me Tab\b/gi] },
     { id: 'tools', patterns: [/@tools/gi, /\bTools Tab\b/gi, /\bTools & Plugins\b/gi] }
   ];
 
@@ -574,7 +605,10 @@ export function showTransientNotice(message, severity = 'info', timeout = 4000) 
 export function trimAgenticEvent(ev, maxLen = 800) {
   if (!ev || typeof ev !== 'object') return ev;
   const out = { type: ev.type, timestamp: ev.timestamp || new Date().toISOString() };
-  if (ev.toolCall && ev.toolCall.name) out.toolName = ev.toolCall.name;
+  if (ev.toolCall) {
+    out.toolCall = { name: ev.toolCall.name, arguments: ev.toolCall.arguments || {} };
+    if (ev.toolCall.name) out.toolName = ev.toolCall.name;
+  }
   if (ev.iteration != null) out.iteration = ev.iteration;
   if (typeof ev.text === 'string') {
     out.text = ev.text.length > maxLen ? ev.text.slice(0, maxLen) + '…' : ev.text;

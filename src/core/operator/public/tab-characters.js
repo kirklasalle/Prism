@@ -96,9 +96,9 @@ function updateDynamicLabels() {
   var operatorEmailLabel = document.getElementById('label-operator-email');
   var hubLabel = document.getElementById('label-workspace-hub');
   var hubInput = document.getElementById('character-assign-workspace-hub');
-  if (prismEmailLabel) prismEmailLabel.textContent = isBusiness ? 'Employee Email *' : 'Assistant Email *';
-  if (operatorEmailLabel) operatorEmailLabel.textContent = isBusiness ? 'Company Email *' : 'Personal Email *';
-  if (hubLabel) hubLabel.textContent = isBusiness ? 'Department / Project *' : 'Workspace Label (optional)';
+  if (prismEmailLabel) prismEmailLabel.textContent = isBusiness ? 'Prism Employee Email *' : 'Prism Agent Email *';
+  if (operatorEmailLabel) operatorEmailLabel.textContent = isBusiness ? 'Operator Email (Company) *' : 'Operator Email (Personal) *';
+  if (hubLabel) hubLabel.textContent = isBusiness ? 'Workspace Label (Department / Project) *' : 'Workspace Label (optional)';
   if (hubInput) hubInput.placeholder = isBusiness ? 'e.g., Engineering, Marketing, Project X' : 'e.g., My Projects, Home Lab (optional)';
 }
 
@@ -205,10 +205,14 @@ export function renderCharacterRoster() {
     html += '</div>';
     html += '<div class="muted" style="font-size:12px;margin-top:4px;">' + escapeHtml(assignment.characterId) + ' \u2022 ' + escapeHtml(assignment.assignmentId) + '</div>';
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px;font-size:12px;">';
-    html += '<div><div class="muted" style="font-size:11px;">Operator</div><div>' + escapeHtml(assignment.operatorEmail || '-') + '</div></div>';
-    html += '<div><div class="muted" style="font-size:11px;">Prism User</div><div>' + escapeHtml(assignment.prismUserEmail || '-') + '</div></div>';
-    html += '<div><div class="muted" style="font-size:11px;">Profile</div><div>' + escapeHtml(assignment.executionProfileSegment || '-') + '</div></div>';
-    html += '<div><div class="muted" style="font-size:11px;">Dispatch Count</div><div>' + escapeHtml(String(assignment.dispatchCount || 0)) + '</div></div>';
+    html += '<div><div class="muted" style="font-size:11px;">Operator Email / ID</div><div>' + escapeHtml(assignment.operatorEmail || '-') + ' (' + escapeHtml(assignment.operatorId || '-') + ')</div></div>';
+    html += '<div><div class="muted" style="font-size:11px;">Agent Email / Character Name</div><div>' + escapeHtml(assignment.prismUserEmail || '-') + ' (' + escapeHtml(assignment.characterId || '-') + ')</div></div>';
+    html += '<div><div class="muted" style="font-size:11px;">Workspace Label (Profile)</div><div>' + escapeHtml(assignment.workspaceHub || '-') + ' (' + escapeHtml(assignment.executionProfileSegment || '-') + ')</div></div>';
+    if (assignment.prismUserId) {
+      html += '<div><div class="muted" style="font-size:11px;">Prism User Name</div><div>' + escapeHtml(assignment.prismUserId) + '</div></div>';
+    } else {
+      html += '<div><div class="muted" style="font-size:11px;">Dispatch Count</div><div>' + escapeHtml(String(assignment.dispatchCount || 0)) + '</div></div>';
+    }
     html += '</div>';
     html += '</div>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;justify-content:flex-end;">';
@@ -227,12 +231,11 @@ export function renderCharacterRoster() {
     if (expanded) {
       html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(148,163,184,0.14);display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;font-size:12px;">';
       html += '<div><div class="muted" style="font-size:11px;">Assignment Chain</div><div style="margin-top:6px;line-height:1.6;">'
-        + '<div><strong>characterId:</strong> ' + escapeHtml(assignment.characterId) + '</div>'
-        + '<div><strong>prismUserId:</strong> ' + escapeHtml(assignment.prismUserId || '-') + '</div>'
-        + '<div><strong>operatorId:</strong> ' + escapeHtml(assignment.operatorId || '-') + '</div>'
-        + '<div><strong>clientId:</strong> ' + escapeHtml(assignment.clientId || '-') + '</div>'
-        + '<div><strong>sessionId:</strong> ' + escapeHtml(assignment.sessionId || '-') + '</div>'
-        + '<div><strong>workspaceHub:</strong> ' + escapeHtml(assignment.workspaceHub || '-') + '</div>'
+        + '<div><strong>Operator ID/Email:</strong> ' + escapeHtml(assignment.operatorId || '-') + ' / ' + escapeHtml(assignment.operatorEmail || '-') + '</div>'
+        + '<div><strong>Agent Email/Character Name:</strong> ' + escapeHtml(assignment.prismUserEmail || '-') + ' / ' + escapeHtml(assignment.characterId || '-') + '</div>'
+        + '<div><strong>Workspace Label:</strong> ' + escapeHtml(assignment.workspaceHub || '-') + '</div>'
+        + (assignment.prismUserId ? '<div><strong>Prism User Name (optional):</strong> ' + escapeHtml(assignment.prismUserId) + '</div>' : '')
+        + '<div><strong>Client ID / Session ID:</strong> ' + escapeHtml(assignment.clientId || '-') + ' / ' + escapeHtml(assignment.sessionId || '-') + '</div>'
         + '</div></div>';
       html += '<div><div class="muted" style="font-size:11px;">Lifecycle</div><div style="margin-top:6px;line-height:1.6;">'
         + '<div><strong>Assigned:</strong> ' + escapeHtml(formatTimestamp(assignment.assignedAt)) + '</div>'
@@ -240,6 +243,7 @@ export function renderCharacterRoster() {
         + '<div><strong>Last Active:</strong> ' + escapeHtml(formatTimestamp(assignment.lastActiveAt)) + '</div>'
         + '<div><strong>Suspend Reason:</strong> ' + escapeHtml(assignment.suspendReason || '-') + '</div>'
         + '<div><strong>Revocation Reason:</strong> ' + escapeHtml(assignment.revocationReason || '-') + '</div>'
+        + '<div><strong>Dispatch Count:</strong> ' + escapeHtml(String(assignment.dispatchCount || 0)) + '</div>'
         + '</div></div>';
       html += '</div>';
     }
@@ -270,8 +274,15 @@ export function renderCharacterAuditLog() {
     html += '<div style="text-align:right;">' + stateBadge(event.status || 'unknown') + '<div class="muted" style="font-size:11px;margin-top:4px;">' + escapeHtml(formatTimestamp(event.timestamp)) + '</div></div>';
     html += '</div>';
     html += '<div style="margin-top:8px;font-size:12px;line-height:1.6;">';
-    html += '<div><strong>Operator:</strong> ' + escapeHtml(event.operatorEmail || '-') + '</div>';
-    html += '<div><strong>Prism User:</strong> ' + escapeHtml(event.prismUserEmail || '-') + '</div>';
+    html += '<div><strong>Operator Email / ID:</strong> ' + escapeHtml(event.operatorEmail || '-') + (event.operatorId ? ' (' + escapeHtml(event.operatorId) + ')' : '') + '</div>';
+    html += '<div><strong>Agent Email / Character Name:</strong> ' + escapeHtml(event.prismUserEmail || '-') + (event.characterId ? ' (' + escapeHtml(event.characterId) + ')' : '') + '</div>';
+    var hub = event.workspaceHub || (event.accountabilityChain && event.accountabilityChain.workspaceHub) || (event.details && event.details.workspaceHub);
+    if (hub) {
+      html += '<div><strong>Workspace Label:</strong> ' + escapeHtml(hub) + '</div>';
+    }
+    if (event.prismUserId) {
+      html += '<div><strong>Prism User Name:</strong> ' + escapeHtml(event.prismUserId) + '</div>';
+    }
     if (event.details && typeof event.details === 'object') {
       if (event.details.reason) {
         html += '<div><strong>Reason:</strong> ' + escapeHtml(String(event.details.reason)) + '</div>';
@@ -645,4 +656,194 @@ export function initCharacterPanel() {
   renderCharacterRoster();
   renderCharacterAuditLog();
   void refreshCharacterPanel();
+}
+
+// ── Custom Character Modal ───────────────────────────────────────────────────
+export function showCustomCharacterModal() {
+  var modal = document.getElementById('custom-character-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'custom-character-modal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.background = 'rgba(15, 23, 42, 0.75)';
+    modal.style.backdropFilter = 'blur(4px)';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '99999';
+    
+    var content = document.createElement('div');
+    content.className = 'panel';
+    content.style.width = '480px';
+    content.style.maxHeight = '90vh';
+    content.style.overflowY = 'auto';
+    content.style.background = '#1e293b';
+    content.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+    content.style.borderRadius = '12px';
+    content.style.padding = '24px';
+    content.style.boxShadow = '0 20px 25px -5px rgba(0,0,0,0.5), 0 8px 10px -6px rgba(0,0,0,0.5)';
+    
+    content.innerHTML = '\
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">\
+        <h3 style="margin:0;font-size:18px;font-weight:700;color:#f8fafc;">Create Custom Character</h3>\
+        <button type="button" onclick="closeCustomCharacterModal()" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:18px;line-height:1;">&times;</button>\
+      </div>\
+      <form id="custom-character-form" onsubmit="event.preventDefault(); submitCustomCharacter();" style="display:flex;flex-direction:column;gap:12px;">\
+        <div>\
+          <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Character ID *</label>\
+          <input type="text" id="custom-char-name" placeholder="e.g. my-custom-agent (lowercase, alphanumeric, hyphens)" required\
+            style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;" />\
+        </div>\
+        <div>\
+          <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Display Name *</label>\
+          <input type="text" id="custom-char-display-name" placeholder="e.g. My Custom Agent" required\
+            style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;" />\
+        </div>\
+        <div>\
+          <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Default Agent Email *</label>\
+          <input type="email" id="custom-char-email" placeholder="e.g. agent-name@prism.local" required\
+            style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;" />\
+        </div>\
+        <div>\
+          <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">System Prompt / Persona *</label>\
+          <textarea id="custom-char-prompt" placeholder="Define the system instructions, behavior, and personality..." required rows="4"\
+            style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;resize:vertical;"></textarea>\
+        </div>\
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">\
+          <div>\
+            <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Execution Profile</label>\
+            <select id="custom-char-profile" onchange="onCustomCharProfileChange()"\
+              style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;">\
+              <option value="individual">Individual</option>\
+              <option value="business">Business</option>\
+            </select>\
+          </div>\
+          <div>\
+            <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Max Risk Tier</label>\
+            <select id="custom-char-risk-tier"\
+              style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;">\
+              <option value="2">Tier 2: Standard Risk</option>\
+              <option value="1">Tier 1: Minimal Risk</option>\
+            </select>\
+          </div>\
+        </div>\
+        <div style="font-size:10.5px;color:#94a3b8;line-height:1.4;" id="custom-char-risk-help">\
+          Note: Individual profile supports both Risk Tiers. Business profile enforces Tier 1 (Minimal Risk) and applies auto-hardened tool restrictions.\
+        </div>\
+        <div>\
+          <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Allowed Tools (comma-separated, optional)</label>\
+          <input type="text" id="custom-char-allow" placeholder="e.g. read_file, write_file"\
+            style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;" />\
+        </div>\
+        <div>\
+          <label style="display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Denied Tools (comma-separated, optional)</label>\
+          <input type="text" id="custom-char-deny" placeholder="e.g. shell_exec, terminal_session"\
+            style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:13px;" />\
+        </div>\
+        <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:16px;">\
+          <button type="button" onclick="closeCustomCharacterModal()" class="secondary-button" style="padding:8px 16px;font-size:13px;">Cancel</button>\
+          <button type="submit" class="primary-button" style="padding:8px 16px;font-size:13px;">Create Character</button>\
+        </div>\
+      </form>\
+    ';
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+  } else {
+    modal.style.display = 'flex';
+  }
+  
+  document.getElementById('custom-char-name').value = '';
+  document.getElementById('custom-char-display-name').value = '';
+  document.getElementById('custom-char-email').value = '';
+  document.getElementById('custom-char-prompt').value = '';
+  document.getElementById('custom-char-profile').value = 'individual';
+  document.getElementById('custom-char-risk-tier').value = '2';
+  document.getElementById('custom-char-allow').value = '';
+  document.getElementById('custom-char-deny').value = '';
+  onCustomCharProfileChange();
+}
+
+export function closeCustomCharacterModal() {
+  var modal = document.getElementById('custom-character-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+export function onCustomCharProfileChange() {
+  var profile = document.getElementById('custom-char-profile').value;
+  var tierSelect = document.getElementById('custom-char-risk-tier');
+  if (profile === 'business') {
+    tierSelect.value = '1';
+    tierSelect.disabled = true;
+  } else {
+    tierSelect.disabled = false;
+  }
+}
+
+export async function submitCustomCharacter() {
+  var name = document.getElementById('custom-char-name').value.trim();
+  var displayName = document.getElementById('custom-char-display-name').value.trim();
+  var email = document.getElementById('custom-char-email').value.trim();
+  var promptText = document.getElementById('custom-char-prompt').value.trim();
+  var profile = document.getElementById('custom-char-profile').value;
+  var riskTier = parseInt(document.getElementById('custom-char-risk-tier').value, 10);
+  
+  var allowInput = document.getElementById('custom-char-allow').value.trim();
+  var denyInput = document.getElementById('custom-char-deny').value.trim();
+  
+  var allow = allowInput ? allowInput.split(',').map(s => s.trim()).filter(s => s.length > 0) : [];
+  var deny = denyInput ? denyInput.split(',').map(s => s.trim()).filter(s => s.length > 0) : [];
+  
+  var nameRegex = /^[a-z0-9-]+$/;
+  if (!nameRegex.test(name)) {
+    alert('Character ID must contain only lowercase letters, numbers, and hyphens (no spaces or special chars).');
+    return;
+  }
+  
+  var manifest = {
+    name: name,
+    displayName: displayName,
+    systemPrompt: promptText,
+    persona: promptText,
+    toolPermissions: {
+      allow: allow,
+      deny: deny
+    },
+    maxRiskTier: riskTier,
+    executionProfile: profile,
+    defaultEmail: email,
+    tags: ['custom']
+  };
+  
+  try {
+    var response = await request('/api/workspace/character-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        manifest: manifest,
+        targetProfile: profile,
+        commit: true
+      })
+    });
+    
+    if (response.error) {
+      alert('Failed to create character: ' + response.error);
+    } else {
+      closeCustomCharacterModal();
+      setCharacterPanelStatus('Custom character "' + displayName + '" created successfully.', false);
+      await loadAvailableCharacters();
+      var select = document.getElementById('character-assign-character');
+      if (select) {
+        select.value = name;
+        onCharacterDefinitionChanged();
+      }
+    }
+  } catch (err) {
+    alert('Error creating custom character: ' + String(err));
+  }
 }

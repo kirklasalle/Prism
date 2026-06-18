@@ -6,9 +6,18 @@ services:
     container_name: prism
     ports:
       - "${PRISM_DASHBOARD_PORT:-7070}:7070"
+    extra_hosts:
+      # Allow PRISM running inside Docker to reach LLM providers on the host
+      # (Ollama, llama.cpp, etc.) via the special DNS name.
+      - "host.docker.internal:host-gateway"
     volumes:
       # Persist workspace data across container restarts
       - prism-data:/data/Prism_Refraction
+      # Optional: override baked-in characters, skills, and MCP config at runtime
+      # Uncomment and point to local directories for customisation:
+      # - ./characters:/app/characters
+      # - ./skills:/app/skills
+      # - ./.mcp:/app/.mcp
     environment:
       - NODE_ENV=production
       - PRISM_MODE=server
@@ -24,7 +33,7 @@ services:
       - PRISM_TLS_KEY=${PRISM_TLS_KEY:-}
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:7070/health" ]
+      test: ["CMD", "wget", "-qO-", "http://localhost:7070/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s

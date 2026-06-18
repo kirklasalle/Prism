@@ -129,7 +129,7 @@ export class PolicyEngine {
                 return { tier: "tier1_autonomous", decision: "deny", reasons, reasonCodes };
             }
 
-            if (!profile.tier1AutonomuousAllowed) {
+            if (!profile.tier1AutonomousAllowed) {
                 reasons.push(`Autonomous operations disabled for ${profile.segment} segment.`);
                 reasonCodes.push(POLICY_REASON_CODES.LOW_RISK_DENY_TIER1_DISABLED);
                 return { tier: "tier1_autonomous", decision: "deny", reasons, reasonCodes };

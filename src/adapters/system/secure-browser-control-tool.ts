@@ -69,6 +69,22 @@ export class SecureBrowserControlTool implements Tool {
         };
     }
 
+    setSSHPInterceptor(sshpInterceptor: any): void {
+        this.browserControlTool.setSSHPInterceptor(sshpInterceptor);
+    }
+
+    setCSHManager(cshManager: any): void {
+        this.browserControlTool.setCSHManager(cshManager);
+    }
+
+    getManager(): any {
+        return this.browserControlTool.getManager();
+    }
+
+    getProfileManager(): any {
+        return this.browserControlTool.getProfileManager();
+    }
+
     async execute(request: SecureBrowserControlRequest): Promise<ToolResult> {
         const args = request.args as Record<string, unknown>;
         const operatorSessionId = typeof args.operatorSessionId === "string" ? args.operatorSessionId : "";

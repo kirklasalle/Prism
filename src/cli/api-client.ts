@@ -87,6 +87,26 @@ export class SetupApiClient {
     }
 
     /**
+     * Set default character in setup.
+     */
+    async postSetupCharacter(characterId: string): Promise<{ ok: boolean; defaultCharacterId: string }> {
+        return this.post("/api/setup/character", { characterId });
+    }
+
+    /**
+     * Create CAC and first chat session.
+     */
+    async postSetupCac(payload: {
+        characterId?: string;
+        operatorEmail: string;
+        assistantEmail?: string;
+        title?: string;
+        operatorPassword?: string;
+    }): Promise<{ ok: boolean; cacAssignmentId: string; session: Record<string, unknown> }> {
+        return this.post("/api/setup/cac", payload);
+    }
+
+    /**
      * Mark setup as complete, trigger readiness check and audit events.
      */
     async postSetupComplete(): Promise<{ setupComplete: boolean; readiness: ReadinessSnapshot }> {
@@ -172,6 +192,7 @@ export class SetupApiClient {
         operatorId?: string;
         executionProfile: string;
         workspaceHub?: string;
+        operatorPassword?: string;
     }): Promise<{ assignment?: { assignmentId?: string } }> {
         return this.post("/api/workspace/character-assign", payload);
     }

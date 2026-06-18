@@ -1,9 +1,9 @@
-// Advanced Setup Wizard — 8-step deep configuration for PRISM
+// Advanced Setup Wizard — 9-step deep configuration for PRISM
 
 const TOTAL_STEPS = 9;
 let currentStep = 1;
 
-const PROVIDERS_NEEDING_KEY = ['openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
+const PROVIDERS_NEEDING_KEY = ['custom', 'openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
 
 const ROUTING_ROLES = [
   'chat', 'code-generation', 'reasoning', 'tool-selection',
@@ -14,6 +14,7 @@ let advState = {
   profile: 'individual',
   workspaceRoot: '',
   provider: 'llamacpp',
+  model: '',
   apiKey: '',
   routingStrategy: 'single',
   roleOverrides: {},
@@ -51,6 +52,42 @@ function escHtml(str) {
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+window.toggleApiKeyVisibility = function toggleApiKeyVisibility(inputId, btnEl) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    btnEl.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon-hidden"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+  } else {
+    input.type = 'password';
+    btnEl.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon-visible"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+  }
+};
+
+function showToast(message, type = 'info') {
+  let container = document.getElementById('wizard-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'wizard-toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `wizard-toast ${type}`;
+  let icon = 'ℹ️';
+  if (type === 'success') icon = '✅';
+  if (type === 'error') icon = '❌';
+  toast.innerHTML = `<span>${icon}</span><div>${message}</div>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => {
+      toast.remove();
+    }, 300);
+  }, 4000);
 }
 
 function applyAdvancedWizardHoverTooltips() {
@@ -157,11 +194,11 @@ async function initWorkspaceStep() {
 async function validateWorkspace() {
   const container = document.getElementById('adv-workspace-checks');
   if (!container) return;
-  container.innerHTML = '<div class="wizard-check-item"><span class="check-icon pending">\u22EF</span> Checking...</div>';
+  container.innerHTML = '<div class="wizard-check-item"><span class="check-icon pending">⋯</span> Checking...</div>';
   const data = await api('GET', '/api/setup/prerequisites');
   let html = '';
   for (const c of data.checks || []) {
-    const icon = c.passed ? '\u2713' : '\u2717';
+    const icon = c.passed ? '✓' : '✗';
     const cls = c.passed ? 'pass' : 'fail';
     html += `<div class="wizard-check-item">
       <span class="check-icon ${cls}">${icon}</span>
@@ -197,6 +234,30 @@ function updateProviderKeyField() {
     keyInput.oninput = () => { advState.apiKey = keyInput.value; };
   }
 }
+
+window.advTestProviderConnection = async function advTestProviderConnection() {
+  const testResult = document.getElementById('adv-provider-test-result');
+  if (!testResult) return false;
+  testResult.innerHTML = '<span style="color:var(--muted);">Testing connection...</span>';
+  try {
+    const data = await api('POST', '/api/llm/provider-test', {
+      providerId: advState.provider,
+      apiKey: advState.apiKey || undefined,
+    });
+    if (data.ok || data.reachable) {
+      testResult.innerHTML = '<span style="color:var(--accent-2);">✓ Provider is reachable.</span>';
+      if (data.models && data.models.length > 0 && !advState.model) {
+        advState.model = data.models[0];
+      }
+      return true;
+    }
+    testResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(data.error || data.reason || 'Could not reach provider.')}</span>`;
+    return false;
+  } catch {
+    testResult.innerHTML = '<span style="color:var(--danger);">✗ Connection test failed.</span>';
+    return false;
+  }
+};
 
 // ── Step 4: Model Routing ────────────────────────────────────────────────────
 
@@ -307,26 +368,42 @@ async function initCacStep() {
   try {
     const data = await api('GET', '/api/workspace/characters');
     advState.availableCharacters = data.characters || data || [];
-  } catch { advState.availableCharacters = []; }
+    console.log("Setup Wizard: Loaded characters:", advState.availableCharacters);
+  } catch (err) {
+    advState.availableCharacters = [];
+    console.error("Failed to load characters for setup wizard:", err);
+  }
 
   const charSelect = document.getElementById('adv-cac-character');
   if (charSelect) {
-    const filtered = advState.availableCharacters.filter(c => {
+    const profile = String(advState.profile || 'individual').toLowerCase();
+    let filtered = advState.availableCharacters.filter(c => {
       if (!c.executionProfile) return true;
-      return c.executionProfile === advState.profile;
+      return String(c.executionProfile).toLowerCase() === profile;
     });
+
+    console.log(`Setup Wizard: Filtering for profile '${profile}'. Matches: ${filtered.length}`);
+
+    if (filtered.length === 0 && advState.availableCharacters.length > 0) {
+      console.warn("Setup Wizard: No characters matched the selected profile. Showing all characters as fallback.");
+      filtered = advState.availableCharacters;
+    }
 
     let html = '<option value="">Select a character...</option>';
     for (const c of filtered) {
       const cid = c.id || c.characterId || '';
-      const icon = cid.startsWith('aria') ? '\u{1F916}' :
-        cid.startsWith('phoenix') ? '\u{1F985}' :
-          cid.startsWith('sentinel') ? '\u{1F6E1}' : '\u{1F464}';
+      const icon = cid.startsWith('aria') ? '🤖' :
+        cid.startsWith('phoenix') ? '🦅' :
+          cid.startsWith('sentinel') ? '🛡️' : '👤';
       html += `<option value="${escHtml(cid)}">${icon} ${escHtml(c.displayName || c.name || cid || 'Unknown')}</option>`;
     }
     charSelect.innerHTML = html;
     if (advState.cacCharacter) charSelect.value = advState.cacCharacter;
-    charSelect.onchange = () => { advState.cacCharacter = charSelect.value; };
+    charSelect.onchange = () => {
+      advState.cacCharacter = charSelect.value;
+      advUpdateCacFields();
+    };
+    advUpdateCacFields();
   }
 
   // Wire up input fields
@@ -335,6 +412,7 @@ async function initCacStep() {
     ['adv-cac-prism-email', 'cacPrismEmail'],
     ['adv-cac-operator-id', 'cacOperatorId'],
     ['adv-cac-workspace-hub', 'cacWorkspaceHub'],
+    ['adv-cac-custom-name', 'cacCustomName'],
   ];
   for (const [elId, stateKey] of fields) {
     const el = document.getElementById(elId);
@@ -352,6 +430,22 @@ async function initCacStep() {
       : 'Optional for individual profiles.';
   }
 }
+
+function showAdvCacError(msg) {
+  const resultEl = document.getElementById('adv-cac-assignment-result');
+  if (resultEl) {
+    resultEl.innerHTML = `<span style="color:var(--danger);">${escHtml(msg)}</span>`;
+  }
+}
+
+window.advUpdateCacFields = function advUpdateCacFields() {
+  const charSelect = document.getElementById('adv-cac-character');
+  const customNameField = document.getElementById('adv-cac-custom-name-field');
+  if (charSelect && customNameField) {
+    const isCustom = charSelect.value === 'test-custom-agent' || charSelect.value === 'custom-agent';
+    customNameField.style.display = isCustom ? 'block' : 'none';
+  }
+};
 
 // ── Step 7: Browser Profile & Scheduler ──────────────────────────────────────
 
@@ -418,7 +512,6 @@ function renderSchedulerSuggestions() {
   if (!container) return;
   const suggestions = getSchedulerSuggestions();
 
-  // Pre-set defaults if not already configured
   for (const s of suggestions) {
     if (advState.schedulerSelections[s.id] === undefined) {
       advState.schedulerSelections[s.id] = s.default;
@@ -448,13 +541,12 @@ window.advToggleScheduler = function advToggleScheduler(id, el) {
 // ── Step 8: Integrations (OAuth) ─────────────────────────────────────────────
 
 async function initIntegrationsStep() {
-  // Gmail status
   const gStat = document.getElementById('adv-gmail-status');
   const gBtn = document.getElementById('adv-gmail-connect');
   try {
     const data = await api('GET', '/api/auth/gmail/status');
     if (data.connected) {
-      if (gStat) gStat.innerHTML = `<span style="color:#22c55e;">\u2713 Connected as ${escHtml(data.email || 'Connected')}</span>`;
+      if (gStat) gStat.innerHTML = `<span style="color:#22c55e;">✓ Connected as ${escHtml(data.email || 'Connected')}</span>`;
       if (gBtn) gBtn.style.display = 'none';
     } else if (!data.available) {
       if (gStat) gStat.innerHTML = 'Unavailable. PRISM_GMAIL_CLIENT_ID not set.';
@@ -464,13 +556,12 @@ async function initIntegrationsStep() {
     }
   } catch { /* ignore */ }
 
-  // Outlook status
   const oStat = document.getElementById('adv-outlook-status');
   const oBtn = document.getElementById('adv-outlook-connect');
   try {
     const data = await api('GET', '/api/auth/outlook/status');
     if (data.connected) {
-      if (oStat) oStat.innerHTML = `<span style="color:#22c55e;">\u2713 Connected as ${escHtml(data.email || data.displayName || 'Connected')}</span>`;
+      if (oStat) oStat.innerHTML = `<span style="color:#22c55e;">✓ Connected as ${escHtml(data.email || data.displayName || 'Connected')}</span>`;
       if (oBtn) oBtn.style.display = 'none';
     } else if (!data.available) {
       if (oStat) oStat.innerHTML = 'Unavailable. PRISM_OUTLOOK_CLIENT_ID not set.';
@@ -480,7 +571,6 @@ async function initIntegrationsStep() {
     }
   } catch { /* ignore */ }
 
-  // Set up polling for OAuth popups
   if (!advState.oauthPoll) {
     advState.oauthPoll = setInterval(() => {
       if (currentStep === 8) initIntegrationsStep();
@@ -507,7 +597,7 @@ async function initSummaryStep() {
   const certBox = document.getElementById('adv-cert-box');
   if (!container) return;
 
-  container.innerHTML = '<div class="wizard-check-item"><span class="check-icon pending">\u22EF</span> Validating configuration...</div>';
+  container.innerHTML = '<div class="wizard-check-item"><span class="check-icon pending">⋯</span> Validating configuration...</div>';
 
   // Save profile
   await api('POST', '/api/setup/profile', { executionProfileSegment: advState.profile });
@@ -520,7 +610,7 @@ async function initSummaryStep() {
   // Save API key if provided
   if (advState.apiKey && PROVIDERS_NEEDING_KEY.includes(advState.provider)) {
     try {
-      await api('POST', `/api/provider/${encodeURIComponent(advState.provider)}/key`, { apiKey: advState.apiKey });
+      await api('POST', '/api/llm/provider-secret', { providerId: advState.provider, apiKey: advState.apiKey });
     } catch { /* best-effort */ }
   }
 
@@ -531,45 +621,6 @@ async function initSummaryStep() {
         strategy: advState.routingStrategy,
         roleOverrides: advState.roleOverrides,
       });
-    } catch { /* best-effort */ }
-  }
-
-  // Configure guardian
-  if (advState.guardianModel) {
-    try {
-      await api('POST', '/api/guardian/configure', {
-        modelPath: advState.guardianModel,
-        authorityTier: advState.guardianTier,
-        autoStart: advState.guardianAutoStart,
-      });
-    } catch { /* best-effort */ }
-  }
-
-  // Create CAC assignment
-  if (advState.cacCharacter && advState.cacOperatorEmail) {
-    try {
-      const result = await api('POST', '/api/workspace/character-assign', {
-        characterId: advState.cacCharacter,
-        operatorEmail: advState.cacOperatorEmail,
-        prismUserEmail: advState.cacPrismEmail || undefined,
-        operatorId: advState.cacOperatorId || undefined,
-        executionProfile: advState.profile,
-        workspaceHub: advState.cacWorkspaceHub || undefined,
-      });
-      if (result.assignment?.assignmentId) advState.cacAssignmentId = result.assignment.assignmentId;
-    } catch { /* best-effort */ }
-  }
-
-  // Create browser profile
-  const browserEmail = advState.browserUseCac ? advState.cacOperatorEmail : advState.browserEmail;
-  if (browserEmail) {
-    try {
-      const result = await api('POST', '/api/browser/profiles', {
-        email: browserEmail,
-        segment: advState.browserSegment,
-      });
-      const pid = result.profile?.profileId || result.profileId || result.id;
-      if (pid) advState.browserProfileId = pid;
     } catch { /* best-effort */ }
   }
 
@@ -590,14 +641,16 @@ async function initSummaryStep() {
   // Run readiness check
   const readiness = await api('POST', '/api/readiness/recheck', { source: 'setup_wizard_advanced' });
 
+  const browserEmail = advState.browserUseCac ? advState.cacOperatorEmail : advState.browserEmail;
+
   // Build summary checks
   const checks = [
     { label: 'Execution Profile', passed: true, detail: advState.profile === 'business' ? 'Business (strict governance)' : 'Individual (fast defaults)' },
     { label: 'Workspace Directory', passed: true, detail: advState.workspaceRoot || 'Default location' },
     { label: 'LLM Provider', passed: true, detail: advState.provider },
     { label: 'Routing Strategy', passed: true, detail: advState.routingStrategy === 'single' ? 'Single model' : advState.routingStrategy === 'multi' ? 'Multi-model (role-based)' : 'Modality-aware' },
-    { label: 'Guardian Agent', passed: !!advState.guardianModel, detail: advState.guardianModel ? `${advState.guardianTier} \u2014 ${advState.guardianModel.split(/[/\\]/).pop()}` : 'Not configured' },
-    { label: 'CAC Assignment', passed: !!advState.cacAssignmentId, detail: advState.cacAssignmentId ? `${advState.cacCharacter} \u2192 ${advState.cacOperatorEmail}` : (advState.cacCharacter ? 'Pending assignment' : 'Not configured') },
+    { label: 'Guardian Agent', passed: !!advState.guardianModel, detail: advState.guardianModel ? `${advState.guardianTier} — ${advState.guardianModel.split(/[/\\]/).pop()}` : 'Not configured' },
+    { label: 'CAC Assignment', passed: !!advState.cacAssignmentId, detail: advState.cacAssignmentId ? `${advState.cacCharacter} → ${advState.cacOperatorEmail}` : (advState.cacCharacter ? 'Pending assignment' : 'Not configured') },
     { label: 'Browser Profile', passed: !!advState.browserProfileId, detail: advState.browserProfileId ? `${browserEmail} (${advState.browserSegment})` : (browserEmail ? 'Pending creation' : 'Not configured') },
     { label: 'Scheduler', passed: true, detail: `${Object.values(advState.schedulerSelections).filter(Boolean).length} task(s) enabled` },
     ...(readiness.requirements || []),
@@ -605,7 +658,7 @@ async function initSummaryStep() {
 
   let html = '';
   for (const c of checks) {
-    const icon = c.passed ? '\u2713' : '\u2717';
+    const icon = c.passed ? '✓' : '✗';
     const cls = c.passed ? 'pass' : 'fail';
     html += `<div class="wizard-check-item">
       <span class="check-icon ${cls}">${icon}</span>
@@ -617,13 +670,12 @@ async function initSummaryStep() {
   const allPassed = checks.every(c => c.passed);
   if (status) {
     if (allPassed) {
-      status.innerHTML = '<div class="wizard-summary-ready"><div class="big-check">\u2713</div><div style="font-weight:600;font-size:16px;">All systems ready</div></div>';
+      status.innerHTML = '<div class="wizard-summary-ready"><div class="big-check">✓</div><div style="font-weight:600;font-size:16px;">All systems ready</div></div>';
     } else {
       status.innerHTML = '<div style="color:var(--muted);font-size:12px;margin-top:8px;">Some items are not configured. You can still launch and configure them later.</div>';
     }
   }
 
-  // Show certificate box
   if (certBox) certBox.style.display = '';
 }
 
@@ -632,7 +684,6 @@ async function initSummaryStep() {
 window.advToggle = function advToggle(el) {
   el.classList.toggle('on');
 
-  // Sync state for known toggles
   if (el.id === 'adv-guardian-autostart') {
     advState.guardianAutoStart = el.classList.contains('on');
   }
@@ -641,24 +692,244 @@ window.advToggle = function advToggle(el) {
 // ── Navigation ───────────────────────────────────────────────────────────────
 
 window.advWizardNext = async function advWizardNext() {
+  const nextBtn = document.getElementById('adv-wizard-next');
   if (currentStep < TOTAL_STEPS) {
-    // Step-specific saves before advancing
-    if (currentStep === 1) {
-      await api('POST', '/api/setup/profile', { executionProfileSegment: advState.profile });
-    }
-    if (currentStep === 2) {
-      if (advState.workspaceRoot) {
-        await api('POST', '/api/setup/workspace', { workspaceRoot: advState.workspaceRoot });
-      }
-    }
-    showStep(currentStep + 1);
-  } else {
-    // Final step — create initialization certificate and launch
-    const nextBtn = document.getElementById('adv-wizard-next');
-    if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Creating Certificate...'; }
+    nextBtn.disabled = true;
+    nextBtn.textContent = 'Validating...';
 
     try {
-      // Build certificate payload
+      if (currentStep === 1) {
+        await api('POST', '/api/setup/profile', { executionProfileSegment: advState.profile });
+      }
+      if (currentStep === 2) {
+        if (advState.workspaceRoot) {
+          await api('POST', '/api/setup/workspace', { workspaceRoot: advState.workspaceRoot });
+        }
+        const data = await api('GET', '/api/setup/prerequisites');
+        const allPassed = (data.checks || []).every(c => c.passed);
+        if (!allPassed) {
+          const errContainer = document.getElementById('adv-workspace-checks');
+          if (errContainer) {
+            const existingErr = errContainer.querySelector('.val-error');
+            if (existingErr) existingErr.remove();
+            errContainer.insertAdjacentHTML('beforeend', '<div class="val-error" style="color:var(--danger);font-size:12px;margin-top:8px;">Workspace prerequisites must be satisfied to continue.</div>');
+          }
+          return;
+        }
+      }
+      if (currentStep === 3) {
+        showToast("Testing provider connection...", "info");
+        const reachable = await advTestProviderConnection();
+        if (!reachable) {
+          showToast("Connection test failed.", "error");
+          return;
+        }
+        showToast("Connection verified successfully!", "success");
+        await delay(500);
+
+        const needsKey = PROVIDERS_NEEDING_KEY.includes(advState.provider);
+        if (advState.apiKey && needsKey) {
+          showToast("Saving API key to secrets...", "info");
+          await api('POST', '/api/llm/provider-secret', {
+            providerId: advState.provider,
+            apiKey: advState.apiKey,
+          });
+          showToast("API key saved.", "success");
+          await delay(500);
+        }
+
+        showToast("Saving provider settings...", "info");
+        let testModels = [];
+        try {
+          const testRes = await api('POST', '/api/llm/provider-test', {
+            providerId: advState.provider,
+            apiKey: advState.apiKey || undefined,
+          });
+          if (testRes.models) {
+            testModels = testRes.models;
+          }
+        } catch { /* ignore */ }
+
+        const defaultModel = advState.model || testModels[0] || null;
+        await api('POST', '/api/llm/provider-settings', {
+          providerId: advState.provider,
+          models: testModels,
+          defaultModel: defaultModel,
+        });
+
+        showToast("Applying model to system...", "info");
+        await api('POST', '/api/llm/select', {
+          providerId: advState.provider,
+          model: defaultModel,
+        });
+        showToast("Model applied to system as ready.", "success");
+        await delay(500);
+      }
+      if (currentStep === 5) {
+        const errEl = document.getElementById('adv-guardian-error');
+        if (errEl) {
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+        }
+        if (advState.guardianModel) {
+          try {
+            const res = await api('POST', '/api/guardian/configure', {
+              modelPath: advState.guardianModel,
+              authorityTier: advState.guardianTier,
+              autoStart: advState.guardianAutoStart,
+            });
+            if (res.error) {
+              if (errEl) {
+                errEl.textContent = "Failed to configure guardian: " + res.error;
+                errEl.style.display = 'block';
+              }
+              return;
+            }
+          } catch (e) {
+            if (errEl) {
+              errEl.textContent = "Failed to configure guardian: " + (e.message || e);
+              errEl.style.display = 'block';
+            }
+            return;
+          }
+        }
+      }
+      if (currentStep === 6) {
+        const charEl = document.getElementById('adv-cac-character');
+        const opEl = document.getElementById('adv-cac-operator-email');
+        const prismEl = document.getElementById('adv-cac-prism-email');
+        const hubEl = document.getElementById('adv-cac-workspace-hub');
+        const opIdEl = document.getElementById('adv-cac-operator-id');
+        const customNameEl = document.getElementById('adv-cac-custom-name');
+        const opPasswordEl = document.getElementById('adv-cac-operator-password');
+
+        const charVal = charEl?.value || '';
+        const opEmail = opEl?.value.trim() || '';
+        const prismEmail = prismEl?.value.trim() || '';
+        const hubVal = hubEl?.value.trim() || '';
+        const opIdVal = opIdEl?.value.trim() || '';
+        const customNameVal = customNameEl?.value.trim() || '';
+        const opPassword = opPasswordEl ? opPasswordEl.value : '';
+
+        const errContainer = document.getElementById('adv-cac-assignment-result');
+        if (errContainer) errContainer.innerHTML = '';
+
+        if (!charVal) {
+          showAdvCacError("Please select a character.");
+          return;
+        }
+        if ((charVal === 'test-custom-agent' || charVal === 'custom-agent') && !customNameVal) {
+          showAdvCacError("Agent Name is required for Custom Agent.");
+          return;
+        }
+        if (!opEmail || !/^\S+@\S+\.\S+$/.test(opEmail)) {
+          showAdvCacError("Please enter a valid operator email address.");
+          return;
+        }
+        if (!opPassword) {
+          showAdvCacError("Please enter a password for the operator account.");
+          return;
+        }
+        if (opPassword.length < 4) {
+          showAdvCacError("Password must be at least 4 characters long.");
+          return;
+        }
+        if (!prismEmail || !/^\S+@\S+\.\S+$/.test(prismEmail)) {
+          showAdvCacError("Please enter a valid PRISM user email address.");
+          return;
+        }
+        if (!opIdVal) {
+          showAdvCacError("Operator ID (First, Last Name) is required.");
+          return;
+        }
+        if (!hubVal) {
+          showAdvCacError("Workspace Hub is required.");
+          return;
+        }
+
+        if (advState.profile === 'business') {
+          const isPlaceholderOp = /@(prism\.local|example\.(com|org|net))$/i.test(opEmail);
+          const isPlaceholderPr = /@(prism\.local|example\.(com|org|net))$/i.test(prismEmail);
+          if (isPlaceholderOp || isPlaceholderPr) {
+            showAdvCacError("Placeholder emails are not allowed for Business profile. Real email addresses must be used.");
+            return;
+          }
+        }
+
+        try {
+          const result = await api('POST', '/api/workspace/character-assign', {
+            characterId: charVal,
+            operatorEmail: opEmail,
+            prismUserEmail: prismEmail || undefined,
+            operatorId: opIdVal || undefined,
+            executionProfile: advState.profile,
+            workspaceHub: hubVal || undefined,
+            customDisplayName: customNameVal || undefined,
+            operatorPassword: opPassword,
+          });
+
+          if (result.error || !result.assignment?.assignmentId) {
+            showAdvCacError(result.error || "Character assignment failed.");
+            return;
+          }
+
+          advState.cacCharacter = charVal;
+          advState.cacOperatorEmail = opEmail;
+          advState.cacPrismEmail = prismEmail;
+          advState.cacOperatorId = opIdVal;
+          advState.cacWorkspaceHub = hubVal;
+          advState.cacAssignmentId = result.assignment.assignmentId;
+        } catch (err) {
+          showAdvCacError(err.message || String(err));
+          return;
+        }
+      }
+      if (currentStep === 7) {
+        const browserEmail = advState.browserUseCac ? advState.cacOperatorEmail : advState.browserEmail;
+        const errEl = document.getElementById('adv-browser-error');
+        if (errEl) {
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+        }
+        if (browserEmail) {
+          try {
+            const result = await api('POST', '/api/browser/profiles', {
+              email: browserEmail,
+              segment: advState.browserSegment,
+            });
+            const pid = result.profile?.profileId || result.profileId || result.id;
+            if (pid) {
+              advState.browserProfileId = pid;
+            } else if (result.error) {
+              if (errEl) {
+                errEl.textContent = "Failed to create browser profile: " + result.error;
+                errEl.style.display = 'block';
+              }
+              return;
+            }
+          } catch (e) {
+            if (errEl) {
+              errEl.textContent = "Failed to create browser profile: " + (e.message || e);
+              errEl.style.display = 'block';
+            }
+            return;
+          }
+        }
+      }
+
+      showStep(currentStep + 1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Continue';
+    }
+  } else {
+    // Final step — create initialization certificate and launch
+    nextBtn.disabled = true;
+    nextBtn.textContent = 'Creating Certificate...';
+
+    try {
       const certificate = {
         profile: {
           segment: advState.profile,
@@ -684,7 +955,7 @@ window.advWizardNext = async function advWizardNext() {
           defaultSwarmTopology: advState.swarmTopology,
         },
         cac: {
-          character: advState.cacCharacter || 'not assigned',
+          character: advState.cacCharacter || 'Not Assigned',
           operatorEmail: advState.cacOperatorEmail || 'not set',
           prismUserEmail: advState.cacPrismEmail || 'not set',
           assignmentId: advState.cacAssignmentId || 'pending',
@@ -706,29 +977,28 @@ window.advWizardNext = async function advWizardNext() {
         },
       };
 
-      // Create the initialization session + certificate package
       const certResult = await api('POST', '/api/setup/initialization-session', { certificate });
       advState.certificateResult = certResult;
 
-      // Update certificate box with result
       const certDetail = document.getElementById('adv-cert-detail');
       if (certDetail && certResult.sessionId) {
-        certDetail.innerHTML = `<div style="color:var(--accent-2);font-weight:600;margin-bottom:4px;">\u2713 Certificate Created</div>
+        certDetail.innerHTML = `<div style="color:var(--accent-2);font-weight:600;margin-bottom:4px;">✓ Certificate Created</div>
           <div>Session: <code style="font-size:11px;">${escHtml(certResult.sessionId)}</code></div>
           <div>Package: <code style="font-size:11px;">${escHtml(certResult.packageId || 'N/A')}</code></div>
           <div style="margin-top:4px;font-size:11px;color:var(--muted);">This immutable provenance record has been archived.</div>`;
       }
 
-      // Mark setup complete
-      await api('POST', '/api/setup/complete');
+      const completeResult = await api('POST', '/api/setup/complete');
 
-      if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Launch Dashboard'; }
-      nextBtn.onclick = () => { window.location.href = '/dashboard'; };
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Launch Dashboard';
+      nextBtn.onclick = () => {
+        const url = completeResult.token ? `/dashboard?token=${completeResult.token}` : '/dashboard';
+        window.location.href = url;
+      };
     } catch (err) {
-      if (nextBtn) {
-        nextBtn.disabled = false;
-        nextBtn.textContent = 'Retry';
-      }
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Retry';
       const certDetail = document.getElementById('adv-cert-detail');
       if (certDetail) {
         certDetail.innerHTML = `<div style="color:var(--danger);">Certificate creation failed: ${escHtml(String(err.message || err))}</div>
@@ -751,7 +1021,6 @@ window.advSkipSetup = function advSkipSetup() {
 (async function init() {
   renderProgress();
 
-  // Pre-load advanced status to fill defaults
   try {
     const data = await api('GET', '/api/setup/advanced/status');
     if (data.executionProfileSegment === 'business') {

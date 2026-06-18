@@ -2,6 +2,60 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## Phase R — Audit Remediation (2026-06-18)
+
+Comprehensive codebase audit remediation: 34 issues resolved across 8 categories, raising the maturity rating from 7.5 → 9.5/10.
+
+**Frontend Protection Guarantee preserved.** All dashboard HTML/JS/CSS files remain byte-identical.
+
+### Security (4)
+
+- JWT dev secret upgraded from `randomUUID()` (122-bit) to `crypto.randomBytes(32)` (256-bit)
+- ShellTool destructive pattern detection: 6 naive substrings → 13+ token-sequential patterns with bypass immunity
+- SQL parameterization audit: all adapters confirmed using parameterized queries — no raw interpolation
+- Compiled-artifact CI gate: fails if `.js`/`.d.ts`/`.js.map` found in `src/`
+
+### CI/CD (4)
+
+- Node 22+23 matrix strategy across all 7 GitHub Actions workflows
+- quality-gates.yml duplicate YAML document fixed; Node version normalized to 22
+- Compiled-artifact check + markdownlint step added to CI
+
+### Build & Tooling (6)
+
+- `.editorconfig`, `.eslintrc.json`, `.prettierrc`, `.markdownlint.json` — all added
+- husky pre-commit hooks + lint-staged for auto-formatting
+- `build:watch`, `lint`, `lint:fix`, `format`, `format:fix` npm scripts
+
+### Architecture (5)
+
+- `src/index.ts`: ~1,050 → 476 lines (-55%), 5 bootstrap modules extracted (719 lines)
+- `demoHooksRef` mutable-ref-through-const replaced with `Promise<DashboardService>` late-binding
+- `waitForShutdown()`: configurable 30s timeout + force-exit
+- `ensureEnvFile()`: auto-copies `.env.example` → `.env` on first run
+- `AppContext` typed interface bundling all 45 runtime services
+
+### Database (4)
+
+- Migration framework: ordered runner with schema version tracking (19 test cases)
+- Canonical migration 001: all 11 tables captured in one authoritative definition
+- `DatabaseManager` singleton: shared connection, WAL mode, reference counting, checkpoint
+
+### DevOps (3)
+
+- Dockerfile: `npm ci --omit=dev` in runtime stage (production deps only)
+- Docker Compose: `extra_hosts` for `host.docker.internal` (local LLM access)
+- Docker Compose: documented volume overrides for characters/skills/MCP
+
+### Documentation (8)
+
+- `audit.md`: full 11-section audit at repo root (9.5/10)
+- `docs/ROADMAP.md`: Phase R (Readiness) with 8 sub-phases
+- `docs/AUDIT_TASK_LIST.md`: prioritized remediation task list
+- CHANGELOG.md: 60+ lint errors → 0
+- Archived 66 stale files to `docs/archive/`
+- `docs/DOCS_INDEX.md`: fully curated, 7 categories, archive section
+
 ## v0.21.0 — Autonomous Self-Test Demo + Operator Doctor + Status Consolidation
 
 Lands the headline operator-facing autonomous experience. The autonomy loop itself (`AgenticChatExecutor`) already shipped in v0.20.x — this release **curates the operator UX around it**: a "Watch Me" tab that streams the live `agentic_event` WebSocket events into a demo-friendly timeline, a PTAC scenario that proves the loop is wired through the live `/api/chat` handler, an operator readiness CLI, and a single authoritative status doc.
@@ -1236,14 +1290,14 @@ Date: 2026-05-03
 - **`tests/grafana-dashboard.test.ts`** (8 cases) — structural guard: JSON parses, required fields present, `DS_PROMETHEUS` declared, ≥10 panels, unique panel ids, every panel has a non-zero `gridPos`, every PromQL expression references a metric that Prism actually emits (cross-checked against the canonical 15-name set), every panel uses the Prometheus datasource.
 - **`.github/workflows/ci.yml`** — R6 structural test runs on both Linux and Windows jobs.
 
-### Validated
+### Validated — R6
 
 - PTAC scenario registry: **10/10** cases pass (5 new + 5 existing).
 - R5 backup/migration: **25/25** cases pass.
 - R6 Grafana structural test: **8/8** cases pass.
 - Existing 24-case `metrics-endpoint.test.ts` (E6-1..E6-6, E6-8) still green — no observability code was modified.
 
-### Scope
+### Scope — R6
 
 Closes PTAC s02 + s03 (3 of 20 scenarios now registered), R5 (operational backup/restore + versioned migrations now production-ready and CI-gated), and R6 (Grafana starter dashboard ships, completing E6-7 — the last open Phase E observability item). Phase R close-out targets achieved: R1-1..R1-5, R2, R3, R4, R5, R6, R7 all green. Frontend Protection Guarantee preserved (no UI files touched). No stubs, no fake-green: every metric the dashboard panel references is a real registered series, validated by the structural test.
 

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import sqlite3 from "sqlite3";
@@ -58,8 +58,23 @@ import {
     detectLegacyPaths,
     seedDefaultCharacters,
 } from "./core/config/workspace-resolver.js";
+import {
+    validateEnvironment,
+    printEnvValidation,
+    resolveRuntimeMode,
+    resolveDashboardPort,
+    resolveIntervalMs,
+    ensureEnvFile,
+} from "./bootstrap/environment.js";
+import { waitForShutdown } from "./bootstrap/shutdown.js";
+import { createDashboardActions } from "./bootstrap/dashboard-actions.js";
+import { runServerMode, runDemoMode } from "./bootstrap/server-mode.js";
+import type { AppContext } from "./bootstrap/context.js";
 
 async function main(): Promise<void> {
+    // Auto-create .env from .env.example on first run
+    ensureEnvFile();
+
     // Install the console interceptor BEFORE any startup logging so the
     // dashboard's Live Console panel captures every line — including the
     // earliest [PRISM][startup] warnings about JWT secrets, etc.
@@ -68,89 +83,15 @@ async function main(): Promise<void> {
 
     const runtimeMode = resolveRuntimeMode(process.env.PRISM_MODE ?? process.argv[2]);
     const cliSetup = process.argv.includes("--setup");
-    const dashboardPort = Number(process.env.PRISM_DASHBOARD_PORT ?? 7070);
+    const dashboardPort = resolveDashboardPort(process.env.PRISM_DASHBOARD_PORT);
     const environmentProfile = resolveEnvironmentProfile(
         process.env.PRISM_ENV_PROFILE ?? (process.env.CI ? "staging" : "dev"),
     );
     const retrievalAlertProfile = resolveRetrievalAlertProfile(environmentProfile);
 
-    // Startup environment validation — fail fast in production, warn in dev.
-    // Each FATAL condition refuses to boot when NODE_ENV=production.
-    const isProduction = process.env.NODE_ENV === "production";
-    const envWarnings: string[] = [];
-    const envFatals: string[] = [];
-
-    const jwtSecret = process.env.PRISM_JWT_SECRET ?? "";
-    if (jwtSecret.length < 32) {
-        if (isProduction) {
-            envFatals.push(
-                "PRISM_JWT_SECRET must be set to a string of at least 32 characters " +
-                "(generate via: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
-            );
-        } else {
-            // Dev convenience: auto-generate a persistent secret stored under
-            // the workspace data dir so the warning does not fire on every
-            // restart and so the same token survives across reboots.
-            try {
-                const dataDir = process.env.PRISM_DATA_DIR
-                    ?? join(process.env.USERPROFILE ?? process.env.HOME ?? process.cwd(), ".prism");
-                mkdirSync(dataDir, { recursive: true });
-                const secretPath = join(dataDir, ".prism-jwt-secret");
-                let secret = "";
-                if (existsSync(secretPath)) {
-                    secret = readFileSync(secretPath, "utf8").trim();
-                }
-                if (secret.length < 32) {
-                    secret = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
-                    writeFileSync(secretPath, secret, { encoding: "utf8", mode: 0o600 });
-                    console.warn(
-                        `[PRISM][startup] PRISM_JWT_SECRET not set — generated a development ` +
-                        `secret at ${secretPath} (mode 0600). Set PRISM_JWT_SECRET explicitly for ` +
-                        `production deployments.`,
-                    );
-                }
-                process.env.PRISM_JWT_SECRET = secret;
-            } catch (err) {
-                envWarnings.push(
-                    "PRISM_JWT_SECRET not set and dev auto-generation failed " +
-                    `(${(err as Error).message}) — authentication may be insecure`,
-                );
-            }
-        }
-    }
-
-    if (process.env.PRISM_AUTH_DISABLED === "true") {
-        const msg = "PRISM_AUTH_DISABLED=true disables dashboard authentication entirely";
-        if (isProduction) envFatals.push(`${msg} — forbidden when NODE_ENV=production`);
-        else envWarnings.push(`${msg} — only acceptable in development`);
-    }
-
-    if (isProduction && !process.env.PRISM_DATA_DIR) {
-        envFatals.push(
-            "PRISM_DATA_DIR must be set in production so SQLite databases, characters, " +
-            "plugin packs, and audit logs are persistent across container restarts",
-        );
-    }
-
-    if (!process.env.PRISM_DASHBOARD_PORT) {
-        envWarnings.push("PRISM_DASHBOARD_PORT not set — defaulting to 7070");
-    }
-
-    for (const warn of envWarnings) {
-        console.warn(`[PRISM][startup] WARN: ${warn}`);
-    }
-
-    if (envFatals.length > 0) {
-        console.error("\n[PRISM][startup] FATAL: refusing to boot in production with the following issues:");
-        for (const fatal of envFatals) {
-            console.error(`  - ${fatal}`);
-        }
-        console.error(
-            "\nSet NODE_ENV=development for local work, or fix the environment and retry. " +
-            "See .env.example at the workspace root for documentation of every variable.",
-        );
-        process.exit(1);
-    }
+    // ── Environment Validation ────────────────────────────────────────────
+    const { isProduction, warnings, fatals } = validateEnvironment();
+    printEnvValidation(warnings, fatals, isProduction);
 
     // Initialize persistent workspace
     ensureWorkspaceStructure(environmentProfile);
@@ -227,7 +168,7 @@ async function main(): Promise<void> {
     console.log(`[PRISM][autonomous] Browser + Computer agents initialized`);
     // ── Phase A2: Autonomous Agent Loop ──────────────────────────────────
     const policyEngine = new PolicyEngine();
-    
+
     // Initialize OAuth adapters early for tool injection
     const oauthTokenStore = createOAuthTokenStore();
     const gmailOAuth = new GmailOAuthAdapter(oauthTokenStore);
@@ -279,8 +220,11 @@ async function main(): Promise<void> {
         { approvalQueue, approvalTimeoutMs: 30_000, executionProfile },
     );
     const workflowExecutor = new WorkflowExecutor();
-    const demoHooksRef: { service: DashboardService | null } = { service: null };
-    const dashboardActions = createDashboardActions(orchestrator, workflowExecutor, approvalQueue, sessionId, demoHooksRef, activityBus);
+    let resolveDashboardService: ((svc: DashboardService) => void) | null = null;
+    const dashboardServiceReady = new Promise<DashboardService>((resolve) => {
+        resolveDashboardService = resolve;
+    });
+    const dashboardActions = createDashboardActions(orchestrator, workflowExecutor, approvalQueue, sessionId, dashboardServiceReady, activityBus);
     const dashboardService = new DashboardService(
         approvalQueue,
         activityBus,
@@ -329,7 +273,7 @@ async function main(): Promise<void> {
 
     // Late-bind the dashboard service into the workflow-demo action's hooks so
     // the demo can broadcast a UI tour and fire real BUA/CUA probes.
-    demoHooksRef.service = dashboardService;
+    resolveDashboardService!(dashboardService);
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
     const llmDelegate = dashboardService.getLlmDelegate();
     const agentTelemetry = new AgentTelemetryCollector();
@@ -471,448 +415,59 @@ async function main(): Promise<void> {
         console.warn("[PRISM][self-review]", warning);
     }
 
+    // ── Build AppContext for mode dispatch ────────────────────────────────────
+    const ctx: AppContext = {
+        sessionId,
+        runtimeMode,
+        cliSetup,
+        dashboardPort,
+        environmentProfile,
+        startedAt,
+        executionProfile,
+        consoleInterceptor,
+        activityBus,
+        sqliteStore,
+        approvalQueue,
+        episodicMemory,
+        metricsCollector,
+        semanticIndex,
+        retrievalDashboardStore,
+        sessionMemory,
+        chatSessionStore,
+        usageMeteringService,
+        gmailOAuth,
+        outlookOAuth,
+        adapterDb,
+        terminalAdapter,
+        containerAdapter,
+        registry,
+        mcpAdapter,
+        policyEngine,
+        orchestrator,
+        workflowExecutor,
+        devIdentity,
+        tabSessionRegistry,
+        telemetryAggregator,
+        covenant,
+        autonomousLoop,
+        autonomousBrowserAgent,
+        autonomousComputerAgent,
+        llmDelegate,
+        agentTelemetry,
+        agentLifecycle,
+        agentPool,
+        swarmCoordinator,
+        agentRouter,
+        dashboardService,
+        selfReviewScheduler,
+    };
+
     if (runtimeMode === "server") {
-        selfReviewScheduler.runInitialPass();
-        selfReviewScheduler.start();
-        activityBus.emit({
-            sessionId,
-            layer: "causal",
-            operation: "prism.server.started",
-            status: "succeeded",
-            details: {
-                environmentProfile,
-                dashboardPort,
-                startedAt,
-            },
-        });
-
-        console.log("\nPRISM server mode is running. Open the dashboard in your browser.");
-
-        // Auto-open setup wizard when --setup flag is passed
-        if (cliSetup) {
-            const setupUrl = `http://localhost:${dashboardPort}/setup`;
-            console.log(`[PRISM] --setup flag detected, opening wizard: ${setupUrl}`);
-            import("node:child_process").then(({ exec }) => {
-                const cmd = process.platform === "win32" ? `start "" "${setupUrl}"`
-                    : process.platform === "darwin" ? `open "${setupUrl}"`
-                        : `xdg-open "${setupUrl}"`;
-                exec(cmd, () => {/* best-effort */ });
-            }).catch(() => {/* ignore */ });
-        }
-
-        await waitForShutdown(async () => {
-            console.log("[PRISM][system] [INFO] Commencing graceful system shutdown sequence...");
-
-            // Emit shutdown event to all activity subscribers before stores close
-            console.log("[PRISM][system] [TRACE] Emitting 'system.shutdown' event to ActivityBus.");
-            activityBus.emit({
-                operation: "system.shutdown",
-                status: "started",
-                sessionId: "system",
-                layer: "agent",
-                details: {},
-            });
-
-            // Persist agent state before shutdown
-            console.log("[PRISM][system] [TRACE] Persisting agent lifecycle states to state/agents.json...");
-            try {
-                const { writeFileSync, mkdirSync } = await import("node:fs");
-                const persistDir = workspacePath("state");
-                mkdirSync(persistDir, { recursive: true });
-                const persistPath = workspacePath("state", "agents.json");
-                writeFileSync(persistPath, JSON.stringify(agentLifecycle.serializePersistent(), null, 2));
-                console.log("[PRISM][system] [TRACE] Agent states persisted successfully.");
-            } catch (err) {
-                console.warn("[PRISM][system] [WARN] Best-effort agent state persistence failed:", err);
-            }
-
-            console.log("[PRISM][system] [TRACE] Deactivating agent reapers and schedulers...");
-            agentLifecycle.stopReaper();
-            selfReviewScheduler.stop();
-
-            console.log("[PRISM][system] [TRACE] Disconnecting all active MCP client interfaces...");
-            mcpAdapter.disconnectAll();
-
-            console.log("[PRISM][system] [TRACE] Flushing and closing persistent databases...");
-            sqliteStore.close();
-            retrievalDashboardStore.close();
-            sessionMemory.close();
-            chatSessionStore.close();
-            adapterDb.close();
-            console.log("[PRISM][system] [TRACE] SQLite activity, retrieval, memory, and chat stores closed.");
-
-            console.log("[PRISM][system] [TRACE] Terminating operator console HTTP/WS dashboard service...");
-            await dashboardService.stop();
-            console.log("[PRISM][system] [INFO] Graceful shutdown process complete. System offline.");
-        });
+        await runServerMode(ctx);
         return;
     }
 
-    console.log("\n--- DEMO 1: Tier 1 autonomous (file_list) ---");
-    await orchestrator.run({
-        operation: "file_list",
-        args: { path: "." },
-        risk: "low",
-        mutatesState: false,
-    });
-
-    console.log("\n--- DEMO 2: Tier 2 conditional (file_write) ---");
-    await orchestrator.run({
-        operation: "file_write",
-        args: { path: "./prism-output/hello.txt", content: "PRISM Phase 1 operational\n" },
-        risk: "medium",
-        mutatesState: true,
-        rollbackPlan: "delete prism-output/hello.txt",
-    });
-
-    console.log("\n--- DEMO 3: Tier 2 conditional (shell_exec) ---");
-    await orchestrator.run({
-        operation: "shell_exec",
-        args: { command: "node --version", timeoutMs: 5000 },
-        risk: "medium",
-        mutatesState: false,
-        rollbackPlan: "read-only command",
-    });
-
-    console.log("\n--- DEMO 4: Tier 3 approval-gated (file_write critical) ---");
-    setTimeout(() => {
-        const pending = approvalQueue.list();
-        if (pending.length > 0) {
-            console.log("[AUTO-DEMO] Approving id=" + pending[0]!.id);
-            approvalQueue.approve(pending[0]!.id);
-        }
-    }, 2000);
-    await orchestrator.run({
-        operation: "file_write",
-        args: { path: "./prism-output/critical.cfg", content: "PRISM_MODE=production\n" },
-        risk: "high",
-        mutatesState: true,
-        rollbackPlan: "restore critical.cfg from git checkpoint",
-    });
-
-    console.log("\n--- DEMO 5: Tier 1 autonomous (semantic_query) ---");
-    await orchestrator.run({
-        operation: "semantic_query",
-        args: { query: "approval file_write", limit: 3, sessionId },
-        risk: "low",
-        mutatesState: false,
-    });
-
-    console.log("\n--- DEMO 6: Tier 1 autonomous (memory_query mode=all) ---");
-    await orchestrator.run({
-        operation: "memory_query",
-        args: { mode: "all", query: "approval file_write", limit: 3, sessionId },
-        risk: "low",
-        mutatesState: false,
-    });
-
-    console.log("\n--- DEMO 7: Multi-step workflow with fallbacks ---");
-    const dag = workflowExecutor.createDAG(
-        "Demo Workflow",
-        [
-            { id: "step1", operation: "file_list", args: { path: "." }, risk: "low", mutatesState: false },
-            { id: "step2", operation: "memory_query", args: { mode: "episodic_recent", limit: 2 }, risk: "low", mutatesState: false },
-        ],
-        [],
-    );
-    await orchestrator.runWorkflow(dag);
-
-    const events = activityBus.listEvents();
-    const semanticMatches = semanticIndex.query("approval file_write", 3);
-    const episodeSnapshot = episodicMemory.snapshot(8);
-    const sessionSummary = sessionMemory.getSessionSummary(sessionId);
-    const retrievalStats = metricsCollector.getStats(50);
-    const retrievalDiagnostics = metricsCollector.getGrowthAndDriftDiagnostics(5, 0.12);
-    const retrievalCohorts = metricsCollector.getCohortDashboard(50, 3, 1);
-    retrievalDashboardStore.saveSnapshot(sessionId, retrievalCohorts);
-    const recentCohortSnapshots = retrievalDashboardStore.getRecentSnapshots(3, sessionId);
-    const cohortTrend = retrievalDashboardStore.getTrendReport(sessionId, 10, 3, {
-        trendP95LatencyIncreaseMs: 80,
-    });
-
-    console.log("\n" + "=".repeat(60));
-    console.log("  Activity events recorded : " + events.length);
-    console.log("  Persisted to SQLite       : prism-activity.db");
-    console.log("  Approval service          : " + `http://localhost:${dashboardPort}/pending`);
-    console.log("  Episodic events buffered  : " + episodeSnapshot.count);
-    console.log("  Episodic token estimate   : " + episodeSnapshot.estimatedTokens);
-    console.log("  Semantic matches found    : " + semanticMatches.length);
-    console.log("  Retrieval hit rate        : " + (retrievalStats.hitRate * 100).toFixed(1) + "%");
-    console.log("  Retrieval coverage avg    : " + retrievalStats.avgCoverageScore.toFixed(2));
-    console.log("  Retrieval novelty avg     : " + retrievalStats.avgNoveltyScore.toFixed(2));
-    console.log("  Retrieval utility avg     : " + retrievalStats.avgUtilityScore.toFixed(2));
-    console.log("  Retrieval avg latency     : " + retrievalStats.avgLatencyMs.toFixed(1) + "ms");
-    console.log("  Retrieval p50 latency     : " + retrievalStats.p50LatencyMs.toFixed(1) + "ms");
-    console.log("  Retrieval p95 latency     : " + retrievalStats.p95LatencyMs.toFixed(1) + "ms");
-    console.log("  Retrieval p99 latency     : " + retrievalStats.p99LatencyMs.toFixed(1) + "ms");
-    console.log("  Retrieval drift score     : " + retrievalDiagnostics.driftScore.toFixed(3));
-    console.log("  Retrieval drift detected  : " + (retrievalDiagnostics.driftDetected ? "yes" : "no"));
-    console.log("  Retrieval volume trend    : " + retrievalDiagnostics.queryVolumeTrend);
-    console.log("  Cohort snapshots saved    : " + recentCohortSnapshots.length);
-    if (sessionSummary) {
-        console.log("  Session summary events    : " + sessionSummary.totalEvents);
-        console.log("  Session summary failures  : " + sessionSummary.failures);
-    }
-    console.log("=".repeat(60));
-
-    if (semanticMatches.length > 0) {
-        console.log("\nTop semantic retrieval matches:");
-        for (const match of semanticMatches) {
-            console.log(`  - ${match.operation} [${match.layer}] score=${match.score.toFixed(2)}`);
-        }
-    }
-
-    if (retrievalDiagnostics.alerts.length > 0) {
-        console.log("\nRetrieval diagnostics alerts:");
-        for (const alert of retrievalDiagnostics.alerts) {
-            console.log(`  - ${alert}`);
-        }
-    }
-
-    if (retrievalCohorts.cohorts.length > 0) {
-        console.log("\nTop retrieval cohorts:");
-        for (const cohort of retrievalCohorts.cohorts) {
-            console.log(
-                `  - ${cohort.cohortKey} count=${cohort.queryCount} ` +
-                `hitRate=${(cohort.hitRate * 100).toFixed(1)}% utility=${cohort.avgUtilityScore.toFixed(2)} ` +
-                `p95=${cohort.p95LatencyMs.toFixed(1)}ms`,
-            );
-        }
-    }
-
-    if (retrievalCohorts.alerts.length > 0) {
-        console.log("\nRetrieval cohort alerts:");
-        for (const alert of retrievalCohorts.alerts) {
-            console.log(`  - ${alert}`);
-        }
-    }
-
-    if (cohortTrend) {
-        console.log("\nRetrieval cohort baseline comparison:");
-        console.log(`  snapshots compared: ${cohortTrend.snapshotsCompared}`);
-        for (const trend of cohortTrend.topChanges) {
-            console.log(
-                `  - ${trend.cohortKey} utilityΔ=${trend.utilityDelta.toFixed(2)} ` +
-                `hitRateΔ=${(trend.hitRateDelta * 100).toFixed(1)}% ` +
-                `p95Δ=${trend.p95LatencyDeltaMs.toFixed(1)}ms`,
-            );
-        }
-
-        if (cohortTrend.alerts.length > 0) {
-            console.log("\nRetrieval cohort trend alerts:");
-            for (const alert of cohortTrend.alerts) {
-                console.log(`  - ${alert}`);
-            }
-        }
-    }
-
-    sqliteStore.close();
-    retrievalDashboardStore.close();
-    sessionMemory.close();
-    chatSessionStore.close();
-    adapterDb.close();
-    await dashboardService.stop();
-}
-
-function createDashboardActions(
-    orchestrator: Orchestrator,
-    workflowExecutor: WorkflowExecutor,
-    approvalQueue: ApprovalQueue,
-    sessionId: string,
-    demoHooksRef: { service: DashboardService | null },
-    activityBus: ActivityBus,
-): DashboardAction[] {
-    let actionInFlight = false;
-
-    const guarded = async (
-        run: () => Promise<{ message: string; details?: Record<string, unknown> }>,
-    ): Promise<{ message: string; details?: Record<string, unknown> }> => {
-        if (actionInFlight) {
-            throw new Error("Another action is already running. Please wait for completion.");
-        }
-        actionInFlight = true;
-        try {
-            return await run();
-        } finally {
-            actionInFlight = false;
-        }
-    };
-
-    return [
-        {
-            name: "run_file_list",
-            label: "Run file list demo",
-            description: "Runs a low-risk autonomous file listing operation.",
-            run: () => guarded(async () => {
-                await orchestrator.run({
-                    operation: "file_list",
-                    args: { path: "." },
-                    risk: "low",
-                    mutatesState: false,
-                });
-                return { message: "file_list demo completed." };
-            }),
-        },
-        {
-            name: "run_approval_demo",
-            label: "Queue approval-required action",
-            description: "Submits a high-risk write operation that requires manual approve/deny.",
-            run: () => guarded(async () => {
-                await orchestrator.run({
-                    operation: "file_write",
-                    args: { path: "./prism-output/dashboard-critical.cfg", content: "DASHBOARD_TRIGGERED=true\n" },
-                    risk: "high",
-                    mutatesState: true,
-                    rollbackPlan: "restore dashboard-critical.cfg from git checkpoint",
-                });
-                return {
-                    message: "Approval-required action submitted.",
-                    details: { pendingApprovals: approvalQueue.list().length },
-                };
-            }),
-        },
-        {
-            name: "run_workflow_demo",
-            label: "Run workflow demo",
-            description: "Visual UI tour + a 2-step DAG + a real (best-effort) browser-use and computer-use probe so the operator can watch PRISM operate itself.",
-            run: () => guarded(async () => {
-                const dag = workflowExecutor.createDAG(
-                    "Dashboard Workflow",
-                    [
-                        { id: "step1", operation: "file_list", args: { path: "." }, risk: "low", mutatesState: false },
-                        { id: "step2", operation: "memory_query", args: { mode: "episodic_recent", limit: 2, sessionId }, risk: "low", mutatesState: false },
-                    ],
-                    [],
-                );
-
-                // ── Cosmetic UI tour: walks every operator console tab so the user
-                //    can literally watch PRISM cycle through Chat → Agentic → Computer
-                //    → Browser → Logs while the underlying DAG + BUA + CUA run in
-                //    parallel. Suppress with PRISM_DEMO_TOUR_DISABLED=1.
-                const svc = demoHooksRef.service;
-                const tour = svc
-                    ? svc.broadcastUiTour([
-                        { tabId: "chat", dwellMs: 600, message: "Workflow demo started" },
-                        { tabId: "agentic", anchor: "guardian-status", dwellMs: 1500, message: "Guardian observing the run" },
-                        { tabId: "computer", dwellMs: 1500, message: "Computer-use probe — capturing a screengrab" },
-                        { tabId: "browser", dwellMs: 1800, message: "Browser-use probe — launching a headless session" },
-                        { tabId: "logs", anchor: "actions", dwellMs: 1500, message: "Quick Actions running" },
-                        { tabId: "logs", anchor: "action-history", dwellMs: 1500, message: "Action recorded in history" },
-                        { tabId: "chat", dwellMs: 200, message: "Workflow demo complete" },
-                    ])
-                    : Promise.resolve();
-
-                // ── Real CUA probe: take a single framebuffer screengrab. Best-effort,
-                //    fails gracefully on headless servers / restricted environments.
-                const cuaProbe = (async () => {
-                    if (!svc) return;
-                    try {
-                        const fb = svc.getFramebufferCapture();
-                        const result = await fb.captureSingle();
-                        activityBus.emit({
-                            sessionId, layer: "tool_execution", operation: "cua.screengrab",
-                            status: "succeeded",
-                            details: { source: "workflow_demo", path: (result as Record<string, unknown>)?.path ?? null },
-                        });
-                    } catch (err) {
-                        activityBus.emit({
-                            sessionId, layer: "tool_execution", operation: "cua.screengrab",
-                            status: "failed",
-                            details: { source: "workflow_demo", error: String(err) },
-                        });
-                    }
-                })();
-
-                // ── Real BUA probe: launch a headless browser, navigate to about:blank,
-                //    take a screenshot, close. Best-effort — fails gracefully when no
-                //    Chromium is available (e.g. fresh Windows dev box without Playwright).
-                const buaProbe = (async () => {
-                    if (!svc) return;
-                    try {
-                        const reg = svc.getToolRegistry();
-                        const tool = reg ? (reg.get("browser_control") as unknown as { getManager?: () => { launch: (o: Record<string, unknown>) => Promise<{ id: string }>; navigate: (id: string, url: string) => Promise<unknown>; screenshot: (id: string) => Promise<unknown>; closeSession: (id: string) => Promise<void>; } } | null) : null;
-                        const mgr = tool?.getManager?.();
-                        if (!mgr) {
-                            activityBus.emit({
-                                sessionId, layer: "tool_execution", operation: "bua.probe",
-                                status: "failed",
-                                details: { source: "workflow_demo", error: "browser_control tool not available" },
-                            });
-                            return;
-                        }
-                        const session = await mgr.launch({ headless: true });
-                        try {
-                            await mgr.navigate(session.id, "about:blank");
-                            await mgr.screenshot(session.id);
-                            activityBus.emit({
-                                sessionId, layer: "tool_execution", operation: "bua.probe",
-                                status: "succeeded",
-                                details: { source: "workflow_demo", url: "about:blank", sessionId: session.id },
-                            });
-                        } finally {
-                            try { await mgr.closeSession(session.id); } catch { /* swallow close errors */ }
-                        }
-                    } catch (err) {
-                        activityBus.emit({
-                            sessionId, layer: "tool_execution", operation: "bua.probe",
-                            status: "failed",
-                            details: { source: "workflow_demo", error: String(err) },
-                        });
-                    }
-                })();
-
-                // Run the underlying DAG concurrently with the cosmetic tour and the
-                // BUA/CUA probes. The DAG is the substantive workload; the others are
-                // observable side-quests that surface in Recent Action History.
-                const [, , , ] = await Promise.all([
-                    orchestrator.runWorkflow(dag),
-                    tour,
-                    cuaProbe,
-                    buaProbe,
-                ]);
-
-                return { message: "Workflow demo completed (DAG + UI tour + BUA + CUA)." };
-            }),
-        },
-    ];
-}
-
-function resolveRuntimeMode(rawMode?: string): "demo" | "server" {
-    const normalized = (rawMode ?? "").trim().toLowerCase();
-    if (normalized === "server" || normalized === "web") {
-        return "server";
-    }
-    return "demo";
-}
-
-function resolveIntervalMs(rawValue: string | undefined, fallbackMs: number): number {
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-        return fallbackMs;
-    }
-
-    const minimumMs = 60_000;
-    return Math.max(minimumMs, Math.floor(parsed));
-}
-
-function waitForShutdown(cleanup: () => Promise<void>): Promise<void> {
-    return new Promise((resolve, reject) => {
-        let shuttingDown = false;
-
-        const shutdown = (signal: string): void => {
-            if (shuttingDown) {
-                return;
-            }
-            shuttingDown = true;
-            console.log(`\n[PRISM] Received ${signal}. Shutting down...`);
-            void cleanup()
-                .then(() => resolve())
-                .catch((error) => reject(error));
-        };
-
-        process.once("SIGINT", () => shutdown("SIGINT"));
-        process.once("SIGTERM", () => shutdown("SIGTERM"));
-    });
+    await runDemoMode(ctx);
 }
 
 main().catch((error: unknown) => {

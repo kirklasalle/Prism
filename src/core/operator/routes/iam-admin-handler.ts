@@ -25,6 +25,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { createHash } from "node:crypto";
 import type { DashboardService } from "../dashboard-service.js";
 import type { IRouteHandler } from "./types.js";
 import type { IamStore, IamUserStatus } from "../../iam/store.js";
@@ -88,6 +89,9 @@ export class IamAdminRouteHandler implements IRouteHandler {
             // /users
             if (path === "/api/iam/admin/users" && method === "GET") {
                 return this.listUsers(tenantId, res);
+            }
+            if (path === "/api/iam/admin/users" && method === "POST") {
+                return await this.createUser(req, tenantId, res, service);
             }
             const userStatusM = /^\/api\/iam\/admin\/users\/([^/]+)\/status$/.exec(path);
             if (userStatusM && method === "POST") {
@@ -188,6 +192,43 @@ export class IamAdminRouteHandler implements IRouteHandler {
         }
         this.store.removeMembership(userId, tenantId, role.id);
         return this.json(res, 200, { ok: true });
+    }
+
+    private async createUser(
+        req: IncomingMessage, tenantId: string, res: ServerResponse, service: DashboardService,
+    ): Promise<void> {
+        const body = await this.readJson(req, service);
+        if (!body || typeof body !== "object") {
+            return this.json(res, 400, { error: { code: "invalid_value", message: "missing JSON body" } });
+        }
+        const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+        if (!email) {
+            return this.json(res, 400, { error: { code: "invalid_value", message: "email is required" } });
+        }
+        const existing = this.store.getUserByEmail(tenantId, email);
+        if (existing) {
+            return this.json(res, 409, { error: { code: "uniqueness", message: `user already exists: ${email}` } });
+        }
+        const displayName = typeof body.displayName === "string" ? body.displayName.trim() : email;
+        const status = body.status === "suspended" ? "suspended" : "active";
+        
+        let passwordHash: string | undefined;
+        if (typeof body.password === "string" && body.password.trim()) {
+            passwordHash = createHash("sha256").update(body.password.trim(), "utf-8").digest("hex");
+        }
+
+        const attrs = passwordHash ? { passwordHash } : {};
+        const user = this.store.createUser({
+            tenantId,
+            email,
+            displayName,
+            status,
+            attrs,
+        });
+        const viewer = this.store.getRoleByName(tenantId, "viewer");
+        if (viewer) this.store.addMembership(user.id, tenantId, viewer.id);
+
+        return this.json(res, 201, this.store.getUser(user.id)!);
     }
 
     private listRoles(tenantId: string, res: ServerResponse): void {

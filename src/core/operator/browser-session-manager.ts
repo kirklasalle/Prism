@@ -153,7 +153,7 @@ export class BrowserSessionManager {
   async launch(options?: BrowserLaunchOptions): Promise<BrowserSession> {
     const pw = await this.playwright();
     const id = options?.sessionId ?? `browser-${randomUUID().slice(0, 8)}`;
-    const headless = options?.headless ?? true;
+    const headless = options?.headless ?? false;
     const now = new Date().toISOString();
 
     const meta: BrowserSession = {

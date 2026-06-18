@@ -155,6 +155,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
     notes_extraction: "Notes operations. Args: action (string, required).",
     tasks_timeline: "Task management operations. Args: action (string, required).",
     vision_capture: "Capture screenshots. Args: action (string: capture|burst|list|get), options (object).",
+    browser_control: "Automate a browser session via Playwright. Actions include: launch_session, navigate, click, type, screenshot, evaluate, get_accessibility_tree, get_page_info. Args: action (string, required), sessionId, url, selector, text, expression, headless (boolean).",
+    computer: "Control the host computer via mouse and keyboard (following the Anthropic Computer Use API pattern). Actions include: mouse_move, left_click, type, key, screenshot. Args: action (string, required), coordinate (array), text (string).",
     semantic_query: "Query semantic memory for relevant context. Args: query (string, required).",
     ask_reasoning_model: "Delegate a complex reasoning, coding, or analysis task to the primary reasoning model. Args: prompt (string, required).",
     memory_query: "Query episodic and session memory. Args: query (string, required).",

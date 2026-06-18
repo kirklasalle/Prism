@@ -66,7 +66,7 @@ export async function testPolicyEngine(): Promise<void> {
     // Test: high-risk whitelisted should be tier3_allow
     const bypassProfile: ExecutionProfile = {
         segment: "business",
-        tier1AutonomuousAllowed: true,
+        tier1AutonomousAllowed: true,
         tier2ConditionalAllowed: true,
         tier3ApprovalRequired: true,
         tier3WhitelistBypass: true,  // Enable whitelist bypass for this test

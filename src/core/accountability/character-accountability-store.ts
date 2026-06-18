@@ -28,8 +28,8 @@ export interface CharacterAssignment {
     permissionScopes?: PermissionScope[];
     /** Phase E5: ISO-8601 timestamp when the operator email was verified via OAuth. */
     emailVerifiedAt?: string | null;
-    /** Phase E5: which OAuth provider verified the email ("gmail" | "outlook"). */
-    emailVerifiedProvider?: "gmail" | "outlook" | null;
+    /** Phase E5: which OAuth provider verified the email ("gmail" | "outlook" | "mock_oauth"). */
+    emailVerifiedProvider?: "gmail" | "outlook" | "mock_oauth" | null;
 }
 
 export interface CharacterAssignmentFilter {
@@ -259,7 +259,7 @@ export class CharacterAccountabilityStore {
             permissionScopes,
             emailVerifiedAt: row.email_verified_at != null ? String(row.email_verified_at) : null,
             emailVerifiedProvider: row.email_verified_provider != null
-                ? (String(row.email_verified_provider) as "gmail" | "outlook")
+                ? (String(row.email_verified_provider) as "gmail" | "outlook" | "mock_oauth")
                 : null,
         };
     }

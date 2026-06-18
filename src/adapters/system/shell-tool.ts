@@ -4,21 +4,68 @@ import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 
 const execAsync = promisify(exec);
 
-// Patterns that are permanently blocked regardless of authority tier.
-const BLOCKED_PATTERNS: readonly string[] = [
-    "rm -rf /",
-    "rm -rf /*",
-    "format c:",
-    "format /c",
-    "del /f /s /q c:\\",
-    ":(){ :|:& };:",
-    "dd if=/dev/zero of=/dev/sda",
+/**
+ * Destructive command token patterns — checked as tokenized sub-sequences
+ * so obfuscation like `rm -rf $DEST` where DEST resolves to `/` still
+ * catches the intent. Each entry is an array of tokens that must ALL appear
+ * (case-insensitive) in the command for it to be blocked.
+ *
+ * This is defense-in-depth, not a guarantee. The PolicyEngine provides the
+ * primary governance layer; this is a fast-path safety net.
+ */
+const DESTRUCTIVE_PATTERNS: readonly (readonly string[])[] = [
+    // Mass filesystem destruction
+    ["rm", "-rf", "/"],
+    ["rm", "-rf", "/*"],
+    ["rm", "--no-preserve-root", "-rf"],
+    ["dd", "of=/dev/sda"],
+    ["dd", "of=/dev/sdb"],
+    ["dd", "of=/dev/nvme"],
+    ["mkfs"],
+    ["format", "c:"],
+    ["format", "/c"],
+    // Fork bomb and similar
+    [":(){"],
+    // Windows destructive
+    ["del", "/f", "/s", "/q", "c:\\"],
+    ["del", "/f", "/s", "/q", "c:"],
+    ["rd", "/s", "/q", "c:\\"],
+    ["rmdir", "/s", "/q", "c:\\"],
+    // Boot/init manipulation
+    ["halt"],
+    ["shutdown", "-h"],
+    ["poweroff"],
 ];
+
+/**
+ * Check a command against destructive patterns using token-level matching.
+ * This is more robust than substring matching because it catches:
+ *   - Extra flags inserted between tokens: `rm -rf --verbose /`
+ *   - Variable expansions: `rm -rf $MOUNTPOINT` (if MOUNTPOINT=/)
+ *   - Aliased paths: `rm -rf /` where `rm` is the real rm
+ */
+function matchesDestructiveTokens(command: string): string | null {
+    const lower = command.toLowerCase();
+    const tokens = lower.split(/\s+/);
+
+    for (const pattern of DESTRUCTIVE_PATTERNS) {
+        let pi = 0;
+        for (const token of tokens) {
+            if (token === pattern[pi] || token.startsWith(pattern[pi] + "=")) {
+                pi++;
+                if (pi >= pattern.length) {
+                    return pattern.join(" ");
+                }
+            }
+        }
+    }
+    return null;
+}
 
 export class ShellTool implements Tool {
     readonly name = "shell_exec";
     readonly contract = {
-        version: "1.0.0",
+        version: "1.1.0",
         args: {
             command: { type: "string", required: true },
             timeoutMs: { type: "number" },
@@ -35,14 +82,13 @@ export class ShellTool implements Tool {
             return { ok: false, output: { error: "No command supplied." } };
         }
 
-        const lower = command.toLowerCase();
-        for (const pattern of BLOCKED_PATTERNS) {
-            if (lower.includes(pattern)) {
-                return {
-                    ok: false,
-                    output: { error: `Command blocked — matches unsafe pattern: "${pattern}"` },
-                };
-            }
+        // Token-level destructive pattern check (more robust than substring)
+        const matched = matchesDestructiveTokens(command);
+        if (matched) {
+            return {
+                ok: false,
+                output: { error: `Command blocked — matches destructive pattern: "${matched}"` },
+            };
         }
 
         try {

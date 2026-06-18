@@ -253,6 +253,64 @@ export function clearUnifiedTelemetry() {
   renderUtEntries();
 }
 
+function appendLogsLiveTimelineEvent(ev) {
+  const root = document.getElementById('logs-live-timeline');
+  if (!root) return;
+  if (root.firstElementChild && root.firstElementChild.classList?.contains('muted')) {
+    root.innerHTML = '';
+  }
+  const t = new Date().toLocaleTimeString();
+  const it = ev.iteration != null ? `[i${ev.iteration}]` : '';
+  let line = '';
+  const color = (c) => `color:${c};`;
+  switch (ev.type) {
+    case 'text':
+      line = `<div style="margin:4px 0;">
+                <span class="muted">${t} ${it}</span>
+                <span style="${color('var(--text)')}"> 💭 ${escapeHtml(ev.text || '')}</span>
+            </div>`;
+      break;
+    case 'tool_call':
+      {
+        const tc = ev.toolCall || {};
+        const args = tc.arguments ? JSON.stringify(tc.arguments) : '{}';
+        line = `<div style="margin:4px 0;padding:4px 6px;border-left:3px solid var(--accent,#2da44e);background:rgba(45,164,78,0.06);">
+                        <span class="muted">${t} ${it}</span>
+                        <span style="${color('var(--accent,#2da44e)')};font-weight:600;"> 🔧 ${escapeHtml(tc.name || 'tool')}</span>
+                        <code style="font-size:11px;color:var(--muted);"> ${escapeHtml(args.slice(0, 240))}${args.length > 240 ? '…' : ''}</code>
+                    </div>`;
+      }
+      break;
+    case 'tool_result':
+      {
+        const tr = ev.toolResult || {};
+        const ok = tr.ok !== false;
+        const out = (tr.output || '').slice(0, 240);
+        line = `<div style="margin:2px 0 6px 12px;">
+                        <span class="muted">${t}</span>
+                        <span style="${color(ok ? 'var(--accent,#2da44e)' : 'var(--danger,#cf222e)')};"> ${ok ? '✓' : '✗'} ${escapeHtml(tr.name || 'tool')}</span>
+                        <span class="muted" style="font-size:11px;"> → ${escapeHtml(out)}${(tr.output || '').length > 240 ? '…' : ''}</span>
+                    </div>`;
+      }
+      break;
+    case 'error':
+      line = `<div style="margin:4px 0;color:var(--danger,#cf222e);">
+                <span class="muted">${t} ${it}</span> ✖ ${escapeHtml(ev.error || '')}
+            </div>`;
+      break;
+    case 'done':
+      line = `<div style="margin:8px 0;padding:6px;background:rgba(45,164,78,0.1);border-radius:4px;">
+                <span class="muted">${t} ${it}</span>
+                <span style="${color('var(--accent,#2da44e)')};font-weight:600;"> ◼ Run complete.</span>
+            </div>`;
+      break;
+    default:
+      line = `<div class="muted" style="margin:2px 0;">${t} ${escapeHtml(ev.type || 'event')}</div>`;
+  }
+  root.insertAdjacentHTML('beforeend', line);
+  root.scrollTop = root.scrollHeight;
+}
+
 function renderUtStats(stats) {
   var container = document.getElementById('unified-telemetry-stats');
   if (!container || !stats) return;
@@ -292,7 +350,7 @@ export function handleTelemetryWsMessage(data) {
     // Pipe real-time telemetry and trace logs directly into Activity Log
     var e = data.entry;
     var logSource = e.source || 'system';
-    
+
     // Normalize source mappings to align with activity log filter values
     if (logSource === 'diagnostics') logSource = 'diagnostics';
     else if (logSource === 'agent') logSource = 'agentic';
@@ -312,7 +370,7 @@ export function handleTelemetryWsMessage(data) {
     if (state.logEntries.length > 2000) {
       state.logEntries = state.logEntries.slice(-2000);
     }
-    
+
     if (state.activeTab === 'logs') {
       safeRenderStep('logsPanel', renderLogsPanel);
     }
@@ -468,7 +526,7 @@ export function initializeSupportDesk() {
 export function renderSupportCatalog(filteredItems) {
   var container = document.getElementById('support-catalog-container');
   if (!container) return;
-  
+
   var items = filteredItems || state.supportCatalog || [];
   if (items.length === 0) {
     container.innerHTML = '<div class="muted" style="padding:12px;font-size:11px;">No diagnostic signatures found.</div>';
@@ -478,26 +536,26 @@ export function renderSupportCatalog(filteredItems) {
   container.innerHTML = items.map(function (item) {
     var isExpanded = !!state.expandedSupportItems[item.id];
     var icon = isExpanded ? '▼' : '►';
-    var detailHtml = isExpanded ? 
+    var detailHtml = isExpanded ?
       '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:6px;">' +
-        '<div><strong>Signature Details:</strong> ' + escapeHtml(item.description) + '</div>' +
-        '<div style="color:#a78bfa;"><strong>Self-Healing Vector:</strong> ' + escapeHtml(item.healingAction) + '</div>' +
-        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
-          '<span>Code: <span class="mono">' + escapeHtml(item.id) + '</span></span>' +
-          '<span>State: ' + escapeHtml(item.health) + '</span>' +
-        '</div>' +
+      '<div><strong>Signature Details:</strong> ' + escapeHtml(item.description) + '</div>' +
+      '<div style="color:#a78bfa;"><strong>Self-Healing Vector:</strong> ' + escapeHtml(item.healingAction) + '</div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
+      '<span>Code: <span class="mono">' + escapeHtml(item.id) + '</span></span>' +
+      '<span>State: ' + escapeHtml(item.health) + '</span>' +
+      '</div>' +
       '</div>' : '';
 
     return '<div class="panel" style="padding:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);border-radius:6px;transition:all 0.2s ease;">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleSupportItem(\'' + escapeHtml(item.id) + '\')">' +
-        '<div style="display:flex;align-items:center;gap:6px;">' +
-          '<span style="color:#888;font-size:9px;">' + icon + '</span>' +
-          '<strong style="font-size:11px;color:#eee;">' + escapeHtml(item.title) + '</strong>' +
-        '</div>' +
-        '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:' + item.bg + ';color:' + item.color + ';font-weight:600;text-transform:uppercase;">' + escapeHtml(item.status) + '</span>' +
+      '<div style="display:flex;align-items:center;gap:6px;">' +
+      '<span style="color:#888;font-size:9px;">' + icon + '</span>' +
+      '<strong style="font-size:11px;color:#eee;">' + escapeHtml(item.title) + '</strong>' +
+      '</div>' +
+      '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:' + item.bg + ';color:' + item.color + ';font-weight:600;text-transform:uppercase;">' + escapeHtml(item.status) + '</span>' +
       '</div>' +
       detailHtml +
-    '</div>';
+      '</div>';
   }).join('');
 }
 
@@ -511,9 +569,9 @@ export function filterSupportCatalog() {
   }
   var filtered = state.supportCatalog.filter(function (item) {
     return item.title.toLowerCase().indexOf(q) !== -1 ||
-           item.id.toLowerCase().indexOf(q) !== -1 ||
-           item.tag.toLowerCase().indexOf(q) !== -1 ||
-           item.description.toLowerCase().indexOf(q) !== -1;
+      item.id.toLowerCase().indexOf(q) !== -1 ||
+      item.tag.toLowerCase().indexOf(q) !== -1 ||
+      item.description.toLowerCase().indexOf(q) !== -1;
   });
   renderSupportCatalog(filtered);
 }
@@ -526,7 +584,7 @@ export function toggleSupportItem(id) {
 
 export async function triggerSelfHealingSweep() {
   dashboardLog('logs', 'support.healing.sweep', 'Initiating world-class self-healing diagnostics sweep...');
-  
+
   // Create virtual log entries showing scanning
   var steps = [
     { op: "diagnostics.module.audit", sum: "Scanning registered operator panels..." },
@@ -536,8 +594,8 @@ export async function triggerSelfHealingSweep() {
   ];
 
   for (var i = 0; i < steps.length; i++) {
-    (function(step, delay) {
-      setTimeout(function() {
+    (function (step, delay) {
+      setTimeout(function () {
         dashboardLog('logs', step.op, '⚡ ' + step.sum);
         // Push to state logEntries to show in active view
         state.logEntries.push({
@@ -555,8 +613,8 @@ export async function triggerSelfHealingSweep() {
     })(steps[i], (i + 1) * 350);
   }
 
-  setTimeout(function() {
-    state.supportCatalog.forEach(function(item) {
+  setTimeout(function () {
+    state.supportCatalog.forEach(function (item) {
       item.status = "Verified";
       item.color = "#34d399";
       item.bg = "rgba(52,211,153,0.15)";
@@ -626,29 +684,29 @@ function renderServers(payload) {
     const tail = (s.stderrTail || []).slice(-5);
     const tailHtml = tail.length
       ? '<details style="margin-top:6px;"><summary class="muted" style="font-size:11px;cursor:pointer;">stderr tail</summary>'
-        + '<pre style="margin:4px 0 0 0;font-size:10.5px;white-space:pre-wrap;color:#ccc;background:rgba(0,0,0,0.3);padding:4px 6px;border-radius:4px;">'
-        + escapeHtml(tail.join('\n')) + '</pre></details>'
+      + '<pre style="margin:4px 0 0 0;font-size:10.5px;white-space:pre-wrap;color:#ccc;background:rgba(0,0,0,0.3);padding:4px 6px;border-radius:4px;">'
+      + escapeHtml(tail.join('\n')) + '</pre></details>'
       : '';
     const lastErr = s.lastError ? ('<div class="muted" style="font-size:11px;color:#ff9a85;margin-top:4px;">' + escapeHtml(s.lastError) + '</div>') : '';
     const nextRetry = s.nextRetryAt ? ('<div class="muted" style="font-size:11px;">next retry: ' + escapeHtml(new Date(s.nextRetryAt).toLocaleTimeString()) + '</div>') : '';
     return ''
       + '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:rgba(0,0,0,0.2);">'
-      +   '<div style="display:flex;align-items:center;gap:6px;">'
-      +     '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';"></span>'
-      +     '<strong style="font-size:13px;">' + escapeHtml(s.name) + '</strong>'
-      +     '<span class="muted" style="font-size:11px;margin-left:auto;">' + escapeHtml(s.state) + '</span>'
-      +   '</div>'
-      +   '<div class="muted" style="font-size:11px;margin-top:4px;">'
-      +     escapeHtml(String(s.toolCount || 0)) + ' tool(s)'
-      +     (s.retryCount > 0 ? (' · retries: ' + escapeHtml(String(s.retryCount))) : '')
-      +   '</div>'
-      +   nextRetry
-      +   lastErr
-      +   tailHtml
-      +   '<div style="margin-top:6px;">'
-      +     '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" '
-      +       'onclick="window.reconnectMcpServer && window.reconnectMcpServer(' + escapeHtml(JSON.stringify(s.name)) + ')">Reconnect</button>'
-      +   '</div>'
+      + '<div style="display:flex;align-items:center;gap:6px;">'
+      + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';"></span>'
+      + '<strong style="font-size:13px;">' + escapeHtml(s.name) + '</strong>'
+      + '<span class="muted" style="font-size:11px;margin-left:auto;">' + escapeHtml(s.state) + '</span>'
+      + '</div>'
+      + '<div class="muted" style="font-size:11px;margin-top:4px;">'
+      + escapeHtml(String(s.toolCount || 0)) + ' tool(s)'
+      + (s.retryCount > 0 ? (' · retries: ' + escapeHtml(String(s.retryCount))) : '')
+      + '</div>'
+      + nextRetry
+      + lastErr
+      + tailHtml
+      + '<div style="margin-top:6px;">'
+      + '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" '
+      + 'onclick="window.reconnectMcpServer && window.reconnectMcpServer(' + escapeHtml(JSON.stringify(s.name)) + ')">Reconnect</button>'
+      + '</div>'
       + '</div>';
   }).join('');
   summary.textContent = servers.length + ' server(s) · '
@@ -809,14 +867,14 @@ export async function submitSupportTicket() {
         }
       })
     });
-    
+
     // Clear inputs and hide form
     titleEl.value = '';
     descEl.value = '';
     toggleCreateTicketForm(false);
 
     dashboardLog('logs', 'support.ticket.created', '🎫 Created ticket ' + res.ticketId + ': "' + title + '"');
-    
+
     // Refresh tickets
     await loadSupportTickets();
   } catch (err) {
@@ -867,49 +925,49 @@ export function renderSupportTickets() {
 
     let detailHtml = '';
     if (isExpanded) {
-      const resolutionBlock = t.resolutionLog 
+      const resolutionBlock = t.resolutionLog
         ? '<div style="margin-top:8px;padding:8px 10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:6px;font-size:11px;color:#a7f3d0;">' +
-            '<strong style="color:#34d399;">🏥 RESOLUTION KNOWLEDGEBASE LOG:</strong> ' + escapeHtml(t.resolutionLog) +
-          '</div>'
+        '<strong style="color:#34d399;">🏥 RESOLUTION KNOWLEDGEBASE LOG:</strong> ' + escapeHtml(t.resolutionLog) +
+        '</div>'
         : '';
 
       const actions = t.status !== 'resolved'
         ? '<div style="display:flex;gap:6px;margin-top:10px;">' +
-            '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(249,115,22,0.3);color:#fb923c;" onclick="window.investigateSupportTicket(\'' + t.ticketId + '\')">🔎 Investigate</button>' +
-            '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(167,139,250,0.3);color:#c084fc;" onclick="window.selfHealSupportTicket(\'' + t.ticketId + '\')">⚡ Self-Heal</button>' +
-            '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(34,197,94,0.3);color:#4ade80;" onclick="window.resolveSupportTicketPrompt(\'' + t.ticketId + '\')">✅ Resolve</button>' +
-          '</div>'
+        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(249,115,22,0.3);color:#fb923c;" onclick="window.investigateSupportTicket(\'' + t.ticketId + '\')">🔎 Investigate</button>' +
+        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(167,139,250,0.3);color:#c084fc;" onclick="window.selfHealSupportTicket(\'' + t.ticketId + '\')">⚡ Self-Heal</button>' +
+        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(34,197,94,0.3);color:#4ade80;" onclick="window.resolveSupportTicketPrompt(\'' + t.ticketId + '\')">✅ Resolve</button>' +
+        '</div>'
         : '';
 
-      detailHtml = 
+      detailHtml =
         '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:6px;">' +
-          '<div><strong>Incident Description:</strong> ' + escapeHtml(t.description) + '</div>' +
-          resolutionBlock +
-          '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:4px;">' +
-            '<span>Log Source: <span class="mono" style="color:#eee;">' + escapeHtml(t.source) + '</span></span>' +
-            '<span>Logged: ' + escapeHtml(timeStr) + '</span>' +
-          '</div>' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">' +
-            actions +
-            '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(239,68,68,0.25);color:#f87171;margin-left:auto;" onclick="window.deleteSupportTicket(\'' + t.ticketId + '\')">🗑️ Delete</button>' +
-          '</div>' +
+        '<div><strong>Incident Description:</strong> ' + escapeHtml(t.description) + '</div>' +
+        resolutionBlock +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:4px;">' +
+        '<span>Log Source: <span class="mono" style="color:#eee;">' + escapeHtml(t.source) + '</span></span>' +
+        '<span>Logged: ' + escapeHtml(timeStr) + '</span>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">' +
+        actions +
+        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(239,68,68,0.25);color:#f87171;margin-left:auto;" onclick="window.deleteSupportTicket(\'' + t.ticketId + '\')">🗑️ Delete</button>' +
+        '</div>' +
         '</div>';
     }
 
     return '<div class="panel" style="padding:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);border-radius:6px;transition:all 0.2s ease;">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="window.toggleSupportItem(\'' + t.ticketId + '\')">' +
-        '<div style="display:flex;align-items:center;gap:6px;">' +
-          '<span style="color:#888;font-size:9px;">' + icon + '</span>' +
-          '<span class="mono" style="font-size:10px;color:#888;">[' + t.ticketId + ']</span>' +
-          '<strong style="font-size:11.5px;color:#eee;">' + escapeHtml(t.title) + '</strong>' +
-        '</div>' +
-        '<div style="display:flex;gap:6px;align-items:center;">' +
-          '<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:' + sev.bg + ';color:' + sev.fg + ';font-weight:600;text-transform:uppercase;">' + t.severity + '</span>' +
-          '<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:' + stat.bg + ';color:' + stat.color + ';font-weight:600;text-transform:uppercase;">' + stat.text + '</span>' +
-        '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;">' +
+      '<span style="color:#888;font-size:9px;">' + icon + '</span>' +
+      '<span class="mono" style="font-size:10px;color:#888;">[' + t.ticketId + ']</span>' +
+      '<strong style="font-size:11.5px;color:#eee;">' + escapeHtml(t.title) + '</strong>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;align-items:center;">' +
+      '<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:' + sev.bg + ';color:' + sev.fg + ';font-weight:600;text-transform:uppercase;">' + t.severity + '</span>' +
+      '<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:' + stat.bg + ';color:' + stat.color + ';font-weight:600;text-transform:uppercase;">' + stat.text + '</span>' +
+      '</div>' +
       '</div>' +
       detailHtml +
-    '</div>';
+      '</div>';
   }).join('');
 }
 
@@ -1047,6 +1105,9 @@ export function initLogsTab() {
         const msg = JSON.parse(ev.data);
         if (msg && msg.type === 'console' && typeof msg.line === 'string') {
           pushConsoleEntry({ ts: msg.ts, stream: msg.stream, line: msg.line });
+        }
+        if (msg && msg.type === 'agentic_event' && msg.event) {
+          appendLogsLiveTimelineEvent(msg.event);
         }
       } catch { /* ignore */ }
     });

@@ -398,6 +398,24 @@ const RECOMMENDED_MODELS = [
     ollamaTag: "qwen2.5-vl:3b-q4_K_M"
   },
   {
+    name: "Gemma 3 1B (Low VRAM 4GB)",
+    fileName: "google_gemma-3-1b-it-Q4_K_M.gguf",
+    size: "0.8 GB",
+    url: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "gemma3:1b"
+  },
+  {
+    name: "Gemma 3 4B (Balanced)",
+    fileName: "google_gemma-3-4b-it-Q4_K_M.gguf",
+    size: "2.8 GB",
+    url: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf",
+    mmprojUrl: "",
+    mmprojName: "",
+    ollamaTag: "gemma3:4b"
+  },
+  {
     name: "Gemma 4 E2B (~2B Agentic)",
     fileName: "gemma-2-2b-it-Q4_K_M.gguf",
     size: "1.6 GB",

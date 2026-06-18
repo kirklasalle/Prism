@@ -433,6 +433,7 @@ export function loginHtml(port: number): string {
       if (!ok) {
         setBanner(manageStatus, 'Please log in first to manage operators.', true);
         manageContent.style.display = 'none';
+        if (loginPanel) loginPanel.style.display = 'block';
         return;
       }
       const roles = Array.isArray(json?.principal?.roles) ? json.principal.roles : [];
@@ -560,15 +561,13 @@ export function loginHtml(port: number): string {
         return;
       }
       setBanner(manageStatus, 'Creating operator account...', true);
-      const { ok, json } = await fetchJson('/scim/v2/Users', {
+      const { ok, json } = await fetchJson('/api/iam/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
-          userName: email,
+          email: email,
           displayName: email,
-          password,
-          active: true,
+          password: password,
         }),
       });
       if (!ok) {

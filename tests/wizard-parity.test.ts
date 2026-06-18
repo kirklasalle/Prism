@@ -141,11 +141,11 @@ describe("Wizard Parity — Advanced Step Count", () => {
         );
     });
 
-    it("Basic wizard has 4 steps (web, TUI, CLI)", () => {
-        // Basic wizard: profile, workspace, provider, summary
-        const BASIC_STEPS = 4;
+    it("Basic wizard has 5 steps (web, TUI, CLI)", () => {
+        // Basic wizard: profile, workspace, character, CAC identity, provider + guardian setup
+        const BASIC_STEPS = 5;
         // This is a structural assertion — the actual step count is hardcoded in each surface
-        assert.strictEqual(BASIC_STEPS, 4, "All basic wizards should have 4 steps");
+        assert.strictEqual(BASIC_STEPS, 5, "All basic wizards should have 5 steps");
     });
 });
 
@@ -265,6 +265,8 @@ describe("Wizard Parity — API Client Endpoint Coverage", () => {
         assert.ok(typeof client.getSetupPrerequisites === "function", "getSetupPrerequisites");
         assert.ok(typeof client.postSetupProfile === "function", "postSetupProfile");
         assert.ok(typeof client.postSetupWorkspace === "function", "postSetupWorkspace");
+        assert.ok(typeof client.postSetupCharacter === "function", "postSetupCharacter");
+        assert.ok(typeof client.postSetupCac === "function", "postSetupCac");
         assert.ok(typeof client.postSetupComplete === "function", "postSetupComplete");
         assert.ok(typeof client.postProviderTest === "function", "postProviderTest");
         assert.ok(typeof client.postProviderKey === "function", "postProviderKey");

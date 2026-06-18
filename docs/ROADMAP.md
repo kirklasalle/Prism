@@ -1,6 +1,7 @@
 # PRISM Roadmap
 
-Date: 2026-03-11
+**Date:** 2026-06-17 (updated from audit — see Phase R)
+**Previous:** 2026-03-11
 
 ## Phase A (Done)
 
@@ -263,7 +264,7 @@ Establish a two-mode dashboard experience: Simple Mode for individual users (cha
   - Character (Aria/Phoenix/Sentinel) selection as entry point
   - Minimal chrome: conversation window, provider status pill, history sidebar
 - **Advanced Mode toggle**: Existing full operator dashboard behind explicit switch
-- **CAC Identity Panel** in Settings tab: visual accountability chain inspector, assignment lifecycle timeline, identity audit export (JSON/CSV)
+- **CAC Identity Panel** in Settings tab: visual accountability chain inspector, assignment lifecycle timeline, and identity audit export (JSON/CSV)
 - **SLO Gauge Panel** in Telemetry tab: real-time SLO health indicators (p50/p95/p99 vs target)
 - **Live Plugin Enable/Disable Toggle** in Tools tab: MCP server health control + immediate effect
 - **Incident Triage UI** in Logs & Debug tab: guided runbook steps, copy-to-clipboard evidence
@@ -625,25 +626,97 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 
 ---
 
-## 2026 Q2 — Phase R (Readiness) and Beyond
+## Phase R — Readiness: Audit Remediation (2026 Q3)
 
-Phase R (Readiness) has been added between Phase E and Phase F based on the [2026 Q2 audit](PRISM_FULL_AUDIT_2026_Q2.md). Phase R closes the gap between "code complete" and "user-testable + production-deployable."
+> **Objective:** Address all findings from the June 17, 2026 world-class codebase audit
+> (`audit.md` at repository root). Targeted engineering improvements to close the gap
+> between "strong architectural foundation" and "true world-class quality."
 
-For the full roadmap — E-Close residuals, Phase R's 8 workstreams (R1 config hygiene, R2 security hardening, R3 wizard UX, R4 E2E tests, R5 ops/data, R6 observability, R7 CI/CD, R8 docs), and extended F / G / H / I plans — see:
+**Source:** `audit.md` — World-Class Complete Codebase Audit (2026-06-17)
 
-- [PRISM_UPDATED_ROADMAP_2026_Q2.md](PRISM_UPDATED_ROADMAP_2026_Q2.md) — formal updated roadmap
-- [READINESS_RUNBOOK.md](READINESS_RUNBOOK.md) — operator checklist with task IDs, target files, acceptance criteria, and effort bands
-- [PRISM_FULL_AUDIT_2026_Q2.md](PRISM_FULL_AUDIT_2026_Q2.md) — audit baseline and canonical gap list G-1 through G-25
-- [PRISM_COMPETITIVE_AaaS_MAP_2026.md](PRISM_COMPETITIVE_AaaS_MAP_2026.md) — AaaS market survey and competitive positioning
+### R1: Build & Source Tree Hygiene
 
-Phase summary:
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R1a | Clean committed `.js`/`.d.ts`/`.js.map` artifacts from `src/core/policy/` and `src/core/memory/` | 1 hr | P1 |
+| R1b | Verify `.gitignore` patterns prevent re-contamination (`src/**/*.js`, `src/**/*.d.ts`, `src/**/*.js.map`) | 30 min | P1 |
+| R1c | Add incremental build support (`tsc --build` with project references or `tsx watch` for dev) | 4 hrs | P2 |
+| R1d | Audit and normalize `.js` imports in `tests/index.ts` — prefer `.ts` source imports for clarity | 2 hrs | P2 |
 
-| Phase | Status | Window |
-|---|---|---|
-| A / B / C / D1 / D2 / D3 / D4 | Closed | Through April 2026 |
-| E — Integration Hardening | Active | May–Jun 2026 |
-| **R — Readiness (NEW)** | Planned | Jun–Jul 2026 |
-| F — Expansion (A2A, OCI, Python SDK) | Planned | Aug–Oct 2026 |
-| G — Ecosystem (marketplace, docs site) | Planned | Nov 2026 – Q1 2027 |
-| H — Enterprise (SSO, multi-tenant, HA) | Planned | Q2 2027 |
-| I — Compliance & Scale (SOC 2 II) | Planned | Q3 2027 |
+### R2: Architecture & Refactoring
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R2a | Begin `src/index.ts` decomposition: extract bootstrap phases into `src/bootstrap/` modules (identity, telemetry, agents, tools, dashboard) | 3-5 days | P0 |
+| R2b | Centralize SQLite connections under a single `DatabaseManager` singleton with connection pooling | 1 day | P2 |
+| R2c | Replace `demoHooksRef` mutable-ref-through-const pattern with proper promise-based lazy initialization | 1 hr | P2 |
+| R2d | Add configurable shutdown timeout to `waitForShutdown()` (default 30s, kill -9 after) | 1 hr | P2 |
+
+### R3: Security Hardening
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R3a | JWT secret dev fallback uses `crypto.randomBytes(32).toString('hex')` ✅ **FIXED IN AUDIT** | — | — |
+| R3b | ShellTool command filtering upgraded to token-level destructive pattern detection ✅ **FIXED IN AUDIT** | — | — |
+| R3c | Add SQL parameterization audit across all adapter store implementations | 2 days | P2 |
+| R3d | Add `ShellTool` test suite covering tokenized-blocklist bypass attempts | 4 hrs | P2 |
+
+### R4: CI/CD Pipeline Cleanup
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R4a | Fix `quality-gates.yml` duplicate YAML document ✅ **FIXED IN AUDIT** | — | — |
+| R4b | Normalize Node.js versions across all workflow files (22 LTS consistently) | 30 min | P1 |
+| R4c | Add compiled-artifact check to `ci.yml` (fail if `.js`/`.d.ts` files found in `src/`) | 30 min | P1 |
+| R4d | Add matrix strategy to `ci.yml` build job (Node 22 + 23) | 1 hr | P2 |
+| R4e | Add `markdownlint` step to CI for CHANGELOG.md quality gate | 30 min | P2 |
+
+### R5: Code Quality
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R5a | Rename `tier1AutonomuousAllowed` → `tier1AutonomousAllowed` across interface, profiles, engine, and benchmarks ✅ **FIXED IN AUDIT** | — | — |
+| R5b | Add `eslint` + `prettier` configuration with pre-commit hook | 1 day | P2 |
+| R5c | Add `.editorconfig` for consistent formatting across editors | 30 min | P2 |
+
+### R6: Documentation & UX
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R6a | Prune stale/overlapping audit docs: consolidate `PRISM_FULL_AUDIT_2026*.md` into single living document | 1 day | P2 |
+| R6b | Fix CHANGELOG.md markdown lint errors (duplicate headings, missing code language, table style) | 2 hrs | P2 |
+| R6c | Add first-run `.env` auto-copy from `.env.example` with guided prompt | 4 hrs | P2 |
+| R6d | Add `DOCS_INDEX.md` curation with staleness dates | 2 hrs | P2 |
+
+### R7: DevOps & Deployment
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R7a | Add `extra_hosts: ["host.docker.internal:host-gateway"]` to docker-compose for local LLM access | 30 min | P2 |
+| R7b | Add database migration framework (schema version table + ordered migration files) | 2-3 days | P1 |
+| R7c | Optimize Dockerfile multi-stage build: `npm ci --omit=dev` in runtime stage | 1 hr | P2 |
+| R7d | Add Docker volume mappings for characters, skills, and MCP settings overrides | 1 hr | P2 |
+
+### R8: Database Centralization (Phase R Stretch)
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| R8a | Design `DatabaseManager` interface with shared connection pool, WAL mode coordination | 1 day | P2 |
+| R8b | Migrate `SqliteActivityStore`, `SessionMemoryStore`, `ChatSessionStore`, `UsageMeteringService`, `RetrievalDashboardStore` to shared manager | 2 days | P2 |
+| R8c | Add health check endpoint exposing per-store connection status | 1 hr | P2 |
+
+---
+
+## Target Quality Gates (Updated 2026-06-17)
+
+| Gate | Target | Current Estimate |
+|------|--------|-----------------|
+| Workflow success rate | >= 99.0% | ✅ Met |
+| Activity stream delivery p95 | <= 200ms | ✅ Met |
+| Policy decision latency p95 | <= 30ms | ✅ Met |
+| Retrieval latency p95 (hot) | <= 50ms | ✅ Met |
+| CI pipeline green on PR | 100% | ⚠️ Needs R4 fixes |
+| Compiled artifacts in src/ | **ZERO** | ❌ R1a needed |
+| Startup file length (index.ts) | < 500 lines | ❌ R2a needed |
+| CHANGELOG.md lint errors | **ZERO** | ❌ R6b needed |
+| Security scan findings (critical) | **ZERO** | ✅ Met |

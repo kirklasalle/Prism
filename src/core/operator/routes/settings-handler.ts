@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { IRouteHandler } from "./types.js";
 import { DashboardService } from "../dashboard-service.js";
 import { BrowserControlTool } from "../../../adapters/system/browser-control-tool.js";
@@ -123,6 +124,7 @@ export class SettingsHandler implements IRouteHandler {
         const body = await service.readJsonBody<{
           characterId?: string;
           operatorEmail?: string;
+          operatorPassword?: string;
           assistantEmail?: string;
           title?: string;
         }>(req);
@@ -138,7 +140,7 @@ export class SettingsHandler implements IRouteHandler {
         if (!available.some((c) => c.id === characterId)) {
           return this.json(res, 404, { error: `character_not_found: ${characterId}` });
         }
-        const operatorEmail = String(body.operatorEmail ?? `operator@prism.local`).trim();
+        const operatorEmail = String(body.operatorEmail ?? `operator@prism.local`).trim().toLowerCase();
         const assistantEmail = String(body.assistantEmail ?? `${characterId}@prism.local`).trim();
 
         // R3 wizard email deny-list check
@@ -147,6 +149,35 @@ export class SettingsHandler implements IRouteHandler {
           const err = new Error("Placeholder operator email is not allowed.") as Error & { code?: string };
           err.code = "operator-email-placeholder";
           throw err;
+        }
+
+        // If a password is provided, upsert this operator user in IamStore
+        const operatorPassword = body.operatorPassword ? String(body.operatorPassword).trim() : null;
+        if (operatorPassword) {
+          const store = service.getIamHandler().getStore();
+          const sha256Hex = (str: string) => createHash("sha256").update(str, "utf-8").digest("hex");
+          const passwordHash = sha256Hex(operatorPassword);
+          const existing = store.getUserByEmail("default", operatorEmail);
+          if (existing) {
+            existing.attrs = { ...existing.attrs, passwordHash };
+            store.updateUserAttrs(existing.id, existing.attrs);
+          } else {
+            const newUser = store.createUser({
+              tenantId: "default",
+              email: operatorEmail,
+              displayName: operatorEmail.split('@')[0] || "Operator",
+              status: "active",
+              attrs: { passwordHash },
+            });
+            const adminRole = store.getRoleByName("default", "admin");
+            if (adminRole) {
+              store.addMembership(newUser.id, "default", adminRole.id);
+            }
+            const operatorRole = store.getRoleByName("default", "operator");
+            if (operatorRole) {
+              store.addMembership(newUser.id, "default", operatorRole.id);
+            }
+          }
         }
 
         const session = service.createChatSession({
@@ -195,6 +226,33 @@ export class SettingsHandler implements IRouteHandler {
     // 7. POST /api/setup/complete
     if (method === "POST" && url === "/api/setup/complete") {
       try {
+        const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
+        const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
+        const isAdmin = authDisabled || (principal ? (principal.roles.includes("admin") || principal.roles.includes("root")) : true);
+
+        let packages = service.listSessionPackages();
+        if (!isAdmin && principal) {
+          const operatorSessionIds = new Set(
+            service.getChatStore().listSessions()
+              .filter(s => s.operatorEmail === principal.email)
+              .map(s => s.sessionId)
+          );
+          packages = packages.filter(pkg =>
+            pkg.sessionIds.some(sid => operatorSessionIds.has(sid))
+          );
+        }
+
+        const hasInitializationCertificate = packages.some(pkg =>
+          /Initialization Certificate/i.test(pkg.title || "")
+        );
+        if (!hasInitializationCertificate) {
+          return this.json(res, 409, {
+            error: "initialization_certificate_required",
+            message: "An Initialization Certificate must be created before setup can be completed. " +
+              "Complete all wizard steps including certificate generation.",
+          });
+        }
+
         writePreferences({ setupComplete: true });
 
         // Initialize Computer & Browser Control

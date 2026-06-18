@@ -87,7 +87,6 @@ export function dashboardHtml(port: number, authToken?: string): string {
         <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:telemetry" data-tip-kind="shell-tab">Telemetry</button>
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:logs" data-tip-kind="shell-tab">Logs &amp; Debug</button>
         <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:scheduler" data-tip-kind="shell-tab">Scheduler</button>
-        <button id="tab-button-watch" type="button" class="tab-button" data-tab-id="watch" role="tab" aria-selected="false" aria-controls="tab-watch" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:watch" data-tip-kind="shell-tab" title="Watch PRISM run autonomously">👁️ Watch Me</button>
         <button id="tab-button-wiki" type="button" class="tab-button" data-tab-id="wiki" role="tab" aria-selected="false" aria-controls="tab-wiki" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:wiki" data-tip-kind="shell-tab">Prism Wiki</button>
       </section>
 
@@ -112,8 +111,6 @@ export function dashboardHtml(port: number, authToken?: string): string {
       <section id="tab-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-logs" aria-hidden="true"></section>
 
       <section id="tab-scheduler" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-scheduler" aria-hidden="true"></section>
-
-      <section id="tab-watch" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-watch" aria-hidden="true"></section>
 
       <section id="tab-wiki" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-wiki" aria-hidden="true"></section>
 
@@ -149,13 +146,6 @@ export function dashboardHtml(port: number, authToken?: string): string {
        /api/approval/pending + /api/approval/:id/{approve,deny} for the
        additive #approval-queue <section> appended to tab-telemetry.html. -->
   <script src="/public/tab-approval-queue.js"></script>
-
-  <!-- Additive (v0.21): Watch Me — autonomous PRISM live view. Streams
-       the existing agentic_event WebSocket messages emitted by the
-       AgenticChatExecutor loop into a curated, demo-friendly timeline.
-       Frontend Protection Guarantee: purely additive, no existing UI
-       removed or modified. -->
-  <script src="/public/tab-watch.js"></script>
 
   <!-- Additive (v0.21): Prism Wiki - serves dynamic docs directory and custom SVG diagrams -->
   <script src="/public/tab-wiki.js"></script>

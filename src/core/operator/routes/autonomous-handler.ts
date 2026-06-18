@@ -21,7 +21,9 @@ export class AutonomousHandler implements IRouteHandler {
 
   async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
     const rawUrl = req.url ?? "";
-    const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
+    const cleanUrl = rawUrl.split("?")[0] || "";
+    const normalizedUrl = cleanUrl.endsWith("/") && cleanUrl.length > 1 ? cleanUrl.slice(0, -1) : cleanUrl;
+    const url = normalizedUrl.startsWith("/api/v1/") ? "/api/" + normalizedUrl.substring("/api/v1/".length) : normalizedUrl;
     const method = req.method?.toUpperCase() ?? "GET";
 
     const loop = service.getAutonomousLoop();

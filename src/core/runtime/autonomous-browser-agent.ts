@@ -27,6 +27,7 @@ import { AgentCheckpointStore } from "./agent-checkpoint-store.js";
 import { DsvarResolver } from "./dsvar-resolver.js";
 import { GuiRlOptimizer } from "../memory/gui-rl-optimizer.js";
 import type { CSHManager } from "../operator/csh-manager.js";
+import type { SSHPInterceptor } from "../operator/sshp-interceptor.js";
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -188,6 +189,7 @@ export class AutonomousBrowserAgent {
   private goalState: BrowserAgentGoalState | null = null;
   private sessionId: string | null = null;
   private cshManager: CSHManager | null = null;
+  private sshpInterceptor: SSHPInterceptor | null = null;
   private readonly checkpointStore: AgentCheckpointStore;
   private readonly guiRlOptimizer: GuiRlOptimizer;
 
@@ -200,6 +202,10 @@ export class AutonomousBrowserAgent {
 
   setCSHManager(cshManager: CSHManager): void {
     this.cshManager = cshManager;
+  }
+
+  setSSHPInterceptor(sshpInterceptor: SSHPInterceptor): void {
+    this.sshpInterceptor = sshpInterceptor;
   }
 
   /** Initialize a new autonomous browser goal. */
@@ -250,6 +256,19 @@ export class AutonomousBrowserAgent {
     try {
       if (!sessionManager || !this.sessionId) {
         throw new Error("Browser session not available");
+      }
+
+      if (this.sshpInterceptor) {
+        const auditArgs: Record<string, any> = { sessionId: this.sessionId };
+        if (type === "navigate") auditArgs.url = target;
+        else if (type === "click") auditArgs.selector = target;
+        else if (type === "type") { auditArgs.selector = target; auditArgs.text = value; }
+        else if (type === "evaluate") auditArgs.expression = target;
+
+        const audit = await this.sshpInterceptor.auditAction(type as any, auditArgs);
+        if (!audit.allowed) {
+          throw new Error(`SSHP Covenant block: ${audit.reason || "Action violates Sacred Covenant articles"}`);
+        }
       }
 
       let result: unknown;
@@ -391,7 +410,11 @@ export class AutonomousBrowserAgent {
       // ── Process accessibility tree ────────────────────────────────
       if (typeof treeResult === "string") {
         try {
-          const parsed = JSON.parse(treeResult) as Record<string, any>;
+          let treeToParse = treeResult;
+          if (this.sshpInterceptor && this.sshpInterceptor.isEnabled()) {
+            treeToParse = this.sshpInterceptor.sanitizeDom(treeResult);
+          }
+          const parsed = JSON.parse(treeToParse) as Record<string, any>;
           perception.title = sanitizeTextContent(String(parsed.title ?? ""));
           perception.url = String(parsed.url ?? perception.url);
           perception.interactiveElements = Number(parsed.interactiveCount ?? 0);
@@ -416,10 +439,63 @@ export class AutonomousBrowserAgent {
 
       // ── Process screenshot ────────────────────────────────────────
       if (ssResult) {
-        if (Buffer.isBuffer(ssResult)) {
-          perception.screenshotBase64 = ssResult.toString("base64");
-        } else if (typeof ssResult === "object" && "path" in (ssResult as Record<string, unknown>)) {
-          perception.screenshotPath = String((ssResult as Record<string, unknown>).path);
+        let finalSsResult = ssResult;
+        if (this.sshpInterceptor && this.sshpInterceptor.isEnabled() && Buffer.isBuffer(ssResult)) {
+          const sensitiveSelectorMatches = [
+            'input[type="password"]',
+            'input[autocomplete*="cc-"]',
+            'input[autocomplete*="ssn"]',
+            'input[autocomplete*="card"]',
+            'input[name*="pass"]',
+            'input[name*="card"]',
+            'input[name*="cvv"]',
+            'input[name*="ssn"]',
+            'input[name*="secret"]',
+            'input[name*="token"]',
+            'input[name*="apikey"]',
+            'input[name*="api-key"]',
+            'input[id*="pass"]',
+            'input[id*="card"]',
+            'input[id*="cvv"]',
+            'input[id*="ssn"]',
+            'input[id*="secret"]',
+            'input[id*="token"]',
+            'input[id*="apikey"]',
+            'input[id*="api-key"]',
+          ];
+          const rects = await sessionManager.evaluate(this.sessionId, `
+            (function(selectors) {
+              const results = [];
+              for (const selector of selectors) {
+                const elms = document.querySelectorAll(selector);
+                for (const el of elms) {
+                  const rect = el.getBoundingClientRect();
+                  if (rect.width > 0 && rect.height > 0) {
+                    results.push({
+                      x: rect.left + window.scrollX,
+                      y: rect.top + window.scrollY,
+                      width: rect.width,
+                      height: rect.height
+                    });
+                  }
+                }
+              }
+              return results;
+            })(${JSON.stringify(sensitiveSelectorMatches)})
+          `).catch(() => null) as any[] | null;
+
+          if (rects && rects.length > 0) {
+            const redacted = await this.sshpInterceptor.redactScreenshot(ssResult, rects).catch(() => null);
+            if (redacted) {
+              finalSsResult = redacted;
+            }
+          }
+        }
+
+        if (Buffer.isBuffer(finalSsResult)) {
+          perception.screenshotBase64 = finalSsResult.toString("base64");
+        } else if (typeof finalSsResult === "object" && "path" in (finalSsResult as Record<string, unknown>)) {
+          perception.screenshotPath = String((finalSsResult as Record<string, unknown>).path);
         }
       }
     }

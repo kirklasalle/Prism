@@ -74,12 +74,24 @@ export class CharacterAccountabilityManager {
             lastActiveAt: now,
         };
 
+        // Suspend any other active main agents to enforce single main agent policy
+        const activeAssignments = this.store.list({ state: "active" });
+        for (const act of activeAssignments) {
+            if (act.assignmentId !== assignment.assignmentId) {
+                this.suspend(act.assignmentId, "Single main agent policy: suspended to allow new main agent dispatch.");
+            }
+        }
+
         this.store.save(assignment);
         this.emitLifecycleEvent("character_accountability.assign", assignment, "succeeded", {
             state: assignment.state,
         });
 
-        return assignment;
+        console.log(`[PRISM][accountability] Character assigned: CharacterId=${assignment.characterId}, Operator=${assignment.operatorEmail} (${assignment.operatorId}), Agent=${assignment.prismUserEmail}, Workspace Label=${assignment.workspaceHub}, Profile=${assignment.executionProfileSegment}`);
+
+        // Automatically dispatch the newly assigned agent
+        const dispatched = this.recordDispatch(assignment.assignmentId);
+        return dispatched || assignment;
     }
 
     suspend(assignmentId: string, reason: string): CharacterAssignment | null {
@@ -90,6 +102,14 @@ export class CharacterAccountabilityManager {
         const existing = this.store.get(assignmentId);
         if (!existing || existing.state === "revoked") {
             return null;
+        }
+
+        // Suspend all other active assignments before resuming this one to enforce single main agent policy
+        const activeAssignments = this.store.list({ state: "active" });
+        for (const act of activeAssignments) {
+            if (act.assignmentId !== assignmentId) {
+                this.suspend(act.assignmentId, "Single main agent policy: suspended to allow other main agent resumption.");
+            }
         }
 
         const updated = {
@@ -104,6 +124,8 @@ export class CharacterAccountabilityManager {
             previousState: existing.state,
             state: updated.state,
         });
+
+        console.log(`[PRISM][accountability] Character assignment resumed: ID=${updated.assignmentId}, CharacterId=${updated.characterId}, Operator=${updated.operatorEmail}, Agent=${updated.prismUserEmail}`);
 
         return updated;
     }
@@ -130,6 +152,8 @@ export class CharacterAccountabilityManager {
         this.emitLifecycleEvent("character_accountability.dispatch", updated, "succeeded", {
             dispatchCount: updated.dispatchCount,
         });
+
+        console.log(`[PRISM][accountability] Character dispatched: ID=${updated.assignmentId}, CharacterId=${updated.characterId}, DispatchCount=${updated.dispatchCount}`);
 
         return updated;
     }
@@ -211,6 +235,8 @@ export class CharacterAccountabilityManager {
             {}
         );
 
+        console.log(`[PRISM][accountability] Character assignment deleted: ID=${existing.assignmentId}, CharacterId=${existing.characterId}, Operator=${existing.operatorEmail}, Agent=${existing.prismUserEmail}`);
+
         return true;
     }
 
@@ -247,7 +273,7 @@ export class CharacterAccountabilityManager {
     markEmailVerified(
         assignmentId: string,
         verifiedEmail: string,
-        provider: "gmail" | "outlook",
+        provider: "gmail" | "outlook" | "mock_oauth",
     ): CharacterAssignment | null {
         const existing = this.store.get(assignmentId);
         if (!existing || existing.state === "revoked") return null;
@@ -407,6 +433,8 @@ export class CharacterAccountabilityManager {
                 reason,
             },
         );
+
+        console.log(`[PRISM][accountability] Character assignment transitioned: ID=${updated.assignmentId}, State=${nextState}, Reason=${reason}, CharacterId=${updated.characterId}, Operator=${updated.operatorEmail}, Agent=${updated.prismUserEmail}`);
 
         return updated;
     }

@@ -88,7 +88,7 @@ function expectedResult(context: PolicyContext, profile: ExecutionProfile): { ti
     if (context.mutatesState && profile.segment === "business") {
         return { tier: "tier1_autonomous", decision: "deny" };
     }
-    if (!profile.tier1AutonomuousAllowed) {
+    if (!profile.tier1AutonomousAllowed) {
         return { tier: "tier1_autonomous", decision: "deny" };
     }
     return { tier: "tier1_autonomous", decision: "allow" };

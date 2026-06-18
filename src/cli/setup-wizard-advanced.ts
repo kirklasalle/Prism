@@ -542,7 +542,29 @@ export async function runAdvancedInteractive(
 
     if (state.cacCharacter) {
         console.log("");
-        state.cacOperatorEmail = await prompt("Operator email");
+        let opPassword = "";
+        while (true) {
+            const opEmail = await prompt("Operator email");
+            const isPlaceholder = /@(prism\.local|example\.(com|org|net))$/i.test(opEmail);
+            if (isPlaceholder) {
+                printError("Placeholder operator email is not allowed. Please enter a real email.");
+                continue;
+            }
+            state.cacOperatorEmail = opEmail;
+            break;
+        }
+        while (true) {
+            opPassword = await maskedInput("Operator password (for console login)");
+            if (!opPassword) {
+                printError("Password is required.");
+                continue;
+            }
+            if (opPassword.length < 4) {
+                printError("Password must be at least 4 characters long.");
+                continue;
+            }
+            break;
+        }
         state.cacPrismEmail = await prompt("PRISM user email (optional)", "");
         state.cacOperatorId = await prompt("Operator ID (optional)", "");
         state.cacWorkspaceHub = await prompt(
@@ -566,6 +588,7 @@ export async function runAdvancedInteractive(
                     operatorId: state.cacOperatorId || undefined,
                     executionProfile: state.profile,
                     workspaceHub: state.cacWorkspaceHub || undefined,
+                    operatorPassword: opPassword,
                 });
                 state.cacAssignmentId = result.assignment?.assignmentId || null;
                 if (state.cacAssignmentId) {
@@ -607,7 +630,18 @@ export async function runAdvancedInteractive(
         state.browserSegment = state.profile;
         printInfo(`Using CAC email: ${state.browserEmail} (${state.browserSegment})`);
     } else {
-        state.browserEmail = await prompt("Browser profile email (optional)", "");
+        while (true) {
+            const email = await prompt("Browser profile email (optional)", "");
+            if (email) {
+                const isPlaceholder = /@(prism\.local|example\.(com|org|net))$/i.test(email);
+                if (isPlaceholder) {
+                    printError("Placeholder browser email is not allowed. Please enter a real email.");
+                    continue;
+                }
+            }
+            state.browserEmail = email;
+            break;
+        }
         if (state.browserEmail) {
             const segOptions: SelectOption[] = [
                 { label: "Individual", value: "individual" },
@@ -798,6 +832,11 @@ export async function runAdvancedNonInteractive(
                 // Guardian model must be specified separately; just save tier preference
             }
             if (args.cacCharacter && args.cacOperatorEmail) {
+                const isPlaceholder = /@(prism\.local|example\.(com|org|net))$/i.test(args.cacOperatorEmail);
+                if (isPlaceholder) {
+                    printError("Placeholder operator email is not allowed. Please enter a real email.");
+                    process.exit(2);
+                }
                 await client.postCharacterAssign({
                     characterId: args.cacCharacter,
                     operatorEmail: args.cacOperatorEmail,

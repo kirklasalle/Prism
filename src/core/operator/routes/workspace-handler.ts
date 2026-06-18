@@ -1,6 +1,7 @@
 import { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { createHash } from "node:crypto";
 import type { IRouteHandler } from "./types.js";
 import type { DashboardService } from "../dashboard-service.js";
 import {
@@ -116,6 +117,7 @@ export class WorkspaceHandler implements IRouteHandler {
                     characterId?: string; prismUserId?: string; prismUserEmail?: string;
                     operatorId?: string; operatorEmail?: string; clientId?: string;
                     sessionId?: string; executionProfile?: string; workspaceHub?: string;
+                    operatorPassword?: string;
                 }>(req);
                 const status = service.getRuntimeStatus();
                 const assignment = service.getCharacterAccountabilityManager().assign({
@@ -129,6 +131,37 @@ export class WorkspaceHandler implements IRouteHandler {
                     executionProfile: String(body.executionProfile ?? status.executionProfileSegment).trim() || status.executionProfileSegment,
                     workspaceHub: String(body.workspaceHub ?? getWorkspaceHub()).trim(),
                 });
+
+                // Register user in IAM store if a password is provided
+                const operatorEmail = String(body.operatorEmail ?? "").trim().toLowerCase();
+                const operatorPassword = body.operatorPassword ? String(body.operatorPassword).trim() : null;
+                if (operatorEmail && operatorPassword) {
+                    const store = service.getIamHandler().getStore();
+                    const sha256Hex = (str: string) => createHash("sha256").update(str, "utf-8").digest("hex");
+                    const passwordHash = sha256Hex(operatorPassword);
+                    const existing = store.getUserByEmail("default", operatorEmail);
+                    if (existing) {
+                        existing.attrs = { ...existing.attrs, passwordHash };
+                        store.updateUserAttrs(existing.id, existing.attrs);
+                    } else {
+                        const newUser = store.createUser({
+                            tenantId: "default",
+                            email: operatorEmail,
+                            displayName: operatorEmail.split('@')[0] || "Operator",
+                            status: "active",
+                            attrs: { passwordHash },
+                        });
+                        const adminRole = store.getRoleByName("default", "admin");
+                        if (adminRole) {
+                            store.addMembership(newUser.id, "default", adminRole.id);
+                        }
+                        const operatorRole = store.getRoleByName("default", "operator");
+                        if (operatorRole) {
+                            store.addMembership(newUser.id, "default", operatorRole.id);
+                        }
+                    }
+                }
+
                 return this.json(res, 200, { ok: true, assignment });
             } catch (err: unknown) {
                 const e = err as { message?: string };
@@ -231,6 +264,26 @@ export class WorkspaceHandler implements IRouteHandler {
                         return this.json(res, 409, { ok: false, error: `character_already_exists: ${result.character.name}`, shape: result.shape });
                     }
                     writeFileSync(destPath, JSON.stringify(result.character, null, 2) + "\n", "utf-8");
+                    service.getActivityBus().emit({
+                        sessionId: "system",
+                        layer: "governance",
+                        operation: "character_accountability.character_created",
+                        status: "succeeded",
+                        characterId: result.character.name,
+                        prismUserId: "",
+                        prismUserEmail: result.character.defaultEmail ?? "",
+                        operatorId: "system",
+                        operatorEmail: "",
+                        clientId: "dashboard",
+                        details: {
+                            displayName: result.character.displayName,
+                            executionProfile: result.character.executionProfile,
+                            maxRiskTier: result.character.maxRiskTier,
+                            tags: result.character.tags,
+                            path: destPath
+                        }
+                    });
+                    console.log(`[PRISM][accountability] Custom character created and saved: ${result.character.name} (${result.character.displayName}) at ${destPath}`);
                     return this.json(res, 201, { ok: true, committed: true, shape: result.shape, warnings: result.warnings, character: result.character, path: destPath });
                 }
                 return this.json(res, 200, { ok: true, committed: false, shape: result.shape, warnings: result.warnings, character: result.character });

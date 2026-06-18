@@ -270,6 +270,15 @@ async function _runDashboardServiceTests(): Promise<void> {
         undefined,
         telemetrySecretStore,
     );
+    const initSession = telemetryService.createChatSession({ title: "Init Session", allowUnbound: true });
+    telemetryService.createSessionPackage({
+        title: "Initialization Certificate v1.0 — " + new Date().toISOString(),
+        areaOfInterest: "setup",
+        objective: "Workspace initialization",
+        successCriteria: "Done",
+        dependencies: [],
+        sessionIds: [initSession.sessionId],
+    });
     telemetryService.start();
     await new Promise((resolve) => setTimeout(resolve, 20)); // wait for listen
     const serverAddress = (telemetryService as unknown as { server: { address(): { port: number } | null } }).server.address();

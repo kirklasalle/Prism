@@ -5,82 +5,115 @@
   <section class="rail-section panel" style="grid-column:1/-1;" data-tip-id="logs:support-desk" data-tip-kind="logs">
     <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('supportDesk')">
       <h3 style="display:flex;align-items:center;gap:6px;">🏥 PRISM Micro Support Desk & Self-Healing Hub</h3>
-      <span class="muted" style="margin-left:8px;font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.15);color:#a78bfa;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;">guardian-shield</span>
+      <span class="muted"
+        style="margin-left:8px;font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.15);color:#a78bfa;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;">guardian-shield</span>
       <span id="supportDesk-collapse-icon" class="collapse-icon">▼</span>
     </div>
     <div id="supportDesk-collapsible" class="collapsible-body">
-      <div class="muted" style="margin-bottom:12px;">Real-time automated incident correlation, active self-healing sweeps, and communication tunnels between Operator and Guardian.</div>
-      
+      <div class="muted" style="margin-bottom:12px;">Real-time automated incident correlation, active self-healing
+        sweeps, and communication tunnels between Operator and Guardian.</div>
+
       <!-- Interactive Grid Layout -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:20px;">
-        
+
         <!-- Column 1: Self-Healing Diagnostic Database -->
-        <div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;">
-          <h4 style="margin:0 0 12px;color:#a78bfa;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🧬 Self-Healing Diagnostics Catalog</h4>
+        <div
+          style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;">
+          <h4
+            style="margin:0 0 12px;color:#a78bfa;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">
+            🧬 Self-Healing Diagnostics Catalog</h4>
           <div style="display:flex;gap:6px;margin-bottom:12px;">
-            <input type="text" id="support-search" placeholder="Filter signatures (e.g. #telemetry, #auth)..." style="flex:1;padding:6px 10px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#eee;" oninput="filterSupportCatalog()" />
+            <input type="text" id="support-search" placeholder="Filter signatures (e.g. #telemetry, #auth)..."
+              style="flex:1;padding:6px 10px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#eee;"
+              oninput="filterSupportCatalog()" />
           </div>
-          
-          <div id="support-catalog-container" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
+
+          <div id="support-catalog-container"
+            style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
             <!-- Rendered dynamically -->
           </div>
         </div>
 
         <!-- Column 2: Active Support Tickets Queue -->
-        <div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+        <div
+          style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <h4 style="margin:0;color:#f472b6;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🎫 Active Support Tickets Queue</h4>
-            <button class="secondary-button" style="font-size:10px;padding:2px 8px;" onclick="window.toggleCreateTicketForm && window.toggleCreateTicketForm(true)">+ Log Incident</button>
+            <h4
+              style="margin:0;color:#f472b6;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">
+              🎫 Active Support Tickets Queue</h4>
+            <button class="secondary-button" style="font-size:10px;padding:2px 8px;"
+              onclick="window.toggleCreateTicketForm && window.toggleCreateTicketForm(true)">+ Log Incident</button>
           </div>
 
           <!-- Inline Log Incident Form (Hidden by default) -->
-          <div id="create-ticket-form" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;flex-direction:column;gap:8px;">
+          <div id="create-ticket-form"
+            style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;flex-direction:column;gap:8px;">
             <div style="font-weight:600;font-size:11px;color:#f472b6;">LOG NEW INCIDENT</div>
-            <input type="text" id="ticket-title" placeholder="Incident title (e.g. MCP Connection Failed)" style="width:100%;padding:6px 8px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;" />
-            <textarea id="ticket-description" placeholder="Description & logs..." style="width:100%;height:50px;padding:6px 8px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;resize:none;"></textarea>
+            <input type="text" id="ticket-title" placeholder="Incident title (e.g. MCP Connection Failed)"
+              style="width:100%;padding:6px 8px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;" />
+            <textarea id="ticket-description" placeholder="Description & logs..."
+              style="width:100%;height:50px;padding:6px 8px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;resize:none;"></textarea>
             <div style="display:flex;gap:6px;align-items:center;">
-              <select id="ticket-severity" style="padding:4px 6px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;flex:1;">
+              <select id="ticket-severity"
+                style="padding:4px 6px;font-size:11px;background:#13131c;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#eee;flex:1;">
                 <option value="low">Low Severity</option>
                 <option value="medium">Medium Severity</option>
                 <option value="high">High Severity</option>
                 <option value="critical">Critical Severity</option>
               </select>
-              <button class="cta-button mini" style="padding:4px 10px;" onclick="window.submitSupportTicket && window.submitSupportTicket()">Submit</button>
-              <button class="secondary-button" style="font-size:11px;padding:4px 8px;" onclick="window.toggleCreateTicketForm && window.toggleCreateTicketForm(false)">Cancel</button>
+              <button class="cta-button mini" style="padding:4px 10px;"
+                onclick="window.submitSupportTicket && window.submitSupportTicket()">Submit</button>
+              <button class="secondary-button" style="font-size:11px;padding:4px 8px;"
+                onclick="window.toggleCreateTicketForm && window.toggleCreateTicketForm(false)">Cancel</button>
             </div>
           </div>
-          
-          <div id="support-tickets-container" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
+
+          <div id="support-tickets-container"
+            style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
             <div class="muted" style="font-size:12px;">Loading tickets…</div>
           </div>
         </div>
 
         <!-- Column 3: Guardian Agent Tunnels & Manual Triage -->
-        <div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;gap:16px;">
+        <div
+          style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;gap:16px;">
           <div>
-            <h4 style="margin:0 0 12px;color:#38bdf8;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🛡️ Guardian Communication Node</h4>
-            
+            <h4
+              style="margin:0 0 12px;color:#38bdf8;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">
+              🛡️ Guardian Communication Node</h4>
+
             <div style="display:flex;flex-direction:column;gap:8px;font-size:11px;color:var(--text-muted);">
-              <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.15);padding:8px 12px;border-radius:6px;">
+              <div
+                style="display:flex;justify-content:space-between;align-items:center;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.15);padding:8px 12px;border-radius:6px;">
                 <span>👤 Operator Dashboard → 🧠 Guardian Shield</span>
                 <span style="color:#34d399;font-weight:700;display:flex;align-items:center;gap:4px;">
-                  <span style="display:inline-block;width:6px;height:6px;background:#34d399;border-radius:50%;box-shadow:0 0 8px #34d399;"></span> SECURE
+                  <span
+                    style="display:inline-block;width:6px;height:6px;background:#34d399;border-radius:50%;box-shadow:0 0 8px #34d399;"></span>
+                  SECURE
                 </span>
               </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);padding:8px 12px;border-radius:6px;">
+              <div
+                style="display:flex;justify-content:space-between;align-items:center;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);padding:8px 12px;border-radius:6px;">
                 <span>🧠 Guardian → 👤 Sub-Agent Nodes (Josephine)</span>
                 <span style="color:#34d399;font-weight:700;display:flex;align-items:center;gap:4px;">
-                  <span style="display:inline-block;width:6px;height:6px;background:#34d399;border-radius:50%;box-shadow:0 0 8px #34d399;"></span> READY
+                  <span
+                    style="display:inline-block;width:6px;height:6px;background:#34d399;border-radius:50%;box-shadow:0 0 8px #34d399;"></span>
+                  READY
                 </span>
               </div>
             </div>
           </div>
 
           <div>
-            <h4 style="margin:0 0 8px;color:#f472b6;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">🗂️ Operator Manual Triage</h4>
+            <h4
+              style="margin:0 0 8px;color:#f472b6;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;font-weight:700;">
+              🗂️ Operator Manual Triage</h4>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
-              <button class="cta-button mini" style="flex:1;background:linear-gradient(135deg, rgba(167,139,250,0.25), rgba(244,114,182,0.25));border:1px solid rgba(167,139,250,0.4);" onclick="triggerSelfHealingSweep()">⚡ Run Diagnostics Sweep</button>
-              <button class="secondary-button" style="font-size:11px;padding:8px 12px;" onclick="captureIncidentBundle()">📦 Export Bundle</button>
+              <button class="cta-button mini"
+                style="flex:1;background:linear-gradient(135deg, rgba(167,139,250,0.25), rgba(244,114,182,0.25));border:1px solid rgba(167,139,250,0.4);"
+                onclick="triggerSelfHealingSweep()">⚡ Run Diagnostics Sweep</button>
+              <button class="secondary-button" style="font-size:11px;padding:8px 12px;"
+                onclick="captureIncidentBundle()">📦 Export Bundle</button>
             </div>
           </div>
         </div>
@@ -153,7 +186,9 @@
       </select>
       <div style="flex:1;"></div>
       <span class="muted" style="font-size:10px;">Last 500 entries · auto-scroll</span>
-      <button class="secondary-button" style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;" onclick="window.copyActivityLogs && window.copyActivityLogs()">📋 Copy Logs</button>
+      <button class="secondary-button"
+        style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;"
+        onclick="window.copyActivityLogs && window.copyActivityLogs()">📋 Copy Logs</button>
       <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="clearLogs()">Clear</button>
     </div>
     <div id="logs-panel-body"
@@ -166,18 +201,23 @@
        Real-time, normalized, AI-readable event stream from
        UniversalTelemetryAggregator via /api/v1/telemetry/unified + WebSocket.
        ═══════════════════════════════════════════════════════════════════════ -->
-  <section class="rail-section panel" style="grid-column:1/-1;" data-tip-id="logs:unified-telemetry" data-tip-kind="logs">
+  <section class="rail-section panel" style="grid-column:1/-1;" data-tip-id="logs:unified-telemetry"
+    data-tip-kind="logs">
     <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('unifiedTelemetry')">
       <h3>🌐 Unified Telemetry Stream</h3>
-      <span id="unified-telemetry-status" class="muted" style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(105,210,255,0.1);color:#69d2ff;">live</span>
+      <span id="unified-telemetry-status" class="muted"
+        style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(105,210,255,0.1);color:#69d2ff;">live</span>
       <span id="unifiedTelemetry-collapse-icon" class="collapse-icon">▼</span>
     </div>
     <div id="unifiedTelemetry-collapsible" class="collapsible-body">
-      <div class="muted" style="margin-bottom:8px;">AI-readable, normalized event stream from all system sources. Used by Guardian for behavioral analysis.</div>
-      <div id="unified-telemetry-stats" style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;font-size:11px;"></div>
+      <div class="muted" style="margin-bottom:8px;">AI-readable, normalized event stream from all system sources. Used
+        by Guardian for behavioral analysis.</div>
+      <div id="unified-telemetry-stats" style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;font-size:11px;">
+      </div>
       <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
         <label class="muted" style="font-size:11px;">Severity:</label>
-        <select id="ut-severity-filter" style="font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        <select id="ut-severity-filter"
+          style="font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text);border:1px solid var(--border);border-radius:4px;">
           <option value="">All</option>
           <option value="trace">trace</option>
           <option value="debug">debug</option>
@@ -187,7 +227,8 @@
           <option value="critical">critical</option>
         </select>
         <label class="muted" style="font-size:11px;">Source:</label>
-        <select id="ut-source-filter" style="font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        <select id="ut-source-filter"
+          style="font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text);border:1px solid var(--border);border-radius:4px;">
           <option value="">All</option>
           <option value="system">system</option>
           <option value="agent">agent</option>
@@ -209,8 +250,11 @@
           <input type="checkbox" id="ut-ai-context" checked> AI context
         </label>
         <button class="secondary-button" id="ut-pause" style="font-size:11px;padding:3px 8px;">Pause</button>
-        <button class="secondary-button" style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;" onclick="window.copyUnifiedTelemetry && window.copyUnifiedTelemetry()">📋 Copy Logs</button>
-        <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="clearUnifiedTelemetry()">Clear</button>
+        <button class="secondary-button"
+          style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;"
+          onclick="window.copyUnifiedTelemetry && window.copyUnifiedTelemetry()">📋 Copy Logs</button>
+        <button class="secondary-button" style="font-size:11px;padding:3px 8px;"
+          onclick="clearUnifiedTelemetry()">Clear</button>
       </div>
       <div id="unified-telemetry-body"
         style="max-height:500px;min-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.35);padding:6px 8px;font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:11px;line-height:1.5;">
@@ -219,7 +263,18 @@
     </div>
   </section>
 
-
+  <section class="rail-section panel" style="grid-column:1/-1;">
+    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('logsLiveTimeline')">
+      <h3>🧭 Live Timeline</h3>
+      <span id="logsLiveTimeline-collapse-icon" class="collapse-icon">▼</span>
+    </div>
+    <div id="logsLiveTimeline-collapsible" class="collapsible-body">
+      <div id="logs-live-timeline"
+        style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;min-height:200px;max-height:560px;overflow:auto;font-size:12px;font-family:monospace;color:var(--text);">
+        <div class="muted">No events yet. Start a run to see live agent reasoning and tool dispatch.</div>
+      </div>
+    </div>
+  </section>
 
   <!-- ═══════════════════════════════════════════════════════════════════════
        Operator Identity & Tab Sessions — Phase A1
@@ -230,8 +285,11 @@
       <span id="identitySessions-collapse-icon" class="collapse-icon">▼</span>
     </div>
     <div id="identitySessions-collapsible" class="collapsible-body">
-      <div class="muted" style="margin-bottom:8px;">Current operator identity (CAC-compatible) and per-tab session registry.</div>
-      <div id="identity-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px;"></div>
+      <div class="muted" style="margin-bottom:8px;">Current operator identity (CAC-compatible) and per-tab session
+        registry.</div>
+      <div id="identity-panel"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px;">
+      </div>
       <h4 style="margin:12px 0 6px;font-size:13px;">📋 Tab Sessions</h4>
       <div id="tab-sessions-panel" style="font-size:12px;"></div>
     </div>
@@ -249,7 +307,8 @@
     <h3 style="margin:0;">MCP Servers</h3>
     <span id="mcp-servers-summary" class="muted" style="font-size:12px;">—</span>
     <div style="flex:1;"></div>
-    <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="window.refreshMcpServers && window.refreshMcpServers()">Refresh</button>
+    <button class="secondary-button" style="font-size:11px;padding:3px 8px;"
+      onclick="window.refreshMcpServers && window.refreshMcpServers()">Refresh</button>
   </header>
   <div id="mcp-servers-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
     <div class="muted" style="font-size:12px;">Loading…</div>
@@ -270,7 +329,8 @@
     <div style="flex:1;"></div>
     <label class="muted" style="font-size:11px;display:flex;align-items:center;gap:4px;">
       Source:
-      <select id="live-console-source" style="font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text,#eee);border:1px solid var(--border);border-radius:4px;">
+      <select id="live-console-source"
+        style="font-size:11px;padding:3px 6px;background:var(--surface-2,#222);color:var(--text,#eee);border:1px solid var(--border);border-radius:4px;">
         <option value="all">all</option>
         <option value="stdout">stdout</option>
         <option value="stderr">stderr</option>
@@ -280,9 +340,13 @@
     <label class="muted" style="font-size:11px;display:flex;align-items:center;gap:4px;">
       <input type="checkbox" id="live-console-autoscroll" checked> auto-scroll
     </label>
-    <button class="secondary-button" id="live-console-pause" style="font-size:11px;padding:3px 8px;" onclick="window.toggleLiveConsolePause && window.toggleLiveConsolePause()">Pause</button>
-    <button class="secondary-button" style="font-size:11px;padding:3px 8px;" onclick="window.clearLiveConsole && window.clearLiveConsole()">Clear</button>
-    <button class="secondary-button" style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;" onclick="window.copyLiveConsole && window.copyLiveConsole()">📋 Copy Logs</button>
+    <button class="secondary-button" id="live-console-pause" style="font-size:11px;padding:3px 8px;"
+      onclick="window.toggleLiveConsolePause && window.toggleLiveConsolePause()">Pause</button>
+    <button class="secondary-button" style="font-size:11px;padding:3px 8px;"
+      onclick="window.clearLiveConsole && window.clearLiveConsole()">Clear</button>
+    <button class="secondary-button"
+      style="font-size:11px;padding:3px 8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;"
+      onclick="window.copyLiveConsole && window.copyLiveConsole()">📋 Copy Logs</button>
   </header>
   <div id="live-console-body"
     style="max-height:420px;min-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.45);padding:6px 8px;font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:11.5px;line-height:1.4;">

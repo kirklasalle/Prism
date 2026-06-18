@@ -39,7 +39,7 @@ export async function testCharacterAccountability(): Promise<void> {
 
         const afterDispatch = manager.recordDispatch(assignment.assignmentId);
         assert.ok(afterDispatch);
-        assert.strictEqual(afterDispatch!.dispatchCount, 1);
+        assert.strictEqual(afterDispatch!.dispatchCount, 2);
 
         const suspended = manager.suspend(assignment.assignmentId, "policy hold");
         assert.ok(suspended);

@@ -148,11 +148,20 @@ export class ApiHandler implements IRouteHandler {
 
     if (method === "GET" && url === "/api/status") {
       const events = service.getActivityBus().listEvents();
+      const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
+      const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
+      const isAdmin = authDisabled || (principal ? principal.roles.includes("admin") : true);
+
+      const allSessions = service.getChatStore().listSessions();
+      const chatSessionCount = (!isAdmin && principal)
+        ? allSessions.filter(s => s.operatorEmail === principal.email).length
+        : allSessions.length;
+
       this.json(res, 200, {
         ...service.getRuntimeStatus(),
         uptimeSeconds: Math.floor((Date.now() - Date.parse(service.getRuntimeStatus().startedAt)) / 1000),
         pendingApprovals: service.getApprovalQueue().list().length,
-        chatSessionCount: service.getChatStore().listSessions().length,
+        chatSessionCount,
         eventCount: events.length,
         lastEvent: events[events.length - 1] ?? null,
         workspaceRoot: resolveWorkspaceRoot(),

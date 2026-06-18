@@ -61,7 +61,7 @@ export async function testOrchestratorExecutionProfile(): Promise<void> {
     {
         const customProfile: ExecutionProfile = {
             segment: "business",
-            tier1AutonomuousAllowed: true,
+            tier1AutonomousAllowed: true,
             tier2ConditionalAllowed: true,
             tier3ApprovalRequired: true,
             tier3WhitelistBypass: false,
@@ -124,7 +124,7 @@ export async function testOrchestratorExecutionProfile(): Promise<void> {
     {
         const customProfile: ExecutionProfile = {
             segment: "business",
-            tier1AutonomuousAllowed: false, // No autonomous tier1 for finance
+            tier1AutonomousAllowed: false, // No autonomous tier1 for finance
             tier2ConditionalAllowed: true,
             tier3ApprovalRequired: true,
             tier3WhitelistBypass: false,

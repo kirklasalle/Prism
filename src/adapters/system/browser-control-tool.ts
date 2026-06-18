@@ -3,6 +3,8 @@ import type { ToolContract } from "../../core/tools/contracts.js";
 import { BrowserSessionManager } from "../../core/operator/browser-session-manager.js";
 import { BrowserProfileManager } from "../../core/operator/browser-profile-manager.js";
 import type { ActivityBus } from "../../core/activity/bus.js";
+import type { SSHPInterceptor } from "../../core/operator/sshp-interceptor.js";
+import type { CSHManager } from "../../core/operator/csh-manager.js";
 
 const BROWSER_GOVERNANCE: GovernanceSchema = {
   actions: {
@@ -86,11 +88,21 @@ export class BrowserControlTool implements Tool {
 
   private manager: BrowserSessionManager;
   private profileManager: BrowserProfileManager;
+  private sshpInterceptor: SSHPInterceptor | null = null;
+  private cshManager: CSHManager | null = null;
 
   constructor(activityBus?: ActivityBus, sessionId?: string) {
     this.manager = new BrowserSessionManager(activityBus, sessionId);
     this.profileManager = new BrowserProfileManager(activityBus, sessionId);
     this.manager.setProfileManager(this.profileManager);
+  }
+
+  setSSHPInterceptor(sshpInterceptor: SSHPInterceptor): void {
+    this.sshpInterceptor = sshpInterceptor;
+  }
+
+  setCSHManager(cshManager: CSHManager): void {
+    this.cshManager = cshManager;
   }
 
   /** Expose the session manager for direct API-route access. */
@@ -120,7 +132,7 @@ export class BrowserControlTool implements Tool {
         }
 
         case "launch_session": {
-          const headless = request.args.headless !== false;
+          const headless = request.args.headless === true;
           const profileId = request.args.profileId ? String(request.args.profileId) : undefined;
           const session = await this.manager.launch({
             headless,
@@ -149,6 +161,12 @@ export class BrowserControlTool implements Tool {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
           const url = String(request.args.url ?? "");
           if (!url) return { ok: false, output: { error: "url is required." } };
+          if (this.sshpInterceptor) {
+            const audit = await this.sshpInterceptor.auditAction("navigate", { sessionId, url });
+            if (!audit.allowed) {
+              return { ok: false, output: { error: `SSHP Covenant block: ${audit.reason || "Action violates Sacred Covenant articles"}` } };
+            }
+          }
           const result = await this.manager.navigate(sessionId, url);
           return {
             ok: true,
@@ -161,6 +179,12 @@ export class BrowserControlTool implements Tool {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
           const selector = String(request.args.selector ?? "");
           if (!selector) return { ok: false, output: { error: "selector is required." } };
+          if (this.sshpInterceptor) {
+            const audit = await this.sshpInterceptor.auditAction("click", { sessionId, selector });
+            if (!audit.allowed) {
+              return { ok: false, output: { error: `SSHP Covenant block: ${audit.reason || "Action violates Sacred Covenant articles"}` } };
+            }
+          }
           await this.manager.click(sessionId, selector);
           return {
             ok: true,
@@ -174,6 +198,12 @@ export class BrowserControlTool implements Tool {
           const selector = String(request.args.selector ?? "");
           const text = String(request.args.text ?? "");
           if (!selector) return { ok: false, output: { error: "selector is required." } };
+          if (this.sshpInterceptor) {
+            const audit = await this.sshpInterceptor.auditAction("type", { sessionId, selector, text });
+            if (!audit.allowed) {
+              return { ok: false, output: { error: `SSHP Covenant block: ${audit.reason || "Action violates Sacred Covenant articles"}` } };
+            }
+          }
           await this.manager.type(sessionId, selector, text);
           return {
             ok: true,
@@ -184,7 +214,53 @@ export class BrowserControlTool implements Tool {
 
         case "screenshot": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
-          const buf = await this.manager.screenshot(sessionId);
+          let buf = await this.manager.screenshot(sessionId);
+          if (this.sshpInterceptor && this.sshpInterceptor.isEnabled()) {
+            const handles = this.manager.getSessionPageAndContext(sessionId);
+            if (handles && handles.page) {
+              const sensitiveSelectorMatches = [
+                'input[type="password"]',
+                'input[autocomplete*="cc-"]',
+                'input[autocomplete*="ssn"]',
+                'input[autocomplete*="card"]',
+                'input[name*="pass"]',
+                'input[name*="card"]',
+                'input[name*="cvv"]',
+                'input[name*="ssn"]',
+                'input[name*="secret"]',
+                'input[name*="token"]',
+                'input[name*="apikey"]',
+                'input[name*="api-key"]',
+                'input[id*="pass"]',
+                'input[id*="card"]',
+                'input[id*="cvv"]',
+                'input[id*="ssn"]',
+                'input[id*="secret"]',
+                'input[id*="token"]',
+                'input[id*="apikey"]',
+                'input[id*="api-key"]',
+              ];
+              const rects = await handles.page.evaluate((selectors: string[]) => {
+                const results: Array<{ x: number; y: number; width: number; height: number }> = [];
+                for (const selector of selectors) {
+                  const elms = document.querySelectorAll(selector);
+                  for (const el of elms) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                      results.push({
+                        x: rect.left + window.scrollX,
+                        y: rect.top + window.scrollY,
+                        width: rect.width,
+                        height: rect.height
+                      });
+                    }
+                  }
+                }
+                return results;
+              }, sensitiveSelectorMatches).catch(() => []);
+              buf = await this.sshpInterceptor.redactScreenshot(buf, rects);
+            }
+          }
           return {
             ok: true,
             output: { sessionId, sizeBytes: buf.length, format: "png", base64: buf.toString("base64") },
@@ -196,6 +272,12 @@ export class BrowserControlTool implements Tool {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
           const expression = String(request.args.expression ?? "");
           if (!expression) return { ok: false, output: { error: "expression is required." } };
+          if (this.sshpInterceptor) {
+            const audit = await this.sshpInterceptor.auditAction("evaluate", { sessionId, expression });
+            if (!audit.allowed) {
+              return { ok: false, output: { error: `SSHP Covenant block: ${audit.reason || "Action violates Sacred Covenant articles"}` } };
+            }
+          }
           const evalResult = await this.manager.evaluate(sessionId, expression);
           return {
             ok: true,
@@ -218,7 +300,10 @@ export class BrowserControlTool implements Tool {
 
         case "get_dom_snapshot": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
-          const html = await this.manager.domSnapshot(sessionId);
+          let html = await this.manager.domSnapshot(sessionId);
+          if (this.sshpInterceptor && this.sshpInterceptor.isEnabled()) {
+            html = this.sshpInterceptor.sanitizeDom(html);
+          }
           return { ok: true, output: { sessionId, html, length: html.length } };
         }
 
@@ -288,7 +373,10 @@ export class BrowserControlTool implements Tool {
         case "get_text_content": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
           const sel = request.args.selector ? String(request.args.selector) : undefined;
-          const content = await this.manager.getTextContent(sessionId, sel);
+          let content = await this.manager.getTextContent(sessionId, sel);
+          if (this.sshpInterceptor && this.sshpInterceptor.isEnabled()) {
+            content = this.sshpInterceptor.sanitizeDom(content);
+          }
           return { ok: true, output: { sessionId, text: content, length: content.length } };
         }
         case "get_links": {
@@ -298,12 +386,67 @@ export class BrowserControlTool implements Tool {
         }
         case "get_accessibility_tree": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
-          const tree = await this.manager.getAccessibilityTree(sessionId);
+          let tree = await this.manager.getAccessibilityTree(sessionId);
+          if (this.sshpInterceptor && this.sshpInterceptor.isEnabled()) {
+            try {
+              const serialized = JSON.stringify(tree);
+              const sanitized = this.sshpInterceptor.sanitizeDom(serialized);
+              tree = JSON.parse(sanitized);
+            } catch {
+              // fallback
+            }
+          }
           return { ok: true, output: { sessionId, tree } as unknown as Record<string, unknown> };
         }
         case "screenshot_full_page": {
           if (!sessionId) return { ok: false, output: { error: "sessionId is required." } };
-          const buf = await this.manager.screenshotFullPage(sessionId);
+          let buf = await this.manager.screenshotFullPage(sessionId);
+          if (this.sshpInterceptor && this.sshpInterceptor.isEnabled()) {
+            const handles = this.manager.getSessionPageAndContext(sessionId);
+            if (handles && handles.page) {
+              const sensitiveSelectorMatches = [
+                'input[type="password"]',
+                'input[autocomplete*="cc-"]',
+                'input[autocomplete*="ssn"]',
+                'input[autocomplete*="card"]',
+                'input[name*="pass"]',
+                'input[name*="card"]',
+                'input[name*="cvv"]',
+                'input[name*="ssn"]',
+                'input[name*="secret"]',
+                'input[name*="token"]',
+                'input[name*="apikey"]',
+                'input[name*="api-key"]',
+                'input[id*="pass"]',
+                'input[id*="card"]',
+                'input[id*="cvv"]',
+                'input[id*="ssn"]',
+                'input[id*="secret"]',
+                'input[id*="token"]',
+                'input[id*="apikey"]',
+                'input[id*="api-key"]',
+              ];
+              const rects = await handles.page.evaluate((selectors: string[]) => {
+                const results: Array<{ x: number; y: number; width: number; height: number }> = [];
+                for (const selector of selectors) {
+                  const elms = document.querySelectorAll(selector);
+                  for (const el of elms) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                      results.push({
+                        x: rect.left + window.scrollX,
+                        y: rect.top + window.scrollY,
+                        width: rect.width,
+                        height: rect.height
+                      });
+                    }
+                  }
+                }
+                return results;
+              }, sensitiveSelectorMatches).catch(() => []);
+              buf = await this.sshpInterceptor.redactScreenshot(buf, rects);
+            }
+          }
           return { ok: true, output: { sessionId, sizeBytes: buf.length, format: "png", fullPage: true, base64: buf.toString("base64") } };
         }
         case "save_pdf": {

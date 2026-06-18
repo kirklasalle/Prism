@@ -39,18 +39,22 @@ concurrency:
 
 jobs:
   build-and-smoke:
-    name: Build & smoke gate
+    name: Build & smoke gate (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 23]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 22
+      - name: Setup Node ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install dependencies (deterministic)
@@ -58,6 +62,22 @@ jobs:
 
       - name: Build (runs prebuild PAD hash compute)
         run: npm run build
+
+      - name: Check for compiled artifacts in src/
+        run: |
+          set -euo pipefail
+          ARTIFACTS=$(find src/ -type f \( -name '*.js' -o -name '*.d.ts' -o -name '*.js.map' \) ! -path '*/operator/public/*' | head -20 || true)
+          if [ -n "$ARTIFACTS" ]; then
+            echo "::error::Compiled artifacts found in src/ — remove with 'git rm' and verify .gitignore:"
+            echo "$ARTIFACTS"
+            exit 1
+          fi
+          echo "src/ is clean (no compiled artifacts)"
+
+      - name: Markdown lint (CHANGELOG.md + docs)
+        run: |
+          set -euo pipefail
+          npx markdownlint-cli2 CHANGELOG.md docs/**/*.md 2>&1 || echo "::warning::Markdown lint issues found — review and fix"
 
       - name: Verify generated PAD hash matches on-disk PAD
         # The prebuild script wrote `src/core/security/directive-hash.generated.ts`

@@ -220,6 +220,83 @@ export function setupWizardHtml(port: number): string {
       font-size: 11px;
       margin-top: 2px;
     }
+    .password-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    .password-input-wrapper input {
+      padding-right: 40px !important;
+      width: 100%;
+    }
+    .password-toggle-btn {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      transition: color 0.2s;
+    }
+    .password-toggle-btn:hover {
+      color: var(--text);
+    }
+    #wizard-toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .wizard-toast {
+      background: rgba(30, 30, 40, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      color: #fff;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 250px;
+      max-width: 350px;
+      pointer-events: auto;
+      animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    .wizard-toast.fade-out {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.9);
+    }
+    .wizard-toast.info {
+      border-left: 4px solid var(--accent, #3b82f6);
+    }
+    .wizard-toast.success {
+      border-left: 4px solid var(--accent-2, #10b981);
+    }
+    .wizard-toast.error {
+      border-left: 4px solid var(--danger, #ef4444);
+    }
+    @keyframes toast-slide-in {
+      from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
   </style>
 </head>
 <body>
@@ -230,6 +307,7 @@ export function setupWizardHtml(port: number): string {
 
       <div class="wizard-progress" id="wizard-progress">
         <div class="wizard-progress-dot active"></div>
+        <div class="wizard-progress-dot"></div>
         <div class="wizard-progress-dot"></div>
         <div class="wizard-progress-dot"></div>
         <div class="wizard-progress-dot"></div>
@@ -266,54 +344,8 @@ export function setupWizardHtml(port: number): string {
         <div class="wizard-check-list" id="workspace-checks"></div>
       </div>
 
-      <!-- Step 3: Provider Configuration -->
+      <!-- Step 3 (E3b): Choose First Assistant -->
       <div class="wizard-step" id="step-3">
-        <h2>LLM Provider</h2>
-        <p>Select which LLM provider to start with. You can add more later in the Provider &amp; Settings tab.</p>
-        <div class="wizard-option selected" data-provider="ollama" onclick="selectProvider(this, 'ollama')">
-          <div class="wizard-option-radio"></div>
-          <div class="wizard-option-body">
-            <h3>\u{1F5A5} Ollama (Local)</h3>
-            <p class="desc">Run open-source models locally. No API key needed. Requires Ollama installed and running.</p>
-          </div>
-        </div>
-        <div class="wizard-option" data-provider="custom" onclick="selectProvider(this, 'custom')">
-          <div class="wizard-option-radio"></div>
-          <div class="wizard-option-body">
-            <h3>\u{1F4BB} Custom Provider</h3>
-            <p class="desc">Use a custom configured provider if PRISM has one available. API key required when configured.</p>
-          </div>
-        </div>
-        <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')">
-          <div class="wizard-option-radio"></div>
-          <div class="wizard-option-body">
-            <h3>\u{1F916} OpenAI</h3>
-            <p class="desc">GPT-4o, GPT-4o-mini, and other OpenAI models. Requires API key.</p>
-          </div>
-        </div>
-        <div class="wizard-option" data-provider="anthropic" onclick="selectProvider(this, 'anthropic')">
-          <div class="wizard-option-radio"></div>
-          <div class="wizard-option-body">
-            <h3>\u2728 Anthropic</h3>
-            <p class="desc">Claude models. Requires API key.</p>
-          </div>
-        </div>
-        <div class="wizard-option" data-provider="google" onclick="selectProvider(this, 'google')">
-          <div class="wizard-option-radio"></div>
-          <div class="wizard-option-body">
-            <h3>\u{1F50D} Google AI</h3>
-            <p class="desc">Gemini models. Requires API key.</p>
-          </div>
-        </div>
-        <div id="provider-key-field" class="wizard-field" style="display:none;margin-top:16px;">
-          <label id="provider-key-label">API Key</label>
-          <input type="text" id="provider-api-key" placeholder="sk-..." autocomplete="off" />
-        </div>
-        <div id="provider-test-result" style="margin-top:8px;font-size:12px;"></div>
-      </div>
-
-      <!-- Step 4 (E3b): Choose First Assistant -->
-      <div class="wizard-step" id="step-4">
         <h2>Choose Your First Assistant</h2>
         <p>Every session in PRISM runs under a character \u2014 a persona with its own tool permissions, risk tier cap, and accountability chain. Pick one to make your default.</p>
         <div id="wizard-character-tabs" style="display:flex;gap:8px;margin:12px 0;">
@@ -335,32 +367,120 @@ export function setupWizardHtml(port: number): string {
         <div id="wizard-character-selected" style="margin-top:12px;font-size:13px;opacity:0.85;"></div>
       </div>
 
-      <!-- Step 5 (E3b): Identity & First Session -->
-      <div class="wizard-step" id="step-5">
+      <!-- Step 4 (E3b): Identity & First Session -->
+      <div class="wizard-step" id="step-4">
         <h2>Identity &amp; First Session</h2>
-        <p>Your Character Accountability Chain (CAC) binds every action back to a real identity. PRISM will create your first chat session and initialize browser/computer tooling with the selected assistant. Placeholder emails may be used now, but Business-profile tier-2+ tools remain blocked until real addresses are configured.</p>
+        <p>Your Character Accountability Chain (CAC) binds every action back to a real identity. PRISM will create your first chat session and initialize browser/computer tooling with the selected assistant. Real email addresses (non-placeholder) are required to initialize your configuration certificate.</p>
         <label style="display:block;margin-top:12px;">Operator email (the human accountable for decisions):
-          <input type="email" id="wizard-operator-email" style="width:100%;margin-top:4px;" placeholder="operator@prism.local" />
+          <input type="email" id="wizard-operator-email" style="width:100%;margin-top:4px;" placeholder="operator@yourcompany.com" />
+        </label>
+        <label style="display:block;margin-top:12px;">Operator password (for console login):
+          <div class="password-input-wrapper" style="margin-top:4px;">
+            <input type="password" id="wizard-operator-password" style="width:100%;" placeholder="Enter your login password" autocomplete="new-password" />
+            <button type="button" class="password-toggle-btn" onclick="toggleApiKeyVisibility('wizard-operator-password', this)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon-visible"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
         </label>
         <label style="display:block;margin-top:12px;">Assistant email (character identity):
-          <input type="email" id="wizard-assistant-email" style="width:100%;margin-top:4px;" placeholder="aria@prism.local" />
+          <input type="email" id="wizard-assistant-email" style="width:100%;margin-top:4px;" placeholder="aria@yourcompany.com" />
         </label>
-        <div id="wizard-cac-warning" style="margin-top:12px;padding:8px;border-radius:6px;background:rgba(255,176,0,0.12);color:#ffb000;font-size:12px;display:none;">
-          Placeholder emails accepted. Business-profile tier-2+ tool calls will be denied at runtime until you replace them in the CAC identity panel.
-        </div>
+        <div id="wizard-cac-warning" style="margin-top:12px;padding:8px;border-radius:6px;background:rgba(255,80,80,0.12);color:#ff8d8d;font-size:12px;display:none;"></div>
       </div>
 
-      <!-- Step 6 (renumbered from step-4): Summary + Launch -->
-      <div class="wizard-step" id="step-6">
-        <h2>Ready to Launch</h2>
-        <p>Here\u2019s a summary of your configuration. PRISM will validate everything before launching.</p>
-        <div class="wizard-check-list" id="summary-checks"></div>
-        <div id="summary-status" style="margin-top:16px;text-align:center;"></div>
+      <!-- Step 5: Provider & Model Setup + Guardian Setup -->
+      <div class="wizard-step" id="step-5">
+        <h2>Provider, Model &amp; Guardian Setup</h2>
+        <p>Configure your LLM provider and the local Guardian Agent to secure and run PRISM.</p>
+        
+        <div class="wizard-section" style="padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.015); margin-bottom: 16px;">
+          <h4 style="font-size: 13px; font-weight: 600; margin: 0 0 8px; display: flex; align-items: center; gap: 6px;">
+            <span>🤖 Primary LLM Provider</span>
+          </h4>
+          <div class="wizard-option selected" data-provider="ollama" onclick="selectProvider(this, 'ollama')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>\u{1F5A5} Ollama (Local)</h3>
+              <p class="desc">Run open-source models locally. No API key needed. Requires Ollama installed and running.</p>
+            </div>
+          </div>
+          <div class="wizard-option" data-provider="custom" onclick="selectProvider(this, 'custom')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>\u{1F527} Custom Provider</h3>
+              <p class="desc">Use a custom configured provider if PRISM has one available. API key required when configured.</p>
+            </div>
+          </div>
+          <div class="wizard-option" data-provider="lmstudio" onclick="selectProvider(this, 'lmstudio')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>\u{1F4BB} LM Server</h3>
+              <p class="desc">Connect to a local LM Studio / LM Server endpoint. No API key needed by default.</p>
+            </div>
+          </div>
+          <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>\u{1F916} OpenAI</h3>
+              <p class="desc">GPT-4o, GPT-4o-mini, and other OpenAI models. Requires API key.</p>
+            </div>
+          </div>
+          <div class="wizard-option" data-provider="anthropic" onclick="selectProvider(this, 'anthropic')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>\u2728 Anthropic</h3>
+              <p class="desc">Claude models. Requires API key.</p>
+            </div>
+          </div>
+          <div class="wizard-option" data-provider="google" onclick="selectProvider(this, 'google')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>\u{1F50D} Google AI</h3>
+              <p class="desc">Gemini models. Requires API key.</p>
+            </div>
+          </div>
+          <div id="provider-key-field" class="wizard-field" style="display:none;margin-top:16px;">
+            <label id="provider-key-label">API Key</label>
+            <div class="password-input-wrapper">
+              <input type="password" id="provider-api-key" placeholder="sk-..." autocomplete="off" />
+              <button type="button" class="password-toggle-btn" onclick="toggleApiKeyVisibility('provider-api-key', this)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon-visible"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="secondary-button" style="margin-top:8px;font-size:12px;padding:6px 12px;" onclick="testProviderConnection()">Test Connection</button>
+          <div id="provider-test-result" style="margin-top:8px;font-size:12px;"></div>
+        </div>
+
+        <div class="wizard-section" style="padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.015);">
+          <h4 style="font-size: 13px; font-weight: 600; margin: 0 0 8px; display: flex; align-items: center; gap: 6px;">
+            <span>🛡️ Guardian Agent</span>
+          </h4>
+          <div class="wizard-field">
+            <label>Guardian Model</label>
+            <select id="wizard-guardian-model"><option value="">Loading models...</option></select>
+            <span class="wizard-hint">Select a local GGUF model for the guardian to use.</span>
+          </div>
+
+          <div class="wizard-field">
+            <label>Authority Tier</label>
+            <select id="wizard-guardian-tier">
+              <option value="tier1_autonomous">Tier 1 — Autonomous (Individual default)</option>
+              <option value="tier2_conditional">Tier 2 — Conditional (Business default)</option>
+            </select>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;font-size:13px;">
+            <span>Auto-start Guardian on launch</span>
+            <input type="checkbox" id="wizard-guardian-autostart" style="cursor:pointer;" checked />
+          </div>
+        </div>
+        <div id="wizard-launch-error" style="color:var(--danger);font-size:12px;margin-top:12px;display:none;"></div>
       </div>
 
       <!-- Navigation -->
       <div class="wizard-nav">
-        <button class="skip-link" id="wizard-skip" onclick="skipSetup()">Skip setup</button>
+        <!-- Skip setup removed: Initialization Certificate is REQUIRED -->
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="secondary-button" style="font-size:12px;opacity:0.8;" onclick="startAdvancedWizard()">Advanced Setup \u2192</button>
           <button class="secondary-button" id="wizard-back" onclick="wizardBack()" style="display:none;">Back</button>
@@ -730,6 +850,83 @@ export function setupWizardAdvancedHtml(port: number): string {
       margin-top: 3px;
       font-weight: 400;
     }
+    .password-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    .password-input-wrapper input {
+      padding-right: 40px !important;
+      width: 100%;
+    }
+    .password-toggle-btn {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      transition: color 0.2s;
+    }
+    .password-toggle-btn:hover {
+      color: var(--text);
+    }
+    #wizard-toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .wizard-toast {
+      background: rgba(30, 30, 40, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      color: #fff;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 250px;
+      max-width: 350px;
+      pointer-events: auto;
+      animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    .wizard-toast.fade-out {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.9);
+    }
+    .wizard-toast.info {
+      border-left: 4px solid var(--accent, #3b82f6);
+    }
+    .wizard-toast.success {
+      border-left: 4px solid var(--accent-2, #10b981);
+    }
+    .wizard-toast.error {
+      border-left: 4px solid var(--danger, #ef4444);
+    }
+    @keyframes toast-slide-in {
+      from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
   </style>
 </head>
 <body>
@@ -785,6 +982,20 @@ export function setupWizardAdvancedHtml(port: number): string {
             <p class="desc">Run open-source models locally. No API key needed.</p>
           </div>
         </div>
+        <div class="wizard-option" data-provider="custom" onclick="advSelectProvider(this, 'custom')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F527} Custom Provider</h3>
+            <p class="desc">Connect to a custom compatible API endpoint. Requires custom configuration.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="lmstudio" onclick="advSelectProvider(this, 'lmstudio')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F4BB} LM Server</h3>
+            <p class="desc">Connect to a local LM Studio / LM Server endpoint. No API key needed by default.</p>
+          </div>
+        </div>
         <div class="wizard-option" data-provider="openai" onclick="advSelectProvider(this, 'openai')">
           <div class="wizard-option-radio"></div>
           <div class="wizard-option-body">
@@ -806,10 +1017,51 @@ export function setupWizardAdvancedHtml(port: number): string {
             <p class="desc">Gemini models. Requires API key.</p>
           </div>
         </div>
+        <div class="wizard-option" data-provider="mistral" onclick="advSelectProvider(this, 'mistral')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F300} Mistral AI</h3>
+            <p class="desc">Mistral Large, Pixtral, and more. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="groq" onclick="advSelectProvider(this, 'groq')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{26A1} Groq</h3>
+            <p class="desc">Ultra-fast inference for Llama and Mixtral. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="deepseek" onclick="advSelectProvider(this, 'deepseek')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F433} DeepSeek</h3>
+            <p class="desc">DeepSeek-V3 and Reasoner models. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="perplexity" onclick="advSelectProvider(this, 'perplexity')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F50E} Perplexity</h3>
+            <p class="desc">Sonar models with real-time search. Requires API key.</p>
+          </div>
+        </div>
+        <div class="wizard-option" data-provider="openrouter" onclick="advSelectProvider(this, 'openrouter')">
+          <div class="wizard-option-radio"></div>
+          <div class="wizard-option-body">
+            <h3>\u{1F310} OpenRouter</h3>
+            <p class="desc">Unified API for hundreds of models. Requires API key.</p>
+          </div>
+        </div>
         <div id="adv-provider-key-field" class="wizard-field" style="display:none;margin-top:14px;">
           <label id="adv-provider-key-label">API Key</label>
-          <input type="text" id="adv-provider-api-key" placeholder="sk-..." autocomplete="off" />
+          <div class="password-input-wrapper">
+            <input type="password" id="adv-provider-api-key" placeholder="sk-..." autocomplete="off" />
+            <button type="button" class="password-toggle-btn" onclick="toggleApiKeyVisibility('adv-provider-api-key', this)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon-visible"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
         </div>
+        <button type="button" class="secondary-button" style="margin-top:8px;" onclick="advTestProviderConnection()">Test Connection</button>
         <div id="adv-provider-test-result" style="margin-top:8px;font-size:12px;"></div>
       </div>
 
@@ -876,6 +1128,7 @@ export function setupWizardAdvancedHtml(port: number): string {
             <span>Auto-start Guardian on launch</span>
             <div class="wizard-toggle on" id="adv-guardian-autostart" onclick="advToggle(this)"></div>
           </div>
+          <div id="adv-guardian-error" style="color:var(--danger);font-size:12px;margin-top:8px;display:none;"></div>
         </div>
 
         <div class="wizard-section" style="margin-top:12px;">
@@ -899,7 +1152,13 @@ export function setupWizardAdvancedHtml(port: number): string {
 
         <div class="wizard-field">
           <label>Primary Character</label>
-          <select id="adv-cac-character"><option value="">Loading characters...</option></select>
+          <select id="adv-cac-character" onchange="advUpdateCacFields()"><option value="">Loading characters...</option></select>
+        </div>
+
+        <div id="adv-cac-custom-name-field" class="wizard-field" style="display:none;">
+          <label>Agent Name</label>
+          <input type="text" id="adv-cac-custom-name" placeholder="Enter custom agent name" />
+          <span class="wizard-hint">Required for Custom Agent.</span>
         </div>
 
         <div class="wizard-inline-row">
@@ -915,13 +1174,25 @@ export function setupWizardAdvancedHtml(port: number): string {
 
         <div class="wizard-inline-row">
           <div class="wizard-field">
-            <label>Operator ID</label>
-            <input type="text" id="adv-cac-operator-id" placeholder="Optional identifier" />
+            <label>Operator Password (for console login)</label>
+            <div class="password-input-wrapper">
+              <input type="password" id="adv-cac-operator-password" placeholder="Enter your login password" autocomplete="new-password" />
+              <button type="button" class="password-toggle-btn" onclick="toggleApiKeyVisibility('adv-cac-operator-password', this)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon-visible"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="wizard-inline-row">
+          <div class="wizard-field">
+            <label>Operator ID (First, Last Name)</label>
+            <input type="text" id="adv-cac-operator-id" placeholder="Required identifier" />
           </div>
           <div class="wizard-field">
             <label>Workspace Hub</label>
-            <input type="text" id="adv-cac-workspace-hub" placeholder="e.g. main / department-name" />
-            <span class="wizard-hint" id="adv-cac-hub-hint">Suggested for individual, required for business profiles.</span>
+            <input type="text" id="adv-cac-workspace-hub" placeholder="Required hub name" />
+            <span class="wizard-hint" id="adv-cac-hub-hint">Required for all profiles.</span>
           </div>
         </div>
 
@@ -953,6 +1224,7 @@ export function setupWizardAdvancedHtml(port: number): string {
               </select>
             </div>
           </div>
+          <div id="adv-browser-error" style="color:var(--danger);font-size:12px;margin-top:8px;display:none;"></div>
         </div>
 
         <div class="wizard-section" style="margin-top:12px;">

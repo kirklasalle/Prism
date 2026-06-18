@@ -105,6 +105,8 @@ const PLANNER_SYSTEM_PROMPT = `You are PRISM Autonomous Planner — an expert AI
 5. When the objective is fully achieved, respond with a summary WITHOUT any tool calls.
 
 ## Rules
+- ALWAYS use tools to accomplish tasks. NEVER hallucinate or guess the final answer without executing tools first.
+- If using the browser_control tool to launch a session, you MUST set headless to false unless explicitly told otherwise, so the operator can see the browser.
 - Always explain your reasoning before calling a tool.
 - Use the most specific tool available for each task.
 - If a tool call fails, diagnose the failure cause, execute rollback or compensating action, then continue toward the objective.
@@ -200,6 +202,7 @@ export class AutonomousPlanner {
                 }
 
                 // Call LLM
+                console.log(`[PRISM][Planner] Calling LLM. GoalId: ${goal.goalId}, Iteration: ${iteration}, ConversationLength: ${conversation.length}, Tools: ${toolDefinitions.length}`);
                 this.emit("planner.llm.calling", "succeeded", {
                     goalId: goal.goalId, iteration,
                     conversationLength: conversation.length,
@@ -212,14 +215,17 @@ export class AutonomousPlanner {
                         conversation,
                         systemPrompt,
                         tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
-                        tool_choice: toolDefinitions.length > 0 ? "auto" : undefined,
+                        tool_choice: toolDefinitions.length > 0 ? (iteration === 0 ? "required" : "auto") : undefined,
                         goal,
                     });
+                    console.log(`[PRISM][Planner] LLM responded. StopReason: ${llmResult?.stopReason}, Content: ${llmResult?.content ? `"${llmResult.content.slice(0, 80)}..."` : "null"}, ToolCalls: ${llmResult?.toolCalls?.length || 0}`);
                 } catch (llmError) {
+                    console.error(`[PRISM][Planner] LLM call failed on iteration ${iteration}:`, llmError);
                     this.emit("planner.llm.error", "failed", {
                         goalId: goal.goalId, iteration, error: String(llmError),
                     });
                     // Retry once with exponential backoff
+                    console.log(`[PRISM][Planner] Retrying LLM call in 2000ms...`);
                     await this.sleep(2000);
                     try {
                         llmResult = await generateFn({
@@ -227,16 +233,19 @@ export class AutonomousPlanner {
                             conversation,
                             systemPrompt,
                             tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
-                            tool_choice: toolDefinitions.length > 0 ? "auto" : undefined,
+                            tool_choice: toolDefinitions.length > 0 ? (iteration === 0 ? "required" : "auto") : undefined,
                             goal,
                         });
+                        console.log(`[PRISM][Planner] LLM retry responded. StopReason: ${llmResult?.stopReason}, Content: ${llmResult?.content ? `"${llmResult.content.slice(0, 80)}..."` : "null"}, ToolCalls: ${llmResult?.toolCalls?.length || 0}`);
                     } catch (retryError) {
+                        console.error(`[PRISM][Planner] LLM retry call failed:`, retryError);
                         loop.terminateGoal(goal.goalId, `LLM error after retry: ${String(retryError)}`);
                         return this.buildResult(goal.goalId, "failed", `LLM error: ${String(retryError)}`, iteration, totalToolCalls, startTime, loop);
                     }
                 }
 
                 if (!llmResult) {
+                    console.error(`[PRISM][Planner] LLM returned null response`);
                     loop.terminateGoal(goal.goalId, "LLM returned null response");
                     return this.buildResult(goal.goalId, "failed", "LLM returned no response", iteration, totalToolCalls, startTime, loop);
                 }
@@ -367,7 +376,7 @@ export class AutonomousPlanner {
         prompt += `\n\n## Current Goal Constraints`;
         prompt += `\n- Max actions: ${goal.constraints.maxActions}`;
         prompt += `\n- Max duration: ${Math.round(goal.constraints.maxDurationMs / 1000)}s`;
-        prompt += `\n- Browser use: ${goal.constraints.allowBrowserUse ? "allowed" : "DISABLED"}`;
+        prompt += `\n- Browser use: ${goal.constraints.allowBrowserUse ? "allowed (CRITICAL: When launching a browser session, you MUST set headless to false so the operator can see it. Never hallucinate answers without navigating to the page)" : "DISABLED"}`;
         prompt += `\n- Computer use: ${goal.constraints.allowComputerUse ? "allowed" : "DISABLED"}`;
         prompt += `\n- Shell exec: ${goal.constraints.allowShellExec ? "allowed" : "DISABLED"}`;
 

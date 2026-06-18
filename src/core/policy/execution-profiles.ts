@@ -12,7 +12,7 @@ export type MarketSegment = "individual" | "business";
 export interface ExecutionProfile {
     segment: MarketSegment;
     /** Tier 1: Allow low-risk autonomous operations without approval. */
-    tier1AutonomuousAllowed: boolean;
+    tier1AutonomousAllowed: boolean;
     /** Tier 2: Allow medium-risk operations with governance checks (e.g., require rollback plan). */
     tier2ConditionalAllowed: boolean;
     /** Tier 3: Require explicit approval for high-risk operations. */
@@ -36,7 +36,7 @@ export interface ExecutionProfile {
  */
 export const INDIVIDUAL_PROFILE: ExecutionProfile = {
     segment: "individual",
-    tier1AutonomuousAllowed: true,
+    tier1AutonomousAllowed: true,
     tier2ConditionalAllowed: true,
     tier3ApprovalRequired: true,
     tier3WhitelistBypass: false,
@@ -54,7 +54,7 @@ export const INDIVIDUAL_PROFILE: ExecutionProfile = {
  */
 export const BUSINESS_PROFILE: ExecutionProfile = {
     segment: "business",
-    tier1AutonomuousAllowed: true, // But only for non-mutating
+    tier1AutonomousAllowed: true, // But only for non-mutating
     tier2ConditionalAllowed: true,
     tier3ApprovalRequired: true,
     tier3WhitelistBypass: false, // Stricter: no bypass

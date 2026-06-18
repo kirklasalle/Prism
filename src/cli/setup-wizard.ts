@@ -43,9 +43,11 @@ import {
     resolveWorkspaceRoot,
     setWorkspaceRoot,
     ensureWorkspaceStructure,
+    seedDefaultCharacters,
+    workspacePath,
 } from "../core/config/workspace-resolver.js";
-import { existsSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Provider definitions (matches web wizard + TUI wizard)
@@ -190,8 +192,106 @@ function printUsage(): void {
 interface WizardState {
     profile: "individual" | "business";
     workspace: string;
+    characterId: string;
+    operatorEmail: string;
+    assistantEmail: string;
     provider: string;
     apiKey: string;
+    guardianModel: string;
+    guardianTier: string;
+    guardianAutoStart: boolean;
+    cacAssignmentId: string | null;
+}
+
+function getLocalCharacters(profile: string) {
+    try {
+        seedDefaultCharacters();
+        const dir = workspacePath("characters");
+        if (!existsSync(dir)) {
+            return getFallbackCharacters(profile);
+        }
+        const files = readdirSync(dir).filter(f => f.toLowerCase().endsWith(".json"));
+        const list = [];
+        for (const file of files) {
+            try {
+                const content = JSON.parse(readFileSync(join(dir, file), "utf-8"));
+                const id = file.replace(/\.json$/i, "");
+                if (content.executionProfile && content.executionProfile !== profile) {
+                    continue;
+                }
+                list.push({
+                    id,
+                    displayName: content.displayName || content.name || id,
+                    persona: content.persona || "",
+                });
+            } catch {}
+        }
+        return list.length > 0 ? list : getFallbackCharacters(profile);
+    } catch {
+        return getFallbackCharacters(profile);
+    }
+}
+
+function getFallbackCharacters(profile: string) {
+    if (profile === "business") {
+        return [
+            { id: "sentinel-business", displayName: "Sentinel", persona: "Strict guard and validator." },
+            { id: "aria-business", displayName: "Aria", persona: "Helpful business assistant." },
+            { id: "phoenix-business", displayName: "Phoenix", persona: "Autonomous task solver." },
+        ];
+    } else {
+        return [
+            { id: "aria-individual", displayName: "Aria", persona: "Fast personal assistant." },
+            { id: "phoenix-individual", displayName: "Phoenix", persona: "Autonomous task solver." },
+            { id: "sentinel-individual", displayName: "Sentinel", persona: "Oversight and validation." },
+        ];
+    }
+}
+
+function buildCertificate(state: WizardState): Record<string, unknown> {
+    return {
+        profile: {
+            segment: state.profile,
+            governance: state.profile === "business" ? "strict" : "minimal",
+        },
+        workspace: {
+            path: state.workspace || "default",
+        },
+        provider: {
+            primary: state.provider,
+            hasApiKey: !!state.apiKey,
+        },
+        routing: {
+            strategy: "single",
+            roleOverrides: "none",
+        },
+        guardian: {
+            model: state.guardianModel || "not configured",
+            authorityTier: state.guardianTier || (state.profile === "business" ? "tier2_conditional" : "tier1_autonomous"),
+            autoStart: state.guardianAutoStart,
+        },
+        agents: {
+            defaultSwarmTopology: state.profile === "business" ? "star" : "mesh",
+        },
+        cac: {
+            character: state.characterId || "not assigned",
+            operatorEmail: state.operatorEmail || "not set",
+            prismUserEmail: state.assistantEmail || "not set",
+            assignmentId: state.cacAssignmentId || "pending",
+            workspaceHub: "default",
+        },
+        browserProfile: {
+            email: state.operatorEmail || "not set",
+            segment: state.profile,
+            profileId: "pending",
+        },
+        scheduler: {
+            enabledTasks: state.profile === "business" ? "daily-review, daily-backup, weekly-compliance, weekly-telemetry" : "daily-review",
+        },
+        readiness: {
+            timestamp: new Date().toISOString(),
+        },
+    };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -216,6 +316,24 @@ async function runNonInteractive(args: CliArgs, client: SetupApiClient | null): 
         printWarning(`Provider '${provider}' requires an API key. Use --api-key or set the provider-specific env var.`);
     }
 
+    const characterId = profile === "business" ? "sentinel-business" : "aria-individual";
+    const operatorEmail = "operator@yourcompany.com";
+    const assistantEmail = `${characterId}@yourcompany.com`;
+
+    const state: WizardState = {
+        profile: profile as "individual" | "business",
+        workspace,
+        characterId,
+        operatorEmail,
+        assistantEmail,
+        provider,
+        apiKey: args.apiKey || "",
+        guardianModel: "",
+        guardianTier: profile === "business" ? "tier2_conditional" : "tier1_autonomous",
+        guardianAutoStart: true,
+        cacAssignmentId: null,
+    };
+
     printBanner();
     console.log(color("  Running in non-interactive mode...", ansi.gray));
     console.log("");
@@ -226,12 +344,22 @@ async function runNonInteractive(args: CliArgs, client: SetupApiClient | null): 
         try {
             await client.postSetupProfile(profile);
             await client.postSetupWorkspace(workspace);
+            await client.postSetupCharacter(characterId);
+            const cacRes = await client.postSetupCac({
+                characterId,
+                operatorEmail,
+                assistantEmail,
+            });
+            state.cacAssignmentId = cacRes.cacAssignmentId || null;
             if (args.apiKey && validProvider.needsKey) {
                 await client.postProviderKey(provider, args.apiKey);
             }
+            const certificate = buildCertificate(state);
+            await client.postInitializationSession(certificate);
+
             const result = await client.postSetupComplete();
             spin.stop(color(`${sym.check} Setup complete via server`, ansi.green));
-            printSummary({ profile, workspace, provider, apiKey: args.apiKey || "" }, result.readiness);
+            printSummary(state, result.readiness);
         } catch (err: unknown) {
             spin.stop(color(`${sym.cross} Server configuration failed`, ansi.red));
             printError(err instanceof Error ? err.message : String(err));
@@ -243,6 +371,8 @@ async function runNonInteractive(args: CliArgs, client: SetupApiClient | null): 
         try {
             writePreferences({
                 executionProfileSegment: profile,
+                defaultCharacterId: characterId,
+                lastUsedCharacterId: characterId,
                 setupComplete: true,
             });
             if (workspace) {
@@ -250,7 +380,7 @@ async function runNonInteractive(args: CliArgs, client: SetupApiClient | null): 
             }
             ensureWorkspaceStructure(profile === "business" ? "prod" : "dev");
             spin.stop(color(`${sym.check} Configuration saved`, ansi.green));
-            printSummary({ profile, workspace, provider, apiKey: args.apiKey || "" }, null);
+            printSummary(state, null);
         } catch (err: unknown) {
             spin.stop(color(`${sym.cross} Configuration failed`, ansi.red));
             printError(err instanceof Error ? err.message : String(err));
@@ -289,13 +419,22 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
     const state: WizardState = {
         profile: currentProfile === "business" ? "business" : "individual",
         workspace: currentWorkspace,
+        characterId: "",
+        operatorEmail: "",
+        assistantEmail: "",
         provider: args.provider || "llamacpp",
         apiKey: args.apiKey || "",
+        guardianModel: "",
+        guardianTier: "",
+        guardianAutoStart: true,
+        cacAssignmentId: null,
     };
+
+    const TOTAL_STEPS = 5;
 
     // ── Step 1: Execution Profile ────────────────────────────────────────────
 
-    printStep(1, 4, "Execution Profile");
+    printStep(1, TOTAL_STEPS, "Execution Profile");
     console.log("");
     printInfo("Choose how PRISM will operate on this machine.");
     console.log("");
@@ -326,68 +465,168 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
 
     // ── Step 2: Workspace Directory ──────────────────────────────────────────
 
-    printStep(2, 4, "Workspace Directory");
+    printStep(2, TOTAL_STEPS, "Workspace Directory");
     console.log("");
     printInfo("PRISM stores all data, state, and artifacts in a persistent workspace.");
     console.log("");
 
-    state.workspace = await prompt("Workspace path", state.workspace);
+    while (true) {
+        state.workspace = await prompt("Workspace path", state.workspace);
 
-    if (!isAbsolute(state.workspace)) {
-        printError("Workspace must be an absolute path.");
-        process.exit(2);
-    }
+        if (!isAbsolute(state.workspace)) {
+            printError("Workspace must be an absolute path.");
+            continue;
+        }
 
-    // Save workspace
-    if (client) {
-        try {
-            const result = await client.postSetupWorkspace(state.workspace);
-            state.workspace = result.workspaceRoot;
-        } catch (err: unknown) {
-            printWarning(`Server workspace save failed: ${err instanceof Error ? err.message : String(err)}`);
-            // Fall back to standalone save
+        let passed = true;
+        if (client) {
+            const spin = spinner("Validating workspace via server...");
             try {
-                setWorkspaceRoot(state.workspace);
-                ensureWorkspaceStructure(state.profile === "business" ? "prod" : "dev");
-            } catch (e2: unknown) {
-                printError(`Failed to create workspace: ${e2 instanceof Error ? e2.message : String(e2)}`);
-                process.exit(1);
+                await client.postSetupWorkspace(state.workspace);
+                const prereqs = await client.getSetupPrerequisites();
+                spin.stop(color(`${sym.check} Workspace configured`, ansi.green));
+                console.log("");
+                for (const check of prereqs.checks) {
+                    printCheck(check.label, check.passed, check.detail);
+                    if (!check.passed) passed = false;
+                }
+                console.log("");
+            } catch (err: unknown) {
+                spin.stop(color(`${sym.cross} Workspace validation failed`, ansi.red));
+                printError(err instanceof Error ? err.message : String(err));
+                passed = false;
+            }
+        } else {
+            // Local checks
+            const nodeMajor = parseInt(process.versions.node.split(".")[0], 10);
+            const nodePassed = nodeMajor >= 22;
+            const dirExists = existsSync(state.workspace);
+            console.log("");
+            printCheck("Node.js 22+", nodePassed, `Node.js ${process.version} detected`);
+            printCheck("Workspace directory exists", dirExists, state.workspace);
+            console.log("");
+            if (!nodePassed || !dirExists) {
+                passed = false;
+            }
+            if (passed) {
+                try {
+                    setWorkspaceRoot(state.workspace);
+                    ensureWorkspaceStructure(state.profile === "business" ? "prod" : "dev");
+                } catch (err: unknown) {
+                    printError(`Failed to create workspace structure: ${err instanceof Error ? err.message : String(err)}`);
+                    passed = false;
+                }
             }
         }
-    } else {
-        try {
-            setWorkspaceRoot(state.workspace);
-            ensureWorkspaceStructure(state.profile === "business" ? "prod" : "dev");
-        } catch (err: unknown) {
-            printError(`Failed to create workspace: ${err instanceof Error ? err.message : String(err)}`);
-            process.exit(1);
+
+        if (passed) {
+            break;
+        } else {
+            printError("Workspace prerequisites not satisfied. Please correct or enter a valid absolute path.");
         }
     }
-
-    // Run prerequisite checks
-    console.log("");
-    const nodeMajor = parseInt(process.versions.node.split(".")[0], 10);
-    printCheck("Node.js 22+", nodeMajor >= 22, `Node.js ${process.version} detected`);
-    printCheck("Workspace directory exists", existsSync(state.workspace), state.workspace);
-
-    if (client) {
-        try {
-            const prereqs = await client.getSetupPrerequisites();
-            for (const check of prereqs.checks) {
-                printCheck(check.label, check.passed, check.detail);
-            }
-        } catch {
-            // Local checks already shown
-        }
-    }
-    console.log("");
     printSuccess(`Workspace: ${color(state.workspace, ansi.bold)}`);
 
-    // ── Step 3: LLM Provider ─────────────────────────────────────────────────
+    // ── Step 3: Choose First Assistant ───────────────────────────────────────
 
-    printStep(3, 4, "LLM Provider");
+    printStep(3, TOTAL_STEPS, "Choose First Assistant");
     console.log("");
-    printInfo("Select your primary language model provider.");
+    printInfo("Select the first character identity for your PRISM assistant.");
+    console.log("");
+
+    let characters: any[] = [];
+    if (client) {
+        const spin = spinner("Loading workspace characters...");
+        try {
+            const data = await client.getWorkspaceCharacters();
+            characters = (data.characters || []).filter(c => !c.executionProfile || c.executionProfile === state.profile);
+            spin.stop(color(`${sym.check} Loaded ${characters.length} character(s)`, ansi.green));
+        } catch {
+            spin.stop(color(`${sym.cross} Failed to load characters from server`, ansi.yellow));
+        }
+    }
+    if (characters.length === 0) {
+        characters = getLocalCharacters(state.profile);
+    }
+
+    const charOptions = characters.map((c) => ({
+        label: c.displayName || c.name || c.id,
+        value: c.id,
+        description: c.persona || "",
+    }));
+
+    state.characterId = await select("Select character:", charOptions, 0);
+
+    if (client) {
+        try {
+            await client.postSetupCharacter(state.characterId);
+        } catch (err: unknown) {
+            printWarning(`Could not save character to server: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+    printSuccess(`Selected Assistant: ${color(state.characterId, ansi.bold)}`);
+
+    // ── Step 4: Identity & First Session ─────────────────────────────────────
+
+    printStep(4, TOTAL_STEPS, "Identity & First Session");
+    console.log("");
+    printInfo("Establish your Character Assignment Control (CAC) identity.");
+    console.log("");
+
+    while (true) {
+        const opEmail = await prompt("Operator email (human accountable for decisions)", state.operatorEmail || "operator@yourcompany.com");
+        
+        // Block placeholder email domains
+        const isPlaceholder = /@(prism\.local|example\.(com|org|net))$/i.test(opEmail);
+        if (isPlaceholder) {
+            printError("Placeholder operator email is not allowed. Please enter a real email.");
+            continue;
+        }
+
+        const opPassword = await maskedInput("Operator password (for console login)");
+        if (!opPassword) {
+            printError("Password is required.");
+            continue;
+        }
+        if (opPassword.length < 4) {
+            printError("Password must be at least 4 characters long.");
+            continue;
+        }
+
+        const defaultAssistantEmail = `${state.characterId}@yourcompany.com`;
+        const asEmail = await prompt("Assistant email (character identity)", state.assistantEmail || defaultAssistantEmail);
+
+        if (client) {
+            const spin = spinner("Initializing Character Accountability Chain (CAC)...");
+            try {
+                const res = await client.postSetupCac({
+                    characterId: state.characterId,
+                    operatorEmail: opEmail,
+                    assistantEmail: asEmail,
+                    operatorPassword: opPassword,
+                });
+                state.cacAssignmentId = res.cacAssignmentId || null;
+                state.operatorEmail = opEmail;
+                state.assistantEmail = asEmail;
+                spin.stop(color(`${sym.check} CAC initialized successfully`, ansi.green));
+                break;
+            } catch (err: unknown) {
+                spin.stop(color(`${sym.cross} CAC initialization failed`, ansi.red));
+                printError(err instanceof Error ? err.message : String(err));
+            }
+        } else {
+            state.operatorEmail = opEmail;
+            state.assistantEmail = asEmail;
+            printSuccess("CAC settings configured locally.");
+            break;
+        }
+    }
+
+    // ── Step 5: Provider & Model Setup + Guardian Setup ──────────────────────
+
+    printStep(5, TOTAL_STEPS, "Provider & Model Setup + Guardian Setup");
+    console.log("");
+    printInfo("Configure LLM settings and local governance guardian.");
     console.log("");
 
     const providerOptions: SelectOption[] = PROVIDERS.map((p) => ({
@@ -400,7 +639,6 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
 
     const selectedProvider = PROVIDERS.find((p) => p.id === state.provider)!;
 
-    // API key input (if needed)
     if (selectedProvider.needsKey) {
         if (!state.apiKey) {
             console.log("");
@@ -430,30 +668,82 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
                 printWarning("Provider test failed. You can reconfigure later from the dashboard.");
             }
         } catch {
-            spin.stop(color(`${sym.cross} Could not test provider (server may not support this endpoint)`, ansi.yellow));
+            spin.stop(color(`${sym.cross} Could not test provider`, ansi.yellow));
         }
-    } else {
-        printInfo(`Provider test skipped (standalone mode). Configure connectivity from the dashboard after starting PRISM.`);
     }
 
-    console.log("");
-    printSuccess(`Provider: ${color(selectedProvider.label, ansi.bold)}`);
+    // Guardian
+    let availableModels: Array<{ name: string; path: string }> = [];
+    if (client) {
+        const spin = spinner("Loading available GGUF models...");
+        try {
+            const data = await client.getGgufModels();
+            availableModels = data.models || [];
+            spin.stop(color(`${sym.check} Found ${availableModels.length} GGUF model(s)`, ansi.green));
+        } catch {
+            spin.stop(color(`${sym.cross} Could not load GGUF models`, ansi.yellow));
+        }
+    }
 
-    // ── Step 4: Summary & Complete ───────────────────────────────────────────
+    if (availableModels.length > 0) {
+        const modelOptions = [
+            { label: "None (skip guardian)", value: "", description: "Configure later" },
+            ...availableModels.map((m) => ({
+                label: m.name,
+                value: m.path,
+                description: m.path.split(/[/\\]/).pop() || "",
+            })),
+        ];
+        state.guardianModel = await select("Select guardian model:", modelOptions, 0);
+    } else {
+        state.guardianModel = "";
+    }
 
-    printStep(4, 4, "Summary");
-    console.log("");
+    if (state.guardianModel) {
+        const tierOptions = [
+            { label: "Tier 1 — Autonomous", value: "tier1_autonomous" },
+            { label: "Tier 2 — Conditional", value: "tier2_conditional" },
+        ];
+        const defaultTierIdx = state.profile === "business" ? 1 : 0;
+        state.guardianTier = await select("Select authority tier:", tierOptions, defaultTierIdx);
+        state.guardianAutoStart = await confirm("Auto-start guardian on launch?", true);
+
+        if (client) {
+            try {
+                await client.postGuardianConfigure({
+                    modelPath: state.guardianModel,
+                    authorityTier: state.guardianTier,
+                    autoStart: state.guardianAutoStart,
+                });
+                printSuccess("Guardian configuration saved");
+            } catch (err: unknown) {
+                printWarning(`Could not save guardian config: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        }
+    }
 
     // Save profile (in case standalone mode)
     if (!client) {
         writePreferences({
             executionProfileSegment: state.profile,
+            defaultCharacterId: state.characterId,
+            lastUsedCharacterId: state.characterId,
             setupComplete: true,
         });
     }
 
-    // Finalize via server or standalone
-    let readiness: ReadinessSnapshot | Record<string, unknown> | null = null;
+    // Submit certificate
+    const certificate = buildCertificate(state);
+    if (client) {
+        try {
+            await client.postInitializationSession(certificate);
+        } catch (err: unknown) {
+            printWarning(`Could not submit initialization certificate: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+
+    // Finalize setup
+    let readiness: ReadinessSnapshot | null = null;
     if (client) {
         const spin = spinner("Finalizing setup...");
         try {
@@ -463,7 +753,6 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
         } catch (err: unknown) {
             spin.stop(color(`${sym.cross} Server finalization failed`, ansi.red));
             printWarning(err instanceof Error ? err.message : String(err));
-            // Fall back to standalone save
             writePreferences({ setupComplete: true });
         }
     }
@@ -494,9 +783,21 @@ function printSummary(state: WizardState, readiness: Record<string, unknown> | R
 
     printCheck("Execution Profile", true, state.profile);
     printCheck("Workspace Directory", true, state.workspace);
+    printCheck("First Assistant", !!state.characterId, state.characterId || "Not selected");
+    if (state.operatorEmail) {
+        printCheck("Operator Email", true, state.operatorEmail);
+    }
+    if (state.assistantEmail) {
+        printCheck("Assistant Email", true, state.assistantEmail);
+    }
     printCheck("LLM Provider", true, state.provider);
     if (state.apiKey) {
         printCheck("API Key", true, "configured (masked)");
+    }
+    if (state.guardianModel) {
+        printCheck("Guardian Agent", true, `${state.guardianTier} — ${state.guardianModel.split(/[/\\]/).pop()}`);
+    } else {
+        printCheck("Guardian Agent", false, "Not configured");
     }
 
     if (readiness) {

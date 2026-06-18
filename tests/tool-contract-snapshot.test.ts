@@ -31,7 +31,7 @@ export async function testToolContractSnapshots(): Promise<void> {
     assert.strictEqual(shellVersionChange!.change, "version_changed");
 
     const schemaChangedWithoutVersion = buildToolContractSnapshot([
-        makeTool("shell_exec", "1.0.0", {
+        makeTool("shell_exec", "1.1.0", {
             command: { type: "string", required: true },
             timeoutMs: { type: "number" },
         }),

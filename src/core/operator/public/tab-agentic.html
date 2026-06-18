@@ -12,22 +12,26 @@
     </div>
   </section>
 
-  <section class="rail-section panel" style="grid-column:1/-1;border:1px solid #8b5cf6;border-radius:8px;background:linear-gradient(135deg,rgba(139,92,246,0.05),rgba(59,130,246,0.02));">
+  <section class="rail-section panel"
+    style="grid-column:1/-1;border:1px solid #8b5cf6;border-radius:8px;background:linear-gradient(135deg,rgba(139,92,246,0.05),rgba(59,130,246,0.02));">
     <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('cshHandoff')"
       data-tip-id="agentic:csh-handoff" data-tip-kind="agentic">
       <h3>🤝 Cognitive Session Handoff (CSH) "Baton Pass"</h3>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="csh-handoff-badge" class="muted" style="font-size:11px;">0 pending</span>
-        <button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); refreshCshHandoffs()">🔄</button>
+        <button class="secondary-button" style="font-size:11px;padding:2px 8px;"
+          onclick="event.stopPropagation(); refreshCshHandoffs()">🔄</button>
         <span id="cshHandoff-collapse-icon" class="collapse-icon">▼</span>
       </div>
     </div>
     <div id="cshHandoff-collapsible" class="collapsible-body">
       <div class="muted" style="margin-bottom:8px;font-size:12px;">
-        When an agent encounters CAPTCHAs, MFA, or safety suspensions, it requests a "Baton Pass" human-in-the-loop handoff. Take manual control, solve the roadblock, and hand control back to the autonomous planner.
+        When an agent encounters CAPTCHAs, MFA, or safety suspensions, it requests a "Baton Pass" human-in-the-loop
+        handoff. Take manual control, solve the roadblock, and hand control back to the autonomous planner.
       </div>
       <div id="csh-handoff-container" class="stack">
-        <div class="muted" style="text-align:center;padding:16px;">No pending handoffs. Ready for autonomous triggers.</div>
+        <div class="muted" style="text-align:center;padding:16px;">No pending handoffs. Ready for autonomous triggers.
+        </div>
       </div>
     </div>
   </section>
@@ -38,7 +42,8 @@
       <h3>📋 AAB Ledger — Autonomous Behavior Monitor</h3>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="aab-ledger-badge" class="muted" style="font-size:11px;">0 entries</span>
-        <button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); refreshAABLedger()">🔄</button>
+        <button class="secondary-button" style="font-size:11px;padding:2px 8px;"
+          onclick="event.stopPropagation(); refreshAABLedger()">🔄</button>
         <span id="aabLedger-collapse-icon" class="collapse-icon">▼</span>
       </div>
     </div>
@@ -59,7 +64,10 @@
             </tr>
           </thead>
           <tbody id="aab-ledger-body">
-            <tr><td colspan="5" class="muted" style="text-align:center;padding:16px;">No AAB entries yet. The ledger populates when autonomous goals are executed.</td></tr>
+            <tr>
+              <td colspan="5" class="muted" style="text-align:center;padding:16px;">No AAB entries yet. The ledger
+                populates when autonomous goals are executed.</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -72,7 +80,8 @@
       <h3>🎯 Autonomous Goals</h3>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="autonomous-goals-badge" class="muted" style="font-size:11px;">No active goal</span>
-        <button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); refreshAutonomousGoals()">🔄</button>
+        <button class="secondary-button" style="font-size:11px;padding:2px 8px;"
+          onclick="event.stopPropagation(); refreshAutonomousGoals()">🔄</button>
         <span id="autonomousGoals-collapse-icon" class="collapse-icon">▼</span>
       </div>
     </div>
@@ -82,8 +91,7 @@
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
         <input id="autonomous-goal-objective" type="text" placeholder="e.g. Summarize the latest activity events"
-          style="flex:1;min-width:200px;font-size:13px;"
-          onkeydown="if(event.key==='Enter')submitAutonomousGoal()" />
+          style="flex:1;min-width:200px;font-size:13px;" onkeydown="if(event.key==='Enter')submitAutonomousGoal()" />
         <button class="primary-button" onclick="submitAutonomousGoal()" style="font-size:12px;">🚀 Submit Goal</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
@@ -100,25 +108,6 @@
       </div>
       <div id="autonomous-goals-list" class="stack">
         <div class="muted" style="text-align:center;padding:16px;">No goals submitted yet.</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="rail-section panel" style="grid-column:1/-1;">
-    <div class="rail-header" style="cursor:pointer;user-select:none;" onclick="togglePanelCollapse('agentMgmt')"
-      data-tip-id="agentic:agent-list" data-tip-kind="agentic">
-      <h3>🤖 Agent Management</h3>
-      <span id="agentMgmt-collapse-icon" class="collapse-icon">▼</span>
-    </div>
-    <div id="agentMgmt-collapsible" class="collapsible-body">
-      <div class="muted" style="margin-bottom:8px;">List, start, stop, and monitor individual agents.</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <button class="primary-button" onclick="refreshAgentList()" style="font-size:12px;">🔄 Refresh Agents</button>
-        <button class="primary-button" onclick="launchNewAgent()" style="font-size:12px;">➕ Launch Agent</button>
-      </div>
-      <div id="agent-list-container" class="stack">
-        <div class="muted" style="text-align:center;padding:24px;">No agents running. Launch an agent to get started.
-        </div>
       </div>
     </div>
   </section>

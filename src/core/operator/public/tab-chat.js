@@ -266,8 +266,12 @@ export
 
   if (!state.readiness || !state.readiness.ready) {
     state.notice = 'Complete provider readiness before running package workflow.';
-    state.activeTab = 'settings';
-    render();
+    if (typeof window.setActiveTab === 'function') {
+      window.setActiveTab('settings');
+    } else {
+      state.activeTab = 'settings';
+      render();
+    }
     return;
   }
 
@@ -516,12 +520,12 @@ export
 }
 
 export
-  async function refreshChrome() {
+  async function refreshChrome(force) {
   // Always fetch a provider catalog: session-specific if a session is active,
   // otherwise the global session-independent catalog so settings panels populate.
-  const llmUrl = state.selectedSessionId
+  const llmUrl = (state.selectedSessionId
     ? '/api/llm/providers?sessionId=' + encodeURIComponent(state.selectedSessionId)
-    : '/api/llm/catalog';
+    : '/api/llm/catalog') + (force ? (state.selectedSessionId ? '&refresh=true' : '?refresh=true') : '');
   const llmConfigUrl = state.selectedSessionId
     ? '/api/llm/config?sessionId=' + encodeURIComponent(state.selectedSessionId)
     : null;
@@ -534,102 +538,158 @@ export
     + (state.selectedTraceId ? '&correlationId=' + encodeURIComponent(state.selectedTraceId) : '');
   const chatTelemetryUrl = '/api/events?limit=25'
     + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '');
-  const [status, readiness, llmCatalog, llmConfig, llmAuditEvents, chatTelemetryPayload, pending, actions, actionHistory, traceData, events, retrievalData, prioritizedAlertsData, telemetrySummaryData, runtimeExcellenceData, releaseValidationData, releaseDecisionData, selfReviewLatest, selfReviewHistory, packagePayload, packageHistoryPayload, settingsPayload, agentDataPayload, computerSystemInfoPayload, toolsStatusPayload, pluginsStatusPayload, llmModalitiesPayload, modelMatrixPayload] = await Promise.all([
+
+  // 1. Critical Initialization Phase: Fetch readiness and core settings
+  const [status, readiness, llmCatalog, llmConfig, pending] = await Promise.all([
     request('/api/status').catch(() => null),
     request(readinessUrl).catch(() => null),
     request(llmUrl).catch(() => null),
     llmConfigUrl ? request(llmConfigUrl).catch(() => null) : Promise.resolve(null),
-    request(llmAuditUrl).catch(() => []),
-    request(chatTelemetryUrl).catch(function () { return []; }),
-    request('/api/pending').catch(() => []),
-    request('/api/actions').catch(() => []),
-    request('/api/action-history').catch(() => []),
-    request(tracesUrl).catch(() => ({ traces: [], selectedTraceEvents: [] })),
-    request('/api/events?limit=8').catch(() => []),
-    request('/api/retrieval/alerts').catch(() => ({ alerts: [] })),
-    request('/api/retrieval/prioritized-alerts').catch(() => null),
-    request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
-    request('/api/runtime/excellence?window=' + state.telemetryWindow).catch(() => null),
-    request('/api/release/validation/latest').catch(() => ({ report: null })),
-    request('/api/release/decision/latest').catch(() => ({ report: null })),
-    request('/api/self-review/latest').catch(() => ({ report: null })),
-    request('/api/self-review/history?limit=5').catch(() => ({ reports: [] })),
-    request('/api/session-packages').catch(() => ({ packages: [], releaseSnapshot: null })),
-    request('/api/session-packages/history?limit=12').catch(() => ({ history: [] })),
-    request('/api/settings').catch(() => ({ settings: null })),
-    request('/api/agents').catch(() => ({ agents: [], swarms: [], telemetry: null })),
-    request('/api/computer/system-info').catch(() => null),
-    request('/api/tools/status').catch(function () { return { tools: {} }; }),
-    request('/api/plugins/status').catch(function () { return { plugins: {} }; }),
-    request('/api/llm/modalities').catch(function () { return { modalities: [] }; }),
-    request('/api/models/matrix').catch(function () { return { models: [] }; })
+    request('/api/pending').catch(() => [])
   ]);
-  state.agentData = agentDataPayload || null;
-  state.computerSystemInfo = computerSystemInfoPayload || null;
-  var serverTools = (toolsStatusPayload && toolsStatusPayload.tools) || {};
-  state.toolCatalog = Array.isArray(toolsStatusPayload && toolsStatusPayload.catalog)
-    ? toolsStatusPayload.catalog
-    : [];
-  for (var tk in serverTools) {
-    if (!state.toolStates[tk]) state.toolStates[tk] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
-    var st = serverTools[tk];
-    state.toolStates[tk].invocations = st.invocations || 0;
-    state.toolStates[tk].successes = st.successes || 0;
-    state.toolStates[tk].failures = st.failures || 0;
-    state.toolStates[tk].avgLatencyMs = st.avgLatencyMs || 0;
-    state.toolStates[tk].lastInvoked = st.lastInvoked || null;
-    state.toolStates[tk].lastError = st.lastError || null;
-    if (typeof st.enabled === 'boolean') state.toolStates[tk].enabled = st.enabled;
+
+  if (status) state.status = status;
+  if (readiness) state.readiness = readiness;
+  if (llmCatalog) {
+    state.llmCatalog = llmCatalog;
+    try {
+      localStorage.setItem('prism-llm-catalog', JSON.stringify(llmCatalog));
+    } catch (_) { }
   }
-  var serverPlugins = (pluginsStatusPayload && pluginsStatusPayload.plugins) || {};
-  for (var pk in serverPlugins) {
-    if (!state.pluginStates[pk]) state.pluginStates[pk] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, uptime: 100, lastChecked: null };
-    var sp = serverPlugins[pk];
-    state.pluginStates[pk].requests = sp.requests || 0;
-    state.pluginStates[pk].errors = sp.errors || 0;
-    state.pluginStates[pk].avgResponseMs = sp.avgResponseMs || 0;
-    state.pluginStates[pk].lastChecked = sp.lastChecked || null;
-    if (typeof sp.enabled === 'boolean') state.pluginStates[pk].enabled = sp.enabled;
-    if (typeof sp.healthy === 'boolean') state.pluginStates[pk].healthy = sp.healthy;
-  }
-  var modalitySummary = llmModalitiesPayload || null;
-  state.llmModalitySummary = modalitySummary;
-  if (modalitySummary && Array.isArray(modalitySummary.modalities) && modalitySummary.modalities.length > 0) {
-    state.availableModalities = modalitySummary.modalities;
-  }
-  // /api/models/matrix returns { known, runtime, deprecated } — combine all into modelMatrixEntries
-  // so resolveMatrixEntry() can enrich the capability matrix with tier/locality/strengths.
-  state.modelMatrixEntries = [
-    ...(Array.isArray(modelMatrixPayload && modelMatrixPayload.runtime) ? modelMatrixPayload.runtime : []),
-    ...(Array.isArray(modelMatrixPayload && modelMatrixPayload.known) ? modelMatrixPayload.known : []),
-  ];
-  state.status = status;
-  state.readiness = readiness;
-  state.llmCatalog = llmCatalog;
-  state.llmConfig = llmConfig;
-  state.llmAuditEvents = llmAuditEvents;
-  state.chatTelemetry = (Array.isArray(chatTelemetryPayload) ? chatTelemetryPayload : []).filter(function (e) { return e.operation && (e.operation.startsWith('chat.') || e.operation.startsWith('llm.')); });
-  state.pending = pending;
-  state.actions = actions;
-  state.actionHistory = actionHistory;
-  state.traceData = traceData;
-  state.events = events;
-  state.selfReviewLatest = selfReviewLatest.report || null;
-  state.selfReviewHistory = selfReviewHistory.reports || [];
-  state.retrievalAlerts = retrievalData.alerts || [];
-  state.prioritizedAlerts = prioritizedAlertsData || null;
-  state.telemetrySummary = telemetrySummaryData || null;
-  state.runtimeExcellence = runtimeExcellenceData || null;
-  state.releaseValidation = releaseValidationData ? (releaseValidationData.report || null) : null;
-  state.releaseDecision = releaseDecisionData ? (releaseDecisionData.report || null) : null;
-  state.sessionPackages = Array.isArray(packagePayload.packages) ? packagePayload.packages : [];
-  state.packageReleaseSnapshot = packagePayload.releaseSnapshot || null;
-  state.sessionPackageHistory = Array.isArray(packageHistoryPayload.history) ? packageHistoryPayload.history : [];
-  state.runtimeSettings = settingsPayload.settings || null;
-  reconcileExpandedSessionPackages();
-  if (state.selectedTraceId && (!traceData || !traceData.traces || !traceData.traces.some(trace => trace.correlationId === state.selectedTraceId))) {
-    state.selectedTraceId = null;
-  }
+  if (llmConfig) state.llmConfig = llmConfig;
+  if (pending) state.pending = pending;
+
+  // Render critical components immediately
+  safeRenderStep('header', renderHeader);
+  safeRenderStep('llm', renderLlm);
+  safeRenderStep('onboarding', renderOnboarding);
+  safeRenderStep('brandPanel', renderBrandPanel);
+
+  // 2. Deferred & Non-Essential Data Fetching: Runs in the background
+  (async () => {
+    const promises = [
+      request('/api/actions').catch(() => []),
+      request('/api/action-history').catch(() => []),
+      request(llmAuditUrl).catch(() => []),
+      request(chatTelemetryUrl).catch(() => []),
+      request(tracesUrl).catch(() => ({ traces: [], selectedTraceEvents: [] })),
+      request('/api/events?limit=8').catch(() => []),
+      request('/api/retrieval/alerts').catch(() => ({ alerts: [] })),
+      request('/api/retrieval/prioritized-alerts').catch(() => null),
+      request('/api/telemetry/summary?window=' + state.telemetryWindow).catch(() => null),
+      request('/api/runtime/excellence?window=' + state.telemetryWindow).catch(() => null),
+      request('/api/release/validation/latest').catch(() => ({ report: null })),
+      request('/api/release/decision/latest').catch(() => ({ report: null })),
+      request('/api/self-review/latest').catch(() => ({ report: null })),
+      request('/api/self-review/history?limit=5').catch(() => ({ reports: [] })),
+      request('/api/session-packages').catch(() => ({ packages: [], releaseSnapshot: null })),
+      request('/api/session-packages/history?limit=12').catch(() => ({ history: [] })),
+      request('/api/settings').catch(() => ({ settings: null })),
+      request('/api/agents').catch(() => ({ agents: [], swarms: [], telemetry: null })),
+      request('/api/computer/system-info').catch(() => null),
+      request('/api/tools/status').catch(() => ({ tools: {} })),
+      request('/api/plugins/status').catch(() => ({ plugins: {} })),
+      request('/api/llm/modalities').catch(() => ({ modalities: [] }))
+    ];
+
+    // Defer the model matrix request completely unless settings tab is active
+    let matrixPromiseIndex = -1;
+    if (state.activeTab === 'settings') {
+      matrixPromiseIndex = promises.length;
+      promises.push(request('/api/models/matrix').catch(() => ({ models: [] })));
+    }
+
+    const results = await Promise.all(promises);
+
+    const actions = results[0];
+    const actionHistory = results[1];
+    const llmAuditEvents = results[2];
+    const chatTelemetryPayload = results[3];
+    const traceData = results[4];
+    const events = results[5];
+    const retrievalData = results[6];
+    const prioritizedAlertsData = results[7];
+    const telemetrySummaryData = results[8];
+    const runtimeExcellenceData = results[9];
+    const releaseValidationData = results[10];
+    const releaseDecisionData = results[11];
+    const selfReviewLatest = results[12];
+    const selfReviewHistory = results[13];
+    const packagePayload = results[14];
+    const packageHistoryPayload = results[15];
+    const settingsPayload = results[16];
+    const agentDataPayload = results[17];
+    const computerSystemInfoPayload = results[18];
+    const toolsStatusPayload = results[19];
+    const pluginsStatusPayload = results[20];
+    const llmModalitiesPayload = results[21];
+    const modelMatrixPayload = matrixPromiseIndex !== -1 ? results[matrixPromiseIndex] : null;
+
+    state.agentData = agentDataPayload || null;
+    state.computerSystemInfo = computerSystemInfoPayload || null;
+    var serverTools = (toolsStatusPayload && toolsStatusPayload.tools) || {};
+    state.toolCatalog = Array.isArray(toolsStatusPayload && toolsStatusPayload.catalog)
+      ? toolsStatusPayload.catalog
+      : [];
+    for (var tk in serverTools) {
+      if (!state.toolStates[tk]) state.toolStates[tk] = { enabled: true, invocations: 0, successes: 0, failures: 0, avgLatencyMs: 0, lastInvoked: null, lastError: null };
+      var st = serverTools[tk];
+      state.toolStates[tk].invocations = st.invocations || 0;
+      state.toolStates[tk].successes = st.successes || 0;
+      state.toolStates[tk].failures = st.failures || 0;
+      state.toolStates[tk].avgLatencyMs = st.avgLatencyMs || 0;
+      state.toolStates[tk].lastInvoked = st.lastInvoked || null;
+      state.toolStates[tk].lastError = st.lastError || null;
+      if (typeof st.enabled === 'boolean') state.toolStates[tk].enabled = st.enabled;
+    }
+    var serverPlugins = (pluginsStatusPayload && pluginsStatusPayload.plugins) || {};
+    for (var pk in serverPlugins) {
+      if (!state.pluginStates[pk]) state.pluginStates[pk] = { enabled: true, healthy: true, requests: 0, errors: 0, avgResponseMs: 0, uptime: 100, lastChecked: null };
+      var sp = serverPlugins[pk];
+      state.pluginStates[pk].requests = sp.requests || 0;
+      state.pluginStates[pk].errors = sp.errors || 0;
+      state.pluginStates[pk].avgResponseMs = sp.avgResponseMs || 0;
+      state.pluginStates[pk].lastChecked = sp.lastChecked || null;
+      if (typeof sp.enabled === 'boolean') state.pluginStates[pk].enabled = sp.enabled;
+      if (typeof sp.healthy === 'boolean') state.pluginStates[pk].healthy = sp.healthy;
+    }
+    var modalitySummary = llmModalitiesPayload || null;
+    state.llmModalitySummary = modalitySummary;
+    if (modalitySummary && Array.isArray(modalitySummary.modalities) && modalitySummary.modalities.length > 0) {
+      state.availableModalities = modalitySummary.modalities;
+    }
+    if (modelMatrixPayload) {
+      state.modelMatrixEntries = [
+        ...(Array.isArray(modelMatrixPayload.runtime) ? modelMatrixPayload.runtime : []),
+        ...(Array.isArray(modelMatrixPayload.known) ? modelMatrixPayload.known : []),
+      ];
+    }
+    state.actions = actions;
+    state.actionHistory = actionHistory;
+    state.llmAuditEvents = llmAuditEvents;
+    state.chatTelemetry = (Array.isArray(chatTelemetryPayload) ? chatTelemetryPayload : []).filter(function (e) { return e.operation && (e.operation.startsWith('chat.') || e.operation.startsWith('llm.')); });
+    state.traceData = traceData;
+    state.events = events;
+    state.selfReviewLatest = selfReviewLatest ? (selfReviewLatest.report || null) : null;
+    state.selfReviewHistory = selfReviewHistory ? (selfReviewHistory.reports || []) : [];
+    state.retrievalAlerts = retrievalData ? (retrievalData.alerts || []) : [];
+    state.prioritizedAlerts = prioritizedAlertsData || null;
+    state.telemetrySummary = telemetrySummaryData || null;
+    state.runtimeExcellence = runtimeExcellenceData || null;
+    state.releaseValidation = releaseValidationData ? (releaseValidationData.report || null) : null;
+    state.releaseDecision = releaseDecisionData ? (releaseDecisionData.report || null) : null;
+    state.sessionPackages = packagePayload ? (Array.isArray(packagePayload.packages) ? packagePayload.packages : []) : [];
+    state.packageReleaseSnapshot = packagePayload ? (packagePayload.releaseSnapshot || null) : null;
+    state.sessionPackageHistory = packageHistoryPayload ? (Array.isArray(packageHistoryPayload.history) ? packageHistoryPayload.history : []) : [];
+    state.runtimeSettings = settingsPayload ? (settingsPayload.settings || null) : null;
+    reconcileExpandedSessionPackages();
+    if (state.selectedTraceId && (!traceData || !traceData.traces || !traceData.traces.some(trace => trace.correlationId === state.selectedTraceId))) {
+      state.selectedTraceId = null;
+    }
+    if (typeof window !== 'undefined' && typeof window.render === 'function') {
+      window.render();
+    }
+  })().catch(err => console.error('[refreshChrome] deferred fetch error:', err));
 }
 
 export
@@ -844,11 +904,17 @@ export
         + '</div>';
     }
 
+    var viewBtn = '';
+    if (name === 'browser_control' || name === 'browser_create') {
+      viewBtn = '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'browser\'); } if(typeof setBrowserView===\'function\'){ setBrowserView(\'viewport\'); } }catch(e){console.error(e);} return false;">View in Browser Control</button>';
+    }
+
     blocks.push(
       '<div class="tool-block" onclick="this.classList.toggle(&quot;expanded&quot;)">'
       + '<div class="tool-block-header">'
       + '<span class="tool-block-icon">\u{1F527}</span>'
       + '<span class="tool-block-name">' + escapeHtml(name) + '</span>'
+      + viewBtn
       + '<span class="tool-block-status ' + statusClass + '">' + statusText + '</span>'
       + '</div>'
       + '<div class="tool-block-body">'
@@ -965,12 +1031,17 @@ export
       if (ev.type === 'tool_call') {
         var tn = (ev.toolCall && ev.toolCall.name) || 'tool';
         var iter = ev.iteration != null ? ev.iteration : '';
+        var isBrowser = tn === 'browser_control' || tn === 'browser_create';
+        var btnText = isBrowser ? 'View in Browser Control' : 'View in Agentic';
+        var btnClick = isBrowser
+          ? "try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'browser\'); } if(typeof setBrowserView===\'function\'){ setBrowserView(\'viewport\'); } }catch(e){console.error(e);} return false;"
+          : "try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'agentic\'); } if(typeof refreshAutonomousGoals===\'function\'){ refreshAutonomousGoals(); } }catch(e){console.error(e);} return false;";
         return '<div class="tool-block" title="' + escapeHtml(tn) + (iter ? ' (iteration ' + iter + ')' : '') + '">'
           + '<div class="tool-block-header"><span class="tool-block-icon">\u{1F527}</span>'
           + '<span class="tool-block-name" style="margin-left:8px;font-weight:600;">' + escapeHtml(tn) + '</span>'
           + '<span class="muted" style="margin-left:8px;font-size:11px;">' + (iter ? 'iter ' + iter : '') + '</span>'
           + '<span class="streaming-dot" style="margin-left:8px"></span>'
-          + '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'agentic\'); } if(typeof refreshAutonomousGoals===\'function\'){ refreshAutonomousGoals(); } }catch(e){console.error(e);} return false;">View in Agentic</button>'
+          + '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="' + btnClick + '">' + btnText + '</button>'
           + '</div></div>';
       }
       if (ev.type === 'tool_result') { var rn = (ev.toolResult && ev.toolResult.name) || 'tool'; return '<div class="muted" style="font-size:11px;">\u2713 ' + escapeHtml(rn) + ' done</div>'; }
@@ -1035,7 +1106,12 @@ export
     }
   }
 
-  var html = '<div class="eyebrow">Frontier Operator Console</div>'
+  var html = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">'
+    + '<div class="eyebrow" style="margin-bottom: 0;">Frontier Operator Console</div>'
+    + '<button id="system-shutdown-btn" onclick="triggerSystemShutdown()" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.45); color: #f87171; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 3px; text-transform: uppercase; letter-spacing: 0.5px; height: 18px; line-height: 1;" onmouseover="this.style.background=\'rgba(239, 68, 68, 0.28)\'; this.style.boxShadow=\'0 0 8px rgba(239, 68, 68, 0.25)\'" onmouseout="this.style.background=\'rgba(239, 68, 68, 0.12)\'; this.style.boxShadow=\'none\'">'
+    + '<span>🛑</span> Shutdown'
+    + '</button>'
+    + '</div>'
     + '<h1>PRISM Chat</h1>'
     + '<div class="brand-profile-badge ' + badgeClass + '">' + badgeLabel + '</div>'
     + '<div class="brand-info-grid">'
@@ -1383,8 +1459,12 @@ export
   }
   if (!state.readiness || !state.readiness.ready) {
     state.notice = 'Complete the first-run checklist in Provider & Settings before sending messages.';
-    state.activeTab = 'settings';
-    render();
+    if (typeof window.setActiveTab === 'function') {
+      window.setActiveTab('settings');
+    } else {
+      state.activeTab = 'settings';
+      render();
+    }
     return;
   }
   state.busy = true;
@@ -1723,8 +1803,8 @@ export function showThinkingTraceModal() {
     html += `
       <div style="background:rgba(30,30,46,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:16px;font-size:13px;display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;box-sizing:border-box;flex-shrink:0;">
         <div><span style="color:#94a3b8;">Active Session:</span> <span style="font-family:monospace;color:#a78bfa;word-break:break-all;">${escapeHtml(state.selectedSessionId || 'none')}</span></div>
-        <div><span style="color:#94a3b8;">Cognitive Mode:</span> <span style="color:#38bdf8;font-weight:600;">Spectrum Refraction</span></div>
-        <div><span style="color:#94a3b8;">Live Event Count:</span> <span style="font-family:monospace;color:#34d399;font-weight:600;">${state.agenticStream.length}</span></div>
+        <div><span style="color:#94a3b8;">Cognitive Mode:</span> <span style="color:#38bdf8;font-weight:600;">${state.settings?.srEnabled ? 'Spectrum Refraction' : 'Standard Pipeline'}</span></div>
+        <div><span style="color:#94a3b8;">Live Event Count:</span> <span style="font-family:monospace;color:#34d399;font-weight:600;">${trace.length}</span></div>
         <div><span style="color:#94a3b8;">Status:</span> <span style="color:#fbbf24;animation:thinking-pulse 1.4s ease-in-out infinite;">🧠 processing...</span></div>
       </div>
     `;

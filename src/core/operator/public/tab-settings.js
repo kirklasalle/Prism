@@ -228,7 +228,14 @@ export
     return;
   }
   if (!state.llmCatalog) {
-    container.innerHTML = '<div class="muted">Loading providers...</div>';
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px dashed rgba(255,255,255,0.08);margin:10px 0;">
+        <div class="muted">Failed to load providers catalog.</div>
+        <button class="secondary-button" onclick="refreshChrome(true).then(function() { render(); })" style="padding:6px 12px;font-size:11px;cursor:pointer;">
+          🔄 Retry Loading Catalog
+        </button>
+      </div>
+    `;
     return;
   }
 
@@ -622,7 +629,14 @@ export
   const container = document.getElementById('capability-matrix');
   if (!container) return;
   if (!state.llmCatalog || !state.llmCatalog.providers) {
-    container.innerHTML = '<div class="muted">Waiting for provider catalog...</div>';
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px dashed rgba(255,255,255,0.08);margin:10px 0;">
+        <div class="muted">Waiting for provider catalog...</div>
+        <button class="secondary-button" onclick="refreshChrome(true).then(function() { render(); })" style="padding:6px 12px;font-size:11px;cursor:pointer;">
+          🔄 Retry Loading Catalog
+        </button>
+      </div>
+    `;
     return;
   }
 
@@ -2043,7 +2057,7 @@ export
   /* ── Section 1c: LLM Power & VRAM Manager ── */
   sec('powerManager', '\u{1F50B} LLM Power & VRAM Manager', function () {
     var currentMode = state.powerMode || 'adaptive';
-    
+
     html += '<div class="power-manager-panel" style="background: linear-gradient(135deg, rgba(20,20,35,0.8), rgba(10,10,20,0.9)); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; padding: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); backdrop-filter: blur(8px); margin-bottom: 8px; overflow: hidden; position: relative;">';
     html += '<div style="position: absolute; top: -50px; right: -50px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(0,0,0,0) 70%); pointer-events: none;"></div>';
 
@@ -2054,7 +2068,7 @@ export
     html += '<div style="font-size: 14px; font-weight: 700; color: #a78bfa; letter-spacing: 0.5px; text-transform: uppercase;">LLM Power Manager</div>';
     html += '<div style="font-size: 11px; color: var(--fg-muted);">Dynamic battery-like capacity & VRAM routing</div>';
     html += '</div></div>';
-    
+
     html += '<div style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);">';
     html += '<div id="power-battery-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></div>';
     html += '<span id="power-battery-text" style="font-size: 10px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.5px;">MONITORING</span>';
@@ -2065,12 +2079,12 @@ export
     html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Dynamic Profile</div>';
     html += '<div id="power-mode-badge" style="font-size: 12px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">' + escapeHtml(currentMode) + '</div>';
     html += '</div>';
-    
+
     html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
     html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Est. Free VRAM</div>';
     html += '<div id="power-vram-text" style="font-size: 12px; font-weight: 700; color: #10b981;">-- / -- MB</div>';
     html += '</div>';
-    
+
     html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
     html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Usage Footprint</div>';
     html += '<div id="power-cost-badge" style="font-size: 12px; font-weight: 700; color: #a78bfa;">MINIMAL</div>';
@@ -2114,14 +2128,14 @@ export
     html += '</button>';
 
     html += '</div></div></div>';
-    
+
     // Trigger telemetry update shortly after render
-    setTimeout(function() {
+    setTimeout(function () {
       if (window.updatePowerTelemetry) window.updatePowerTelemetry();
     }, 10);
   });
 
-  /* ── Section 2: LLM Summary ── */
+  /* ── Section 2: LLM Summary ──
   sec('llm', 'LLM Configuration (Summary)', function () {
     var provider = state.llmCatalog ? (state.llmCatalog.activeProviderId || 'none') : 'unknown';
     var model = state.llmCatalog ? (state.llmCatalog.activeModel || 'none') : 'unknown';
@@ -2385,6 +2399,121 @@ export
     html += '<button class="secondary-button" style="font-size:12px;" onclick="window.location.href=\'/setup?rerun=true\'">Re-run Setup Wizard</button>';
     html += '</div>';
   });
+
+  /* ── Section 12: Operator Management (Admin-only) ── */
+  var isAdmin = state.principal && state.principal.roles && (state.principal.roles.includes('admin') || state.principal.roles.includes('root'));
+  if (isAdmin) {
+    sec('operators', '👥 Operator Management', function () {
+      html += '<div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">';
+      html += '  <span class="muted" style="font-size:11px;">Manage system operator accounts, statuses, and role assignments.</span>';
+      html += '  <button class="secondary-button" onclick="toggleCreateOperatorForm()" style="font-size:11px; padding:4px 8px;">➕ Create Operator</button>';
+      html += '</div>';
+
+      // 1. Create Operator Form (collapsible/toggleable)
+      if (state.showCreateOperatorForm) {
+        html += '<div style="padding:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(148,163,184,0.15); border-radius:8px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">';
+        html += '  <div style="font-size:11px; font-weight:bold; text-transform:uppercase; color:var(--fg-muted);">New Operator Registration</div>';
+
+        // Email Input
+        html += '  <div style="display:flex; flex-direction:column; gap:2px;">';
+        html += '    <label style="font-size:10px; color:var(--fg-muted);">Email Address (Username)</label>';
+        html += '    <input id="new-op-email" type="email" placeholder="operator@prism.ai" style="padding:6px; background:var(--bg-input); border:1px solid var(--border-color); border-radius:4px; color:var(--fg); font-size:12px;" />';
+        html += '  </div>';
+
+        // Display Name Input
+        html += '  <div style="display:flex; flex-direction:column; gap:2px;">';
+        html += '    <label style="font-size:10px; color:var(--fg-muted);">Display Name</label>';
+        html += '    <input id="new-op-name" type="text" placeholder="John Doe" style="padding:6px; background:var(--bg-input); border:1px solid var(--border-color); border-radius:4px; color:var(--fg); font-size:12px;" />';
+        html += '  </div>';
+
+        // Password Input
+        html += '  <div style="display:flex; flex-direction:column; gap:2px;">';
+        html += '    <label style="font-size:10px; color:var(--fg-muted);">Temporary Password</label>';
+        html += '    <input id="new-op-password" type="password" placeholder="••••••••" style="padding:6px; background:var(--bg-input); border:1px solid var(--border-color); border-radius:4px; color:var(--fg); font-size:12px;" />';
+        html += '  </div>';
+
+        // Actions
+        html += '  <div style="display:flex; gap:8px; margin-top:4px;">';
+        html += '    <button class="stg-save-btn" onclick="submitCreateOperator()" style="padding:6px 12px; font-size:11px; margin:0;">Register</button>';
+        html += '    <button class="secondary-button" onclick="toggleCreateOperatorForm()" style="padding:6px 12px; font-size:11px;">Cancel</button>';
+        html += '  </div>';
+        html += '</div>';
+      }
+
+      // 2. Operators List/Table
+      var ops = state.operatorList || [];
+      if (ops.length === 0) {
+        html += '<div class="muted" style="padding:8px 0; font-size:11px;">Loading operators list...</div>';
+      } else {
+        html += '<div style="overflow-x:auto;">';
+        html += '<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">';
+        html += '  <thead>';
+        html += '    <tr style="border-bottom:1px solid var(--border-color); color:var(--fg-muted); font-weight:600;">';
+        html += '      <th style="padding:8px 6px;">Operator</th>';
+        html += '      <th style="padding:8px 6px;">Roles</th>';
+        html += '      <th style="padding:8px 6px;">Status</th>';
+        html += '      <th style="padding:8px 6px; text-align:right;">Actions</th>';
+        html += '    </tr>';
+        html += '  </thead>';
+        html += '  <tbody>';
+
+        ops.forEach(function (op) {
+          var isSelf = state.principal && state.principal.email === op.email;
+          var statusColor = op.status === 'active' ? '#10b981' : '#f87171';
+          var hasAdmin = op.roles && op.roles.includes('admin');
+
+          html += '    <tr style="border-bottom:1px solid rgba(148,163,184,0.06);">';
+
+          // Identity
+          html += '      <td style="padding:8px 6px;">';
+          html += '        <div style="font-weight:600;">' + escapeHtml(op.displayName || op.email) + '</div>';
+          html += '        <div class="muted" style="font-size:10px;">' + escapeHtml(op.email) + (isSelf ? ' <span style="color:#a78bfa; font-weight:bold;">(you)</span>' : '') + '</div>';
+          html += '      </td>';
+
+          // Roles
+          html += '      <td style="padding:8px 6px;">';
+          if (op.roles && op.roles.length > 0) {
+            op.roles.forEach(function (r) {
+              html += '        <span class="stg-badge" style="background:rgba(167,139,250,0.15); color:#c084fc; border:1px solid rgba(167,139,250,0.3); border-radius:4px; padding:2px 6px; font-size:10px; font-weight:600; text-transform:uppercase; margin-right:4px;">' + escapeHtml(r) + '</span>';
+            });
+          } else {
+            html += '        <span class="muted" style="font-size:10px;">None</span>';
+          }
+          html += '      </td>';
+
+          // Status
+          html += '      <td style="padding:8px 6px;">';
+          html += '        <span style="display:inline-flex; align-items:center; gap:4px;">';
+          html += '          <span style="width:6px; height:6px; border-radius:50%; background:' + statusColor + ';"></span>';
+          html += '          <span style="text-transform:capitalize; font-size:11px;">' + escapeHtml(op.status) + '</span>';
+          html += '        </span>';
+          html += '      </td>';
+
+          // Actions
+          html += '      <td style="padding:8px 6px; text-align:right; white-space:nowrap;">';
+          if (!isSelf) {
+            // Status Toggle (Suspend / Activate)
+            var nextStatus = op.status === 'active' ? 'suspended' : 'active';
+            var statusBtnLabel = op.status === 'active' ? '⛔ Suspend' : '✅ Activate';
+            html += '        <button class="secondary-button" onclick="changeOperatorStatus(\'' + op.id + '\', \'' + nextStatus + '\')" style="font-size:10px; padding:2px 6px; margin-right:4px;">' + statusBtnLabel + '</button>';
+
+            // Role Toggle (Admin/Viewer)
+            var roleBtnLabel = hasAdmin ? '⬇️ Revoke Admin' : '🛡️ Make Admin';
+            html += '        <button class="secondary-button" onclick="toggleOperatorAdminRole(\'' + op.id + '\', ' + hasAdmin + ')" style="font-size:10px; padding:2px 6px;">' + roleBtnLabel + '</button>';
+          } else {
+            html += '        <span class="muted" style="font-size:10px; padding-right:8px;">Immutable</span>';
+          }
+          html += '      </td>';
+
+          html += '    </tr>';
+        });
+
+        html += '  </tbody>';
+        html += '</table>';
+        html += '</div>';
+      }
+    });
+  }
 
   container.innerHTML = html;
 }
@@ -3154,7 +3283,7 @@ export
     var rightProvEl = document.getElementById('sr-right-provider');
     var leftProviderId = leftProvEl ? leftProvEl.value : '';
     var rightProviderId = rightProvEl ? rightProvEl.value : '';
-    
+
     var query = [];
     if (leftProviderId) query.push('leftProviderId=' + encodeURIComponent(leftProviderId));
     if (rightProviderId) query.push('rightProviderId=' + encodeURIComponent(rightProviderId));
@@ -3246,7 +3375,7 @@ export async function refreshLlreTelemetry() {
   const sessionId = state.selectedSessionId || '';
   try {
     const data = await request('/api/llre/summary?sessionId=' + encodeURIComponent(sessionId));
-    
+
     const teqEl = document.getElementById('llre-teq-value');
     const rsiEl = document.getElementById('llre-rsi-value');
     const csrEl = document.getElementById('llre-csr-value');
@@ -3259,7 +3388,7 @@ export async function refreshLlreTelemetry() {
     if (rsiEl) rsiEl.textContent = typeof data.rsi === 'number' && data.count > 0 ? data.rsi.toFixed(2) : '--';
     if (csrEl) csrEl.textContent = typeof data.csr === 'number' && data.count > 0 ? data.csr.toFixed(2) : '--';
     if (tcaEl) tcaEl.textContent = typeof data.tca === 'number' && data.count > 0 ? data.tca.toFixed(2) : '--';
-    
+
     if (costEl) {
       costEl.textContent = typeof data.costUsd === 'number' ? '$' + data.costUsd.toFixed(4) : '$0.0000';
     }
@@ -3337,11 +3466,23 @@ export async function oauthDisconnect(provider) {
 
 export async function refreshCacChain() {
   try {
-    const res = await request('/api/v1/cac/chain');
+    const res = await request('/api/cac/chain');
     state.cacChain = res;
     render();
   } catch (e) {
     console.error('Failed to fetch CAC chain', e);
+  }
+
+  // Check if current user is admin to render Operator Management
+  try {
+    const me = await request('/api/iam/me');
+    state.principal = me.principal;
+    var isAdmin = me.principal && me.principal.roles && (me.principal.roles.includes('admin') || me.principal.roles.includes('root'));
+    if (isAdmin) {
+      refreshOperatorList();
+    }
+  } catch (e) {
+    console.error('Failed to fetch principal', e);
   }
 }
 
@@ -3414,10 +3555,10 @@ export async function savePowerModePreference(mode) {
       noticeToast.style.opacity = '1';
       setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
     }
-    
+
     // Rerender Settings panel to apply styling
     renderSettingsPanel();
-    
+
     // Trigger matrix update in case dynamic model routing preferences changed!
     if (window.updateModelMatrix) {
       window.updateModelMatrix();
@@ -3436,9 +3577,9 @@ export async function updatePowerTelemetry() {
   var costBadge = document.getElementById('power-cost-badge');
   var batteryText = document.getElementById('power-battery-text');
   var batteryDot = document.getElementById('power-battery-dot');
-  
+
   if (!vramText) return; // Tab not active or element not rendered yet
-  
+
   try {
     // 1. Update Mode badge based on active state
     var currentMode = state.powerMode || 'adaptive';
@@ -3452,7 +3593,7 @@ export async function updatePowerTelemetry() {
         modeBadge.style.color = '#3b82f6';
       }
     }
-    
+
     // 2. Fetch latest Ollama / System Telemetry
     var data = await request('/api/system/hardware').catch(() => null);
     if (!data || !data.gpu) {
@@ -3518,6 +3659,95 @@ export async function updatePowerTelemetry() {
     }
   } catch (err) {
     // silence
+  }
+}
+
+// ── Operator Management Action Handlers ──
+window.toggleCreateOperatorForm = function () {
+  state.showCreateOperatorForm = !state.showCreateOperatorForm;
+  renderSettingsPanel();
+};
+
+window.submitCreateOperator = async function () {
+  var emailEl = document.getElementById('new-op-email');
+  var nameEl = document.getElementById('new-op-name');
+  var passwordEl = document.getElementById('new-op-password');
+
+  var email = emailEl ? emailEl.value.trim() : '';
+  var name = nameEl ? nameEl.value.trim() : '';
+  var password = passwordEl ? passwordEl.value.trim() : '';
+
+  if (!email) {
+    state.notice = { type: 'error', message: 'Email address is required.' };
+    renderNotice();
+    return;
+  }
+
+  try {
+    await request('/api/iam/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, displayName: name, password: password })
+    });
+
+    state.notice = { type: 'success', message: 'Operator created successfully.' };
+    renderNotice();
+    state.showCreateOperatorForm = false;
+    await refreshOperatorList();
+  } catch (e) {
+    state.notice = { type: 'error', message: 'Failed to create operator: ' + e.message };
+    renderNotice();
+  }
+};
+
+window.changeOperatorStatus = async function (userId, newStatus) {
+  if (!confirm('Are you sure you want to set this operator status to ' + newStatus + '?')) return;
+  try {
+    await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    state.notice = { type: 'success', message: 'Operator status updated.' };
+    renderNotice();
+    await refreshOperatorList();
+  } catch (e) {
+    state.notice = { type: 'error', message: 'Failed to update status: ' + e.message };
+    renderNotice();
+  }
+};
+
+window.toggleOperatorAdminRole = async function (userId, currentlyAdmin) {
+  var action = currentlyAdmin ? 'remove' : 'add';
+  if (!confirm('Are you sure you want to ' + (currentlyAdmin ? 'revoke' : 'grant') + ' admin rights for this operator?')) return;
+  try {
+    if (currentlyAdmin) {
+      await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/roles/admin', {
+        method: 'DELETE'
+      });
+    } else {
+      await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'admin' })
+      });
+    }
+    state.notice = { type: 'success', message: 'Operator role updated.' };
+    renderNotice();
+    await refreshOperatorList();
+  } catch (e) {
+    state.notice = { type: 'error', message: 'Failed to update role: ' + e.message };
+    renderNotice();
+  }
+};
+
+export async function refreshOperatorList() {
+  try {
+    var data = await request('/api/iam/admin/users');
+    state.operatorList = data.users || [];
+    renderSettingsPanel();
+  } catch (e) {
+    console.error('Failed to fetch operator list', e);
   }
 }
 

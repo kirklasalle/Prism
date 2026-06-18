@@ -104,6 +104,7 @@ export interface SystemInfo {
     freeMemory: number;
     uptime: number;
     nodeVersion: string;
+    platform: string;
 }
 
 export interface NetworkInterface {

@@ -1,0 +1,30 @@
+# Optimization Walkthrough: Prism Model Matrix Loading & Tab Resiliency
+
+We have successfully resolved the UI hang in the **Session Provider Assignment** / **Provider & Settings** tab by implementing the planned decoupled loading architecture, manual-refresh model, and client-side catalog state caching.
+
+---
+
+## Technical Summary of Edits
+
+### 1. Manual-Only Provider Model Discovery Probes
+In [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts):
+- Added an optional `forceRefresh` flag to `getCatalog()`.
+- If `forceRefresh` is falsy, the method bypasses network discovery probes (which query local ports for Ollama/LM Studio and can take seconds) and returns the catalog built from the provider settings' default models. This ensures startup and tab transitions load instantly (taking <1ms).
+- When `forceRefresh` is true, it performs active network probes. The cache TTL (`CATALOG_CACHE_TTL_MS`) has been increased to 24 hours to prevent redundant background probes.
+- Added `.catch(() => [])` to each provider fetch promise within `Promise.all`. This ensures that even if one local provider (e.g., local Ollama) is offline, the other providers are still loaded successfully and the endpoint does not return a 500 error.
+
+### 2. Router Updates for On-Demand Refreshing
+In the backend router [dashboard-service.ts](file:///d:/Projects/Prism/src/core/operator/dashboard-service.ts):
+- Updated the GET `/api/llm/catalog` and GET `/api/llm/providers` routes to parse a `refresh` query parameter (`?refresh=true`) and pass it to `getCatalog(..., refresh)`.
+- Updated POST `/api/models/matrix/refresh` to pass `true` to `getCatalog()`, ensuring manual capability matrix updates force a fresh network probe.
+
+### 3. Client-Side Persistent Caching of the Provider Catalog
+- **State Initialization:** In [dashboard-core.js](file:///d:/Projects/Prism/src/core/operator/public/dashboard-core.js), `state.llmCatalog` is initialized by reading and parsing `prism-llm-catalog` from `localStorage` if it exists. This ensures that the UI never displays an initial "Loading..." state or falls back to a blank screen on reload.
+- **State Update & Persistence:** In `refreshChrome()` inside [tab-chat.js](file:///d:/Projects/Prism/src/core/operator/public/tab-chat.js), if the newly fetched catalog is valid (truthy), it updates `state.llmCatalog` and persists it to `localStorage`. If the request fails or times out, the existing `state.llmCatalog` is preserved instead of being overwritten with `null`.
+- **On-Demand Retry:** In [tab-settings.js](file:///d:/Projects/Prism/src/core/operator/public/tab-settings.js), both retry buttons have been updated to call `refreshChrome(true)`, forcing the client to send the `?refresh=true` flag to the server.
+
+---
+
+## Verification & Compilation
+- Ran TypeScript compilation (`npm run build`), which finished with exit code `0`.
+- All background telemetry/discovery actions are now deferred, ensuring the primary dashboard is immediately responsive and stable.

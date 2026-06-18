@@ -40,6 +40,7 @@ export class DashboardHandler implements IRouteHandler {
     const isTokenValid = clientToken ? service.getAuthGate().check({ headers: { authorization: `Bearer ${clientToken}` }, url: "/" } as any).authenticated : false;
 
     const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
+    const isAdmin = authDisabled || (principal ? (principal.roles.includes("admin") || principal.roles.includes("root")) : true);
     if (!principal && !isTokenValid && !authDisabled) {
       res.writeHead(302, { Location: "/login" });
       res.end();
@@ -50,7 +51,25 @@ export class DashboardHandler implements IRouteHandler {
       clientToken = service.getAuthGate().getToken();
     }
 
-    if (!prefs?.setupComplete && !url.startsWith("/setup") && !url.startsWith("/login")) {
+    let packages = service.listSessionPackages();
+    if (!isAdmin && principal) {
+      const operatorSessionIds = new Set(
+        service.getChatStore().listSessions()
+          .filter(s => s.operatorEmail === principal.email)
+          .map(s => s.sessionId)
+      );
+      packages = packages.filter(pkg =>
+        pkg.sessionIds.some(sid => operatorSessionIds.has(sid))
+      );
+    }
+
+    const hasInitializationCertificate = packages.some(pkg =>
+      /Initialization Certificate/i.test(pkg.title || "")
+    );
+
+    const requiresSetup = !prefs?.setupComplete || !hasInitializationCertificate;
+
+    if (requiresSetup && !url.startsWith("/setup") && !url.startsWith("/login")) {
       res.writeHead(302, { Location: "/setup" });
       res.end();
       return;

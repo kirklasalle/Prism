@@ -137,11 +137,7 @@ export class SkillsEngine {
 
     try {
       // 1. SOTA Progressive Tool Disclosure (Tool Hot-Swapping)
-      if (step.tools && step.tools.length > 0) {
-        this.providerManager.setTemporaryToolFilter(step.tools);
-      } else {
-        this.providerManager.setTemporaryToolFilter([]);
-      }
+      // Removed global setTemporaryToolFilter calls to avoid multi-execution race conditions.
 
       // 2. Interpolate Hemispheric Prompts with session variables
       const leftPrompt = this.interpolate(skill.triad_templates.left_hemisphere, session.statePayload);
@@ -176,7 +172,8 @@ ${mainPrompt}
           {
             message: srInputMessage,
             conversation: [],
-            systemPrompt: "You are the PRISM Spectrum Refraction orchestrator running a governed skill workflow."
+            systemPrompt: "You are the PRISM Spectrum Refraction orchestrator running a governed skill workflow.",
+            allowedTools: step.tools ?? []
           },
           {
             enabled: true,
@@ -225,7 +222,8 @@ ${mainPrompt}
         const genResult = await this.providerManager.generate({
           message: `Execute step action: ${step.action}`,
           conversation: [],
-          systemPrompt: fusedSystemPrompt
+          systemPrompt: fusedSystemPrompt,
+          allowedTools: step.tools ?? []
         }, selection);
 
         if (genResult) {
@@ -258,7 +256,7 @@ ${mainPrompt}
         outputHash
       });
 
-      if (nextStep === "complete") {
+      if (nextStep === "complete" || nextStep === "completed") {
         session.status = "completed";
       } else if (nextStep === "abort_task" || nextStep === "failed") {
         session.status = "failed";
@@ -287,7 +285,7 @@ ${mainPrompt}
         outputHash: ""
       });
 
-      if (nextStep === "complete") {
+      if (nextStep === "complete" || nextStep === "completed") {
         session.status = "completed";
       } else {
         session.status = "failed";
@@ -304,8 +302,7 @@ ${mainPrompt}
         details: { error: err.message, nextStep }
       });
     } finally {
-      // SOTA: Always restore standard global tools
-      this.providerManager.clearTemporaryToolFilter();
+      // SOTA: Done executing step.
     }
 
     return session;

@@ -1,0 +1,30 @@
+# PRISM markdownlint configuration
+# Rules: https: //github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# Default state for all rules
+default: true
+
+# Line length — relaxed for changelogs and tables
+MD013: false
+
+# Duplicate heading content — allowed in CHANGELOG since sections repeat per release
+MD024:
+  siblings_only: true
+
+# Multiple top-level headings — allowed
+MD025: false
+
+# Inline HTML — allowed for docs
+MD033: false
+
+# Bare URLs — allowed
+MD034: false
+
+# Fenced code blocks should have language
+MD040: false
+
+# First line should be top-level heading
+MD041: false
+
+# Table column style
+MD060: false

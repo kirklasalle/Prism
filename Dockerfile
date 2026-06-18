@@ -22,10 +22,12 @@ WORKDIR /app
 # Runtime dependencies for sharp and sqlite3
 RUN apk add --no-cache vips
 
-# Copy built output and production dependencies
+# Copy built output
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
 COPY package.json ./
+
+# Install only production dependencies (no devDependencies, no TypeScript)
+RUN npm ci --omit=dev --ignore-scripts && npm rebuild sharp sqlite3
 
 # Copy supporting files
 COPY characters/ ./characters/

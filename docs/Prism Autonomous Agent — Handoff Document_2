@@ -1,0 +1,63 @@
+# Prism Autonomous Agent — Handoff Document
+
+> **Session**: 2026-06-12/13 | **Author**: Antigravity (Opus 4.6 Thinking)
+> **Status**: ✅ Build clean, server running, autonomous goals executing successfully
+
+---
+
+## Summary of Changes Made
+
+### 1. Google Model Prefix Fix (`models/` prefix)
+**File**: `src/core/operator/llm-provider-manager.ts`
+
+- **Line ~267**: `GOOGLE_DEFAULT_MODELS` now uses `models/` prefix (e.g. `"models/gemini-2.5-flash"`)
+- **Line ~1868-1876**: `getResolvedSettings()` auto-normalizes Google models — any model without `models/` prefix gets it added automatically
+- **Why**: Google's OpenAI-compatible endpoint returns 400 "schema constraint" errors when models lack the `models/` prefix
+
+### 2. Thread-Safe Tool Filtering (Race Condition Fix)
+**Files**: `llm-provider-manager.ts` + `skills-engine.ts`
+
+- Added `allowedTools?: string[]` to `LlmGenerationInput` interface (line ~199)
+- `generate()` (line ~852) and `generateSR()` (line ~1178) now check `input.allowedTools ?? this.temporaryToolFilter`
+- `skills-engine.ts`: Removed global `setTemporaryToolFilter()` / `clearTemporaryToolFilter()` calls — now passes `allowedTools` per-request
+- **Why**: Global filter was a shared-mutable-state race condition when multiple skill sessions or autonomous goals ran concurrently
+
+### 3. Empty Response Debug Logging
+**File**: `llm-provider-manager.ts` (line ~2264)
+
+- When provider returns empty content + no tool calls, logs the full response payload before throwing
+- Tagged as `EMPTY_RESPONSE_DEBUG` in `llm-trace.log`
+
+---
+
+## Files Modified
+
+| File | Changes |
+|------|---------|
+| [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts) | Google prefix, allowedTools, empty-response logging |
+| [skills-engine.ts](file:///d:/Projects/Prism/src/core/skills/skills-engine.ts) | Request-local tool filtering |
+
+## Key Architecture Notes for Copilot
+
+1. **LLM routing**: `dashboard-service.ts` line ~2986 hard-pins autonomous goals to `google` provider when no session selection exists
+2. **Tool schema**: 104 tools registered — Google Gemini Flash can hit 400 "schema constraint" errors if the combined tool JSON schema is too complex. Consider reducing tool count for autonomous goals or using `gemini-2.5-pro` which has higher schema limits
+3. **Autonomous loop**: `src/core/runtime/autonomous-agent-loop.ts` — ReAct pattern, calls `setLlmGenerateFn` callback bound in `dashboard-service.ts` ~2972
+4. **Browser control**: `src/adapters/system/browser-control-tool.ts` — Playwright-based, registered as `browser_control` tool
+
+## Current Server State
+
+```
+PRISM server running at http://localhost:7070
+Provider: google
+Model: models/gemini-2.5-flash (with models/ prefix)
+Environment: dev
+Build: clean (exit 0)
+```
+
+## Remaining Known Issue
+
+The "schema too complex" 400 error from Google still occurs on the **planning** phase because all 104 tools are sent. The fix is to either:
+- Cap tool definitions sent to Gemini Flash to ~50 most relevant tools
+- Or use `gemini-2.5-pro` which handles larger schemas
+
+This is a **Google API limitation**, not a Prism bug.

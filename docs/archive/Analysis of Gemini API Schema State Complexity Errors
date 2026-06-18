@@ -1,0 +1,31 @@
+# Analysis of Gemini API Schema State Complexity Errors
+
+## Root Cause
+When the Autonomous Agent Loop executed a goal (such as the pants shopping test), it passed all registered tools from the `ToolRegistry` to the LLM generation call. Because Prism has 71 MCP tools dynamically registered alongside 36 built-in and system tools, the total tool count reached **107**.
+
+When Gemini 2.5 Pro receives 107 tool definitions via its OpenAI-compatible endpoint, it constructs a constrained grammar schema to guide function calling. The resulting schema exceeded Gemini's state constraint limit, triggering the following API error:
+```json
+{
+  "error": {
+    "code": 400,
+    "message": "The specified schema produces a constraint that has too many states for serving. Typical causes of this error are schemas with lots of text (for example, very long property or enum names), schemas with long array length limits (especially when nested), or schemas using complex value matchers (for example, integers or numbers with minimum/maximum bounds or strings with complex formats like date-time)",
+    "status": "INVALID_ARGUMENT"
+  }
+}
+```
+
+This caused the planner's initial and retry LLM calls to fail immediately on iteration 0, terminating the goal with no steps completed.
+
+---
+
+## Solution: Adaptive Tool Pruning
+We implemented an **Adaptive Tool Pruning** mechanism inside the `AutonomousAgentLoop.executeGoal` method:
+
+1. **Core Tools Retained**: Core system tools (like `browser_control`, `computer`, `shell_exec`, `terminal_session`, file tools, network tools, etc.) are always retained.
+2. **MCP Tools Filtered Dynamically**: MCP tools (prefixed with `mcp_`) are filtered out *unless* they are relevant to the user's objective.
+3. **Relevance Heuristic**:
+   - If the user explicitly mentions the full tool name (e.g. `mcp_ids_sync`), it is kept.
+   - If the user mentions the keyword `mcp`, all MCP tools are kept.
+   - Otherwise, the clean tool name is broken down into keywords (excluding generic terms like `search`, `scrape`, `enhanced`, etc.). If any keyword is found in the goal objective, the tool is retained (e.g., matching `wikipedia` for `mcp_scrape_wikipedia_enhanced`).
+
+This reduces the active tool definition list from 107 to ~25 tools for a typical browser/computer control task, easily staying within Gemini's complexity limits while retaining full, on-demand MCP tool support.

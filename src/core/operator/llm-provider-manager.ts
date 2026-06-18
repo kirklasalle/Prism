@@ -125,12 +125,14 @@ export interface SRCostEstimate {
 export type PrismLlmProviderId =
     | "openai" | "anthropic" | "ollama" | "ollama-cloud" | "custom"
     | "google" | "mistral" | "cohere" | "groq" | "together"
-    | "deepseek" | "perplexity" | "fireworks" | "openrouter" | "lmstudio" | "llamacpp" | "bitnetcpp";
+    | "deepseek" | "perplexity" | "fireworks" | "openrouter" | "lmstudio" | "llamacpp" | "bitnetcpp"
+    | "gemini-pro" | "claude-3-opus";
 
 export const ALL_PROVIDER_IDS: PrismLlmProviderId[] = [
-    "openai", "anthropic", "google", "mistral", "cohere", "groq",
+    "google", "openai", "anthropic", "mistral", "cohere", "groq",
     "together", "deepseek", "perplexity", "fireworks", "openrouter",
     "llamacpp", "bitnetcpp", "ollama", "ollama-cloud", "lmstudio", "custom",
+    "gemini-pro", "claude-3-opus",
 ];
 
 export interface PersistedProviderSettings {
@@ -195,6 +197,8 @@ interface LlmGenerationInput {
     tools?: LlmToolDefinition[];
     tool_choice?: "auto" | "none" | "required";
     stream?: boolean;
+    disableRecovery?: boolean;
+    allowedTools?: string[];
 }
 
 export interface LlmGenerationOutput {
@@ -262,7 +266,7 @@ const ANTHROPIC_DEFAULT_MODELS = [
     "claude-3-5-haiku-20241022",
 ];
 
-const GOOGLE_DEFAULT_MODELS = ["gemini-3.0-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro"];
+const GOOGLE_DEFAULT_MODELS = ["models/gemini-2.5-flash", "models/gemini-3.0-flash", "models/gemini-3-flash", "models/gemini-2.5-pro", "models/gemini-1.5-pro"];
 const MISTRAL_DEFAULT_MODELS = ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"];
 const COHERE_DEFAULT_MODELS = ["command-r-plus", "command-r", "command-light"];
 const GROQ_DEFAULT_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"];
@@ -407,7 +411,7 @@ export class LlmProviderManager {
         bitnetcpp: string[];
         expiresAt: number;
     } | null = null;
-    private static readonly CATALOG_CACHE_TTL_MS = 5_000;
+    private static readonly CATALOG_CACHE_TTL_MS = 24 * 3600 * 1000; // 24 hours
 
     /** Circuit breaker state: key = `${hemisphereRole}:${providerId}` */
     private readonly srCircuitBreaker = new Map<string, { failures: number; openUntil: number }>();
@@ -631,13 +635,43 @@ export class LlmProviderManager {
             } as ProviderSettings,
             bitnetcpp: {
                 id: "bitnetcpp",
-                label: "BitNet.cpp (Local)",
+                label: "BitNet++",
                 kind: "local",
-                baseUrl: trimSlash(this.env.PRISM_BITNET_BASE_URL?.trim() || "http://127.0.0.1:8082/v1"),
-                defaultModels: parseModelList(this.env.PRISM_BITNET_MODELS, []),
-                defaultModel: null,
+                baseUrl: trimSlash(this.env.PRISM_BITNETCPP_BASE_URL?.trim() || "http://127.0.0.1:8000"),
+                defaultModels: parseModelList(this.env.PRISM_BITNETCPP_MODELS, BITNETCPP_DEFAULT_MODELS),
+                defaultModel: this.env.PRISM_LLM_PROVIDER === "bitnetcpp"
+                    ? this.env.PRISM_LLM_MODEL?.trim() || BITNETCPP_DEFAULT_MODELS[0] || null
+                    : BITNETCPP_DEFAULT_MODELS[0] || null,
                 requiresApiKey: false,
             } as ProviderSettings,
+            ["gemini-pro"]: {
+                id: "gemini-pro",
+                label: "Google Gemini Pro",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_GEMINI_PRO_BASE_URL?.trim() || "https://generativelanguage.googleapis.com"),
+                apiKey: this.env.GOOGLE_API_KEY?.trim() || this.env.PRISM_GEMINI_PRO_API_KEY?.trim(),
+                apiKeyHeader: "x-goog-api-key",
+                defaultModels: parseModelList(this.env.PRISM_GEMINI_PRO_MODELS, GEMINI_PRO_DEFAULT_MODELS),
+                defaultModel: this.env.PRISM_LLM_PROVIDER === "gemini-pro"
+                    ? this.env.PRISM_LLM_MODEL?.trim() || GEMINI_PRO_DEFAULT_MODELS[0] || null
+                    : GEMINI_PRO_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            ["claude-3-opus"]: {
+                id: "claude-3-opus",
+                label: "Anthropic Claude 3 Opus",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_CLAUDE_3_OPUS_BASE_URL?.trim() || "https://api.anthropic.com/v1"),
+                apiKey: this.env.ANTHROPIC_API_KEY?.trim() || this.env.PRISM_CLAUDE_3_OPUS_API_KEY?.trim(),
+                apiKeyHeader: "x-api-key",
+                defaultModels: parseModelList(this.env.PRISM_CLAUDE_3_OPUS_MODELS, CLAUDE_3_OPUS_DEFAULT_MODELS),
+                defaultModel: this.env.PRISM_LLM_PROVIDER === "claude-3-opus"
+                    ? this.env.PRISM_LLM_MODEL?.trim() || CLAUDE_3_OPUS_DEFAULT_MODELS[0] || null
+                    : CLAUDE_3_OPUS_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
         };
 
         this.setPersistedProviderSettings(settings);
@@ -671,22 +705,33 @@ export class LlmProviderManager {
         // Provider snapshots are always rebuilt from current settings + cached discovered models.
     }
 
-    async getCatalog(selection?: Partial<LlmSelection>): Promise<LlmProviderCatalog> {
+    async getCatalog(selection?: Partial<LlmSelection>, forceRefresh?: boolean): Promise<LlmProviderCatalog> {
         // Cache only the network-discovered model lists (expensive network probes).
         // Provider snapshots are always rebuilt from current settings so that settings
         // changes (saveProviderSettings) are reflected immediately without re-probing.
         let discovered: NonNullable<typeof this.discoveredModelsCache>;
-        if (this.discoveredModelsCache && Date.now() < this.discoveredModelsCache.expiresAt) {
+        if (this.discoveredModelsCache && Date.now() < this.discoveredModelsCache.expiresAt && !forceRefresh) {
             discovered = this.discoveredModelsCache;
+        } else if (!forceRefresh) {
+            // Serve default models from settings to prevent background network probes on startup / context switches
+            discovered = {
+                ollama: this.getResolvedSettings("ollama").defaultModels,
+                "ollama-cloud": this.getResolvedSettings("ollama-cloud").defaultModels,
+                lmstudio: this.getResolvedSettings("lmstudio").defaultModels,
+                llamacpp: this.llamaSupervisor ? this.llamaSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!) : this.getResolvedSettings("llamacpp").defaultModels,
+                bitnetcpp: this.bitnetSupervisor ? this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!) : [],
+                expiresAt: Date.now() + LlmProviderManager.CATALOG_CACHE_TTL_MS,
+            };
+            this.discoveredModelsCache = discovered;
         } else {
             const startProbe = Date.now();
             const [ollamaModels, ollamaCloudModels, lmStudioModels, llamacppRunning, bitnetRunning] = await Promise.all([
-                this.fetchOllamaModels(this.getResolvedSettings("ollama")),
-                this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")),
-                this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")),
+                this.fetchOllamaModels(this.getResolvedSettings("ollama")).catch(() => [] as string[]),
+                this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")).catch(() => [] as string[]),
+                this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")).catch(() => [] as string[]),
                 this.llamaSupervisor
                     ? Promise.resolve(this.llamaSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
-                    : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")),
+                    : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")).catch(() => [] as string[]),
                 this.bitnetSupervisor
                     ? Promise.resolve(this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
                     : Promise.resolve([] as string[]),
@@ -836,10 +881,11 @@ export class LlmProviderManager {
     }
 
     async generate(input: LlmGenerationInput, selection?: Partial<LlmSelection>): Promise<LlmGenerationOutput | null> {
-        if (this.temporaryToolFilter && input.tools) {
+        const filter = input.allowedTools ?? this.temporaryToolFilter;
+        if (filter && input.tools) {
             input = {
                 ...input,
-                tools: input.tools.filter(t => this.temporaryToolFilter!.includes(t.name))
+                tools: input.tools.filter(t => filter.includes(t.name))
             };
         }
 
@@ -921,7 +967,9 @@ export class LlmProviderManager {
         } catch (error) {
             const failedProvider = catalog.activeProviderId;
             const isRemote = provider.kind === "remote";
-            if (isRemote) {
+            const errStr = String(error).toLowerCase();
+            const isAuthError = errStr.includes("api key") || errStr.includes("unauthorized") || errStr.includes("401") || errStr.includes("403") || errStr.includes("forbidden") || errStr.includes("auth") || errStr.includes("invalid key");
+            if (isRemote && !input.disableRecovery && !isAuthError) {
                 console.warn(`[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Attempting same-provider recovery first...`);
 
                 const sameProviderRecovery = await this.trySameProviderModelFallbacks(
@@ -962,25 +1010,26 @@ export class LlmProviderManager {
                     }
                 }
 
-                if (fallbackProvider && fallbackModel) {
-                    console.log(`[PRISM][llm] Same-provider recovery exhausted. Routing request to local provider "${fallbackProvider}" with model "${fallbackModel}".`);
-                    this.activityBus?.emit({
-                        sessionId: selection?.providerId ?? "llm",
-                        layer: "llm",
-                        operation: "llm.provider_fallback",
-                        status: "succeeded",
-                        details: {
-                            failedProvider,
-                            failedModel: catalog.activeModel,
-                            fallbackProvider,
-                            fallbackModel,
-                            error: String(error),
-                        },
-                    });
-
-                    // Recurse with local selection
-                    return this.generate(input, { providerId: fallbackProvider, model: fallbackModel });
-                }
+                // THIS IS THE BUG. DO NOT FALLBACK ACROSS PROVIDERS. Let the original error throw.
+                // if (fallbackProvider && fallbackModel) {
+                //     console.log(`[PRISM][llm] Same-provider recovery exhausted. Routing request to local provider "${fallbackProvider}" with model "${fallbackModel}".`);
+                //     this.activityBus?.emit({
+                //         sessionId: selection?.providerId ?? "llm",
+                //         layer: "llm",
+                //         operation: "llm.provider_fallback",
+                //         status: "succeeded",
+                //         details: {
+                //             failedProvider,
+                //             failedModel: catalog.activeModel,
+                //             fallbackProvider,
+                //             fallbackModel,
+                //             error: String(error),
+                //         },
+                //     });
+                //
+                //     // Recurse with local selection
+                //     return this.generate(input, { providerId: fallbackProvider, model: fallbackModel });
+                // }
             }
             throw error;
         }
@@ -1158,10 +1207,11 @@ export class LlmProviderManager {
         srConfig: SpectrumRefractionConfig,
         mainSelection?: Partial<LlmSelection>,
     ): Promise<SRGenerationOutput | null> {
-        if (this.temporaryToolFilter && input.tools) {
+        const filter = input.allowedTools ?? this.temporaryToolFilter;
+        if (filter && input.tools) {
             input = {
                 ...input,
-                tools: input.tools.filter(t => this.temporaryToolFilter!.includes(t.name))
+                tools: input.tools.filter(t => filter.includes(t.name))
             };
         }
 
@@ -1843,12 +1893,20 @@ export class LlmProviderManager {
         const hasPersistedModels = Boolean(persisted?.models.length);
         const baseUrl = normalizeOptionalUrl(persisted?.baseUrl) || defaults.baseUrl;
         const apiKeyHeader = persisted?.apiKeyHeader?.trim() || defaults.apiKeyHeader;
-        const defaultModels = hasPersistedModels ? normalizeModels(persisted!.models) : defaults.defaultModels;
-        const defaultModel = persisted?.defaultModel?.trim()
+        let defaultModels = hasPersistedModels ? normalizeModels(persisted!.models) : defaults.defaultModels;
+        let defaultModel = persisted?.defaultModel?.trim()
             || defaults.defaultModel
             || defaultModels[0]
             || null;
         const apiKey = this.secretStore?.getApiKey(providerId) || defaults.apiKey;
+
+        if (providerId === "google") {
+            if (defaultModel && !defaultModel.startsWith("models/")) {
+                defaultModel = "models/" + defaultModel;
+            }
+            defaultModels = defaultModels.map(m => m.startsWith("models/") ? m : "models/" + m);
+        }
+
         return {
             ...defaults,
             baseUrl,
@@ -1877,9 +1935,7 @@ export class LlmProviderManager {
                 return settings.defaultModels;
             }
             const payload = await response.json() as { models?: Array<{ name?: string }> };
-            const names = (payload.models ?? [])
-                .map((entry) => entry.name?.trim())
-                .filter((value): value is string => Boolean(value));
+            const names = (payload.models ?? []).map((m) => m.name?.trim()).filter(Boolean) as string[];
             return names.length > 0 ? names : settings.defaultModels;
         } catch {
             return settings.defaultModels;
@@ -1901,9 +1957,7 @@ export class LlmProviderManager {
                 return settings.defaultModels;
             }
             const payload = await response.json() as { models?: Array<{ name?: string }> };
-            const names = (payload.models ?? [])
-                .map((entry) => entry.name?.trim())
-                .filter((value): value is string => Boolean(value));
+            const names = (payload.models ?? []).map((m) => m.name?.trim()).filter(Boolean) as string[];
             return names.length > 0 ? names : settings.defaultModels;
         } catch {
             return settings.defaultModels;
@@ -1921,9 +1975,7 @@ export class LlmProviderManager {
                 return settings.defaultModels;
             }
             const payload = await response.json() as { data?: Array<{ id?: string }> };
-            const ids = (payload.data ?? [])
-                .map((entry) => entry.id?.trim())
-                .filter((value): value is string => Boolean(value));
+            const ids = (payload.data ?? []).map((m) => m.id?.trim()).filter(Boolean) as string[];
             return ids.length > 0 ? ids : settings.defaultModels;
         } catch {
             return settings.defaultModels;
@@ -2011,7 +2063,7 @@ export class LlmProviderManager {
             }
             // OpenAI-compatible: fetch model list
             const authHeader: Record<string, string> = settings.apiKeyHeader === "Authorization"
-                ? { Authorization: `Bearer ${settings.apiKey ?? ""}` }
+                ? { Authorization: `Bearer ${settings.apiKey}` }
                 : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
             const response = await fetch(`${settings.baseUrl}/models`, {
                 method: "GET",
@@ -2209,19 +2261,24 @@ export class LlmProviderManager {
             || firstTcSig;
 
         const toolCalls: LlmToolCall[] | undefined = rawToolCalls?.map((tc, idx) => {
-            // Per docs: signature is on extra_content.google.thought_signature of each tool call
-            const sig = (tc as any).extra_content?.google?.thought_signature
+            let args: Record<string, unknown> = {};
+            try {
+                args = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : tc.function.arguments;
+            } catch { /* ignore */ }
+
+            const tcSig = (tc as any).extra_content?.google?.thought_signature
                 || (tc as any).thought_signature
-                || (tc as any).google?.thought_signature;
+                || (tc as any).google?.thought_signature
+                || (idx === 0 ? thoughtSignature : undefined);
+
             return {
-                id: tc.id || randomToolCallId(),
+                id: tc.id || `call_${Math.random().toString(36).slice(2, 11)}`,
                 name: tc.function.name,
-                arguments: safeJsonParse(tc.function.arguments),
-                thought_signature: sig,
-                thoughtSignature: sig,
-                // Preserve the raw extra_content so it can be echoed verbatim
-                extra_content: sig ? { google: { thought_signature: sig } } : undefined,
-            } as LlmToolCall;
+                arguments: args,
+                thought_signature: tcSig,
+                thoughtSignature: tcSig,
+                extra_content: tcSig ? { google: { thought_signature: tcSig } } : undefined,
+            };
         });
 
         // ── LLM Trace: log response ──
@@ -2246,6 +2303,7 @@ export class LlmProviderManager {
                     : "end_turn" as const;
 
         if (!content && !toolCalls?.length) {
+            llmTraceLog(`EMPTY_RESPONSE_DEBUG ← ${settings.id}/${model}`, payload);
             throw new Error("Provider returned an empty response.");
         }
 
@@ -2741,3 +2799,7 @@ function safeJsonParse(raw: string): Record<string, unknown> {
 function randomToolCallId(): string {
     return `tc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+
+const GEMINI_PRO_DEFAULT_MODELS = ["models/gemini-2.5-pro", "models/gemini-3.0-pro", "models/gemini-3-pro"];
+const CLAUDE_3_OPUS_DEFAULT_MODELS = ["claude-3-opus-20240229"];
+const BITNETCPP_DEFAULT_MODELS = ["bitnetcpp-7b"];

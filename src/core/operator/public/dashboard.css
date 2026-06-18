@@ -90,7 +90,7 @@ select {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    overflow: hidden;
+    overflow-y: auto;
     min-width: 200px;
 }
 
@@ -3477,7 +3477,7 @@ select optgroup {
 }
 /* -----------------------------------------------------------------------
  * PRISM Tooltips ("Prism Tips")
- * Single-overlay rich tooltip, additive — never overrides existing styles.
+ * Single-overlay rich tooltip, additive ï¿½ never overrides existing styles.
  * ----------------------------------------------------------------------- */
 .prism-tip {
     position: absolute;

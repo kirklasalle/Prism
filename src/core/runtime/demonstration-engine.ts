@@ -260,7 +260,6 @@ const TAB_TOUR: Array<{ tabId: string; title: string; highlight: string }> = [
   { tabId: "telemetry", title: "📊 Telemetry", highlight: "Real-time event streams, session traces, and unified observability" },
   { tabId: "logs", title: "📋 Logs & Debug", highlight: "Full activity audit trail with layer filtering and real-time WebSocket feed" },
   { tabId: "scheduler", title: "📅 Scheduler", highlight: "Cron-based task scheduling with approval gates and execution history" },
-  { tabId: "watch", title: "👁️ Watch Me", highlight: "Session recording, replay, and training data export for agent learning" },
   { tabId: "network", title: "🌍 Network", highlight: "HTTP request inspector, API monitoring, and network capture analysis" },
 ];
 
@@ -544,7 +543,7 @@ export class DemonstrationEngine {
     if (action.startsWith("demo:")) {
       const demoAction = action.slice(5);
       console.log(`[PRISM][demo] [INFO] Raising autonomous event: "${demoAction}" with args: ${JSON.stringify(args)}`);
-      
+
       let realResult: string | undefined;
 
       if (this.registry && this.registry.has("browser_control")) {
