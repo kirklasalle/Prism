@@ -1,0 +1,103 @@
+{
+    "id": "prism.skill.gws_shared",
+    "version": "1.0.0",
+    "name": "GWS CLI Shared Patterns",
+    "description": "gws CLI: Shared patterns for Google Workspace authentication (OAuth, service accounts), global flags, CLI syntax, output formatting, and security rules. Prerequisite for all GWS skills.",
+    "tags": [
+        "gws",
+        "google-workspace",
+        "auth",
+        "oauth",
+        "cli",
+        "shared",
+        "foundation",
+        "google"
+    ],
+    "governance": {
+        "min_policy_tier": "tier-1",
+        "required_approvals": [
+            "shell_exec"
+        ],
+        "covenant_rules": [
+            "Never output secrets (API keys, tokens) directly — always sanitize before logging.",
+            "Always confirm with the user before executing write/delete commands on Google Workspace resources.",
+            "Prefer --dry-run flag for destructive operations to validate locally before calling the API.",
+            "Use --sanitize flag for PII/content safety screening when handling sensitive data."
+        ]
+    },
+    "triad_templates": {
+        "left_hemisphere": "Evaluate auth status, flag configuration, and security constraints for the gws CLI invocation: {query}. Verify zero token leaks or unsafe flag combinations exist.",
+        "right_hemisphere": "Design optimal gws CLI command structures, flag combinations, and output format selections for: {query}. Prefer table or JSON output as appropriate.",
+        "main_hemisphere": "Coordinate gws CLI setup. Check gws binary availability on PATH, verify authentication state, determine required global flags, construct the command, enforce security rules, and execute: {query}."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "verify_gws_installation",
+                "name": "Verify gws CLI Installation",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Check that the gws binary is available on PATH and determine the installed version. gws --version must succeed.",
+                "transitions": {
+                    "success": "check_authentication",
+                    "failed": "verify_gws_installation"
+                }
+            },
+            {
+                "id": "check_authentication",
+                "name": "Check Authentication State",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Run gws auth login or verify GOOGLE_APPLICATION_CREDENTIALS environment variable for service account auth. Ensure valid OAuth or service account credentials are in place.",
+                "transitions": {
+                    "success": "construct_command",
+                    "failed": "check_authentication"
+                }
+            },
+            {
+                "id": "construct_command",
+                "name": "Construct gws Command with Flags",
+                "tools": [],
+                "action": "Build the final gws <service> <resource> <method> command with appropriate --format, --params, --json, --dry-run, --sanitize, --page-all flags based on the user's intent and method requirements.",
+                "transitions": {
+                    "success": "confirm_and_execute",
+                    "failed": "construct_command"
+                }
+            },
+            {
+                "id": "confirm_and_execute",
+                "name": "Confirm and Execute Command",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Display the constructed command to the user for confirmation on write/delete operations, then execute it. For read-only operations, execute directly with appropriate output format.",
+                "transitions": {
+                    "success": "format_output",
+                    "failed": "construct_command"
+                }
+            },
+            {
+                "id": "format_output",
+                "name": "Format and Present Output",
+                "tools": [],
+                "action": "Present the CLI output to the user in a readable format. For JSON output, parse and display key fields. For table output, display as formatted table. Never output raw secrets or tokens.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            },
+            {
+                "id": "completed",
+                "name": "GWS Operation Completed",
+                "tools": [],
+                "action": "Confirm the operation result to the user. If errors occurred, suggest remediation steps such as re-authentication or flag corrections.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            }
+        ]
+    }
+}

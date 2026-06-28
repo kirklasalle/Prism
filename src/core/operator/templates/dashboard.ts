@@ -14,11 +14,16 @@ export function dashboardHtml(port: number, authToken?: string): string {
   <div class="app" id="app">
     <aside class="sidebar panel" id="sidebar">
       <div class="brand" id="brand-panel" data-tip-id="shell:brand" data-tip-kind="shell">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2px;">
           <div class="eyebrow" style="margin-bottom: 0;">Frontier Operator Console</div>
-          <button id="system-shutdown-btn" onclick="triggerSystemShutdown()" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.45); color: #f87171; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 3px; text-transform: uppercase; letter-spacing: 0.5px; height: 18px; line-height: 1;" onmouseover="this.style.background='rgba(239, 68, 68, 0.28)'; this.style.boxShadow='0 0 8px rgba(239, 68, 68, 0.25)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.12)'; this.style.boxShadow='none'">
-            <span>🛑</span> Shutdown
-          </button>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+            <button id="system-shutdown-btn" onclick="triggerSystemShutdown()" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.45); color: #f87171; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 3px; text-transform: uppercase; letter-spacing: 0.5px; height: 18px; line-height: 1;" onmouseover="this.style.background='rgba(239, 68, 68, 0.28)'; this.style.boxShadow='0 0 8px rgba(239, 68, 68, 0.25)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.12)'; this.style.boxShadow='none'">
+              <span>🛑</span> Shutdown
+            </button>
+            <button id="system-logout-btn" onclick="triggerSystemLogout()" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.45); color: #f59e0b; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 3px; text-transform: uppercase; letter-spacing: 0.5px; height: 18px; line-height: 1;" onmouseover="this.style.background='rgba(245, 158, 11, 0.28)'; this.style.boxShadow='0 0 8px rgba(245, 158, 11, 0.25)'" onmouseout="this.style.background='rgba(245, 158, 11, 0.12)'; this.style.boxShadow='none'">
+              <span>🚪</span> Logout
+            </button>
+          </div>
         </div>
         <h1>PRISM Chat</h1>
         <a href="http://localhost:${port}" target="_blank" rel="noopener" class="muted" style="display:block;margin-top:0;text-decoration:none;color:var(--muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'" data-tip-id="shell:console-link" data-tip-kind="shell">http://localhost:${port} \u2197</a>
@@ -46,7 +51,7 @@ export function dashboardHtml(port: number, authToken?: string): string {
               🚀 Frontier
             </button>
             <button id="prism-btn-automode" onclick="setResourceParadigm('auto')" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;padding:5px 0;font-size:8px;font-weight:700;cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.3px;">
-              � Auto
+              🔍 Auto
             </button>
           </div>
           <div id="prism-paradigm-desc" style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:2px;">
@@ -212,7 +217,27 @@ export function dashboardHtml(port: number, authToken?: string): string {
     .then(async res => {
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
-      alert(data.message || "Graceful shutdown initialized. Check terminal console.");
+      
+      // Render full screen shutdown status overlay
+      document.body.innerHTML = \`
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0d0f12;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:center;">
+          <div style="font-size:48px;margin-bottom:16px;">🛑</div>
+          <div style="font-size:24px;font-weight:600;margin-bottom:8px;letter-spacing:-0.5px;">PRISM System Shutdown</div>
+          <div style="color:#8892b0;font-size:14px;margin-bottom:32px;max-width:320px;">Graceful termination complete. Closing browser tab...</div>
+          <div style="width:28px;height:28px;border:3px solid #3b82f6;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;"></div>
+          <style>
+            @keyframes spin { to { transform: rotate(360deg); } }
+          </style>
+        </div>
+      \`;
+      
+      setTimeout(() => {
+        try {
+          window.open('about:blank', '_self').close();
+        } catch (e) {
+          window.close();
+        }
+      }, 1500);
     })
     .catch(err => {
       console.error("Shutdown request failed:", err);
@@ -222,6 +247,30 @@ export function dashboardHtml(port: number, authToken?: string): string {
         btn.style.opacity = '1';
         btn.innerHTML = '<span>🛑</span> Shutdown';
       }
+    });
+  };
+
+  window.triggerSystemLogout = function() {
+    if (!confirm("Are you sure you want to log out?")) {
+      return;
+    }
+    const meta = document.querySelector('meta[name="prism-auth-token"]');
+    const token = meta ? meta.getAttribute('content') || '' : '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    fetch('/api/v1/iam/logout', {
+      method: 'POST',
+      headers: headers,
+      credentials: 'same-origin'
+    })
+    .then(() => {
+      if (meta) meta.setAttribute('content', '');
+      window.location.href = '/login';
+    })
+    .catch(err => {
+      console.error("Logout request failed:", err);
+      window.location.href = '/login';
     });
   };
 

@@ -1,7 +1,7 @@
 # PRISM Roadmap
 
-**Date:** 2026-06-17 (updated from audit — see Phase R)
-**Previous:** 2026-03-11
+**Date:** 2026-06-18 (updated — see Phase S: Skills)
+**Previous:** 2026-06-17
 
 ## Phase A (Done)
 
@@ -707,7 +707,68 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 
 ---
 
-## Target Quality Gates (Updated 2026-06-17)
+## Phase S — Skills: Guardian + CAC-Native Tab Control (2026 Q3)
+
+> **Objective:** Give the autonomous agent full knowledge and operational control of every dashboard tab through a Guardian-first, CAC-governed Skills system. Skills bridge the Guardian Agent's 18 maintenance/security tasks, the CAC accountability chain, and the autonomous agent loop into a unified workflow execution framework.
+
+**Architecture:** `docs/PRISM_SKILLS_ARCHITECTURE.md`
+
+### S1: Core Infrastructure (2 days)
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| S1a | Update `src/core/skills/types.ts` — add `SkillAccountabilityChain`, `SkillExecutor`, `SkillSessionCreateOptions`, `SkillPermissionCheck` | 2 hrs | P0 |
+| S1b | Update `src/core/skills/skills-engine.ts` — add CAC gate via `CharacterAccountabilityManager`, add `checkPermission()`, enhance `createSession()` with accountability chain | 4 hrs | P0 |
+| S1c | Update `CharacterAccountabilityStore` — add `hasSkillPermission()` method, `SKILL_PERMISSION_SCOPES` migration | 3 hrs | P0 |
+| S1d | Update `CharacterAccountabilityManager` — add `assertSkillPermission()` method | 2 hrs | P0 |
+| S1e | Create `TabToolAdapter` — unified gateway tool that routes to existing API handlers by tab | 6 hrs | P0 |
+| S1f | Wire into bootstrap: pass `CharacterAccountabilityManager` to `SkillsEngine`, pass `SkillsEngine` to `GuardianAgent` | 2 hrs | P0 |
+
+### S2: Guardian Skill Integration (2 days)
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| S2a | Create synthetic Guardian CAC identity (`guardian@prism.local`) with `skill.guardian.*` permissions, `tier1_autonomous` | 2 hrs | P0 |
+| S2b | Add `SkillsEngine` reference and `setSkillsEngine()` to `GuardianAgent` | 2 hrs | P0 |
+| S2c | Add `taskToSkillId()` mapping — convert all 18 Guardian tasks to skill IDs | 3 hrs | P0 |
+| S2d | Create Guardian skill definitions (8 files): `skill.guardian.{disk-space,command-filter,secrets-scan,pad-integrity,mcp-health,aab-ledger,covenant-audit,agent-health}` | 4 hrs | P0 |
+| S2e | Add `skill.guardian.skill-audit` — new Guardian task that audits all active skill sessions every 10 minutes | 2 hrs | P0 |
+| S2f | Wire Guardian skill execution into `GuardianAgent.executeTask()` — fallback to legacy logic if no skill match | 3 hrs | P0 |
+| S2g | Add `skillIntervalOverrides` to `GuardianConfig` for operator-customizable intervals | 1 hr | P1 |
+
+### S3: Tab Skill Definitions (2 days)
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| S3a | Create 12 tab skill definition JSON files under `skills/tab/`: `tab-chat`, `tab-settings`, `tab-tools`, `tab-browser`, `tab-computer`, `tab-network`, `tab-telemetry`, `tab-logs`, `tab-scheduler`, `tab-agentic`, `tab-workspace`, `tab-demo` | 6 hrs | P0 |
+| S3b | Create 12 knowledge base Markdown docs under `skills/kb/` — each describing the tab's purpose, API endpoints, and available operations | 6 hrs | P0 |
+| S3c | Wire `tab_*_inspect` and `tab_*_control` tools through `TabToolAdapter` to existing API handlers | 4 hrs | P0 |
+| S3d | Register all tab tools in `ToolRegistry` alongside built-in tools | 1 hr | P0 |
+| S3e | Add tab-level governance rules — each skill declares `min_policy_tier` and `required_approvals` | 2 hrs | P1 |
+
+### S4: Autonomous Loop Integration (1 day)
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| S4a | Wire `SkillsEngine.routeQuery()` into `AutonomousAgentLoop` — auto-detect skill intent from user goals | 3 hrs | P0 |
+| S4b | Load skill KB docs into `AutonomousPlanner` system prompt when skill match detected | 2 hrs | P0 |
+| S4c | Add skill governance checks to `Orchestrator` — verify CAC permissions before skill execution | 2 hrs | P0 |
+| S4d | Track skill sessions in `ActivityBus` — emit `skill.session.*` events for Telemetry tab | 1 hr | P0 |
+| S4e | Add skill session dashboard panel in Telemetry tab — view active sessions, step history, governance decisions | 4 hrs | P2 |
+
+### S5: Validation & Testing (1 day)
+
+| ID | Task | Effort | Priority |
+|----|------|--------|----------|
+| S5a | Test: CAC-gated skill denial — character without permission gets denied with remediation | 3 hrs | P0 |
+| S5b | Test: Guardian skill execution — Guardian executes skill via `SkillsEngine` with synthetic identity | 3 hrs | P0 |
+| S5c | Test: TabToolAdapter — each of 12 tabs responds to `inspect` and returns structured results | 4 hrs | P0 |
+| S5d | Test: Cross-tab governance — tab access respects CAC permission scopes | 2 hrs | P0 |
+| S5e | Test: Autonomous loop routing — `routeQuery()` correctly matches skill from natural language | 2 hrs | P0 |
+| S5f | Test: Skill-audit Guardian task — detects stalled sessions and reports to AAB ledger | 2 hrs | P1 |
+| S5g | Total required: **35+ test cases** | — | — |
+
+## Target Quality Gates (Updated 2026-06-18)
 
 | Gate | Target | Current Estimate |
 |------|--------|-----------------|
@@ -715,8 +776,11 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 | Activity stream delivery p95 | <= 200ms | ✅ Met |
 | Policy decision latency p95 | <= 30ms | ✅ Met |
 | Retrieval latency p95 (hot) | <= 50ms | ✅ Met |
-| CI pipeline green on PR | 100% | ⚠️ Needs R4 fixes |
-| Compiled artifacts in src/ | **ZERO** | ❌ R1a needed |
-| Startup file length (index.ts) | < 500 lines | ❌ R2a needed |
-| CHANGELOG.md lint errors | **ZERO** | ❌ R6b needed |
+| CI pipeline green on PR | 100% | ✅ Met |
+| Compiled artifacts in src/ | **ZERO** | ✅ Met |
+| Startup file length (index.ts) | < 500 lines | ✅ 476 lines |
+| CHANGELOG.md lint errors | **ZERO** | ✅ Met |
 | Security scan findings (critical) | **ZERO** | ✅ Met |
+| **Tab skills defined** | **12** | ❌ S3a needed |
+| **Guardian skills defined** | **9** | ❌ S2d needed |
+| **Skill test coverage** | **35+ cases** | ❌ S5 needed |

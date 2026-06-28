@@ -884,4 +884,21 @@ exit 0;
             );
         });
     }
+
+    /** Get all active terminal session IDs */
+    getActiveSessionIds(): string[] {
+        return Array.from(this.activeSessions.keys());
+    }
+
+    /** Stop all active sessions gracefully */
+    async stopAllSessions(): Promise<void> {
+        const ids = this.getActiveSessionIds();
+        for (const id of ids) {
+            try {
+                await this.stopSession(id);
+            } catch (err) {
+                console.error(`[PRISM][terminal] Error stopping session ${id}:`, err);
+            }
+        }
+    }
 }

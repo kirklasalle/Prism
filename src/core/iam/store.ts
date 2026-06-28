@@ -144,6 +144,7 @@ export class IamStore {
         listUsers: StatementSync;
         updateUserStatus: StatementSync;
         updateUserAttrs: StatementSync;
+        deleteUser: StatementSync;
         insertRole: StatementSync;
         getRoleById: StatementSync;
         getRoleByName: StatementSync;
@@ -188,6 +189,7 @@ export class IamStore {
     }
 
     private migrate(): void {
+        this.db.exec("PRAGMA foreign_keys = ON;");
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS iam_users (
         id           TEXT PRIMARY KEY,
@@ -280,6 +282,9 @@ export class IamStore {
             `),
             updateUserAttrs: this.db.prepare(`
                 UPDATE iam_users SET attrs = :attrs, updated_at = :updated_at WHERE id = :id
+            `),
+            deleteUser: this.db.prepare(`
+                DELETE FROM iam_users WHERE id = :id
             `),
 
             insertRole: this.db.prepare(`
@@ -435,6 +440,10 @@ export class IamStore {
 
     updateUserAttrs(id: string, attrs: Record<string, unknown>): void {
         this.stmts.updateUserAttrs.run({ id, attrs: JSON.stringify(attrs), updated_at: nowIso() });
+    }
+
+    deleteUser(id: string): void {
+        this.stmts.deleteUser.run({ id });
     }
 
     // ── roles ───────────────────────────────────────────────────────────────

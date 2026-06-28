@@ -253,9 +253,18 @@ export class AutonomousAgentLoop {
     // We prune MCP tools (starting with 'mcp_') unless the objective explicitly mentions terms related to them.
     const objectiveLower = goal.objective.toLowerCase();
     const originalCount = activeDefs.length;
+
+    // Detect research/find/search objectives — retain all search+scrape+browse MCP tools
+    const isResearchObjective = /\b(find|search|look.?up|locate|browse|research|fetch|buy|purchase|listing|listings|price|deal|sale|car|vehicle|product|job|property|house|apartment|news|data)\b/.test(objectiveLower);
+
     activeDefs = activeDefs.filter(t => {
       if (!t.name.startsWith("mcp_")) {
         return true; // Keep all core/builtin tools
+      }
+
+      // Always keep search/scrape/browse/fetch MCP tools for research objectives
+      if (isResearchObjective && (t.name.includes("search") || t.name.includes("scrape") || t.name.includes("browse") || t.name.includes("fetch"))) {
+        return true;
       }
       
       // Keep if the objective mentions the full tool name
@@ -267,10 +276,12 @@ export class AutonomousAgentLoop {
       const cleanName = t.name.replace(/^mcp_/, "").replace(/_/g, " ");
       const parts = cleanName.split(" ");
       
-      // Match if any significant keyword from the tool name is in the objective
+      // Match if any significant keyword from the tool name is in the objective.
+      // NOTE: "search" and "scrape" are intentionally NOT in the stopword list — they are
+      // meaningful routing signals. Removing them would block search tools from research tasks.
       const matchesKeyword = parts.some(part => {
         if (part.length <= 2) return false;
-        if (["enhanced", "tool", "mcp", "search", "scrape", "get", "post", "read", "write", "sync"].includes(part)) return false;
+        if (["enhanced", "tool", "mcp", "get", "post", "read", "write", "sync"].includes(part)) return false;
         return objectiveLower.includes(part);
       });
       

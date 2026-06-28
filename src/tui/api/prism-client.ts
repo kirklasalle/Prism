@@ -239,10 +239,32 @@ export interface SetupPrerequisites {
 export class PrismClient {
     private baseUrl: string;
     private timeout: number;
+    private token: string | null = null;
+    private cookie: string | null = null;
 
     constructor(opts?: Partial<PrismClientOptions>) {
         this.baseUrl = opts?.baseUrl ?? "http://localhost:7070";
         this.timeout = opts?.timeout ?? 10_000;
+    }
+
+    setBaseUrl(baseUrl: string): void {
+        this.baseUrl = baseUrl;
+    }
+
+    setToken(token: string | null): void {
+        this.token = token;
+    }
+
+    getToken(): string | null {
+        return this.token;
+    }
+
+    setCookie(cookie: string | null): void {
+        this.cookie = cookie;
+    }
+
+    getCookie(): string | null {
+        return this.cookie;
     }
 
     /* ---- low-level ---- */
@@ -251,20 +273,38 @@ export class PrismClient {
         return new Promise((resolve, reject) => {
             const url = new URL(path, this.baseUrl);
             const payload = body ? JSON.stringify(body) : undefined;
+            const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+                ...(payload ? { "Content-Length": Buffer.byteLength(payload).toString() } : {}),
+            };
+            if (this.token) {
+                headers["Authorization"] = `Bearer ${this.token}`;
+            }
+            if (this.cookie) {
+                headers["Cookie"] = this.cookie;
+            }
             const req = http.request(
                 url,
                 {
                     method,
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...(payload ? { "Content-Length": Buffer.byteLength(payload).toString() } : {}),
-                    },
+                    headers,
                     timeout: this.timeout,
                 },
                 (res) => {
                     let data = "";
                     res.on("data", (chunk: Buffer) => (data += chunk.toString()));
                     res.on("end", () => {
+                        const setCookie = res.headers["set-cookie"];
+                        if (setCookie) {
+                            const first = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+                            if (first) {
+                                const parts = first.split(";");
+                                if (parts[0]) {
+                                    this.cookie = parts[0].trim();
+                                }
+                            }
+                        }
+
                         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                             try {
                                 resolve(data ? (JSON.parse(data) as T) : ({} as T));
@@ -297,26 +337,53 @@ export class PrismClient {
         return this.request<T>("DELETE", path);
     }
 
+    /* ---- IAM & Authentication ---- */
+    login(email: string, password: string, tenantId?: string): Promise<{ ok: boolean; user: Record<string, unknown>; session: Record<string, unknown>; dashboardToken: string }> {
+        return this.post("/api/iam/login", { email, password, tenantId });
+    }
+
+    getIamMe(): Promise<{ principal?: { email: string; roles: string[] } }> {
+        return this.get("/api/iam/me");
+    }
+
     /* ---- Health ---- */
     getHealth(): Promise<HealthResponse> {
         return this.get("/api/health");
     }
 
     /* ---- Chat & Sessions ---- */
-    getSessions(): Promise<SessionInfo[]> {
-        return this.get("/api/sessions");
+    async getSessions(): Promise<SessionInfo[]> {
+        const raw = await this.get<any[]>("/api/chat/sessions");
+        return raw.map((s) => ({
+            id: s.sessionId,
+            label: s.title || "Untitled Session",
+            createdAt: s.createdAt,
+            messageCount: s.messageCount ?? 0,
+        }));
     }
-    createSession(label?: string): Promise<SessionInfo> {
-        return this.post("/api/sessions", { label });
+    async createSession(label?: string): Promise<SessionInfo> {
+        const res = await this.post<{ session: any }>("/api/chat/sessions", { title: label });
+        const s = res.session;
+        return {
+            id: s.sessionId,
+            label: s.title || "Untitled Session",
+            createdAt: s.createdAt,
+            messageCount: s.messageCount ?? 0,
+        };
     }
     deleteSession(id: string): Promise<void> {
-        return this.del(`/api/sessions/${encodeURIComponent(id)}`);
+        return this.del(`/api/chat/sessions/${encodeURIComponent(id)}`);
     }
-    getMessages(sessionId: string): Promise<ChatMessage[]> {
-        return this.get(`/api/sessions/${encodeURIComponent(sessionId)}/messages`);
+    async getMessages(sessionId: string): Promise<ChatMessage[]> {
+        const res = await this.get<{ messages: ChatMessage[] }>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`);
+        return res.messages || [];
     }
-    sendChat(message: string, sessionId?: string): Promise<{ response: string; sessionId: string }> {
-        return this.post("/api/chat", { message, sessionId });
+    sendChat(message: string, sessionId?: string): Promise<{ response: string; session_id: string; accepted?: boolean; denied?: boolean; tier?: number; approval_pending_ids?: string[] }> {
+        return this.post("/api/chat", { prompt: message, message, sessionId });
+    }
+
+    sendSessionMessage(sessionId: string, content: string): Promise<{ session: any; userMessage: ChatMessage; assistantMessage: ChatMessage }> {
+        return this.post(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, { content });
     }
 
     /* ---- LLM Configuration ---- */

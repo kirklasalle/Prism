@@ -28,6 +28,62 @@ const DEFAULT_CONFIG: AgenticChatConfig = {
     workspaceSandbox: true,
 };
 
+/**
+ * Detect whether a user message is a research/information-gathering request.
+ * When true, the executor forces tool_choice='required' for the first N
+ * iterations so PRISM MUST use tools rather than responding with suggestions.
+ */
+function isResearchQuery(message: string): boolean {
+    const lower = message.toLowerCase();
+    const researchVerbs = [
+        "find", "search", "look up", "lookup", "locate", "fetch", "get",
+        "help me find", "help find", "check", "research", "investigate",
+        "show me", "list", "browse", "scan", "query", "retrieve",
+    ];
+    const researchObjects = [
+        "car", "vehicle", "listing", "price", "deal", "sale", "product",
+        "job", "property", "house", "apartment", "flight", "hotel",
+        "restaurant", "business", "company", "person", "contact",
+        "news", "article", "data", "information", "details", "specs",
+        "stock", "weather", "event", "ticket",
+    ];
+    const hasVerb = researchVerbs.some(v => lower.includes(v));
+    const hasObject = researchObjects.some(o => lower.includes(o));
+    // Also detect explicit "I need" + something
+    const hasNeed = /\b(i need|we need|please|can you|could you|help)\b/.test(lower);
+    return hasVerb || (hasNeed && hasObject);
+}
+
+/** How many iterations to force tool_choice='required' for research queries. */
+const RESEARCH_FORCED_TOOL_ITERATIONS = 3;
+
+/**
+ * Detect whether the LLM's response is giving up with suggestions/advice
+ * instead of actually completing the research task.
+ * Returns true when the model is telling the user to do the work themselves.
+ */
+function isGaveUpResponse(text: string): boolean {
+    const lower = text.toLowerCase();
+    const gaveUpPatterns = [
+        /here are some (steps|suggestions|tips|recommendations|alternatives)/,
+        /you (can|could|should|might|may) (try|check|visit|contact|search|look|browse|use)/,
+        /i (couldn't|could not|was unable|wasn't able) (to )?(find|locate|retrieve)/,
+        /unfortunately.{0,40}(couldn't|could not|no results|no listings|not find)/,
+        /\b(reach out to|contact|visit)\b.{0,30}\b(dealership|dealer|local|directly)\b/,
+        /continue checking/,
+        /consider (looking|checking|trying|using)/,
+        /if you (need|want|would like) (further|more|additional)/,
+        /local (dealerships|dealers|businesses)/,
+        /social media.{0,20}(groups|boards|pages)/,
+        /community boards/,
+        /car auctions/,
+        /set (up )?alerts/,
+    ];
+    const matchCount = gaveUpPatterns.filter(p => p.test(lower)).length;
+    // Require at least 2 pattern matches to avoid false positives
+    return matchCount >= 2;
+}
+
 export interface AgenticTurnEvent {
     type: "text" | "tool_call" | "tool_result" | "error" | "done";
     text?: string;
@@ -118,16 +174,28 @@ export class AgenticChatExecutor {
             activeTools = this.toolDefinitions.filter(t => coreTools.includes(t.name));
         }
 
+        // Detect research/information-gathering queries — force tool use on first N passes
+        const isResearch = isResearchQuery(userMessage);
+        let researchReinjections = 0;
+        const MAX_RESEARCH_REINJECTIONS = 3;
+
         for (let iteration = 0; iteration < this.config.maxIterations; iteration++) {
             let result;
             try {
+                // For research tasks, force tool use for the first N iterations
+                // so the model must try multiple sources before it can give up
+                const toolChoice: "auto" | "none" | "required" =
+                    (activeTools.length > 0 && isResearch && iteration < RESEARCH_FORCED_TOOL_ITERATIONS)
+                        ? "required"
+                        : (activeTools.length > 0 ? "auto" : "none");
+
                 result = await generateFn(
                     {
                         message: iteration === 0 ? userMessage : "",
                         conversation,
                         systemPrompt,
                         tools: activeTools.length > 0 ? activeTools : undefined,
-                        tool_choice: activeTools.length > 0 ? "auto" : undefined,
+                        tool_choice: toolChoice,
                     },
                     selection,
                 );
@@ -149,8 +217,31 @@ export class AgenticChatExecutor {
                 emit({ type: "text", text: result.content, iteration });
             }
 
-            // If no tool calls, done
+            // If no tool calls — check if the model gave up on a research task
             if (!result.toolCalls?.length || result.stopReason !== "tool_use") {
+                // For research tasks: detect "gave up" responses and re-inject
+                // a continuation message forcing the model to keep trying
+                if (isResearch && result.content && isGaveUpResponse(result.content) && researchReinjections < MAX_RESEARCH_REINJECTIONS) {
+                    researchReinjections++;
+                    // Add the assistant's "gave up" message to conversation
+                    conversation.push({
+                        role: "assistant",
+                        content: result.content,
+                    });
+                    // Inject a user-role message telling the model to keep going
+                    conversation.push({
+                        role: "user",
+                        content: "Do NOT suggest steps for me to do. YOU must execute those steps yourself using your tools. "
+                            + "Try the specific sites and strategies you just mentioned — use http_request to fetch from Autotrader, Cars.com, Craigslist, or similar sites. "
+                            + "If http_request gets blocked or returns no useful data, use browser_control to launch a visible browser session and navigate to those sites. "
+                            + "Try broadening the search: increase the price range, expand the radius, or adjust mileage limits. "
+                            + "Keep searching until you find real results with actual prices, mileage, and URLs. Do NOT give up.",
+                    });
+                    emit({ type: "text", text: `[PRISM Research Agent] Initial search yielded no results — retrying with broader strategy (attempt ${researchReinjections}/${MAX_RESEARCH_REINJECTIONS})...`, iteration });
+                    // Continue the loop — don't exit
+                    continue;
+                }
+
                 emit({ type: "done", iteration });
                 return { finalContent, toolCallsExecuted: totalToolCalls, iterations: iteration + 1, events };
             }

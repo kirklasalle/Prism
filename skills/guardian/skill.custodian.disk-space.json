@@ -1,0 +1,48 @@
+{
+    "id": "skill.custodian.disk-space",
+    "version": "1.0.0",
+    "name": "Disk Space Health Check",
+    "description": "Monitor disk usage, alert on thresholds, auto-clean temp files",
+    "tags": [
+        "guardian",
+        "custodian",
+        "maintenance",
+        "disk",
+        "system"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_filesystem_destruction"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 300000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "check-disk",
+                "name": "Check disk usage",
+                "tools": [
+                    "tab_workspace_inspect"
+                ],
+                "action": "Check workspace disk usage and available space",
+                "transitions": {
+                    "success": "evaluate",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "evaluate",
+                "name": "Evaluate thresholds",
+                "tools": [],
+                "action": "If usage > 90%, alert; if usage > 95%, auto-clean temp files",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

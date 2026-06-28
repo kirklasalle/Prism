@@ -845,7 +845,7 @@ export class DashboardService {
   /** Optional MCP adapter for /api/mcp/servers and Guardian self-heal task. */
   public mcpAdapter: McpClientAdapter | null = null;
   /** Optional console interceptor for /api/debug/console + live WS stream. */
-  private consoleInterceptor: ConsoleInterceptor | null = null;
+  public consoleInterceptor: ConsoleInterceptor | null = null;
   public sshpInterceptor!: SSHPInterceptor;
   private cshManager!: CSHManager;
   /** Unsubscribe handle for the console-line listener. */
@@ -853,8 +853,8 @@ export class DashboardService {
   private readonly openSockets = new Set<Socket>();
   public readonly sseClients = new Map<string, ServerResponse>();
   public readonly networkCommandHistory: Array<{ command: string; tier?: string; ok: boolean; timestamp: string }> = [];
-  private toolStates: Record<string, { enabled: boolean; invocations: number; successes: number; failures: number; avgLatencyMs: number; lastInvoked: string | null; lastError: string | null }> = {};
-  private pluginStates: Record<string, { enabled: boolean; healthy: boolean; requests: number; errors: number; avgResponseMs: number; lastChecked: string | null }> = {};
+  public toolStates: Record<string, { enabled: boolean; invocations: number; successes: number; failures: number; avgLatencyMs: number; lastInvoked: string | null; lastError: string | null }> = {};
+  public pluginStates: Record<string, { enabled: boolean; healthy: boolean; requests: number; errors: number; avgResponseMs: number; lastChecked: string | null }> = {};
   private utilityStates: Record<string, Record<string, unknown>> = {};
   private pendingToolCalls = new Map<string, { toolName: string; startedAt: number }>();
   private agentLifecycle: AgentLifecycleManager | null = null;
@@ -3149,6 +3149,70 @@ export class DashboardService {
   /** Return the LlmProviderManager for direct access. */
   getLlmProviderManager(): LlmProviderManager {
     return this.llmProviders;
+  }
+
+  public getUsageMetering() {
+    return this.usageMetering;
+  }
+
+  public getMetricsCollector() {
+    return this.metricsCollector;
+  }
+
+  public getIncidentTrendStore() {
+    return this.incidentTrendStore;
+  }
+
+  public getMetricsStore() {
+    return this.metricsStore;
+  }
+
+  public getRetrievalDashboardStore() {
+    return this.retrievalDashboardStore;
+  }
+
+  public getSoc2Exporter() {
+    return this.soc2Exporter;
+  }
+
+  public getActivityRetentionPolicy() {
+    return this.activityRetentionPolicy;
+  }
+
+  public getRiskOverrideStore() {
+    return this.riskOverrideStore;
+  }
+
+  public getUtilityRegistry() {
+    return this.utilityRegistry;
+  }
+
+  public getUtilityStates() {
+    return this.utilityStates;
+  }
+
+  public getAgentLifecycle() {
+    return this.agentLifecycle;
+  }
+
+  public getSwarmCoordinator() {
+    return this.swarmCoordinator;
+  }
+
+  public getAgentTelemetry() {
+    return this.agentTelemetry;
+  }
+
+  public getAgentPool() {
+    return this.agentPool;
+  }
+
+  public getModelMatrixCache() {
+    return this.modelMatrixCache;
+  }
+
+  public setModelMatrixCache(cache: { ts: number; matrix: any } | null) {
+    this.modelMatrixCache = cache;
   }
 
   /** Wire agent control dependencies after construction. */
@@ -9272,7 +9336,7 @@ $r | ConvertTo-Json -Depth 4 -Compress
    * by the PRISM_INCUBATION env flag (defaults to "on" in dev, "off" in prod).
    * All endpoints under /api/v1/incubation/* explicitly mark `prototype: true`.
    */
-  private async getIncubation(): Promise<NonNullable<DashboardService["incubation"]>> {
+  public async getIncubation(): Promise<NonNullable<DashboardService["incubation"]>> {
     if (this.incubation) return this.incubation;
     const envFlag = process.env.PRISM_INCUBATION;
     const enabled = envFlag === undefined
@@ -9420,11 +9484,35 @@ $r | ConvertTo-Json -Depth 4 -Compress
           sessionId
         );
         // Start background execution of the autonomous loop
-        void this.autonomousLoop.executeGoal(goal.goalId, (step) => {
+        this.autonomousLoop.executeGoal(goal.goalId, (step) => {
           const payload = JSON.stringify({ type: "autonomous_step", goalId: goal.goalId, ...step });
           for (const ws of this.wsClients) {
             try { ws.send(payload); } catch { /* ignore */ }
           }
+        }).then((result) => {
+          console.log(`[PRISM][Chat] Autonomous goal ${goal.goalId} completed with status: ${result.status}`);
+          
+          const messageContent = result.status === "completed"
+            ? `🤖 **Autonomous Task Completed**\n\nHere are the findings for **Goal \`${goal.goalId.substring(0, 8)}\`**:\n\n${result.summary}`
+            : `❌ **Autonomous Task Failed**\n\nGoal \`${goal.goalId.substring(0, 8)}\` failed:\n\n${result.summary}`;
+          
+          this.chatStore.appendMessage(sessionId, "assistant", messageContent, {
+            intent: "autonomous_completion",
+            goalId: goal.goalId,
+            status: result.status,
+            summary: result.summary,
+          });
+
+          this.broadcastWs({
+            type: "autonomous_goal_complete",
+            goalId: goal.goalId,
+            status: result.status,
+            summary: result.summary,
+            iterations: result.iterations,
+            toolCallsExecuted: result.toolCallsExecuted,
+            totalDurationMs: result.totalDurationMs,
+            timestamp: new Date().toISOString(),
+          });
         }).catch((err) => {
           console.error(`[PRISM][Chat] ✖ Autonomous goal execution failed for ${goal.goalId}:`, err);
           this.activityBus.emit({

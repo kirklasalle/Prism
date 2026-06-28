@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { IRouteHandler } from "./types.js";
-import { DashboardService } from "../dashboard-service.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { classifyChatTier } from "../chat-tier-classifier.js";
 import { getWorkspaceHub } from "../../config/workspace-resolver.js";
 import { writePreferences } from "../../config/workspace-resolver.js";
@@ -18,6 +18,8 @@ export class ChatHandler implements IRouteHandler {
     if (pathname.startsWith("/api/auth/gmail/")) return true;
     if (pathname.startsWith("/api/auth/outlook/")) return true;
     if (pathname.startsWith("/api/support/tickets")) return true;
+    if (pathname === "/api/identity") return true;
+    if (pathname.startsWith("/api/sessions/tab")) return true;
     return false;
   }
 
@@ -30,8 +32,8 @@ export class ChatHandler implements IRouteHandler {
     const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
     const isAdmin = authDisabled || (principal ? principal.roles.includes("admin") : true);
 
-    // If not admin and we have a principal, enforce session ownership on endpoints referencing specific session IDs
-    if (!isAdmin && principal) {
+    // If we have a principal, enforce session ownership/view access on endpoints referencing specific session IDs
+    if (principal) {
       let extractedSessionId: string | null = null;
       const m1 = /^\/api\/chat\/sessions\/([^/]+)/.exec(url);
       const m2 = /^\/api\/session\/([^/]+)/.exec(url);
@@ -40,10 +42,14 @@ export class ChatHandler implements IRouteHandler {
 
       if (extractedSessionId) {
         const session = service.getChatStore().getSession(extractedSessionId);
-        if (session && session.operatorEmail !== principal.email) {
-          res.writeHead(403, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "forbidden", message: "You do not have access to this session." }));
-          return;
+        if (session) {
+          const hasOwnership = session.operatorEmail === principal.email;
+
+          if (!hasOwnership) {
+            res.writeHead(403, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "forbidden", message: "You do not have access to this session." }));
+            return;
+          }
         }
       }
     }
@@ -86,7 +92,7 @@ export class ChatHandler implements IRouteHandler {
 
       // Check session ownership if it exists
       const session = service.getChatStore().getSession(sessionId);
-      if (session && !isAdmin && principal && session.operatorEmail !== principal.email) {
+      if (session && principal && session.operatorEmail !== principal.email) {
         return this.json(res, 403, { error: "forbidden", message: "You do not have access to this session." });
       }
 
@@ -153,8 +159,10 @@ export class ChatHandler implements IRouteHandler {
     // 3. GET /api/chat/sessions
     if (method === "GET" && url === "/api/chat/sessions") {
       let sessions = service.listChatSessions();
-      if (!isAdmin && principal) {
-        sessions = sessions.filter(s => s.operatorEmail === principal.email);
+      if (principal) {
+        sessions = sessions.filter(s =>
+          s.operatorEmail === principal.email
+        );
       }
       return this.json(res, 200, sessions);
     }
@@ -169,7 +177,7 @@ export class ChatHandler implements IRouteHandler {
           operatorEmail?: string;
           assistantEmail?: string;
         }>(req);
-        const operatorEmail = (!isAdmin && principal) ? principal.email : (body.operatorEmail || undefined);
+        const operatorEmail = principal ? principal.email : (body.operatorEmail || undefined);
         const session = service.createChatSession({
           title: body.title,
           characterId: body.characterId,
@@ -219,7 +227,7 @@ export class ChatHandler implements IRouteHandler {
         let assistantEmailFinal = body.assistantEmail ?? null;
 
         if (!cacAssignmentId) {
-          const rawEmail = (!isAdmin && principal && principal.email) ? principal.email : (body.operatorEmail ?? `operator@prism.local`);
+          const rawEmail = (principal && principal.email) ? principal.email : (body.operatorEmail ?? `operator@prism.local`);
           const operatorEmail = String(rawEmail).trim();
           const rawAssistantEmail = body.assistantEmail ?? `${characterId}@prism.local`;
           const assistantEmail = String(rawAssistantEmail).trim();
@@ -517,6 +525,41 @@ export class ChatHandler implements IRouteHandler {
     if (method === "DELETE" && url === "/api/auth/outlook/disconnect") {
       await service.getOutlookOAuth().disconnect();
       return this.json(res, 200, { disconnected: true });
+    }
+
+    // 27. GET /api/identity
+    if (method === "GET" && url === "/api/identity") {
+      const devIdentity = service.getDevIdentity();
+      const op = devIdentity?.getOperator();
+      const ag = devIdentity?.getAgent();
+      return this.json(res, 200, { operator: op ?? null, agent: ag ?? null });
+    }
+
+    // 28. GET /api/sessions/tabs
+    if (method === "GET" && url === "/api/sessions/tabs") {
+      const tabSessionRegistry = service.getTabSessionRegistry();
+      if (!tabSessionRegistry) return this.json(res, 200, { sessions: [] });
+      return this.json(res, 200, { sessions: tabSessionRegistry.getSummary() });
+    }
+
+    // 29. POST /api/sessions/tab/:id
+    if (method === "POST" && url.startsWith("/api/sessions/tab/")) {
+      const tabSessionRegistry = service.getTabSessionRegistry();
+      if (!tabSessionRegistry) return this.json(res, 503, { error: "Tab sessions not initialized" });
+      const tabId = url.replace("/api/sessions/tab/", "").split("?")[0];
+      try {
+        const session = tabSessionRegistry.getOrCreate(tabId as any);
+        return this.json(res, 200, session);
+      } catch (err) { return this.json(res, 400, { error: String(err) }); }
+    }
+
+    // 30. POST /api/sessions/tab-event/:id
+    if (method === "POST" && url.startsWith("/api/sessions/tab-event/")) {
+      const tabSessionRegistry = service.getTabSessionRegistry();
+      if (!tabSessionRegistry) return this.json(res, 503, { error: "Not initialized" });
+      const tabId = url.replace("/api/sessions/tab-event/", "").split("?")[0];
+      const session = tabSessionRegistry.recordEvent(tabId as any);
+      return this.json(res, 200, { ok: !!session, session });
     }
   }
 

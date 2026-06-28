@@ -15,6 +15,8 @@ import {
     HelpOverlay, SectionHeader, SubTabBar,
 } from "../src/tui/components/ui.js";
 import { TABS } from "../src/tui/theme.js";
+import { createMockClient } from "./tui-mocks.js";
+import { LoginTab } from "../src/tui/tabs/LoginTab.js";
 
 /* ================================================================== */
 /*  StatusBadge                                                        */
@@ -278,5 +280,86 @@ describe("HelpOverlay", () => {
         // Should mention help-related text
         assert.ok(frame.includes("q") || frame.includes("quit") || frame.includes("help"),
             "should include some keyboard hint");
+    });
+});
+
+/* ================================================================== */
+/*  LoginTab                                                           */
+/* ================================================================== */
+
+describe("LoginTab", () => {
+    it("renders operator authentication fields", () => {
+        const client = createMockClient();
+        const { lastFrame } = render(React.createElement(LoginTab, {
+            client,
+            focused: true,
+            onSuccess: () => {},
+            onLaunchWizard: () => {},
+        }));
+        const frame = lastFrame() ?? "";
+        assert.ok(frame.includes("OPERATOR AUTHENTICATION"));
+        assert.ok(frame.includes("Email:"));
+        assert.ok(frame.includes("Password:"));
+        assert.ok(frame.includes("QUICK ACTIONS"));
+    });
+
+    it("autofills email and password on pressing shortcut keys", async () => {
+        const client = createMockClient({
+            login: () => Promise.resolve({ ok: true, user: {}, session: {}, dashboardToken: "tok" }),
+        });
+        const inst = render(React.createElement(LoginTab, {
+            client,
+            focused: true,
+            onSuccess: () => {},
+            onLaunchWizard: () => {},
+        }));
+        // Write shortcut key "t" to trigger testing operator autofill
+        await inst.stdin.write("t");
+        await new Promise((r) => setTimeout(r, 100));
+        const frame = inst.lastFrame() ?? "";
+        // Check if testing operator email is now present in the frame
+        assert.ok(frame.includes("testing@prism.ai"), "should autofill testing@prism.ai");
+        inst.unmount();
+    });
+
+    it("calls login when pressing Enter on active input", async () => {
+        let loginCalled = false;
+        const client = createMockClient({
+            login: (email, password) => {
+                loginCalled = true;
+                return Promise.resolve({ ok: true, user: {}, session: {}, dashboardToken: "tok" });
+            },
+        });
+        const inst = render(React.createElement(LoginTab, {
+            client,
+            focused: true,
+            onSuccess: () => {},
+            onLaunchWizard: () => {},
+        }));
+        
+        // Type email character-by-character
+        for (const char of "test@prism.ai") {
+            await inst.stdin.write(char);
+            await new Promise((r) => setTimeout(r, 10));
+        }
+        await new Promise((r) => setTimeout(r, 50));
+        
+        // Press Enter
+        await inst.stdin.write("\r");
+        await new Promise((r) => setTimeout(r, 50));
+        
+        // Type password character-by-character
+        for (const char of "password") {
+            await inst.stdin.write(char);
+            await new Promise((r) => setTimeout(r, 10));
+        }
+        await new Promise((r) => setTimeout(r, 50));
+        
+        // Press Enter
+        await inst.stdin.write("\r");
+        await new Promise((r) => setTimeout(r, 50));
+        
+        assert.ok(loginCalled, "login should be called");
+        inst.unmount();
     });
 });

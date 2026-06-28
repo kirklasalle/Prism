@@ -51,12 +51,6 @@ set PRISM_EXECUTION_PROFILE=individual
 set PRISM_ENV_PROFILE=dev
 set PRISM_MODE=server
 
-if not defined PRISM_BASE_MODE (
-  echo [INFO] PRISM_BASE_MODE was not defined.
-  echo [INFO] Engaging BASE MODE extreme memory constraints paradigm by default.
-  set "PRISM_BASE_MODE=true"
-)
-
 if not defined PRISM_DASHBOARD_PORT set "PRISM_DASHBOARD_PORT=7070"
 
 REM ── LLM Provider Configuration ─────────────────────────────────────────

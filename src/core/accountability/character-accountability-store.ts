@@ -5,6 +5,8 @@ export type CharacterAssignmentState = "active" | "suspended" | "revoked";
 export interface PermissionScope {
     scope: string;
     expiresAt: string | null; // ISO-8601 or null for never-expires
+    maxTier?: "tier1_autonomous" | "tier2_conditional" | "tier3_approval";
+    allowedActions?: string[]; // ["inspect", "control"] — omit = all
 }
 
 export interface CharacterAssignment {

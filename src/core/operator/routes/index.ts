@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { DashboardService } from "../dashboard-service.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { IRouteHandler } from "./types.js";
 import { DashboardHandler } from "./dashboard-handler.js";
 import { SetupHandler } from "./setup-handler.js";
@@ -19,6 +19,18 @@ import { ComputerHandler } from "./computer-handler.js";
 import { AgenticHandler } from "./agentic-handler.js";
 import { ChatHandler } from "./chat-handler.js";
 import { SettingsHandler } from "./settings-handler.js";
+import { LlmHandler } from "./llm-handler.js";
+import { DiagnosticsHandler } from "./diagnostics-handler.js";
+import { SessionPackageHandler } from "./session-package-handler.js";
+import { GuardianHandler } from "./guardian-handler.js";
+import { ModelHandler } from "./model-handler.js";
+import { TelemetryHandler } from "./telemetry-handler.js";
+import { OAuthHandler } from "./oauth-handler.js";
+import { UtilitiesHandler } from "./utilities-handler.js";
+import { ToolsHandler } from "./tools-handler.js";
+import { CacHandler } from "./cac-handler.js";
+import { IncubationHandler } from "./incubation-handler.js";
+import { PluginsHandler } from "./plugins-handler.js";
 
 export * from "./types.js";
 export * from "./dashboard-handler.js";
@@ -33,6 +45,18 @@ export * from "./iam-handler.js";
 export * from "./iam-admin-handler.js";
 export * from "./scim-handler.js";
 export * from "./login-handler.js";
+export * from "./llm-handler.js";
+export * from "./diagnostics-handler.js";
+export * from "./session-package-handler.js";
+export * from "./guardian-handler.js";
+export * from "./model-handler.js";
+export * from "./telemetry-handler.js";
+export * from "./oauth-handler.js";
+export * from "./utilities-handler.js";
+export * from "./tools-handler.js";
+export * from "./cac-handler.js";
+export * from "./incubation-handler.js";
+export * from "./plugins-handler.js";
 
 export class Router {
   private handlers: IRouteHandler[] = [];
@@ -53,6 +77,18 @@ export class Router {
     this.handlers.push(new AgenticHandler());
     this.handlers.push(new ChatHandler());
     this.handlers.push(new SettingsHandler());
+    this.handlers.push(new LlmHandler());
+    this.handlers.push(new DiagnosticsHandler());
+    this.handlers.push(new SessionPackageHandler());
+    this.handlers.push(new GuardianHandler());
+    this.handlers.push(new ModelHandler());
+    this.handlers.push(new TelemetryHandler());
+    this.handlers.push(new UtilitiesHandler());
+    this.handlers.push(new ToolsHandler());
+    this.handlers.push(new CacHandler());
+    this.handlers.push(new IncubationHandler());
+    this.handlers.push(new OAuthHandler());
+    this.handlers.push(new PluginsHandler());
 
     this.handlers.push(new IamAdminRouteHandler({ iam }));
     this.handlers.push(iam);
@@ -78,6 +114,20 @@ export class Router {
     }
     // No handler matched — restore original URL for inline handle() processing
     (req as any).url = originalUrl;
+
+    // Backward-compat: redirect unversioned GET /api/<path> to /api/v1/<path> if unhandled
+    const method = req.method?.toUpperCase() ?? "GET";
+    if (method === "GET" && originalUrl.startsWith("/api/") && !originalUrl.startsWith("/api/v1/")) {
+      const redirectedPath = "/api/v1/" + originalUrl.substring("/api/".length);
+      res.writeHead(301, {
+        "Location": redirectedPath,
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(`Redirecting to ${redirectedPath}`);
+      return true;
+    }
+
     return false;
   }
 }

@@ -1,0 +1,100 @@
+{
+    "id": "prism.skill.gws_calendar",
+    "version": "1.0.0",
+    "name": "GWS Calendar Integration",
+    "description": "Google Calendar: Manage calendars and events using the Google Workspace gws CLI. Covers events, calendars, ACL rules, free/busy queries, calendar lists, and settings.",
+    "tags": [
+        "gws",
+        "google-workspace",
+        "calendar",
+        "events",
+        "scheduling",
+        "freebusy",
+        "google"
+    ],
+    "governance": {
+        "min_policy_tier": "tier-1",
+        "required_approvals": [
+            "shell_exec"
+        ],
+        "covenant_rules": [
+            "Prerequisite: gws-shared must be loaded first for authentication and global flags.",
+            "Always confirm with the user before creating, updating, deleting, or moving calendar events.",
+            "Respect calendar visibility rules — never expose private event details from secondary calendars without explicit user intent.",
+            "Use gws schema calendar.<resource>.<method> to inspect required parameters before constructing API calls."
+        ]
+    },
+    "triad_templates": {
+        "left_hemisphere": "Evaluate the Calendar API method, timezone handling, recurrence rules, and attendee data for: {query}. Verify the operation respects calendar access controls.",
+        "right_hemisphere": "Design the exact gws calendar command with proper resource, method, --params, --json for event bodies, --format flags, and timeMin/timeMax filters for: {query}.",
+        "main_hemisphere": "Coordinate Calendar operations. Inspect method schema, construct command, confirm event mutations, execute, and present schedule results: {query}."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "inspect_calendar_schema",
+                "name": "Inspect Calendar API Method Schema",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Use 'gws schema calendar.<resource>.<method>' to inspect required parameters for the target Calendar API call. Resources: acl, calendarList, calendars, channels, colors, events, freebusy, settings.",
+                "transitions": {
+                    "success": "construct_calendar_command",
+                    "failed": "inspect_calendar_schema"
+                }
+            },
+            {
+                "id": "construct_calendar_command",
+                "name": "Construct Calendar Command",
+                "tools": [],
+                "action": "Build the full 'gws calendar <resource> <method>' command with --params for filters (timeMin, timeMax, q, calendarId), --json for event bodies (summary, description, start, end, attendees, recurrence), and --format for display.",
+                "transitions": {
+                    "success": "confirm_calendar_mutations",
+                    "failed": "inspect_calendar_schema"
+                }
+            },
+            {
+                "id": "confirm_calendar_mutations",
+                "name": "Confirm Calendar Mutations",
+                "tools": [],
+                "action": "For create, update, delete, move, import, or quickAdd operations, present the command details to the user for confirmation. For read-only operations (get, list, instances, freebusy query), proceed automatically.",
+                "transitions": {
+                    "success": "execute_calendar_command",
+                    "failed": "construct_calendar_command"
+                }
+            },
+            {
+                "id": "execute_calendar_command",
+                "name": "Execute Calendar Command",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Execute the gws calendar command in the terminal. For events.list include timeMin, timeMax, or q parameter for targeted queries. Use --page-all for large result sets.",
+                "transitions": {
+                    "success": "format_calendar_output",
+                    "failed": "inspect_calendar_schema"
+                }
+            },
+            {
+                "id": "format_calendar_output",
+                "name": "Format and Present Calendar Results",
+                "tools": [],
+                "action": "Parse the JSON output and present events in a readable table: date/time, event title, calendar, attendees. For free/busy queries show time blocks. For event details show full description and attendees.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            },
+            {
+                "id": "completed",
+                "name": "Calendar Operation Completed",
+                "tools": [],
+                "action": "Confirm the Calendar operation result. Provide next-step suggestions such as creating an event from a free slot, modifying recurrence, or sharing a calendar.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            }
+        ]
+    }
+}

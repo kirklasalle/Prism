@@ -1,0 +1,45 @@
+{
+    "id": "skill.custodian.agent-health",
+    "version": "1.0.0",
+    "name": "Agent Health Check",
+    "description": "Check all agent lifecycles and health status",
+    "tags": [
+        "guardian",
+        "custodian",
+        "diagnostics",
+        "agent-health"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_agent_disruption"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 900000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "list-agents",
+                "name": "List all agents",
+                "tools": [],
+                "action": "Get list of all agents and their states",
+                "transitions": {
+                    "success": "check-health",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "check-health",
+                "name": "Check agent health",
+                "tools": [],
+                "action": "Identify agents in error/stopped state",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

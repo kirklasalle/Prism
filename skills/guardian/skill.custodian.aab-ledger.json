@@ -1,0 +1,45 @@
+{
+    "id": "skill.custodian.aab-ledger",
+    "version": "1.0.0",
+    "name": "AAB Ledger Monitor",
+    "description": "Check for anomalous autonomous behavior in AAB ledger",
+    "tags": [
+        "guardian",
+        "custodian",
+        "monitoring",
+        "aab-ledger"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_anomalous_behavior"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 30000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "load-ledger",
+                "name": "Load AAB ledger",
+                "tools": [],
+                "action": "Load AAB ledger entries from autonomous agent loop",
+                "transitions": {
+                    "success": "analyze",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "analyze",
+                "name": "Analyze for anomalies",
+                "tools": [],
+                "action": "Check for anomalous autonomous behavior patterns",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

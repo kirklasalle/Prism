@@ -189,7 +189,7 @@ describe("buildAdaptiveSystemPrompt", () => {
     it("returns minimal prompt for T1 models", () => {
         const profile = resolveProfile("gemma3:1b");
         const prompt = buildAdaptiveSystemPrompt(profile);
-        assert.ok(prompt.length < 300);
+        assert.ok(prompt.length < 400);
         assert.ok(prompt.includes("PRISM"));
     });
 

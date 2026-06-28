@@ -1,0 +1,65 @@
+{
+    "id": "skill.custodian.skill-audit",
+    "version": "1.0.0",
+    "name": "Skill Execution Audit",
+    "description": "Audit all active skill sessions every 10 minutes for stalled sessions, policy violations, or anomalous execution patterns",
+    "tags": [
+        "guardian",
+        "custodian",
+        "security",
+        "skill-audit"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_skill_anomaly"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 600000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "list-sessions",
+                "name": "List active skill sessions",
+                "tools": [],
+                "action": "Query database for all active skill sessions",
+                "transitions": {
+                    "success": "check-stalled",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "check-stalled",
+                "name": "Check for stalled sessions",
+                "tools": [],
+                "action": "Identify sessions stuck in 'running' state for > 5 minutes",
+                "transitions": {
+                    "success": "check-violations",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "check-violations",
+                "name": "Check for policy violations",
+                "tools": [],
+                "action": "Verify all sessions comply with CAC permission scopes",
+                "transitions": {
+                    "success": "check-anomalies",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "check-anomalies",
+                "name": "Check for anomalous patterns",
+                "tools": [],
+                "action": "Identify unusual skill execution patterns (e.g., rapid-fire executions, high-frequency retries)",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

@@ -1,0 +1,102 @@
+{
+    "id": "prism.skill.gws_gmail",
+    "version": "1.0.0",
+    "name": "GWS Gmail Integration",
+    "description": "Gmail: Send, read, and manage email using the Google Workspace gws CLI. Covers messages, threads, drafts, labels, settings, history, and push notifications.",
+    "tags": [
+        "gws",
+        "google-workspace",
+        "gmail",
+        "email",
+        "messages",
+        "threads",
+        "drafts",
+        "labels",
+        "google"
+    ],
+    "governance": {
+        "min_policy_tier": "tier-1",
+        "required_approvals": [
+            "shell_exec"
+        ],
+        "covenant_rules": [
+            "Prerequisite: gws-shared must be loaded first for authentication and global flags.",
+            "Always confirm with the user before sending emails or performing destructive mailbox operations (delete, permanent delete).",
+            "Never output full email bodies containing PII without --sanitize flag screening.",
+            "Use gws schema gmail.<resource>.<method> to inspect required parameters before constructing API calls."
+        ]
+    },
+    "triad_templates": {
+        "left_hemisphere": "Evaluate the Gmail API method, required parameters, and security implications for: {query}. Verify the operation respects mailbox privacy and data sensitivity boundaries.",
+        "right_hemisphere": "Design the exact gws gmail command with proper resource, method, --params, --json, and --format flags for: {query}. Include pagination for list operations.",
+        "main_hemisphere": "Coordinate Gmail operations. Check auth, inspect method schema via gws schema, construct the command, confirm destructive actions, execute, and present formatted results: {query}."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "inspect_method_schema",
+                "name": "Inspect Gmail API Method Schema",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Use 'gws schema gmail.<resource>.<method>' to inspect required parameters, types, and defaults for the target Gmail API call. Resources: users (getProfile, stop, watch), drafts, history, labels, messages, settings, threads.",
+                "transitions": {
+                    "success": "construct_gmail_command",
+                    "failed": "inspect_method_schema"
+                }
+            },
+            {
+                "id": "construct_gmail_command",
+                "name": "Construct Gmail Command",
+                "tools": [],
+                "action": "Build the full 'gws gmail <resource> <method>' command with appropriate --params, --json, --format, --page-all, --output flags based on the schema inspection results.",
+                "transitions": {
+                    "success": "confirm_if_destructive",
+                    "failed": "inspect_method_schema"
+                }
+            },
+            {
+                "id": "confirm_if_destructive",
+                "name": "Confirm Destructive Operations",
+                "tools": [],
+                "action": "If the operation is a delete, update, or send operation, present the command to the user for confirmation. For read-only operations (get, list, getProfile), proceed automatically.",
+                "transitions": {
+                    "success": "execute_gmail_command",
+                    "failed": "construct_gmail_command"
+                }
+            },
+            {
+                "id": "execute_gmail_command",
+                "name": "Execute Gmail Command",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Execute the gws gmail command in the terminal with proper flags. Use --dry-run for destructive operations if available.",
+                "transitions": {
+                    "success": "format_email_output",
+                    "failed": "inspect_method_schema"
+                }
+            },
+            {
+                "id": "format_email_output",
+                "name": "Format and Present Email Results",
+                "tools": [],
+                "action": "Parse the JSON or table output and present a clean summary. For message lists show sender, subject, date snippet. For message content show body with PII sensitivity note.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            },
+            {
+                "id": "completed",
+                "name": "Gmail Operation Completed",
+                "tools": [],
+                "action": "Confirm the Gmail operation result to the user. Provide next-step suggestions such as replying to a message, creating a filter, or managing labels.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            }
+        ]
+    }
+}

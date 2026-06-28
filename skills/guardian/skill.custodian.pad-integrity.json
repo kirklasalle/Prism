@@ -1,0 +1,55 @@
+{
+    "id": "skill.custodian.pad-integrity",
+    "version": "1.0.0",
+    "name": "PAD Integrity Check",
+    "description": "Verify Sacred Covenant PAD SHA-256 integrity",
+    "tags": [
+        "guardian",
+        "custodian",
+        "security",
+        "pad-integrity"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_pad_modification"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 300000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "load-pad",
+                "name": "Load PAD file",
+                "tools": [],
+                "action": "Load Sacred Covenant PAD file",
+                "transitions": {
+                    "success": "compute-hash",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "compute-hash",
+                "name": "Compute SHA-256 hash",
+                "tools": [],
+                "action": "Compute SHA-256 hash of PAD file content",
+                "transitions": {
+                    "success": "compare",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "compare",
+                "name": "Compare with expected hash",
+                "tools": [],
+                "action": "Compare computed hash with expected hash from configuration",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

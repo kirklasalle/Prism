@@ -57,7 +57,9 @@ import {
     workspaceArtifactsDir,
     detectLegacyPaths,
     seedDefaultCharacters,
+    readPreferences,
 } from "./core/config/workspace-resolver.js";
+import { resolveProfile } from "./core/operator/model-capability-matrix.js";
 import {
     validateEnvironment,
     printEnvValidation,
@@ -70,10 +72,27 @@ import { waitForShutdown } from "./bootstrap/shutdown.js";
 import { createDashboardActions } from "./bootstrap/dashboard-actions.js";
 import { runServerMode, runDemoMode } from "./bootstrap/server-mode.js";
 import type { AppContext } from "./bootstrap/context.js";
+import { GuardianAgent } from "./core/agents/guardian-agent.js";
+import { SkillsEngine } from "./core/skills/skills-engine.js";
+import { TabToolAdapter } from "./core/skills/tab-tool-adapter.js";
+import { SkillsDbAdapter } from "./core/skills/db-adapter.js";
 
 async function main(): Promise<void> {
     // Auto-create .env from .env.example on first run
     ensureEnvFile();
+
+    // Assign mock credentials in dev mode if they are not configured, so OAuth is connectable
+    if (process.env.NODE_ENV !== "production") {
+        if (!process.env.PRISM_GMAIL_CLIENT_ID) {
+            process.env.PRISM_GMAIL_CLIENT_ID = "mock_gmail_client_id";
+        }
+        if (!process.env.PRISM_GMAIL_CLIENT_SECRET) {
+            process.env.PRISM_GMAIL_CLIENT_SECRET = "mock_gmail_client_secret";
+        }
+        if (!process.env.PRISM_OUTLOOK_CLIENT_ID) {
+            process.env.PRISM_OUTLOOK_CLIENT_ID = "mock_outlook_client_id";
+        }
+    }
 
     // Install the console interceptor BEFORE any startup logging so the
     // dashboard's Live Console panel captures every line — including the
@@ -96,6 +115,41 @@ async function main(): Promise<void> {
     // Initialize persistent workspace
     ensureWorkspaceStructure(environmentProfile);
     seedDefaultCharacters();
+
+    // Load and apply powerMode preference early at startup to determine baseMode.
+    // Base Mode defaults to off unless a low-end local model (tier <= 2) is actually running.
+    try {
+        const prefs = readPreferences();
+        const powerMode = prefs?.powerMode || "adaptive";
+        let isAuto = false;
+        let targetBaseMode = false;
+
+        if (powerMode === "adaptive") {
+            isAuto = true;
+            process.env.PRISM_BASE_MODE_AUTO = "true";
+            
+            // Resolve configured provider / model from prefs or env
+            const providerId = prefs?.activeLlmProviderId || (process.env.PRISM_LLM_PROVIDER ?? "").trim().toLowerCase();
+            const activeModel = prefs?.activeLlmModel || process.env.PRISM_LLM_MODEL || null;
+            
+            if (activeModel) {
+                const profile = resolveProfile(activeModel);
+                targetBaseMode = profile.locality === "local" && profile.tier <= 2;
+            } else {
+                targetBaseMode = false;
+            }
+        } else {
+            isAuto = false;
+            process.env.PRISM_BASE_MODE_AUTO = "false";
+            targetBaseMode = powerMode === "eco";
+        }
+
+        process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
+        console.log(`[PRISM][startup] Early hydrated powerMode preference: '${powerMode}' -> baseMode=${targetBaseMode} (auto=${isAuto})`);
+    } catch (err) {
+        console.warn("[PRISM][startup] Failed to early hydrate powerMode preference:", err);
+    }
+
     const wsRoot = resolveWorkspaceRoot();
     const dbPath = workspaceDbPath();
     const legacy = detectLegacyPaths();
@@ -192,6 +246,9 @@ async function main(): Promise<void> {
         registry.register(tool);
     }
 
+    const tabToolAdapter = new TabToolAdapter(registry, consoleInterceptor);
+    registry.register(tabToolAdapter);
+
     // Load MCP tools from workspace config or CWD fallback
     const mcpAdapter = new McpClientAdapter();
     const mcpSettingsPath = process.env.PRISM_MCP_SETTINGS
@@ -270,10 +327,6 @@ async function main(): Promise<void> {
     autonomousLoop.setUsageMetering(usageMeteringService);
     console.log(`[PRISM][autonomous] Autonomous agent loop initialized`);
 
-
-    // Late-bind the dashboard service into the workflow-demo action's hooks so
-    // the demo can broadcast a UI tour and fire real BUA/CUA probes.
-    resolveDashboardService!(dashboardService);
     // Wire AgentPool — must happen after dashboardService (which owns LlmProviderManager)
     const llmDelegate = dashboardService.getLlmDelegate();
     const agentTelemetry = new AgentTelemetryCollector();
@@ -320,10 +373,9 @@ async function main(): Promise<void> {
     }
 
     // Sync lifecycle model overrides to LLM routing config
-    const llmProviders = dashboardService.getLlmProviderManager();
     for (const inst of agentLifecycle.list()) {
         if (inst.modelOverride) {
-            llmProviders.setAgentModelOverride(inst.agentId, inst.modelOverride.providerId, inst.modelOverride.model);
+            dashboardService.getLlmProviders().setAgentModelOverride(inst.agentId, inst.modelOverride.providerId, inst.modelOverride.model);
         }
     }
 
@@ -415,6 +467,37 @@ async function main(): Promise<void> {
         console.warn("[PRISM][self-review]", warning);
     }
 
+    // ── Phase A2 (cont): Guardian Agent & Skills Engine ───────────────────
+    // Guardian is the permanent Custodian agent (llama.cpp) that executes
+    // custodian skills and supports the CAC Character.
+    const guardianAgent = dashboardService.getGuardianAgent();
+    console.log(`[PRISM][guardian] Guardian agent initialized`);
+
+    // ── Skills Engine — CAC-gated skill execution ────────────────────────
+    // Skills are workflows composed of tools. The SkillsEngine enforces
+    // CAC permission checks before executing any skill step.
+    const skillsEngine = dashboardService.getSkillsEngine();
+    console.log(`[PRISM][skills] Skills engine initialized`);
+
+    // Late-bind the dashboard service into the workflow-demo action's hooks so
+    // the demo can broadcast a UI tour and fire real BUA/CUA probes.
+    resolveDashboardService!(dashboardService);
+    console.log("=".repeat(60));
+    console.log("  PRISM RUNTIME -- Session:", sessionId);
+    console.log("  Environment profile:", environmentProfile);
+    console.log("  Execution profile:", describeExecutionProfileResolution(executionProfile, environmentProfile));
+    console.log("  Mode:", runtimeMode);
+    console.log("  Dashboard:", `http://localhost:${dashboardPort}`);
+    console.log(
+        "  Self-review intervals:",
+        `daily=${selfReviewConfiguration.intervalsMs.daily}ms weekly=${selfReviewConfiguration.intervalsMs.weekly}ms monthly=${selfReviewConfiguration.intervalsMs.monthly}ms`,
+    );
+    console.log("=".repeat(60));
+
+    for (const warning of selfReviewConfiguration.warnings) {
+        console.warn("[PRISM][self-review]", warning);
+    }
+
     // ── Build AppContext for mode dispatch ────────────────────────────────────
     const ctx: AppContext = {
         sessionId,
@@ -460,6 +543,8 @@ async function main(): Promise<void> {
         agentRouter,
         dashboardService,
         selfReviewScheduler,
+        guardianAgent,
+        skillsEngine,
     };
 
     if (runtimeMode === "server") {

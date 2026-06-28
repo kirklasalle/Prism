@@ -1,0 +1,45 @@
+{
+    "id": "skill.custodian.covenant-audit",
+    "version": "1.0.0",
+    "name": "Covenant Integrity Audit",
+    "description": "Audit Sacred Covenant integrity and policy compliance",
+    "tags": [
+        "guardian",
+        "custodian",
+        "security",
+        "covenant"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_covenant_modification"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 300000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "load-covenant",
+                "name": "Load Covenant",
+                "tools": [],
+                "action": "Load Sacred Covenant configuration",
+                "transitions": {
+                    "success": "check-compliance",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "check-compliance",
+                "name": "Check policy compliance",
+                "tools": [],
+                "action": "Verify all active agents and skills comply with Covenant rules",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

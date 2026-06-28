@@ -939,5 +939,22 @@ export class ContainerSandboxAdapter {
                 }
             });
         });
+     }
+
+    /** Get all active container IDs */
+    getActiveContainerIds(): string[] {
+        return Array.from(this.activeContainers.keys());
+    }
+
+    /** Stop all active containers gracefully */
+    async stopAllContainers(): Promise<void> {
+        const ids = this.getActiveContainerIds();
+        for (const id of ids) {
+            try {
+                await this.stopContainer(id);
+            } catch (err) {
+                console.error(`[PRISM][container] Error stopping container ${id}:`, err);
+            }
+        }
     }
 }

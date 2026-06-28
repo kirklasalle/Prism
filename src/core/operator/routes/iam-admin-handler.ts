@@ -97,6 +97,14 @@ export class IamAdminRouteHandler implements IRouteHandler {
             if (userStatusM && method === "POST") {
                 return await this.setUserStatus(req, decodeURIComponent(userStatusM[1]), tenantId, res, service);
             }
+            const userPasswordM = /^\/api\/iam\/admin\/users\/([^/]+)\/password$/.exec(path);
+            if (userPasswordM && method === "POST") {
+                return await this.setUserPassword(req, decodeURIComponent(userPasswordM[1]), tenantId, res, service);
+            }
+            const userM = /^\/api\/iam\/admin\/users\/([^/]+)$/.exec(path);
+            if (userM && method === "DELETE") {
+                return this.deleteUser(decodeURIComponent(userM[1]), tenantId, res);
+            }
             const userRolesM = /^\/api\/iam\/admin\/users\/([^/]+)\/roles$/.exec(path);
             if (userRolesM && method === "POST") {
                 return await this.addUserRole(req, decodeURIComponent(userRolesM[1]), tenantId, res, service);
@@ -162,6 +170,33 @@ export class IamAdminRouteHandler implements IRouteHandler {
             return this.json(res, 400, { error: { code: "invalid_status", message: "status must be active|suspended|deprovisioned" } });
         }
         this.store.setUserStatus(userId, status as IamUserStatus);
+        return this.json(res, 200, { ok: true });
+    }
+
+    private async setUserPassword(
+        req: IncomingMessage, userId: string, tenantId: string, res: ServerResponse, service: DashboardService,
+    ): Promise<void> {
+        const user = this.store.getUser(userId);
+        if (!user || user.tenantId !== tenantId) {
+            return this.json(res, 404, { error: { code: "not_found", message: `user ${userId}` } });
+        }
+        const body = await this.readJson(req, service);
+        const password = body && typeof body["password"] === "string" ? body["password"].trim() : "";
+        if (!password) {
+            return this.json(res, 400, { error: { code: "invalid_password", message: "password required" } });
+        }
+        const passwordHash = createHash("sha256").update(password, "utf-8").digest("hex");
+        const attrs = { ...(user.attrs || {}), passwordHash };
+        this.store.updateUserAttrs(userId, attrs);
+        return this.json(res, 200, { ok: true });
+    }
+
+    private deleteUser(userId: string, tenantId: string, res: ServerResponse): void {
+        const user = this.store.getUser(userId);
+        if (!user || user.tenantId !== tenantId) {
+            return this.json(res, 404, { error: { code: "not_found", message: `user ${userId}` } });
+        }
+        this.store.deleteUser(userId);
         return this.json(res, 200, { ok: true });
     }
 

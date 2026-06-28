@@ -27,6 +27,22 @@ export class IntentClassifier {
         // 1. Check for Autonomous OS Tasks (e.g., Browser control, computer use, e-commerce)
         const osPatterns = [
             {
+                category: "research",
+                patterns: [
+                    // "find/search/look up/locate/research" + real-world object
+                    /\b(find|search|look\s*up|locate|research|investigate)\b.*\b(car|cars|vehicle|vehicles|truck|suv|listing|listings|price|prices|deal|deals|sale|property|properties|house|houses|home|homes|apartment|apartments|rental|rentals|job|jobs|hotel|hotels|flight|flights|ticket|tickets|restaurant|restaurants|product|products|item|items)\b/,
+                    // real-world object + "find/search/look up/locate/research"
+                    /\b(car|cars|vehicle|vehicles|truck|suv|listing|listings|price|prices|deal|deals|sale|property|properties|house|houses|home|homes|apartment|apartments|rental|rentals|job|jobs|hotel|hotels|flight|flights|ticket|tickets|restaurant|restaurants|product|products|item|items)\b.*\b(find|search|look\s*up|locate|research|investigate)\b/,
+                    // "help me/I need to find" patterns
+                    /\b(help|need)\b.*\b(find|search|look|locate)\b.*\b(car|vehicle|truck|suv|listing|price|deal|property|house|home|apartment|rental|job|hotel|flight|ticket|restaurant|product)\b/,
+                    // Direct vehicle search patterns (common Kirk use case)
+                    /\b(ford|chevy|chevrolet|toyota|honda|nissan|dodge|jeep|ram|bmw|mercedes|audi|hyundai|kia|subaru|mazda|volkswagen|vw|lexus|acura|infiniti|cadillac|buick|gmc|lincoln)\b.*\b(for sale|listing|price|under|miles|mileage)\b/,
+                    /\b(for sale|listing|price|under|miles|mileage)\b.*\b(ford|chevy|chevrolet|toyota|honda|nissan|dodge|jeep|ram|bmw|mercedes|audi|hyundai|kia|subaru|mazda|volkswagen|vw|lexus|acura|infiniti|cadillac|buick|gmc|lincoln)\b/,
+                ],
+                requiresBrowser: true,
+                requiresComputer: false
+            },
+            {
                 category: "shopping",
                 patterns: [
                     /\bshop\b/, /\bbuy\b/, /\bpurchase\b/, /\border\b/, /\bfind.*shoes\b/,

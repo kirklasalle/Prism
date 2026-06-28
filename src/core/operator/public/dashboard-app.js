@@ -68,6 +68,13 @@ window.addEventListener('error', function (ev) {
 });
 async function bootstrap() {
   try {
+    try {
+      const me = await request('/api/iam/me');
+      state.principal = me.principal;
+    } catch (e) {
+      console.warn('Failed to fetch IAM principal during bootstrap', e);
+    }
+
     initPrismTooltips();
     registerShellTooltips();
     registerChatTooltips();
@@ -304,10 +311,10 @@ async function setActiveTab(tabId) {
     try { await initAgenticTab(); } catch (e) { console.error('[tab] agentic init:', e); }
     try { await refreshGuardianStatus(); } catch (e) { console.error('[tab] guardian:', e); }
     try { await initHardwareTab(); } catch (e) { console.error('[tab] hardware init:', e); }
+    try { await initCharacterPanel(); } catch (e) { console.error('[tab] character panel:', e); }
   }
   if (tabId === 'workspace') {
     try { await initWorkspaceTab(); } catch (e) { console.error('[tab] workspace init:', e); }
-    try { await initCharacterPanel(); } catch (e) { console.error('[tab] character panel:', e); }
   }
   if (tabId === 'computer') {
     try { await initComputerTab(); } catch (e) { console.error('[tab] computer init:', e); }
@@ -647,7 +654,12 @@ function connectWebSocket() {
           // push a done sentinel so renderMessages can show completion context
           state.agenticStream.push(ev);
           if (state.agenticStream.length > 500) state.agenticStream = state.agenticStream.slice(-500);
-          safeRenderStep('messages', renderMessages);
+          
+          // Reload chat messages and refresh UI in case the goal was triggered from chat
+          loadMessages().then(function() {
+            safeRenderStep('messages', renderMessages);
+          }).catch(function() {});
+          refreshChrome().catch(function() {});
         } catch (e) { console.error('[ws] autonomous_goal_complete handle error', e); }
         try { refreshAutonomousGoals(); refreshAABLedger(); } catch (_) { }
       }

@@ -542,7 +542,7 @@ export class GuardianAgent extends EventEmitter {
         this.covenantFn = fn;
     }
 
-    /** Inject SkillsEngine for autonomous, multi-step self-healing workflows. */
+    /** Inject SkillsEngine for autonomous, multi-step custodian skill execution. */
     public setSkillsEngine(engine: any): void {
         this.skillsEngine = engine;
     }
@@ -612,6 +612,19 @@ export class GuardianAgent extends EventEmitter {
 
     private async executeTask(task: GuardianTask): Promise<void> {
         try {
+            // Check if this task maps to a custodian skill
+            const skillId = this.taskToSkillId(task.id);
+            if (skillId && this.skillsEngine) {
+                const result = await this.executeCustodianSkill(skillId, task);
+                task.lastRunAt = new Date().toISOString();
+                task.lastResult = result.status;
+                task.lastDetail = result.detail;
+                this.recordAction(`task.${task.id}`, result.status === "failure" ? "failure" : result.status === "warning" ? "escalated" : "success", result.detail);
+                this.emitEvent(`guardian.task.${task.id}`, result.detail);
+                return;
+            }
+
+            // Fallback to existing task implementation
             const result = await this.runTaskImpl(task.id);
             task.lastRunAt = new Date().toISOString();
             task.lastResult = result.status;
@@ -1052,6 +1065,74 @@ export class GuardianAgent extends EventEmitter {
                 status: operation.includes("fail") || operation.includes("error") ? "failed" : "succeeded",
                 details: { detail, modelAlias: this.config.modelAlias, state: this._state },
             });
+        }
+    }
+
+    /** Map Guardian task IDs to custodian skill IDs. */
+    private taskToSkillId(taskId: string): string | null {
+        const mapping: Record<string, string> = {
+            "disk_space_check": "skill.custodian.disk-space",
+            "temp_cleanup": "skill.custodian.disk-space",  // Reuse disk-space skill
+            "memory_audit": "skill.custodian.system-snapshot",
+            "model_integrity": "skill.custodian.pad-integrity",
+            "command_filter_verify": "skill.custodian.command-filter",
+            "env_secrets_scan": "skill.custodian.secrets-scan",
+            "endpoint_access_audit": "skill.custodian.aab-ledger",
+            "directive_integrity": "skill.custodian.covenant-audit",
+            "knowledge_graph_check": "skill.custodian.agent-health",
+            "tool_contract_audit": "skill.custodian.agent-health",
+            "agent_health_check": "skill.custodian.agent-health",
+            "system_snapshot": "skill.custodian.system-snapshot",
+            "agent_census": "skill.custodian.agent-health",
+            "log_volume_analysis": "skill.custodian.agent-health",
+            "mcp_health_recovery": "skill.custodian.mcp-health",
+            "aab_ledger_monitor": "skill.custodian.aab-ledger",
+            "covenant_audit": "skill.custodian.covenant-audit",
+        };
+        return mapping[taskId] || null;
+    }
+
+    /** Execute a custodian skill via SkillsEngine. */
+    private async executeCustodianSkill(skillId: string, task: GuardianTask): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
+        if (!this.skillsEngine) {
+            return { status: "failure", detail: "SkillsEngine not configured — cannot execute custodian skill" };
+        }
+
+        try {
+            const skill = await this.skillsEngine.routeQuery(skillId);
+            if (!skill) {
+                return { status: "failure", detail: `Custodian skill not found: ${skillId}` };
+            }
+
+            this.emitEvent("guardian.custodian_skill.starting", `Executing custodian skill: ${skill.name} (ID: ${skill.id})`);
+
+            const session = await this.skillsEngine.createSession({
+                skillId: skill.id,
+                executor: "guardian",
+                accountabilityChain: {
+                    characterId: "guardian",
+                    operatorId: "guardian",
+                    prismUserId: "guardian",
+                    operatorEmail: "guardian@prism.local",
+                    assignmentId: "guardian-builtin",
+                },
+            });
+
+            // Execute until complete
+            let currentSession = session;
+            while (currentSession.status === "running") {
+                currentSession = await this.skillsEngine.executeStep(currentSession.sessionId);
+            }
+
+            if (currentSession.status === "completed") {
+                this.emitEvent("guardian.custodian_skill.completed", `Custodian skill completed: ${skill.name}`);
+                return { status: "success", detail: `Custodian skill executed: ${skill.name}` };
+            } else {
+                return { status: "failure", detail: `Custodian skill ended with state: ${currentSession.status}` };
+            }
+        } catch (error) {
+            this.emitEvent("guardian.custodian_skill.failed", `Custodian skill execution failed: ${String(error)}`);
+            return { status: "failure", detail: `Custodian skill error: ${String(error)}` };
         }
     }
 }

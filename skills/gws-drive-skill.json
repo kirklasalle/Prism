@@ -1,0 +1,102 @@
+{
+    "id": "prism.skill.gws_drive",
+    "version": "1.0.0",
+    "name": "GWS Drive Integration",
+    "description": "Google Drive: Manage files, folders, and shared drives using the Google Workspace gws CLI. Covers file CRUD, permissions, comments, revisions, shared drives, labels, and access proposals.",
+    "tags": [
+        "gws",
+        "google-workspace",
+        "drive",
+        "files",
+        "folders",
+        "shared-drives",
+        "permissions",
+        "google"
+    ],
+    "governance": {
+        "min_policy_tier": "tier-1",
+        "required_approvals": [
+            "shell_exec"
+        ],
+        "covenant_rules": [
+            "Prerequisite: gws-shared must be loaded first for authentication and global flags.",
+            "Always confirm with the user before deleting files, updating permissions, or sharing files with external users.",
+            "Use the 'q' parameter (search query) for targeted file listings — never list all files without a filter unless explicitly requested.",
+            "Be aware of 10MB export limit for Google Workspace document exports and 5,120GB upload limit.",
+            "Use gws schema drive.<resource>.<method> to inspect required parameters before constructing API calls."
+        ]
+    },
+    "triad_templates": {
+        "left_hemisphere": "Evaluate the Drive API method, required parameters, search query filters, and access control implications for: {query}. Verify the operation respects file ownership and sharing boundaries.",
+        "right_hemisphere": "Design the exact gws drive command with proper resource, method, --params for search (q, fields, pageSize, orderBy), --json for bodies, --output for file downloads, and --upload for file uploads: {query}.",
+        "main_hemisphere": "Coordinate Drive operations. Inspect schema, construct command, confirm destructive actions, execute (including upload/download if needed), and present file metadata results: {query}."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "inspect_drive_schema",
+                "name": "Inspect Drive API Method Schema",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Use 'gws schema drive.<resource>.<method>' to inspect required parameters. Resources: about, accessproposals, approvals, apps, changes, channels, comments, drives, files, operations, permissions, replies, revisions, teamdrives.",
+                "transitions": {
+                    "success": "construct_drive_command",
+                    "failed": "inspect_drive_schema"
+                }
+            },
+            {
+                "id": "construct_drive_command",
+                "name": "Construct Drive Command",
+                "tools": [],
+                "action": "Build the 'gws drive <resource> <method>' command. For files.list include 'q' search parameter and 'fields' for selective returns. For uploads use --upload flag. For downloads use -o/--output flag. For exports use the export method with target MIME type.",
+                "transitions": {
+                    "success": "confirm_drive_mutations",
+                    "failed": "inspect_drive_schema"
+                }
+            },
+            {
+                "id": "confirm_drive_mutations",
+                "name": "Confirm Drive Mutations",
+                "tools": [],
+                "action": "For create, update, delete, copy, permission changes, or label modifications, present the command to the user for confirmation. For read-only operations (get, list, export, download), proceed automatically.",
+                "transitions": {
+                    "success": "execute_drive_command",
+                    "failed": "construct_drive_command"
+                }
+            },
+            {
+                "id": "execute_drive_command",
+                "name": "Execute Drive Command",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Execute the gws drive command. Use --page-all for large result sets. Handle file download output paths and upload file paths appropriately.",
+                "transitions": {
+                    "success": "format_drive_output",
+                    "failed": "inspect_drive_schema"
+                }
+            },
+            {
+                "id": "format_drive_output",
+                "name": "Format and Present Drive Results",
+                "tools": [],
+                "action": "Format JSON output into readable summaries. For file lists show name, MIME type, size, owner, modified date. For file details show full metadata, permissions summary, and download/export availability.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            },
+            {
+                "id": "completed",
+                "name": "Drive Operation Completed",
+                "tools": [],
+                "action": "Confirm the Drive operation result. Provide next-step suggestions such as sharing the file, moving to a shared drive, or managing permissions.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            }
+        ]
+    }
+}

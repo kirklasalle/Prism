@@ -56,17 +56,45 @@ export function ChatTab({
         setMessages((prev) => [...prev, { role: "user", content: text }]);
 
         try {
-            const resp = await client.sendChat(text, activeSession ?? undefined);
-            if (resp.sessionId && !activeSession) {
-                setActiveSession(resp.sessionId);
+            let currentSessId = activeSession;
+            if (!currentSessId) {
+                const newSess = await client.createSession("New Chat Session");
+                currentSessId = newSess.id;
+                setActiveSession(currentSessId);
+                sessionsResult.refresh();
             }
-            setMessages((prev) => [...prev, { role: "assistant", content: resp.response }]);
+
+            // 1. Run prompt through governance
+            const resp = await client.sendChat(text, currentSessId);
+            
+            const sessId = resp.session_id || currentSessId;
+            if (sessId && sessId !== currentSessId) {
+                currentSessId = sessId;
+                setActiveSession(sessId);
+                sessionsResult.refresh();
+            }
+
+            // 2. Handle governance results
+            const pendingIds = resp.approval_pending_ids;
+            if (resp.denied) {
+                setMessages((prev) => [...prev, { role: "assistant", content: `❌ Denied: ${resp.response || "Request blocked by governance."}` }]);
+            } else if (pendingIds && pendingIds.length > 0) {
+                setMessages((prev) => [...prev, { role: "assistant", content: `⏳ Pending Approval: Request requires authorization. (IDs: ${pendingIds.join(", ")})` }]);
+            } else {
+                // Tier 1 accepted - post to sessions/:id/messages to actually get the assistant's response!
+                if (currentSessId) {
+                    const turn = await client.sendSessionMessage(currentSessId, text);
+                    setMessages((prev) => [...prev, { role: "assistant", content: turn.assistantMessage.content }]);
+                } else {
+                    setMessages((prev) => [...prev, { role: "assistant", content: resp.response }]);
+                }
+            }
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : String(e));
         } finally {
             setSending(false);
         }
-    }, [inputValue, sending, client, activeSession]);
+    }, [inputValue, sending, client, activeSession, sessionsResult]);
 
     const createSession = useCallback(async () => {
         try {

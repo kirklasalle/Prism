@@ -101,6 +101,8 @@ export interface PrismPreferences {
     guardianConfig?: Record<string, unknown>;
     /** Phase 4: Dynamic power mode preference for LLM execution routing. */
     powerMode?: "performance" | "eco" | "adaptive";
+    activeLlmProviderId?: string;
+    activeLlmModel?: string;
     lastModified: string;
 }
 

@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
+import { execSync } from "node:child_process";
 import { IRouteHandler } from "./types.js";
-import { DashboardService } from "../dashboard-service.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { resolveWorkspaceRoot, writePreferences } from "../../config/workspace-resolver.js";
 import { PRISM_VERSION } from "../../version.js";
 import {
@@ -12,6 +13,7 @@ import {
 } from "../../security/directive-integrity.js";
 import { probeOptionalDeps, summarizeOptionalDeps } from "../../system/optional-deps.js";
 import { resolveProfile, getCachedHardwareSnapshot, fetchHardwareSnapshot, updateCachedHardwareSnapshot } from "../model-capability-matrix.js";
+import { generateOpenApiSpec } from "../openapi-generator.js";
 
 export class ApiHandler implements IRouteHandler {
   match(req: IncomingMessage): boolean {
@@ -25,9 +27,16 @@ export class ApiHandler implements IRouteHandler {
       url === "/api/system/adapters" ||
       url === "/api/system/hardware" ||
       url === "/api/skills" ||
-      pathname === "/api/llre/summary"
+      pathname === "/api/llre/summary" ||
+      url === "/api/openapi.json" ||
+      url === "/api/v1/openapi.json" ||
+      url === "/api/mcp/servers"
     )) return true;
-    if (method === "POST" && url === "/api/mode") return true;
+    if (method === "POST" && (
+      url === "/api/mode" ||
+      url === "/api/system/shutdown" ||
+      /^\/api\/mcp\/servers\/[^/]+\/reconnect$/.test(url)
+    )) return true;
     return false;
   }
 
@@ -36,6 +45,53 @@ export class ApiHandler implements IRouteHandler {
     const rawUrl = req.url ?? "";
     const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
     const method = req.method?.toUpperCase() ?? "GET";
+
+    if (method === "POST" && url === "/api/system/shutdown") {
+      console.log("[PRISM][system] [INFO] Received shutdown signal from dashboard operator. Initiating graceful termination...");
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify({ success: true, message: "Graceful shutdown sequence initialized by operator console." }));
+      setTimeout(() => {
+        process.kill(process.pid, "SIGTERM");
+      }, 500);
+      return;
+    }
+
+    if (method === "GET" && (rawUrl === "/api/v1/openapi.json" || url === "/api/openapi.json")) {
+      this.json(res, 200, generateOpenApiSpec(service.getPort()));
+      return;
+    }
+
+    if (method === "GET" && url === "/api/mcp/servers") {
+      const adapter = service.mcpAdapter;
+      if (!adapter) {
+        this.json(res, 200, { servers: [], attached: false });
+        return;
+      }
+      this.json(res, 200, {
+        servers: adapter.getServerStates(),
+        attached: true,
+      });
+      return;
+    }
+
+    if (method === "POST" && /^\/api\/mcp\/servers\/[^/]+\/reconnect$/.test(url)) {
+      const adapter = service.mcpAdapter;
+      if (!adapter) {
+        this.json(res, 503, { error: "MCP adapter not attached" });
+        return;
+      }
+      const name = decodeURIComponent(url.split("/")[4] ?? "");
+      if (!name) {
+        this.json(res, 400, { error: "Missing server name" });
+        return;
+      }
+      const result = await adapter.forceReconnect(name);
+      this.json(res, result.ok ? 200 : 502, result);
+      return;
+    }
 
     if (method === "GET" && url === "/api/skills") {
       const skillsEngine = service.getSkillsEngine();
@@ -167,6 +223,8 @@ export class ApiHandler implements IRouteHandler {
         workspaceRoot: resolveWorkspaceRoot(),
         baseMode: process.env.PRISM_BASE_MODE === "true",
         baseModeAuto: process.env.PRISM_BASE_MODE_AUTO === "true",
+        nodeVersion: process.version,
+        platform: process.platform + " " + process.arch,
       });
       return;
     }
@@ -240,24 +298,140 @@ export class ApiHandler implements IRouteHandler {
         if (!snapshot) {
           try {
             snapshot = await fetchHardwareSnapshot("http://localhost:11434");
-            updateCachedHardwareSnapshot(snapshot);
           } catch {
-            // Ollama not available — return null gpu to trigger "NO GPU DETECTED" in UI
+            // Ollama not available
           }
         }
+
+        let vramTotalMb = snapshot?.totalVramMb ?? 8192;
         if (!snapshot) {
-          this.json(res, 200, { gpu: null });
-          return;
+          try {
+            const nvOut = execSync("nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits", { timeout: 3000, encoding: "utf8" });
+            const total = parseInt(nvOut.trim(), 10);
+            if (total) vramTotalMb = total;
+          } catch {
+            try {
+              const wmicOut = execSync("wmic path Win32_VideoController get AdapterRAM /format:csv", { timeout: 3000, encoding: "utf8" });
+              const lines = wmicOut.trim().split(/\r?\n/).filter((l: string) => l.trim() && !l.startsWith("Node"));
+              if (lines.length > 0) {
+                const cols = lines[0].split(",");
+                if (cols.length >= 2) {
+                  const adapterRam = parseInt(cols[1], 10) || 0;
+                  if (adapterRam) vramTotalMb = Math.round(adapterRam / 1048576);
+                }
+              }
+            } catch {
+              // fallback
+            }
+          }
         }
-        const usedVramMb = snapshot.loadedModels.reduce(
+
+        const loadedModels: Array<{ name: string; sizeBytes: number; vramBytes: number }> = [];
+
+        // 1. Add Ollama models
+        if (snapshot?.loadedModels) {
+          for (const m of snapshot.loadedModels) {
+            loadedModels.push({
+              name: m.name,
+              sizeBytes: m.sizeBytes,
+              vramBytes: m.vramBytes,
+            });
+          }
+        }
+
+        // 2. Add llama.cpp models
+        const llamaSupervisor = service.getLlamaSupervisor();
+        if (llamaSupervisor) {
+          const slots = llamaSupervisor.getSnapshot();
+          for (const slot of slots) {
+            if (slot.status === "ready" && slot.modelPath) {
+              try {
+                let sizeBytes = 0;
+                if (existsSync(slot.modelPath)) {
+                  sizeBytes = statSync(slot.modelPath).size;
+                }
+                const isGpu = slot.gpuLayers === null || slot.gpuLayers > 0;
+                const vramBytes = isGpu ? sizeBytes : 0;
+                loadedModels.push({
+                  name: slot.modelAlias || basename(slot.modelPath),
+                  sizeBytes,
+                  vramBytes,
+                });
+              } catch (_) {}
+            }
+          }
+        }
+
+        // 2b. Add Guardian Agent model if running/active
+        const guardianAgent = service.getGuardianAgent();
+        if (guardianAgent) {
+          const gStatus = guardianAgent.getStatus();
+          if (gStatus && (gStatus.state === "running" || gStatus.state === "healing" || gStatus.state === "starting") && gStatus.modelPath) {
+            const alias = gStatus.modelAlias || basename(gStatus.modelPath);
+            const exists = loadedModels.some(m => m.name === alias);
+            if (!exists) {
+              try {
+                let sizeBytes = 0;
+                if (existsSync(gStatus.modelPath)) {
+                  sizeBytes = statSync(gStatus.modelPath).size;
+                } else {
+                  // Fallback estimate for dummy paths
+                  sizeBytes = 1.5 * 1024 * 1024 * 1024;
+                }
+                const isGpu = gStatus.slotInfo?.gpuLayers === undefined || gStatus.slotInfo.gpuLayers === null || gStatus.slotInfo.gpuLayers > 0;
+                const vramBytes = isGpu ? sizeBytes : 0;
+                loadedModels.push({
+                  name: alias,
+                  sizeBytes,
+                  vramBytes,
+                });
+              } catch (_) {}
+            }
+          }
+        }
+
+        // 3. Add BitNet.cpp models
+        const bitnetSupervisor = service.getBitnetSupervisor();
+        if (bitnetSupervisor) {
+          const slots = bitnetSupervisor.getSnapshot();
+          for (const slot of slots) {
+            if (slot.status === "ready" && slot.modelPath) {
+              try {
+                let sizeBytes = 0;
+                if (existsSync(slot.modelPath)) {
+                  sizeBytes = statSync(slot.modelPath).size;
+                }
+                const isGpu = slot.gpuLayers === null || slot.gpuLayers > 0;
+                const vramBytes = isGpu ? sizeBytes : 0;
+                loadedModels.push({
+                  name: slot.modelAlias || basename(slot.modelPath),
+                  sizeBytes,
+                  vramBytes,
+                });
+              } catch (_) {}
+            }
+          }
+        }
+
+        const usedVramMb = loadedModels.reduce(
           (sum, m) => sum + m.vramBytes / (1024 * 1024), 0,
         );
+        const vramFreeMb = Math.max(0, vramTotalMb - usedVramMb);
+
+        // Update global matrix VRAM cache
+        const combinedSnapshot = {
+          totalVramMb: vramTotalMb,
+          loadedModels,
+          estimatedFreeVramMb: vramFreeMb,
+        };
+        updateCachedHardwareSnapshot(combinedSnapshot);
+
         this.json(res, 200, {
           gpu: {
-            vramTotalMb: snapshot.totalVramMb,
+            vramTotalMb,
             vramUsedMb: Math.round(usedVramMb * 100) / 100,
-            vramFreeMb: Math.round(snapshot.estimatedFreeVramMb * 100) / 100,
-            loadedModels: snapshot.loadedModels.map(m => ({
+            vramFreeMb: Math.round(vramFreeMb * 100) / 100,
+            loadedModels: loadedModels.map(m => ({
               name: m.name,
               sizeMb: Math.round(m.sizeBytes / (1024 * 1024)),
               vramMb: Math.round(m.vramBytes / (1024 * 1024)),

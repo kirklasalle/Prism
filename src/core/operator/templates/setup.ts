@@ -1061,7 +1061,16 @@ export function setupWizardAdvancedHtml(port: number): string {
             </button>
           </div>
         </div>
-        <button type="button" class="secondary-button" style="margin-top:8px;" onclick="advTestProviderConnection()">Test Connection</button>
+        <div id="adv-provider-model-field" class="wizard-field" style="display:none;margin-top:14px;">
+          <label>Select Model</label>
+          <select id="adv-provider-model">
+            <option value="">Loading models...</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <button type="button" class="secondary-button" id="adv-provider-test-btn" onclick="advTestProviderConnection()">Test Connection</button>
+          <button type="button" class="primary-button" id="adv-provider-save-btn" style="display:none;" onclick="advSaveProviderConfig()">Save Configuration</button>
+        </div>
         <div id="adv-provider-test-result" style="margin-top:8px;font-size:12px;"></div>
       </div>
 

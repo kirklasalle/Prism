@@ -84,6 +84,8 @@ export class GmailOAuthAdapter {
 
     /** Whether the `googleapis` package is available and credentials are configured. */
     get isAvailable(): boolean {
+        const isMock = process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id";
+        if (isMock) return true;
         return this.googleapisModule !== null
             && !!process.env.PRISM_GMAIL_CLIENT_ID
             && !!process.env.PRISM_GMAIL_CLIENT_SECRET;
@@ -105,6 +107,9 @@ export class GmailOAuthAdapter {
         if (!this.isAvailable) {
             throw new Error("Gmail OAuth not available: googleapis not installed or credentials not configured.");
         }
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return `http://localhost:7070/api/auth/gmail/callback?code=mock_google_code`;
+        }
         const oauth2Client = this.createOAuth2Client();
         return oauth2Client.generateAuthUrl({
             access_type: "offline",
@@ -121,6 +126,17 @@ export class GmailOAuthAdapter {
         await this.initPromise;
         if (!this.isAvailable) {
             return { available: false, connected: false, email: null, error: "googleapis not available" };
+        }
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            const oauthToken: OAuthToken = {
+                accessToken: "mock_gmail_access_token",
+                refreshToken: "mock_gmail_refresh_token",
+                expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+                scopes: GMAIL_SCOPES,
+                provider: PROVIDER_KEY,
+            };
+            this.tokenStore.set(PROVIDER_KEY, oauthToken);
+            return { available: true, connected: true, email: "mock.user@gmail.com" };
         }
         try {
             const oauth2Client = this.createOAuth2Client();
@@ -162,6 +178,9 @@ export class GmailOAuthAdapter {
         if (!this.isConnected) {
             return { available: true, connected: false, email: null };
         }
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return { available: true, connected: true, email: "mock.user@gmail.com" };
+        }
         try {
             const oauth2Client = await this.getAuthenticatedClient();
             const email = await this.getUserEmail(oauth2Client);
@@ -190,8 +209,57 @@ export class GmailOAuthAdapter {
      * @param maxResults Maximum number of threads to return (default: 20)
      * @param query Optional Gmail query string (e.g. "is:unread", "from:user@example.com")
      */
+    /**
+     * List recent inbox threads, optionally filtered by query.
+     * @param maxResults Maximum number of threads to return (default: 20)
+     * @param query Optional Gmail query string (e.g. "is:unread", "from:user@example.com")
+     */
     async listThreads(maxResults = 20, query?: string): Promise<GmailThread[]> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return [
+                {
+                    threadId: "gmail-thread-1",
+                    subject: "Governance Review Request",
+                    messages: [
+                        {
+                            id: "gmail-msg-1",
+                            threadId: "gmail-thread-1",
+                            from: "governance@prism.local",
+                            to: ["mock.user@gmail.com"],
+                            subject: "Governance Review Request",
+                            snippet: "Please approve the Tier 3 access requests for the Guardian Agent.",
+                            body: "Hello, please approve the Tier 3 access requests for the Guardian Agent.",
+                            date: new Date().toISOString(),
+                            labelIds: ["INBOX", "UNREAD"],
+                            isUnread: true,
+                        },
+                    ],
+                    lastMessageDate: new Date().toISOString(),
+                    isUnread: true,
+                },
+                {
+                    threadId: "gmail-thread-2",
+                    subject: "Weekly VRAM Telemetry Report",
+                    messages: [
+                        {
+                            id: "gmail-msg-2",
+                            threadId: "gmail-thread-2",
+                            from: "guardian.telemetry@prism.local",
+                            to: ["mock.user@gmail.com"],
+                            subject: "Weekly VRAM Telemetry Report",
+                            snippet: "Guardian models report 100% load success and zero leaks.",
+                            body: "Hi Team, Guardian models report 100% load success and zero leaks.",
+                            date: new Date(Date.now() - 3600 * 1000).toISOString(),
+                            labelIds: ["INBOX"],
+                            isUnread: false,
+                        },
+                    ],
+                    lastMessageDate: new Date(Date.now() - 3600 * 1000).toISOString(),
+                    isUnread: false,
+                },
+            ];
+        }
         const client = await this.getAuthenticatedClient();
         const { google } = this.googleapisModule;
         const gmail = google.gmail({ version: "v1", auth: client });
@@ -223,6 +291,10 @@ export class GmailOAuthAdapter {
      */
     async getThread(gmailClient: any, threadId: string): Promise<GmailThread> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            const threads = await this.listThreads();
+            return threads.find((t) => t.threadId === threadId) ?? threads[0]!;
+        }
         const client = gmailClient ?? (await this.getGmailClient());
         const threadResp = await client.users.threads.get({
             userId: "me",
@@ -255,6 +327,13 @@ export class GmailOAuthAdapter {
         threadId?: string
     ): Promise<GmailSendResult> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return {
+                messageId: "gmail-msg-sent-" + Date.now(),
+                threadId: threadId ?? "gmail-thread-sent-" + Date.now(),
+                labelIds: ["SENT"],
+            };
+        }
         const client = await this.getGmailClient();
 
         const fromEmail = await this.getUserEmail(await this.getAuthenticatedClient());
@@ -280,6 +359,9 @@ export class GmailOAuthAdapter {
      */
     async markAsRead(threadId: string): Promise<void> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return;
+        }
         const client = await this.getGmailClient();
         await client.users.threads.modify({
             userId: "me",
@@ -293,6 +375,9 @@ export class GmailOAuthAdapter {
      */
     async archiveThread(threadId: string): Promise<void> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return;
+        }
         const client = await this.getGmailClient();
         await client.users.threads.modify({
             userId: "me",
@@ -308,6 +393,16 @@ export class GmailOAuthAdapter {
      */
     async listEvents(maxResults = 50, timeMin = new Date().toISOString()): Promise<any[]> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return [
+                {
+                    id: "gmail-event-1",
+                    summary: "Prism Governance Alignment Sync",
+                    start: { dateTime: new Date(Date.now() + 3600 * 1000).toISOString() },
+                    end: { dateTime: new Date(Date.now() + 7200 * 1000).toISOString() },
+                },
+            ];
+        }
         const client = await this.getCalendarClient();
         const resp = await client.events.list({
             calendarId: "primary",
@@ -324,6 +419,12 @@ export class GmailOAuthAdapter {
      */
     async createEvent(event: any): Promise<any> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return {
+                id: "gmail-event-created-" + Date.now(),
+                ...event,
+            };
+        }
         const client = await this.getCalendarClient();
         const resp = await client.events.insert({
             calendarId: "primary",
@@ -337,6 +438,12 @@ export class GmailOAuthAdapter {
      */
     async updateEvent(eventId: string, event: any): Promise<any> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return {
+                id: eventId,
+                ...event,
+            };
+        }
         const client = await this.getCalendarClient();
         const resp = await client.events.update({
             calendarId: "primary",
@@ -351,6 +458,9 @@ export class GmailOAuthAdapter {
      */
     async deleteEvent(eventId: string): Promise<void> {
         await this.initPromise;
+        if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
+            return;
+        }
         const client = await this.getCalendarClient();
         await client.events.delete({
             calendarId: "primary",

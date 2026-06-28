@@ -6,10 +6,14 @@
  *
  * Connects to the running PRISM server as a pure API client.
  */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { render, Box, Text, useInput, useApp } from "ink";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { PrismClient } from "./api/prism-client.js";
 import { PrismWsClient } from "./api/ws-client.js";
+import { LoginTab } from "./tabs/LoginTab.js";
 import {
     colors, symbols, TABS, PRISM_LOGO, TAB_SHORTCUTS,
 } from "./theme.js";
@@ -36,10 +40,11 @@ import { SetupWizardTab } from "./tabs/SetupWizardTab.js";
 /*  Parse CLI arguments                                                */
 /* ------------------------------------------------------------------ */
 
-function parseArgs(): { port: number; setup: boolean } {
+function parseArgs(): { port: number; setup: boolean; autoLogin: boolean } {
     const args = process.argv.slice(2);
     let port = 7070;
     let setup = false;
+    let autoLogin = false;
     for (let i = 0; i < args.length; i++) {
         if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
             port = parseInt(args[i + 1]!, 10);
@@ -48,12 +53,15 @@ function parseArgs(): { port: number; setup: boolean } {
         if (args[i] === "--setup") {
             setup = true;
         }
+        if (args[i] === "--auto-login") {
+            autoLogin = true;
+        }
     }
     if (process.env.PRISM_DASHBOARD_PORT) {
         const envPort = parseInt(process.env.PRISM_DASHBOARD_PORT, 10);
         if (!isNaN(envPort)) port = envPort;
     }
-    return { port, setup };
+    return { port, setup, autoLogin };
 }
 
 /* ------------------------------------------------------------------ */
@@ -175,31 +183,209 @@ function Splash({ port, onDone }: { port: number; onDone: () => void }): React.J
 }
 
 /* ------------------------------------------------------------------ */
+/*  Token Resolution                                                   */
+/* ------------------------------------------------------------------ */
+
+function getAdminToken(): string | null {
+    // 1. Check environment variable
+    const envRoot = process.env.PRISM_WORKSPACE_ROOT;
+    if (envRoot) {
+        const tokenPath = path.join(envRoot, "state", "admin-token");
+        if (fs.existsSync(tokenPath)) {
+            return fs.readFileSync(tokenPath, "utf-8").trim();
+        }
+    }
+    // 2. Check preferences for custom root
+    const projectDir = process.cwd();
+    const prefsPath = path.join(projectDir, ".prism-preferences.json");
+    if (fs.existsSync(prefsPath)) {
+        try {
+            const prefs = JSON.parse(fs.readFileSync(prefsPath, "utf-8"));
+            if (prefs?.workspaceRoot) {
+                const tokenPath = path.join(prefs.workspaceRoot, "state", "admin-token");
+                if (fs.existsSync(tokenPath)) {
+                    return fs.readFileSync(tokenPath, "utf-8").trim();
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    // 3. Fallback to default OS path
+    const home = os.homedir();
+    const defaultRoot = path.join(home, "Documents", "Prism_Refraction");
+    const tokenPath = path.join(defaultRoot, "state", "admin-token");
+    if (fs.existsSync(tokenPath)) {
+        return fs.readFileSync(tokenPath, "utf-8").trim();
+    }
+    return null;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Root                                                               */
 /* ------------------------------------------------------------------ */
 
-function Root({ client, wsClient, port, forceSetup }: { client: PrismClient; wsClient: PrismWsClient; port: number; forceSetup: boolean }): React.JSX.Element {
+function Root({ client, wsClient, port, forceSetup, autoLogin }: { client: PrismClient; wsClient: PrismWsClient; port: number; forceSetup: boolean; autoLogin: boolean }): React.JSX.Element {
     const [ready, setReady] = useState(false);
     const [needsSetup, setNeedsSetup] = useState<boolean | null>(forceSetup || null);
+    const [authenticated, setAuthenticated] = useState<boolean>(false);
+    const [authenticating, setAuthenticating] = useState<boolean>(true);
+    const [connectionError, setConnectionError] = useState<string | null>(null);
+
+    useQuit();
 
     useEffect(() => {
         if (forceSetup) {
             setNeedsSetup(true);
+            setAuthenticating(false);
             return;
         }
-        client.getSetupStatus()
-            .then((s) => setNeedsSetup(!s.setupComplete))
-            .catch(() => setNeedsSetup(false));
-    }, [client, forceSetup]);
+
+        let active = true;
+        let timer: NodeJS.Timeout;
+
+        const probePort = async (p: number): Promise<boolean> => {
+            const tempClient = new PrismClient({ baseUrl: `http://localhost:${p}`, timeout: 1500 });
+            try {
+                await tempClient.getSetupStatus();
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        const checkConnection = async () => {
+            try {
+                let activePort = port;
+                const primaryOk = await probePort(port);
+                if (!primaryOk) {
+                    const altPort = port === 7070 ? 7071 : 7070;
+                    const altOk = await probePort(altPort);
+                    if (altOk) {
+                        activePort = altPort;
+                        client.setBaseUrl(`http://localhost:${altPort}`);
+                        wsClient.setUrl(`ws://localhost:${altPort}/ws`);
+                        wsClient.disconnect();
+                        wsClient.connect();
+                    } else {
+                        throw new Error(`Server not reachable on port ${port} or ${altPort}.`);
+                    }
+                }
+
+                // 1. Check setup completion
+                const s = await client.getSetupStatus();
+                if (!active) return;
+                setConnectionError(null);
+
+                if (!s.setupComplete) {
+                    setNeedsSetup(true);
+                    setAuthenticating(false);
+                    return;
+                }
+                setNeedsSetup(false);
+
+                // 2. Setup is complete, try silent login if requested
+                if (autoLogin) {
+                    const token = getAdminToken();
+                    if (token) {
+                        client.setToken(token);
+                        wsClient.setToken(token);
+                        // Reconnect WebSocket to verify connection with token
+                        wsClient.disconnect();
+                        wsClient.connect();
+
+                        // Verify token against /api/iam/me
+                        try {
+                            await client.getIamMe();
+                            if (!active) return;
+                            setAuthenticated(true);
+                            setAuthenticating(false);
+                            return;
+                        } catch {
+                            // Token invalid/expired
+                            client.setToken(null);
+                            wsClient.setToken(null);
+                        }
+                    }
+                }
+                setAuthenticating(false);
+            } catch (err: any) {
+                if (!active) return;
+                setConnectionError(`Server not reachable on port ${port} or ${port === 7070 ? 7071 : 7070}. Retrying connection...`);
+                // Retry in 3 seconds
+                timer = setTimeout(checkConnection, 3000);
+            }
+        };
+
+        checkConnection();
+
+        return () => {
+            active = false;
+            clearTimeout(timer);
+        };
+    }, [client, wsClient, forceSetup, autoLogin, port]);
+
+    const handleLoginSuccess = useCallback((token: string | null, cookie: string | null) => {
+        client.setToken(token);
+        client.setCookie(cookie);
+        wsClient.setToken(token);
+        wsClient.setCookie(cookie);
+        wsClient.disconnect();
+        wsClient.connect();
+        setAuthenticated(true);
+    }, [client, wsClient]);
 
     if (!ready) {
         return <Splash port={port} onDone={() => setReady(true)} />;
     }
 
+    if (connectionError) {
+        return (
+            <Box flexDirection="column" alignItems="center" justifyContent="center" paddingY={4} width="100%">
+                <Box marginBottom={1}>
+                    <Text color={colors.error} bold>
+                        {symbols.warning} CONNECTION ERROR
+                    </Text>
+                </Box>
+                <Text color={colors.text}>{connectionError}</Text>
+                <Text color={colors.muted}>Please check if the PRISM server is started and listening.</Text>
+                <Box marginTop={1}>
+                    <Loading label="Reconnecting..." />
+                </Box>
+            </Box>
+        );
+    }
+
+    if (authenticating) {
+        return (
+            <Box flexDirection="column" alignItems="center" justifyContent="center" paddingY={2}>
+                <Loading label="Verifying security session..." />
+            </Box>
+        );
+    }
+
     if (needsSetup) {
         return (
             <Box flexDirection="column" flexGrow={1} paddingX={1} paddingY={1}>
-                <SetupWizardTab client={client} focused={true} onComplete={() => setNeedsSetup(false)} />
+                <SetupWizardTab
+                    client={client}
+                    focused={true}
+                    onComplete={() => {
+                        setNeedsSetup(false);
+                        setAuthenticated(false); // Force authentication after setup wizard
+                    }}
+                />
+            </Box>
+        );
+    }
+
+    if (!authenticated) {
+        return (
+            <Box flexDirection="column" flexGrow={1} paddingX={1} paddingY={1}>
+                <LoginTab
+                    client={client}
+                    focused={true}
+                    onSuccess={handleLoginSuccess}
+                    onLaunchWizard={() => setNeedsSetup(true)}
+                />
             </Box>
         );
     }
@@ -211,7 +397,12 @@ function Root({ client, wsClient, port, forceSetup }: { client: PrismClient; wsC
 /*  Bootstrap                                                          */
 /* ------------------------------------------------------------------ */
 
-const { port, setup } = parseArgs();
+// Resize terminal to 160 columns x 50 lines (100% size increase)
+if (process.stdout.isTTY) {
+    process.stdout.write("\x1b[8;50;160t");
+}
+
+const { port, setup, autoLogin } = parseArgs();
 const baseUrl = `http://localhost:${port}`;
 const wsUrl = `ws://localhost:${port}/ws`;
 
@@ -229,4 +420,4 @@ process.on("SIGTERM", () => {
     process.exit(0);
 });
 
-render(<Root client={client} wsClient={wsClient} port={port} forceSetup={setup} />);
+render(<Root client={client} wsClient={wsClient} port={port} forceSetup={setup} autoLogin={autoLogin} />);

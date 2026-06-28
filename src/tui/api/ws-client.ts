@@ -59,6 +59,8 @@ export class PrismWsClient extends EventEmitter {
     private currentDelay: number;
     private intentionalClose = false;
     private _connected = false;
+    private token: string | null = null;
+    private cookie: string | null = null;
 
     constructor(opts?: Partial<WsClientOptions>) {
         super();
@@ -67,6 +69,18 @@ export class PrismWsClient extends EventEmitter {
         this.reconnectInterval = opts?.reconnectIntervalMs ?? 3000;
         this.maxReconnect = opts?.maxReconnectMs ?? 30_000;
         this.currentDelay = this.reconnectInterval;
+    }
+
+    setUrl(url: string): void {
+        this.url = url;
+    }
+
+    setToken(token: string | null): void {
+        this.token = token;
+    }
+
+    setCookie(cookie: string | null): void {
+        this.cookie = cookie;
     }
 
     get connected(): boolean {
@@ -94,7 +108,18 @@ export class PrismWsClient extends EventEmitter {
 
     private _tryConnect(): void {
         try {
-            this.ws = new WebSocket(this.url);
+            const options: any = {};
+            const headers: Record<string, string> = {};
+            if (this.token) {
+                headers["Authorization"] = `Bearer ${this.token}`;
+            }
+            if (this.cookie) {
+                headers["Cookie"] = this.cookie;
+            }
+            if (Object.keys(headers).length > 0) {
+                options.headers = headers;
+            }
+            this.ws = new WebSocket(this.url, options);
         } catch {
             this._scheduleReconnect();
             return;

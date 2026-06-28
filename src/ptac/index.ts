@@ -89,4 +89,8 @@ import "./scenarios/s27-real-docker-lifecycle.js";
 // AgenticChatExecutor loop through `/api/chat` via a single Tier-1
 // prompt and asserts a non-empty terminal answer.
 import "./scenarios/s28-autonomous-self-test.js";
+// v0.21 — Strong Autonomy litmus tests. Two research prompts (shopping +
+// vehicle search) prove the autonomous loop persists through failure,
+// iterates across multiple sources, and returns real data.
+import "./scenarios/s29-autonomous-research-litmus.js";
 import "./scenarios/osworld.js";

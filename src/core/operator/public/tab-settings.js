@@ -2491,6 +2491,7 @@ export
 
           // Actions
           html += '      <td style="padding:8px 6px; text-align:right; white-space:nowrap;">';
+          var escapedEmail = escapeHtml(op.email.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
           if (!isSelf) {
             // Status Toggle (Suspend / Activate)
             var nextStatus = op.status === 'active' ? 'suspended' : 'active';
@@ -2499,9 +2500,17 @@ export
 
             // Role Toggle (Admin/Viewer)
             var roleBtnLabel = hasAdmin ? '⬇️ Revoke Admin' : '🛡️ Make Admin';
-            html += '        <button class="secondary-button" onclick="toggleOperatorAdminRole(\'' + op.id + '\', ' + hasAdmin + ')" style="font-size:10px; padding:2px 6px;">' + roleBtnLabel + '</button>';
+            html += '        <button class="secondary-button" onclick="toggleOperatorAdminRole(\'' + op.id + '\', ' + hasAdmin + ')" style="font-size:10px; padding:2px 6px; margin-right:4px;">' + roleBtnLabel + '</button>';
+
+            // Change Password
+            html += '        <button class="secondary-button" onclick="changeOperatorPassword(\'' + op.id + '\', \'' + escapedEmail + '\')" style="font-size:10px; padding:2px 6px; margin-right:4px;">🔑 Change PW</button>';
+
+            // Delete Operator
+            html += '        <button class="secondary-button" onclick="deleteOperator(\'' + op.id + '\', \'' + escapedEmail + '\')" style="font-size:10px; padding:2px 6px; color:#f87171; border-color:rgba(248,113,113,0.3);">🗑️ Delete</button>';
           } else {
-            html += '        <span class="muted" style="font-size:10px; padding-right:8px;">Immutable</span>';
+            // Self: can change password, but not modify roles/status or delete
+            html += '        <button class="secondary-button" onclick="changeOperatorPassword(\'' + op.id + '\', \'' + escapedEmail + '\')" style="font-size:10px; padding:2px 6px; margin-right:4px;">🔑 Change PW</button>';
+            html += '        <span class="muted" style="font-size:10px; padding-right:8px;">(Self)</span>';
           }
           html += '      </td>';
 
@@ -3750,4 +3759,41 @@ export async function refreshOperatorList() {
     console.error('Failed to fetch operator list', e);
   }
 }
+
+window.deleteOperator = async function (userId, email) {
+  if (!confirm('Are you sure you want to permanently delete operator "' + email + '"? This cannot be undone.')) return;
+  try {
+    await request('/api/iam/admin/users/' + encodeURIComponent(userId), {
+      method: 'DELETE'
+    });
+    state.notice = { type: 'success', message: 'Operator deleted successfully.' };
+    renderNotice();
+    await refreshOperatorList();
+  } catch (e) {
+    state.notice = { type: 'error', message: 'Failed to delete operator: ' + e.message };
+    renderNotice();
+  }
+};
+
+window.changeOperatorPassword = async function (userId, email) {
+  var newPassword = prompt('Enter a new password for operator "' + email + '":');
+  if (newPassword === null) return; // cancelled
+  newPassword = newPassword.trim();
+  if (!newPassword) {
+    alert('Password cannot be empty.');
+    return;
+  }
+  try {
+    await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPassword })
+    });
+    state.notice = { type: 'success', message: 'Operator password changed successfully.' };
+    renderNotice();
+  } catch (e) {
+    state.notice = { type: 'error', message: 'Failed to change password: ' + e.message };
+    renderNotice();
+  }
+};
 

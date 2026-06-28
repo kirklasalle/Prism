@@ -48,10 +48,29 @@ function matchesDestructiveTokens(command: string): string | null {
     const lower = command.toLowerCase();
     const tokens = lower.split(/\s+/);
 
+    if (tokens[0] === "echo") {
+        return null;
+    }
+
     for (const pattern of DESTRUCTIVE_PATTERNS) {
+        if (pattern.length === 1 && (pattern[0] === "halt" || pattern[0] === "poweroff")) {
+            const idx = tokens.indexOf(pattern[0]);
+            if (idx === 0 || (idx === 1 && tokens[0] === "sudo")) {
+                return pattern[0];
+            }
+            continue;
+        }
+
         let pi = 0;
         for (const token of tokens) {
-            if (token === pattern[pi] || token.startsWith(pattern[pi] + "=")) {
+            const pat = pattern[pi];
+            const isMatch = token === pat || 
+                            token.startsWith(pat + "=") || 
+                            token.startsWith(pat + ".") || 
+                            token.startsWith(pat + "\\") || 
+                            token.startsWith(pat + "/") ||
+                            ((pat === "/" || pat === "/*") && token.startsWith("$"));
+            if (isMatch) {
                 pi++;
                 if (pi >= pattern.length) {
                     return pattern.join(" ");

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { IRouteHandler } from "./types.js";
-import { DashboardService } from "../dashboard-service.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { dashboardHtml, simpleModeHtml } from "../templates/index.js";
 import { readPreferences, writePreferences } from "../../config/workspace-resolver.js";
 
@@ -52,10 +52,10 @@ export class DashboardHandler implements IRouteHandler {
     }
 
     let packages = service.listSessionPackages();
-    if (!isAdmin && principal) {
+    if (principal) {
       const operatorSessionIds = new Set(
         service.getChatStore().listSessions()
-          .filter(s => s.operatorEmail === principal.email)
+          .filter(s => s.operatorEmail === principal.email || /Initialization Certificate/i.test(s.title || ""))
           .map(s => s.sessionId)
       );
       packages = packages.filter(pkg =>

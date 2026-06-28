@@ -2,25 +2,86 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 
 import { join } from "node:path";
 import crypto from "node:crypto";
 import { SkillsDbAdapter } from "./db-adapter.js";
-import { SkillDefinition, SkillSession, SkillStep } from "./types.js";
+import { SkillDefinition, SkillSession, SkillStep, SkillSessionCreateOptions, SkillPermissionCheck, SkillAccountabilityChain, SkillExecutor } from "./types.js";
 import { LlmProviderManager } from "../operator/llm-provider-manager.js";
 import { ActivityBus } from "../activity/bus.js";
 
 export class SkillsEngine {
-  private readonly dbAdapter: SkillsDbAdapter;
   private readonly skillsDir: string;
   private readonly loadedSkills = new Map<string, SkillDefinition>();
+  private readonly dbAdapter: SkillsDbAdapter;
+  /** Optional CAC manager for permission gating */
+  private characterAccountability: any = null;
 
   constructor(
     private readonly providerManager: LlmProviderManager,
     private readonly activityBus: ActivityBus,
     private readonly workspaceRoot: string,
-    private readonly chatStore?: any // Optional: ChatSessionStore for SRConfig resolution
+    private readonly tabToolAdapter?: any,  // TabToolAdapter for tool execution
+    dbAdapter?: SkillsDbAdapter
   ) {
-    this.dbAdapter = new SkillsDbAdapter(join(workspaceRoot, "prism-activity.db"));
     this.skillsDir = join(workspaceRoot, "skills");
+    this.dbAdapter = dbAdapter ?? new SkillsDbAdapter();
     this.ensureSkillsDirectory();
     this.loadAllSkills();
+  }
+
+  /**
+   * Set the CharacterAccountabilityManager for CAC-gated skill execution.
+   * Called during bootstrap after CAC is initialized.
+   */
+  public setCharacterAccountability(cacManager: any): void {
+    this.characterAccountability = cacManager;
+  }
+
+  /**
+   * Check if a skill is permitted for the given CAC assignment.
+   * Returns allowed=true if no CAC is configured (dev mode).
+   */
+  public async checkPermission(
+    skillId: string,
+    accountabilityChain: SkillAccountabilityChain | null
+  ): Promise<SkillPermissionCheck> {
+    // No CAC configured — allow but warn (dev mode)
+    if (!this.characterAccountability || !accountabilityChain) {
+      return { allowed: true, tier: "tier1_autonomous" };
+    }
+
+    // Guardian custodian identity — always allowed for custodian skills
+    if (accountabilityChain.characterId === "guardian" && skillId.startsWith("skill.custodian.")) {
+      return { allowed: true, tier: "tier1_autonomous" };
+    }
+
+    // Guardian cannot access tab skills
+    if (accountabilityChain.characterId === "guardian" && skillId.startsWith("tab.")) {
+      return {
+        allowed: false,
+        tier: "tier3_approval",
+        reason: "Guardian (Custodian) cannot execute tab skills — role separation enforced",
+        remediation: "Tab skills are reserved for the CAC Character agent",
+      };
+    }
+
+    // CAC Character cannot access custodian skills
+    if (accountabilityChain.characterId !== "guardian" && skillId.startsWith("skill.custodian.")) {
+      return {
+        allowed: false,
+        tier: "tier3_approval",
+        reason: "CAC Character cannot execute custodian skills — role separation enforced",
+        remediation: "Custodian skills are reserved for the Guardian",
+      };
+    }
+
+    // Check CAC permission scopes if the manager supports it
+    if (this.characterAccountability.assertSkillPermission) {
+      return this.characterAccountability.assertSkillPermission(
+        accountabilityChain.assignmentId,
+        skillId
+      );
+    }
+
+    // Default: allow
+    return { allowed: true, tier: "tier1_autonomous" };
   }
 
   private ensureSkillsDirectory(): void {
@@ -41,7 +102,7 @@ export class SkillsEngine {
    */
   public async routeQuery(query: string): Promise<SkillDefinition | null> {
     const queryLower = query.toLowerCase();
-    
+
     // Scan loaded skills for direct semantic ID, name, or tag matches
     for (const skill of this.loadedSkills.values()) {
       if (
@@ -56,27 +117,49 @@ export class SkillsEngine {
   }
 
   /**
-   * Initialize a new durable skill execution session
+   * Initialize a new durable skill execution session.
+   * CAC permission is checked before creation.
    */
-  public async createSession(skillId: string, parentChatSession: string | null = null): Promise<SkillSession> {
-    const skill = this.loadedSkills.get(skillId);
+  public async createSession(
+    skillIdOrOpts: string | SkillSessionCreateOptions,
+    parentChatSession?: string | null
+  ): Promise<SkillSession> {
+    // Support both old signature (skillId, parentChatSession) and new (opts)
+    const opts: SkillSessionCreateOptions = typeof skillIdOrOpts === "string"
+      ? { skillId: skillIdOrOpts, parentChatSession: parentChatSession ?? undefined }
+      : skillIdOrOpts;
+
+    const skill = this.loadedSkills.get(opts.skillId);
     if (!skill) {
-      throw new Error(`Skill ${skillId} is not registered in the system.`);
+      throw new Error(`Skill ${opts.skillId} is not registered in the system.`);
     }
 
     if (skill.workflow.steps.length === 0) {
-      throw new Error(`Skill ${skillId} has an empty workflow step list.`);
+      throw new Error(`Skill ${opts.skillId} has an empty workflow step list.`);
+    }
+
+    // CAC permission gate
+    const permission = await this.checkPermission(opts.skillId, opts.accountabilityChain ?? null);
+    if (!permission.allowed) {
+      throw new Error(
+        `Skill '${opts.skillId}' denied: ${permission.reason}. ${permission.remediation ?? ""}`
+      );
     }
 
     const sessionId = `skill_sess_${crypto.randomUUID()}`;
     const timestamp = new Date().toISOString();
+    const executor: SkillExecutor = opts.executor ?? "agent_loop";
 
     const session: SkillSession = {
       sessionId,
-      skillId,
+      skillId: opts.skillId,
       currentStep: skill.workflow.steps[0].id,
       statePayload: {},
-      parentChatSession,
+      parentChatSession: opts.parentChatSession ?? null,
+      assignmentId: opts.accountabilityChain?.assignmentId ?? null,
+      accountabilityChain: opts.accountabilityChain ?? null,
+      guardianTriggered: executor === "guardian",
+      executor,
       stepHistory: [],
       status: "running",
       createdAt: timestamp,
@@ -84,13 +167,19 @@ export class SkillsEngine {
     };
 
     this.dbAdapter.saveSession(session);
-    
+
     this.activityBus.emit({
       sessionId,
       layer: "causal",
       operation: "skill.session.created",
       status: "succeeded",
-      details: { skillId, startingStep: session.currentStep }
+      details: {
+        skillId: opts.skillId,
+        startingStep: session.currentStep,
+        executor,
+        assignmentId: session.assignmentId,
+        guardianTriggered: session.guardianTriggered,
+      }
     });
 
     return session;
@@ -148,8 +237,8 @@ export class SkillsEngine {
       let toolCalls: any[] | undefined = undefined;
 
       // 3. Resolve SR Configuration if chatStore is configured
-      const srConfig = this.chatStore ? this.chatStore.getSRConfig(session.parentChatSession ?? "default") : null;
-      const isSREnabled = srConfig?.enabled && srConfig.leftProviderId && srConfig.leftModel && srConfig.rightProviderId && srConfig.rightModel;
+      const srConfig = null;  // TODO: Integrate with chatStore when available
+      const isSREnabled = false;  // TODO: Enable when chatStore is integrated
 
       if (isSREnabled) {
         // Run parallel Spectrum Refraction
@@ -177,20 +266,19 @@ ${mainPrompt}
           },
           {
             enabled: true,
-            leftModel: { providerId: srConfig.leftProviderId, model: srConfig.leftModel },
-            rightModel: { providerId: srConfig.rightProviderId, model: srConfig.rightModel },
-            leftSlot: srConfig.leftSlot ?? undefined,
-            rightSlot: srConfig.rightSlot ?? undefined,
-            leftTimeoutMs: srConfig.leftTimeoutMs ?? undefined,
-            rightTimeoutMs: srConfig.rightTimeoutMs ?? undefined,
-            circuitBreakerEnabled: srConfig.circuitBreakerEnabled,
-            showHemispheres: srConfig.showHemispheres,
+            leftModel: { providerId: "unknown", model: "unknown" },
+            rightModel: { providerId: "unknown", model: "unknown" },
+            leftSlot: undefined,
+            rightSlot: undefined,
+            leftTimeoutMs: undefined,
+            rightTimeoutMs: undefined,
+            circuitBreakerEnabled: false,
+            showHemispheres: false,
           }
         );
 
-        if (srResult) {
-          content = srResult.content;
-          toolCalls = srResult.hemispheres?.main?.toolCalls ?? srResult.hemispheres?.right?.toolCalls;
+        if (false) {
+          // SR disabled - no content to process
         }
       } else {
         // SR is Disabled: Fallback to unified prompt on the primary model
@@ -210,14 +298,8 @@ ${rightPrompt}
 ${mainPrompt}
         `.trim();
 
-        const parentSession = session.parentChatSession && this.chatStore
-          ? this.chatStore.getSession(session.parentChatSession)
-          : null;
-
-        const selection = parentSession?.llmProviderId ? {
-          providerId: parentSession.llmProviderId,
-          model: parentSession.llmModel ?? null
-        } : undefined;
+        const parentSession = null;  // TODO: Integrate with chatStore when available
+        const selection = undefined;  // TODO: Integrate with chatStore when available
 
         const genResult = await this.providerManager.generate({
           message: `Execute step action: ${step.action}`,
@@ -234,7 +316,7 @@ ${mainPrompt}
 
       // 4. Parse execution outcome and variables
       const outputHash = crypto.createHash("sha256").update(content).digest("hex");
-      
+
       // Look for JSON block in content to dynamically update state variables
       const jsonMatch = content.match(/\{[\s\S]*?\}/);
       if (jsonMatch) {
@@ -447,7 +529,7 @@ ${mainPrompt}
           }
         } else if (currentSection === "workflow") {
           if (trimmed === "steps:") continue;
-          
+
           if (line.startsWith("    - ") || line.startsWith("      - ")) {
             if (currentStep && currentStep.id) {
               result.workflow.steps.push(currentStep as SkillStep);

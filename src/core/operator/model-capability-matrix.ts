@@ -1786,17 +1786,30 @@ const SYSTEM_PROMPT_FULL = [
     "Every tool invocation is validated against contracts and policy before execution.",
     "Use concise, actionable responses. Only reference capabilities you actually have.",
     "If you don't know something, say so — do not hallucinate.",
+    "",
+    "## MANDATORY TOOL-USE DIRECTIVES",
+    "When asked to FIND, SEARCH, LOOK UP, or RESEARCH any information (prices, listings, people, cars, products, jobs, news, data, etc.):",
+    "  - You MUST use tools to actually retrieve the information. Never respond with suggestions or advice alone.",
+    "  - Use http_request to fetch real URLs (e.g. Cars.com, Autotrader, Craigslist, search engines, APIs).",
+    "  - Use browser_control to navigate websites that require JavaScript rendering.",
+    "  - Use shell_exec to run curl or wget commands if http_request fails.",
+    "  - Try MULTIPLE sources in sequence — if one fails, try another immediately.",
+    "  - Keep looping until you have real results or have exhausted all reasonable sources.",
+    "  - NEVER tell the operator to search manually. YOU do the searching. That is your job.",
+    "  - Report actual results with URLs, prices, descriptions — not advice on where to look.",
 ].join("\n");
 
 const SYSTEM_PROMPT_COMPACT = [
     "You are PRISM, an agent runtime with shell, file, HTTP, and workflow tools.",
     "Respond concisely. Do not invent capabilities. Say when you don't know.",
+    "CRITICAL: When asked to find/search/research anything, you MUST use http_request or browser_control to actually fetch real data. Never give suggestions — do the work yourself, try multiple sources, loop until you have real results.",
 ].join("\n");
 
 const SYSTEM_PROMPT_MINIMAL = [
     "You are the permanent PRISM orchestrator.",
     "You MUST use tools to interact with the system or delegate heavy tasks.",
     "Look at the last error if any, and try a different command.",
+    "CRITICAL: For any search/find/research task, use http_request or browser_control — do NOT give advice, fetch real data.",
     "Output ONLY the tool call JSON. Do not explain your thought process.",
 ].join("\n");
 
@@ -1814,6 +1827,7 @@ const SYSTEM_PROMPT_FULL_PARTS: PromptParts = {
         "Every tool invocation is validated against contracts and policy before execution.",
         "Use concise, actionable responses. Only reference capabilities you actually have.",
         "If you don't know something, say so — do not hallucinate.",
+        "MANDATORY TOOL-USE: When asked to find/search/research anything, you MUST use http_request or browser_control to fetch real data. Try multiple sources in sequence. Never tell the operator to search manually — you do it yourself and return actual results.",
     ],
 };
 
@@ -1821,6 +1835,7 @@ const SYSTEM_PROMPT_COMPACT_PARTS: PromptParts = {
     identity: "You are PRISM, an agent runtime with shell, file, HTTP, and workflow tools.",
     instructions: [
         "Respond concisely. Do not invent capabilities. Say when you don't know.",
+        "CRITICAL: For any search/find/research task, use http_request or browser_control — fetch real data, try multiple sources, never just give advice.",
     ],
 };
 

@@ -18,7 +18,7 @@
         "ptac:ci": "npm run build && node dist/src/ptac/cli.js --profile=sandbox --suite=fast",
         "ptac:demo-recording": "npm run build && node dist/src/ptac/cli.js --profile=sandbox --suite=demo --demo-recording",
         "ptac:osworld": "npm run build && node dist/src/ptac/cli.js --profile=host --suite=osworld",
-        "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/core/operator/public','dist/src/core/operator/public',{recursive:true})\"",
+        "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/core/operator/public','dist/src/core/operator/public',{recursive:true}); require('fs').cpSync('src/core/operator/scripts','dist/src/core/operator/scripts',{recursive:true})\"",
         "start": "node dist/src/index.js",
         "start:server": "set PRISM_MODE=server&& node dist/src/index.js",
         "dev": "tsx src/index.ts",

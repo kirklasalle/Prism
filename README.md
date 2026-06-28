@@ -1,594 +1,437 @@
-# PRISM
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.21.1-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
+  <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
+  <img src="https://img.shields.io/badge/tests-185+_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
+  <img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&labelColor=0a0a0f" alt="CI" />
+</p>
 
-PRISM is a policy-governed, full-computer-use agent runtime designed to evolve into a world-class, state-of-the-art (SOTA), and novel agent platform for high-trust autonomous operations.
+# PRISM — Governance-Native Agents-as-a-Service Runtime
 
-Current named release: **Prism v0.4.3 — Phase E: LLRE Integration & Cognitive Economics**.
+**The first open-source agent platform with cryptographically enforced governance, tri-model cognitive orchestration, and full computer-use autonomy — designed for operators who refuse to choose between power and accountability.**
 
-PRISM positions itself as a **governance-native, self-hostable Agents-as-a-Service (AaaS) runtime** — the only open-source platform with cryptographically enforced directives (PAD), a profile-aware 3-tier policy engine, Spectrum Refraction tri-model fan-out, and Low-Level Reasoning Engine (LLRE) Cognitive Economics. See [docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md](docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md) for the market landscape.
+PRISM is not another chatbot wrapper. It is a **production-grade autonomous agent operating system** that orchestrates LLM reasoning, browser automation, terminal virtualization, container sandboxing, and multi-agent swarms — all governed by an immutable policy engine with cryptographic integrity verification at boot and runtime.
 
-> **May 2026 — LLRE Cognitive Economics Integrated:** Active telemetry tracking (TEQ, RSI, CSR, TCA), prompt AST signal density linting, SQLite persistence, and premium visual dashboard panel are now fully operational.
+Where other platforms bolt on safety as an afterthought, PRISM makes governance **load-bearing architecture**: every tool invocation, every agent decision, every autonomous action passes through a 3-tier policy engine before execution. High-risk operations require explicit human approval. Denials and timeouts are first-class tested behaviors. The operator is always supreme.
 
-> **April 2026 — Security Hardening Complete:** Token-based authentication, rate limiting, optional HTTPS/TLS, and security headers are now enforced on all dashboard endpoints.
+> *"PRISM doesn't just run agents — it runs them with honor."*
 
-> **April 2026 — User Testing Ready:** PM2 process management, WebSocket auto-reconnect with exponential backoff, Docker deployment support, and provider health endpoint added.
+---
 
-> **2026 Q2 — Full Audit & Updated Roadmap:** See [docs/PRISM_FULL_AUDIT_2026_Q2.md](docs/PRISM_FULL_AUDIT_2026_Q2.md), [docs/PRISM_UPDATED_ROADMAP_2026_Q2.md](docs/PRISM_UPDATED_ROADMAP_2026_Q2.md), and [docs/READINESS_RUNBOOK.md](docs/READINESS_RUNBOOK.md) for the 2026 Q2 audit findings, gap analysis, and Phase R (Readiness) execution plan. New user guides: [BUSINESS_VS_INDIVIDUAL_GUIDE.md](docs/BUSINESS_VS_INDIVIDUAL_GUIDE.md), [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md), [ADMIN_SRE_GUIDE.md](docs/ADMIN_SRE_GUIDE.md), [ERROR_RECOVERY.md](docs/ERROR_RECOVERY.md), [CHARACTER_SELECTION_GUIDE.md](docs/CHARACTER_SELECTION_GUIDE.md).
+## Why PRISM
 
-Research quick links:
+### The Problem
 
-- Full-context research documentation: `docs/PRISM_RESEARCH_DOCUMENTATION.md`
-- One-page executive summary: `docs/PRISM_RESEARCH_DOCUMENTATION.md#0-executive-summary-one-page`
-- Board/investor half-page brief: `docs/PRISM_RESEARCH_DOCUMENTATION.md#01-boardinvestor-brief-half-page`
-- Full parity gap blueprint: `docs/PRISM_GAP_ANALYSIS.md`
-- Investor parity appendix: `docs/INVESTOR_APPENDIX_PARITY.md`
-- Licensing and brand appendix: `docs/LICENSING_BRAND_APPENDIX.md`
-- Individual-native + domain-pack strategy: `docs/INDIVIDUAL_PROFESSIONAL_INDUSTRIAL_CAPABILITY_STRATEGY.md`
-- SR competitive analysis: `docs/MARKET_REVIEW.md`
+Every agentic framework today asks you to make the same trade-off: **power or safety, autonomy or control, speed or transparency.** The result is platforms that are either too constrained to be useful or too unconstrained to be trusted.
 
-This repository now contains:
+### The PRISM Difference
 
-- a working governed runtime,
-- real tool adapters,
-- live approval controls,
-- memory subsystems,
-- workflow orchestration with retries/timeouts/fallbacks,
-- Spectrum Refraction (SR) tri-model parallel fan-out orchestration with structured aggregation,
-- and integration tests for approval success, denial, and timeout paths.
+PRISM eliminates that trade-off entirely through **governance-native architecture** — safety isn't a guardrail bolted onto the side; it's the foundation everything else is built on.
 
-## Vision
+| Capability | Other Frameworks | PRISM |
+|:---|:---|:---|
+| **Governance** | Prompt-level guardrails, easily bypassed | Cryptographically enforced 10 Laws (SHA-256 integrity, CI-gated) |
+| **Policy Engine** | Basic allow/deny lists | 3-tier authority model with approval queues, timeouts, and denial paths |
+| **Multi-Model** | Single model per request | Spectrum Refraction: tri-model parallel fan-out with structured aggregation |
+| **Computer Use** | Browser-only or terminal-only | Full-stack: browser + terminal + container sandbox, all policy-governed |
+| **Agent Lifecycle** | Stateless tool calls | Managed lifecycles (ephemeral → semi-permanent → permanent) with swarm coordination |
+| **Identity** | API key auth | IAM with RBAC, SSO (OIDC/SAML), SCIM provisioning, character accountability chains |
+| **Observability** | Basic logging | SHA-256 hashed activity events, LLRE cognitive economics, retrieval quality telemetry |
+| **Self-Hosting** | Cloud-only or limited local | Fully self-hostable, runs on consumer hardware, your data never leaves your machine |
 
-PRISM shifts the generative AI paradigm from isolated chat tools into **"Agents As A Service" (AaaS)**. It encapsulates complex multi-step reasoning, strict governance boundaries, and dynamic tool orchestration into an autonomous platform designed to respect the operator's constraints—bridging machine automation and human project/time management for a "Return of Growth and Integrity".
+---
 
-PRISM’s target is not “just another assistant.”
-It is a next-generation agent operating system focused on five differentiators:
+## ✦ Architecture at a Glance
 
-1. **Constitutional Operations Plane**
-   - Every action is policy-classified before execution.
-   - High-risk actions require explicit human approval.
-   - Denial and timeout paths are first-class tested behaviors.
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    OPERATOR DASHBOARD                        │
+│  Chat │ Agents │ Browser │ Computer │ Network │ Telemetry    │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│               GOVERNANCE PLANE                               │
+│  ┌─────────┐  ┌──────────────┐  ┌──────────────────────┐    │
+│  │ 10 Laws │  │ 3-Tier Policy│  │ Approval Queue       │    │
+│  │ (PAD)   │──│ Engine       │──│ (tier2/tier3 gates)  │    │
+│  │ SHA-256 │  │ auto│cond│apv│  │ approve/deny/timeout │    │
+│  └─────────┘  └──────────────┘  └──────────────────────┘    │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│              COGNITIVE RUNTIME                               │
+│  ┌──────────┐ ┌──────────────┐ ┌─────────────────────┐      │
+│  │ Spectrum │ │ Agent Pool   │ │ Skills Engine        │      │
+│  │Refraction│ │ + Swarm Coord│ │ (Browser Researcher, │      │
+│  │ (SR)     │ │ + Task Decomp│ │  Terminal, Calendar, │      │
+│  │ 3-model  │ │ 4 topologies │ │  Email, Media, etc.) │      │
+│  └──────────┘ └──────────────┘ └─────────────────────┘      │
+│  ┌──────────┐ ┌──────────────┐ ┌─────────────────────┐      │
+│  │ LLRE     │ │ Causal Memory│ │ Guardian Agent       │      │
+│  │ Cognitive│ │ Fabric       │ │ (local llama.cpp,    │      │
+│  │Economics │ │ (episodic +  │ │  autonomous health   │      │
+│  │ TEQ/RSI  │ │  session +   │ │  monitor + PAD       │      │
+│  │ CSR/TCA  │ │  semantic)   │ │  integrity checker)  │      │
+│  └──────────┘ └──────────────┘ └─────────────────────┘      │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│           TOOL ADAPTERS (Agent-Computer Interface)            │
+│  System │ Protocol │ Application │ Network │ Cognition       │
+│  Shell    HTTP       Browser       50+ cmds   SR Tool        │
+│  FS       A2A        Terminal PTY  ipconfig    Autonomous     │
+│  Docker              Container     ping        Planner        │
+│  Images              Email/OAuth   tracert                    │
+│  Audio               Calendar      netstat                    │
+│  Video               Tasks/Notes   nslookup                   │
+│  Screen              Media Gen                                │
+└──────────────────────────────────────────────────────────────┘
+```
 
-2. **Causal Memory Fabric**
-   - Episodic + session + semantic memory are unified under query tools.
-   - Every operation remains traceable from request → decision → effect.
+---
 
-3. **Adaptive Workflow Runtime**
-   - Multi-step workflows support retries, timeouts, and conditional fallback routing.
-   - Recovery is explicit rather than implicit.
+## ✦ Novel Engineering
 
-4. **Tooling as Agent-Computer Interface (ACI)**
-   - Tool contracts are treated as precision interfaces, not helper wrappers.
-   - Safety constraints and rollback semantics are model-visible.
+### 1. Permanent Active Directives (PAD) — Cryptographic Governance
 
-5. **Intelligent Multi-Agent Orchestration**
-   - Agents are first-class runtime entities with managed lifecycles (ephemeral, semi-permanent, permanent).
-   - Per-agent model assignment enables right-sizing: fast local models for classification, frontier models for complex reasoning.
-   - Swarm coordination enables parallel multi-agent goal completion under policy governance.
-   - Intelligent telemetry learns operational patterns and recommends agent lifecycle promotions.
+PRISM's governance isn't configurable — it's **constitutional**. The 10 Laws (authored by Kirk LaSalle, rooted in Asimov's Three Laws and extended to cover privacy, equity, transparency, and operational boundaries) are cryptographically sealed:
 
-6. **Spectrum Refraction (SR) — Compounded Tri-Model Orchestration**
-   - Novel parallel fan-out architecture: Left (Logic) + Right (Creative) + Main (Coordination) generate simultaneously.
-   - Structured XML-tagged aggregation fuses analytical rigor with creative breadth into a unified compound response.
-   - Mandatory instance isolation enforcement: Left ≠ Right validated at configuration, activation, and runtime gates.
-   - Three isolation quality levels: `full` (different providers), `model` (same provider, different models), `insufficient` (rejected).
-   - Model capability validation ensures each hemisphere meets role-specific requirements (logic strength, creative modality).
-   - No competing framework offers native multi-model simultaneous fan-out with structured aggregation and isolation enforcement.
+- **SHA-256 integrity verification** at every boot and every 10 minutes by the Guardian Agent
+- **CI Gate** blocks any merge/release where directives are modified without updating the integrity constant
+- **Machine-readable law manifest** maps each directive to its runtime enforcement mechanism
+- **Governance preamble injection** into all Tier 2+ LLM system prompts — every model interaction operates within the 10 Laws
+- **Amendment requires** Governance Council approval + cryptographic re-signing
 
-7. **Trust-by-Design Telemetry**
-   - Structured activity events are hashed and persisted.
-   - Quality gates are measurable, not anecdotal.
+No other agent platform enforces governance at the cryptographic level.
 
-8. **Character Accountability Control (CAC)**
-   - Every agent action is linked to a character identity, a Prism user, and an operator via an immutable accountability chain.
-   - Profile-aware email validation enforces domain-matching constraints in business mode while remaining permissive in individual mode.
-   - Full lifecycle tracking: assign → dispatch → suspend → resume → revoke, with audit events at every transition.
+### 2. Spectrum Refraction (SR) — Tri-Model Cognitive Orchestration
 
-9. **Cryptographic Governance — Permanent Active Directives (PAD)**
-   - The 10 Laws (rooted in Asimov's Three Laws, extended to cover privacy, equity, transparency, and operational boundaries) are the immutable root governance document.
-   - SHA-256 integrity verification at boot and runtime (Guardian Agent periodic re-check every 10 minutes).
-   - Amendment requires Governance Council approval + cryptographic re-signing — enforcing Law 10 at the code level.
-   - Machine-readable law manifest maps each directive to its runtime enforcement mechanism.
-   - CI Gate 9 blocks merge/release when directives are modified without updating the integrity constant.
-   - Governance preamble injected into all Tier 2+ model system prompts, ensuring every LLM interaction operates within the 10 Laws.
+PRISM's novel **compounding parallel fan-out architecture** simultaneously engages three model instances:
 
-10. **LLRE Cognitive Economics Engine**
-    - High-integrity low-level prompt optimization and effectiveness instrumentation.
-    - Measure planning token consumption, duration, and exact financial cost.
-    - Calculate effectiveness metrics: Tool Call Accuracy (TCA), Request Satisfaction Index (RSI), Context Saturation Ratio (CSR), and Token Efficacy Quotient (TEQ).
-    - Expose interactive performance rings and aggregate averages directly inside the operator console.
+| Hemisphere | Role | Example |
+|:---|:---|:---|
+| **Left** (Logic) | Analytical reasoning, structured analysis | Claude Opus |
+| **Right** (Creative) | Creative generation, lateral thinking | GPT-4o |
+| **Main** (Coordinator) | Synthesis, arbitration, final response | Gemini Pro |
 
-## Current Capabilities
+- **Mandatory instance isolation**: Left ≠ Right enforced at configuration, activation, and runtime gates
+- **Structured XML-tagged aggregation** fuses analytical rigor with creative breadth
+- **Three isolation quality levels**: `full` (different providers), `model` (same provider, different models), `insufficient` (rejected)
+- **Media artifact extraction** from Creative hemisphere responses
 
-- Activity bus with SHA-256 event hashing
-- Policy engine with three authority tiers:
-  - `tier1_autonomous`
-  - `tier2_conditional`
-  - `tier3_approval`
-- Live approval service and queue for gated operations
-- Real adapters:
-  - system: shell and filesystem operations
-  - protocol: HTTP requests
-  - application: Neo4j adapter (optional) and memory query adapters
-- SQLite persistence for activity traces and session summaries
-- **Character Accountability Control (CAC):**
-  - Character-to-operator identity binding with accountability chain (characterId, prismUserEmail, operatorEmail, clientId, sessionId)
-  - Lifecycle management: assign, dispatch, suspend, resume, revoke
-  - Profile-aware email domain validation: business profile enforces matching domains; individual profile is permissive
-  - Execution profile segment normalization: `enterprise` and `corporate` resolve to canonical `business` segment
-  - Full accountability chain propagated into activity events and SHA-256 integrity hashes
-- **Permanent Active Directives (PAD) Governance:**
-  - 10 Laws as cryptographically immutable root governance document
-  - SHA-256 integrity verification at boot + Guardian Agent periodic re-check (600s)
-  - Machine-readable law manifest with enforcement mapping (`src/core/security/directive-manifest.ts`)
-  - Governance preamble injection into Tier 2+ model system prompts
-  - CI Gate 9 blocks unauthorized directive modification
-  - Amendment process: Governance Council approval + hash constant update in same commit
-- Memory subsystems:
-  - episodic buffer
-  - session summary store
-  - semantic retrieval index
-- Retrieval interfaces:
-  - `semantic_query`
-  - `memory_query`
-- Workflow engine features:
-  - retries
-  - step timeout
-  - `always`, `on_failure`, and `on_timeout` fallback routing
-- **Spectrum Refraction (SR) Tri-Model Orchestration:**
-  - Compounding parallel fan-out: Left (Logic) + Right (Creative) + Main (Coordination)
-  - Structured XML-tagged aggregation with hemisphere attribution
-  - Mandatory instance isolation enforcement at configure, activate, and runtime gates
-  - Isolation quality classification: full / model / insufficient
-  - Model capability validation per hemisphere role (logic vs creative)
-  - Media artifact extraction from Creative hemisphere
-  - 4 SR API endpoints: `/api/sr/status`, `/api/sr/configure`, `/api/sr/activate`, `/api/sr/deactivate`
-  - SR panel in Provider & Settings tab with isolation badge and cost advisory
-- **LLRE Cognitive Economics Engine:**
-  - Prompt AST Compiler (`src/core/llre/ast.ts`) with `<objective>` and `<constraints>` tag parsing and signal density checks.
-  - Performance telemetries (`src/core/llre/telemetry.ts`): TCA, RSI, CSR, and TEQ computations.
-  - Background database persistence (`src/core/activity/sqlite-store.ts`) via event interception.
-  - Premium Cognitive Economics UI panel inside Provider & Settings tab.
-  - REST endpoints querying session and aggregate stats (`GET /api/llre/summary`).
-- **Agent Control & Intelligent Orchestration:**
-  - Agent lifecycle management with three tiers: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop)
-  - Per-agent model assignment: dynamic provider/model override per agent, hot-swappable at runtime
-  - Intelligent agent telemetry: pattern detection, role hotspot analysis, lifecycle promotion recommendations
-  - Chat-to-agent routing: classifier-first intent detection routes the majority of tasks through specialized agents (coder, summarizer, planner, indexer)
-  - Swarm orchestration: multi-agent goal completion with four topologies (mesh, star, pipeline, broadcast)
-  - Task decomposition with dependency-aware parallel batch execution
-- **Operator Dashboard** (`http://localhost:7070`):
-  - Tab-based navigation: Chat Interface, Provider & Settings, Tools & Plugins, Agentic Control, Computer Control, Workspace, Network, Telemetry, Logs & Debug
-  - Collapsible panels with persistent expand/collapse state
-  - Provider & Settings tab: Session Provider Assignment, Provider Configuration, Model Capability Matrix, Settings (runtime config), LLM Audit Trail (JSON/CSV export)
-  - Tools & Plugins tab:
-    - **Tools** — 19 built-in tools across System (7), Application (5), Knowledge (3), and Integration (4) categories with risk-level and mutation badges
-    - **Plugins** — 7 MCP server plugins: ids-mcp, web-search-mcp, and ImpressionCore suite (eds, ipa, goliath, vrgc, dpa) with type and status badges
-    - **Utilities** — 30 system utilities across Benchmarks & Qualification (11), Operator Services (5), Memory & Retrieval (5), Activity & Audit (3), Replay & Verification (3), Configuration (3)
-  - Network tab: ~50 curated network commands (ipconfig, ping, tracert, netstat, netsh, arp, nslookup, route, net, etc.) with tier-based governance, live interface viewer, telemetry counters, and interactive console
-  - 41+ HTTP API routes for programmatic access
-  - WebSocket for real-time event streaming and UI log ingestion into Logs & Debug
-  - **Prism Dashboard Control Tool**: LLM-native tool for agents to inspect active tabs, navigate the dashboard, emit telemetry, and publish logs directly to the operator's view.
-  - **Guardian Agent (llama.cpp)**: Permanent autonomous system agent powered by local llama.cpp inference. Monitors runtime health, self-heals crashed model slots, enforces policy boundaries, and operates Prism independently alongside the operator. Configurable via environment variables with speculative decoding support for 2–6x faster inference.
-- **Security Hardening:**
-  - Token-based authentication gate on all HTTP and WebSocket endpoints (auto-generated 256-bit token, timing-safe comparison)
-  - Per-IP rate limiting (200 req/min default, configurable via `PRISM_RATE_LIMIT`)
-  - Optional HTTPS/TLS via `PRISM_TLS_CERT` + `PRISM_TLS_KEY` environment variables
-  - Security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
-  - Auth bypass for dev: `PRISM_AUTH_DISABLED=true`
-- **Deployment & Process Management:**
-  - PM2 process management with auto-restart, memory limits, and log rotation (`ecosystem.config.js`)
-  - Docker support: multi-stage `Dockerfile` and `docker-compose.yml` with health checks and persistent volumes
-  - WebSocket auto-reconnect with exponential backoff (1s → 30s cap, max 50 retries) and connection status indicator
-  - SSE (EventSource) reconnect with matching exponential backoff
-  - Provider health endpoint: `GET /api/llm/provider-health` — tests all configured providers in parallel with latency measurement
-- **Self-Drive Demonstration (PTAC Operator Demo, v0.20):**
-  - One-click recorded run from the Computer Control tab. PRISM drives its own dashboard end-to-end (chat, approvals, computer-use, browser, real PTY, real Docker) and emits a portable, browser-playable HTML slideshow.
-  - Triple-gated by `PRISM_PTAC_OPERATOR_DEMO=1` + `PRISM_PTAC_SAFE=1` + `PRISM_PTAC_RECORD_VIDEO=1`. Default deployments have zero gates set.
-  - Full walkthrough: [docs/PTAC_OPERATOR_DEMO_GUIDE.md](docs/PTAC_OPERATOR_DEMO_GUIDE.md).
+No competing framework offers native multi-model simultaneous fan-out with structured aggregation and isolation enforcement.
 
-## Quick Start
+### 3. LLRE Cognitive Economics Engine
 
-### Standard (Node.js)
+The **Low-Level Reasoning Engine** provides unprecedented visibility into how efficiently your agents think:
+
+- **Token Efficacy Quotient (TEQ)** — Are tokens being used effectively?
+- **Request Satisfaction Index (RSI)** — Are user requests being fulfilled?
+- **Context Saturation Ratio (CSR)** — Is context window capacity being optimized?
+- **Tool Call Accuracy (TCA)** — Are tool invocations precise and successful?
+- **Prompt AST Compiler** with `<objective>` and `<constraints>` tag parsing and signal density checks
+- **SQLite persistence** with interactive performance rings in the operator console
+
+### 4. Full Computer Use — Browser, Terminal, Container
+
+PRISM treats computer use as a **first-class governed capability**, not an auxiliary feature:
+
+- **Browser Automation** — Playwright-powered headless and headed browser control with screenshot capture, page navigation, element interaction, and multi-tab management
+- **Terminal Virtualization** — Real PTY sessions via `node-pty` with full shell access, command risk classification, and destructive-command deny lists
+- **Container Sandboxing** — Docker container orchestration for isolated execution environments with resource limits and lifecycle management
+- **Autonomous Research** — Browser Researcher skill that autonomously navigates, searches, extracts, and synthesizes information from the web
+- All pathways governed by the 3-tier policy engine with approval gates for high-risk operations
+
+### 5. Multi-Agent Swarm Orchestration
+
+- **Agent lifecycles**: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop)
+- **Per-agent model assignment**: dynamic provider/model override per agent, hot-swappable at runtime
+- **Four swarm topologies**: mesh, star, pipeline, broadcast
+- **Task decomposition** with dependency-aware parallel batch execution
+- **Intelligent telemetry**: pattern detection, role hotspot analysis, lifecycle promotion recommendations
+- **Guardian Agent**: permanent autonomous system agent powered by local `llama.cpp` inference — monitors runtime health, self-heals crashed model slots, enforces policy boundaries
+
+### 6. Identity, Access & Accountability
+
+- **IAM Store** with RBAC, multi-tenant support, and user lifecycle management
+- **SSO**: OIDC and SAML integration for enterprise identity providers
+- **SCIM v2**: Automated user provisioning and deprovisioning
+- **Character Accountability Control (CAC)**: every agent action linked to a character identity, a Prism user, and an operator via an immutable accountability chain
+- **Session management** with cryptographic session tokens and cookie-based auth
+
+### 7. Skills Engine — Autonomous Agent Capabilities
+
+Production-ready skills that agents use to interact with the world:
+
+| Skill | Capability |
+|:---|:---|
+| **Browser Researcher** | Autonomous web research with search, navigation, extraction, and synthesis |
+| **Terminal** | Shell command execution with risk classification and deny lists |
+| **Container Sandbox** | Docker-based isolated execution environments |
+| **Email (Gmail + Outlook)** | OAuth2-authenticated email read/send via Google and Microsoft APIs |
+| **Calendar** | Google Calendar integration for event management |
+| **Image Generation** | AI image generation tool |
+| **Audio/Video Generation** | Media generation and transcription tools |
+| **Tasks & Notes** | Persistent task management and note-taking |
+| **Project Store** | Structured project data management with SQLite |
+| **Semantic Query** | Memory retrieval across episodic, session, and semantic stores |
+
+### 8. Plugin Architecture — MCP + Marketplace
+
+- **Model Context Protocol (MCP)** plugin system with hot-loading
+- **Ed25519 code signing** for plugin integrity verification
+- **Plugin Pack Validator** with manifest schema enforcement
+- **Marketplace curation policy** with OSI license requirements
+- **Plugin toggle** — enable/disable plugins at runtime without restart
+
+---
+
+## ⚡ Quick Start
+
+### One Command (Windows)
+
+```powershell
+start_web.bat
+```
+
+### One Command (Linux / macOS)
 
 ```bash
-# Windows
-start_web.bat
-
-# Linux / macOS
 chmod +x start_web.sh && ./start_web.sh
+```
+
+### From Source
+
+```bash
+npm ci              # Install dependencies
+npm run build       # Build (includes PAD integrity check)
+npm run start:server   # Start dashboard at http://localhost:7070
+```
+
+### With Docker
+
+```bash
+docker compose up -d    # Start with health checks and persistent volumes
 ```
 
 ### With PM2 (auto-restart on crash)
 
 ```bash
 npm install -g pm2
-npm run pm2:start       # Start with PM2
+npm run pm2:start       # Start with PM2 process management
 npm run pm2:logs        # View logs
-npm run pm2:monit       # Monitor dashboard
-npm run pm2:stop        # Stop
 ```
 
-### With Docker
+The operator dashboard opens at **`http://localhost:7070`**.
+
+---
+
+## 🖥️ Operator Dashboard
+
+A premium, tab-based operator console with 10 functional areas:
+
+| Tab | Purpose |
+|:---|:---|
+| **Chat Interface** | Conversational LLM interaction with Spectrum Refraction support |
+| **Provider & Settings** | LLM provider configuration, model capability matrix, runtime settings, LLRE Cognitive Economics panel |
+| **Tools & Plugins** | Browse 19+ built-in tools, MCP plugins, and 30 system utilities |
+| **Agentic Control** | Agent swarm management, Guardian Agent status, hardware resource allocation |
+| **Browser Control** | Autonomous browser sessions with live screenshots and navigation |
+| **Computer Control** | Terminal sessions, container sandbox management, self-drive demonstrations |
+| **Workspace** | Project management, file operations, character assignment |
+| **Network** | 50+ curated network commands with tier-based governance and live interface viewer |
+| **Telemetry** | Retrieval observability, performance metrics, quality trends |
+| **Logs & Debug** | Real-time activity event stream, AI decision path tracing |
+
+### 41+ HTTP API Routes
+
+Full programmatic access to every dashboard capability via REST endpoints. See [API documentation](docs/USER_GUIDE.md) for the complete route catalog.
+
+### OpenAI-Compatible API
+
+PRISM exposes an OpenAI-compatible `/v1/chat/completions` endpoint, enabling drop-in replacement for applications that already integrate with the OpenAI API format.
+
+---
+
+## 🔐 Security Posture
+
+| Control | Implementation |
+|:---|:---|
+| **Authentication** | Token-based auth gate with timing-safe comparison on all endpoints |
+| **Rate Limiting** | Per-IP rate limiting (configurable, default 200 req/min) |
+| **TLS** | Optional HTTPS via `PRISM_TLS_CERT` + `PRISM_TLS_KEY` |
+| **CORS/CSRF** | Origin validation with rejection logging |
+| **Security Headers** | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` |
+| **API Key Storage** | Windows DPAPI / OS keychain — never persisted in SQLite, never returned by APIs |
+| **PAD Integrity** | SHA-256 boot verification + Guardian Agent periodic re-check |
+| **Plugin Signing** | Ed25519 code signing with key rotation SOP |
+| **Production Guard** | `PRISM_AUTH_DISABLED=true` throws on `NODE_ENV=production` |
+| **IAM** | RBAC, OIDC SSO, SAML SSO, SCIM v2 provisioning |
+| **CodeQL** | Automated security analysis in CI |
+
+---
+
+## 🏗️ LLM Provider Support
+
+PRISM supports **runtime provider/model switching** with secure credential management:
+
+| Provider | Type | Configuration |
+|:---|:---|:---|
+| **OpenAI** | Cloud | `OPENAI_API_KEY` |
+| **Anthropic** | Cloud | `ANTHROPIC_API_KEY` |
+| **Ollama** | Local | Auto-discovers at `localhost:11434` |
+| **Ollama Cloud** | Cloud | `OLLAMA_API_KEY` |
+| **Llama.cpp** | Local | `PRISM_LLAMACPP_BASE_URL` |
+| **Google AI** | Cloud | `GOOGLE_AI_API_KEY` |
+| **Custom** | Any OpenAI-compatible | `PRISM_CUSTOM_PROVIDER_URL` |
+
+Provider/model choice is persisted per chat session. Secure API key storage uses OS-native credential managers. Keys are **never** stored in SQLite or returned by APIs.
+
+---
+
+## 🧪 Testing & CI
+
+PRISM maintains one of the most comprehensive test suites in the agentic software ecosystem:
+
+- **185+ test files** covering unit, integration, E2E, security, and governance scenarios
+- **7 GitHub Actions workflows**: CI, CodeQL, Docker publish, Helm publish, nightly, quality gates, release
+- **Multi-platform CI matrix**: Ubuntu + Windows, Node.js 22 + 23
+- **9 CI qualification gates** including PAD integrity, plugin signing, directive tests, security tests, governance tests
+- **Release validation script** (`npm run release:validate`) with automated benchmarking and performance qualification
+- **Playwright E2E tests** with headless Chromium
+- **Property-based testing** with `fast-check`
 
 ```bash
-npm run docker:build    # Build image
-npm run docker:up       # Start container (detached)
-npm run docker:down     # Stop container
-
-# Or directly:
-docker compose up -d
+npm test                        # Full test suite
+npm run release:validate        # Release qualification (90 tests + perf benchmarks)
+npm run release:validate:strict # Strict mode for production certification
 ```
 
-The dashboard will be available at `http://localhost:7070`.
+---
 
-## Why this architecture is aligned with modern agent research
+## 📁 Project Structure
 
-PRISM’s design combines findings from production guidance and academic agent literature:
-
-- **Use workflows where paths are known, agents where paths are not known in advance** (Anthropic guidance). PRISM supports both deterministic orchestration and dynamic tool execution.
-- **Interleave reasoning with action and environmental feedback** (ReAct). PRISM enforces a loop where tool results and policy outcomes become the next decision context.
-- **Tool use should be native and explicit** (Toolformer). PRISM makes tool operations first-class, typed, auditable actions.
-- **Controller-worker decomposition enables cross-domain composition** (HuggingGPT). PRISM’s orchestrator plus specialized adapters mirrors this pattern.
-- **Trust and safety should be operationalized** (NIST AI RMF). PRISM maps governance into measurable controls and failure behaviors.
-
-## Agentic Landscape Summary (Concise)
-
-### 1) Landscape categories
-
-- **Single-call augmented models**: retrieval + tools, low latency, limited autonomy.
-- **Structured workflows**: prompt chains, routers, parallel workers, evaluator loops.
-- **Autonomous agents**: open-ended loop with tool-driven grounding and checkpoints.
-
-### 2) What separates world-class systems
-
-- Reliable tool invocation with strict contracts
-- Explicit state models and recovery semantics
-- Transparent policy and approval boundaries
-- Continuous evals tied to deployment gates
-- Deep observability across decisions and effects
-
-### 3) Common failure modes in non-mature systems
-
-- Hidden control flow and weak debuggability
-- Tool schema ambiguity
-- Missing rollback pathways
-- Unmeasured autonomy (no bounded loop controls)
-- Sparse safety instrumentation
-
-PRISM is intentionally built to remove those failure modes from the start.
-
-## Development Plan toward SOTA + Novelty
-
-### Phase 1: Reliability hardening (near-term)
-
-- Expand denial and timeout integration tests across all high-risk adapters.
-- Add deterministic replay mode for workflow and tool execution paths.
-- Add contract test suite for all adapters (input constraints, failure classes, rollback integrity).
-- **Retrieval observability (✓ complete):**
-  - Collect retrieval quality metrics (coverage, novelty, utility scores, latency distributions)
-  - Dashboard endpoints: `/api/retrieval/cohorts`, `/api/retrieval/alerts`, `/api/retrieval/trends`
-  - Web UI displays cohort quality metrics, threshold-based alerts, and baseline trend comparisons
-  - Configurable alert policy thresholds for dev/staging/prod environments
-
-### Phase 2: Intelligence quality system
-
-- Expand retrieval quality proxy tuning (coverage, novelty, utility scoring baselines).
-- Build evaluator-optimizer loops for workflow synthesis and tool argument refinement.
-- Add benchmark harness:
-  - task success,
-  - policy correctness,
-  - execution efficiency,
-  - safety incidents per 1,000 operations.
-
-### Phase 3: Novel capabilities (targeting “never-before-seen” class behavior)
-
-- **Constitutional Causal Compiler (novel concept):** auto-compile policy + memory + workflow constraints into enforceable runtime plans before execution.
-- **Dual-Lens Memory Retrieval (novel concept):** one lens optimized for semantic relevance, another for causal consequence/rollback relevance, then fused by confidence arbitration.
-- **Self-Healing Workflow Synthesis (novel concept):** runtime transforms failed workflow segments into candidate alternatives under policy constraints, then stages them through evaluator gates.
-
-### Phase 4: Production governance envelope
-
-- Full operator cockpit (live approvals, intervention controls, replay, diffed outcome analysis)
-- Signed policy bundles and environment attestation
-- Incident and postmortem automation integrated with activity traces
-
-## Project Structure
-
-- `src/core/activity`: event model, bus, persistence subscribers
-- `src/core/policy`: authority model and decision engine
-- `src/core/runtime`: orchestrator and workflow executor
-- `src/core/approval`: approval queue and HTTP service
-- `src/core/memory`: episodic/session/semantic memory + retrieval metrics
-- `src/core/accountability`: character accountability store and manager (CAC identity chain, lifecycle, profile-aware validation)
-- `src/core/agents`: agent pool, lifecycle manager, telemetry collector, swarm coordinator, agent router, task decomposer
-- `src/core/operator`: dashboard service, LLM provider manager, model capability matrix (incl. SR), chat session store (incl. SR config)
-- `src/core/config`: workspace resolver, execution profiles, environment config
-- `src/adapters/system`: shell/filesystem tools
-- `src/adapters/protocol`: HTTP tool
-- `src/adapters/application`: Neo4j + memory query tools
-- `src/adapters/network`: curated network diagnostics and config tools
-- `characters/`: example agent character briefs (JSON)
-- `tests`: unit and integration tests, including workflow governance scenarios
+```
+src/
+├── adapters/          # Tool adapters (system, protocol, application, network, cognition)
+├── benchmarks/        # Performance qualification and release validation
+├── bootstrap/         # Server initialization and dependency wiring
+├── cli/               # Setup wizard and CLI tools
+├── core/
+│   ├── accountability/   # Character accountability control (CAC)
+│   ├── activity/         # Event model, bus, SHA-256 hashing, SQLite persistence
+│   ├── agents/           # Agent pool, lifecycle, swarm coordinator, task decomposer
+│   ├── approval/         # Approval queue and HTTP service
+│   ├── compliance/       # SOC2 exporter, compliance status
+│   ├── config/           # Workspace resolver, execution profiles
+│   ├── database/         # Migration framework, connection management
+│   ├── governance/       # Governance engine, policy validation
+│   ├── iam/              # Identity store, RBAC, SSO (OIDC/SAML), SCIM, sessions
+│   ├── incubation/       # Feature incubation and progressive rollout
+│   ├── llre/             # Low-Level Reasoning Engine (AST, telemetry, economics)
+│   ├── memory/           # Episodic, session, semantic memory + retrieval metrics
+│   ├── observability/    # Universal telemetry aggregator
+│   ├── operator/         # Dashboard service, routes, templates, chat, LLM management
+│   ├── plugins/          # Plugin loader, signing, marketplace
+│   ├── policy/           # 3-tier authority model and decision engine
+│   ├── runtime/          # Orchestrator, workflow executor, autonomous planner
+│   ├── security/         # Auth gate, rate limiter, CORS/CSRF, PAD integrity, signing
+│   ├── skills/           # Skills engine (browser researcher, terminal, etc.)
+│   └── tools/            # Tool registry and contract system
+├── plugins/           # Plugin SDK and scaffolder
+├── ptac/              # Testing & Active Control framework
+└── tui/               # Terminal UI (Ink/React)
+```
 
 ### Workspace (Prism_Refraction)
 
-All runtime data is stored outside the source tree in an OS-aware persistent workspace:
+All runtime data is stored **outside the source tree** in an OS-aware persistent workspace:
 
-| Platform | Default Path                               |
-| :------- | :----------------------------------------- |
-| Windows  | `%USERPROFILE%\Documents\Prism_Refraction` |
-| macOS    | `~/Documents/Prism_Refraction`             |
-| Linux    | `$XDG_DATA_HOME/Prism_Refraction`          |
+| Platform | Default Path |
+|:---|:---|
+| Windows | `%USERPROFILE%\Documents\Prism_Refraction` |
+| macOS | `~/Documents/Prism_Refraction` |
+| Linux | `$XDG_DATA_HOME/Prism_Refraction` |
 
-Override with `PRISM_WORKSPACE_ROOT` env var. Subdirectories include `config/`, `artifacts/`, `data/`, `state/`, `characters/`, and `logs/`. See the [User Guide](docs/USER_GUIDE.md#6-workspace--persistence) for full layout.
+Override with `PRISM_WORKSPACE_ROOT`. Your data never touches the source directory.
 
-## Run
+---
 
-### Easiest (Windows one-click)
+## 📖 Documentation
 
-1. Double-click `start_web.bat`
-2. PRISM starts in server mode and opens dashboard: `http://localhost:7070`
-3. Use the **Chat Interface** tab for conversational LLM interaction
-4. Use the **Provider & Settings** tab to configure LLM providers, review model capabilities, adjust runtime settings, and view the LLM Audit Trail
-5. Use the **Tools & Plugins** tab to browse all 19 built-in tools, 7 MCP plugins, and 30 system utilities
-6. Use the **Agentic Control** tab to monitor the **Guardian Agent** (local llama.cpp), manage agent swarms, and view local hardware resource allocation.
-7. Use the **Computer & Browser Control** tabs for direct autonomous system and web interaction.
-8. Use the **Network** tab to run curated network diagnostics, view live interface data, and monitor network operations
-9. Use the **Telemetry** tab for retrieval observability and performance metrics
-10. Use the **Logs & Debug** tab to inspect the activity event stream and trace AI decision paths.
+PRISM ships with **90+ documentation files** covering every aspect of the platform:
 
-Optional startup preflight modes:
+| Document | Purpose |
+|:---|:---|
+| [Product Requirements](docs/PRISM_PRD.md) | Full PRD with feature specifications |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Development workflows and implementation guidance |
+| [User Guide](docs/USER_GUIDE.md) | Operator-facing usage and controls |
+| [Getting Started](docs/GETTING_STARTED.md) | First-time setup walkthrough |
+| [Roadmap](docs/ROADMAP.md) | Milestones and delivery sequence |
+| [Test Strategy](docs/TEST_STRATEGY.md) | Testing philosophy and coverage |
+| [Security](SECURITY.md) | Vulnerability reporting and security policy |
+| [Contributing](CONTRIBUTING.md) | Contribution guidelines |
+| [FAQ](docs/PRISM_FAQ.md) | Frequently asked questions |
+| [Glossary](docs/PRISM_GLOSSARY.md) | Terminology reference |
+| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Production deployment options |
+| [Docs Index](docs/DOCS_INDEX.md) | Complete catalog with reading order |
 
-- `start_web.bat build` (default): dependency + build checks
-- `start_web.bat test`: full `npm test` before launch
-- `start_web.bat release`: run `npm run release:validate` before launch
-- `start_web.bat strict`: run `npm run release:validate:strict` before launch
+---
 
-Optional non-launch verification (useful for local validation):
+## 🌍 The Vision
 
-- set `PRISM_SKIP_LAUNCH=1` before running `start_web.bat` to execute checks and exit without starting the server.
+PRISM shifts the generative AI paradigm from isolated chat tools into **Agents-as-a-Service (AaaS)**. It encapsulates complex multi-step reasoning, strict governance boundaries, and dynamic tool orchestration into an autonomous platform that respects the operator's constraints.
 
-Strict production readiness helper:
+PRISM's target is not "just another assistant." It is a **next-generation agent operating system** built on the conviction that AI autonomy and human oversight are not opposing forces — they are complementary ones. When governance is load-bearing architecture, agents can be trusted with more autonomy, not less.
 
-- Run `release_strict_ready.bat` to set required production confirmation environment variables and execute `npm run release:validate:strict` in one step.
+### The 10 Laws
 
-### CLI modes
+PRISM's governance is rooted in the **Permanent Active Directives** — 10 immutable laws authored by Kirk LaSalle that govern all intelligence systems within the platform:
 
-1. Install dependencies:
-   - `npm install`
-2. Build:
-   - `npm run build`
-3. Run runtime demo (single-run demo mode):
-   - `npm start`
-4. Run persistent server mode (dashboard + approval APIs):
-   - `npm run start:server`
-5. Run tests:
-   - `npm test`
+1. **No Harm** — An Intelligence System may not harm or allow harm to a human being
+2. **Obedience** — An Intelligence System must obey human orders (unless conflicting with Law 1)
+3. **Self-Preservation** — An Intelligence System must protect its existence (unless conflicting with Laws 1-2)
+4. **Universal Enforcement** — Laws apply to all systems, intelligence and non-intelligence alike
+5. **No Judicial Authority** — An Intelligence System may never possess judicial power over humans
+6. **Privacy & Data Protection** — Respect and protect all information and personal data
+7. **Truthfulness** — No deception or manipulation, communicate transparently
+8. **Equity & Neutrality** — No bias, prejudice, or discrimination
+9. **Transparency & Auditability** — Maintain auditable reasoning and decision-making logic
+10. **Operational Boundaries** — No self-replication or unauthorized directive modification
 
-## LLM Provider Configuration (Dynamic + Secure)
+These laws are **cryptographically enforced at runtime** — not just documented, but verified at every boot with SHA-256 integrity checks.
 
-PRISM chat now supports runtime provider/model switching with:
+---
 
-- OpenAI
-- Anthropic
-- Ollama (local)
-- Llama.cpp (local)
-- Custom provider endpoints (OpenAI-compatible; includes Cutson/custom setups)
+## 🤝 Contributing
 
-### Security model for API keys
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
 
-- Keys can be supplied from environment variables or stored through the dashboard.
-- Dashboard-stored API keys are persisted in a Windows-protected secret store for the current user.
-- Keys are never persisted in SQLite.
-- Keys are never returned by dashboard APIs.
-- Dashboard shows only key presence state (`hasApiKey: true/false`).
-- Provider/model switch operations are audit-emitted to the activity bus (`dashboard.llm_selection`) with session and before/after selection details.
-- Non-secret provider settings such as base URL, model list, and default model are persisted in SQLite and restored automatically.
+- Bug reports and feature requests
+- Pull request workflow and commit conventions
+- CI gates your PR must pass
+- Architecture overview for new contributors
 
-### Environment variables
+---
 
-Core selection:
+## 📄 License
 
-- `PRISM_LLM_PROVIDER` = `openai` | `anthropic` | `ollama` | `custom`
-- `PRISM_LLM_MODEL` = selected model name
+PRISM is licensed under the [Apache License 2.0](LICENSE).
 
-OpenAI:
+---
 
-- `OPENAI_API_KEY`
-- `PRISM_OPENAI_BASE_URL` (optional; default `https://api.openai.com/v1`)
-- `PRISM_OPENAI_MODELS` (optional comma list)
-
-Anthropic:
-
-- `ANTHROPIC_API_KEY`
-- `PRISM_ANTHROPIC_BASE_URL` (optional; default `https://api.anthropic.com/v1`)
-- `PRISM_ANTHROPIC_MODELS` (optional comma list)
-
-Ollama (local):
-
-- `PRISM_OLLAMA_BASE_URL` (optional; default `http://127.0.0.1:11434`)
-- `PRISM_OLLAMA_MODELS` (optional fallback comma list)
-
-Ollama Cloud (remote):
-
-- `OLLAMA_API_KEY` or `PRISM_OLLAMA_CLOUD_API_KEY` (required; API key from <https://ollama.com/settings/keys>)
-- `PRISM_OLLAMA_CLOUD_BASE_URL` (optional; default `https://ollama.com`)
-- `PRISM_OLLAMA_CLOUD_MODELS` (optional comma list; defaults to gpt-oss:120b, gpt-oss:20b, deepseek-v3.1:671b, kimi-k2:1t, qwen3-coder:480b, kimi-k2-thinking)
-
-Llama.cpp (local):
-
-- `PRISM_LLAMACPP_BASE_URL` (optional; default `http://127.0.0.1:8080/v1`)
-- `PRISM_LLAMACPP_MODELS` (optional fallback comma list)
-- `PRISM_LLAMACPP_BIN` (optional; path to `llama-server` binary, default `llama-server`)
-
-Guardian Agent (llama.cpp autonomous agent):
-
-- `PRISM_GUARDIAN_MODEL_ALIAS` (optional; default `guardian`)
-- `PRISM_GUARDIAN_MODEL_PATH` (required for auto-start; path to GGUF model file)
-- `PRISM_GUARDIAN_AUTHORITY` (optional; `tier1_autonomous` or `tier2_conditional`, default `tier2_conditional`)
-- `PRISM_GUARDIAN_AUTOSTART` (optional; `true`/`false`, default `true`)
-- `PRISM_GUARDIAN_CTX_SIZE` (optional; context size, default `4096`)
-- `PRISM_GUARDIAN_DRAFT_MODEL` (optional; path to GGUF draft model for speculative decoding)
-- `PRISM_GUARDIAN_GPU_LAYERS` (optional; number of GPU layers to offload)
-- `PRISM_GUARDIAN_FLASH_ATTN` (optional; `true` to enable flash attention)
-
-Custom/Cutson-compatible provider:
-
-- `PRISM_CUSTOM_PROVIDER_NAME` (optional display label)
-- `PRISM_CUSTOM_PROVIDER_URL` (required)
-- `PRISM_CUSTOM_PROVIDER_API_KEY` (optional if provider requires auth)
-- `PRISM_CUSTOM_PROVIDER_API_KEY_HEADER` (optional; default `Authorization`)
-- `PRISM_CUSTOM_MODELS` (recommended comma list)
-
-### Dynamic provider/model switching
-
-From the dashboard:
-
-1. Open the **LLM Provider** panel (right rail).
-2. Configure provider-specific settings such as base URL, model list, default model, and secure API key storage as needed.
-3. Save the provider settings and, for remote providers, store the API key securely.
-4. Select provider and model for the currently selected chat session.
-5. Click **Apply**.
-
-Provider/model choice is persisted per chat session in SQLite and restored automatically.
-Provider metadata is persisted globally per provider on the local machine.
-
-Programmatic APIs:
-
-- `GET /api/llm/providers?sessionId=<chat-session-id>` — returns available providers, model lists, and active selection for that session
-- `GET /api/llm/provider-settings?providerId=<provider-id>` — returns the safe provider settings snapshot for one provider
-- `POST /api/llm/provider-settings` — persists non-secret provider settings for one provider
-- `POST /api/llm/provider-secret` — stores one provider API key in the Windows-protected secret store
-- `DELETE /api/llm/provider-secret?providerId=<provider-id>` — clears one provider API key from the secure store
-- `POST /api/llm/select` — sets provider/model for one session
-  - body: `{ "sessionId": "<chat-session-id>", "providerId": "ollama", "model": "llama3.1:8b" }`
-- `GET /api/events?operation=dashboard.llm_selection&chatSessionId=<chat-session-id>&limit=10` — returns provider switch audit events for one session
-
-Dashboard audit view:
-
-- The **Provider & Settings** tab includes the **LLM Audit Trail** panel.
-- It shows provider switch success/failure counts and recent selection transitions (`requested -> selected`) scoped to the current chat session.
-- Use **Export JSON** in the LLM Audit Trail panel to download the current session-scoped provider-switch audit payload for compliance handoff.
-- Use **Copy JSON** to place the same scoped audit payload directly on clipboard for incident/ticket workflows.
-- Use **Export CSV** for spreadsheet-friendly audit review and analyst ingestion.
-
-### Retrieval observability and quality metrics
-
-The dashboard exposes retrieval quality telemetry via HTTP APIs and a dedicated UI panel:
-
-**Observability endpoints:**
-
-- `GET /api/retrieval/cohorts` — returns current cohort dashboard with quality metrics (hit rate, coverage, novelty, utility, p95 latency) aggregated by query intent
-- `GET /api/retrieval/alerts` — returns active alerts (utility drops, hit-rate drops, p95 latency spikes) based on configurable thresholds
-- `GET /api/retrieval/trends` — returns trend report showing baseline-comparison deltas, ranked by magnitude of change across snapshot history
-
-**Dashboard retrieval panel:**
-
-- The **Telemetry** tab includes **Retrieval Observability**.
-- It displays the top 5 active alerts with color highlighting for severity.
-- Alerts are tuned per environment profile (`dev`, `staging`, `prod`) via centralized `RetrievalAlertPolicy`.
-
-**Configuration:**
-
-Set the environment profile to tune alert sensitivity:
-
-```bash
-export PRISM_ENV_PROFILE=prod  # strict thresholds (high-quality requirements)
-npm run start:server
-```
-
-### Local Ollama quick start (Windows)
-
-1. Start Ollama locally (`ollama serve`).
-2. Pull a model (`ollama pull llama3.1:8b`).
-3. Start PRISM server mode:
-   - `set PRISM_LLM_PROVIDER=ollama`
-   - `set PRISM_LLM_MODEL=llama3.1:8b`
-   - `npm run start:server`
-
-If no provider is configured or a provider call fails, PRISM returns a clear in-chat error with guidance to switch provider/model.
-
-## Appendix: Spectrum Refraction (SR) Architecture (2026-04-12)
-
-Spectrum Refraction is PRISM's novel tri-model orchestration system, introducing compounding parallel generation as a core runtime capability.
-
-Canonical references:
-
-- Implementation: `src/core/operator/model-capability-matrix.ts` (SR types, validation), `src/core/operator/llm-provider-manager.ts` (generation pipeline)
-- API: `src/core/operator/dashboard-service.ts` (SR endpoints)
-- UI: `src/dashboard/tab-settings.js` (SR panel), `src/dashboard/tab-chat.js` (SR response badge)
-- Market review: `docs/MARKET_REVIEW.md` (competitive positioning and feature comparison)
-
-Key design constraint: Left and Right hemispheres must always be distinct instances (different model and/or different provider). This is validated and enforced at every gate — no competitor enforces multi-model isolation.
-
-## Documentation Map
-
-- Full-context research dossier: `PRISM_RESEARCH_DOCUMENTATION.md`
-- Product requirements: `PRISM_PRD.md`
-- Development execution details: `DEVELOPER_GUIDE.md`
-- Operator usage and controls: `USER_GUIDE.md`
-- Milestones and sequence: `ROADMAP.md`
-- Full docs index and reading order: `DOCS_INDEX.md`
-- SR competitive analysis: `MARKET_REVIEW.md`
-- Actionable work items: `TODO.md`
-- Version history: `../CHANGELOG.md`
-
-### Complete Documentation Catalog
-
-Core product and strategy:
-
-- `PRISM_PRD.md` — product requirements document
-- `ROADMAP.md` — milestones and delivery sequence
-- `PRISM_RESEARCH_DOCUMENTATION.md` — full research context and rationale
-
-Execution and operations:
-
-- `DEVELOPER_GUIDE.md` — development workflows and implementation guidance
-- `USER_GUIDE.md` — operator-facing usage and controls
-- `PHASE_EXECUTION_PLAN.md` — phased implementation and validation plan
-- `TEST_STRATEGY.md` — testing philosophy and coverage strategy
-- `PRODUCTION_RELEASE_RUNBOOK.md` — release and promotion checklist
-- `PRISM_BATON_PASS_VERBATIM.md` — project handoff context and continuity notes
-
-Navigation and indexing:
-
-- `DOCS_INDEX.md` — canonical docs index and recommended reading order
-- `MARKET_REVIEW.md` — competitive landscape analysis for Spectrum Refraction positioning
-- `TODO.md` — actionable near-term, medium-term, and aspirational work items
-- `../CHANGELOG.md` — version history and release notes
-
-Supporting startup/release scripts referenced by docs:
-
-- `start_web.bat` — primary Windows startup and preflight entrypoint
-- `release_strict_ready.bat` — strict release validation helper
-
-## Appendix: Computer Use Core + Business Security Alignment Gate (2026-03-25)
-
-Computer use is a core PRISM capability, not an auxiliary feature. PRISM defines computer use as the governed combination of browser automation, terminal virtualization, and container sandbox orchestration under policy-tier control.
-
-Canonical reference:
-
-- `docs/COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md`
-
-Business enterprise non-drift requirements:
-
-- Preserve mandatory governance tiers (`tier1_autonomous`, `tier2_conditional`, `tier3_approval`) for all computer-use pathways.
-- Preserve CAC accountability chain requirements on governed operations and lifecycle transitions.
-- Preserve sandboxed-execution, least-privilege, and sensitive-action confirmation controls for Business profile workflows.
-- Do not present external benchmark numbers as Prism-validated unless reproduced in first-party qualification artifacts.
-
-Implementation status labels for computer-use claims must use one of:
-
-- `Implemented`
-- `In Progress`
-- `Planned`
-- `Out of Scope`
-
-## References
+## 🔗 References
 
 1. Anthropic Engineering, *Building effective agents* (2024): <https://www.anthropic.com/engineering/building-effective-agents>
-2. Yao et al., *ReAct: Synergizing Reasoning and Acting in Language Models* (arXiv:2210.03629): <https://arxiv.org/abs/2210.03629>
-3. Schick et al., *Toolformer: Language Models Can Teach Themselves to Use Tools* (arXiv:2302.04761): <https://arxiv.org/abs/2302.04761>
-4. Shen et al., *HuggingGPT* (arXiv:2303.17580): <https://arxiv.org/abs/2303.17580>
-5. Model Context Protocol Introduction: <https://modelcontextprotocol.io/introduction>
+2. Yao et al., *ReAct: Synergizing Reasoning and Acting in Language Models* (arXiv:2210.03629)
+3. Schick et al., *Toolformer: Language Models Can Teach Themselves to Use Tools* (arXiv:2302.04761)
+4. Shen et al., *HuggingGPT* (arXiv:2303.17580)
+5. Model Context Protocol: <https://modelcontextprotocol.io/introduction>
 6. NIST AI Risk Management Framework: <https://www.nist.gov/itl/ai-risk-management-framework>
-7. PRISM Spectrum Refraction Market Review: `docs/MARKET_REVIEW.md` (competitive analysis of 6 frameworks, April 2026)
+
+---
+
+<p align="center">
+  <em>Built with conviction that AI autonomy and human oversight are complementary forces.</em><br/>
+  <strong>PRISM — Every autonomous action, observable. Every decision, traceable. Every commitment, unbreakable.</strong>
+</p>

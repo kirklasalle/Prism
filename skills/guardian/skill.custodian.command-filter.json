@@ -1,0 +1,55 @@
+{
+    "id": "skill.custodian.command-filter",
+    "version": "1.0.0",
+    "name": "Command Filter Self-Test",
+    "description": "Verify command filtering patterns block dangerous commands and allow safe commands",
+    "tags": [
+        "guardian",
+        "custodian",
+        "security",
+        "command-filter"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_command_execution"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 600000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "load-patterns",
+                "name": "Load command filter patterns",
+                "tools": [],
+                "action": "Load command filter regex patterns from configuration",
+                "transitions": {
+                    "success": "test-block",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "test-block",
+                "name": "Test dangerous command blocking",
+                "tools": [],
+                "action": "Verify dangerous commands (rm -rf, del /s, format, shutdown) are blocked",
+                "transitions": {
+                    "success": "test-allow",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "test-allow",
+                "name": "Test safe command allowance",
+                "tools": [],
+                "action": "Verify safe commands (dir, echo, whoami, node --version) are allowed",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

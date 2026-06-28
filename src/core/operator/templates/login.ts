@@ -301,11 +301,14 @@ export function loginHtml(port: number): string {
       </form>
       <div class="quick-fill">
       <p>Quick Evaluation Profiles</p>
+      <div style="background:rgba(249,115,22,0.12); border:1px solid rgba(249,115,22,0.3); color:#fdba74; padding:0.6rem 0.85rem; border-radius:0.6rem; font-size:0.8rem; margin-bottom:0.75rem; text-align:center;">
+        ⚠️ Local evaluation only — do not use these credentials in production or internet-facing deployments. Run the Setup Wizard to create secure operator accounts.
+      </div>
       <div class="quick-buttons">
-        <button type="button" class="badge-btn admin" onclick="fillCreds('admin@prism.ai', 'admin')" title="Autofill admin evaluation credentials">
+        <button type="button" class="badge-btn admin" onclick="fillCreds('admin@prism.ai', 'admin')" title="Autofill admin evaluation credentials (local dev only)">
           <span>Admin Profile</span>
         </button>
-        <button type="button" class="badge-btn testing" onclick="fillCreds('testing@prism.ai', 'testing')" title="Autofill testing operator credentials">
+        <button type="button" class="badge-btn testing" onclick="fillCreds('testing@prism.ai', 'testing')" title="Autofill testing operator credentials (local dev only)">
           <span>Testing Operator</span>
         </button>
       </div>

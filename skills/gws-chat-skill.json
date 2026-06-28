@@ -1,0 +1,100 @@
+{
+    "id": "prism.skill.gws_chat",
+    "version": "1.0.0",
+    "name": "GWS Chat Integration",
+    "description": "Google Chat: Manage Chat spaces and messages using the Google Workspace gws CLI. Covers spaces CRUD, messages, memberships, custom emojis, media uploads, and space events.",
+    "tags": [
+        "gws",
+        "google-workspace",
+        "chat",
+        "spaces",
+        "messages",
+        "memberships",
+        "google"
+    ],
+    "governance": {
+        "min_policy_tier": "tier-1",
+        "required_approvals": [
+            "shell_exec"
+        ],
+        "covenant_rules": [
+            "Prerequisite: gws-shared must be loaded first for authentication and global flags.",
+            "Always confirm with the user before deleting spaces, sending messages as the bot, or removing members.",
+            "Space search (spaces.search) requires admin access with use_admin_access=true — only use with explicit administrator intent.",
+            "Use gws schema chat.<resource>.<method> to inspect required parameters before constructing API calls."
+        ]
+    },
+    "triad_templates": {
+        "left_hemisphere": "Evaluate the Chat API method, space visibility constraints, member access levels, and message formatting rules for: {query}. Verify the operation respects Chat space membership boundaries.",
+        "right_hemisphere": "Design the exact gws chat command with proper resource, method, --params for space filters, --json for message bodies (cards, text), and --format for display: {query}.",
+        "main_hemisphere": "Coordinate Chat operations. Inspect method schema, construct command, confirm space mutations, execute, and present formatted Chat results: {query}."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "inspect_chat_schema",
+                "name": "Inspect Chat API Method Schema",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Use 'gws schema chat.<resource>.<method>' to inspect required parameters. Resources: customEmojis, media, spaces (completeImport, create, delete, findDirectMessage, get, list, patch, search, setup, members, messages, spaceEvents), users.spaces.",
+                "transitions": {
+                    "success": "construct_chat_command",
+                    "failed": "inspect_chat_schema"
+                }
+            },
+            {
+                "id": "construct_chat_command",
+                "name": "Construct Chat Command",
+                "tools": [],
+                "action": "Build the 'gws chat <resource> <method>' command. For spaces.list use appropriate filters. For messages include --json with text or card body. For media uploads use --upload flag with attachment file path.",
+                "transitions": {
+                    "success": "confirm_chat_mutations",
+                    "failed": "inspect_chat_schema"
+                }
+            },
+            {
+                "id": "confirm_chat_mutations",
+                "name": "Confirm Chat Mutations",
+                "tools": [],
+                "action": "For create, delete, update, setup operations on spaces, memberships, messages, or custom emojis, present the command to the user for confirmation. For read-only operations (get, list, findDirectMessage), proceed automatically.",
+                "transitions": {
+                    "success": "execute_chat_command",
+                    "failed": "construct_chat_command"
+                }
+            },
+            {
+                "id": "execute_chat_command",
+                "name": "Execute Chat Command",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Execute the gws chat command. Use --page-all for listing spaces or members. Handle media download for attachments.",
+                "transitions": {
+                    "success": "format_chat_output",
+                    "failed": "inspect_chat_schema"
+                }
+            },
+            {
+                "id": "format_chat_output",
+                "name": "Format and Present Chat Results",
+                "tools": [],
+                "action": "Format JSON output into readable summaries. For space lists show name, displayName, spaceType, memberCount. For messages show sender, text/card preview, timestamp. For member lists show name, role, type.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            },
+            {
+                "id": "completed",
+                "name": "Chat Operation Completed",
+                "tools": [],
+                "action": "Confirm the Chat operation result. Provide next-step suggestions such as sending a message to a space, adding members, or managing space settings.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            }
+        ]
+    }
+}

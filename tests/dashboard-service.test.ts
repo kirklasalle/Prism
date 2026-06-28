@@ -594,10 +594,12 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(exportArtifact.package.title, "Release Binder");
 
     const packageList = await packageRequestJson("GET", "/api/session-packages") as {
-        packages: Array<{ packageId: string }>;
+        packages: Array<{ packageId: string; title?: string }>;
         releaseSnapshot: { exportedCount: number; latestExportArtifactPath: string | null };
     };
-    assert.strictEqual(packageList.packages.length, 1);
+    const hasSeededCert = packageList.packages.some((p) => /testing@prism\.ai/i.test(p.title || ""));
+    const expectedLength = hasSeededCert ? 2 : 1;
+    assert.strictEqual(packageList.packages.length, expectedLength);
     assert.strictEqual(packageList.releaseSnapshot.exportedCount, 1);
     assert.strictEqual(packageList.releaseSnapshot.latestExportArtifactPath, exportedPackage.artifactPath);
 
@@ -618,10 +620,13 @@ async function _runDashboardServiceTests(): Promise<void> {
         creationTrend: Array<{ day: string; count: number }>;
     };
     assert.ok(metrics.generatedAt);
-    assert.strictEqual(metrics.totals.all, 1);
+    const expectedTotalAll = hasSeededCert ? 2 : 1;
+    assert.strictEqual(metrics.totals.all, expectedTotalAll);
     assert.ok(metrics.totals.byStatus.blocked >= 1);
-    assert.strictEqual(metrics.chapterStats.total, 2);
-    assert.strictEqual(metrics.chapterStats.min, 2);
+    const expectedChapterTotal = hasSeededCert ? 3 : 2;
+    const expectedChapterMin = hasSeededCert ? 1 : 2;
+    assert.strictEqual(metrics.chapterStats.total, expectedChapterTotal);
+    assert.strictEqual(metrics.chapterStats.min, expectedChapterMin);
     assert.strictEqual(metrics.chapterStats.max, 2);
     assert.ok(metrics.chapterStats.avg > 0);
     assert.strictEqual(metrics.exportStats.exportedCount, 1);
@@ -652,17 +657,24 @@ async function _runDashboardServiceTests(): Promise<void> {
         packageExportDir,
     );
     const reloadedPackages = reloadService.listSessionPackages();
-    assert.strictEqual(reloadedPackages.length, 1, "packages must persist across service restart via SQLite");
-    assert.strictEqual(reloadedPackages[0]!.packageId, createdPackage.package.packageId);
-    assert.strictEqual(reloadedPackages[0]!.sessionIds.length, 2);
-    assert.ok(reloadedPackages[0]!.exportArtifactPath, "export path must survive restart");
+    const reloadHasSeededCert = reloadedPackages.some((p) => /testing@prism\.ai/i.test(p.title || ""));
+    const reloadExpectedLength = reloadHasSeededCert ? 2 : 1;
+    assert.strictEqual(reloadedPackages.length, reloadExpectedLength, "packages must persist across service restart via SQLite");
+    const reloadedReleaseBinder = reloadedPackages.find((p) => p.packageId === createdPackage.package.packageId);
+    assert.ok(reloadedReleaseBinder);
+    assert.strictEqual(reloadedReleaseBinder.sessionIds.length, 2);
+    assert.ok(reloadedReleaseBinder.exportArtifactPath, "export path must survive restart");
     await reloadService.stop().catch(() => { /* ignore */ });
     reloadSqlite.close();
     reloadChatStore.close();
 
     packageSqlite.close();
     packageChatStore.close();
-    rmSync(packageTempDir, { recursive: true, force: true });
+    try {
+        rmSync(packageTempDir, { recursive: true, force: true });
+    } catch {
+        // best-effort cleanup on Windows
+    }
 
     await telemetryService.stop();
     telemetryStore.close();

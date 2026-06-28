@@ -252,7 +252,7 @@ async function runTests(): Promise<void> {
                 const elapsed = Date.now() - t0;
                 process.stdout.write(`FAIL ${elapsed}ms\n`);
                 failed++;
-                console.error(`   ✗ ${test.name}:`, error instanceof Error ? error.message : error);
+                console.error(`   ✗ ${test.name}:`, error instanceof Error ? error.stack : error);
             }
         }
     } finally {

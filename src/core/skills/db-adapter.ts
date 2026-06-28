@@ -29,16 +29,29 @@ export class SkillsDbAdapter {
       CREATE INDEX IF NOT EXISTS idx_prism_skill_sessions_chat
       ON prism_skill_sessions (parent_chat_session);
     `);
+
+    // Add new columns for Phase S CAC/Guardian integration
+    this.ensureColumn("prism_skill_sessions", "assignment_id", "TEXT");
+    this.ensureColumn("prism_skill_sessions", "guardian_triggered", "INTEGER DEFAULT 0");
+    this.ensureColumn("prism_skill_sessions", "executor", "TEXT DEFAULT 'agent_loop'");
+  }
+
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const rows = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (rows.some((row: any) => row.name === column)) return;
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 
   public saveSession(session: SkillSession): void {
     this.db.prepare(`
       INSERT OR REPLACE INTO prism_skill_sessions (
         session_id, skill_id, current_step, state_payload,
-        parent_chat_session, step_history, status, created_at, updated_at
+        parent_chat_session, step_history, status, created_at, updated_at,
+        assignment_id, guardian_triggered, executor
       ) VALUES (
         :sessionId, :skillId, :currentStep, :statePayload,
-        :parentChatSession, :stepHistory, :status, :createdAt, :updatedAt
+        :parentChatSession, :stepHistory, :status, :createdAt, :updatedAt,
+        :assignmentId, :guardianTriggered, :executor
       )
     `).run({
       sessionId: session.sessionId,
@@ -49,7 +62,10 @@ export class SkillsDbAdapter {
       stepHistory: JSON.stringify(session.stepHistory),
       status: session.status,
       createdAt: session.createdAt,
-      updatedAt: session.updatedAt
+      updatedAt: session.updatedAt,
+      assignmentId: session.assignmentId,
+      guardianTriggered: session.guardianTriggered ? 1 : 0,
+      executor: session.executor
     });
   }
 
@@ -108,6 +124,10 @@ export class SkillsDbAdapter {
       currentStep: String(row.current_step),
       statePayload,
       parentChatSession: row.parent_chat_session != null ? String(row.parent_chat_session) : null,
+      assignmentId: row.assignment_id != null ? String(row.assignment_id) : null,
+      accountabilityChain: null,
+      guardianTriggered: row.guardian_triggered === 1 || row.guardian_triggered === true,
+      executor: (row.executor as any) ?? "agent_loop",
       stepHistory,
       status: String(row.status) as SkillSessionStatus,
       createdAt: String(row.created_at),

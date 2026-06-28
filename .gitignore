@@ -19,8 +19,20 @@ screengrab/
 *.db
 *.db-shm
 *.db-wal
-test_out.txt
 
+# Test output files
+test_out.txt
+test_output*.txt
+test_output*.log
+
+# Scratch / debug scripts — developer-only, never commit
+scratch*
+scratch-*
+
+# Python bytecode — never commit
+__pycache__/
+*.pyc
+*.pyo
 
 # Local environment & secrets — never commit
 .env

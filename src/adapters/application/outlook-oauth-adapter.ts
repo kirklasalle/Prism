@@ -94,6 +94,8 @@ export class OutlookOAuthAdapter {
     }
 
     get isAvailable(): boolean {
+        const isMock = process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id";
+        if (isMock) return true;
         return this.msalModule !== null
             && !!process.env.PRISM_OUTLOOK_CLIENT_ID;
     }
@@ -112,6 +114,9 @@ export class OutlookOAuthAdapter {
         await this.initPromise;
         if (!this.isAvailable) {
             throw new Error("Outlook OAuth not available: @azure/msal-node not installed or credentials not configured.");
+        }
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return `http://localhost:7070/api/auth/outlook/callback?code=mock_outlook_code`;
         }
 
         // Generate PKCE pair
@@ -144,6 +149,17 @@ export class OutlookOAuthAdapter {
         await this.initPromise;
         if (!this.isAvailable) {
             return { available: false, connected: false, email: null, displayName: null, error: "@azure/msal-node not available" };
+        }
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            const oauthToken: OAuthToken = {
+                accessToken: "mock_outlook_access_token",
+                refreshToken: "mock_outlook_refresh_token",
+                expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+                scopes: GRAPH_SCOPES,
+                provider: PROVIDER_KEY,
+            };
+            this.tokenStore.set(PROVIDER_KEY, oauthToken);
+            return { available: true, connected: true, email: "mock.user@outlook.com", displayName: "Mock Outlook User" };
         }
 
         const clientId = process.env.PRISM_OUTLOOK_CLIENT_ID!;
@@ -229,6 +245,9 @@ export class OutlookOAuthAdapter {
         if (!this.isConnected) {
             return { available: true, connected: false, email: null, displayName: null };
         }
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return { available: true, connected: true, email: "mock.user@outlook.com", displayName: "Mock Outlook User" };
+        }
         try {
             const token = await this.getValidAccessToken();
             const profile = await this.getProfile(token);
@@ -255,7 +274,42 @@ export class OutlookOAuthAdapter {
      * @param maxResults Maximum number of messages (default: 25)
      * @param folder Folder name, default "inbox"
      */
+    /**
+     * List inbox messages, optionally filtered.
+     * @param maxResults Maximum number of messages (default: 25)
+     * @param folder Folder name, default "inbox"
+     */
     async listMessages(maxResults = 25, folder = "inbox"): Promise<OutlookMessage[]> {
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return [
+                {
+                    id: "outlook-msg-1",
+                    conversationId: "outlook-conv-1",
+                    from: "security@prism.local",
+                    to: ["mock.user@outlook.com"],
+                    subject: "Security Audit Notification",
+                    bodyPreview: "A review of the Guardian Agent access settings has been scheduled.",
+                    body: "Hello, a review of the Guardian Agent access settings has been scheduled.",
+                    receivedDateTime: new Date().toISOString(),
+                    isRead: false,
+                    hasAttachments: false,
+                    importance: "normal" as const,
+                },
+                {
+                    id: "outlook-msg-2",
+                    conversationId: "outlook-conv-2",
+                    from: "admin@prism.local",
+                    to: ["mock.user@outlook.com"],
+                    subject: "Platform Readiness Report Ready",
+                    bodyPreview: "PRISM platform readiness checks have completed successfully.",
+                    body: "Hello, PRISM platform readiness checks have completed successfully.",
+                    receivedDateTime: new Date(Date.now() - 3600 * 1000).toISOString(),
+                    isRead: true,
+                    hasAttachments: false,
+                    importance: "normal" as const,
+                },
+            ];
+        }
         const token = await this.getValidAccessToken();
         const url = `${GRAPH_BASE}/me/mailFolders/${folder}/messages?$top=${maxResults}&$orderby=receivedDateTime desc`;
         const data = await this.graphGet(url, token);
@@ -271,6 +325,12 @@ export class OutlookOAuthAdapter {
         body: string,
         isHtml = false
     ): Promise<OutlookSendResult> {
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return {
+                messageId: "outlook-msg-sent-" + Date.now(),
+                conversationId: "outlook-conv-sent-" + Date.now(),
+            };
+        }
         const token = await this.getValidAccessToken();
         const payload = {
             message: {
@@ -300,6 +360,9 @@ export class OutlookOAuthAdapter {
      * Mark a message as read.
      */
     async markAsRead(messageId: string): Promise<void> {
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return;
+        }
         const token = await this.getValidAccessToken();
         await fetch(`${GRAPH_BASE}/me/messages/${messageId}`, {
             method: "PATCH",
@@ -317,6 +380,16 @@ export class OutlookOAuthAdapter {
      * List upcoming calendar events.
      */
     async listEvents(maxResults = 50, timeMin = new Date().toISOString()): Promise<any[]> {
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return [
+                {
+                    id: "outlook-event-1",
+                    subject: "Prism Security Audit Review",
+                    start: { dateTime: new Date(Date.now() + 3600 * 1000).toISOString() },
+                    end: { dateTime: new Date(Date.now() + 7200 * 1000).toISOString() },
+                },
+            ];
+        }
         const token = await this.getValidAccessToken();
         const url = `${GRAPH_BASE}/me/calendar/events?$top=${maxResults}&$filter=start/dateTime ge '${timeMin}'&$orderby=start/dateTime`;
         const data = await this.graphGet(url, token);
@@ -327,6 +400,12 @@ export class OutlookOAuthAdapter {
      * Create a new calendar event.
      */
     async createEvent(event: any): Promise<any> {
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return {
+                id: "outlook-event-created-" + Date.now(),
+                ...event,
+            };
+        }
         const token = await this.getValidAccessToken();
         const resp = await fetch(`${GRAPH_BASE}/me/calendar/events`, {
             method: "POST",
@@ -347,6 +426,12 @@ export class OutlookOAuthAdapter {
      * Update an existing calendar event.
      */
     async updateEvent(eventId: string, event: any): Promise<any> {
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return {
+                id: eventId,
+                ...event,
+            };
+        }
         const token = await this.getValidAccessToken();
         const resp = await fetch(`${GRAPH_BASE}/me/calendar/events/${eventId}`, {
             method: "PATCH",
@@ -367,6 +452,9 @@ export class OutlookOAuthAdapter {
      * Delete a calendar event.
      */
     async deleteEvent(eventId: string): Promise<void> {
+        if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
+            return;
+        }
         const token = await this.getValidAccessToken();
         const resp = await fetch(`${GRAPH_BASE}/me/calendar/events/${eventId}`, {
             method: "DELETE",

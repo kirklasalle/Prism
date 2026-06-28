@@ -550,6 +550,27 @@ export class ChatSessionStore implements ISessionStore {
         });
     }
 
+    /**
+     * Update the operator email for a session. Used during login to claim
+     * orphaned Initialization Certificate sessions created during wizard setup
+     * before the operator had authenticated. This is part of the session
+     * ownership provenance chain — every session must have a verifiable
+     * operator email for accountability tracking.
+     */
+    updateSessionOperatorEmail(sessionId: string, operatorEmail: string): void {
+        this.assertSessionExists(sessionId);
+        this.db.prepare(`
+            UPDATE chat_sessions
+            SET operator_email = :operatorEmail,
+                updated_at = :updatedAt
+            WHERE session_id = :sessionId
+        `).run({
+            sessionId,
+            operatorEmail: operatorEmail.trim().toLowerCase(),
+            updatedAt: new Date().toISOString(),
+        });
+    }
+
     updateSessionLlmSelection(sessionId: string, providerId: string | null, model: string | null): void {
         this.assertSessionExists(sessionId);
         this.updateLlmSelectionStmt.run({

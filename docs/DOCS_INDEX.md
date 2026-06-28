@@ -8,7 +8,8 @@
 - **[STATUS.md](STATUS.md)** — Authoritative status: what's shipped, pending, gated
 - **[../audit.md](../audit.md)** — World-Class Complete Codebase Audit (2026-06-17)
 - **[AUDIT_TASK_LIST.md](AUDIT_TASK_LIST.md)** — Prioritized remediation task list
-- **[ROADMAP.md](ROADMAP.md)** — Updated with Phase R (Readiness)
+- **[ROADMAP.md](ROADMAP.md)** — Updated with Phase R (Readiness) + Phase S (Skills)
+- **[PRISM_SKILLS_ARCHITECTURE.md](PRISM_SKILLS_ARCHITECTURE.md)** — Guardian + CAC-native Skills architecture
 - **[../README.md](../README.md)** — Strategy, architecture, current capabilities
 - **[../CHANGELOG.md](../CHANGELOG.md)** — Version history
 

@@ -1,6 +1,7 @@
 import type { ProviderSecretStore } from "./provider-secret-store.js";
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { join as pathJoin } from "node:path";
+import { readPreferences } from "../config/workspace-resolver.js";
 
 // ── LLM Trace Logger ─────────────────────────────────────────────────────────
 const LLM_TRACE_DIR = pathJoin(process.cwd(), "logs");
@@ -341,7 +342,7 @@ function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null
     }
 
     // Google Gemini
-    if (lower.startsWith("gemini-")) {
+    if (lower.startsWith("gemini-") || lower.startsWith("models/")) {
         return "google";
     }
 
@@ -676,16 +677,29 @@ export class LlmProviderManager {
 
         this.setPersistedProviderSettings(settings);
 
-        const configuredProvider = (this.env.PRISM_LLM_PROVIDER ?? "").trim().toLowerCase();
+        let configuredProvider = "";
+        let configuredModel: string | null = null;
+        try {
+            const prefs = readPreferences();
+            if (prefs?.activeLlmProviderId) {
+                configuredProvider = prefs.activeLlmProviderId;
+                configuredModel = prefs.activeLlmModel || null;
+            }
+        } catch (_) {}
+
+        if (!configuredProvider) {
+            configuredProvider = (this.env.PRISM_LLM_PROVIDER ?? "").trim().toLowerCase();
+        }
+
         const selected = this.resolveProvider(configuredProvider) ?? this.findFirstEnabledProvider();
         this.activeProviderId = selected;
         this.activeModel = null;
 
         if (selected) {
             const defaults = this.getResolvedSettings(selected).defaultModels;
-            this.activeModel = defaults.length > 0
+            this.activeModel = configuredModel || (defaults.length > 0
                 ? (this.env.PRISM_LLM_MODEL?.trim() || defaults[0] || null)
-                : (this.env.PRISM_LLM_MODEL?.trim() || null);
+                : (this.env.PRISM_LLM_MODEL?.trim() || null));
         }
     }
 
@@ -871,6 +885,24 @@ export class LlmProviderManager {
                 return await fn();
             } catch (err) {
                 lastError = err;
+
+                // Fail fast on non-transient API / routing errors:
+                // 1. HTTP 400, 401, 403, 404, 413, 415, 422
+                // 2. Auth, credentials, permissions, API key, or billing block errors in message
+                // 3. Model not found, not supported, or unauthorized model access in message
+                const errMsg = String(err);
+                const isNonTransient =
+                    /request failed \((400|401|403|404|413|415|422)\)/i.test(errMsg) ||
+                    /api key/i.test(errMsg) ||
+                    /unauthorized/i.test(errMsg) ||
+                    /invalid key/i.test(errMsg) ||
+                    /not found/i.test(errMsg) ||
+                    /not supported/i.test(errMsg);
+
+                if (isNonTransient) {
+                    throw err;
+                }
+
                 if (attempt < maxRetries) {
                     const delay = Math.min(baseDelayMs * Math.pow(2, attempt), 4000);
                     await new Promise<void>((res) => setTimeout(res, delay));
@@ -916,7 +948,31 @@ export class LlmProviderManager {
         }
 
         const provider = catalog.providers.find((entry) => entry.id === catalog.activeProviderId);
-        if (!provider?.enabled) {
+
+        // If the selected provider is disabled or missing its API key, try to route to a local fallback
+        if ((!provider || !provider.enabled) && !input.disableRecovery) {
+            console.warn(`[PRISM][llm] Selected provider "${catalog.activeProviderId}" is disabled or missing API key. Attempting local fallback...`);
+            const fallback = this.findLocalFallback(catalog);
+            if (fallback) {
+                console.log(`[PRISM][llm] Routing request to local fallback provider "${fallback.providerId}" with model "${fallback.model}".`);
+                this.activityBus?.emit({
+                    sessionId: selection?.providerId ?? "llm",
+                    layer: "llm",
+                    operation: "llm.provider_fallback",
+                    status: "succeeded",
+                    details: {
+                        failedProvider: catalog.activeProviderId,
+                        failedModel: catalog.activeModel,
+                        fallbackProvider: fallback.providerId,
+                        fallbackModel: fallback.model,
+                        reason: "Selected provider disabled/missing API key",
+                    },
+                });
+                return this.generate(input, { providerId: fallback.providerId, model: fallback.model });
+            }
+        }
+
+        if (!provider || !provider.enabled) {
             return null;
         }
 
@@ -966,70 +1022,47 @@ export class LlmProviderManager {
                 this.generateWithOpenAiCompatible(settings, catalog.activeModel!, input));
         } catch (error) {
             const failedProvider = catalog.activeProviderId;
-            const isRemote = provider.kind === "remote";
+            const isRemote = provider && provider.kind === "remote";
             const errStr = String(error).toLowerCase();
             const isAuthError = errStr.includes("api key") || errStr.includes("unauthorized") || errStr.includes("401") || errStr.includes("403") || errStr.includes("forbidden") || errStr.includes("auth") || errStr.includes("invalid key");
-            if (isRemote && !input.disableRecovery && !isAuthError) {
-                console.warn(`[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Attempting same-provider recovery first...`);
+            if (isRemote && failedProvider && !input.disableRecovery) {
+                console.warn(`[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Error: ${String(error)}. Attempting recovery...`);
 
-                const sameProviderRecovery = await this.trySameProviderModelFallbacks(
-                    input,
-                    catalog,
-                    failedProvider,
-                    catalog.activeModel,
-                );
-                if (sameProviderRecovery) {
-                    return sameProviderRecovery;
-                }
-
-                let fallbackProvider: PrismLlmProviderId | null = null;
-                let fallbackModel: string | null = null;
-
-                // 1. Check llamacpp first (which manages GGUF slots)
-                const llamacppSnapshot = this.snapshotFor("llamacpp");
-                if (llamacppSnapshot.enabled && llamacppSnapshot.models.length > 0) {
-                    fallbackProvider = "llamacpp";
-                    fallbackModel = llamacppSnapshot.defaultModel || llamacppSnapshot.models[0];
-                }
-
-                // 2. Check ollama second
-                if (!fallbackProvider) {
-                    const ollamaSnapshot = this.snapshotFor("ollama");
-                    if (ollamaSnapshot.enabled && ollamaSnapshot.models.length > 0) {
-                        fallbackProvider = "ollama";
-                        fallbackModel = ollamaSnapshot.defaultModel || ollamaSnapshot.models[0];
+                // If not an auth error, try alternate models within the same remote provider first
+                if (!isAuthError) {
+                    const sameProviderRecovery = await this.trySameProviderModelFallbacks(
+                        input,
+                        catalog,
+                        failedProvider,
+                        catalog.activeModel,
+                    );
+                    if (sameProviderRecovery) {
+                        return sameProviderRecovery;
                     }
                 }
 
-                // 3. Check lmstudio third
-                if (!fallbackProvider) {
-                    const lmstudioSnapshot = this.snapshotFor("lmstudio");
-                    if (lmstudioSnapshot.enabled && lmstudioSnapshot.models.length > 0) {
-                        fallbackProvider = "lmstudio";
-                        fallbackModel = lmstudioSnapshot.defaultModel || lmstudioSnapshot.models[0];
-                    }
-                }
+                // Try local fallback
+                const fallback = this.findLocalFallback(catalog);
+                if (fallback) {
+                    console.log(`[PRISM][llm] Cloud provider recovery exhausted. Routing request to local fallback provider "${fallback.providerId}" with model "${fallback.model}".`);
+                    this.activityBus?.emit({
+                        sessionId: selection?.providerId ?? "llm",
+                        layer: "llm",
+                        operation: "llm.provider_fallback",
+                        status: "succeeded",
+                        details: {
+                            failedProvider,
+                            failedModel: catalog.activeModel,
+                            fallbackProvider: fallback.providerId,
+                            fallbackModel: fallback.model,
+                            error: String(error),
+                            reason: isAuthError ? "Auth failure on remote provider" : "Same-provider recovery exhausted",
+                        },
+                    });
 
-                // THIS IS THE BUG. DO NOT FALLBACK ACROSS PROVIDERS. Let the original error throw.
-                // if (fallbackProvider && fallbackModel) {
-                //     console.log(`[PRISM][llm] Same-provider recovery exhausted. Routing request to local provider "${fallbackProvider}" with model "${fallbackModel}".`);
-                //     this.activityBus?.emit({
-                //         sessionId: selection?.providerId ?? "llm",
-                //         layer: "llm",
-                //         operation: "llm.provider_fallback",
-                //         status: "succeeded",
-                //         details: {
-                //             failedProvider,
-                //             failedModel: catalog.activeModel,
-                //             fallbackProvider,
-                //             fallbackModel,
-                //             error: String(error),
-                //         },
-                //     });
-                //
-                //     // Recurse with local selection
-                //     return this.generate(input, { providerId: fallbackProvider, model: fallbackModel });
-                // }
+                    // Recurse with local selection
+                    return this.generate(input, { providerId: fallback.providerId, model: fallback.model });
+                }
             }
             throw error;
         }
@@ -2716,6 +2749,37 @@ export class LlmProviderManager {
         }
 
         return this.withExponentialRetry(() => this.generateWithOpenAiCompatible(settings, model, input));
+    }
+
+    private findLocalFallback(catalog: LlmProviderCatalog): { providerId: PrismLlmProviderId; model: string } | null {
+        // 1. Check llamacpp first (which manages GGUF slots)
+        const llamacppSnapshot = catalog.providers.find(p => p.id === "llamacpp");
+        if (llamacppSnapshot && llamacppSnapshot.enabled && llamacppSnapshot.models.length > 0) {
+            return {
+                providerId: "llamacpp",
+                model: llamacppSnapshot.defaultModel || llamacppSnapshot.models[0],
+            };
+        }
+
+        // 2. Check ollama second
+        const ollamaSnapshot = catalog.providers.find(p => p.id === "ollama");
+        if (ollamaSnapshot && ollamaSnapshot.enabled && ollamaSnapshot.models.length > 0) {
+            return {
+                providerId: "ollama",
+                model: ollamaSnapshot.defaultModel || ollamaSnapshot.models[0],
+            };
+        }
+
+        // 3. Check lmstudio third
+        const lmstudioSnapshot = catalog.providers.find(p => p.id === "lmstudio");
+        if (lmstudioSnapshot && lmstudioSnapshot.enabled && lmstudioSnapshot.models.length > 0) {
+            return {
+                providerId: "lmstudio",
+                model: lmstudioSnapshot.defaultModel || lmstudioSnapshot.models[0],
+            };
+        }
+
+        return null;
     }
 
     /**

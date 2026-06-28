@@ -1,0 +1,55 @@
+{
+    "id": "skill.custodian.mcp-health",
+    "version": "1.0.0",
+    "name": "MCP Health & Recovery",
+    "description": "Health-check MCP servers and restart stuck/down servers",
+    "tags": [
+        "guardian",
+        "custodian",
+        "monitoring",
+        "mcp"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_mcp_disruption"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 60000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "list-servers",
+                "name": "List MCP servers",
+                "tools": [],
+                "action": "Get list of all MCP servers and their states",
+                "transitions": {
+                    "success": "check-health",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "check-health",
+                "name": "Check server health",
+                "tools": [],
+                "action": "Identify servers in down/failed/retrying state",
+                "transitions": {
+                    "success": "attempt-recovery",
+                    "failed": "report-error"
+                }
+            },
+            {
+                "id": "attempt-recovery",
+                "name": "Attempt recovery",
+                "tools": [],
+                "action": "Restart failed servers using MCP adapter",
+                "transitions": {
+                    "success": "report",
+                    "failed": "report-error"
+                }
+            }
+        ]
+    }
+}

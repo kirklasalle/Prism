@@ -37,6 +37,8 @@ let advState = {
   availableModels: [],
   availableCharacters: [],
   certificateResult: null,
+  isProviderSaved: false,
+  providerModels: [],
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -214,6 +216,13 @@ window.advSelectProvider = function advSelectProvider(el, value) {
   advState.provider = value;
   document.querySelectorAll('#step-3 .wizard-option').forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
+  advState.isProviderSaved = false;
+
+  const modelField = document.getElementById('adv-provider-model-field');
+  if (modelField) modelField.style.display = 'none';
+  const saveBtn = document.getElementById('adv-provider-save-btn');
+  if (saveBtn) saveBtn.style.display = 'none';
+
   updateProviderKeyField();
 };
 
@@ -231,7 +240,12 @@ function updateProviderKeyField() {
   const keyInput = document.getElementById('adv-provider-api-key');
   if (keyInput) {
     keyInput.value = advState.apiKey = '';
-    keyInput.oninput = () => { advState.apiKey = keyInput.value; };
+    keyInput.oninput = () => {
+      advState.apiKey = keyInput.value;
+      advState.isProviderSaved = false;
+      const saveBtn = document.getElementById('adv-provider-save-btn');
+      if (saveBtn) saveBtn.style.display = 'none';
+    };
   }
 }
 
@@ -239,6 +253,12 @@ window.advTestProviderConnection = async function advTestProviderConnection() {
   const testResult = document.getElementById('adv-provider-test-result');
   if (!testResult) return false;
   testResult.innerHTML = '<span style="color:var(--muted);">Testing connection...</span>';
+
+  const modelField = document.getElementById('adv-provider-model-field');
+  const saveBtn = document.getElementById('adv-provider-save-btn');
+  if (modelField) modelField.style.display = 'none';
+  if (saveBtn) saveBtn.style.display = 'none';
+
   try {
     const data = await api('POST', '/api/llm/provider-test', {
       providerId: advState.provider,
@@ -246,9 +266,32 @@ window.advTestProviderConnection = async function advTestProviderConnection() {
     });
     if (data.ok || data.reachable) {
       testResult.innerHTML = '<span style="color:var(--accent-2);">✓ Provider is reachable.</span>';
-      if (data.models && data.models.length > 0 && !advState.model) {
-        advState.model = data.models[0];
+
+      const models = data.models || [];
+      advState.providerModels = models;
+
+      const modelSelect = document.getElementById('adv-provider-model');
+      if (modelSelect) {
+        if (models.length > 0) {
+          modelSelect.innerHTML = models.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+          advState.model = models[0];
+          modelSelect.value = models[0];
+        } else {
+          modelSelect.innerHTML = '<option value="">No models available (using provider default)</option>';
+          advState.model = '';
+        }
+        modelSelect.onchange = () => {
+          advState.model = modelSelect.value;
+        };
       }
+
+      if (modelField) modelField.style.display = 'block';
+      if (saveBtn) {
+        saveBtn.style.display = 'inline-block';
+        saveBtn.textContent = 'Save Configuration';
+        saveBtn.disabled = false;
+      }
+      applyAdvancedWizardHoverTooltips();
       return true;
     }
     testResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(data.error || data.reason || 'Could not reach provider.')}</span>`;
@@ -256,6 +299,58 @@ window.advTestProviderConnection = async function advTestProviderConnection() {
   } catch {
     testResult.innerHTML = '<span style="color:var(--danger);">✗ Connection test failed.</span>';
     return false;
+  }
+};
+
+window.advSaveProviderConfig = async function advSaveProviderConfig() {
+  const saveBtn = document.getElementById('adv-provider-save-btn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+  }
+
+  try {
+    const needsKey = PROVIDERS_NEEDING_KEY.includes(advState.provider);
+    if (advState.apiKey && needsKey) {
+      showToast("Saving API key to secrets...", "info");
+      await api('POST', '/api/llm/provider-secret', {
+        providerId: advState.provider,
+        apiKey: advState.apiKey,
+      });
+      showToast("API key saved.", "success");
+      await delay(500);
+    }
+
+    showToast("Saving provider settings...", "info");
+    const models = advState.providerModels || [];
+    const defaultModel = advState.model || models[0] || null;
+
+    await api('POST', '/api/llm/provider-settings', {
+      providerId: advState.provider,
+      models: models,
+      defaultModel: defaultModel,
+    });
+
+    showToast("Applying model to system...", "info");
+    await api('POST', '/api/llm/select', {
+      providerId: advState.provider,
+      model: defaultModel,
+    });
+
+    advState.isProviderSaved = true;
+    showToast("Provider and model configuration saved and applied!", "success");
+
+    const testResult = document.getElementById('adv-provider-test-result');
+    if (testResult) {
+      testResult.innerHTML = '<span style="color:var(--accent-2);">✓ Configuration saved successfully. System ready!</span>';
+    }
+  } catch (err) {
+    showToast(`Save failed: ${err.message || String(err)}`, "error");
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Configuration';
+    }
   }
 };
 
@@ -718,52 +813,14 @@ window.advWizardNext = async function advWizardNext() {
         }
       }
       if (currentStep === 3) {
-        showToast("Testing provider connection...", "info");
-        const reachable = await advTestProviderConnection();
-        if (!reachable) {
-          showToast("Connection test failed.", "error");
+        if (!advState.isProviderSaved) {
+          showToast("Please save the provider and model configuration before continuing.", "error");
+          const testResult = document.getElementById('adv-provider-test-result');
+          if (testResult) {
+            testResult.innerHTML = '<span style="color:var(--danger);">✗ Configuration must be saved to make system ready before continuing.</span>';
+          }
           return;
         }
-        showToast("Connection verified successfully!", "success");
-        await delay(500);
-
-        const needsKey = PROVIDERS_NEEDING_KEY.includes(advState.provider);
-        if (advState.apiKey && needsKey) {
-          showToast("Saving API key to secrets...", "info");
-          await api('POST', '/api/llm/provider-secret', {
-            providerId: advState.provider,
-            apiKey: advState.apiKey,
-          });
-          showToast("API key saved.", "success");
-          await delay(500);
-        }
-
-        showToast("Saving provider settings...", "info");
-        let testModels = [];
-        try {
-          const testRes = await api('POST', '/api/llm/provider-test', {
-            providerId: advState.provider,
-            apiKey: advState.apiKey || undefined,
-          });
-          if (testRes.models) {
-            testModels = testRes.models;
-          }
-        } catch { /* ignore */ }
-
-        const defaultModel = advState.model || testModels[0] || null;
-        await api('POST', '/api/llm/provider-settings', {
-          providerId: advState.provider,
-          models: testModels,
-          defaultModel: defaultModel,
-        });
-
-        showToast("Applying model to system...", "info");
-        await api('POST', '/api/llm/select', {
-          providerId: advState.provider,
-          model: defaultModel,
-        });
-        showToast("Model applied to system as ready.", "success");
-        await delay(500);
       }
       if (currentStep === 5) {
         const errEl = document.getElementById('adv-guardian-error');
@@ -991,7 +1048,7 @@ window.advWizardNext = async function advWizardNext() {
       const completeResult = await api('POST', '/api/setup/complete');
 
       nextBtn.disabled = false;
-      nextBtn.textContent = 'Launch Dashboard';
+      nextBtn.textContent = 'Operator Login';
       nextBtn.onclick = () => {
         const url = completeResult.token ? `/dashboard?token=${completeResult.token}` : '/dashboard';
         window.location.href = url;

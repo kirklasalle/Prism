@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { IRouteHandler } from "./types.js";
-import { DashboardService } from "../dashboard-service.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { loginHtml } from "../templates/login.js";
 import { readPreferences } from "../../config/workspace-resolver.js";
 

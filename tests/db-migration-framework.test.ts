@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { existsSync, unlinkSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { runMigrations, getSchemaVersion, listMigrations, type Migration } from "../src/core/database/migrations/framework.js";
+import { MIGRATIONS } from "../src/core/database/migrations/definitions.js";
 
 const TEST_DB = "./prism-test-migration-framework.db";
 
@@ -107,11 +108,7 @@ describe("Canonical Schema Migrations", () => {
     });
 
     it("applies canonical schema migration 001", () => {
-        // Dynamically import to avoid static dependency
-        const { runMigrations: rm } = require("../src/core/database/migrations/framework.js");
-        const { MIGRATIONS } = require("../src/core/database/migrations/definitions.js");
-
-        const applied = rm(db, MIGRATIONS);
+        const applied = runMigrations(db, MIGRATIONS);
         assert.ok(applied.length >= 1, "Expected at least migration 001 to apply");
         assert.equal(applied[0]!.id, 1);
         assert.equal(applied[0]!.description.includes("Initial schema"), true);

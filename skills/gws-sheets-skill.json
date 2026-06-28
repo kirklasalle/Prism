@@ -1,0 +1,100 @@
+{
+    "id": "prism.skill.gws_sheets",
+    "version": "1.0.0",
+    "name": "GWS Sheets Integration",
+    "description": "Google Sheets: Read and write spreadsheets using the Google Workspace gws CLI. Covers spreadsheet CRUD, batch updates, value ranges, developer metadata, and sheet-level operations.",
+    "tags": [
+        "gws",
+        "google-workspace",
+        "sheets",
+        "spreadsheets",
+        "data",
+        "values",
+        "google"
+    ],
+    "governance": {
+        "min_policy_tier": "tier-1",
+        "required_approvals": [
+            "shell_exec"
+        ],
+        "covenant_rules": [
+            "Prerequisite: gws-shared must be loaded first for authentication and global flags.",
+            "Always confirm with the user before overwriting spreadsheet data, deleting sheets, or running batch updates.",
+            "Use A1 notation for range specification — validate range syntax before constructing commands.",
+            "Use gws schema sheets.<resource>.<method> to inspect required parameters before constructing API calls."
+        ]
+    },
+    "triad_templates": {
+        "left_hemisphere": "Evaluate the Sheets API method, range notation, value formatting, and data validation rules for: {query}. Verify A1 notation syntax and grid coordinate boundaries.",
+        "right_hemisphere": "Design the exact gws sheets command with proper resource, method, --params for spreadsheetId/ranges, --json for valueRanges/batchUpdate requests, and --format for data display: {query}.",
+        "main_hemisphere": "Coordinate Sheets operations. Inspect method schema, construct command, confirm data mutations, execute, and present spreadsheet data results: {query}."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "inspect_sheets_schema",
+                "name": "Inspect Sheets API Method Schema",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Use 'gws schema sheets.<resource>.<method>' to inspect required parameters. Resources: spreadsheets (batchUpdate, create, get, getByDataFilter, developerMetadata, sheets, values).",
+                "transitions": {
+                    "success": "construct_sheets_command",
+                    "failed": "inspect_sheets_schema"
+                }
+            },
+            {
+                "id": "construct_sheets_command",
+                "name": "Construct Sheets Command",
+                "tools": [],
+                "action": "Build the 'gws sheets <resource> <method>' command. For values operations include --params with spreadsheetId and range (A1 notation). For batchUpdate include --json with requests array. For create include --json with spreadsheet properties.",
+                "transitions": {
+                    "success": "confirm_sheets_mutations",
+                    "failed": "inspect_sheets_schema"
+                }
+            },
+            {
+                "id": "confirm_sheets_mutations",
+                "name": "Confirm Sheets Mutations",
+                "tools": [],
+                "action": "For create, update, batchUpdate, or delete operations on data/sheets, present the command to the user for confirmation. For read-only operations (get, getByDataFilter), proceed automatically.",
+                "transitions": {
+                    "success": "execute_sheets_command",
+                    "failed": "construct_sheets_command"
+                }
+            },
+            {
+                "id": "execute_sheets_command",
+                "name": "Execute Sheets Command",
+                "tools": [
+                    "run_command"
+                ],
+                "action": "Execute the gws sheets command. Use --format table for value ranges to show data in a grid-like view. Use --format json for full spreadsheet metadata.",
+                "transitions": {
+                    "success": "format_sheets_output",
+                    "failed": "inspect_sheets_schema"
+                }
+            },
+            {
+                "id": "format_sheets_output",
+                "name": "Format and Present Sheets Results",
+                "tools": [],
+                "action": "Format the output into readable data presentation. For value ranges show data in a markdown table. For spreadsheet metadata show sheet names, grid dimensions, and properties. For batchUpdate results show the reply details.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            },
+            {
+                "id": "completed",
+                "name": "Sheets Operation Completed",
+                "tools": [],
+                "action": "Confirm the Sheets operation result. Provide next-step suggestions such as appending more data, requesting specific cell formatting, or creating charts.",
+                "transitions": {
+                    "success": "completed",
+                    "failed": "completed"
+                }
+            }
+        ]
+    }
+}

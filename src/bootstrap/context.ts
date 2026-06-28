@@ -46,6 +46,8 @@ import type { TerminalSessionAdapter } from "../adapters/application/terminal-se
 import type { ContainerSandboxAdapter } from "../adapters/application/container-sandbox-adapter.js";
 import type { ConsoleInterceptor } from "../core/logging/console-interceptor.js";
 import type { ExecutionProfile } from "../core/policy/execution-profiles.js";
+import type { GuardianAgent } from "../core/agents/guardian-agent.js";
+import type { SkillsEngine } from "../core/skills/skills-engine.js";
 
 /**
  * AppContext — the complete set of initialized runtime services.
@@ -120,4 +122,8 @@ export interface AppContext {
     // Dashboard
     dashboardService: DashboardService;
     selfReviewScheduler: SelfReviewScheduler;
+
+    // Guardian & Skills
+    guardianAgent: GuardianAgent;
+    skillsEngine: SkillsEngine;
 }

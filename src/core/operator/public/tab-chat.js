@@ -448,7 +448,14 @@ export
     }
   }
   if (!state.selectedSessionId && state.sessions.length > 0) {
-    state.selectedSessionId = state.sessions[0].sessionId;
+    // Prefer an Initialization Certificate session (provenance chain root)
+    // over a generic "New Session" on first load.
+    const initCertSession = state.sessions.find(s =>
+      /Initialization Certificate/i.test(s.title || '')
+    );
+    state.selectedSessionId = initCertSession
+      ? initCertSession.sessionId
+      : state.sessions[0].sessionId;
   }
   if (state.selectedSessionId && !state.sessions.some(session => session.sessionId === state.selectedSessionId)) {
     state.selectedSessionId = state.sessions[0] ? state.sessions[0].sessionId : null;
@@ -1106,15 +1113,25 @@ export
     }
   }
 
-  var html = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">'
+  var html = '<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2px;">'
     + '<div class="eyebrow" style="margin-bottom: 0;">Frontier Operator Console</div>'
+    + '<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">'
     + '<button id="system-shutdown-btn" onclick="triggerSystemShutdown()" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.45); color: #f87171; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 3px; text-transform: uppercase; letter-spacing: 0.5px; height: 18px; line-height: 1;" onmouseover="this.style.background=\'rgba(239, 68, 68, 0.28)\'; this.style.boxShadow=\'0 0 8px rgba(239, 68, 68, 0.25)\'" onmouseout="this.style.background=\'rgba(239, 68, 68, 0.12)\'; this.style.boxShadow=\'none\'">'
     + '<span>🛑</span> Shutdown'
     + '</button>'
+    + '<button id="system-logout-btn" onclick="triggerSystemLogout()" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.45); color: #f59e0b; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 3px; text-transform: uppercase; letter-spacing: 0.5px; height: 18px; line-height: 1;" onmouseover="this.style.background=\'rgba(245, 158, 11, 0.28)\'; this.style.boxShadow=\'0 0 8px rgba(245, 158, 11, 0.25)\'" onmouseout="this.style.background=\'rgba(245, 158, 11, 0.12)\'; this.style.boxShadow=\'none\'">'
+    + '<span>🚪</span> Logout'
+    + '</button>'
+    + '</div>'
     + '</div>'
     + '<h1>PRISM Chat</h1>'
-    + '<div class="brand-profile-badge ' + badgeClass + '">' + badgeLabel + '</div>'
-    + '<div class="brand-info-grid">'
+    + '<div class="brand-profile-badge ' + badgeClass + '">' + badgeLabel + '</div>';
+
+  if (state.principal && state.principal.email) {
+    html += '<div class="brand-profile-email" style="font-size: 10px; color: var(--fg-muted); margin-top: 4px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + escapeHtml(state.principal.email) + '</div>';
+  }
+
+  html += '<div class="brand-info-grid">'
     + '<div class="brand-info-item"><span class="brand-info-label">Env</span><br><span class="brand-info-value"><span class="brand-env-dot ' + envDotClass + '"></span>' + escapeHtml(envProfile) + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Mode</span><br><span class="brand-info-value">' + escapeHtml(s.mode || 'server') + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Uptime</span><br><span class="brand-info-value">' + formatUptime(s.uptimeSeconds) + '</span></div>'

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { IRouteHandler } from "./types.js";
-import { DashboardService } from "../dashboard-service.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { BrowserControlTool } from "../../../adapters/system/browser-control-tool.js";
 import {
   readPreferences,
@@ -231,10 +231,10 @@ export class SettingsHandler implements IRouteHandler {
         const isAdmin = authDisabled || (principal ? (principal.roles.includes("admin") || principal.roles.includes("root")) : true);
 
         let packages = service.listSessionPackages();
-        if (!isAdmin && principal) {
+        if (principal) {
           const operatorSessionIds = new Set(
             service.getChatStore().listSessions()
-              .filter(s => s.operatorEmail === principal.email)
+              .filter(s => s.operatorEmail === principal.email || /Initialization Certificate/i.test(s.title || ""))
               .map(s => s.sessionId)
           );
           packages = packages.filter(pkg =>
@@ -367,11 +367,16 @@ export class SettingsHandler implements IRouteHandler {
       try {
         const body = await service.readJsonBody<{ certificate: Record<string, unknown> }>(req);
         const cert = body.certificate ?? {};
+        const cac = (cert.cac || {}) as Record<string, unknown>;
+        const operatorEmail = typeof cac.operatorEmail === "string" && cac.operatorEmail !== "not set" && cac.operatorEmail !== "not configured"
+          ? cac.operatorEmail.trim().toLowerCase()
+          : undefined;
         const timestamp = new Date().toISOString();
 
         const session = service.createChatSession({
           title: "PRISM Initialization Certificate \u2014 " + timestamp,
           allowUnbound: true,
+          operatorEmail: operatorEmail || null,
         });
 
         const certLines: string[] = [
@@ -498,7 +503,7 @@ export class SettingsHandler implements IRouteHandler {
     if (method === "POST" && url === "/api/preferences/power-mode") {
       try {
         const body = await service.readJsonBody<{ powerMode?: string }>(req);
-        const mode = body.powerMode || "performance";
+        const mode = body.powerMode || "adaptive";
         if (mode !== "performance" && mode !== "eco" && mode !== "adaptive") {
           return this.json(res, 400, { error: "Invalid powerMode value. Must be 'performance', 'eco', or 'adaptive'." });
         }

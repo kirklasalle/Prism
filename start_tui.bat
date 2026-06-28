@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+mode con: cols=160 lines=50
 title PRISM TUI — Terminal Dashboard
 color 0F
 
@@ -20,7 +21,16 @@ if %ERRORLEVEL% neq 0 (
 
 :: ---- Port configuration ----
 set "TUI_PORT=%PRISM_DASHBOARD_PORT%"
-if "%TUI_PORT%"=="" set "TUI_PORT=7070"
+if "%TUI_PORT%"=="" (
+    powershell -Command "if (Get-NetTCPConnection -LocalPort 7071 -State Listen -ErrorAction SilentlyContinue) { exit 71 } else { exit 70 }"
+    if !errorlevel! equ 71 (
+        set "TUI_PORT=7071"
+        echo [PRISM TUI] Detected active server on port 7071.
+    ) else (
+        set "TUI_PORT=7070"
+        echo [PRISM TUI] No server detected on port 7071, defaulting to port 7070.
+    )
+)
 
 :: ---- Check if server is running ----
 echo [PRISM TUI] Checking PRISM server on port %TUI_PORT%...

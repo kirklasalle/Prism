@@ -187,7 +187,7 @@ export class IamRouteHandler implements IRouteHandler {
             }
             // POST /api/iam/logout
             if (path === "/api/iam/logout" && method === "POST") {
-                return this.handleLogout(req, res);
+                return await this.handleLogout(req, res, _service);
             }
 
             // CAC Authentication Routes
@@ -338,11 +338,41 @@ export class IamRouteHandler implements IRouteHandler {
         return this.json(res, 200, { principal });
     }
 
-    private handleLogout(req: IncomingMessage, res: ServerResponse): void {
+    private async handleLogout(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
         const principal = this.resolvePrincipalFromCookie(req);
         const cookieValue = this.sessions.readCookie(req);
         this.sessions.revoke(cookieValue);
         this.sessions.clearCookie(res);
+
+        // Disconnect Gmail and Outlook integrations
+        try {
+            if (typeof service.getGmailOAuth === "function") {
+                await service.getGmailOAuth().disconnect();
+            }
+        } catch (err) {
+            console.error("[PRISM][logout] Error disconnecting Gmail:", err);
+        }
+        try {
+            if (typeof service.getOutlookOAuth === "function") {
+                await service.getOutlookOAuth().disconnect();
+            }
+        } catch (err) {
+            console.error("[PRISM][logout] Error disconnecting Outlook:", err);
+        }
+
+        // Close all active browser sessions
+        try {
+            if (service && Array.isArray(service.tools)) {
+                const browserTool = service.tools.find(t => t.name === "browser_control") as any;
+                const mgr = browserTool?.getManager();
+                if (mgr) {
+                    await mgr.closeAll();
+                }
+            }
+        } catch (err) {
+            console.error("[PRISM][logout] Error closing browser sessions:", err);
+        }
+
         this.emitAuthEvent("iam.logout", "succeeded", {
             email: principal?.email ?? "unknown",
             userId: principal?.userId,
@@ -400,6 +430,75 @@ export class IamRouteHandler implements IRouteHandler {
             sessionId: session.id,
             message: `Operator ${email} authenticated successfully`,
         }, durationMs, user.email, user.id);
+
+        // ── Post-login: claim orphan Initialization Certificate sessions ──
+        // The wizard creates an Init Certificate session before the operator
+        // has logged in, so it may have operator_email = null or a placeholder
+        // like 'operator@prism.local'. We only claim the MOST RECENT orphan
+        // certificate created within 24h — older certificates belong to the
+        // operator who originally ran that wizard and are part of their
+        // provenance chain.
+        try {
+            const chatStore = service.getChatStore();
+            const allSessions = chatStore.listSessions();
+            const now = Date.now();
+            const CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+            // Find orphan Init Certificate sessions within the claim window,
+            // sorted by creation time (most recent first).
+            const claimable = allSessions
+                .filter(s => {
+                    const isInitCert = /Initialization Certificate/i.test(s.title || "");
+                    const isOrphan = !s.operatorEmail
+                        || s.operatorEmail === "operator@prism.local"
+                        || s.operatorEmail === "not set";
+                    const age = now - new Date(s.createdAt).getTime();
+                    return isInitCert && isOrphan && age < CLAIM_WINDOW_MS;
+                })
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            // Claim only the most recent one — it's the certificate from
+            // the wizard run that preceded this login.
+            if (claimable.length > 0) {
+                const target = claimable[0]!;
+                chatStore.updateSessionOperatorEmail(target.sessionId, email);
+                this.emitAuthEvent("iam.login.session_claimed", "succeeded", {
+                    email, sessionId: target.sessionId,
+                    previousEmail: target.operatorEmail || "(none)",
+                    message: `Claimed Initialization Certificate session for provenance chain`,
+                });
+            }
+        } catch (claimErr) {
+            // Non-fatal — session claiming must not block login
+            console.warn("[PRISM][login] Failed to claim Init Certificate sessions:", claimErr);
+        }
+
+        // ── Post-login: apply wizard LLM provider preferences ─────────────
+        // The wizard saves activeLlmProviderId and activeLlmModel to preferences.
+        // Apply them at login so the dashboard shows the correct provider.
+        try {
+            const { readPreferences } = await import("../../config/workspace-resolver.js");
+            const prefs = readPreferences();
+            if (prefs?.activeLlmProviderId) {
+                const llm = service.getLlmProviderManager();
+                if (llm.activeProviderId !== prefs.activeLlmProviderId
+                    || (prefs.activeLlmModel && llm.activeModel !== prefs.activeLlmModel)) {
+                    await llm.setActiveSelection(
+                        prefs.activeLlmProviderId,
+                        prefs.activeLlmModel ?? undefined,
+                    );
+                    this.emitAuthEvent("iam.login.llm_restored", "succeeded", {
+                        email,
+                        providerId: prefs.activeLlmProviderId,
+                        model: prefs.activeLlmModel ?? "(default)",
+                        message: `Restored LLM provider from wizard preferences`,
+                    });
+                }
+            }
+        } catch (llmErr) {
+            // Non-fatal — provider restore must not block login
+            console.warn("[PRISM][login] Failed to restore LLM preferences:", llmErr);
+        }
 
         // Return the dashboard auth token so the login page can redirect
         // to /dashboard?token=<token> for the initial authenticated load.

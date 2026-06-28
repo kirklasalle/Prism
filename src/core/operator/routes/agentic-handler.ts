@@ -4,7 +4,7 @@ import { join, basename, dirname } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { IRouteHandler } from "./types.js";
-import { DashboardService } from "../dashboard-service.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { workspacePath } from "../../config/workspace-resolver.js";
 
 export class AgenticHandler implements IRouteHandler {
@@ -20,8 +20,10 @@ export class AgenticHandler implements IRouteHandler {
     if (pathname.startsWith("/api/self-review/")) return true;
     if (pathname.startsWith("/api/release/")) return true;
     if (pathname.startsWith("/api/approval/")) return true;
-    if (pathname.startsWith("/api/actions/")) return true;
-    if (pathname.startsWith("/api/models/")) return true;
+    if (pathname.startsWith("/api/actions/") || pathname === "/api/actions" || pathname === "/api/action-history") return true;
+    if (pathname.startsWith("/api/agents")) return true;
+    if (pathname.startsWith("/api/swarms")) return true;
+    if (pathname.startsWith("/api/hardware/swarm")) return true;
     
     // Legacy approval endpoints
     if (method === "POST" && (
@@ -555,198 +557,213 @@ export class AgenticHandler implements IRouteHandler {
       }
     }
 
-    // 21. GET /api/models/gguf
-    if (method === "GET" && url === "/api/models/gguf") {
-      try {
-        const models: Array<{ name: string; path: string; source: string }> = [];
-        const searchPaths = [
-          { path: process.cwd(), source: "workspace" },
-          { path: join(process.cwd(), "models"), source: "workspace-models" },
-          { path: join(homedir(), ".ollama", "models"), source: "ollama" },
-        ];
-
-        for (const entry of searchPaths) {
-          service.scanForGgufs(entry.path, entry.source, models);
-        }
-
-        const ollamaModels = await service.fetchOllamaTags();
-        for (const om of ollamaModels) {
-          models.push({ name: om.name, path: om.name, source: om.source });
-        }
-
-        return this.json(res, 200, { models });
-      } catch (err: any) {
-        return this.json(res, 500, { error: err.message });
-      }
-    }
-
-    // 22. GET /api/models/download/status
-    if (method === "GET" && url === "/api/models/download/status") {
-      return this.json(res, 200, { downloads: Array.from(service.getDownloadStatus().values()) });
-    }
-
-    // 23. POST /api/models/download
-    if (method === "POST" && url === "/api/models/download") {
-      const body = await service.readJsonBody<{ url?: string; name?: string; mmprojUrl?: string; mmprojName?: string }>(req);
-      const dlUrl = body.url;
-      const name = body.name;
-      const mmprojUrl = body.mmprojUrl;
-      const mmprojName = body.mmprojName;
-      if (!dlUrl || !name) return this.json(res, 400, { error: "Missing url or name" });
-
-      const modelsDir = join(process.cwd(), "models");
-      if (!existsSync(modelsDir)) mkdirSync(modelsDir, { recursive: true });
-
-      const modelId = randomUUID();
-      service.getDownloadStatus().set(modelId, {
-        id: modelId,
-        url: dlUrl,
-        fileName: name,
-        status: "pending",
-        progress: 0,
-        downloadedBytes: 0,
-        totalBytes: 0,
-        startTime: new Date().toISOString()
+    // GET /api/agents
+    if (method === "GET" && url === "/api/agents") {
+      const agentLifecycle = service.getAgentLifecycle();
+      const swarmCoordinator = service.getSwarmCoordinator();
+      const agentTelemetry = service.getAgentTelemetry();
+      const agents = agentLifecycle?.list() ?? [];
+      const swarms = swarmCoordinator?.list() ?? [];
+      const telemetry = agentTelemetry?.getGlobalStats() ?? { activeAgents: 0, tasksCompleted: 0, tasksFailed: 0, avgResponseMs: 0, totalDispatches: 0 };
+      const agentSummaries = agents.map((a: any) => {
+        const summary = agentTelemetry?.getAgentSummary(a.agentId);
+        const modelOverride = service.getLlmProviders().getAgentModelOverride(a.agentId);
+        return {
+          ...a,
+          modelOverride: a.modelOverride ?? modelOverride,
+          telemetry: summary ?? null,
+        };
       });
-
-      service.downloadFile(modelId, dlUrl, join(modelsDir, name)).catch(() => { });
-
-      if (mmprojUrl && mmprojName) {
-        const mmId = randomUUID();
-        service.getDownloadStatus().set(mmId, {
-          id: mmId,
-          url: mmprojUrl,
-          fileName: mmprojName,
-          status: "pending",
-          progress: 0,
-          downloadedBytes: 0,
-          totalBytes: 0,
-          startTime: new Date().toISOString()
-        });
-        service.downloadFile(mmId, mmprojUrl, join(modelsDir, mmprojName)).catch(() => { });
-      }
-
-      return this.json(res, 200, { message: "Downloads initiated", modelId });
+      return this.json(res, 200, { agents: agentSummaries, swarms, telemetry });
     }
 
-    // 24. POST /api/models/pull
-    if (method === "POST" && url === "/api/models/pull") {
+    // POST /api/agents/launch
+    if (method === "POST" && url === "/api/agents/launch") {
+      const agentLifecycle = service.getAgentLifecycle();
+      if (!agentLifecycle) return this.json(res, 503, { error: "Agent lifecycle not initialized" });
+      const body = await service.readJsonBody<{ role?: string; description?: string; lifecycle?: string; providerId?: string; model?: string }>(req);
+      const role = (body.role ?? "chat") as import("../model-capability-matrix.js").TaskRole;
+      const instance = agentLifecycle.spawn({
+        role,
+        description: body.description,
+        lifecycle: (body.lifecycle as "ephemeral" | "semi-permanent" | "permanent") ?? "ephemeral",
+        modelOverride: body.providerId && body.model ? { providerId: body.providerId, model: body.model } : undefined,
+      });
+      // Sync model override to LLM provider routing
+      if (instance.modelOverride) {
+        service.getLlmProviders().setAgentModelOverride(instance.agentId, instance.modelOverride.providerId, instance.modelOverride.model);
+      }
+      // Register in agent pool
+      service.getAgentPool()?.register({ agentId: instance.agentId, role: instance.role, description: instance.description, systemContext: instance.systemContext });
+      return this.json(res, 201, { agent: instance });
+    }
+
+    // POST /api/agents/stop
+    if (method === "POST" && url === "/api/agents/stop") {
+      const agentLifecycle = service.getAgentLifecycle();
+      if (!agentLifecycle) return this.json(res, 503, { error: "Agent lifecycle not initialized" });
+      const body = await service.readJsonBody<{ agentId: string }>(req);
+      service.getLlmProviders().clearAgentModelOverride(body.agentId);
+      service.getAgentPool()?.unregister(body.agentId);
+      const stopped = agentLifecycle.stop(body.agentId);
+      return this.json(res, 200, { agentId: body.agentId, stopped });
+    }
+
+    // POST /api/agents/:agentId/model
+    if (method === "POST" && url?.match(/^\/api\/agents\/([^/]+)\/model$/)) {
+      const agentLifecycle = service.getAgentLifecycle();
+      if (!agentLifecycle) return this.json(res, 503, { error: "Agent lifecycle not initialized" });
+      const agentId = url.split("/")[3]!;
+      const body = await service.readJsonBody<{ providerId: string; model: string }>(req);
+      agentLifecycle.setModelOverride(agentId, { providerId: body.providerId, model: body.model });
+      service.getLlmProviders().setAgentModelOverride(agentId, body.providerId, body.model);
+      return this.json(res, 200, { agentId, modelOverride: { providerId: body.providerId, model: body.model } });
+    }
+
+    // POST /api/agents/:agentId/promote
+    if (method === "POST" && url?.match(/^\/api\/agents\/([^/]+)\/promote$/)) {
+      const agentLifecycle = service.getAgentLifecycle();
+      if (!agentLifecycle) return this.json(res, 503, { error: "Agent lifecycle not initialized" });
+      const agentId = url.split("/")[3]!;
+      const newTier = agentLifecycle.promote(agentId);
+      if (!newTier) return this.json(res, 404, { error: "Agent not found" });
+      return this.json(res, 200, { agentId, lifecycle: newTier });
+    }
+
+    // POST /api/agents/:agentId/demote
+    if (method === "POST" && url?.match(/^\/api\/agents\/([^/]+)\/demote$/)) {
+      const agentLifecycle = service.getAgentLifecycle();
+      if (!agentLifecycle) return this.json(res, 503, { error: "Agent lifecycle not initialized" });
+      const agentId = url.split("/")[3]!;
+      const newTier = agentLifecycle.demote(agentId);
+      if (!newTier) return this.json(res, 404, { error: "Agent not found" });
+      return this.json(res, 200, { agentId, lifecycle: newTier });
+    }
+
+    // GET /api/agents/telemetry
+    if (method === "GET" && url === "/api/agents/telemetry") {
+      const agentLifecycle = service.getAgentLifecycle();
+      const agentTelemetry = service.getAgentTelemetry();
+      const summaries = agentTelemetry?.getAllSummaries() ?? [];
+      const frequency = agentTelemetry?.getDispatchFrequency() ?? [];
+      const recommendations = agentLifecycle && agentTelemetry
+        ? agentTelemetry.getPromotionRecommendations(agentLifecycle)
+        : [];
+      const global = agentTelemetry?.getGlobalStats() ?? { activeAgents: 0, tasksCompleted: 0, tasksFailed: 0, avgResponseMs: 0, totalDispatches: 0 };
+      return this.json(res, 200, { summaries, frequency, recommendations, global });
+    }
+
+    // POST /api/swarms/create
+    if (method === "POST" && url === "/api/swarms/create") {
+      const swarmCoordinator = service.getSwarmCoordinator();
+      if (!swarmCoordinator) return this.json(res, 503, { error: "Swarm coordinator not initialized" });
+      const body = await service.readJsonBody<{ topology?: string; goal?: string; agentIds?: string[]; timeoutMs?: number }>(req);
+      const swarm = swarmCoordinator.create({
+        topology: (body.topology as "mesh" | "star" | "pipeline" | "broadcast") ?? "broadcast",
+        goal: body.goal ?? "",
+        agentIds: body.agentIds ?? [],
+        timeoutMs: body.timeoutMs,
+      });
+      // Start execution asynchronously
+      void swarmCoordinator.execute(swarm.swarmId).catch(() => { });
+      return this.json(res, 201, { swarm });
+    }
+
+    // GET /api/swarms
+    if (method === "GET" && url === "/api/swarms") {
+      const swarmCoordinator = service.getSwarmCoordinator();
+      const swarms = swarmCoordinator?.list() ?? [];
+      return this.json(res, 200, { swarms });
+    }
+
+    // POST /api/swarms/:swarmId/stop
+    if (method === "POST" && url?.match(/^\/api\/swarms\/([^/]+)\/stop$/)) {
+      const swarmCoordinator = service.getSwarmCoordinator();
+      if (!swarmCoordinator) return this.json(res, 503, { error: "Swarm coordinator not initialized" });
+      const swarmId = url.split("/")[3]!;
+      const stopped = swarmCoordinator.stop(swarmId);
+      return this.json(res, 200, { swarmId, stopped });
+    }
+
+    // GET /api/hardware/swarm
+    if (method === "GET" && url === "/api/hardware/swarm") {
       try {
-        const body = await service.readJsonBody<{ tag: string }>(req);
-        const tag = body?.tag;
-        if (!tag || typeof tag !== "string" || !/^[\w.:\/-]+$/.test(tag)) {
-          return this.json(res, 400, { error: "Invalid or missing Ollama tag" });
+        const llamaSupervisor = service.getLlamaSupervisor();
+        if (!llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        return this.json(res, 200, llamaSupervisor.getSnapshot());
+      } catch (error) {
+        return this.json(res, 500, { error: String(error) });
+      }
+    }
+
+    // POST /api/hardware/swarm/load
+    if (method === "POST" && url === "/api/hardware/swarm/load") {
+      try {
+        const llamaSupervisor = service.getLlamaSupervisor();
+        if (!llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        const body = await service.readJsonBody<{ modelPath?: string; modelAlias?: string; slotId?: string | number; model?: string; ctxSize?: number }>(req);
+
+        let modelAlias = body.modelAlias || body.model;
+        let modelPath = body.modelPath;
+
+        if (!modelAlias) {
+          return this.json(res, 400, { error: "Missing required model/modelAlias field." });
         }
-        const pullId = randomUUID();
-        service.getDownloadStatus().set(pullId, {
-          id: pullId,
-          url: `ollama://${tag}`,
-          fileName: tag,
-          status: "downloading",
-          progress: 0,
-          downloadedBytes: 0,
-          totalBytes: 0,
-          startTime: new Date().toISOString(),
-        });
-        const { exec: execCb } = await import("node:child_process");
-        execCb(`ollama pull ${tag}`, { timeout: 600000 }, (err, stdout, stderr) => {
-          const status = service.getDownloadStatus().get(pullId);
-          if (!status) return;
-          if (err) {
-            status.status = "error";
-            status.error = stderr?.trim() || err.message;
+
+        if (!modelPath) {
+          modelPath = llamaSupervisor.getModelPath(modelAlias) || undefined;
+        }
+
+        if (!modelPath) {
+          if (body.model && (body.model.endsWith(".gguf") || body.model.includes("/") || body.model.includes("\\"))) {
+            modelPath = body.model;
+            modelAlias = body.model.replace(/\.gguf$/i, "").split(/[/\\]/).pop();
           } else {
-            status.status = "completed";
-            status.progress = 100;
+            return this.json(res, 400, { error: `Model "${modelAlias}" not found in local models directory.` });
           }
-        });
-        return this.json(res, 200, { message: "Ollama pull initiated", pullId });
+        }
+
+        const slot = await llamaSupervisor.loadModel(modelPath!, modelAlias!, body.ctxSize);
+        return this.json(res, 200, slot);
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
       }
     }
 
-    // 25. DELETE /api/models/delete
-    if (method === "DELETE" && url === "/api/models/delete") {
+    // POST /api/hardware/swarm/unload
+    if (method === "POST" && url === "/api/hardware/swarm/unload") {
       try {
-        const body = await service.readJsonBody<{ path: string; source: string }>(req);
-        if (!body?.path || !body?.source) {
-          return this.json(res, 400, { error: "Missing path or source" });
+        const llamaSupervisor = service.getLlamaSupervisor();
+        if (!llamaSupervisor) return this.json(res, 404, { error: "LlamaCppSupervisor disabled" });
+        const body = await service.readJsonBody<{ modelAlias?: string; slotId?: string | number }>(req);
+
+        let slot = null;
+        if (body.modelAlias) {
+          slot = llamaSupervisor.getSnapshot().find((s: any) => s.modelAlias === body.modelAlias);
+        } else if (body.slotId !== undefined) {
+          const idNum = Number(body.slotId);
+          slot = llamaSupervisor.getSnapshot().find((s: any) => s.id === idNum);
         }
 
-        const { path: modelPath, source } = body;
-
-        if (source === "ollama") {
-          const { exec: execCb } = await import("node:child_process");
-          await new Promise((resolve, reject) => {
-            execCb(`ollama rm ${modelPath}`, { timeout: 60000 }, (err, stdout, stderr) => {
-              if (err) reject(new Error(stderr?.trim() || err.message));
-              else resolve(stdout);
-            });
-          });
-          return this.json(res, 200, { message: `Ollama model ${modelPath} removed successfully` });
-        } else {
-          if (!existsSync(modelPath)) {
-            return this.json(res, 404, { error: "Model file not found on disk" });
-          }
-          if (statSync(modelPath).isDirectory()) {
-            return this.json(res, 400, { error: "Path is a directory, not a file" });
-          }
-          unlinkSync(modelPath);
-          return this.json(res, 200, { message: `Model file ${basename(modelPath)} deleted successfully` });
+        if (!slot) {
+          return this.json(res, 400, { error: "Could not find matching slot to unload." });
         }
-      } catch (error: any) {
-        return this.json(res, 500, { error: error.message || String(error) });
-      }
-    }
 
-    // 26. GET /api/models/recommended
-    if (method === "GET" && url === "/api/models/recommended") {
-      return this.json(res, 200, { custom: service.customRecommendedModels });
-    }
-
-    // 27. POST /api/models/recommended
-    if (method === "POST" && url === "/api/models/recommended") {
-      try {
-        const body = await service.readJsonBody<{ name: string; fileName: string; path: string; source: string }>(req);
-        if (!body?.fileName || !body?.path) {
-          return this.json(res, 400, { error: "Missing fileName or path" });
+        if (slot.modelAlias) {
+          await llamaSupervisor.unloadModel(slot.modelAlias);
         }
-        if (service.customRecommendedModels.some(m => m.fileName === body.fileName)) {
-          return this.json(res, 409, { error: "Model already in recommended list" });
-        }
-        let sizeStr = "unknown";
-        try {
-          const st = statSync(body.path);
-          const gb = st.size / (1024 * 1024 * 1024);
-          sizeStr = gb >= 1 ? gb.toFixed(1) + " GB" : (st.size / (1024 * 1024)).toFixed(0) + " MB";
-        } catch { /* remote/ollama */ }
-        service.customRecommendedModels.push({
-          name: body.name || body.fileName.replace(/\.gguf$/i, ""),
-          fileName: body.fileName,
-          size: sizeStr,
-          path: body.path,
-          source: body.source || "workspace",
-          addedAt: new Date().toISOString(),
-        });
-        service.saveCustomRecommendedModels();
-        return this.json(res, 200, { custom: service.customRecommendedModels });
+        return this.json(res, 200, { unloaded: true });
       } catch (error) {
         return this.json(res, 500, { error: String(error) });
       }
     }
 
-    // 28. DELETE /api/models/recommended
-    if (method === "DELETE" && url === "/api/models/recommended") {
-      try {
-        const body = await service.readJsonBody<{ fileName: string }>(req);
-        if (!body?.fileName) return this.json(res, 400, { error: "Missing fileName" });
-        service.customRecommendedModels = service.customRecommendedModels.filter(m => m.fileName !== body.fileName);
-        service.saveCustomRecommendedModels();
-        return this.json(res, 200, { custom: service.customRecommendedModels });
-      } catch (error) {
-        return this.json(res, 500, { error: String(error) });
-      }
+    if (method === "GET" && url === "/api/actions") {
+      return this.json(res, 200, service.listActions());
+    }
+
+    if (method === "GET" && url === "/api/action-history") {
+      return this.json(res, 200, service.listActionHistory());
     }
   }
 

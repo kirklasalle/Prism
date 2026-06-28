@@ -98,6 +98,43 @@ export async function runServerMode(ctx: AppContext): Promise<void> {
         agentLifecycle.stopReaper();
         selfReviewScheduler.stop();
 
+        console.log("[PRISM][system] [TRACE] Terminating all active terminal adapter sessions...");
+        try {
+            await ctx.terminalAdapter.stopAllSessions();
+            console.log("[PRISM][system] [TRACE] Terminal sessions terminated successfully.");
+        } catch (err) {
+            console.warn("[PRISM][system] [WARN] Best-effort terminal sessions cleanup failed:", err);
+        }
+
+        console.log("[PRISM][system] [TRACE] Terminating all active container sandboxes...");
+        try {
+            await ctx.containerAdapter.stopAllContainers();
+            console.log("[PRISM][system] [TRACE] Container sandboxes terminated successfully.");
+        } catch (err) {
+            console.warn("[PRISM][system] [WARN] Best-effort container sandboxes cleanup failed:", err);
+        }
+
+        console.log("[PRISM][system] [TRACE] Disconnecting all Gmail and Outlook integrations...");
+        try {
+            await ctx.gmailOAuth.disconnect();
+            await ctx.outlookOAuth.disconnect();
+            console.log("[PRISM][system] [TRACE] OAuth integrations disconnected successfully.");
+        } catch (err) {
+            console.warn("[PRISM][system] [WARN] Best-effort OAuth cleanup failed:", err);
+        }
+
+        console.log("[PRISM][system] [TRACE] Terminating all active browser control sessions...");
+        try {
+            const browserTool = ctx.dashboardService.tools.find(t => t.name === "browser_control") as any;
+            const mgr = browserTool?.getManager();
+            if (mgr) {
+                await mgr.closeAll();
+                console.log("[PRISM][system] [TRACE] Browser control sessions terminated successfully.");
+            }
+        } catch (err) {
+            console.warn("[PRISM][system] [WARN] Best-effort browser cleanup failed:", err);
+        }
+
         console.log("[PRISM][system] [TRACE] Disconnecting all active MCP client interfaces...");
         mcpAdapter.disconnectAll();
 
@@ -112,6 +149,40 @@ export async function runServerMode(ctx: AppContext): Promise<void> {
         console.log("[PRISM][system] [TRACE] Terminating operator console HTTP/WS dashboard service...");
         ctx.dashboardService.stop();
         console.log("[PRISM][system] [INFO] Graceful shutdown process complete. System offline.");
+
+        activityBus.emit({
+            operation: "system.shutdown",
+            status: "succeeded",
+            sessionId: "system",
+            layer: "agent",
+            details: {},
+        });
+
+        // Terminate batch/terminal windows and close processes
+        setTimeout(async () => {
+            console.log("[PRISM][system] [INFO] Closing console windows and process tree...");
+            const ppid = process.ppid;
+            const pid = process.pid;
+            if (process.platform === "win32") {
+                try {
+                    const { exec } = await import("node:child_process");
+                    exec(`taskkill /PID ${ppid} /F /T`, () => {
+                        exec(`taskkill /PID ${pid} /F /T`, () => {
+                            process.exit(0);
+                        });
+                    });
+                } catch {
+                    process.exit(0);
+                }
+            } else {
+                try {
+                    process.kill(-ppid, "SIGKILL");
+                } catch {
+                    try { process.kill(ppid, "SIGKILL"); } catch {}
+                }
+                process.exit(0);
+            }
+        }, 1000);
     });
 }
 
