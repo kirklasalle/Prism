@@ -1,0 +1,18 @@
+# PRISM Codeowners File
+# Details: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners for core code and configs
+*                                        @kirklasalle
+
+# Enterprise / Commercial modules (require strict approval and security audits)
+src/enterprise/                         @kirklasalle
+src/core/iam/sso/                       @kirklasalle
+src/core/iam/cac/                       @kirklasalle
+
+# Governance & policy engine changes (safety critical)
+src/core/governance/                    @kirklasalle
+src/core/policy/                        @kirklasalle
+AGENTIC_PRIME_DIRECTIVE.md              @kirklasalle
+AGENTIC_SACRED_COVENANT.md              @kirklasalle
+Permanent_Active_Directives.txt         @kirklasalle
+src/core/security/                      @kirklasalle
