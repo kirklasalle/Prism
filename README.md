@@ -5,6 +5,7 @@
   <img src="https://img.shields.io/badge/tests-185+_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
   <img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&labelColor=0a0a0f" alt="CI" />
 </p>
+https://youtu.be/Q16a-NMSoeI?si=ijSiqTazwBqKnYKY
 
 # PRISM — Governance-Native Agents-as-a-Service Runtime
 
