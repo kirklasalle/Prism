@@ -5,7 +5,11 @@
   <img src="https://img.shields.io/badge/tests-185+_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
   <img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&labelColor=0a0a0f" alt="CI" />
 </p>
-[![Watch the video](https://img.youtube.com/vi/Q16a-NMSoeI/maxresdefault.jpg)](https://youtu.be/Q16a-NMSoeI?si=ijSiqTazwBqKnYKY)
+<p align="center">
+  <a href="https://youtu.be/Q16a-NMSoeI?si=ijSiqTazwBqKnYKY">
+    <img src="https://img.youtube.com/vi/Q16a-NMSoeI/maxresdefault.jpg" alt="Watch the video" width="70%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);" />
+  </a>
+</p>
 
 # PRISM — Governance-Native Agents-as-a-Service Runtime
 
