@@ -17,9 +17,12 @@ import assert from "node:assert";
 import http from "node:http";
 
 /** Minimal JSON fetch helper — makes an HTTP request and returns parsed JSON. */
-function jsonRequest(
-    options: { method: string; port: number; path: string; body?: unknown },
-): Promise<{ status: number; data: any }> {
+function jsonRequest(options: {
+    method: string;
+    port: number;
+    path: string;
+    body?: unknown;
+}): Promise<{ status: number; data: any }> {
     return new Promise((resolve, reject) => {
         const headers: Record<string, string> = {};
         let bodyStr: string | undefined;
@@ -81,7 +84,7 @@ describe("Network API Routes — Integration Tests", function () {
         if (!serverAvailable) {
             console.warn(
                 `  ⚠ Dashboard server not detected on port ${PORT}. ` +
-                "API route tests will be skipped. Start the server with start_web.bat to enable them.",
+                    "API route tests will be skipped. Start the server with start_web.bat to enable them.",
             );
         }
     });

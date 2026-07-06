@@ -282,17 +282,20 @@ describe("McpClientAdapter", () => {
         writeFileSync(
             failScriptPath,
             `process.stderr.write(${JSON.stringify(longLine)} + "\\n");\n` +
-            `process.stderr.write("Traceback (most recent call last):\\n");\n` +
-            `process.stderr.write("  File 'foo.py', line 1\\n");\n` +
-            `process.stderr.write("ValueError: something specific went wrong\\n");\n` +
-            `process.exit(2);\n`,
+                `process.stderr.write("Traceback (most recent call last):\\n");\n` +
+                `process.stderr.write("  File 'foo.py', line 1\\n");\n` +
+                `process.stderr.write("ValueError: something specific went wrong\\n");\n` +
+                `process.exit(2);\n`,
         );
         const conn = new McpConnection("fail", { command: "node", args: [failScriptPath] });
         await assert.rejects(() => conn.connect());
         const tail = conn.stderrTail(20);
         assert.ok(tail.length >= 4, `expected >= 4 stderr lines, got ${tail.length}`);
         // The long line should NOT be truncated.
-        assert.ok(tail.some((l) => l === longLine), "expected full long line preserved verbatim");
+        assert.ok(
+            tail.some((l) => l === longLine),
+            "expected full long line preserved verbatim",
+        );
         // firstStderrHint should prefer the actual exception, not the Traceback header.
         const hint = conn.firstStderrHint();
         assert.match(hint, /ValueError: something specific went wrong/);

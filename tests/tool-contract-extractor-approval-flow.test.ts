@@ -27,7 +27,11 @@ describe("Tool Contract Extractor — Approval Response Flow", () => {
         db = new sqlite3.Database(":memory:");
         bus = new ActivityBus();
         events = [];
-        bus.subscribe({ onEvent: (evt: any) => { events.push(evt); } });
+        bus.subscribe({
+            onEvent: (evt: any) => {
+                events.push(evt);
+            },
+        });
         extractor = new ToolContractExtractor(db, new PolicyEngine(), bus);
     });
 

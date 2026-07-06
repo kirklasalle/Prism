@@ -13,7 +13,7 @@ class MockTool implements Tool {
     constructor(
         readonly name: string,
         private readonly handler: (request: ToolRequest) => Promise<ToolResult>,
-    ) { }
+    ) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         return this.handler(request);
@@ -104,14 +104,10 @@ async function testCalendarAllowPath(): Promise<void> {
 
     await orchestrator.runWorkflow(calendarDag);
 
-    const approvalGranted = bus
-        .listEvents()
-        .find((event) => event.operation === "calendar_plan.approval_granted");
+    const approvalGranted = bus.listEvents().find((event) => event.operation === "calendar_plan.approval_granted");
     assert.ok(approvalGranted);
 
-    const completion = bus
-        .listEvents()
-        .find((event) => event.operation === `workflow.${calendarDag.id}.completed`);
+    const completion = bus.listEvents().find((event) => event.operation === `workflow.${calendarDag.id}.completed`);
     assert.ok(completion);
     assert.strictEqual(completion!.status, "succeeded");
 }
@@ -133,9 +129,7 @@ async function testEmailDenyPathFallback(): Promise<void> {
 
     await orchestrator.runWorkflow(emailDag);
 
-    const approvalDenied = bus
-        .listEvents()
-        .find((event) => event.operation === "email_ops.approval_denied");
+    const approvalDenied = bus.listEvents().find((event) => event.operation === "email_ops.approval_denied");
     assert.ok(approvalDenied);
 
     const fallbackAttempt = bus
@@ -143,9 +137,7 @@ async function testEmailDenyPathFallback(): Promise<void> {
         .find((event) => event.operation === "workflow.step.email_draft_fallback.attempt.1");
     assert.ok(fallbackAttempt);
 
-    const completion = bus
-        .listEvents()
-        .find((event) => event.operation === `workflow.${emailDag.id}.completed`);
+    const completion = bus.listEvents().find((event) => event.operation === `workflow.${emailDag.id}.completed`);
     assert.ok(completion);
     assert.strictEqual(completion!.status, "succeeded");
 }
@@ -171,9 +163,7 @@ async function testTasksTimeoutPathFallback(): Promise<void> {
 
     await orchestrator.runWorkflow(tasksDag);
 
-    const timeoutEvent = bus
-        .listEvents()
-        .find((event) => event.operation === "workflow.step.tasks_commit.timeout");
+    const timeoutEvent = bus.listEvents().find((event) => event.operation === "workflow.step.tasks_commit.timeout");
     assert.ok(timeoutEvent);
 
     const fallbackAttempt = bus
@@ -181,9 +171,7 @@ async function testTasksTimeoutPathFallback(): Promise<void> {
         .find((event) => event.operation === "workflow.step.tasks_replan_fallback.attempt.1");
     assert.ok(fallbackAttempt);
 
-    const completion = bus
-        .listEvents()
-        .find((event) => event.operation === `workflow.${tasksDag.id}.completed`);
+    const completion = bus.listEvents().find((event) => event.operation === `workflow.${tasksDag.id}.completed`);
     assert.ok(completion);
     assert.strictEqual(completion!.status, "succeeded");
 }

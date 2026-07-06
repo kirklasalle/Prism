@@ -15,14 +15,7 @@
  * an injected clock).
  */
 
-import {
-    existsSync,
-    mkdirSync,
-    readdirSync,
-    renameSync,
-    statSync,
-    unlinkSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { join, parse } from "node:path";
 
 /** Default retention window when `PRISM_LOG_RETENTION_DAYS` is unset/invalid. */
@@ -141,12 +134,10 @@ export function resolveRetentionDays(env: NodeJS.ProcessEnv = process.env): numb
 }
 
 /** Combined rotate + prune helper. */
-export function rotateAndPrune(opts: {
-    logDir: string;
-    activeFile: string;
-    retentionDays?: number;
-    now?: Date;
-}): { rotate: RotateResult; prune: PruneResult } {
+export function rotateAndPrune(opts: { logDir: string; activeFile: string; retentionDays?: number; now?: Date }): {
+    rotate: RotateResult;
+    prune: PruneResult;
+} {
     const now = opts.now ?? new Date();
     const retentionDays = opts.retentionDays ?? resolveRetentionDays();
     if (!existsSync(opts.logDir)) {

@@ -168,7 +168,7 @@ function burstMetadataFileName(burstId: string): string {
 
 function readBurstMetadata(dir: string): Map<string, BurstCaptureMetadata> {
     const metadata = new Map<string, BurstCaptureMetadata>();
-    const files = readdirSync(dir).filter(name => /^burst-\d{8}-\d{6}\.json$/i.test(name));
+    const files = readdirSync(dir).filter((name) => /^burst-\d{8}-\d{6}\.json$/i.test(name));
     for (const fileName of files) {
         try {
             const fullPath = join(dir, fileName);
@@ -177,7 +177,10 @@ function readBurstMetadata(dir: string): Map<string, BurstCaptureMetadata> {
             metadata.set(parsed.burstId, {
                 burstId: parsed.burstId,
                 fps: typeof parsed.fps === "number" && parsed.fps > 0 ? parsed.fps : 8,
-                durationSec: typeof parsed.durationSec === "number" && parsed.durationSec > 0 ? parsed.durationSec : Math.max(1, parsed.files.length / 8),
+                durationSec:
+                    typeof parsed.durationSec === "number" && parsed.durationSec > 0
+                        ? parsed.durationSec
+                        : Math.max(1, parsed.files.length / 8),
                 files: parsed.files.filter((entry): entry is string => typeof entry === "string"),
                 createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : new Date().toISOString(),
             });
@@ -220,8 +223,8 @@ export class FramebufferCapture {
         if (!existsSync(dir)) return [];
 
         return readdirSync(dir)
-            .filter(f => f.endsWith(".png") && f !== "latest.png")
-            .map(name => {
+            .filter((f) => f.endsWith(".png") && f !== "latest.png")
+            .map((name) => {
                 const st = statSync(join(dir, name));
                 return {
                     name,
@@ -246,13 +249,17 @@ export class FramebufferCapture {
         if (process.platform === "darwin") return this.captureDarwin();
         const dir = this.ensureDir();
         const script = captureScript(dir, 1, 0);
-        const { stdout, stderr } = await execFileAsync("powershell.exe", [
-            "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script,
-        ], { timeout: 15_000, maxBuffer: 50 * 1024 * 1024 });
+        const { stdout, stderr } = await execFileAsync(
+            "powershell.exe",
+            ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+            { timeout: 15_000, maxBuffer: 50 * 1024 * 1024 },
+        );
         const base64 = stdout.trim();
         if (!base64) {
             const detail = stderr.trim();
-            throw new Error(detail ? `PowerShell returned no image data: ${detail}` : "PowerShell returned no image data");
+            throw new Error(
+                detail ? `PowerShell returned no image data: ${detail}` : "PowerShell returned no image data",
+            );
         }
         return Buffer.from(base64, "base64");
     }
@@ -272,13 +279,19 @@ export class FramebufferCapture {
                     await execFileAsync("scrot", ["-o", tmp], { timeout: 15_000 });
                 }
                 const buf = readFileSync(tmp);
-                try { unlinkSync(tmp); } catch { /* best effort */ }
+                try {
+                    unlinkSync(tmp);
+                } catch {
+                    /* best effort */
+                }
                 return buf;
             } catch (err) {
                 lastErr = err;
             }
         }
-        throw new Error(`Linux framebuffer capture failed: install grim (Wayland) or scrot (X11). Last error: ${String(lastErr)}`);
+        throw new Error(
+            `Linux framebuffer capture failed: install grim (Wayland) or scrot (X11). Last error: ${String(lastErr)}`,
+        );
     }
 
     /** macOS capture — built-in `screencapture` covers all displays merged. */
@@ -287,7 +300,11 @@ export class FramebufferCapture {
         // -x = silent (no shutter sound), -t png = PNG, -C captures cursor
         await execFileAsync("/usr/sbin/screencapture", ["-x", "-t", "png", tmp], { timeout: 15_000 });
         const buf = readFileSync(tmp);
-        try { unlinkSync(tmp); } catch { /* best effort */ }
+        try {
+            unlinkSync(tmp);
+        } catch {
+            /* best effort */
+        }
         return buf;
     }
 
@@ -352,14 +369,18 @@ export class FramebufferCapture {
         const script = captureScript(dir, frameCount, intervalMs);
 
         this.lastBurstTime = Date.now();
-        const { stdout, stderr } = await execFileAsync("powershell.exe", [
-            "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script,
-        ], { timeout: (durationSec + 10) * 1000, maxBuffer: 10 * 1024 * 1024 });
+        const { stdout, stderr } = await execFileAsync(
+            "powershell.exe",
+            ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+            { timeout: (durationSec + 10) * 1000, maxBuffer: 10 * 1024 * 1024 },
+        );
 
         const files = stdout.trim().split(/\r?\n/).filter(Boolean);
         if (files.length === 0) {
             const detail = stderr.trim();
-            throw new Error(detail ? `PowerShell returned no burst frames: ${detail}` : "PowerShell returned no burst frames");
+            throw new Error(
+                detail ? `PowerShell returned no burst frames: ${detail}` : "PowerShell returned no burst frames",
+            );
         }
 
         const firstBurst = classifyScreengrab(files[0]);
@@ -371,7 +392,11 @@ export class FramebufferCapture {
                 files,
                 createdAt: new Date().toISOString(),
             };
-            writeFileSync(join(dir, burstMetadataFileName(firstBurst.burstId)), JSON.stringify(metadata, null, 2) + "\n", "utf-8");
+            writeFileSync(
+                join(dir, burstMetadataFileName(firstBurst.burstId)),
+                JSON.stringify(metadata, null, 2) + "\n",
+                "utf-8",
+            );
         }
 
         // Update latest.png with the last burst frame
@@ -464,9 +489,9 @@ export class FramebufferCapture {
         for (const burstItem of burstItems.values()) {
             if (burstItem.burstId && (!burstMetadata.has(burstItem.burstId) || burstItem.sourceFiles.length === 0)) {
                 burstItem.sourceFiles = files
-                    .filter(file => file.burstId === burstItem.burstId)
+                    .filter((file) => file.burstId === burstItem.burstId)
                     .sort((a, b) => (a.burstFrameIndex ?? 0) - (b.burstFrameIndex ?? 0))
-                    .map(file => file.name);
+                    .map((file) => file.name);
             }
             if (burstItem.durationSec <= 0) {
                 burstItem.durationSec = burstItem.frameCount / Math.max(1, burstItem.playbackFps);
@@ -483,8 +508,8 @@ export class FramebufferCapture {
         const dir = workspaceFramebufferDir();
         if (!existsSync(dir)) return;
         const files = readdirSync(dir)
-            .filter(f => f.endsWith(".png") && f !== "latest.png")
-            .map(name => {
+            .filter((f) => f.endsWith(".png") && f !== "latest.png")
+            .map((name) => {
                 const st = statSync(join(dir, name));
                 return { name, size: st.size, mtime: st.mtime.getTime() };
             })
@@ -493,7 +518,11 @@ export class FramebufferCapture {
         // Prune by count
         while (files.length > FramebufferCapture.MAX_FILES) {
             const oldest = files.shift()!;
-            try { unlinkSync(join(dir, oldest.name)); } catch { /* ignore */ }
+            try {
+                unlinkSync(join(dir, oldest.name));
+            } catch {
+                /* ignore */
+            }
         }
 
         // Prune by total size
@@ -502,20 +531,28 @@ export class FramebufferCapture {
         while (totalBytes > maxBytes && files.length > 0) {
             const oldest = files.shift()!;
             totalBytes -= oldest.size;
-            try { unlinkSync(join(dir, oldest.name)); } catch { /* ignore */ }
+            try {
+                unlinkSync(join(dir, oldest.name));
+            } catch {
+                /* ignore */
+            }
         }
 
         const remainingBurstIds = new Set(
             readdirSync(dir)
-                .filter(f => f.endsWith(".png") && f !== "latest.png")
-                .map(name => classifyScreengrab(name).burstId)
+                .filter((f) => f.endsWith(".png") && f !== "latest.png")
+                .map((name) => classifyScreengrab(name).burstId)
                 .filter((burstId): burstId is string => !!burstId),
         );
-        const metadataFiles = readdirSync(dir).filter(name => /^burst-\d{8}-\d{6}\.json$/i.test(name));
+        const metadataFiles = readdirSync(dir).filter((name) => /^burst-\d{8}-\d{6}\.json$/i.test(name));
         for (const metadataFile of metadataFiles) {
             const match = /^burst-(\d{8}-\d{6})\.json$/i.exec(metadataFile);
             if (!match || remainingBurstIds.has(match[1])) continue;
-            try { unlinkSync(join(dir, metadataFile)); } catch { /* ignore */ }
+            try {
+                unlinkSync(join(dir, metadataFile));
+            } catch {
+                /* ignore */
+            }
         }
     }
 }

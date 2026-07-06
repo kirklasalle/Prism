@@ -12,9 +12,9 @@ export class PolicyEngine {
         // operations (medium + high risk) until the operator replaces sentinel emails
         // via the CAC identity panel. Tier-1 (low-risk, non-mutating) reads remain allowed.
         if (
-            profile.segment === "business"
-            && context.cac?.hasPlaceholderIdentity
-            && (context.risk === "medium" || context.risk === "high")
+            profile.segment === "business" &&
+            context.cac?.hasPlaceholderIdentity &&
+            (context.risk === "medium" || context.risk === "high")
         ) {
             reasons.push(
                 "Tier-2+ operation denied: CAC assignment uses placeholder identity. Replace `@prism.local` / `@placeholder` emails in the CAC panel before continuing.",
@@ -34,13 +34,13 @@ export class PolicyEngine {
         // are unaffected. Verification freshness is enforced via the recorded
         // `cac.emailVerifiedAt` timestamp.
         if (
-            profile.segment === "business"
-            && context.emailBound
-            && (context.risk === "medium" || context.risk === "high")
+            profile.segment === "business" &&
+            context.emailBound &&
+            (context.risk === "medium" || context.risk === "high")
         ) {
             const verifiedAt = context.cac?.emailVerifiedAt;
             const verifiedAtMs = verifiedAt ? new Date(verifiedAt).getTime() : NaN;
-            const fresh = !isNaN(verifiedAtMs) && (Date.now() - verifiedAtMs) <= 30 * 86_400_000;
+            const fresh = !isNaN(verifiedAtMs) && Date.now() - verifiedAtMs <= 30 * 86_400_000;
             if (!fresh) {
                 reasons.push(
                     "Tier-2+ email-bound operation denied: operator email must be verified via OAuth within the last 30 days.",
@@ -70,9 +70,7 @@ export class PolicyEngine {
                 return { tier: "tier3_approval", decision: "allow", reasons, reasonCodes };
             }
 
-            reasons.push(
-                `High-risk operation requires explicit approval (segment=${profile.segment}).`,
-            );
+            reasons.push(`High-risk operation requires explicit approval (segment=${profile.segment}).`);
             reasonCodes.push(POLICY_REASON_CODES.HIGH_RISK_APPROVAL_REQUIRED);
             return { tier: "tier3_approval", decision: "require_approval", reasons, reasonCodes };
         }
@@ -81,9 +79,7 @@ export class PolicyEngine {
         if (context.risk === "medium") {
             // Business profile: always require rollback plan for mutations
             if (profile.rollbackPlanRequired && context.mutatesState && !context.rollbackPlan) {
-                reasons.push(
-                    `State mutation denied: ${profile.segment} segment requires explicit rollback plan.`,
-                );
+                reasons.push(`State mutation denied: ${profile.segment} segment requires explicit rollback plan.`);
                 reasonCodes.push(POLICY_REASON_CODES.MEDIUM_RISK_DENY_MISSING_ROLLBACK);
                 return { tier: "tier2_conditional", decision: "deny", reasons, reasonCodes };
             }
@@ -98,16 +94,12 @@ export class PolicyEngine {
 
             // Check tier2 is enabled for this profile
             if (!profile.tier2ConditionalAllowed) {
-                reasons.push(
-                    `Medium-risk conditional tier disabled for ${profile.segment} segment.`,
-                );
+                reasons.push(`Medium-risk conditional tier disabled for ${profile.segment} segment.`);
                 reasonCodes.push(POLICY_REASON_CODES.MEDIUM_RISK_DENY_TIER2_DISABLED);
                 return { tier: "tier2_conditional", decision: "deny", reasons, reasonCodes };
             }
 
-            reasons.push(
-                `Conditional operation allowed with governance checks (segment=${profile.segment}).`,
-            );
+            reasons.push(`Conditional operation allowed with governance checks (segment=${profile.segment}).`);
             reasonCodes.push(POLICY_REASON_CODES.MEDIUM_RISK_ALLOW_CONDITIONAL);
             return { tier: "tier2_conditional", decision: "allow", reasons, reasonCodes };
         }
@@ -122,9 +114,7 @@ export class PolicyEngine {
 
             // Tier1 autonomous check: Business disallows tier1 for mutating ops
             if (context.mutatesState && profile.segment === "business") {
-                reasons.push(
-                    "Low-risk mutation denied: business segment requires explicit governance tier 2+.",
-                );
+                reasons.push("Low-risk mutation denied: business segment requires explicit governance tier 2+.");
                 reasonCodes.push(POLICY_REASON_CODES.LOW_RISK_DENY_BUSINESS_MUTATION);
                 return { tier: "tier1_autonomous", decision: "deny", reasons, reasonCodes };
             }
@@ -135,9 +125,7 @@ export class PolicyEngine {
                 return { tier: "tier1_autonomous", decision: "deny", reasons, reasonCodes };
             }
 
-            reasons.push(
-                `Low-risk operation allowed as autonomous execution (segment=${profile.segment}).`,
-            );
+            reasons.push(`Low-risk operation allowed as autonomous execution (segment=${profile.segment}).`);
             reasonCodes.push(POLICY_REASON_CODES.LOW_RISK_ALLOW_AUTONOMOUS);
             return { tier: "tier1_autonomous", decision: "allow", reasons, reasonCodes };
         }

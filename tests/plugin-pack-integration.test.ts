@@ -36,12 +36,12 @@ function validManifest(): PluginPackManifest {
 function invalidManifest(): PluginPackManifest {
     return {
         manifest_version: "2.0", // invalid version
-        pack_name: "",            // empty name
+        pack_name: "", // empty name
         pack_version: "not-semver",
-        description: "",          // too short
-        author: { name: "" },     // missing name
+        description: "", // too short
+        author: { name: "" }, // missing name
         license: "INVALID",
-        adapters: [],             // empty adapters
+        adapters: [], // empty adapters
         compatibility: { prism_min_version: "", profiles: [] },
     };
 }
@@ -50,7 +50,6 @@ function invalidManifest(): PluginPackManifest {
  *  Plugin Pack Loader — Load-Time Validation Integration
  * ────────────────────────────────────────────────────── */
 describe("Plugin Pack Loader — Load-Time Validation Integration", () => {
-
     it("accepts a valid manifest in individual profile", () => {
         const bus = new ActivityBus();
         const result = loadPluginPack(validManifest(), ".", bus, { executionProfile: "individual" });
@@ -63,7 +62,7 @@ describe("Plugin Pack Loader — Load-Time Validation Integration", () => {
         const bus = new ActivityBus();
         loadPluginPack(validManifest(), ".", bus, { executionProfile: "individual" });
         const events = bus.listEvents();
-        const passEvent = events.find(e => e.operation === "prism.plugin.validation_passed");
+        const passEvent = events.find((e) => e.operation === "prism.plugin.validation_passed");
         assert.ok(passEvent, "Expected a prism.plugin.validation_passed event");
         assert.strictEqual(passEvent!.status, "succeeded");
         assert.strictEqual(passEvent!.policyDecision, "allow");
@@ -79,7 +78,7 @@ describe("Plugin Pack Loader — Load-Time Validation Integration", () => {
         assert.ok(result.summary.includes("rejected"));
 
         const events = bus.listEvents();
-        const failEvent = events.find(e => e.operation === "prism.plugin.validation_failed");
+        const failEvent = events.find((e) => e.operation === "prism.plugin.validation_failed");
         assert.ok(failEvent, "Expected a prism.plugin.validation_failed event");
         assert.strictEqual(failEvent!.status, "failed");
         assert.strictEqual(failEvent!.policyDecision, "deny");
@@ -98,7 +97,7 @@ describe("Plugin Pack Loader — Load-Time Validation Integration", () => {
         assert.strictEqual(result.trustValidation!.allowed, false);
 
         const events = bus.listEvents();
-        const trustFail = events.find(e => e.operation === "prism.plugin.trust_validation_failed");
+        const trustFail = events.find((e) => e.operation === "prism.plugin.trust_validation_failed");
         assert.ok(trustFail, "Expected a prism.plugin.trust_validation_failed event");
         assert.strictEqual(trustFail!.policyDecision, "deny");
     });
@@ -107,7 +106,7 @@ describe("Plugin Pack Loader — Load-Time Validation Integration", () => {
         const bus = new ActivityBus();
         loadPluginPack(validManifest(), ".", bus, { executionProfile: "individual" });
         const events = bus.listEvents();
-        const passEvent = events.find(e => e.operation === "prism.plugin.validation_passed");
+        const passEvent = events.find((e) => e.operation === "prism.plugin.validation_passed");
         assert.ok(passEvent);
         assert.strictEqual((passEvent!.details as any).adapterCount, 1);
         assert.strictEqual((passEvent!.details as any).profile, "individual");
@@ -117,7 +116,7 @@ describe("Plugin Pack Loader — Load-Time Validation Integration", () => {
         const bus = new ActivityBus();
         loadPluginPack(invalidManifest(), ".", bus, { executionProfile: "individual" });
         const events = bus.listEvents();
-        const failEvent = events.find(e => e.operation === "prism.plugin.validation_failed");
+        const failEvent = events.find((e) => e.operation === "prism.plugin.validation_failed");
         assert.ok(failEvent);
         const details = failEvent!.details as any;
         assert.ok(details.errorCount > 0);
@@ -141,6 +140,6 @@ describe("Plugin Pack Loader — Load-Time Validation Integration", () => {
         const result = loadPluginPack(manifest, ".", bus, { executionProfile: "individual" });
         assert.strictEqual(result.accepted, true); // individual is permissive
         const events = bus.listEvents();
-        assert.ok(!events.find(e => e.operation === "prism.plugin.trust_validation_failed"));
+        assert.ok(!events.find((e) => e.operation === "prism.plugin.trust_validation_failed"));
     });
 });

@@ -12,7 +12,7 @@ describe("Active Budget Cost Controller", () => {
             emit(event: any) {
                 emittedEvents.push(event);
             },
-            subscribe() {}
+            subscribe() {},
         } as unknown as ActivityBus;
 
         const mockUsageMeteringAllowed = {
@@ -21,7 +21,7 @@ describe("Active Budget Cost Controller", () => {
             },
             getCaps() {
                 return { sessionCap: 10.0, dailyCap: null, monthlyCap: null };
-            }
+            },
         } as unknown as UsageMeteringService;
 
         const pm = new LlmProviderManager(
@@ -30,7 +30,7 @@ describe("Active Budget Cost Controller", () => {
             undefined,
             undefined,
             undefined,
-            mockActivityBus
+            mockActivityBus,
         );
         pm.setUsageMetering(mockUsageMeteringAllowed);
 
@@ -40,7 +40,7 @@ describe("Active Budget Cost Controller", () => {
         const result = await pm.generate({
             message: "Hello world",
             conversation: [],
-            systemPrompt: "You are an assistant."
+            systemPrompt: "You are an assistant.",
         });
 
         assert.equal(result, null);
@@ -53,7 +53,7 @@ describe("Active Budget Cost Controller", () => {
             emit(event: any) {
                 emittedEvents.push(event);
             },
-            subscribe() {}
+            subscribe() {},
         } as unknown as ActivityBus;
 
         const mockUsageMeteringBreached = {
@@ -62,7 +62,7 @@ describe("Active Budget Cost Controller", () => {
             },
             getCaps() {
                 return { sessionCap: 0.01, dailyCap: null, monthlyCap: null };
-            }
+            },
         } as unknown as UsageMeteringService;
 
         const pm = new LlmProviderManager(
@@ -71,20 +71,17 @@ describe("Active Budget Cost Controller", () => {
             undefined,
             undefined,
             undefined,
-            mockActivityBus
+            mockActivityBus,
         );
         pm.setUsageMetering(mockUsageMeteringBreached);
 
-        await assert.rejects(
-            async () => {
-                await pm.generate({
-                    message: "Expensive task",
-                    conversation: [],
-                    systemPrompt: "You are an assistant."
-                });
-            },
-            /Centralized API budget ceiling breached: reached session spend cap/
-        );
+        await assert.rejects(async () => {
+            await pm.generate({
+                message: "Expensive task",
+                conversation: [],
+                systemPrompt: "You are an assistant.",
+            });
+        }, /Centralized API budget ceiling breached: reached session spend cap/);
 
         assert.equal(emittedEvents.length, 1, "Exactly one event should be emitted");
         assert.equal(emittedEvents[0].operation, "llm.budget_limit_breached");
@@ -98,7 +95,7 @@ describe("Active Budget Cost Controller", () => {
             emit(event: any) {
                 emittedEvents.push(event);
             },
-            subscribe() {}
+            subscribe() {},
         } as unknown as ActivityBus;
 
         const mockUsageMeteringBreached = {
@@ -107,7 +104,7 @@ describe("Active Budget Cost Controller", () => {
             },
             getCaps() {
                 return { sessionCap: null, dailyCap: 0.01, monthlyCap: null };
-            }
+            },
         } as unknown as UsageMeteringService;
 
         const loop = new AutonomousAgentLoop(mockActivityBus);
@@ -121,12 +118,9 @@ describe("Active Budget Cost Controller", () => {
         (goal as any).status = "executing";
         (goal as any).startedAt = new Date().toISOString();
 
-        await assert.rejects(
-            async () => {
-                await loop.executeStep(goal.goalId, "browser_control", {}, 1);
-            },
-            /Action budget cost ceiling exceeded: reached daily spend cap/
-        );
+        await assert.rejects(async () => {
+            await loop.executeStep(goal.goalId, "browser_control", {}, 1);
+        }, /Action budget cost ceiling exceeded: reached daily spend cap/);
 
         // Verify loop marked the goal as failed
         assert.equal(goal.status, "failed");
@@ -140,7 +134,7 @@ describe("Active Budget Cost Controller", () => {
         assert.equal(aabLedger[0].intervention, "terminate");
 
         // Verify ActivityBus emitted appropriate warnings
-        const breachedEvent = emittedEvents.find(e => e.operation === "autonomous.goal.budget_hard_exceeded");
+        const breachedEvent = emittedEvents.find((e) => e.operation === "autonomous.goal.budget_hard_exceeded");
         assert.ok(breachedEvent);
         assert.equal(breachedEvent.status, "failed");
         assert.equal(breachedEvent.details.capType, "daily");

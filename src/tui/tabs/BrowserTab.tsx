@@ -9,27 +9,24 @@ import { useApi } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, KeyValue, Loading, ErrorBox, StatusBadge, SectionHeader } from "../components/ui.js";
 
-export function BrowserTab({
-    client,
-    focused,
-}: {
-    client: PrismClient;
-    focused: boolean;
-}): React.JSX.Element {
+export function BrowserTab({ client, focused }: { client: PrismClient; focused: boolean }): React.JSX.Element {
     const session = useApi(client, (c) => c.getBrowserSession(), 5000);
     const [urlInput, setUrlInput] = useState("");
     const [consoleLog, setConsoleLog] = useState<Array<{ level: string; message: string }>>([]);
     const [actionMsg, setActionMsg] = useState<string | null>(null);
 
-    const launchBrowser = useCallback(async (headless: boolean) => {
-        try {
-            await client.launchBrowser(headless);
-            setActionMsg(`Browser launched (${headless ? "headless" : "headed"})`);
-            session.refresh();
-        } catch (e: unknown) {
-            setActionMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
-        }
-    }, [client, session]);
+    const launchBrowser = useCallback(
+        async (headless: boolean) => {
+            try {
+                await client.launchBrowser(headless);
+                setActionMsg(`Browser launched (${headless ? "headless" : "headed"})`);
+                session.refresh();
+            } catch (e: unknown) {
+                setActionMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        },
+        [client, session],
+    );
 
     const closeBrowser = useCallback(async () => {
         try {
@@ -80,14 +77,14 @@ export function BrowserTab({
         <Box flexDirection="column">
             {actionMsg && (
                 <Box marginBottom={1}>
-                    <Text color={colors.info}>{symbols.arrow} {actionMsg}</Text>
+                    <Text color={colors.info}>
+                        {symbols.arrow} {actionMsg}
+                    </Text>
                 </Box>
             )}
 
             <Box marginBottom={1}>
-                <Text color={colors.muted}>
-                    l: launch headless | L: launch headed | c: close | r: refresh console
-                </Text>
+                <Text color={colors.muted}>l: launch headless | L: launch headed | c: close | r: refresh console</Text>
             </Box>
 
             {/* Session status */}
@@ -102,7 +99,11 @@ export function BrowserTab({
                         />
                         {session.data.active && (
                             <>
-                                <KeyValue label="URL" value={session.data.url ?? "about:blank"} valueColor={colors.info} />
+                                <KeyValue
+                                    label="URL"
+                                    value={session.data.url ?? "about:blank"}
+                                    valueColor={colors.info}
+                                />
                                 <KeyValue label="Title" value={session.data.title ?? ""} />
                                 <KeyValue label="Mode" value={session.data.headless ? "Headless" : "Headed"} />
                             </>
@@ -128,12 +129,18 @@ export function BrowserTab({
             {/* Console log */}
             <SectionHeader title="Browser Console" />
             <Box flexDirection="column" marginTop={1}>
-                {consoleLog.length === 0 && (
-                    <Text color={colors.muted}>Press r to load console logs.</Text>
-                )}
+                {consoleLog.length === 0 && <Text color={colors.muted}>Press r to load console logs.</Text>}
                 {consoleLog.map((entry, i) => (
                     <Box key={i}>
-                        <Text color={entry.level === "error" ? colors.error : entry.level === "warn" ? colors.warning : colors.muted}>
+                        <Text
+                            color={
+                                entry.level === "error"
+                                    ? colors.error
+                                    : entry.level === "warn"
+                                      ? colors.warning
+                                      : colors.muted
+                            }
+                        >
                             [{entry.level}]
                         </Text>
                         <Text> {entry.message}</Text>

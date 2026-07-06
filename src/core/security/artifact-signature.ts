@@ -80,11 +80,7 @@ export function signArtifact(
  * Verify a detached Ed25519 signature over the artifact bytes using a
  * base64-encoded SPKI public key (matching the registry format).
  */
-export function verifyArtifactSignature(
-    artifactBytes: Buffer,
-    signature: Buffer,
-    publicKeyBase64: string,
-): boolean {
+export function verifyArtifactSignature(artifactBytes: Buffer, signature: Buffer, publicKeyBase64: string): boolean {
     const der = Buffer.from(publicKeyBase64, "base64");
     const key = createPublicKey({ key: der, format: "der", type: "spki" });
     return verify(null, artifactBytes, key, signature);
@@ -104,10 +100,7 @@ export function loadReleaseSigningKeyRegistry(path: string): ReleaseSigningKeyRe
 }
 
 /** Locate a key entry by keyId; returns null if missing or revoked. */
-export function findReleaseKey(
-    registry: ReleaseSigningKeyRegistry,
-    keyId: string,
-): ReleaseSigningKeyEntry | null {
+export function findReleaseKey(registry: ReleaseSigningKeyRegistry, keyId: string): ReleaseSigningKeyEntry | null {
     const found = registry.keys.find((k) => k.keyId === keyId) ?? null;
     if (!found) return null;
     if (found.revokedAt) return null;
@@ -145,7 +138,11 @@ export function verifyArtifactWithSidecar(opts: {
 }
 
 /** Convenience helper for CLI scripts. */
-export function writeSidecars(artifactPath: string, signature: Buffer, manifest: ArtifactSignatureManifest): {
+export function writeSidecars(
+    artifactPath: string,
+    signature: Buffer,
+    manifest: ArtifactSignatureManifest,
+): {
     sigPath: string;
     manifestPath: string;
 } {

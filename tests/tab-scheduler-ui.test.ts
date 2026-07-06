@@ -155,7 +155,7 @@ describe("tab-scheduler.js — Frontend Unit Tests", function () {
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
 
         const moduleUrl = pathToFileURL(join(tmpDir, "tab-scheduler.js")).href;
-        mod = await import(moduleUrl) as TabSchedulerModule;
+        mod = (await import(moduleUrl)) as TabSchedulerModule;
     });
 
     after(() => {
@@ -315,7 +315,8 @@ describe("tab-scheduler.js — Frontend Unit Tests", function () {
             // Count day numbers 1–30 appearing
             let found = 0;
             for (let d = 1; d <= 30; d++) {
-                if (html.includes(">" + d + "<") || html.includes(">" + d + "\\u003c") || html.includes(`>${d}`)) found++;
+                if (html.includes(">" + d + "<") || html.includes(">" + d + "\\u003c") || html.includes(`>${d}`))
+                    found++;
             }
             assert.ok(found >= 25, `Should find most of the 30 days, found ${found}`);
         });
@@ -482,7 +483,10 @@ describe("tab-scheduler.js — Frontend Unit Tests", function () {
                 if (btn.getAttribute("data-sched-view") === "cron") {
                     assert.ok(btn.classList.contains("active"), "cron button should be active");
                 } else {
-                    assert.ok(!btn.classList.contains("active"), btn.getAttribute("data-sched-view") + " button should not be active");
+                    assert.ok(
+                        !btn.classList.contains("active"),
+                        btn.getAttribute("data-sched-view") + " button should not be active",
+                    );
                 }
             });
             // Reset to calendar
@@ -546,7 +550,11 @@ describe("tab-scheduler.js — Frontend Unit Tests", function () {
                 for (const other of views) {
                     if (other !== v) {
                         const otherPanel = dom.window.document.getElementById("sched-view-" + other);
-                        assert.strictEqual(otherPanel!.style.display, "none", other + " panel should be hidden when " + v + " is active");
+                        assert.strictEqual(
+                            otherPanel!.style.display,
+                            "none",
+                            other + " panel should be hidden when " + v + " is active",
+                        );
                     }
                 }
             }

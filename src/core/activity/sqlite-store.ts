@@ -117,10 +117,7 @@ export class SqliteActivityStore implements IActivityStore {
         ]);
     }
 
-    private ensureColumns(
-        tableName: string,
-        columns: Array<{ name: string; definition: string }>,
-    ): void {
+    private ensureColumns(tableName: string, columns: Array<{ name: string; definition: string }>): void {
         const rows = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
         const existing = new Set(rows.map((row) => row.name));
 
@@ -197,21 +194,51 @@ export class SqliteActivityStore implements IActivityStore {
         const conditions: string[] = [];
         const params: Record<string, string> = {};
 
-        if (filter.sessionId) { conditions.push("session_id = :sessionId"); params.sessionId = filter.sessionId; }
-        if (filter.operation) { conditions.push("operation = :operation"); params.operation = filter.operation; }
-        if (filter.layer) { conditions.push("layer = :layer"); params.layer = filter.layer; }
-        if (filter.characterId) { conditions.push("character_id = :characterId"); params.characterId = filter.characterId; }
-        if (filter.prismUserId) { conditions.push("prism_user_id = :prismUserId"); params.prismUserId = filter.prismUserId; }
-        if (filter.prismUserEmail) { conditions.push("prism_user_email = :prismUserEmail"); params.prismUserEmail = filter.prismUserEmail; }
-        if (filter.operatorId) { conditions.push("operator_id = :operatorId"); params.operatorId = filter.operatorId; }
-        if (filter.operatorEmail) { conditions.push("operator_email = :operatorEmail"); params.operatorEmail = filter.operatorEmail; }
-        if (filter.clientId) { conditions.push("client_id = :clientId"); params.clientId = filter.clientId; }
-        if (filter.assignmentId) { conditions.push("assignment_id = :assignmentId"); params.assignmentId = filter.assignmentId; }
+        if (filter.sessionId) {
+            conditions.push("session_id = :sessionId");
+            params.sessionId = filter.sessionId;
+        }
+        if (filter.operation) {
+            conditions.push("operation = :operation");
+            params.operation = filter.operation;
+        }
+        if (filter.layer) {
+            conditions.push("layer = :layer");
+            params.layer = filter.layer;
+        }
+        if (filter.characterId) {
+            conditions.push("character_id = :characterId");
+            params.characterId = filter.characterId;
+        }
+        if (filter.prismUserId) {
+            conditions.push("prism_user_id = :prismUserId");
+            params.prismUserId = filter.prismUserId;
+        }
+        if (filter.prismUserEmail) {
+            conditions.push("prism_user_email = :prismUserEmail");
+            params.prismUserEmail = filter.prismUserEmail;
+        }
+        if (filter.operatorId) {
+            conditions.push("operator_id = :operatorId");
+            params.operatorId = filter.operatorId;
+        }
+        if (filter.operatorEmail) {
+            conditions.push("operator_email = :operatorEmail");
+            params.operatorEmail = filter.operatorEmail;
+        }
+        if (filter.clientId) {
+            conditions.push("client_id = :clientId");
+            params.clientId = filter.clientId;
+        }
+        if (filter.assignmentId) {
+            conditions.push("assignment_id = :assignmentId");
+            params.assignmentId = filter.assignmentId;
+        }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-        const rows = this.db.prepare(
-            `SELECT * FROM activity_events ${where} ORDER BY timestamp DESC LIMIT 1000`
-        ).all(params) as Record<string, unknown>[];
+        const rows = this.db
+            .prepare(`SELECT * FROM activity_events ${where} ORDER BY timestamp DESC LIMIT 1000`)
+            .all(params) as Record<string, unknown>[];
 
         return rows.map((row) => ({
             id: String(row.id),
@@ -223,8 +250,12 @@ export class SqliteActivityStore implements IActivityStore {
             confidence: row.confidence != null ? Number(row.confidence) : undefined,
             durationMs: row.duration_ms != null ? Number(row.duration_ms) : undefined,
             details: JSON.parse(String(row.details ?? "{}")),
-            authorityTier: row.authority_tier != null ? String(row.authority_tier) as ActivityEvent["authorityTier"] : undefined,
-            policyDecision: row.policy_decision != null ? String(row.policy_decision) as ActivityEvent["policyDecision"] : undefined,
+            authorityTier:
+                row.authority_tier != null ? (String(row.authority_tier) as ActivityEvent["authorityTier"]) : undefined,
+            policyDecision:
+                row.policy_decision != null
+                    ? (String(row.policy_decision) as ActivityEvent["policyDecision"])
+                    : undefined,
             sideEffects: JSON.parse(String(row.side_effects ?? "[]")),
             characterId: row.character_id != null ? String(row.character_id) : undefined,
             prismUserId: row.prism_user_id != null ? String(row.prism_user_id) : undefined,
@@ -233,9 +264,10 @@ export class SqliteActivityStore implements IActivityStore {
             operatorEmail: row.operator_email != null ? String(row.operator_email) : undefined,
             clientId: row.client_id != null ? String(row.client_id) : undefined,
             assignmentId: row.assignment_id != null ? String(row.assignment_id) : undefined,
-            accountabilityChain: row.accountability_chain != null
-                ? JSON.parse(String(row.accountability_chain)) as ActivityEvent["accountabilityChain"]
-                : undefined,
+            accountabilityChain:
+                row.accountability_chain != null
+                    ? (JSON.parse(String(row.accountability_chain)) as ActivityEvent["accountabilityChain"])
+                    : undefined,
             rollbackPlan: row.rollback_plan != null ? String(row.rollback_plan) : undefined,
             hash: row.hash != null ? String(row.hash) : undefined,
         }));
@@ -275,11 +307,15 @@ export class SqliteActivityStore implements IActivityStore {
 
     queryLlreTelemetry(sessionId: string): any[] {
         if (this._closed) return [];
-        return this.db.prepare(`
+        return this.db
+            .prepare(
+                `
             SELECT * FROM prism_llre_telemetry
             WHERE session_id = :sessionId
             ORDER BY timestamp DESC
-        `).all({ sessionId }) as any[];
+        `,
+            )
+            .all({ sessionId }) as any[];
     }
 
     close(): void {

@@ -1,16 +1,71 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { workspacePath } from "../../config/workspace-resolver.js";
 import { parseCronExpression, getNextNCronOccurrences } from "../scheduler-engine.js";
 import type { DashboardService } from "../dashboard-service.js";
 import type { IRouteHandler } from "./types.js";
 
 export class SchedulerHandler implements IRouteHandler {
+    private initialized = false;
+
     match(req: IncomingMessage): boolean {
         const url = req.url ?? "";
         return url.startsWith("/api/scheduler/");
     }
 
+    private initPersistence(service: DashboardService) {
+        if (this.initialized) return;
+        this.initialized = true;
+        if (service.status.environmentProfile === "test" || process.env.NODE_ENV === "test") {
+            return;
+        }
+        try {
+            const eventsPath = workspacePath("state", "scheduler_events.json");
+            const projectsPath = workspacePath("state", "scheduler_projects.json");
+
+            if (existsSync(eventsPath)) {
+                const data = JSON.parse(readFileSync(eventsPath, "utf-8"));
+                const map = service.getSchedulerEvents();
+                map.clear();
+                for (const item of data) {
+                    map.set(item.id, item);
+                }
+            }
+            if (existsSync(projectsPath)) {
+                const data = JSON.parse(readFileSync(projectsPath, "utf-8"));
+                const map = service.getSchedulerProjects();
+                map.clear();
+                for (const item of data) {
+                    map.set(item.id, item);
+                }
+            }
+        } catch (err) {
+            console.error("[SchedulerHandler] Failed to load persisted data:", err);
+        }
+    }
+
+    private savePersistence(service: DashboardService) {
+        if (service.status.environmentProfile === "test" || process.env.NODE_ENV === "test") {
+            return;
+        }
+        try {
+            const eventsPath = workspacePath("state", "scheduler_events.json");
+            const projectsPath = workspacePath("state", "scheduler_projects.json");
+
+            const events = [...service.getSchedulerEvents().values()];
+            const projects = [...service.getSchedulerProjects().values()];
+
+            writeFileSync(eventsPath, JSON.stringify(events, null, 2), "utf-8");
+            writeFileSync(projectsPath, JSON.stringify(projects, null, 2), "utf-8");
+        } catch (err) {
+            console.error("[SchedulerHandler] Failed to save persisted data:", err);
+        }
+    }
+
     async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
+        this.initPersistence(service);
+
         const rawUrl = req.url ?? "";
         const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
         const method = req.method?.toUpperCase() ?? "GET";
@@ -18,6 +73,10 @@ export class SchedulerHandler implements IRouteHandler {
         const schedulerEvents = service.getSchedulerEvents();
         const schedulerProjects = service.getSchedulerProjects();
         const schedulerEngine = service.getSchedulerEngine();
+
+        const triggerTabSwitch = () => {
+            service.broadcastEvent({ type: "ui_action", action: "switch_tab", tabId: "scheduler" });
+        };
 
         // ── Events ──────────────────────────────────────────────────────────
 
@@ -32,12 +91,73 @@ export class SchedulerHandler implements IRouteHandler {
         }
 
         if (method === "POST" && url === "/api/scheduler/events") {
-            const body = await service.readJsonBody<{ eventId?: string; title?: string; start?: string; end?: string; description?: string }>(req);
+            const body = await service.readJsonBody<{
+                id?: string;
+                eventId?: string;
+                title?: string;
+                start?: string;
+                end?: string;
+                description?: string;
+                startTime?: string;
+                endTime?: string;
+            }>(req);
             if (!body.title || !body.start) return this.json(res, 400, { error: "title and start are required" });
-            const id = body.eventId || randomUUID();
-            const evt = { id, title: body.title, start: body.start, end: body.end, description: body.description, createdAt: new Date().toISOString() };
+            triggerTabSwitch();
+            const id = body.eventId || body.id || randomUUID();
+            const evt = {
+                id,
+                title: body.title,
+                start: body.start,
+                end: body.end,
+                description: body.description,
+                startTime: body.startTime,
+                endTime: body.endTime,
+                createdAt: new Date().toISOString(),
+            };
             schedulerEvents.set(id, evt);
+            this.savePersistence(service);
             return this.json(res, 200, { event: evt });
+        }
+
+        const eventDetailMatch = /^\/api\/scheduler\/events\/([^/?]+)$/.exec(url);
+        if (eventDetailMatch) {
+            const eventId = decodeURIComponent(eventDetailMatch[1]!);
+
+            if (method === "PUT") {
+                const body = await service.readJsonBody<{
+                    title?: string;
+                    start?: string;
+                    end?: string;
+                    description?: string;
+                    startTime?: string;
+                    endTime?: string;
+                }>(req);
+                if (!body.title || !body.start) return this.json(res, 400, { error: "title and start are required" });
+                triggerTabSwitch();
+                const existing = schedulerEvents.get(eventId);
+                if (!existing) return this.json(res, 404, { error: "Event not found" });
+
+                const updated = {
+                    ...existing,
+                    title: body.title,
+                    start: body.start,
+                    end: body.end,
+                    description: body.description,
+                    startTime: body.startTime,
+                    endTime: body.endTime,
+                };
+                schedulerEvents.set(eventId, updated);
+                this.savePersistence(service);
+                return this.json(res, 200, { event: updated });
+            }
+
+            if (method === "DELETE") {
+                triggerTabSwitch();
+                if (!schedulerEvents.has(eventId)) return this.json(res, 404, { error: "Event not found" });
+                schedulerEvents.delete(eventId);
+                this.savePersistence(service);
+                return this.json(res, 200, { ok: true });
+            }
         }
 
         // ── Projects ─────────────────────────────────────────────────────────
@@ -48,26 +168,48 @@ export class SchedulerHandler implements IRouteHandler {
         }
 
         const projectDetailMatch = /^\/api\/scheduler\/projects\/([^/?]+)$/.exec(url);
-        if (method === "GET" && projectDetailMatch) {
+        if (projectDetailMatch) {
             const pid = decodeURIComponent(projectDetailMatch[1]!);
-            const project = schedulerProjects.get(pid);
-            if (!project) return this.json(res, 404, { error: "Project not found" });
-            return this.json(res, 200, { project });
+
+            if (method === "GET") {
+                const project = schedulerProjects.get(pid);
+                if (!project) return this.json(res, 404, { error: "Project not found" });
+                return this.json(res, 200, { project });
+            }
+
+            if (method === "DELETE") {
+                triggerTabSwitch();
+                if (!schedulerProjects.has(pid)) return this.json(res, 404, { error: "Project not found" });
+                schedulerProjects.delete(pid);
+                this.savePersistence(service);
+                return this.json(res, 200, { ok: true });
+            }
         }
 
         if (method === "POST" && url === "/api/scheduler/projects") {
             const body = await service.readJsonBody<{ name?: string; description?: string }>(req);
             if (!body.name) return this.json(res, 400, { error: "name is required" });
+            triggerTabSwitch();
             const id = randomUUID();
             const project = {
                 id,
                 name: body.name,
                 description: body.description,
-                tasks: [] as Array<{ id: string; title: string; status: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string; createdAt: string }>,
+                tasks: [] as Array<{
+                    id: string;
+                    title: string;
+                    status: string;
+                    assignee?: string;
+                    startDate?: string;
+                    endDate?: string;
+                    dueDate?: string;
+                    createdAt: string;
+                }>,
                 milestones: [] as Array<{ title: string; dueDate?: string }>,
                 createdAt: new Date().toISOString(),
             };
             schedulerProjects.set(id, project);
+            this.savePersistence(service);
             return this.json(res, 200, { project });
         }
 
@@ -82,8 +224,18 @@ export class SchedulerHandler implements IRouteHandler {
         }
 
         if (method === "POST" && url === "/api/scheduler/tasks") {
-            const body = await service.readJsonBody<{ title?: string; projectId?: string; status?: string; assignee?: string; startDate?: string; endDate?: string; dueDate?: string }>(req);
+            const body = await service.readJsonBody<{
+                title?: string;
+                projectId?: string;
+                status?: string;
+                assignee?: string;
+                startDate?: string;
+                endDate?: string;
+                dueDate?: string;
+            }>(req);
             if (!body.title) return this.json(res, 400, { error: "title is required" });
+            if (!body.projectId) return this.json(res, 400, { error: "Project ID is required" });
+            triggerTabSwitch();
             const task = {
                 id: randomUUID(),
                 title: body.title,
@@ -94,34 +246,68 @@ export class SchedulerHandler implements IRouteHandler {
                 dueDate: body.dueDate,
                 createdAt: new Date().toISOString(),
             };
-            if (body.projectId) {
-                const project = schedulerProjects.get(body.projectId);
-                if (project) { project.tasks.push(task); }
-                else { return this.json(res, 404, { error: "Project not found" }); }
+            const project = schedulerProjects.get(body.projectId);
+            if (project) {
+                project.tasks.push(task);
+            } else {
+                return this.json(res, 404, { error: "Project not found" });
             }
+            this.savePersistence(service);
             return this.json(res, 200, { task });
         }
 
         const taskUpdateMatch = /^\/api\/scheduler\/tasks\/([^/?]+)/.exec(url);
-        if (method === "PUT" && taskUpdateMatch) {
+        if (taskUpdateMatch) {
             const taskId = decodeURIComponent(taskUpdateMatch[1]!);
             const qs = new URL(url, "http://localhost").searchParams;
             const projectId = qs.get("projectId") || "";
-            const body = await service.readJsonBody<{ status?: string; title?: string; assignee?: string }>(req);
-            let found = false;
-            for (const p of schedulerProjects.values()) {
-                if (projectId && p.id !== projectId) continue;
-                const task = p.tasks.find((t: any) => t.id === taskId);
-                if (task) {
-                    if (body.status) task.status = body.status;
-                    if (body.title) task.title = body.title;
-                    if (body.assignee !== undefined) task.assignee = body.assignee;
-                    found = true;
-                    break;
+
+            if (method === "PUT") {
+                const body = await service.readJsonBody<{
+                    status?: string;
+                    title?: string;
+                    assignee?: string;
+                    startDate?: string;
+                    endDate?: string;
+                    dueDate?: string;
+                }>(req);
+                triggerTabSwitch();
+                let found = false;
+                for (const p of schedulerProjects.values()) {
+                    if (projectId && p.id !== projectId) continue;
+                    const task = p.tasks.find((t: any) => t.id === taskId);
+                    if (task) {
+                        if (body.status) task.status = body.status;
+                        if (body.title) task.title = body.title;
+                        if (body.assignee !== undefined) task.assignee = body.assignee;
+                        if (body.startDate !== undefined) task.startDate = body.startDate;
+                        if (body.endDate !== undefined) task.endDate = body.endDate;
+                        if (body.dueDate !== undefined) task.dueDate = body.dueDate;
+                        found = true;
+                        break;
+                    }
                 }
+                if (!found) return this.json(res, 404, { error: "Task not found" });
+                this.savePersistence(service);
+                return this.json(res, 200, { ok: true });
             }
-            if (!found) return this.json(res, 404, { error: "Task not found" });
-            return this.json(res, 200, { ok: true });
+
+            if (method === "DELETE") {
+                triggerTabSwitch();
+                let found = false;
+                for (const p of schedulerProjects.values()) {
+                    if (projectId && p.id !== projectId) continue;
+                    const index = p.tasks.findIndex((t: any) => t.id === taskId);
+                    if (index !== -1) {
+                        p.tasks.splice(index, 1);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return this.json(res, 404, { error: "Task not found" });
+                this.savePersistence(service);
+                return this.json(res, 200, { ok: true });
+            }
         }
 
         // ── Cron Jobs ────────────────────────────────────────────────────────
@@ -148,6 +334,7 @@ export class SchedulerHandler implements IRouteHandler {
             if (!body.label || !body.action) {
                 return this.json(res, 400, { error: "label and action are required" });
             }
+            triggerTabSwitch();
             try {
                 let entry;
                 if (body.type === "once") {
@@ -160,7 +347,12 @@ export class SchedulerHandler implements IRouteHandler {
                         return this.json(res, 400, { error: "cronExpression is required for recurring jobs" });
                     }
                     parseCronExpression(body.cronExpression);
-                    entry = schedulerEngine.scheduleRecurring(body.label, body.cronExpression, body.action, body.payload);
+                    entry = schedulerEngine.scheduleRecurring(
+                        body.label,
+                        body.cronExpression,
+                        body.action,
+                        body.payload,
+                    );
                 }
                 service.broadcastEvent({ type: "scheduler:cron-created", id: entry.id, label: entry.label });
                 return this.json(res, 201, { job: entry });
@@ -197,6 +389,7 @@ export class SchedulerHandler implements IRouteHandler {
             }
 
             if (!isPreview && method === "DELETE") {
+                triggerTabSwitch();
                 const removed = schedulerEngine.cancel(cronId);
                 if (!removed) return this.json(res, 404, { error: "Cron job not found" });
                 service.broadcastEvent({ type: "scheduler:cron-cancelled", id: cronId });

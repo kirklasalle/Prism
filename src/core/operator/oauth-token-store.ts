@@ -10,12 +10,7 @@
  *   "outlook:access_token"  "outlook:refresh_token"
  */
 
-import {
-    existsSync,
-    mkdirSync,
-    rmSync,
-    readdirSync,
-} from "node:fs";
+import { existsSync, mkdirSync, rmSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";

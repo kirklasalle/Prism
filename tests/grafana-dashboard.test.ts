@@ -115,7 +115,7 @@ describe("R6 / E6-7 — Grafana dashboard JSON", () => {
                     assert.ok(
                         PRISM_METRICS.has(base),
                         `panel "${panel.title}" references unknown metric "${m}" (base "${base}"). ` +
-                        `Either register it in OtelExporter / metrics route, or fix the dashboard.`,
+                            `Either register it in OtelExporter / metrics route, or fix the dashboard.`,
                     );
                 }
             }

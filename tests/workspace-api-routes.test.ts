@@ -28,15 +28,26 @@ let service: DashboardService;
 let port: number;
 let tmpDir: string;
 let chatStore: ChatSessionStore;
+let authToken = "";
+let savedPrefs: string | undefined;
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return authToken ? { Authorization: `Bearer ${authToken}`, ...extra } : { ...extra };
+}
 
 function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        http.get({ hostname: "127.0.0.1", port, path }, (res) => {
+        http.get({ hostname: "127.0.0.1", port, path, headers: authHeaders() }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });
@@ -44,20 +55,28 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
 
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? authHeaders() : authHeaders({ "Content-Type": "application/json" }),
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -72,21 +91,29 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
     before(async () => {
         tmpDir = mkdtempSync(join(tmpdir(), "prism-workspace-api-"));
 
+        // Isolate the preferences path to avoid polluting the workspace's main prefs file
+        savedPrefs = process.env.PRISM_PREFERENCES_PATH;
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "isolated-prefs.json");
+
         // Seed a minimal character file so listWorkspaceCharacters finds something
         const charDir = join(tmpDir, "characters");
         mkdirSync(charDir, { recursive: true });
         // Ensure state directory exists for workspace database
         mkdirSync(join(tmpDir, "state"), { recursive: true });
-        writeFileSync(join(charDir, "test-agent.json"), JSON.stringify({
-            id: "test-agent",
-            name: "Test Agent",
-            archetype: "sentinel",
-            profile: "individual",
-            maxRiskTier: 1,
-            allowedTools: ["semantic_query"],
-            systemPromptOverride: "You are a test agent.",
-            defaultEmail: "test@prism.local",
-        }), "utf8");
+        writeFileSync(
+            join(charDir, "test-agent.json"),
+            JSON.stringify({
+                id: "test-agent",
+                name: "Test Agent",
+                archetype: "sentinel",
+                profile: "individual",
+                maxRiskTier: 1,
+                allowedTools: ["semantic_query"],
+                systemPromptOverride: "You are a test agent.",
+                defaultEmail: "test@prism.local",
+            }),
+            "utf8",
+        );
 
         // Point workspace resolver at the temp dir
         _setWorkspaceRootForTest(tmpDir);
@@ -106,15 +133,15 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
                 executionProfileSegment: "individual",
             },
             chatStore,
-            [],                                          // actions
-            0,                                           // port = ephemeral
-            undefined,                                   // metricsCollector
-            undefined,                                   // retrievalDashboardStore
-            new InMemoryProviderSecretStore(),            // providerSecretStore
-            undefined,                                   // activityStore
-            join(tmpDir, "session-packages.json"),        // sessionPackageStorePath
-            join(tmpDir, "exports"),                      // sessionPackageExportDir
-            registry,                                    // toolRegistry
+            [], // actions
+            0, // port = ephemeral
+            undefined, // metricsCollector
+            undefined, // retrievalDashboardStore
+            new InMemoryProviderSecretStore(), // providerSecretStore
+            undefined, // activityStore
+            join(tmpDir, "session-packages.json"), // sessionPackageStorePath
+            join(tmpDir, "exports"), // sessionPackageExportDir
+            registry, // toolRegistry
         );
 
         service.start();
@@ -123,13 +150,29 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
         const addr = (service as unknown as { server: { address(): { port: number } | null } }).server.address();
         port = addr ? addr.port : 0;
         assert.ok(port > 0, "DashboardService should bind to an ephemeral port");
+
+        // Capture the admin token so requests pass the AuthGate.
+        authToken = service.getAuthGate().getToken();
+        assert.ok(authToken.length > 0, "AuthGate should expose an admin token");
     });
 
     after(async () => {
         await service.stop();
         chatStore.close();
         _resetWorkspaceRootCache();
-        rmSync(tmpDir, { recursive: true, force: true });
+
+        // Restore previous PRISM_PREFERENCES_PATH
+        if (savedPrefs === undefined) {
+            delete process.env.PRISM_PREFERENCES_PATH;
+        } else {
+            process.env.PRISM_PREFERENCES_PATH = savedPrefs;
+        }
+
+        try {
+            rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+        } catch {
+            /* Windows file-lock tolerance */
+        }
     });
 
     /* ── GET /api/workspace/info ───────────────────────────────────────── */
@@ -391,8 +434,10 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
         });
         assert.strictEqual(status, 400);
         assert.ok(body.error);
-        assert.ok(body.error.includes("path separator") || body.error.includes(".."),
-            "error should mention path safety");
+        assert.ok(
+            body.error.includes("path separator") || body.error.includes(".."),
+            "error should mention path safety",
+        );
     });
 
     it("POST /api/workspace/import rejects oversized file (>10 MB)", async () => {
@@ -407,8 +452,7 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
         });
         assert.strictEqual(status, 400);
         assert.ok(body.error);
-        assert.ok(body.error.includes("10 MB") || body.error.includes("size"),
-            "error should mention size limit");
+        assert.ok(body.error.includes("10 MB") || body.error.includes("size"), "error should mention size limit");
     });
 
     it("POST /api/workspace/import rejects invalid mode", async () => {
@@ -434,19 +478,19 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
 
     /* ── POST /api/workspace/import — registered mode ──────────────────── */
 
-    it("POST /api/workspace/import (registered) imports character JSON", async () => {
-        const charJson = { name: "test-import-char", persona: "A test character", systemPrompt: "Hello" };
-        const content = Buffer.from(JSON.stringify(charJson)).toString("base64");
+    it("POST /api/workspace/import (registered) imports mcp-config JSON", async () => {
+        const mcpJson = { mcpServers: { myServer: { command: "node", args: ["server.js"] } } };
+        const content = Buffer.from(JSON.stringify(mcpJson)).toString("base64");
         const { status, body } = await requestJson("POST", "/api/workspace/import", {
             mode: "registered",
-            fileName: "test-import-char.json",
+            fileName: "mcp-settings.json",
             content,
-            registeredType: "character",
+            registeredType: "mcp-config",
         });
         assert.strictEqual(status, 200);
         assert.strictEqual(body.ok, true);
         assert.strictEqual(body.entry.mode, "registered");
-        assert.strictEqual(body.entry.registeredType, "character");
+        assert.strictEqual(body.entry.registeredType, "mcp-config");
     });
 
     it("POST /api/workspace/import (registered) rejects unknown registeredType", async () => {
@@ -462,19 +506,34 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
         assert.ok(body.error.includes("registeredType"));
     });
 
-    it("POST /api/workspace/import (registered) validates character schema", async () => {
-        // Missing required 'name' field
-        const badChar = { persona: "Missing name" };
-        const content = Buffer.from(JSON.stringify(badChar)).toString("base64");
+    it("POST /api/workspace/import (registered) validates session-package schema", async () => {
+        // Missing required 'exportedAt' and 'package' fields
+        const badPkg = { title: "missing required fields" };
+        const content = Buffer.from(JSON.stringify(badPkg)).toString("base64");
         const { status, body } = await requestJson("POST", "/api/workspace/import", {
             mode: "registered",
-            fileName: "bad-char.json",
+            fileName: "bad-pkg.json",
+            content,
+            registeredType: "session-package",
+        });
+        assert.strictEqual(status, 400);
+        assert.ok(body.error);
+        assert.ok(
+            body.error.includes("Validation") || body.error.includes("exportedAt") || body.error.includes("package"),
+            "error should mention session-package validation",
+        );
+    });
+
+    it("POST /api/workspace/import (registered) rejects character type (moved to Characters tab)", async () => {
+        const content = Buffer.from('{"name":"x"}').toString("base64");
+        const { status, body } = await requestJson("POST", "/api/workspace/import", {
+            mode: "registered",
+            fileName: "char.json",
             content,
             registeredType: "character",
         });
         assert.strictEqual(status, 400);
-        assert.ok(body.error);
-        assert.ok(body.error.includes("name"), "error should mention missing name");
+        assert.ok(body.error, "should return an error — character import is handled by the Characters tab");
     });
 
     /* ── POST /api/workspace/import — folder mode ──────────────────────── */
@@ -548,8 +607,10 @@ describe("Workspace API Routes (/api/workspace/*)", function () {
             reason: "should fail",
         });
         // Should fail — can't suspend a revoked assignment
-        assert.ok(status === 400 || status === 409 || (body.error && body.ok !== true),
-            "Suspending a revoked assignment should fail");
+        assert.ok(
+            status === 400 || status === 409 || (body.error && body.ok !== true),
+            "Suspending a revoked assignment should fail",
+        );
     });
 
     it("POST /api/workspace/character-resume on active assignment is a no-op", async () => {

@@ -72,7 +72,10 @@ export interface OidcVerifiedIdentity {
 }
 
 export class OidcError extends Error {
-    constructor(message: string, readonly code: string = "oidc_error") {
+    constructor(
+        message: string,
+        readonly code: string = "oidc_error",
+    ) {
         super(message);
         this.name = "OidcError";
     }
@@ -122,10 +125,7 @@ export class OidcProvider {
     }
 
     /** Exchange an authorization code for an ID token and verify it. */
-    async completeAuth(input: {
-        code: string;
-        state: OidcAuthRequestState;
-    }): Promise<OidcVerifiedIdentity> {
+    async completeAuth(input: { code: string; state: OidcAuthRequestState }): Promise<OidcVerifiedIdentity> {
         const doc = await this.discovery();
         const body = new URLSearchParams({
             grant_type: "authorization_code",
@@ -145,7 +145,7 @@ export class OidcProvider {
             const text = await safeText(tokenRes);
             throw new OidcError(`token endpoint returned ${tokenRes.status}: ${text}`, "token_exchange_failed");
         }
-        const tokenJson = await tokenRes.json() as { id_token?: string };
+        const tokenJson = (await tokenRes.json()) as { id_token?: string };
         const idToken = tokenJson.id_token;
         if (!idToken || typeof idToken !== "string") {
             throw new OidcError("token endpoint did not return id_token", "missing_id_token");
@@ -157,10 +157,7 @@ export class OidcProvider {
      * Verify an ID token signature + standard claims. Exported as a public
      * method so tests can exercise the verification path directly.
      */
-    async verifyIdToken(
-        idToken: string,
-        opts: { expectedNonce?: string } = {},
-    ): Promise<OidcVerifiedIdentity> {
+    async verifyIdToken(idToken: string, opts: { expectedNonce?: string } = {}): Promise<OidcVerifiedIdentity> {
         const doc = await this.discovery();
         const parts = idToken.split(".");
         if (parts.length !== 3) throw new OidcError("malformed id_token", "malformed_jwt");
@@ -184,11 +181,13 @@ export class OidcProvider {
         const claims = payloadJson as Record<string, unknown>;
         const now = this.nowSeconds();
         if (claims["iss"] !== doc.issuer) {
-            throw new OidcError(`issuer mismatch: got ${String(claims["iss"])}, expected ${doc.issuer}`, "iss_mismatch");
+            throw new OidcError(
+                `issuer mismatch: got ${String(claims["iss"])}, expected ${doc.issuer}`,
+                "iss_mismatch",
+            );
         }
         const aud = claims["aud"];
-        const audOk = aud === this.config.clientId
-            || (Array.isArray(aud) && aud.includes(this.config.clientId));
+        const audOk = aud === this.config.clientId || (Array.isArray(aud) && aud.includes(this.config.clientId));
         if (!audOk) throw new OidcError("aud mismatch", "aud_mismatch");
         const exp = Number(claims["exp"]);
         if (!Number.isFinite(exp) || exp < now) throw new OidcError("id_token expired", "expired");
@@ -204,10 +203,11 @@ export class OidcProvider {
             throw new OidcError("missing sub claim", "missing_sub");
         }
         const email = typeof claims["email"] === "string" ? (claims["email"] as string) : undefined;
-        const displayName = (typeof claims["name"] === "string" && claims["name"])
-            || (typeof claims["preferred_username"] === "string" && claims["preferred_username"])
-            || email
-            || sub;
+        const displayName =
+            (typeof claims["name"] === "string" && claims["name"]) ||
+            (typeof claims["preferred_username"] === "string" && claims["preferred_username"]) ||
+            email ||
+            sub;
         return {
             sub,
             email,
@@ -227,7 +227,7 @@ export class OidcProvider {
         if (!res.ok) {
             throw new OidcError(`discovery fetch failed: ${res.status}`, "discovery_failed");
         }
-        const doc = await res.json() as OidcDiscoveryDoc;
+        const doc = (await res.json()) as OidcDiscoveryDoc;
         for (const k of ["issuer", "authorization_endpoint", "token_endpoint", "jwks_uri"] as const) {
             if (typeof doc[k] !== "string") {
                 throw new OidcError(`discovery doc missing field: ${k}`, "discovery_invalid");
@@ -244,7 +244,7 @@ export class OidcProvider {
             const doc = await this.discovery();
             const res = await this.fetcher(doc.jwks_uri, { method: "GET" });
             if (!res.ok) throw new OidcError(`jwks fetch failed: ${res.status}`, "jwks_failed");
-            const jwks = await res.json() as { keys?: JsonWebKey[] };
+            const jwks = (await res.json()) as { keys?: JsonWebKey[] };
             if (!Array.isArray(jwks.keys)) throw new OidcError("jwks invalid", "jwks_invalid");
             this.jwksCache = { keys: jwks.keys, fetchedAt: now };
         }
@@ -284,5 +284,9 @@ function parseJsonOrThrow(s: string): Record<string, unknown> {
 }
 
 async function safeText(res: Response): Promise<string> {
-    try { return (await res.text()).slice(0, 500); } catch { return ""; }
+    try {
+        return (await res.text()).slice(0, 500);
+    } catch {
+        return "";
+    }
 }

@@ -17,11 +17,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import type {
-    PtacRunResult,
-    PtacScenarioResult,
-    PtacStepResult,
-} from "./types.js";
+import type { PtacRunResult, PtacScenarioResult, PtacStepResult } from "./types.js";
 
 export class PtacRecorder {
     private readonly stepsLogPath: string;
@@ -33,7 +29,10 @@ export class PtacRecorder {
     public readonly recordVideoFps: number;
     private readonly videoFrames: Array<{ stepId: string; relPath: string; observedAt: string; bracket: string }> = [];
 
-    constructor(public readonly runDir: string, options: { demoRecording?: boolean; recordVideo?: boolean; recordVideoFps?: number } = {}) {
+    constructor(
+        public readonly runDir: string,
+        options: { demoRecording?: boolean; recordVideo?: boolean; recordVideoFps?: number } = {},
+    ) {
         mkdirSync(runDir, { recursive: true });
         this.screenshotsDir = join(runDir, "screenshots");
         mkdirSync(this.screenshotsDir, { recursive: true });
@@ -87,11 +86,7 @@ export class PtacRecorder {
         writeFileSync(summaryPath, JSON.stringify(run, null, 2), "utf8");
         if (this.demoRecording) {
             const transcript = buildTranscript(run);
-            writeFileSync(
-                join(this.runDir, "transcript.json"),
-                JSON.stringify(transcript, null, 2),
-                "utf8",
-            );
+            writeFileSync(join(this.runDir, "transcript.json"), JSON.stringify(transcript, null, 2), "utf8");
             writeFileSync(
                 join(this.runDir, "transcript.txt"),
                 transcript.map(formatTranscriptLine).join("\n") + "\n",
@@ -106,11 +101,7 @@ export class PtacRecorder {
                 durationSec: Math.round((this.videoFrames.length / this.recordVideoFps) * 100) / 100,
                 frames: this.videoFrames,
             };
-            writeFileSync(
-                join(this.runDir, "video-manifest.json"),
-                JSON.stringify(manifest, null, 2),
-                "utf8",
-            );
+            writeFileSync(join(this.runDir, "video-manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
             writeFileSync(
                 join(this.runDir, "video.html"),
                 renderVideoSlideshow(run.runId, this.videoFrames, this.recordVideoFps),
@@ -173,11 +164,7 @@ function narrateStep(scenarioId: string, st: PtacStepResult): string {
         oauthFlowCanary: "drives an OAuth canary",
     };
     const action = verb[st.kind] ?? `runs ${st.kind}`;
-    const outcome = st.status === "passed"
-        ? "and succeeds"
-        : st.status === "failed"
-            ? "and fails"
-            : `(${st.status})`;
+    const outcome = st.status === "passed" ? "and succeeds" : st.status === "failed" ? "and fails" : `(${st.status})`;
     return `In scenario ${scenarioId}, step ${st.stepId} ${action} the dashboard ${outcome}.`;
 }
 
@@ -278,8 +265,7 @@ function escapeHtml(s: string): string {
 /* ── Report renderer (intentionally dependency-free) ─────────────────── */
 
 function renderReport(run: PtacRunResult): string {
-    const escape = (s: string): string =>
-        s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const escape = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const statusClass = (s: string): string => `status-${s}`;
     const scenarios = run.scenarios.map((sc) => renderScenario(sc, escape, statusClass)).join("\n");
     const passCount = run.scenarios.filter((s) => s.status === "passed").length;
@@ -336,17 +322,9 @@ function renderScenario(
 </section>`;
 }
 
-function renderStep(
-    st: PtacStepResult,
-    escape: (s: string) => string,
-    statusClass: (s: string) => string,
-): string {
-    const screens = st.evidence.screenshots
-        .map((p) => `<img src="${escape(p)}" alt="${escape(p)}">`)
-        .join("");
-    const err = st.error
-        ? `<pre>${escape(st.error.message)}\n${escape(st.error.stack ?? "")}</pre>`
-        : "";
+function renderStep(st: PtacStepResult, escape: (s: string) => string, statusClass: (s: string) => string): string {
+    const screens = st.evidence.screenshots.map((p) => `<img src="${escape(p)}" alt="${escape(p)}">`).join("");
+    const err = st.error ? `<pre>${escape(st.error.message)}\n${escape(st.error.stack ?? "")}</pre>` : "";
     return `<div class="step">
     <span class="pill">${escape(st.kind)}</span>
     <div>

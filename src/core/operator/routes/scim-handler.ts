@@ -168,7 +168,10 @@ export class ScimRouteHandler implements IRouteHandler {
     }
 
     private async handleCreateUser(
-        req: IncomingMessage, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const body = await this.readJson(req, service);
         if (!body || typeof body !== "object") {
@@ -208,7 +211,11 @@ export class ScimRouteHandler implements IRouteHandler {
     }
 
     private async handleReplaceUser(
-        req: IncomingMessage, id: string, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        id: string,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const user = this.store.getUser(id);
         if (!user || user.tenantId !== tenantId) {
@@ -230,7 +237,11 @@ export class ScimRouteHandler implements IRouteHandler {
     }
 
     private async handlePatchUser(
-        req: IncomingMessage, id: string, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        id: string,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const user = this.store.getUser(id);
         if (!user || user.tenantId !== tenantId) {
@@ -246,9 +257,12 @@ export class ScimRouteHandler implements IRouteHandler {
             const value = op["value"];
             if ((opName === "replace" || opName === "add") && (path === "active" || path === "")) {
                 // Some IdPs send {op:"replace", value:{active:false}} with no path.
-                const flag = path === "active"
-                    ? value
-                    : (value && typeof value === "object" ? (value as Record<string, unknown>)["active"] : undefined);
+                const flag =
+                    path === "active"
+                        ? value
+                        : value && typeof value === "object"
+                          ? (value as Record<string, unknown>)["active"]
+                          : undefined;
                 if (flag === false) this.store.setUserStatus(id, "suspended");
                 else if (flag === true) this.store.setUserStatus(id, "active");
             }
@@ -334,11 +348,13 @@ export class ScimRouteHandler implements IRouteHandler {
             changePassword: { supported: false },
             sort: { supported: false },
             etag: { supported: false },
-            authenticationSchemes: [{
-                type: "oauthbearertoken",
-                name: "OAuth Bearer Token",
-                description: "PRISM SCIM bearer token issued via the IAM admin UI.",
-            }],
+            authenticationSchemes: [
+                {
+                    type: "oauthbearertoken",
+                    name: "OAuth Bearer Token",
+                    description: "PRISM SCIM bearer token issued via the IAM admin UI.",
+                },
+            ],
         };
     }
 
@@ -359,7 +375,12 @@ export class ScimRouteHandler implements IRouteHandler {
             totalResults: 2,
             Resources: [
                 { id: "User", name: "User", endpoint: "/Users", schema: "urn:ietf:params:scim:schemas:core:2.0:User" },
-                { id: "Group", name: "Group", endpoint: "/Groups", schema: "urn:ietf:params:scim:schemas:core:2.0:Group" },
+                {
+                    id: "Group",
+                    name: "Group",
+                    endpoint: "/Groups",
+                    schema: "urn:ietf:params:scim:schemas:core:2.0:Group",
+                },
             ],
         };
     }
@@ -373,13 +394,17 @@ export class ScimRouteHandler implements IRouteHandler {
         const svc = service as unknown as { readJsonBody?: (r: IncomingMessage) => Promise<unknown> };
         if (svc && typeof svc.readJsonBody === "function") {
             const v = await svc.readJsonBody(req);
-            return (v && typeof v === "object") ? v as Record<string, unknown> : null;
+            return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
         }
         const chunks: Buffer[] = [];
         for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         const text = Buffer.concat(chunks).toString("utf-8");
         if (!text) return null;
-        try { return JSON.parse(text) as Record<string, unknown>; } catch { return null; }
+        try {
+            return JSON.parse(text) as Record<string, unknown>;
+        } catch {
+            return null;
+        }
     }
 
     private scimJson(res: ServerResponse, status: number, body: unknown, extraHeaders?: Record<string, string>): void {

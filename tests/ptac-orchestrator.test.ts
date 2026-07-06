@@ -128,8 +128,10 @@ export async function testPtacOrchestrator(): Promise<void> {
         [approveScenario],
     );
     assert.strictEqual(out1.status, "passed", `approveAt scenario must pass — got ${out1.status}`);
-    assert.ok(approveCalls.some((c) => c.method === "POST" && /\/approve$/.test(c.url)),
-        "POST /approve must have been issued");
+    assert.ok(
+        approveCalls.some((c) => c.method === "POST" && /\/approve$/.test(c.url)),
+        "POST /approve must have been issued",
+    );
 
     // ── 4. assertEvent — pass and fail paths ───────────────────────────
     const assertScenarioPass: PtacScenario = {
@@ -257,8 +259,10 @@ export async function testPtacOrchestrator(): Promise<void> {
         [srStatusScenario],
     );
     assert.strictEqual(out5.status, "passed", `srFanOut status-mode must pass — got ${out5.status}`);
-    assert.ok(srStatusCalls.some((c) => /\/api\/sr\/status\?/.test(c.url)),
-        "GET /api/sr/status must have been issued");
+    assert.ok(
+        srStatusCalls.some((c) => /\/api\/sr\/status\?/.test(c.url)),
+        "GET /api/sr/status must have been issued",
+    );
 
     // ── 8. srFanOut — configure + cost-estimate (full triad) ───────────
     const srTriadScenario: PtacScenario = {

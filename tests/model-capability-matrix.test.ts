@@ -142,13 +142,15 @@ describe("selectModelForRole", () => {
     });
 
     it("reports degraded when only T1 available for code-generation", () => {
-        const tinyOnly: AvailableModel[] = [
-            { providerId: "ollama", model: "gemma3:1b", locality: "local" },
-        ];
+        const tinyOnly: AvailableModel[] = [{ providerId: "ollama", model: "gemma3:1b", locality: "local" }];
         const result = selectModelForRole("code-generation", tinyOnly);
         assert.ok(result);
         assert.equal(result.degraded, true);
-        assert.ok(result.reason.includes("degraded") || result.reason.includes("not met") || result.reason.includes("below ideal"));
+        assert.ok(
+            result.reason.includes("degraded") ||
+                result.reason.includes("not met") ||
+                result.reason.includes("below ideal"),
+        );
     });
 });
 
@@ -565,7 +567,10 @@ describe("PROVIDER_PROMPT_STRATEGIES registry", () => {
 
     it("each strategy has required fields", () => {
         for (const s of PROVIDER_PROMPT_STRATEGIES) {
-            assert.ok(typeof s.providerPattern === "string" && s.providerPattern.length > 0, `${s.label} providerPattern should be non-empty string`);
+            assert.ok(
+                typeof s.providerPattern === "string" && s.providerPattern.length > 0,
+                `${s.label} providerPattern should be non-empty string`,
+            );
             assert.ok(typeof s.label === "string" && s.label.length > 0);
             assert.ok(["xml", "markdown", "mixed", "minimal"].includes(s.structureFormat));
             assert.ok(["explicit", "avoid", "implicit"].includes(s.chainOfThoughtMode));

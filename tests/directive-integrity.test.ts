@@ -42,7 +42,9 @@ describe("Directive Integrity", function () {
     });
 
     afterEach(() => {
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {}
     });
 
     /* ── Hash Computation ────────────────────────────────────────────── */
@@ -144,9 +146,12 @@ describe("Directive Integrity", function () {
             const hash = computeDirectiveHash(workspaceRoot);
             if (hash) {
                 // If the file is present, the constant must match
-                assert.strictEqual(hash, DIRECTIVE_SHA256,
+                assert.strictEqual(
+                    hash,
+                    DIRECTIVE_SHA256,
                     "DIRECTIVE_SHA256 constant does not match the PAD file on disk. " +
-                    "If the PAD was intentionally updated, update the constant in directive-integrity.ts.");
+                        "If the PAD was intentionally updated, update the constant in directive-integrity.ts.",
+                );
             }
         });
     });
@@ -181,8 +186,7 @@ describe("Directive Manifest", function () {
 
         it("all laws are currently enforced", () => {
             for (const law of PAD_LAWS) {
-                assert.strictEqual(law.enforced, true,
-                    `Law ${law.id} (${law.code}) should be enforced`);
+                assert.strictEqual(law.enforced, true, `Law ${law.id} (${law.code}) should be enforced`);
             }
         });
     });
@@ -237,8 +241,7 @@ describe("Directive Manifest", function () {
         it("business preamble references all 10 laws", () => {
             const preamble = getGovernancePreamble("business");
             for (let i = 1; i <= 10; i++) {
-                assert.ok(preamble.includes(`Law ${i}`),
-                    `Business preamble should reference Law ${i}`);
+                assert.ok(preamble.includes(`Law ${i}`), `Business preamble should reference Law ${i}`);
             }
         });
     });

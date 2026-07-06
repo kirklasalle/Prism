@@ -90,7 +90,8 @@ export function tierColor(tier: number): string {
 
 export function statusColor(status: string): string {
     const s = status.toLowerCase();
-    if (s === "pass" || s === "healthy" || s === "active" || s === "ok" || s === "approved" || s === "running") return colors.success;
+    if (s === "pass" || s === "healthy" || s === "active" || s === "ok" || s === "approved" || s === "running")
+        return colors.success;
     if (s === "warn" || s === "warning" || s === "idle" || s === "pending") return colors.warning;
     if (s === "fail" || s === "error" || s === "unhealthy" || s === "denied" || s === "stopped") return colors.error;
     return colors.muted;

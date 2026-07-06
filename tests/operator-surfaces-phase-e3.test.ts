@@ -11,18 +11,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ActivityBus } from "../src/core/activity/bus.js";
-import {
-    UtilityRegistry,
-    registerBuiltInUtilities,
-} from "../src/core/operator/utility-registry.js";
-import {
-    RiskOverrideStore,
-} from "../src/core/operator/risk-override-store.js";
+import { UtilityRegistry, registerBuiltInUtilities } from "../src/core/operator/utility-registry.js";
+import { RiskOverrideStore } from "../src/core/operator/risk-override-store.js";
 import { IncidentTrendStore } from "../src/core/memory/incident-trend-store.js";
-import {
-    defaultRetrievalAlertPolicy,
-    tuneFromIncidentTrends,
-} from "../src/core/memory/retrieval-alert-policy.js";
+import { defaultRetrievalAlertPolicy, tuneFromIncidentTrends } from "../src/core/memory/retrieval-alert-policy.js";
 
 export async function testUtilityRegistry(): Promise<void> {
     const bus = new ActivityBus();
@@ -52,7 +44,9 @@ export async function testUtilityRegistry(): Promise<void> {
         label: "Boom",
         description: "Throws",
         riskTier: 1,
-        handler: async () => { throw new Error("kaboom"); },
+        handler: async () => {
+            throw new Error("kaboom");
+        },
     });
     const failed = await registry.execute("test.boom").catch(() => null);
     // execute resolves rather than rejects on failures (run.status === "failed")
@@ -95,7 +89,10 @@ export async function testRiskOverrideStore(): Promise<void> {
         });
         assert.equal(ov.toolId, "test.tool");
         assert.equal(ov.overrideTier, "tier2");
-        assert.ok(events.some((op) => op.startsWith("risk.override")), "should emit override event");
+        assert.ok(
+            events.some((op) => op.startsWith("risk.override")),
+            "should emit override event",
+        );
 
         // Persistence — re-load from same file
         const reload = new RiskOverrideStore(filePath, bus);
@@ -109,13 +106,15 @@ export async function testRiskOverrideStore(): Promise<void> {
         assert.equal(reload.get("test.tool"), null);
 
         // Validation: missing reason should throw
-        assert.throws(() => store.set({
-            toolId: "no.reason",
-            overrideTier: "tier1",
-            reason: "",
-            setBy: "x",
-            expiresAt: null,
-        }));
+        assert.throws(() =>
+            store.set({
+                toolId: "no.reason",
+                overrideTier: "tier1",
+                reason: "",
+                setBy: "x",
+                expiresAt: null,
+            }),
+        );
 
         // File still exists and is valid JSON
         assert.ok(existsSync(filePath));

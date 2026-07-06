@@ -1,7 +1,7 @@
 /**
  * Secure Browser Control Tool - Enhanced version with operator session integration
- * 
- * This wrapper extends the base BrowserControlTool with secure operator session 
+ *
+ * This wrapper extends the base BrowserControlTool with secure operator session
  * management, providing:
  * - Session-based authorization for browser control operations
  * - Comprehensive audit trails for all web interactions
@@ -15,7 +15,7 @@ import { BrowserControlTool } from "./browser-control-tool.js";
 import type {
     SecureOperatorSessionManager,
     SecureOperatorSession,
-    SecureOperatorActivity
+    SecureOperatorActivity,
 } from "../../core/operator/secure-operator-session-manager.js";
 import type { ActivityBus } from "../../core/activity/bus.js";
 import { randomUUID } from "node:crypto";
@@ -31,11 +31,11 @@ export interface SecureBrowserControlOptions {
     elevatedOperations?: string[];
 }
 
-export interface SecureBrowserControlRequest extends ToolRequest { }
+export interface SecureBrowserControlRequest extends ToolRequest {}
 
 /**
  * Secure Browser Control Tool with operator session integration
- * 
+ *
  * Wraps the base BrowserControlTool with comprehensive security features
  * including session-based authorization, audit trails, and compliance logging.
  */
@@ -52,9 +52,18 @@ export class SecureBrowserControlTool implements Tool {
         this.sessionManager = options.sessionManager;
         this.activityBus = options.activityBus;
         this.browserControlTool = options.browserControlTool || new BrowserControlTool(options.activityBus);
-        this.elevatedOperations = new Set(options.elevatedOperations || [
-            "evaluate", "click", "type", "select_option", "set_cookie", "clear_cookies", "create_profile", "delete_profile"
-        ]);
+        this.elevatedOperations = new Set(
+            options.elevatedOperations || [
+                "evaluate",
+                "click",
+                "type",
+                "select_option",
+                "set_cookie",
+                "clear_cookies",
+                "create_profile",
+                "delete_profile",
+            ],
+        );
 
         // Extend the base contract with operator session requirements
         this.contract = {
@@ -63,9 +72,9 @@ export class SecureBrowserControlTool implements Tool {
                 ...this.browserControlTool.contract.args,
                 operatorSessionId: {
                     type: "string",
-                    required: true
-                }
-            }
+                    required: true,
+                },
+            },
         };
     }
 
@@ -98,8 +107,8 @@ export class SecureBrowserControlTool implements Tool {
                     ok: false,
                     output: {
                         error: "Invalid or expired operator session",
-                        code: "session_invalid"
-                    }
+                        code: "session_invalid",
+                    },
                 };
             }
 
@@ -111,8 +120,8 @@ export class SecureBrowserControlTool implements Tool {
                     ok: false,
                     output: {
                         error: `Operation '${action}' not authorized for current session`,
-                        code: "operation_unauthorized"
-                    }
+                        code: "operation_unauthorized",
+                    },
                 };
             }
 
@@ -123,21 +132,14 @@ export class SecureBrowserControlTool implements Tool {
             const startTime = Date.now();
             const result = await this.browserControlTool.execute({
                 ...request,
-                args: this.sanitizeArgsForBaseTool(args)
+                args: this.sanitizeArgsForBaseTool(args),
             });
             const executionTime = Date.now() - startTime;
 
             // Step 5: Record operation completion
-            await this.recordOperationComplete(
-                session,
-                activityId,
-                action,
-                result,
-                executionTime
-            );
+            await this.recordOperationComplete(session, activityId, action, result, executionTime);
 
             return result;
-
         } catch (error) {
             console.error("Secure browser operation failed:", error);
 
@@ -152,8 +154,8 @@ export class SecureBrowserControlTool implements Tool {
                         details: {
                             operatorSessionId,
                             action,
-                            error: error instanceof Error ? error.message : String(error)
-                        }
+                            error: error instanceof Error ? error.message : String(error),
+                        },
                     });
                 }
             } catch (e) {
@@ -165,8 +167,8 @@ export class SecureBrowserControlTool implements Tool {
                 output: {
                     error: "Secure browser operation failed",
                     message: error instanceof Error ? error.message : String(error),
-                    code: "operation_failed"
-                }
+                    code: "operation_failed",
+                },
             };
         }
     }
@@ -209,8 +211,10 @@ export class SecureBrowserControlTool implements Tool {
         // Additional checks for elevated operations
         if (this.elevatedOperations.has(action)) {
             // Require administrator or emergency privileges for elevated operations
-            if (session.securityConstraints.privilege !== "administrator" &&
-                session.securityConstraints.privilege !== "emergency") {
+            if (
+                session.securityConstraints.privilege !== "administrator" &&
+                session.securityConstraints.privilege !== "emergency"
+            ) {
                 return false;
             }
         }
@@ -224,7 +228,7 @@ export class SecureBrowserControlTool implements Tool {
     private async recordOperationStart(
         session: SecureOperatorSession,
         action: string,
-        args: Record<string, unknown>
+        args: Record<string, unknown>,
     ): Promise<string> {
         const activityId = randomUUID();
 
@@ -236,9 +240,9 @@ export class SecureBrowserControlTool implements Tool {
             operation: action,
             details: {
                 status: "started",
-                args: this.maskSensitiveArgs(args)
+                args: this.maskSensitiveArgs(args),
             },
-            impactLevel: this.determineImpactLevel(action)
+            impactLevel: this.determineImpactLevel(action),
         };
 
         await this.sessionManager.recordActivity(session.sessionId, activity);
@@ -253,7 +257,7 @@ export class SecureBrowserControlTool implements Tool {
         activityId: string,
         action: string,
         result: ToolResult,
-        executionTimeMs: number
+        executionTimeMs: number,
     ): Promise<void> {
         const activity: SecureOperatorActivity = {
             activityId: `${activityId}-complete`,
@@ -268,9 +272,9 @@ export class SecureBrowserControlTool implements Tool {
                 // Don't log full output as it might contain sensitive data (DOM, screenshots, etc.)
                 resultStatus: result.ok ? "success" : "failed",
                 hasOutput: !!result.output,
-                errorCode: result.ok ? undefined : (result.output as any)?.code
+                errorCode: result.ok ? undefined : (result.output as any)?.code,
             },
-            impactLevel: this.determineImpactLevel(action)
+            impactLevel: this.determineImpactLevel(action),
         };
 
         await this.sessionManager.recordActivity(session.sessionId, activity);
@@ -282,7 +286,7 @@ export class SecureBrowserControlTool implements Tool {
     private async recordUnauthorizedAttempt(
         session: SecureOperatorSession,
         action: string,
-        args: Record<string, unknown>
+        args: Record<string, unknown>,
     ): Promise<void> {
         const activity: SecureOperatorActivity = {
             activityId: randomUUID(),
@@ -293,9 +297,9 @@ export class SecureBrowserControlTool implements Tool {
             details: {
                 status: "denied",
                 reason: "unauthorized_operation",
-                args: this.maskSensitiveArgs(args)
+                args: this.maskSensitiveArgs(args),
             },
-            impactLevel: "high" // Unauthorized attempts are always high impact for auditing
+            impactLevel: "high", // Unauthorized attempts are always high impact for auditing
         };
 
         await this.sessionManager.recordActivity(session.sessionId, activity);

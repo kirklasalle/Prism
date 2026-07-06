@@ -100,7 +100,7 @@ export interface IamSsoSession {
 
 /** Default seeded role names, in descending privilege order. */
 export const DEFAULT_ROLE_NAMES = ["root", "admin", "operator", "viewer"] as const;
-export type DefaultRoleName = typeof DEFAULT_ROLE_NAMES[number];
+export type DefaultRoleName = (typeof DEFAULT_ROLE_NAMES)[number];
 
 /** Result of a successful API-key verification. */
 export interface ApiKeyVerifyResult {
@@ -184,7 +184,11 @@ export class IamStore {
     /** Close the underlying database (only if this store opened it). */
     close(): void {
         if (this.ownsDb) {
-            try { this.db.close(); } catch { /* best-effort */ }
+            try {
+                this.db.close();
+            } catch {
+                /* best-effort */
+            }
         }
     }
 
@@ -425,7 +429,9 @@ export class IamStore {
     }
 
     getUserByEmail(tenantId: string, email: string): IamUser | null {
-        const row = this.stmts.getUserByEmail.get({ tenant_id: tenantId, email }) as Record<string, unknown> | undefined;
+        const row = this.stmts.getUserByEmail.get({ tenant_id: tenantId, email }) as
+            | Record<string, unknown>
+            | undefined;
         return row ? this.rowToUser(row) : null;
     }
 
@@ -474,7 +480,10 @@ export class IamStore {
     }
 
     listRoleNamesForUser(userId: string, tenantId: string): string[] {
-        const rows = this.stmts.listMembershipsForUser.all({ user_id: userId, tenant_id: tenantId }) as Record<string, unknown>[];
+        const rows = this.stmts.listMembershipsForUser.all({ user_id: userId, tenant_id: tenantId }) as Record<
+            string,
+            unknown
+        >[];
         return rows.map((r) => String(r["role_name"]));
     }
 
@@ -490,10 +499,21 @@ export class IamStore {
         const id = newId("key");
         const now = nowIso();
         this.stmts.insertApiKey.run({
-            id, user_id: userId, tenant_id: tenantId, hash, label, created_at: now,
+            id,
+            user_id: userId,
+            tenant_id: tenantId,
+            hash,
+            label,
+            created_at: now,
         });
         const record: IamApiKey = {
-            id, userId, tenantId, label, createdAt: now, lastUsedAt: null, revokedAt: null,
+            id,
+            userId,
+            tenantId,
+            label,
+            createdAt: now,
+            lastUsedAt: null,
+            revokedAt: null,
         };
         return { token, record };
     }
@@ -540,7 +560,11 @@ export class IamStore {
         const id = newId("idp");
         const now = nowIso();
         this.stmts.insertIdp.run({
-            id, tenant_id: tenantId, kind, config_json: JSON.stringify(config), created_at: now,
+            id,
+            tenant_id: tenantId,
+            kind,
+            config_json: JSON.stringify(config),
+            created_at: now,
         });
         return { id, tenantId, kind, config, createdAt: now };
     }
@@ -641,7 +665,11 @@ export class IamStore {
 
     private rowToUser(r: Record<string, unknown>): IamUser {
         let attrs: Record<string, unknown> = {};
-        try { attrs = JSON.parse(String(r["attrs"] ?? "{}")) as Record<string, unknown>; } catch { /* ignore */ }
+        try {
+            attrs = JSON.parse(String(r["attrs"] ?? "{}")) as Record<string, unknown>;
+        } catch {
+            /* ignore */
+        }
         return {
             id: String(r["id"]),
             tenantId: String(r["tenant_id"]),
@@ -679,7 +707,11 @@ function rowToApiKey(r: Record<string, unknown>): IamApiKey {
 
 function rowToIdp(r: Record<string, unknown>): IamIdpConfig {
     let cfg: Record<string, unknown> = {};
-    try { cfg = JSON.parse(String(r["config_json"] ?? "{}")) as Record<string, unknown>; } catch { /* ignore */ }
+    try {
+        cfg = JSON.parse(String(r["config_json"] ?? "{}")) as Record<string, unknown>;
+    } catch {
+        /* ignore */
+    }
     return {
         id: String(r["id"]),
         tenantId: String(r["tenant_id"]),
@@ -691,9 +723,13 @@ function rowToIdp(r: Record<string, unknown>): IamIdpConfig {
 
 function defaultRoleDescription(name: DefaultRoleName): string {
     switch (name) {
-        case "root": return "Full control including IAM administration and tenant configuration.";
-        case "admin": return "Tenant administrator: manages users, roles, and policies.";
-        case "operator": return "Day-to-day agent operation, run management, and observability.";
-        case "viewer": return "Read-only access to dashboards and audit trails.";
+        case "root":
+            return "Full control including IAM administration and tenant configuration.";
+        case "admin":
+            return "Tenant administrator: manages users, roles, and policies.";
+        case "operator":
+            return "Day-to-day agent operation, run management, and observability.";
+        case "viewer":
+            return "Read-only access to dashboards and audit trails.";
     }
 }

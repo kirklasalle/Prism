@@ -178,7 +178,15 @@ export class SetupApiClient {
     /**
      * List available characters from workspace.
      */
-    async getWorkspaceCharacters(): Promise<{ characters: Array<{ id?: string; characterId?: string; name?: string; displayName?: string; executionProfile?: string }> }> {
+    async getWorkspaceCharacters(): Promise<{
+        characters: Array<{
+            id?: string;
+            characterId?: string;
+            name?: string;
+            displayName?: string;
+            executionProfile?: string;
+        }>;
+    }> {
         return this.get("/api/workspace/characters");
     }
 
@@ -200,7 +208,10 @@ export class SetupApiClient {
     /**
      * Create a browser profile.
      */
-    async postBrowserProfile(email: string, segment: string): Promise<{ profile?: { profileId?: string }; profileId?: string; id?: string }> {
+    async postBrowserProfile(
+        email: string,
+        segment: string,
+    ): Promise<{ profile?: { profileId?: string }; profileId?: string; id?: string }> {
         return this.post("/api/browser/profiles", { email, segment });
     }
 

@@ -107,8 +107,8 @@ export class MigrationRunner {
             if (applied.checksum !== expected) {
                 throw new MigrationError(
                     `migration v${declared.version} (${declared.name}) checksum mismatch: ` +
-                    `db=${applied.checksum.slice(0, 12)} declared=${expected.slice(0, 12)} — ` +
-                    `migrations are immutable once applied; create a new version instead`,
+                        `db=${applied.checksum.slice(0, 12)} declared=${expected.slice(0, 12)} — ` +
+                        `migrations are immutable once applied; create a new version instead`,
                 );
             }
         }
@@ -132,9 +132,7 @@ export class MigrationRunner {
             } catch (err) {
                 this.db.exec("ROLLBACK");
                 const e = err as Error;
-                throw new MigrationError(
-                    `migration v${m.version} (${m.name}) failed: ${e.message}`,
-                );
+                throw new MigrationError(`migration v${m.version} (${m.name}) failed: ${e.message}`);
             }
             justApplied.push({ version: m.version, name: m.name, checksum, appliedAt });
         }
@@ -191,9 +189,7 @@ export class MigrationRunner {
         for (let i = 0; i < versions.length; i++) {
             const v = versions[i]!;
             if (!Number.isInteger(v) || v < 1) {
-                throw new MigrationError(
-                    `migration version must be a positive integer, got ${v}`,
-                );
+                throw new MigrationError(`migration version must be a positive integer, got ${v}`);
             }
         }
 
@@ -216,7 +212,7 @@ export class MigrationRunner {
             if (sorted[i] !== expected) {
                 throw new MigrationError(
                     `migration versions must be 1-indexed and contiguous; ` +
-                    `got [${sorted.join(", ")}] (expected v${expected} at position ${i})`,
+                        `got [${sorted.join(", ")}] (expected v${expected} at position ${i})`,
                 );
             }
         }

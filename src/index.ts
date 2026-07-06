@@ -10,10 +10,7 @@ import { SqliteActivityStore } from "./core/activity/sqlite-store.js";
 import { ApprovalQueue } from "./core/approval/approval-queue.js";
 import { resolveEnvironmentProfile } from "./core/config/environment-profiles.js";
 import { EpisodicMemory } from "./core/memory/episodic-memory.js";
-import {
-    resolveRetrievalAlertProfile,
-    withRetrievalAlertPolicyProfile,
-} from "./core/memory/retrieval-alert-policy.js";
+import { resolveRetrievalAlertProfile, withRetrievalAlertPolicyProfile } from "./core/memory/retrieval-alert-policy.js";
 import { RetrievalMetricsCollector } from "./core/memory/retrieval-metrics.js";
 import { RetrievalDashboardStore } from "./core/memory/retrieval-dashboard-store.js";
 import { SemanticMemoryIndex } from "./core/memory/semantic-memory.js";
@@ -21,7 +18,10 @@ import { SessionMemoryStore } from "./core/memory/session-memory.js";
 import { PolicyEngine } from "./core/policy/engine.js";
 import { Orchestrator } from "./core/runtime/orchestrator.js";
 import { WorkflowExecutor } from "./core/runtime/workflow.js";
-import { resolveExecutionProfileFromEnv, describeExecutionProfileResolution } from "./core/config/execution-mode-config.js";
+import {
+    resolveExecutionProfileFromEnv,
+    describeExecutionProfileResolution,
+} from "./core/config/execution-mode-config.js";
 import { builtinTools } from "./core/tools/builtin-tools.js";
 import { ToolRegistry } from "./core/tools/registry.js";
 import { GmailOAuthAdapter } from "./adapters/application/email-oauth-adapter.js";
@@ -67,6 +67,7 @@ import {
     resolveDashboardPort,
     resolveIntervalMs,
     ensureEnvFile,
+    loadEnvFile,
 } from "./bootstrap/environment.js";
 import { waitForShutdown } from "./bootstrap/shutdown.js";
 import { createDashboardActions } from "./bootstrap/dashboard-actions.js";
@@ -80,6 +81,8 @@ import { SkillsDbAdapter } from "./core/skills/db-adapter.js";
 async function main(): Promise<void> {
     // Auto-create .env from .env.example on first run
     ensureEnvFile();
+    // Load environment variables from .env into process.env
+    loadEnvFile();
 
     // Assign mock credentials in dev mode if they are not configured, so OAuth is connectable
     if (process.env.NODE_ENV !== "production") {
@@ -127,11 +130,12 @@ async function main(): Promise<void> {
         if (powerMode === "adaptive") {
             isAuto = true;
             process.env.PRISM_BASE_MODE_AUTO = "true";
-            
+
             // Resolve configured provider / model from prefs or env
-            const providerId = prefs?.activeLlmProviderId || (process.env.PRISM_LLM_PROVIDER ?? "").trim().toLowerCase();
+            const providerId =
+                prefs?.activeLlmProviderId || (process.env.PRISM_LLM_PROVIDER ?? "").trim().toLowerCase();
             const activeModel = prefs?.activeLlmModel || process.env.PRISM_LLM_MODEL || null;
-            
+
             if (activeModel) {
                 const profile = resolveProfile(activeModel);
                 targetBaseMode = profile.locality === "local" && profile.tier <= 2;
@@ -145,7 +149,9 @@ async function main(): Promise<void> {
         }
 
         process.env.PRISM_BASE_MODE = targetBaseMode ? "true" : "false";
-        console.log(`[PRISM][startup] Early hydrated powerMode preference: '${powerMode}' -> baseMode=${targetBaseMode} (auto=${isAuto})`);
+        console.log(
+            `[PRISM][startup] Early hydrated powerMode preference: '${powerMode}' -> baseMode=${targetBaseMode} (auto=${isAuto})`,
+        );
     } catch (err) {
         console.warn("[PRISM][startup] Failed to early hydrate powerMode preference:", err);
     }
@@ -156,7 +162,7 @@ async function main(): Promise<void> {
     if (legacy.found) {
         console.log(
             `[PRISM][workspace] Legacy CWD-relative paths detected: ${legacy.paths.join(", ")}. ` +
-            `Workspace is now at: ${wsRoot}`,
+                `Workspace is now at: ${wsRoot}`,
         );
     }
 
@@ -207,7 +213,9 @@ async function main(): Promise<void> {
     // Immutable governance contract between agent and operator.
     // Ref: .github/PRISM_SACRED_COVENANT.md
     const covenant = new PrismCovenant(activityBus);
-    console.log(`[PRISM][covenant] Sacred Covenant active (v${covenant.getStatus().version}, hash:${covenant.getStatus().hash})`);
+    console.log(
+        `[PRISM][covenant] Sacred Covenant active (v${covenant.getStatus().version}, hash:${covenant.getStatus().hash})`,
+    );
 
     if (process.env.PRISM_BASE_MODE === "true") {
         console.log(`\n[PRISM][startup] ======================================================`);
@@ -241,7 +249,9 @@ async function main(): Promise<void> {
         registry.register(tool);
     }
     registry.register(new SemanticQueryTool(semanticIndex, episodicMemory, sessionMemory, metricsCollector));
-    registry.register(new MemoryQueryTool(semanticIndex, episodicMemory, sessionMemory, "memory_query", metricsCollector));
+    registry.register(
+        new MemoryQueryTool(semanticIndex, episodicMemory, sessionMemory, "memory_query", metricsCollector),
+    );
     for (const tool of nexusBridgeTools()) {
         registry.register(tool);
     }
@@ -251,8 +261,9 @@ async function main(): Promise<void> {
 
     // Load MCP tools from workspace config or CWD fallback
     const mcpAdapter = new McpClientAdapter();
-    const mcpSettingsPath = process.env.PRISM_MCP_SETTINGS
-        ?? (existsSync(join(workspaceConfigDir(), "mcp-settings.json"))
+    const mcpSettingsPath =
+        process.env.PRISM_MCP_SETTINGS ??
+        (existsSync(join(workspaceConfigDir(), "mcp-settings.json"))
             ? join(workspaceConfigDir(), "mcp-settings.json")
             : join(process.cwd(), ".mcp/mcp-settings.json"));
     if (existsSync(mcpSettingsPath)) {
@@ -272,16 +283,24 @@ async function main(): Promise<void> {
         }
     }
 
-    const orchestrator = new Orchestrator(
-        sessionId, activityBus, policyEngine, registry,
-        { approvalQueue, approvalTimeoutMs: 30_000, executionProfile },
-    );
+    const orchestrator = new Orchestrator(sessionId, activityBus, policyEngine, registry, {
+        approvalQueue,
+        approvalTimeoutMs: 30_000,
+        executionProfile,
+    });
     const workflowExecutor = new WorkflowExecutor();
     let resolveDashboardService: ((svc: DashboardService) => void) | null = null;
     const dashboardServiceReady = new Promise<DashboardService>((resolve) => {
         resolveDashboardService = resolve;
     });
-    const dashboardActions = createDashboardActions(orchestrator, workflowExecutor, approvalQueue, sessionId, dashboardServiceReady, activityBus);
+    const dashboardActions = createDashboardActions(
+        orchestrator,
+        workflowExecutor,
+        approvalQueue,
+        sessionId,
+        dashboardServiceReady,
+        activityBus,
+    );
     const dashboardService = new DashboardService(
         approvalQueue,
         activityBus,
@@ -333,26 +352,38 @@ async function main(): Promise<void> {
     const agentLifecycle = new AgentLifecycleManager({
         onSpawn: (inst) => {
             activityBus.emit({
-                sessionId, layer: "agent", operation: "agent.spawned",
-                status: "succeeded", details: { agentId: inst.agentId, role: inst.role, lifecycle: inst.lifecycle },
+                sessionId,
+                layer: "agent",
+                operation: "agent.spawned",
+                status: "succeeded",
+                details: { agentId: inst.agentId, role: inst.role, lifecycle: inst.lifecycle },
             });
         },
         onStop: (agentId) => {
             activityBus.emit({
-                sessionId, layer: "agent", operation: "agent.stopped",
-                status: "succeeded", details: { agentId },
+                sessionId,
+                layer: "agent",
+                operation: "agent.stopped",
+                status: "succeeded",
+                details: { agentId },
             });
         },
         onPromote: (agentId, from, to) => {
             activityBus.emit({
-                sessionId, layer: "agent", operation: "agent.promoted",
-                status: "succeeded", details: { agentId, from, to },
+                sessionId,
+                layer: "agent",
+                operation: "agent.promoted",
+                status: "succeeded",
+                details: { agentId, from, to },
             });
         },
         onReap: (agentId) => {
             activityBus.emit({
-                sessionId, layer: "agent", operation: "agent.reaped",
-                status: "succeeded", details: { agentId },
+                sessionId,
+                layer: "agent",
+                operation: "agent.reaped",
+                status: "succeeded",
+                details: { agentId },
             });
         },
     });
@@ -375,7 +406,9 @@ async function main(): Promise<void> {
     // Sync lifecycle model overrides to LLM routing config
     for (const inst of agentLifecycle.list()) {
         if (inst.modelOverride) {
-            dashboardService.getLlmProviders().setAgentModelOverride(inst.agentId, inst.modelOverride.providerId, inst.modelOverride.model);
+            dashboardService
+                .getLlmProviders()
+                .setAgentModelOverride(inst.agentId, inst.modelOverride.providerId, inst.modelOverride.model);
         }
     }
 
@@ -383,7 +416,12 @@ async function main(): Promise<void> {
 
     // Register all lifecycle agents in the pool
     for (const inst of agentLifecycle.list()) {
-        agentPool.register({ agentId: inst.agentId, role: inst.role, description: inst.description, systemContext: inst.systemContext });
+        agentPool.register({
+            agentId: inst.agentId,
+            role: inst.role,
+            description: inst.description,
+            systemContext: inst.systemContext,
+        });
     }
 
     // Wire dispatch hooks for lifecycle tracking and telemetry
@@ -406,8 +444,11 @@ async function main(): Promise<void> {
 
     const swarmCoordinator = new SwarmCoordinator(agentPool, (swarm) => {
         activityBus.emit({
-            sessionId, layer: "agent", operation: "swarm.updated",
-            status: "succeeded", details: { swarmId: swarm.swarmId, state: swarm.state, topology: swarm.topology },
+            sessionId,
+            layer: "agent",
+            operation: "swarm.updated",
+            status: "succeeded",
+            details: { swarmId: swarm.swarmId, state: swarm.state, topology: swarm.topology },
         });
     });
 

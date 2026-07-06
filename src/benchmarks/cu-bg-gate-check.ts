@@ -60,8 +60,10 @@ function readJson<T>(filePath: string): T {
 }
 
 function resolveInputPath(): string {
-    return process.env.PRISM_CU_BG_STATUS_PATH
-        ?? workspacePath("artifacts", "ci-gates", "computer-use-business-gate-status.json");
+    return (
+        process.env.PRISM_CU_BG_STATUS_PATH ??
+        workspacePath("artifacts", "ci-gates", "computer-use-business-gate-status.json")
+    );
 }
 
 function resolveSchemaPath(): string {
@@ -73,8 +75,10 @@ function resolveSchemaPath(): string {
 }
 
 function resolveOutputPath(): string {
-    return process.env.PRISM_CU_BG_VALIDATION_OUTPUT_PATH
-        ?? workspacePath("artifacts", "ci-gates", "computer-use-business-gate-validation.json");
+    return (
+        process.env.PRISM_CU_BG_VALIDATION_OUTPUT_PATH ??
+        workspacePath("artifacts", "ci-gates", "computer-use-business-gate-validation.json")
+    );
 }
 
 function ensureSchemaPresent(schemaPath: string, errors: string[]): void {
@@ -147,7 +151,8 @@ function validateArtifactShape(
 
         const status = requirement.status;
         const statusValid = VALID_STATUSES.includes(status);
-        const evidenceValid = typeof requirement.evidenceLink === "string" && requirement.evidenceLink.trim().length > 0;
+        const evidenceValid =
+            typeof requirement.evidenceLink === "string" && requirement.evidenceLink.trim().length > 0;
         const reviewerValid = typeof requirement.reviewer === "string" && requirement.reviewer.trim().length > 0;
         const evidenceNotPlaceholder = evidenceValid && !hasTemplatePlaceholder(requirement.evidenceLink);
         const reviewerNotPlaceholder = reviewerValid && !hasTemplatePlaceholder(requirement.reviewer);

@@ -34,7 +34,13 @@ import type { DashboardService } from "../dashboard-service.js";
 import { SessionManager } from "../../iam/sso/session.js";
 import { IamStore, type IamUser } from "../../iam/store.js";
 import { adminTokenPrincipal, type IamPrincipal, type RoleName } from "../../iam/rbac.js";
-import { OidcConfig, OidcProvider, OidcError, OidcVerifiedIdentity, type OidcAuthRequestState } from "../../iam/sso/oidc.js";
+import {
+    OidcConfig,
+    OidcProvider,
+    OidcError,
+    OidcVerifiedIdentity,
+    type OidcAuthRequestState,
+} from "../../iam/sso/oidc.js";
 import { SamlProvider, SamlError, type SamlAuthnRequestState } from "../../iam/sso/saml.js";
 import type { CacProvider, CacAuthRequest, CacSecurityLevel, CacOperatorPrivilege } from "../../iam/cac/types.js";
 import type { SecureOperatorSessionManager, SecureOperatorSessionOptions } from "../secure-operator-session-manager.js";
@@ -100,13 +106,15 @@ export class IamRouteHandler implements IRouteHandler {
         this.sessions = opts.sessionManager ?? new SessionManager(this.store);
         this.defaultTenantId = opts.defaultTenantId ?? "default";
         this.publicBaseUrl = opts.publicBaseUrl ?? "";
-        this.oidcFactory = opts.oidcProviderFactory ?? ((configId: string) => {
-            const cfg = this.store.getIdpConfig(configId);
-            if (!cfg || cfg.kind !== "oidc") {
-                throw new OidcError(`unknown OIDC config id: ${configId}`, "unknown_idp");
-            }
-            return new OidcProvider(cfg.config as unknown as OidcConfig);
-        });
+        this.oidcFactory =
+            opts.oidcProviderFactory ??
+            ((configId: string) => {
+                const cfg = this.store.getIdpConfig(configId);
+                if (!cfg || cfg.kind !== "oidc") {
+                    throw new OidcError(`unknown OIDC config id: ${configId}`, "unknown_idp");
+                }
+                return new OidcProvider(cfg.config as unknown as OidcConfig);
+            });
         this.cacProvider = opts.cacProvider;
         this.secureOperatorSessionManager = opts.secureOperatorSessionManager;
         this.activityBus = opts.activityBus;
@@ -139,9 +147,7 @@ export class IamRouteHandler implements IRouteHandler {
     resolvePrincipalFromApiKey(presentedToken: string): IamPrincipal | null {
         const verified = this.store.verifyApiKey(presentedToken);
         if (!verified) return null;
-        const roleNames = this.store.listRoleNamesForUser(
-            verified.user.id, verified.user.tenantId,
-        ) as RoleName[];
+        const roleNames = this.store.listRoleNamesForUser(verified.user.id, verified.user.tenantId) as RoleName[];
         return {
             userId: verified.user.id,
             tenantId: verified.user.tenantId,
@@ -153,8 +159,12 @@ export class IamRouteHandler implements IRouteHandler {
     }
 
     /** Read-only access to the underlying store (for SCIM in H-3). */
-    getStore(): IamStore { return this.store; }
-    getSessions(): SessionManager { return this.sessions; }
+    getStore(): IamStore {
+        return this.store;
+    }
+    getSessions(): SessionManager {
+        return this.sessions;
+    }
 
     match(req: IncomingMessage): boolean {
         const path = (req.url ?? "").split("?")[0];
@@ -240,7 +250,9 @@ export class IamRouteHandler implements IRouteHandler {
         const tenantId = url.searchParams.get("tenant_id") ?? this.defaultTenantId;
         const configId = url.searchParams.get("config_id");
         if (!configId) {
-            return this.json(res, 400, { error: { code: "missing_config_id", message: "config_id query param required" } });
+            return this.json(res, 400, {
+                error: { code: "missing_config_id", message: "config_id query param required" },
+            });
         }
 
         if (kind === "oidc") {
@@ -255,7 +267,9 @@ export class IamRouteHandler implements IRouteHandler {
         // SAML
         const cfg = this.store.getIdpConfig(configId);
         if (!cfg || cfg.kind !== "saml") {
-            return this.json(res, 400, { error: { code: "unknown_idp", message: `unknown SAML config id: ${configId}` } });
+            return this.json(res, 400, {
+                error: { code: "unknown_idp", message: `unknown SAML config id: ${configId}` },
+            });
         }
         const provider = new SamlProvider(cfg.config as never);
         const { url: redirectUrl, state } = provider.beginAuth();
@@ -265,7 +279,12 @@ export class IamRouteHandler implements IRouteHandler {
         res.end();
     }
 
-    private async handleCallback(kind: "oidc" | "saml", req: IncomingMessage, url: URL, res: ServerResponse): Promise<void> {
+    private async handleCallback(
+        kind: "oidc" | "saml",
+        req: IncomingMessage,
+        url: URL,
+        res: ServerResponse,
+    ): Promise<void> {
         const flowId = this.readFlowCookie(req);
         if (!flowId) {
             return this.json(res, 400, { error: { code: "missing_flow", message: "no SSO flow in progress" } });
@@ -284,10 +303,14 @@ export class IamRouteHandler implements IRouteHandler {
             const state = url.searchParams.get("state");
             const oidcState = flow.state as OidcAuthRequestState;
             if (!code || state !== oidcState.state) {
-                return this.json(res, 400, { error: { code: "invalid_callback", message: "missing code or state mismatch" } });
+                return this.json(res, 400, {
+                    error: { code: "invalid_callback", message: "missing code or state mismatch" },
+                });
             }
             const configId = url.searchParams.get("config_id") ?? "";
-            const provider = configId ? this.oidcFactory(configId) : this.oidcFactory(this.findFirstOidcConfigId(flow.tenantId));
+            const provider = configId
+                ? this.oidcFactory(configId)
+                : this.oidcFactory(this.findFirstOidcConfigId(flow.tenantId));
             const identity = await provider.completeAuth({ code, state: oidcState });
             return this.completeLoginAndRedirect(res, flow.tenantId, identity);
         }
@@ -295,7 +318,9 @@ export class IamRouteHandler implements IRouteHandler {
         // SAML — currently surfaces "not_implemented".
         // The real flow will pull `SAMLResponse` from the POST body; this
         // GET callback is a placeholder so the route still exists.
-        return this.json(res, 501, { error: { code: "not_implemented", message: "SAML callback verification deferred to H-2.1" } });
+        return this.json(res, 501, {
+            error: { code: "not_implemented", message: "SAML callback verification deferred to H-2.1" },
+        });
     }
 
     private completeLoginAndRedirect(res: ServerResponse, tenantId: string, identity: OidcVerifiedIdentity): void {
@@ -363,7 +388,7 @@ export class IamRouteHandler implements IRouteHandler {
         // Close all active browser sessions
         try {
             if (service && Array.isArray(service.tools)) {
-                const browserTool = service.tools.find(t => t.name === "browser_control") as any;
+                const browserTool = service.tools.find((t) => t.name === "browser_control") as any;
                 const mgr = browserTool?.getManager();
                 if (mgr) {
                     await mgr.closeAll();
@@ -373,26 +398,49 @@ export class IamRouteHandler implements IRouteHandler {
             console.error("[PRISM][logout] Error closing browser sessions:", err);
         }
 
-        this.emitAuthEvent("iam.logout", "succeeded", {
-            email: principal?.email ?? "unknown",
-            userId: principal?.userId,
-            message: `Operator ${principal?.email ?? "unknown"} logged out`,
-        }, undefined, principal?.email, principal?.userId);
+        this.emitAuthEvent(
+            "iam.logout",
+            "succeeded",
+            {
+                email: principal?.email ?? "unknown",
+                userId: principal?.userId,
+                message: `Operator ${principal?.email ?? "unknown"} logged out`,
+            },
+            undefined,
+            principal?.email,
+            principal?.userId,
+        );
         res.statusCode = 204;
         res.end();
     }
 
-    private async handleLocalLogin(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
+    private async handleLocalLogin(
+        req: IncomingMessage,
+        res: ServerResponse,
+        service: DashboardService,
+    ): Promise<void> {
         const loginStartMs = Date.now();
         let bodyText = "";
         for await (const chunk of req) bodyText += chunk;
-        const parsed = JSON.parse(bodyText) as { email?: string; password?: string; tenantId?: string };
+        const parsed = JSON.parse(bodyText) as {
+            email?: string;
+            password?: string;
+            tenantId?: string;
+            setupToken?: string;
+        };
         const tenantId = parsed.tenantId ?? this.defaultTenantId;
-        const email = String(parsed.email ?? "").trim().toLowerCase();
+        const email = String(parsed.email ?? "")
+            .trim()
+            .toLowerCase();
         const password = String(parsed.password ?? "").trim();
         if (!email || !password) {
-            this.emitAuthEvent("iam.login.rejected", "failed", { email: email || "(empty)", reason: "missing_credentials" });
-            return this.json(res, 400, { error: { code: "invalid_credentials", message: "Email and password required" } });
+            this.emitAuthEvent("iam.login.rejected", "failed", {
+                email: email || "(empty)",
+                reason: "missing_credentials",
+            });
+            return this.json(res, 400, {
+                error: { code: "invalid_credentials", message: "Email and password required" },
+            });
         }
 
         const user = this.store.getUserByEmail(tenantId, email);
@@ -403,19 +451,35 @@ export class IamRouteHandler implements IRouteHandler {
             const storedHash = String(user.attrs?.passwordHash ?? "");
             const sha256Hex = (str: string) => createHash("sha256").update(str, "utf-8").digest("hex");
             if (storedHash && storedHash !== sha256Hex(password)) {
-                this.emitAuthEvent("iam.login.failed", "failed", { email, reason: "invalid_password", userId: user.id, tenantId });
+                this.emitAuthEvent("iam.login.failed", "failed", {
+                    email,
+                    reason: "invalid_password",
+                    userId: user.id,
+                    tenantId,
+                });
                 return this.json(res, 401, { error: { code: "unauthorized", message: "Invalid credentials" } });
             }
             if (!storedHash) {
                 user.attrs = { ...user.attrs, passwordHash: sha256Hex(password) };
                 this.store.updateUserAttrs(user.id, user.attrs);
-                this.emitAuthEvent("iam.login.password_set", "succeeded", { email, userId: user.id, message: "Initial password hash stored" });
+                this.emitAuthEvent("iam.login.password_set", "succeeded", {
+                    email,
+                    userId: user.id,
+                    message: "Initial password hash stored",
+                });
             }
         }
 
         if (user.status !== "active") {
-            this.emitAuthEvent("iam.login.blocked", "failed", { email, reason: "account_inactive", userId: user.id, status: user.status });
-            return this.json(res, 403, { error: { code: "account_inactive", message: "Operator account is not active" } });
+            this.emitAuthEvent("iam.login.blocked", "failed", {
+                email,
+                reason: "account_inactive",
+                userId: user.id,
+                status: user.status,
+            });
+            return this.json(res, 403, {
+                error: { code: "account_inactive", message: "Operator account is not active" },
+            });
         }
 
         const { cookie, session } = this.sessions.issue(user.id, tenantId);
@@ -423,13 +487,22 @@ export class IamRouteHandler implements IRouteHandler {
 
         const durationMs = Date.now() - loginStartMs;
         const roles = this.store.listRoleNamesForUser(user.id, tenantId);
-        this.emitAuthEvent("iam.login.success", "succeeded", {
-            email, userId: user.id, tenantId,
-            roles: roles.join(", "),
-            displayName: user.displayName,
-            sessionId: session.id,
-            message: `Operator ${email} authenticated successfully`,
-        }, durationMs, user.email, user.id);
+        this.emitAuthEvent(
+            "iam.login.success",
+            "succeeded",
+            {
+                email,
+                userId: user.id,
+                tenantId,
+                roles: roles.join(", "),
+                displayName: user.displayName,
+                sessionId: session.id,
+                message: `Operator ${email} authenticated successfully`,
+            },
+            durationMs,
+            user.email,
+            user.id,
+        );
 
         // ── Post-login: claim orphan Initialization Certificate sessions ──
         // The wizard creates an Init Certificate session before the operator
@@ -444,29 +517,57 @@ export class IamRouteHandler implements IRouteHandler {
             const now = Date.now();
             const CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-            // Find orphan Init Certificate sessions within the claim window,
-            // sorted by creation time (most recent first).
-            const claimable = allSessions
-                .filter(s => {
-                    const isInitCert = /Initialization Certificate/i.test(s.title || "");
-                    const isOrphan = !s.operatorEmail
-                        || s.operatorEmail === "operator@prism.local"
-                        || s.operatorEmail === "not set";
-                    const age = now - new Date(s.createdAt).getTime();
-                    return isInitCert && isOrphan && age < CLAIM_WINDOW_MS;
-                })
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            const { readPreferences } = await import("../../config/workspace-resolver.js");
+            const prefs = readPreferences();
+            const tokenMatches = !prefs?.setupToken || prefs.setupToken === parsed.setupToken;
 
-            // Claim only the most recent one — it's the certificate from
-            // the wizard run that preceded this login.
-            if (claimable.length > 0) {
-                const target = claimable[0]!;
-                chatStore.updateSessionOperatorEmail(target.sessionId, email);
-                this.emitAuthEvent("iam.login.session_claimed", "succeeded", {
-                    email, sessionId: target.sessionId,
-                    previousEmail: target.operatorEmail || "(none)",
-                    message: `Claimed Initialization Certificate session for provenance chain`,
+            if (!tokenMatches) {
+                this.emitAuthEvent("iam.login.session_claim_failed", "failed", {
+                    email,
+                    reason: "setup_token_mismatch",
+                    message: "Failed to claim initialization session: setup token mismatch",
                 });
+            } else {
+                // Find orphan Init Certificate sessions within the claim window,
+                // sorted by creation time (most recent first).
+                const claimable = allSessions
+                    .filter((s) => {
+                        const isInitCert = /Initialization Certificate/i.test(s.title || "");
+                        const isOrphan =
+                            !s.operatorEmail ||
+                            s.operatorEmail === "operator@prism.local" ||
+                            s.operatorEmail === "not set";
+                        const age = now - new Date(s.createdAt).getTime();
+                        return isInitCert && isOrphan && age < CLAIM_WINDOW_MS;
+                    })
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+                // Claim only the most recent one — it's the certificate from
+                // the wizard run that preceded this login.
+                if (claimable.length > 0) {
+                    const target = claimable[0]!;
+                    chatStore.updateSessionOperatorEmail(target.sessionId, email);
+
+                    // If the session has an associated character assignment, update its operatorEmail too
+                    if (target.cacAssignmentId) {
+                        try {
+                            const cam = service.getCharacterAccountabilityManager();
+                            cam.updateAssignmentEmails(target.cacAssignmentId, email);
+                        } catch (cacErr) {
+                            console.warn(
+                                "[PRISM][login] Failed to update character assignment operator email on session claim:",
+                                cacErr,
+                            );
+                        }
+                    }
+
+                    this.emitAuthEvent("iam.login.session_claimed", "succeeded", {
+                        email,
+                        sessionId: target.sessionId,
+                        previousEmail: target.operatorEmail || "(none)",
+                        message: `Claimed Initialization Certificate session for provenance chain`,
+                    });
+                }
             }
         } catch (claimErr) {
             // Non-fatal — session claiming must not block login
@@ -481,12 +582,11 @@ export class IamRouteHandler implements IRouteHandler {
             const prefs = readPreferences();
             if (prefs?.activeLlmProviderId) {
                 const llm = service.getLlmProviderManager();
-                if (llm.activeProviderId !== prefs.activeLlmProviderId
-                    || (prefs.activeLlmModel && llm.activeModel !== prefs.activeLlmModel)) {
-                    await llm.setActiveSelection(
-                        prefs.activeLlmProviderId,
-                        prefs.activeLlmModel ?? undefined,
-                    );
+                if (
+                    llm.activeProviderId !== prefs.activeLlmProviderId ||
+                    (prefs.activeLlmModel && llm.activeModel !== prefs.activeLlmModel)
+                ) {
+                    await llm.setActiveSelection(prefs.activeLlmProviderId, prefs.activeLlmModel ?? undefined);
                     this.emitAuthEvent("iam.login.llm_restored", "succeeded", {
                         email,
                         providerId: prefs.activeLlmProviderId,
@@ -558,8 +658,8 @@ export class IamRouteHandler implements IRouteHandler {
             return this.json(res, 501, {
                 error: {
                     code: "cac_not_configured",
-                    message: "CAC authentication not available"
-                }
+                    message: "CAC authentication not available",
+                },
             });
         }
 
@@ -568,12 +668,17 @@ export class IamRouteHandler implements IRouteHandler {
             const authRequest: CacAuthRequest = JSON.parse(body);
 
             // Validate required fields
-            if (!authRequest.clientIp || !authRequest.tenantId || !authRequest.securityLevel || !authRequest.operatorPrivilege) {
+            if (
+                !authRequest.clientIp ||
+                !authRequest.tenantId ||
+                !authRequest.securityLevel ||
+                !authRequest.operatorPrivilege
+            ) {
                 return this.json(res, 400, {
                     error: {
                         code: "invalid_request",
-                        message: "Missing required fields: clientIp, tenantId, securityLevel, operatorPrivilege"
-                    }
+                        message: "Missing required fields: clientIp, tenantId, securityLevel, operatorPrivilege",
+                    },
                 });
             }
 
@@ -582,7 +687,7 @@ export class IamRouteHandler implements IRouteHandler {
                 securityLevel: authRequest.securityLevel as CacSecurityLevel,
                 operatorPrivilege: authRequest.operatorPrivilege as CacOperatorPrivilege,
                 characterId: authRequest.characterId,
-                metadata: authRequest.metadata
+                metadata: authRequest.metadata,
             };
 
             const session = await this.secureOperatorSessionManager.createSession(authRequest, sessionOptions);
@@ -594,9 +699,8 @@ export class IamRouteHandler implements IRouteHandler {
                 expiresAt: session.expiresAt,
                 securityLevel: session.securityConstraints.level,
                 privilegeLevel: session.securityConstraints.privilege,
-                allowedOperations: session.securityConstraints.allowedOperations
+                allowedOperations: session.securityConstraints.allowedOperations,
             });
-
         } catch (error) {
             console.error("CAC authentication error:", error);
             this.emitAuthEvent("iam.cac.auth.failed", "failed", {
@@ -605,8 +709,8 @@ export class IamRouteHandler implements IRouteHandler {
             return this.json(res, 400, {
                 error: {
                     code: "authentication_failed",
-                    message: error instanceof Error ? error.message : "Authentication failed"
-                }
+                    message: error instanceof Error ? error.message : "Authentication failed",
+                },
             });
         }
     }
@@ -616,8 +720,8 @@ export class IamRouteHandler implements IRouteHandler {
             return this.json(res, 501, {
                 error: {
                     code: "cac_not_configured",
-                    message: "CAC session management not available"
-                }
+                    message: "CAC session management not available",
+                },
             });
         }
 
@@ -626,8 +730,8 @@ export class IamRouteHandler implements IRouteHandler {
             return this.json(res, 404, {
                 error: {
                     code: "session_not_found",
-                    message: `Session not found: ${sessionId}`
-                }
+                    message: `Session not found: ${sessionId}`,
+                },
             });
         }
 
@@ -642,17 +746,21 @@ export class IamRouteHandler implements IRouteHandler {
             privilegeLevel: session.securityConstraints.privilege,
             allowedOperations: session.securityConstraints.allowedOperations,
             operatorEmail: session.cacSession.certificateInfo.email,
-            characterId: session.cacSession.characterId
+            characterId: session.cacSession.characterId,
         });
     }
 
-    private async handleTerminateCacSession(sessionId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    private async handleTerminateCacSession(
+        sessionId: string,
+        req: IncomingMessage,
+        res: ServerResponse,
+    ): Promise<void> {
         if (!this.secureOperatorSessionManager) {
             return this.json(res, 501, {
                 error: {
                     code: "cac_not_configured",
-                    message: "CAC session management not available"
-                }
+                    message: "CAC session management not available",
+                },
             });
         }
 
@@ -664,16 +772,15 @@ export class IamRouteHandler implements IRouteHandler {
 
             return this.json(res, 200, {
                 success: true,
-                message: `Session ${sessionId} terminated successfully`
+                message: `Session ${sessionId} terminated successfully`,
             });
-
         } catch (error) {
             console.error(`Error terminating CAC session ${sessionId}:`, error);
             return this.json(res, 400, {
                 error: {
                     code: "termination_failed",
-                    message: error instanceof Error ? error.message : "Failed to terminate session"
-                }
+                    message: error instanceof Error ? error.message : "Failed to terminate session",
+                },
             });
         }
     }
@@ -683,13 +790,13 @@ export class IamRouteHandler implements IRouteHandler {
             return this.json(res, 501, {
                 error: {
                     code: "cac_not_configured",
-                    message: "CAC session management not available"
-                }
+                    message: "CAC session management not available",
+                },
             });
         }
 
         const sessions = this.secureOperatorSessionManager.listSessions();
-        const sessionSummaries = sessions.map(session => ({
+        const sessionSummaries = sessions.map((session) => ({
             sessionId: session.sessionId,
             sessionType: session.sessionType,
             status: session.status,
@@ -699,18 +806,20 @@ export class IamRouteHandler implements IRouteHandler {
             securityLevel: session.securityConstraints.level,
             privilegeLevel: session.securityConstraints.privilege,
             operatorEmail: session.cacSession.certificateInfo.email,
-            characterId: session.cacSession.characterId
+            characterId: session.cacSession.characterId,
         }));
 
         return this.json(res, 200, {
             sessions: sessionSummaries,
-            totalCount: sessions.length
+            totalCount: sessions.length,
         });
     }
 
     private async handleCacEmergencyShutdown(req: IncomingMessage, res: ServerResponse): Promise<void> {
         if (!this.secureOperatorSessionManager) {
-            return this.json(res, 501, { error: { code: "cac_not_configured", message: "CAC session management not available" } });
+            return this.json(res, 501, {
+                error: { code: "cac_not_configured", message: "CAC session management not available" },
+            });
         }
 
         try {
@@ -718,23 +827,37 @@ export class IamRouteHandler implements IRouteHandler {
             const { reason } = JSON.parse(body);
 
             if (!reason) {
-                return this.json(res, 400, { error: { code: "invalid_request", message: "Emergency shutdown reason is required" } });
+                return this.json(res, 400, {
+                    error: { code: "invalid_request", message: "Emergency shutdown reason is required" },
+                });
             }
 
             await this.secureOperatorSessionManager.emergencyShutdown(reason);
 
             return this.json(res, 200, {
                 success: true,
-                message: "Emergency shutdown executed successfully"
+                message: "Emergency shutdown executed successfully",
             });
         } catch (error) {
-            return this.json(res, 500, { error: { code: "shutdown_failed", message: error instanceof Error ? error.message : "Emergency shutdown failed" } });
+            return this.json(res, 500, {
+                error: {
+                    code: "shutdown_failed",
+                    message: error instanceof Error ? error.message : "Emergency shutdown failed",
+                },
+            });
         }
     }
 
-    private async handleSecureToolExecute(req: IncomingMessage, res: ServerResponse, service: DashboardService, toolType: "computer" | "browser"): Promise<void> {
+    private async handleSecureToolExecute(
+        req: IncomingMessage,
+        res: ServerResponse,
+        service: DashboardService,
+        toolType: "computer" | "browser",
+    ): Promise<void> {
         if (!this.secureOperatorSessionManager) {
-            return this.json(res, 501, { error: { code: "cac_not_configured", message: "CAC session management not available" } });
+            return this.json(res, 501, {
+                error: { code: "cac_not_configured", message: "CAC session management not available" },
+            });
         }
 
         try {
@@ -742,7 +865,9 @@ export class IamRouteHandler implements IRouteHandler {
             const requestPayload = JSON.parse(bodyText);
 
             if (!requestPayload || !requestPayload.args || !requestPayload.args.operatorSessionId) {
-                return this.json(res, 400, { error: { code: "invalid_request", message: "Missing args or operatorSessionId" } });
+                return this.json(res, 400, {
+                    error: { code: "invalid_request", message: "Missing args or operatorSessionId" },
+                });
             }
 
             const activityBus = service.getActivityBus();
@@ -751,13 +876,13 @@ export class IamRouteHandler implements IRouteHandler {
             if (toolType === "computer") {
                 const tool = new SecureComputerUseTool({
                     sessionManager: this.secureOperatorSessionManager,
-                    activityBus
+                    activityBus,
                 });
                 result = await tool.execute(requestPayload);
             } else {
                 const tool = new SecureBrowserControlTool({
                     sessionManager: this.secureOperatorSessionManager,
-                    activityBus
+                    activityBus,
                 });
                 result = await tool.execute(requestPayload);
             }
@@ -765,7 +890,12 @@ export class IamRouteHandler implements IRouteHandler {
             return this.json(res, 200, result);
         } catch (error) {
             console.error(`Secure ${toolType} tool execution error:`, error);
-            return this.json(res, 500, { error: { code: "tool_execution_failed", message: error instanceof Error ? error.message : "Tool execution failed" } });
+            return this.json(res, 500, {
+                error: {
+                    code: "tool_execution_failed",
+                    message: error instanceof Error ? error.message : "Tool execution failed",
+                },
+            });
         }
     }
 
@@ -792,19 +922,21 @@ export class IamRouteHandler implements IRouteHandler {
                 operatorEmail: operatorEmail ?? undefined,
                 operatorId: operatorId ?? undefined,
             });
-        } catch { /* swallow — telemetry must never break auth */ }
+        } catch {
+            /* swallow — telemetry must never break auth */
+        }
     }
 
     private readRequestBody(req: IncomingMessage): Promise<string> {
         return new Promise((resolve, reject) => {
-            let body = '';
-            req.on('data', chunk => {
+            let body = "";
+            req.on("data", (chunk) => {
                 body += chunk.toString();
             });
-            req.on('end', () => {
+            req.on("end", () => {
                 resolve(body);
             });
-            req.on('error', reject);
+            req.on("error", reject);
         });
     }
 }

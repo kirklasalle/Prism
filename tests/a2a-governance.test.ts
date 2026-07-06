@@ -60,10 +60,7 @@ describe("A2ATaskAdapter", function () {
         it("classifies multi-part messages using all parts", () => {
             const tier = adapter.classifyTaskTier({
                 role: "user",
-                parts: [
-                    { text: "First, analyze the data." },
-                    { text: "Then, execute the transformation script." },
-                ],
+                parts: [{ text: "First, analyze the data." }, { text: "Then, execute the transformation script." }],
             });
             assert.strictEqual(tier, "tier3");
         });

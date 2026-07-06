@@ -39,9 +39,7 @@
         },
         "author": {
             "type": "object",
-            "required": [
-                "name"
-            ],
+            "required": ["name"],
             "properties": {
                 "name": {
                     "type": "string",
@@ -79,11 +77,7 @@
             "properties": {
                 "type": {
                     "type": "string",
-                    "enum": [
-                        "git",
-                        "hg",
-                        "svn"
-                    ]
+                    "enum": ["git", "hg", "svn"]
                 },
                 "url": {
                     "type": "string"
@@ -95,13 +89,7 @@
             "minItems": 1,
             "items": {
                 "type": "object",
-                "required": [
-                    "adapter_id",
-                    "adapter_type",
-                    "entry_file",
-                    "capabilities",
-                    "tier_routing"
-                ],
+                "required": ["adapter_id", "adapter_type", "entry_file", "capabilities", "tier_routing"],
                 "properties": {
                     "adapter_id": {
                         "type": "string",
@@ -111,14 +99,7 @@
                     },
                     "adapter_type": {
                         "type": "string",
-                        "enum": [
-                            "terminal",
-                            "container",
-                            "protocol",
-                            "system",
-                            "application",
-                            "custom"
-                        ],
+                        "enum": ["terminal", "container", "protocol", "system", "application", "custom"],
                         "description": "Adapter category"
                     },
                     "entry_file": {
@@ -166,11 +147,7 @@
                             },
                             "default_tier": {
                                 "type": "integer",
-                                "enum": [
-                                    1,
-                                    2,
-                                    3
-                                ],
+                                "enum": [1, 2, 3],
                                 "default": 2
                             }
                         }
@@ -194,12 +171,7 @@
                     },
                     "trust_level": {
                         "type": "string",
-                        "enum": [
-                            "untrusted",
-                            "community",
-                            "verified",
-                            "official"
-                        ],
+                        "enum": ["untrusted", "community", "verified", "official"],
                         "default": "untrusted",
                         "description": "Trust classification for business profile install gating"
                     }
@@ -209,10 +181,7 @@
         },
         "compatibility": {
             "type": "object",
-            "required": [
-                "prism_min_version",
-                "profiles"
-            ],
+            "required": ["prism_min_version", "profiles"],
             "properties": {
                 "prism_min_version": {
                     "type": "string",
@@ -227,11 +196,7 @@
                     "type": "array",
                     "items": {
                         "type": "string",
-                        "enum": [
-                            "individual",
-                            "business",
-                            "both"
-                        ]
+                        "enum": ["individual", "business", "both"]
                     },
                     "minItems": 1,
                     "description": "Supported execution profiles"
@@ -244,12 +209,7 @@
                     "type": "array",
                     "items": {
                         "type": "string",
-                        "enum": [
-                            "linux",
-                            "macos",
-                            "windows",
-                            "any"
-                        ]
+                        "enum": ["linux", "macos", "windows", "any"]
                     },
                     "description": "Supported operating systems"
                 }
@@ -294,11 +254,7 @@
             "properties": {
                 "review_status": {
                     "type": "string",
-                    "enum": [
-                        "unreviewed",
-                        "community-reviewed",
-                        "security-reviewed"
-                    ],
+                    "enum": ["unreviewed", "community-reviewed", "security-reviewed"],
                     "default": "unreviewed"
                 },
                 "signature": {
@@ -307,12 +263,7 @@
                 },
                 "signature_algorithm": {
                     "type": "string",
-                    "enum": [
-                        "rsa-2048",
-                        "rsa-4096",
-                        "ecdsa-256",
-                        "ecdsa-384"
-                    ]
+                    "enum": ["rsa-2048", "rsa-4096", "ecdsa-256", "ecdsa-384"]
                 },
                 "known_issues": {
                     "type": "array",
@@ -324,12 +275,7 @@
                             },
                             "severity": {
                                 "type": "string",
-                                "enum": [
-                                    "low",
-                                    "medium",
-                                    "high",
-                                    "critical"
-                                ]
+                                "enum": ["low", "medium", "high", "critical"]
                             },
                             "description": {
                                 "type": "string"

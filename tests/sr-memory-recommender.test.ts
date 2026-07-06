@@ -26,7 +26,13 @@ function makeRec(overrides: Partial<SRGenerationRecord> = {}): SRGenerationRecor
         role: "code-review",
         hemispheres: [
             { id: "h1", providerId: "openai", model: "gpt-4o", profileId: "code-review", role: "logic" },
-            { id: "h2", providerId: "anthropic", model: "claude-3.5-sonnet", profileId: "reasoning-deep", role: "logic" },
+            {
+                id: "h2",
+                providerId: "anthropic",
+                model: "claude-3.5-sonnet",
+                profileId: "reasoning-deep",
+                role: "logic",
+            },
         ],
         estimatedCostUsd: 0.05,
         totalMs: 4_500,
@@ -48,16 +54,18 @@ export async function testSrMemoryAndRecommender(): Promise<void> {
         const tsA = "2026-05-01T00:00:00.000Z";
         const tsB = "2026-05-01T00:00:01.000Z";
         recordSRGeneration(makeRec({ ts: tsA, estimatedCostUsd: 0.01, totalHemispheres: 2, succeededHemispheres: 2 }));
-        recordSRGeneration(makeRec({
-            ts: tsB,
-            estimatedCostUsd: 0.50,
-            totalHemispheres: 2,
-            succeededHemispheres: 1,
-            hemispheres: [
-                { id: "x", providerId: "p1", model: "m1", role: "logic" },
-                { id: "y", providerId: "p2", model: "m2", role: "creative" },
-            ],
-        }));
+        recordSRGeneration(
+            makeRec({
+                ts: tsB,
+                estimatedCostUsd: 0.5,
+                totalHemispheres: 2,
+                succeededHemispheres: 1,
+                hemispheres: [
+                    { id: "x", providerId: "p1", model: "m1", role: "logic" },
+                    { id: "y", providerId: "p2", model: "m2", role: "creative" },
+                ],
+            }),
+        );
 
         assert(listSRRecords().length === 2, "two records persisted");
 

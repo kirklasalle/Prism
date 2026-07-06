@@ -7,17 +7,19 @@ import type { PrismClient } from "../api/prism-client.js";
 import { useApi, useListNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
-    Panel, DataTable, SubTabBar, Sparkline, KeyValue, StatusBadge,
-    Loading, ErrorBox, SectionHeader, ProgressBar,
+    Panel,
+    DataTable,
+    SubTabBar,
+    Sparkline,
+    KeyValue,
+    StatusBadge,
+    Loading,
+    ErrorBox,
+    SectionHeader,
+    ProgressBar,
 } from "../components/ui.js";
 
-export function TelemetryTab({
-    client,
-    focused,
-}: {
-    client: PrismClient;
-    focused: boolean;
-}): React.JSX.Element {
+export function TelemetryTab({ client, focused }: { client: PrismClient; focused: boolean }): React.JSX.Element {
     const [subTab, setSubTab] = useState("overview");
     const summary = useApi(client, (c) => c.getTelemetrySummary(), 5000);
     const cohorts = useApi(client, (c) => c.getRetrievalCohorts(), 10000);
@@ -37,13 +39,21 @@ export function TelemetryTab({
         if (subTab === "approvals" && approvals.data?.[approvalNav.selectedIndex]) {
             const item = approvals.data[approvalNav.selectedIndex]!;
             if (input === "a") {
-                client.approveItem(item.id)
-                    .then(() => { setActionMsg(`Approved: ${item.operation}`); approvals.refresh(); })
+                client
+                    .approveItem(item.id)
+                    .then(() => {
+                        setActionMsg(`Approved: ${item.operation}`);
+                        approvals.refresh();
+                    })
                     .catch((e: Error) => setActionMsg(`Error: ${e.message}`));
             }
             if (input === "d") {
-                client.denyItem(item.id)
-                    .then(() => { setActionMsg(`Denied: ${item.operation}`); approvals.refresh(); })
+                client
+                    .denyItem(item.id)
+                    .then(() => {
+                        setActionMsg(`Denied: ${item.operation}`);
+                        approvals.refresh();
+                    })
                     .catch((e: Error) => setActionMsg(`Error: ${e.message}`));
             }
         }
@@ -70,7 +80,9 @@ export function TelemetryTab({
 
             {actionMsg && (
                 <Box marginBottom={1}>
-                    <Text color={colors.info}>{symbols.arrow} {actionMsg}</Text>
+                    <Text color={colors.info}>
+                        {symbols.arrow} {actionMsg}
+                    </Text>
                 </Box>
             )}
 
@@ -89,11 +101,20 @@ export function TelemetryTab({
                                         value={String(summary.data.errorCount)}
                                         valueColor={summary.data.errorCount > 0 ? colors.error : colors.success}
                                     />
-                                    <KeyValue label="Avg Latency" value={`${summary.data.avgLatencyMs.toFixed(0)} ms`} />
+                                    <KeyValue
+                                        label="Avg Latency"
+                                        value={`${summary.data.avgLatencyMs.toFixed(0)} ms`}
+                                    />
                                 </Box>
                                 <Box flexDirection="column">
-                                    <KeyValue label="P95 Latency" value={`${summary.data.p95LatencyMs.toFixed(0)} ms`} />
-                                    <KeyValue label="Uptime" value={`${(summary.data.uptimeSeconds / 3600).toFixed(1)} hours`} />
+                                    <KeyValue
+                                        label="P95 Latency"
+                                        value={`${summary.data.p95LatencyMs.toFixed(0)} ms`}
+                                    />
+                                    <KeyValue
+                                        label="Uptime"
+                                        value={`${(summary.data.uptimeSeconds / 3600).toFixed(1)} hours`}
+                                    />
                                 </Box>
                             </Box>
                         </Panel>
@@ -113,32 +134,32 @@ export function TelemetryTab({
                                 { header: "Cohort", accessor: "cohortId", width: 14 },
                                 {
                                     header: "Hit Rate",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        `${((r.hitRate as number) * 100).toFixed(1)}%`),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        `${((r.hitRate as number) * 100).toFixed(1)}%`,
                                     width: 10,
                                 },
                                 {
                                     header: "Coverage",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        `${((r.coverage as number) * 100).toFixed(1)}%`),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        `${((r.coverage as number) * 100).toFixed(1)}%`,
                                     width: 10,
                                 },
                                 {
                                     header: "Novelty",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        `${((r.novelty as number) * 100).toFixed(1)}%`),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        `${((r.novelty as number) * 100).toFixed(1)}%`,
                                     width: 10,
                                 },
                                 {
                                     header: "Utility",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        `${((r.utility as number) * 100).toFixed(1)}%`),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        `${((r.utility as number) * 100).toFixed(1)}%`,
                                     width: 10,
                                 },
                                 {
                                     header: "P95 ms",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        (r.p95LatencyMs as number)?.toFixed(0) ?? "-"),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        (r.p95LatencyMs as number)?.toFixed(0) ?? "-",
                                     width: 10,
                                 },
                             ]}
@@ -161,18 +182,22 @@ export function TelemetryTab({
                                     header: "Priority",
                                     accessor: "priority",
                                     width: 10,
-                                    color: ((r: Record<string, unknown>) => {
+                                    color: (r: Record<string, unknown>) => {
                                         const p = String(r.priority);
-                                        return p === "critical" ? colors.error : p === "high" ? colors.warning : colors.info;
-                                    }),
+                                        return p === "critical"
+                                            ? colors.error
+                                            : p === "high"
+                                              ? colors.warning
+                                              : colors.info;
+                                    },
                                 },
                                 { header: "Metric", accessor: "metric", width: 20 },
                                 { header: "Threshold", accessor: "threshold", width: 12 },
                                 { header: "Current", accessor: "currentValue", width: 12 },
                                 {
                                     header: "Triggered",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.triggeredAt ? new Date(r.triggeredAt as string).toLocaleTimeString() : ""),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        r.triggeredAt ? new Date(r.triggeredAt as string).toLocaleTimeString() : "",
                                     width: 12,
                                 },
                             ]}
@@ -186,9 +211,7 @@ export function TelemetryTab({
             {subTab === "approvals" && (
                 <Box flexDirection="column">
                     <Box marginBottom={1}>
-                        <Text color={colors.muted}>
-                            a: approve | d: deny | j/k: navigate
-                        </Text>
+                        <Text color={colors.muted}>a: approve | d: deny | j/k: navigate</Text>
                     </Box>
                     {approvals.loading && <Loading />}
                     {approvals.error && <ErrorBox message={approvals.error} />}
@@ -202,15 +225,19 @@ export function TelemetryTab({
                                     header: "Status",
                                     accessor: "status",
                                     width: 10,
-                                    color: ((r: Record<string, unknown>) => {
+                                    color: (r: Record<string, unknown>) => {
                                         const s = String(r.status);
-                                        return s === "pending" ? colors.warning : s === "approved" ? colors.success : colors.error;
-                                    }),
+                                        return s === "pending"
+                                            ? colors.warning
+                                            : s === "approved"
+                                              ? colors.success
+                                              : colors.error;
+                                    },
                                 },
                                 {
                                     header: "Requested",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.requestedAt ? new Date(r.requestedAt as string).toLocaleTimeString() : ""),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        r.requestedAt ? new Date(r.requestedAt as string).toLocaleTimeString() : "",
                                     width: 12,
                                 },
                             ]}

@@ -159,7 +159,14 @@ export async function testSoc2Exporter(): Promise<void> {
 
         // Two SOC 2 events → triggers immediate flush at batchSize=2.
         bus.emit({ sessionId: "s", layer: "agent", operation: "auth.login.success", status: "succeeded", details: {} });
-        bus.emit({ sessionId: "s", layer: "governance", operation: "policy.deny", status: "succeeded", policyDecision: "deny", details: {} });
+        bus.emit({
+            sessionId: "s",
+            layer: "governance",
+            operation: "policy.deny",
+            status: "succeeded",
+            policyDecision: "deny",
+            details: {},
+        });
 
         await exporter.stop();
 
@@ -177,7 +184,9 @@ export async function testSoc2Exporter(): Promise<void> {
             webhookUrl: "https://example.invalid/soc2",
             batchSize: 1,
             flushIntervalMs: 60_000,
-            httpPoster: async () => { throw new Error("boom"); },
+            httpPoster: async () => {
+                throw new Error("boom");
+            },
         });
         exporter2.start();
         bus.emit({ sessionId: "s", layer: "agent", operation: "iam.role.grant", status: "succeeded", details: {} });
@@ -208,8 +217,19 @@ export async function testSoc2Exporter(): Promise<void> {
     {
         const events: ActivityEvent[] = [
             makeEvent({ id: "a", timestamp: "2026-05-01T00:00:00.000Z", operation: "auth.login.success" }),
-            makeEvent({ id: "b", timestamp: "2026-05-05T00:00:00.000Z", operation: "retrieval.lookup", layer: "retrieval" }),
-            makeEvent({ id: "c", timestamp: "2026-05-10T00:00:00.000Z", operation: "policy.deny", policyDecision: "deny", layer: "governance" }),
+            makeEvent({
+                id: "b",
+                timestamp: "2026-05-05T00:00:00.000Z",
+                operation: "retrieval.lookup",
+                layer: "retrieval",
+            }),
+            makeEvent({
+                id: "c",
+                timestamp: "2026-05-10T00:00:00.000Z",
+                operation: "policy.deny",
+                policyDecision: "deny",
+                layer: "governance",
+            }),
         ];
         const records = backfillFromEvents(events, {
             since: new Date("2026-05-04T00:00:00.000Z"),

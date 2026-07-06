@@ -111,14 +111,10 @@ function run(): void {
     fs.writeFileSync(
         path.join(outputDir, "reason-code-telemetry-samples.json"),
         JSON.stringify(samples, null, 2),
-        "utf8"
+        "utf8",
     );
 
-    fs.writeFileSync(
-        path.join(outputDir, "event-lineage-bundle.json"),
-        JSON.stringify(lineageBundle, null, 2),
-        "utf8"
-    );
+    fs.writeFileSync(path.join(outputDir, "event-lineage-bundle.json"), JSON.stringify(lineageBundle, null, 2), "utf8");
 
     console.log("Event lineage qualification complete.");
     console.log("- Artifact: prism-output/reason-code-telemetry-samples.json");

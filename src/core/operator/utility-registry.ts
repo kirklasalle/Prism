@@ -53,7 +53,7 @@ export class UtilityRegistry {
     private readonly utilities = new Map<string, UtilityDescriptor>();
     private readonly history: UtilityRun[] = [];
 
-    constructor(private readonly activityBus?: ActivityBus) { }
+    constructor(private readonly activityBus?: ActivityBus) {}
 
     register(descriptor: UtilityDescriptor): void {
         if (!descriptor.id || !descriptor.label) {
@@ -82,11 +82,7 @@ export class UtilityRegistry {
      * Execute a utility synchronously (the caller awaits completion).
      * Returns the run record. The registry retains the last MAX_HISTORY runs.
      */
-    async execute(
-        utilityId: string,
-        args?: Record<string, unknown>,
-        requestedBy?: string,
-    ): Promise<UtilityRun> {
+    async execute(utilityId: string, args?: Record<string, unknown>, requestedBy?: string): Promise<UtilityRun> {
         const descriptor = this.utilities.get(utilityId);
         if (!descriptor) {
             const err = new Error(`Unknown utility: ${utilityId}`);
@@ -180,10 +176,7 @@ export interface BuiltInUtilityWiring {
     runPerfTrendReport?: () => Promise<UtilityResult>;
 }
 
-export function registerBuiltInUtilities(
-    registry: UtilityRegistry,
-    wiring: BuiltInUtilityWiring,
-): void {
+export function registerBuiltInUtilities(registry: UtilityRegistry, wiring: BuiltInUtilityWiring): void {
     const stubHandler = (label: string) => async (): Promise<UtilityResult> => ({
         summary: `${label} not wired in this deployment.`,
         details: { wired: false },

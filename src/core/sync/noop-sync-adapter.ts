@@ -3,7 +3,9 @@ import type { SyncAdapter, SyncBatch, SyncStatus, SyncLayer } from "./sync-adapt
 /** No-op adapter — accepts everything, returns nothing. Default when sync is off. */
 export class NoopSyncAdapter implements SyncAdapter {
     readonly name = "noop";
-    async init(): Promise<void> { /* nothing to do */ }
+    async init(): Promise<void> {
+        /* nothing to do */
+    }
     async push(batch: SyncBatch): Promise<{ accepted: number; rejected: number }> {
         return { accepted: batch.events.length, rejected: 0 };
     }

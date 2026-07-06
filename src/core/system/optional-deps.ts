@@ -38,10 +38,10 @@ interface ProbeSpec {
 }
 
 const SPECS: readonly ProbeSpec[] = [
-    { module: "node-pty",            capability: "terminal-pty" },
-    { module: "dockerode",           capability: "container-exec" },
-    { module: "googleapis",          capability: "gmail-and-calendar-oauth" },
-    { module: "@azure/msal-node",    capability: "outlook-oauth" },
+    { module: "node-pty", capability: "terminal-pty" },
+    { module: "dockerode", capability: "container-exec" },
+    { module: "googleapis", capability: "gmail-and-calendar-oauth" },
+    { module: "@azure/msal-node", capability: "outlook-oauth" },
 ];
 
 let cache: OptionalDepResult[] | null = null;
@@ -100,8 +100,7 @@ async function loadOne(spec: ProbeSpec): Promise<OptionalDepResult> {
         };
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        const isMissing = /Cannot find (module|package)/i.test(message)
-            || /ERR_MODULE_NOT_FOUND/i.test(message);
+        const isMissing = /Cannot find (module|package)/i.test(message) || /ERR_MODULE_NOT_FOUND/i.test(message);
         return {
             module: spec.module,
             capability: spec.capability,
@@ -131,7 +130,11 @@ export function getCachedOptionalDeps(): OptionalDepResult[] | null {
     return cache;
 }
 
-export function summarizeOptionalDeps(results: OptionalDepResult[]): { available: number; missing: number; error: number } {
+export function summarizeOptionalDeps(results: OptionalDepResult[]): {
+    available: number;
+    missing: number;
+    error: number;
+} {
     let available = 0;
     let missing = 0;
     let error = 0;

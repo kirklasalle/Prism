@@ -74,15 +74,17 @@ describe("LlmProviderManager — provider failover", () => {
 
         const mgr = new LlmProviderManager(
             { PRISM_OPENAI_MODELS: "gpt-4o" },
-            [{
-                providerId: "openai",
-                baseUrl: "https://api.openai.com/v1",
-                apiKeyHeader: "Authorization",
-                models: ["gpt-4o"],
-                defaultModel: "gpt-4o",
-                updatedAt: new Date().toISOString(),
-                source: "test",
-            }],
+            [
+                {
+                    providerId: "openai",
+                    baseUrl: "https://api.openai.com/v1",
+                    apiKeyHeader: "Authorization",
+                    models: ["gpt-4o"],
+                    defaultModel: "gpt-4o",
+                    updatedAt: new Date().toISOString(),
+                    source: "test",
+                },
+            ],
             secretStore,
         );
 
@@ -112,7 +114,9 @@ describe("LlmProviderManager — provider failover", () => {
             // No PRISM_OPENAI_MODELS and no API key — openai will be disabled
         });
         // Explicitly select openai (which has no API key)
-        await mgr.setActiveSelection("openai").catch(() => { /* may fail if openai disabled */ });
+        await mgr.setActiveSelection("openai").catch(() => {
+            /* may fail if openai disabled */
+        });
         // generate() should return null because no enabled provider has models
         const catalog = await mgr.getCatalog();
         const openAi = catalog.providers.find((p) => p.id === "openai");
@@ -122,17 +126,11 @@ describe("LlmProviderManager — provider failover", () => {
 
     it("setActiveSelection throws on unknown provider", async () => {
         const mgr = makeOllamaManager();
-        await assert.rejects(
-            () => mgr.setActiveSelection("not-a-real-provider"),
-            /unknown provider/i,
-        );
+        await assert.rejects(() => mgr.setActiveSelection("not-a-real-provider"), /unknown provider/i);
     });
 
     it("setActiveSelection throws on unavailable model", async () => {
         const mgr = makeOllamaManager();
-        await assert.rejects(
-            () => mgr.setActiveSelection("ollama", "no-such-model"),
-            /model is not available/i,
-        );
+        await assert.rejects(() => mgr.setActiveSelection("ollama", "no-such-model"), /model is not available/i);
     });
 });

@@ -40,7 +40,7 @@ export class TooltipsRegistry {
     private readonly linkOverrides = new Map<string, TooltipLink[]>();
     private loaded = false;
 
-    constructor(private readonly seedDir: string) { }
+    constructor(private readonly seedDir: string) {}
 
     private ensureLoaded(): void {
         if (this.loaded) return;
@@ -53,14 +53,23 @@ export class TooltipsRegistry {
                 const parsed = JSON.parse(readFileSync(linksPath, "utf-8")) as Record<string, TooltipLink[]>;
                 for (const [tipId, links] of Object.entries(parsed)) {
                     if (Array.isArray(links)) {
-                        this.linkOverrides.set(tipId, links.filter((l) => l && typeof l.href === "string"));
+                        this.linkOverrides.set(
+                            tipId,
+                            links.filter((l) => l && typeof l.href === "string"),
+                        );
                     }
                 }
-            } catch { /* ignore malformed links.json */ }
+            } catch {
+                /* ignore malformed links.json */
+            }
         }
         // 2. Load seed entries from *.json (excluding links.json).
         let files: string[] = [];
-        try { files = readdirSync(this.seedDir); } catch { return; }
+        try {
+            files = readdirSync(this.seedDir);
+        } catch {
+            return;
+        }
         for (const fileName of files) {
             if (!fileName.toLowerCase().endsWith(".json")) continue;
             if (fileName === "links.json") continue;
@@ -69,7 +78,9 @@ export class TooltipsRegistry {
                 if (!statSync(fullPath).isFile()) continue;
                 const parsed = JSON.parse(readFileSync(fullPath, "utf-8"));
                 this.ingest(parsed);
-            } catch { /* ignore malformed seed file */ }
+            } catch {
+                /* ignore malformed seed file */
+            }
         }
     }
 
@@ -87,9 +98,12 @@ export class TooltipsRegistry {
                 : [];
             const seedLinks = Array.isArray(obj.links)
                 ? (obj.links as unknown[])
-                    .filter((l): l is Record<string, unknown> => !!l && typeof l === "object")
-                    .map((l) => ({ label: String((l as Record<string, unknown>).label ?? ""), href: String((l as Record<string, unknown>).href ?? "") }))
-                    .filter((l) => l.href.length > 0)
+                      .filter((l): l is Record<string, unknown> => !!l && typeof l === "object")
+                      .map((l) => ({
+                          label: String((l as Record<string, unknown>).label ?? ""),
+                          href: String((l as Record<string, unknown>).href ?? ""),
+                      }))
+                      .filter((l) => l.href.length > 0)
                 : [];
             this.entries.set(tipId, {
                 tipId,
@@ -137,7 +151,9 @@ export class TooltipsRegistry {
 
     list(): TooltipEntry[] {
         this.ensureLoaded();
-        return Array.from(this.entries.keys()).map((id) => this.get(id)!).filter(Boolean);
+        return Array.from(this.entries.keys())
+            .map((id) => this.get(id)!)
+            .filter(Boolean);
     }
 
     /** Test/runtime override: register an entry programmatically. */

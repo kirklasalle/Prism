@@ -71,7 +71,7 @@ export async function testPtacRecorderVideo(): Promise<void> {
         assert.ok(html.includes("INTERVAL_MS = 250"), "html INTERVAL_MS = round(1000/4) = 250");
         assert.ok(html.includes("run-vid-1"), "html embeds runId");
         assert.ok(html.includes(manifest.frames[0].relPath), "html references first frame relPath");
-        assert.ok(html.includes("\"stepId\":\"step-a\""), "html embeds frames as inline JSON");
+        assert.ok(html.includes('"stepId":"step-a"'), "html embeds frames as inline JSON");
         assert.ok(html.includes("setInterval"), "html plays via setInterval");
     }
 

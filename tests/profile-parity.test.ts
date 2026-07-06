@@ -1,21 +1,13 @@
 import * as assert from "assert";
 import { describe, it, before, after } from "mocha";
 import sqlite3 from "sqlite3";
-import {
-    TerminalSessionAdapter,
-} from "../src/adapters/application/terminal-session-adapter.js";
-import {
-    ContainerSandboxAdapter,
-    ResourceQuota,
-} from "../src/adapters/application/container-sandbox-adapter.js";
+import { TerminalSessionAdapter } from "../src/adapters/application/terminal-session-adapter.js";
+import { ContainerSandboxAdapter, ResourceQuota } from "../src/adapters/application/container-sandbox-adapter.js";
 import { ToolContractExtractor } from "../src/core/tools/tool-contract-extractor.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
 import { ActivityBus } from "../src/core/activity/bus.js";
-import {
-    INDIVIDUAL_PROFILE,
-    BUSINESS_PROFILE,
-} from "../src/core/policy/execution-profiles.js";
+import { INDIVIDUAL_PROFILE, BUSINESS_PROFILE } from "../src/core/policy/execution-profiles.js";
 
 const SHELL = process.platform === "win32" ? "cmd.exe" : "bash";
 
@@ -64,28 +56,16 @@ describe("Profile Parity Integration Tests", function () {
 
     describe("Terminal Session Adapter - Profile Equivalence", () => {
         it("creates sessions identically under both profiles", async () => {
-            const adapterIndividual = new TerminalSessionAdapter(
-                dbTerminal,
-                policyEngine,
-                activityBus
-            );
+            const adapterIndividual = new TerminalSessionAdapter(dbTerminal, policyEngine, activityBus);
             const adapterBusiness = new TerminalSessionAdapter(
                 new sqlite3.Database(":memory:"),
                 policyEngine,
-                new ActivityBus()
+                new ActivityBus(),
             );
 
-            const sessionIndividual = await adapterIndividual.startSession(
-                SHELL,
-                process.cwd(),
-                "individual-user"
-            );
+            const sessionIndividual = await adapterIndividual.startSession(SHELL, process.cwd(), "individual-user");
 
-            const sessionBusiness = await adapterBusiness.startSession(
-                SHELL,
-                process.cwd(),
-                "business-user"
-            );
+            const sessionBusiness = await adapterBusiness.startSession(SHELL, process.cwd(), "business-user");
 
             // Both sessions created with correct metadata
             assert.ok(sessionIndividual.session_id.length > 10);
@@ -100,12 +80,12 @@ describe("Profile Parity Integration Tests", function () {
             const adapterIndividual = new TerminalSessionAdapter(
                 new sqlite3.Database(":memory:"),
                 policyEngine,
-                activityBus
+                activityBus,
             );
             const adapterBusiness = new TerminalSessionAdapter(
                 new sqlite3.Database(":memory:"),
                 policyEngine,
-                activityBus
+                activityBus,
             );
 
             // Both adapters should classify same commands identically
@@ -121,16 +101,8 @@ describe("Profile Parity Integration Tests", function () {
             const dbIndividual = new sqlite3.Database(":memory:");
             const dbBusiness = new sqlite3.Database(":memory:");
 
-            const adapterIndividual = new ContainerSandboxAdapter(
-                dbIndividual,
-                policyEngine,
-                activityBus
-            );
-            const adapterBusiness = new ContainerSandboxAdapter(
-                dbBusiness,
-                policyEngine,
-                activityBus
-            );
+            const adapterIndividual = new ContainerSandboxAdapter(dbIndividual, policyEngine, activityBus);
+            const adapterBusiness = new ContainerSandboxAdapter(dbBusiness, policyEngine, activityBus);
 
             const quota: ResourceQuota = {
                 cpu_limit: 2,
@@ -138,15 +110,9 @@ describe("Profile Parity Integration Tests", function () {
                 disk_limit_mb: 20480,
             };
 
-            const containerIndividual = await adapterIndividual.createContainer(
-                "alpine:latest",
-                quota
-            );
+            const containerIndividual = await adapterIndividual.createContainer("alpine:latest", quota);
 
-            const containerBusiness = await adapterBusiness.createContainer(
-                "alpine:latest",
-                quota
-            );
+            const containerBusiness = await adapterBusiness.createContainer("alpine:latest", quota);
 
             // Both containers created successfully
             assert.ok(containerIndividual.container_id.length > 0);
@@ -169,16 +135,8 @@ describe("Profile Parity Integration Tests", function () {
             const dbIndividual = new sqlite3.Database(":memory:");
             const dbBusiness = new sqlite3.Database(":memory:");
 
-            const adapterIndividual = new ContainerSandboxAdapter(
-                dbIndividual,
-                policyEngine,
-                activityBus
-            );
-            const adapterBusiness = new ContainerSandboxAdapter(
-                dbBusiness,
-                policyEngine,
-                activityBus
-            );
+            const adapterIndividual = new ContainerSandboxAdapter(dbIndividual, policyEngine, activityBus);
+            const adapterBusiness = new ContainerSandboxAdapter(dbBusiness, policyEngine, activityBus);
 
             const quota: ResourceQuota = {
                 cpu_limit: 2,
@@ -187,23 +145,17 @@ describe("Profile Parity Integration Tests", function () {
             };
 
             // Create containers
-            const containerIndividual = await adapterIndividual.createContainer(
-                "alpine:latest",
-                quota
-            );
-            const containerBusiness = await adapterBusiness.createContainer(
-                "alpine:latest",
-                quota
-            );
+            const containerIndividual = await adapterIndividual.createContainer("alpine:latest", quota);
+            const containerBusiness = await adapterBusiness.createContainer("alpine:latest", quota);
 
             // Both create snapshots
             const snapshotIndividual = await adapterIndividual.snapshotContainer(
                 containerIndividual.container_id,
-                "checkpoint-1"
+                "checkpoint-1",
             );
             const snapshotBusiness = await adapterBusiness.snapshotContainer(
                 containerBusiness.container_id,
-                "checkpoint-1"
+                "checkpoint-1",
             );
 
             // Both snapshots created with identical structure
@@ -227,19 +179,11 @@ describe("Profile Parity Integration Tests", function () {
             const dbIndividual = new sqlite3.Database(":memory:");
             const dbBusiness = new sqlite3.Database(":memory:");
 
-            const extractorIndividual = new ToolContractExtractor(
-                dbIndividual,
-                policyEngine,
-                new ActivityBus()
-            );
+            const extractorIndividual = new ToolContractExtractor(dbIndividual, policyEngine, new ActivityBus());
             extractorIndividual.setToolRegistry(new ToolRegistry());
             extractorIndividual.addManifestPath(process.cwd()); // Dummy path
 
-            const extractorBusiness = new ToolContractExtractor(
-                dbBusiness,
-                policyEngine,
-                new ActivityBus()
-            );
+            const extractorBusiness = new ToolContractExtractor(dbBusiness, policyEngine, new ActivityBus());
             extractorBusiness.setToolRegistry(new ToolRegistry());
             extractorBusiness.addManifestPath(process.cwd()); // Dummy path
 
@@ -266,18 +210,12 @@ describe("Profile Parity Integration Tests", function () {
             });
 
             // Both extractions complete successfully
-            assert.ok(
-                responseIndividual.status === "success" ||
-                responseIndividual.status === "partial"
-            );
-            assert.ok(
-                responseBusiness.status === "success" ||
-                responseBusiness.status === "partial"
-            );
+            assert.ok(responseIndividual.status === "success" || responseIndividual.status === "partial");
+            assert.ok(responseBusiness.status === "success" || responseBusiness.status === "partial");
             assert.strictEqual(
                 responseIndividual.extracted_contracts.length,
                 responseBusiness.extracted_contracts.length,
-                "Extract count must match"
+                "Extract count must match",
             );
 
             // Cleanup
@@ -293,18 +231,10 @@ describe("Profile Parity Integration Tests", function () {
             const dbIndividual = new sqlite3.Database(":memory:");
             const dbBusiness = new sqlite3.Database(":memory:");
 
-            const extractorIndividual = new ToolContractExtractor(
-                dbIndividual,
-                policyEngine,
-                new ActivityBus()
-            );
+            const extractorIndividual = new ToolContractExtractor(dbIndividual, policyEngine, new ActivityBus());
             extractorIndividual.addManifestPath(process.cwd());
 
-            const extractorBusiness = new ToolContractExtractor(
-                dbBusiness,
-                policyEngine,
-                new ActivityBus()
-            );
+            const extractorBusiness = new ToolContractExtractor(dbBusiness, policyEngine, new ActivityBus());
             extractorBusiness.addManifestPath(process.cwd());
 
             const now = new Date().toISOString();
@@ -334,7 +264,7 @@ describe("Profile Parity Integration Tests", function () {
             assert.strictEqual(
                 Object.keys(resultIndividual.risk_summary).length,
                 Object.keys(resultBusiness.risk_summary).length,
-                "Risk summary keys must match"
+                "Risk summary keys must match",
             );
 
             // Cleanup
@@ -350,28 +280,16 @@ describe("Profile Parity Integration Tests", function () {
             const dbIndividual = new sqlite3.Database(":memory:");
             const dbBusiness = new sqlite3.Database(":memory:");
 
-            const extractorIndividual = new ToolContractExtractor(
-                dbIndividual,
-                policyEngine,
-                new ActivityBus()
-            );
+            const extractorIndividual = new ToolContractExtractor(dbIndividual, policyEngine, new ActivityBus());
             extractorIndividual.setToolRegistry(new ToolRegistry());
             extractorIndividual.addManifestPath(process.cwd());
 
-            const extractorBusiness = new ToolContractExtractor(
-                dbBusiness,
-                policyEngine,
-                new ActivityBus()
-            );
+            const extractorBusiness = new ToolContractExtractor(dbBusiness, policyEngine, new ActivityBus());
             extractorBusiness.setToolRegistry(new ToolRegistry());
             extractorBusiness.addManifestPath(process.cwd());
 
             const now = new Date().toISOString();
-            const sourceTypes: ("manifest" | "decorator" | "dynamic")[] = [
-                "manifest",
-                "decorator",
-                "dynamic",
-            ];
+            const sourceTypes: ("manifest" | "decorator" | "dynamic")[] = ["manifest", "decorator", "dynamic"];
 
             for (const source of sourceTypes) {
                 const resultIndividual = await extractorIndividual.extractContracts({
@@ -396,7 +314,7 @@ describe("Profile Parity Integration Tests", function () {
                 assert.strictEqual(
                     resultIndividual.status,
                     resultBusiness.status,
-                    `Status should match for ${source} source`
+                    `Status should match for ${source} source`,
                 );
             }
 
@@ -415,18 +333,10 @@ describe("Profile Parity Integration Tests", function () {
             const busIndividual = new ActivityBus();
             const busBusiness = new ActivityBus();
 
-            const adapterIndividual = new TerminalSessionAdapter(
-                dbTerminal,
-                policyEngine,
-                busIndividual
-            );
+            const adapterIndividual = new TerminalSessionAdapter(dbTerminal, policyEngine, busIndividual);
 
             const dbBusiness = new sqlite3.Database(":memory:");
-            const adapterBusiness = new TerminalSessionAdapter(
-                dbBusiness,
-                policyEngine,
-                busBusiness
-            );
+            const adapterBusiness = new TerminalSessionAdapter(dbBusiness, policyEngine, busBusiness);
 
             // Create sessions
             await adapterIndividual.startSession(SHELL, process.cwd(), "user1");
@@ -437,21 +347,15 @@ describe("Profile Parity Integration Tests", function () {
             const eventsBusiness = busBusiness.listEvents();
 
             // Both should emit terminal_session_start events
-            const hasCreateIndividual = eventsIndividual.some(
-                (e) => e.operation === "terminal_session_start"
-            );
-            const hasCreateBusiness = eventsBusiness.some(
-                (e) => e.operation === "terminal_session_start"
-            );
+            const hasCreateIndividual = eventsIndividual.some((e) => e.operation === "terminal_session_start");
+            const hasCreateBusiness = eventsBusiness.some((e) => e.operation === "terminal_session_start");
 
             assert.strictEqual(hasCreateIndividual, true, "Individual should emit terminal_session_start");
             assert.strictEqual(hasCreateBusiness, true, "Business should emit terminal_session_start");
 
             // Both use same event layer
-            const layerIndividual = eventsIndividual.find((e) => e.operation === "terminal_session_start")
-                ?.layer;
-            const layerBusiness = eventsBusiness.find((e) => e.operation === "terminal_session_start")
-                ?.layer;
+            const layerIndividual = eventsIndividual.find((e) => e.operation === "terminal_session_start")?.layer;
+            const layerBusiness = eventsBusiness.find((e) => e.operation === "terminal_session_start")?.layer;
 
             assert.strictEqual(layerIndividual, "governance");
             assert.strictEqual(layerBusiness, "governance");
@@ -473,27 +377,19 @@ describe("Profile Parity Integration Tests", function () {
             const tableExistsIndividual = await new Promise<boolean>((resolve, reject) => {
                 dbIndividual.get(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='terminal_sessions'",
-                    (err, row) => (err ? reject(err) : resolve(!!row))
+                    (err, row) => (err ? reject(err) : resolve(!!row)),
                 );
             });
 
             const tableExistsBusiness = await new Promise<boolean>((resolve, reject) => {
                 dbBusiness.get(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='terminal_sessions'",
-                    (err, row) => (err ? reject(err) : resolve(!!row))
+                    (err, row) => (err ? reject(err) : resolve(!!row)),
                 );
             });
 
-            assert.strictEqual(
-                tableExistsIndividual,
-                true,
-                "Individual should have terminal_sessions table"
-            );
-            assert.strictEqual(
-                tableExistsBusiness,
-                true,
-                "Business should have terminal_sessions table"
-            );
+            assert.strictEqual(tableExistsIndividual, true, "Individual should have terminal_sessions table");
+            assert.strictEqual(tableExistsBusiness, true, "Business should have terminal_sessions table");
 
             // Cleanup
             await new Promise<void>((resolve, reject) => {
@@ -555,14 +451,14 @@ describe("Profile Parity Integration Tests", function () {
             assert.strictEqual(policyIndividual.decision, "allow");
             assert.ok(
                 policyIndividual.reasons.some((r) => r.includes("Warning")),
-                "Individual should warn"
+                "Individual should warn",
             );
 
             // Business denies
             assert.strictEqual(policyBusiness.decision, "deny");
             assert.ok(
                 policyBusiness.reasons.some((r) => r.includes("rollback plan")),
-                "Business should mention rollback requirement"
+                "Business should mention rollback requirement",
             );
         });
     });

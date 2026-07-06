@@ -12,7 +12,7 @@ class MockTool implements Tool {
     constructor(
         readonly name: string,
         private readonly handler: (request: ToolRequest) => Promise<ToolResult>,
-    ) { }
+    ) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         return this.handler(request);
@@ -278,13 +278,9 @@ async function testWorkflowApprovalGatedStep(): Promise<void> {
     await orchestrator.runWorkflow(dag);
 
     assert.deepStrictEqual(executed, ["high_risk_tool", "post_approval"]);
-    const approvalRequested = bus.listEvents().find(
-        (e) => e.operation === "high_risk_tool.approval_requested",
-    );
+    const approvalRequested = bus.listEvents().find((e) => e.operation === "high_risk_tool.approval_requested");
     assert.ok(approvalRequested);
-    const approvalGranted = bus.listEvents().find(
-        (e) => e.operation === "high_risk_tool.approval_granted",
-    );
+    const approvalGranted = bus.listEvents().find((e) => e.operation === "high_risk_tool.approval_granted");
     assert.ok(approvalGranted);
     const completion = bus.listEvents().find((e) => e.operation === `workflow.${dag.id}.completed`);
     assert.ok(completion);
@@ -373,9 +369,7 @@ async function testWorkflowApprovalDeniedWithFallbackSucceeds(): Promise<void> {
     await orchestrator.runWorkflow(dag);
 
     assert.deepStrictEqual(executed, ["deny_recovery"]);
-    const denied = bus.listEvents().find(
-        (e) => e.operation === "high_risk_deny_fallback.approval_denied",
-    );
+    const denied = bus.listEvents().find((e) => e.operation === "high_risk_deny_fallback.approval_denied");
     assert.ok(denied);
     const completion = bus.listEvents().find((e) => e.operation === `workflow.${dag.id}.completed`);
     assert.ok(completion);

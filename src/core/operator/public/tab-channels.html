@@ -1,0 +1,100 @@
+<div class="channels-grid">
+    <!-- Left Column: Presence & Configurations -->
+    <div class="stack channels-left-stack">
+        <!-- Presence Card -->
+        <section class="channels-panel panel">
+            <div class="channels-panel-header">
+                <h3 class="channels-panel-title"><span>📡</span> Presence &amp; Availability</h3>
+                <!-- Pulsating Status LED Dot -->
+                <span class="channels-status-indicator" id="presence-status-indicator"></span>
+            </div>
+
+            <div class="form-group">
+                <label for="presence-status-select" class="channels-label">Operator Status</label>
+                <select id="presence-status-select" class="channels-select form-control">
+                    <option value="online">Online (Active)</option>
+                    <option value="away">Away (Forward Relays)</option>
+                    <option value="dnd">Do Not Disturb (Silent Queue)</option>
+                    <option value="offline">Offline (Suspend Loops)</option>
+                </select>
+            </div>
+
+            <div class="form-group channels-checkbox-group">
+                <div class="channels-checkbox-row">
+                    <input type="checkbox" id="auto-away-enabled" class="channels-checkbox" />
+                    <label for="auto-away-enabled" class="channels-checkbox-label">Auto-Away when Idle</label>
+                </div>
+                <select id="auto-away-timeout" class="channels-select-inline form-control">
+                    <option value="5">5 minutes</option>
+                    <option value="10" selected>10 minutes</option>
+                    <option value="20">20 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="60">1 hour</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- Channels Configurations -->
+        <section class="channels-panel panel">
+            <h3 class="channels-panel-title"><span>🔌</span> Channel Connections</h3>
+
+            <!-- Email OAuth Cards -->
+            <div class="channels-cards-container">
+                <div class="channels-card" id="gmail-channel-card">
+                    <div class="channels-card-content">
+                        <h4 class="channels-card-title"><span class="gmail-icon">✉️</span> Gmail Channel</h4>
+                        <div id="gmail-status-text" class="channels-status-text">Loading...</div>
+                    </div>
+                    <button class="secondary-button channels-connect-btn" id="gmail-connect-btn">Connect</button>
+                </div>
+
+                <div class="channels-card" id="outlook-channel-card">
+                    <div class="channels-card-content">
+                        <h4 class="channels-card-title"><span class="outlook-icon">✉️</span> Outlook Channel</h4>
+                        <div id="outlook-status-text" class="channels-status-text">Loading...</div>
+                    </div>
+                    <button class="secondary-button channels-connect-btn" id="outlook-connect-btn">Connect</button>
+                </div>
+            </div>
+
+            <!-- SMS Settings -->
+            <div class="channels-sms-section stack">
+                <h4 class="channels-sms-title"><span>📱</span> SMS-via-Email Gateway</h4>
+                <div class="form-group">
+                    <label for="sms-phone" class="channels-label">Operator Mobile Number</label>
+                    <input type="text" id="sms-phone" placeholder="+15550192834" class="channels-input form-control" />
+                </div>
+                <div class="form-group">
+                    <label for="sms-carrier" class="channels-label">Mobile Carrier Gateway</label>
+                    <select id="sms-carrier" class="channels-select form-control">
+                        <option value="att">AT&T (txt.att.net)</option>
+                        <option value="verizon">Verizon (vtext.com)</option>
+                        <option value="tmobile">T-Mobile (tmomail.net)</option>
+                        <option value="sprint">Sprint (messaging.sprintpcs.com)</option>
+                        <option value="rogers">Rogers (pcs.rogers.com)</option>
+                        <option value="bell">Bell (txt.bell.ca)</option>
+                        <option value="telus">Telus (msg.telus.com)</option>
+                        <option value="virgin">Virgin Mobile (vmobl.com)</option>
+                    </select>
+                </div>
+                <div class="channels-btn-group">
+                    <button class="primary-button" id="save-sms-btn">Save Gateway</button>
+                    <button class="secondary-button" id="test-sms-btn">Test Broadcast</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Right Column: Live Logs & Relays -->
+    <div class="stack channels-right-stack">
+        <section class="channels-panel panel channels-logs-panel">
+            <h3 class="channels-panel-title"><span>📝</span> Channel Activity Logs</h3>
+            <div id="channel-logs-container" class="channels-logs-console">
+                <div class="channels-log-entry-system">[SYSTEM] Communications channels online. Ready.</div>
+            </div>
+            <div class="channels-logs-actions">
+                <button class="secondary-button" id="clear-logs-btn">Clear Logs</button>
+            </div>
+        </section>
+    </div>
+</div>

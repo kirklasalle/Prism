@@ -24,7 +24,11 @@ describe("ComputerTab", () => {
         await new Promise((r) => setTimeout(r, 200));
         const frame = inst.lastFrame() ?? "";
         assert.ok(
-            frame.includes("win32") || frame.includes("x64") || frame.includes("System") || frame.includes("OS") || frame.length > 10,
+            frame.includes("win32") ||
+                frame.includes("x64") ||
+                frame.includes("System") ||
+                frame.includes("OS") ||
+                frame.length > 10,
             "should show system info",
         );
         inst.unmount();

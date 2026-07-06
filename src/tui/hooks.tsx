@@ -56,10 +56,7 @@ export function useApi<T>(
 /*  useWsEvent — subscribe to a specific WebSocket event type          */
 /* ------------------------------------------------------------------ */
 
-export function useWsEvent<T extends WsMessage = WsMessage>(
-    wsClient: PrismWsClient,
-    eventType: string,
-): T | null {
+export function useWsEvent<T extends WsMessage = WsMessage>(wsClient: PrismWsClient, eventType: string): T | null {
     const [last, setLast] = useState<T | null>(null);
 
     useEffect(() => {
@@ -95,19 +92,14 @@ export function useConnection(wsClient: PrismWsClient): boolean {
 /*  useTabNavigation — global tab switching via number keys             */
 /* ------------------------------------------------------------------ */
 
-export function useTabNavigation(
-    setActiveTab: (tabId: string) => void,
-    inputEnabled = true,
-): void {
-    useInput(
-        (input, _key) => {
-            if (!inputEnabled) return;
-            const tabId = TAB_SHORTCUTS[input];
-            if (tabId) {
-                setActiveTab(tabId);
-            }
-        },
-    );
+export function useTabNavigation(setActiveTab: (tabId: string) => void, inputEnabled = true): void {
+    useInput((input, _key) => {
+        if (!inputEnabled) return;
+        const tabId = TAB_SHORTCUTS[input];
+        if (tabId) {
+            setActiveTab(tabId);
+        }
+    });
 }
 
 /* ------------------------------------------------------------------ */
@@ -134,20 +126,18 @@ export function useListNavigation(
 ): { selectedIndex: number; setSelectedIndex: (i: number) => void } {
     const [selectedIndex, setSelectedIndex] = useState(0);
 
-    useInput(
-        (input, key) => {
-            if (!inputEnabled || length === 0) return;
-            if (input === "j" || key.downArrow) {
-                setSelectedIndex((i) => Math.min(i + 1, length - 1));
-            } else if (input === "k" || key.upArrow) {
-                setSelectedIndex((i) => Math.max(i - 1, 0));
-            } else if (input === "g") {
-                setSelectedIndex(0);
-            } else if (input === "G") {
-                setSelectedIndex(length - 1);
-            }
-        },
-    );
+    useInput((input, key) => {
+        if (!inputEnabled || length === 0) return;
+        if (input === "j" || key.downArrow) {
+            setSelectedIndex((i) => Math.min(i + 1, length - 1));
+        } else if (input === "k" || key.upArrow) {
+            setSelectedIndex((i) => Math.max(i - 1, 0));
+        } else if (input === "g") {
+            setSelectedIndex(0);
+        } else if (input === "G") {
+            setSelectedIndex(length - 1);
+        }
+    });
 
     return { selectedIndex, setSelectedIndex };
 }

@@ -53,10 +53,7 @@ export function resolveExecutionProfileFromEnv(environmentProfile?: string): Exe
 /**
  * Describe the execution profile resolution for logging/diagnostics.
  */
-export function describeExecutionProfileResolution(
-    profile: ExecutionProfile,
-    environmentProfile?: string,
-): string {
+export function describeExecutionProfileResolution(profile: ExecutionProfile, environmentProfile?: string): string {
     const sources: string[] = [];
 
     if (process.env.PRISM_EXECUTION_PROFILE) {

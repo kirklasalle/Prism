@@ -9,7 +9,11 @@
  */
 
 import { PluginPackValidator, type PluginPackManifest, type ValidationResult } from "./plugin-pack-validator.js";
-import { BusinessTrustValidator, type TrustValidationResult, type TrustValidationContext } from "./business-trust-validator.js";
+import {
+    BusinessTrustValidator,
+    type TrustValidationResult,
+    type TrustValidationContext,
+} from "./business-trust-validator.js";
 import type { ActivityBus } from "../activity/bus.js";
 
 export interface PluginLoadResult {
@@ -63,7 +67,11 @@ export function loadPluginPack(
                 packVersion: manifest.pack_version ?? "unknown",
                 reasonCodes: ["PLUGIN_VALIDATION_FAILED"],
                 errorCount: manifestResult.errors.length,
-                errors: manifestResult.errors.map(e => ({ field: e.field, message: e.message, severity: e.severity })),
+                errors: manifestResult.errors.map((e) => ({
+                    field: e.field,
+                    message: e.message,
+                    severity: e.severity,
+                })),
                 warningCount: manifestResult.warnings.length,
             },
         });
@@ -125,7 +133,10 @@ export function loadPluginPack(
         details: {
             packName: manifest.pack_name,
             packVersion: manifest.pack_version,
-            reasonCodes: ["PLUGIN_VALIDATION_PASSED", ...(trustResult ? ["TRUST_BUSINESS_ALLOWED"] : ["TRUST_INDIVIDUAL_ADVISORY"])],
+            reasonCodes: [
+                "PLUGIN_VALIDATION_PASSED",
+                ...(trustResult ? ["TRUST_BUSINESS_ALLOWED"] : ["TRUST_INDIVIDUAL_ADVISORY"]),
+            ],
             adapterCount: manifest.adapters?.length ?? 0,
             profile: options.executionProfile,
             warningCount: manifestResult.warnings.length,

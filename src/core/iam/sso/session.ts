@@ -37,11 +37,12 @@ export class SessionManager {
     private readonly cookieName: string;
     private readonly forceSecure: boolean | undefined;
 
-    constructor(private readonly store: IamStore, opts: SessionCookieOptions = {}) {
+    constructor(
+        private readonly store: IamStore,
+        opts: SessionCookieOptions = {},
+    ) {
         const raw = opts.secret ?? process.env.PRISM_SSO_SESSION_SECRET ?? "";
-        this.secret = raw.length >= 32
-            ? Buffer.from(raw, "utf-8")
-            : randomBytes(32);
+        this.secret = raw.length >= 32 ? Buffer.from(raw, "utf-8") : randomBytes(32);
         this.cookieName = opts.cookieName ?? COOKIE_NAME;
         this.forceSecure = opts.secure;
     }
@@ -76,21 +77,15 @@ export class SessionManager {
             "SameSite=Lax",
             `Max-Age=${ttlSeconds}`,
         ];
-        const secure = this.forceSecure ?? (process.env.PRISM_ENV_PROFILE !== "dev");
+        const secure = this.forceSecure ?? process.env.PRISM_ENV_PROFILE !== "dev";
         if (secure) parts.push("Secure");
         return parts.join("; ");
     }
 
     /** Build the corresponding clear-cookie header value. */
     buildClearCookie(): string {
-        const parts = [
-            `${this.cookieName}=`,
-            "Path=/",
-            "HttpOnly",
-            "SameSite=Lax",
-            "Max-Age=0",
-        ];
-        const secure = this.forceSecure ?? (process.env.PRISM_ENV_PROFILE !== "dev");
+        const parts = [`${this.cookieName}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0"];
+        const secure = this.forceSecure ?? process.env.PRISM_ENV_PROFILE !== "dev";
         if (secure) parts.push("Secure");
         return parts.join("; ");
     }

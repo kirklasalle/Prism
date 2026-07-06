@@ -28,67 +28,373 @@ interface NetworkCommandDef {
  */
 const NETWORK_COMMANDS: readonly NetworkCommandDef[] = [
     // ── Tier 1: Read-only diagnostics ───────────────────────────────────
-    { match: ["ipconfig"], tier: "tier1", description: "Display network interface configuration", mutating: false, platform: "win" },
-    { match: ["ifconfig"], tier: "tier1", description: "Display network interface configuration", mutating: false, platform: "linux" },
-    { match: ["ping"], tier: "tier1", description: "Test host reachability and measure round-trip time", mutating: false, platform: "both" },
+    {
+        match: ["ipconfig"],
+        tier: "tier1",
+        description: "Display network interface configuration",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["ifconfig"],
+        tier: "tier1",
+        description: "Display network interface configuration",
+        mutating: false,
+        platform: "linux",
+    },
+    {
+        match: ["ping"],
+        tier: "tier1",
+        description: "Test host reachability and measure round-trip time",
+        mutating: false,
+        platform: "both",
+    },
     { match: ["nslookup"], tier: "tier1", description: "DNS resolution lookup", mutating: false, platform: "both" },
-    { match: ["dig"], tier: "tier1", description: "DNS resolution lookup (detailed)", mutating: false, platform: "linux" },
-    { match: ["tracert"], tier: "tier1", description: "Trace route to destination host", mutating: false, platform: "win" },
-    { match: ["traceroute"], tier: "tier1", description: "Trace route to destination host", mutating: false, platform: "linux" },
-    { match: ["netstat"], tier: "tier1", description: "Display active connections and listening ports", mutating: false, platform: "both" },
-    { match: ["arp"], tier: "tier1", description: "Display and manage the ARP cache", mutating: false, platform: "both" },
+    {
+        match: ["dig"],
+        tier: "tier1",
+        description: "DNS resolution lookup (detailed)",
+        mutating: false,
+        platform: "linux",
+    },
+    {
+        match: ["tracert"],
+        tier: "tier1",
+        description: "Trace route to destination host",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["traceroute"],
+        tier: "tier1",
+        description: "Trace route to destination host",
+        mutating: false,
+        platform: "linux",
+    },
+    {
+        match: ["netstat"],
+        tier: "tier1",
+        description: "Display active connections and listening ports",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["arp"],
+        tier: "tier1",
+        description: "Display and manage the ARP cache",
+        mutating: false,
+        platform: "both",
+    },
     { match: ["hostname"], tier: "tier1", description: "Display system hostname", mutating: false, platform: "both" },
-    { match: ["nbtstat"], tier: "tier1", description: "NetBIOS over TCP/IP statistics", mutating: false, platform: "win" },
-    { match: ["pathping"], tier: "tier1", description: "Combined ping and tracert analysis", mutating: false, platform: "win" },
-    { match: ["getmac"], tier: "tier1", description: "Display MAC addresses for all interfaces", mutating: false, platform: "win" },
-    { match: ["net", "view"], tier: "tier1", description: "List shared resources visible on the network", mutating: false, platform: "win" },
-    { match: ["net", "statistics"], tier: "tier1", description: "Display network workstation/server statistics", mutating: false, platform: "win" },
-    { match: ["curl"], tier: "tier1", description: "Transfer data from or to a server", mutating: false, platform: "both" },
-    { match: ["wget"], tier: "tier1", description: "Non-interactive network file download", mutating: false, platform: "both" },
-    { match: ["ss"], tier: "tier1", description: "Socket statistics (modern netstat)", mutating: false, platform: "linux" },
-    { match: ["ip", "addr"], tier: "tier1", description: "Display IP address configuration", mutating: false, platform: "linux" },
+    {
+        match: ["nbtstat"],
+        tier: "tier1",
+        description: "NetBIOS over TCP/IP statistics",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["pathping"],
+        tier: "tier1",
+        description: "Combined ping and tracert analysis",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["getmac"],
+        tier: "tier1",
+        description: "Display MAC addresses for all interfaces",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["net", "view"],
+        tier: "tier1",
+        description: "List shared resources visible on the network",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["net", "statistics"],
+        tier: "tier1",
+        description: "Display network workstation/server statistics",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["curl"],
+        tier: "tier1",
+        description: "Transfer data from or to a server",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["wget"],
+        tier: "tier1",
+        description: "Non-interactive network file download",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["ss"],
+        tier: "tier1",
+        description: "Socket statistics (modern netstat)",
+        mutating: false,
+        platform: "linux",
+    },
+    {
+        match: ["ip", "addr"],
+        tier: "tier1",
+        description: "Display IP address configuration",
+        mutating: false,
+        platform: "linux",
+    },
     { match: ["ip", "route"], tier: "tier1", description: "Display routing table", mutating: false, platform: "linux" },
-    { match: ["openssl", "s_client"], tier: "tier1", description: "TLS/SSL certificate inspection and handshake diagnostics", mutating: false, platform: "both" },
-    { match: ["curl", "-I"], tier: "tier1", description: "Fetch HTTP response headers only (HEAD request)", mutating: false, platform: "both" },
-    { match: ["dig", "+trace"], tier: "tier1", description: "DNS recursive resolution trace from root", mutating: false, platform: "linux" },
+    {
+        match: ["openssl", "s_client"],
+        tier: "tier1",
+        description: "TLS/SSL certificate inspection and handshake diagnostics",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["curl", "-I"],
+        tier: "tier1",
+        description: "Fetch HTTP response headers only (HEAD request)",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["dig", "+trace"],
+        tier: "tier1",
+        description: "DNS recursive resolution trace from root",
+        mutating: false,
+        platform: "linux",
+    },
 
     // ── Tier 2: Config inspection and mapped drive management ───────────
-    { match: ["route", "print"], tier: "tier2", description: "Display the IP routing table", mutating: false, platform: "win" },
-    { match: ["route"], tier: "tier2", description: "Display or manage the IP routing table", mutating: false, platform: "both" },
-    { match: ["netsh", "interface", "show"], tier: "tier2", description: "Show network interface details", mutating: false, platform: "win" },
-    { match: ["netsh", "wlan", "show"], tier: "tier2", description: "Show wireless network profiles and information", mutating: false, platform: "win" },
-    { match: ["netsh", "firewall", "show"], tier: "tier2", description: "Show firewall configuration", mutating: false, platform: "win" },
-    { match: ["netsh", "advfirewall", "show"], tier: "tier2", description: "Show advanced firewall configuration", mutating: false, platform: "win" },
-    { match: ["net", "use"], tier: "tier2", description: "Map or manage network drives", mutating: true, platform: "win" },
-    { match: ["net", "share"], tier: "tier2", description: "View or manage shared folders", mutating: false, platform: "win" },
-    { match: ["net", "session"], tier: "tier2", description: "Display active network sessions", mutating: false, platform: "win" },
+    {
+        match: ["route", "print"],
+        tier: "tier2",
+        description: "Display the IP routing table",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["route"],
+        tier: "tier2",
+        description: "Display or manage the IP routing table",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["netsh", "interface", "show"],
+        tier: "tier2",
+        description: "Show network interface details",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "wlan", "show"],
+        tier: "tier2",
+        description: "Show wireless network profiles and information",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "firewall", "show"],
+        tier: "tier2",
+        description: "Show firewall configuration",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "advfirewall", "show"],
+        tier: "tier2",
+        description: "Show advanced firewall configuration",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["net", "use"],
+        tier: "tier2",
+        description: "Map or manage network drives",
+        mutating: true,
+        platform: "win",
+    },
+    {
+        match: ["net", "share"],
+        tier: "tier2",
+        description: "View or manage shared folders",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["net", "session"],
+        tier: "tier2",
+        description: "Display active network sessions",
+        mutating: false,
+        platform: "win",
+    },
     { match: ["net", "user"], tier: "tier2", description: "View user accounts", mutating: false, platform: "win" },
-    { match: ["net", "localgroup"], tier: "tier2", description: "View local group memberships", mutating: false, platform: "win" },
-    { match: ["net", "config"], tier: "tier2", description: "Display workstation or server configuration", mutating: false, platform: "win" },
-    { match: ["netsh"], tier: "tier2", description: "Network shell \u2014 show and configure network settings", mutating: false, platform: "win" },
-    { match: ["ftp"], tier: "tier2", description: "FTP client for file transfer protocol operations", mutating: false, platform: "both" },
-    { match: ["sftp"], tier: "tier2", description: "Secure FTP client (SSH-based file transfer)", mutating: false, platform: "both" },
-    { match: ["wscat"], tier: "tier2", description: "WebSocket protocol connection and message testing", mutating: false, platform: "both" },
-    { match: ["ssh", "-V"], tier: "tier2", description: "Display SSH client version", mutating: false, platform: "both" },
+    {
+        match: ["net", "localgroup"],
+        tier: "tier2",
+        description: "View local group memberships",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["net", "config"],
+        tier: "tier2",
+        description: "Display workstation or server configuration",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["netsh"],
+        tier: "tier2",
+        description: "Network shell \u2014 show and configure network settings",
+        mutating: false,
+        platform: "win",
+    },
+    {
+        match: ["ftp"],
+        tier: "tier2",
+        description: "FTP client for file transfer protocol operations",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["sftp"],
+        tier: "tier2",
+        description: "Secure FTP client (SSH-based file transfer)",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["wscat"],
+        tier: "tier2",
+        description: "WebSocket protocol connection and message testing",
+        mutating: false,
+        platform: "both",
+    },
+    {
+        match: ["ssh", "-V"],
+        tier: "tier2",
+        description: "Display SSH client version",
+        mutating: false,
+        platform: "both",
+    },
 
     // ── Tier 3: Mutating network configuration (approval-gated) ─────────
-    { match: ["netsh", "interface", "set"], tier: "tier3", description: "Modify network interface settings", mutating: true, platform: "win" },
-    { match: ["netsh", "interface", "ip", "set"], tier: "tier3", description: "Set IP address, DHCP, or DNS configuration", mutating: true, platform: "win" },
-    { match: ["netsh", "firewall", "set"], tier: "tier3", description: "Modify firewall rules", mutating: true, platform: "win" },
-    { match: ["netsh", "advfirewall", "firewall"], tier: "tier3", description: "Advanced firewall rule management", mutating: true, platform: "win" },
-    { match: ["netsh", "wlan", "connect"], tier: "tier3", description: "Connect to a wireless network", mutating: true, platform: "win" },
-    { match: ["netsh", "wlan", "disconnect"], tier: "tier3", description: "Disconnect from wireless network", mutating: true, platform: "win" },
-    { match: ["route", "add"], tier: "tier3", description: "Add a route to the routing table", mutating: true, platform: "both" },
-    { match: ["route", "delete"], tier: "tier3", description: "Delete a route from the routing table", mutating: true, platform: "both" },
-    { match: ["route", "change"], tier: "tier3", description: "Modify an existing route", mutating: true, platform: "both" },
+    {
+        match: ["netsh", "interface", "set"],
+        tier: "tier3",
+        description: "Modify network interface settings",
+        mutating: true,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "interface", "ip", "set"],
+        tier: "tier3",
+        description: "Set IP address, DHCP, or DNS configuration",
+        mutating: true,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "firewall", "set"],
+        tier: "tier3",
+        description: "Modify firewall rules",
+        mutating: true,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "advfirewall", "firewall"],
+        tier: "tier3",
+        description: "Advanced firewall rule management",
+        mutating: true,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "wlan", "connect"],
+        tier: "tier3",
+        description: "Connect to a wireless network",
+        mutating: true,
+        platform: "win",
+    },
+    {
+        match: ["netsh", "wlan", "disconnect"],
+        tier: "tier3",
+        description: "Disconnect from wireless network",
+        mutating: true,
+        platform: "win",
+    },
+    {
+        match: ["route", "add"],
+        tier: "tier3",
+        description: "Add a route to the routing table",
+        mutating: true,
+        platform: "both",
+    },
+    {
+        match: ["route", "delete"],
+        tier: "tier3",
+        description: "Delete a route from the routing table",
+        mutating: true,
+        platform: "both",
+    },
+    {
+        match: ["route", "change"],
+        tier: "tier3",
+        description: "Modify an existing route",
+        mutating: true,
+        platform: "both",
+    },
     { match: ["net", "start"], tier: "tier3", description: "Start a network service", mutating: true, platform: "win" },
     { match: ["net", "stop"], tier: "tier3", description: "Stop a network service", mutating: true, platform: "win" },
-    { match: ["ip", "addr", "add"], tier: "tier3", description: "Add an IP address to an interface", mutating: true, platform: "linux" },
-    { match: ["ip", "addr", "del"], tier: "tier3", description: "Remove an IP address from an interface", mutating: true, platform: "linux" },
-    { match: ["ip", "route", "add"], tier: "tier3", description: "Add a route to the routing table", mutating: true, platform: "linux" },
-    { match: ["ip", "route", "del"], tier: "tier3", description: "Delete a route from the routing table", mutating: true, platform: "linux" },
-    { match: ["iptables"], tier: "tier3", description: "Manage Linux firewall rules", mutating: true, platform: "linux" },
-    { match: ["ufw"], tier: "tier3", description: "Uncomplicated Firewall management", mutating: true, platform: "linux" },
+    {
+        match: ["ip", "addr", "add"],
+        tier: "tier3",
+        description: "Add an IP address to an interface",
+        mutating: true,
+        platform: "linux",
+    },
+    {
+        match: ["ip", "addr", "del"],
+        tier: "tier3",
+        description: "Remove an IP address from an interface",
+        mutating: true,
+        platform: "linux",
+    },
+    {
+        match: ["ip", "route", "add"],
+        tier: "tier3",
+        description: "Add a route to the routing table",
+        mutating: true,
+        platform: "linux",
+    },
+    {
+        match: ["ip", "route", "del"],
+        tier: "tier3",
+        description: "Delete a route from the routing table",
+        mutating: true,
+        platform: "linux",
+    },
+    {
+        match: ["iptables"],
+        tier: "tier3",
+        description: "Manage Linux firewall rules",
+        mutating: true,
+        platform: "linux",
+    },
+    {
+        match: ["ufw"],
+        tier: "tier3",
+        description: "Uncomplicated Firewall management",
+        mutating: true,
+        platform: "linux",
+    },
 ];
 
 /** Patterns permanently blocked regardless of tier. */
@@ -165,6 +471,42 @@ export class NetworkTool implements Tool {
             return { ok: false, output: { error: "No command supplied." } };
         }
 
+        // Check for command injection characters / separators
+        if (/[|;`\n\r]|\$\(/.test(command)) {
+            return {
+                ok: false,
+                output: { error: "Command blocked — contains unsafe character (| ; ` $ newline)." },
+            };
+        }
+
+        // Check for ampersands that are not part of an http/https URL
+        if (command.includes("&")) {
+            let isSafeAmpersand = true;
+            let idx = -1;
+            while ((idx = command.indexOf("&", idx + 1)) !== -1) {
+                const before = command.substring(0, idx);
+                const lastSpaceIdx = before.lastIndexOf(" ");
+                const currentWord = lastSpaceIdx === -1 ? before : before.substring(lastSpaceIdx + 1);
+                // If it doesn't look like part of a URL, block it.
+                if (
+                    !currentWord.startsWith("http://") &&
+                    !currentWord.startsWith("https://") &&
+                    !currentWord.includes("url")
+                ) {
+                    isSafeAmpersand = false;
+                    break;
+                }
+            }
+            if (!isSafeAmpersand) {
+                return {
+                    ok: false,
+                    output: {
+                        error: "Command blocked — ampersand operator (&) is not allowed outside of URL query parameters.",
+                    },
+                };
+            }
+        }
+
         // Check blocked patterns
         const lower = command.toLowerCase();
         for (const pattern of BLOCKED_PATTERNS) {
@@ -182,11 +524,12 @@ export class NetworkTool implements Tool {
             return {
                 ok: false,
                 output: {
-                    error: "Command not recognized. Only curated network commands are allowed via network_exec. " +
+                    error:
+                        "Command not recognized. Only curated network commands are allowed via network_exec. " +
                         "Use shell_exec for arbitrary commands.",
-                    allowedPrefixes: NETWORK_COMMANDS
-                        .filter(c => c.platform === "both" || (c.platform === "win") === (platform() === "win32"))
-                        .map(c => c.match.join(" ")),
+                    allowedPrefixes: NETWORK_COMMANDS.filter(
+                        (c) => c.platform === "both" || (c.platform === "win") === (platform() === "win32"),
+                    ).map((c) => c.match.join(" ")),
                 },
             };
         }
@@ -243,7 +586,7 @@ export function getNetworkCommandCatalog(): Array<{
     mutating: boolean;
     platform: string;
 }> {
-    return NETWORK_COMMANDS.map(c => ({
+    return NETWORK_COMMANDS.map((c) => ({
         name: c.match.join(" "),
         tier: c.tier,
         description: c.description,

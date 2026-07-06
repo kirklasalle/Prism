@@ -141,15 +141,11 @@ export class TaskDecomposer {
         const batches: SubAgentRequest[][] = [];
 
         while (remaining.length > 0) {
-            const ready = remaining.filter((s) =>
-                s.dependsOn.every((dep) => completed.has(dep)),
-            );
+            const ready = remaining.filter((s) => s.dependsOn.every((dep) => completed.has(dep)));
 
             if (ready.length === 0) {
                 // Circular or unresolvable dependency — add rest as single batch
-                batches.push(
-                    remaining.map((s) => ({ goal: s.goal, role: s.role, risk: s.risk })),
-                );
+                batches.push(remaining.map((s) => ({ goal: s.goal, role: s.role, risk: s.risk })));
                 break;
             }
 
@@ -209,11 +205,7 @@ function parsePlannerOutput(raw: string): ParseResult {
         return { ok: false, steps: [], error: `JSON parse error: ${String(err)}` };
     }
 
-    if (
-        typeof parsed !== "object" ||
-        parsed === null ||
-        !Array.isArray((parsed as Record<string, unknown>)["steps"])
-    ) {
+    if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as Record<string, unknown>)["steps"])) {
         return { ok: false, steps: [], error: "Planner output missing 'steps' array" };
     }
 
@@ -228,17 +220,10 @@ function parsePlannerOutput(raw: string): ParseResult {
         const id = String(step["id"] ?? `step-${i + 1}`);
         const description = String(step["description"] ?? "");
         const goal = String(step["goal"] ?? "");
-        const role = ALLOWED_ROLES.has(String(step["role"]))
-            ? (String(step["role"]) as TaskRole)
-            : "chat";
-        const risk = ALLOWED_RISKS.has(String(step["risk"]))
-            ? (String(step["risk"]) as OperationRisk)
-            : "low";
-        const dependsOn = Array.isArray(step["dependsOn"])
-            ? step["dependsOn"].map(String)
-            : [];
-        const expectedOutput =
-            typeof step["expectedOutput"] === "string" ? step["expectedOutput"] : undefined;
+        const role = ALLOWED_ROLES.has(String(step["role"])) ? (String(step["role"]) as TaskRole) : "chat";
+        const risk = ALLOWED_RISKS.has(String(step["risk"])) ? (String(step["risk"]) as OperationRisk) : "low";
+        const dependsOn = Array.isArray(step["dependsOn"]) ? step["dependsOn"].map(String) : [];
+        const expectedOutput = typeof step["expectedOutput"] === "string" ? step["expectedOutput"] : undefined;
 
         steps.push({ id, description, goal, role, risk, dependsOn, expectedOutput });
     }

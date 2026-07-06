@@ -73,6 +73,10 @@ export function statusBadge(action) {
 }
 export function safeRenderStep(step, fn) { fn(); }
 export function renderLogsPanel() {}
+export function showConfirm(message) { return Promise.resolve(true); }
+export function showTransientNotice(message, severity) {}
+export function showPrompt(message, opts) { return Promise.resolve("mocked input"); }
+export function authHeaders(extra) { return extra || {}; }
 `;
 
 /* ──── Module types ──────────────────────────────────────────────────────────────────────── */
@@ -85,6 +89,8 @@ interface TabLogsModule {
     renderApprovals(): void;
     renderActionHistory(): void;
     renderToolCallLog(): void;
+    initLogsTab(): void;
+    resetLogsWired(): void;
 }
 
 /* ──── Suite ───────────────────────────────────────────────────────────────────────────────── */
@@ -115,7 +121,7 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
 
         const moduleUrl = pathToFileURL(join(tmpDir, "tab-logs.js")).href;
-        mod = await import(moduleUrl) as TabLogsModule;
+        mod = (await import(moduleUrl)) as TabLogsModule;
 
         const coreUrl = pathToFileURL(join(tmpDir, "dashboard-core.js")).href;
         const core = await import(coreUrl);
@@ -134,6 +140,9 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
     });
 
     beforeEach(() => {
+        if (mod && typeof mod.resetLogsWired === "function") {
+            mod.resetLogsWired();
+        }
         dom.window.document.body.innerHTML = new JSDOM(SCAFFOLD_HTML).window.document.body.innerHTML;
         mockState.events = [];
         mockState.traceData = null;
@@ -156,9 +165,7 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         });
 
         it("renders event table with correct columns", () => {
-            mockState.events = [
-                { timestamp: "2025-01-01T00:00:00Z", operation: "tool.call", status: "success" },
-            ];
+            mockState.events = [{ timestamp: "2025-01-01T00:00:00Z", operation: "tool.call", status: "success" }];
             mod.renderEvents();
             const el = dom.window.document.getElementById("events");
             assert.ok(el!.innerHTML.includes("<table"));
@@ -213,8 +220,20 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         it("renders trace table with correlation IDs", () => {
             mockState.traceData = {
                 traces: [
-                    { correlationId: "corr-abc-123", eventCount: 5, status: "complete", lastAt: "2025-01-01T00:00:00Z", failures: 0 },
-                    { correlationId: "corr-def-456", eventCount: 3, status: "running", lastAt: "2025-01-01T00:01:00Z", failures: 1 },
+                    {
+                        correlationId: "corr-abc-123",
+                        eventCount: 5,
+                        status: "complete",
+                        lastAt: "2025-01-01T00:00:00Z",
+                        failures: 0,
+                    },
+                    {
+                        correlationId: "corr-def-456",
+                        eventCount: 3,
+                        status: "running",
+                        lastAt: "2025-01-01T00:01:00Z",
+                        failures: 1,
+                    },
                 ],
                 selectedTraceEvents: [],
             };
@@ -228,7 +247,13 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         it("shows failure count when failures > 0", () => {
             mockState.traceData = {
                 traces: [
-                    { correlationId: "corr-1", eventCount: 4, status: "error", lastAt: "2025-01-01T00:00:00Z", failures: 2 },
+                    {
+                        correlationId: "corr-1",
+                        eventCount: 4,
+                        status: "error",
+                        lastAt: "2025-01-01T00:00:00Z",
+                        failures: 2,
+                    },
                 ],
                 selectedTraceEvents: [],
             };
@@ -241,7 +266,13 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
             mockState.selectedTraceId = "corr-abc";
             mockState.traceData = {
                 traces: [
-                    { correlationId: "corr-abc", eventCount: 2, status: "complete", lastAt: "2025-01-01T00:00:00Z", failures: 0 },
+                    {
+                        correlationId: "corr-abc",
+                        eventCount: 2,
+                        status: "complete",
+                        lastAt: "2025-01-01T00:00:00Z",
+                        failures: 0,
+                    },
                 ],
                 selectedTraceEvents: [
                     { timestamp: "2025-01-01T00:00:00Z", operation: "step.1", status: "ok" },
@@ -259,7 +290,13 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
             mockState.selectedTraceId = "corr-abc";
             mockState.traceData = {
                 traces: [
-                    { correlationId: "corr-abc", eventCount: 1, status: "done", lastAt: "2025-01-01T00:00:00Z", failures: 0 },
+                    {
+                        correlationId: "corr-abc",
+                        eventCount: 1,
+                        status: "done",
+                        lastAt: "2025-01-01T00:00:00Z",
+                        failures: 0,
+                    },
                 ],
                 selectedTraceEvents: [],
             };
@@ -292,13 +329,11 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         });
 
         it("includes Run button with action name as data attribute", () => {
-            mockState.actions = [
-                { name: "test-action", label: "Test", description: "A test action", status: "idle" },
-            ];
+            mockState.actions = [{ name: "test-action", label: "Test", description: "A test action", status: "idle" }];
             mod.renderActions();
             const el = dom.window.document.getElementById("actions");
             assert.ok(el!.innerHTML.includes("Run"));
-            assert.ok(el!.innerHTML.includes("runAction"));
+            assert.ok(el!.innerHTML.includes("quick-action-btn"));
             assert.ok(el!.innerHTML.includes("test-action"));
         });
 
@@ -331,9 +366,7 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
 
         it("displays notice when state.notice is set", () => {
             mockState.notice = "System alert: maintenance window";
-            mockState.actions = [
-                { name: "a", label: "A", description: "desc", status: "idle" },
-            ];
+            mockState.actions = [{ name: "a", label: "A", description: "desc", status: "idle" }];
             mod.renderActions();
             const el = dom.window.document.getElementById("actions");
             assert.ok(el!.innerHTML.includes("System alert: maintenance window"));
@@ -363,21 +396,18 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         });
 
         it("includes Approve and Deny buttons", () => {
-            mockState.pending = [
-                { id: "req-001", operation: "test.op" },
-            ];
+            mockState.pending = [{ id: "req-001", operation: "test.op" }];
             mod.renderApprovals();
             const el = dom.window.document.getElementById("pending");
             assert.ok(el!.innerHTML.includes("Approve"));
             assert.ok(el!.innerHTML.includes("Deny"));
-            assert.ok(el!.innerHTML.includes("approve("));
-            assert.ok(el!.innerHTML.includes("deny("));
+            assert.ok(el!.innerHTML.includes("approval-btn"));
+            assert.ok(el!.innerHTML.includes('data-approval-action="approve"'));
+            assert.ok(el!.innerHTML.includes('data-approval-action="deny"'));
         });
 
         it("passes approval ID as data attribute", () => {
-            mockState.pending = [
-                { id: "xyz-789", operation: "op" },
-            ];
+            mockState.pending = [{ id: "xyz-789", operation: "op" }];
             mod.renderApprovals();
             const el = dom.window.document.getElementById("pending");
             assert.ok(el!.innerHTML.includes("xyz-789"));
@@ -444,8 +474,22 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
 
         it("renders table with tool call entries", () => {
             mockState.toolCallLog = [
-                { name: "readFile", timestamp: "2025-01-01T00:00:00Z", iteration: 1, arguments: { path: "/foo" }, output: "file content", ok: true },
-                { name: "writeFile", timestamp: "2025-01-01T00:00:01Z", iteration: 2, arguments: { path: "/bar" }, output: "written", ok: false },
+                {
+                    name: "readFile",
+                    timestamp: "2025-01-01T00:00:00Z",
+                    iteration: 1,
+                    arguments: { path: "/foo" },
+                    output: "file content",
+                    ok: true,
+                },
+                {
+                    name: "writeFile",
+                    timestamp: "2025-01-01T00:00:01Z",
+                    iteration: 2,
+                    arguments: { path: "/bar" },
+                    output: "written",
+                    ok: false,
+                },
             ];
             mod.renderToolCallLog();
             const el = dom.window.document.getElementById("tool-call-log");
@@ -467,9 +511,7 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         });
 
         it("shows pending status when ok is undefined", () => {
-            mockState.toolCallLog = [
-                { name: "pendingTool", timestamp: "2025-01-01T00:00:00Z" },
-            ];
+            mockState.toolCallLog = [{ name: "pendingTool", timestamp: "2025-01-01T00:00:00Z" }];
             mod.renderToolCallLog();
             const el = dom.window.document.getElementById("tool-call-log");
             assert.ok(el!.innerHTML.includes("pending"));
@@ -477,9 +519,7 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
 
         it("truncates long output at 300 chars", () => {
             const longOutput = "z".repeat(400);
-            mockState.toolCallLog = [
-                { name: "tool1", output: longOutput, ok: true },
-            ];
+            mockState.toolCallLog = [{ name: "tool1", output: longOutput, ok: true }];
             mod.renderToolCallLog();
             const el = dom.window.document.getElementById("tool-call-log");
             assert.ok(!el!.innerHTML.includes("z".repeat(400)));
@@ -487,23 +527,75 @@ describe("tab-logs.js – Frontend Unit Tests", function () {
         });
 
         it("renders iteration numbers", () => {
-            mockState.toolCallLog = [
-                { name: "tool1", iteration: 7, ok: true },
-            ];
+            mockState.toolCallLog = [{ name: "tool1", iteration: 7, ok: true }];
             mod.renderToolCallLog();
             const el = dom.window.document.getElementById("tool-call-log");
             assert.ok(el!.innerHTML.includes("7"));
         });
 
         it("handles entries with empty arguments", () => {
-            mockState.toolCallLog = [
-                { name: "noArgs", arguments: {}, ok: true },
-            ];
+            mockState.toolCallLog = [{ name: "noArgs", arguments: {}, ok: true }];
             mod.renderToolCallLog();
             const el = dom.window.document.getElementById("tool-call-log");
             assert.ok(el!.innerHTML.includes("noArgs"));
             // Should show "-" placeholder for empty args
             assert.ok(el!.innerHTML.includes("-"));
+        });
+    });
+
+    describe("initLogsTab and Delegated Event Listeners", () => {
+        beforeEach(() => {
+            (dom.window as any).runAction = () => {};
+            (dom.window as any).approve = () => {};
+            (dom.window as any).deny = () => {};
+        });
+
+        it("wires delegated click listeners for actions container", () => {
+            let runActionCalledWith = "";
+            (dom.window as any).runAction = (act: string) => {
+                runActionCalledWith = act;
+            };
+
+            mockState.actions = [{ name: "restart-agent", label: "Restart", description: "desc", status: "idle" }];
+            mod.renderActions();
+
+            mod.initLogsTab();
+
+            const btn = dom.window.document.querySelector(".quick-action-btn") as HTMLElement;
+            assert.ok(btn);
+            btn.click();
+
+            assert.strictEqual(runActionCalledWith, "restart-agent");
+        });
+
+        it("wires delegated click listeners for pending approvals", () => {
+            let approveCalledWith = "";
+            let denyCalledWith = "";
+            (dom.window as any).approve = (id: string) => {
+                approveCalledWith = id;
+            };
+            (dom.window as any).deny = (id: string) => {
+                denyCalledWith = id;
+            };
+
+            mockState.pending = [{ id: "req-123", operation: "write file" }];
+            mod.renderApprovals();
+
+            mod.initLogsTab();
+
+            const approveBtn = dom.window.document.querySelector(
+                "button[data-approval-action='approve']",
+            ) as HTMLElement;
+            const denyBtn = dom.window.document.querySelector("button[data-approval-action='deny']") as HTMLElement;
+
+            assert.ok(approveBtn);
+            assert.ok(denyBtn);
+
+            approveBtn.click();
+            assert.strictEqual(approveCalledWith, "req-123");
+
+            denyBtn.click();
+            assert.strictEqual(denyCalledWith, "req-123");
         });
     });
 });

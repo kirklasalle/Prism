@@ -10,7 +10,7 @@ export class EpisodicMemory implements ActivitySubscriber {
     private readonly events: ActivityEvent[] = [];
     private estimatedTokens = 0;
 
-    constructor(private readonly maxEvents: number = 500) { }
+    constructor(private readonly maxEvents: number = 500) {}
 
     onEvent(event: ActivityEvent): void {
         this.events.push(event);

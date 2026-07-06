@@ -45,8 +45,7 @@ export const SCENARIO_S08: PtacScenario = {
             id: "tier2-approval-live",
             label: "Tier-2 prompt — live handler enqueues approval",
             kind: "chat",
-            prompt:
-                "Send an email to my project lead summarizing today's standup notes and attach the latest design draft.",
+            prompt: "Send an email to my project lead summarizing today's standup notes and attach the latest design draft.",
             expectedTier: 2,
             expectApprovalRequired: true,
             timeoutMs: 15_000,

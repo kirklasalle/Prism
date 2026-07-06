@@ -230,9 +230,7 @@ export class AgentLifecycleManager {
 
     /** Serialize persistent agents for workspace storage. */
     serializePersistent(): AgentInstance[] {
-        return this.list().filter(
-            (a) => a.lifecycle === "permanent" || a.lifecycle === "semi-permanent",
-        );
+        return this.list().filter((a) => a.lifecycle === "permanent" || a.lifecycle === "semi-permanent");
     }
 
     /** Restore agents from persisted data. */

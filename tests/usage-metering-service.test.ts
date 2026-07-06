@@ -22,8 +22,16 @@ describe("UsageMeteringService", () => {
 
     after(() => {
         // Close the SQLite handles before removing temp files (required on Windows).
-        try { (svc as unknown as { db: { close(): void } }).db.close(); } catch { /* ignore */ }
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore on Windows lock */ }
+        try {
+            (svc as unknown as { db: { close(): void } }).db.close();
+        } catch {
+            /* ignore */
+        }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            /* ignore on Windows lock */
+        }
     });
 
     // ── Schema / bootstrap ───────────────────────────────────────────────
@@ -54,8 +62,22 @@ describe("UsageMeteringService", () => {
     });
 
     it("records multiple entries and aggregates correctly", () => {
-        svc.record({ provider: "openai", model: "gpt-4o", sessionId: "sess-1", inputTokens: 200, outputTokens: 100, costUsd: 0.004 });
-        svc.record({ provider: "anthropic", model: "claude-3-5-sonnet", sessionId: "sess-2", inputTokens: 300, outputTokens: 150, costUsd: 0.009 });
+        svc.record({
+            provider: "openai",
+            model: "gpt-4o",
+            sessionId: "sess-1",
+            inputTokens: 200,
+            outputTokens: 100,
+            costUsd: 0.004,
+        });
+        svc.record({
+            provider: "anthropic",
+            model: "claude-3-5-sonnet",
+            sessionId: "sess-2",
+            inputTokens: 300,
+            outputTokens: 150,
+            costUsd: 0.009,
+        });
 
         const summary = svc.getSummary("1h");
         assert.ok(summary.totalRequests >= 3, "at least 3 total requests recorded");
@@ -138,13 +160,24 @@ describe("UsageMeteringService", () => {
             lowCapSvc.setCaps({ sessionCap: 0.001, dailyCap: null, monthlyCap: null });
 
             // Record spend that exceeds the session cap
-            lowCapSvc.record({ provider: "openai", model: "gpt-4o", sessionId: "s", inputTokens: 10, outputTokens: 5, costUsd: 0.01 });
+            lowCapSvc.record({
+                provider: "openai",
+                model: "gpt-4o",
+                sessionId: "s",
+                inputTokens: 10,
+                outputTokens: 5,
+                costUsd: 0.01,
+            });
 
             const result = lowCapSvc.checkCap();
             assert.equal(result.allowed, false);
             assert.equal(result.capType, "session");
         } finally {
-            try { (lowCapSvc as unknown as { db: { close(): void } }).db.close(); } catch { /* ignore */ }
+            try {
+                (lowCapSvc as unknown as { db: { close(): void } }).db.close();
+            } catch {
+                /* ignore */
+            }
         }
     });
 
@@ -153,13 +186,24 @@ describe("UsageMeteringService", () => {
         const dailySvc = new UsageMeteringService(dailyCapDbPath);
         try {
             dailySvc.setCaps({ sessionCap: null, dailyCap: 0.001, monthlyCap: null });
-            dailySvc.record({ provider: "openai", model: "gpt-4o", sessionId: "s", inputTokens: 10, outputTokens: 5, costUsd: 0.02 });
+            dailySvc.record({
+                provider: "openai",
+                model: "gpt-4o",
+                sessionId: "s",
+                inputTokens: 10,
+                outputTokens: 5,
+                costUsd: 0.02,
+            });
 
             const result = dailySvc.checkCap();
             assert.equal(result.allowed, false);
             assert.equal(result.capType, "daily");
         } finally {
-            try { (dailySvc as unknown as { db: { close(): void } }).db.close(); } catch { /* ignore */ }
+            try {
+                (dailySvc as unknown as { db: { close(): void } }).db.close();
+            } catch {
+                /* ignore */
+            }
         }
     });
 });

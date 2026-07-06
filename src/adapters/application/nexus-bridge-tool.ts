@@ -25,15 +25,9 @@ import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 
 function resolvePaths() {
     return {
-        prismThread:
-            process.env.NEXUS_PRISM_THREAD ??
-            "D:\\Projects\\.nexus\\bridge\\VS_Code\\Thread_Active.md",
-        hotline:
-            process.env.NEXUS_HOTLINE ??
-            "D:\\Projects\\.nexus\\bridge\\hotline.md",
-        memoryDir:
-            process.env.NEXUS_MEMORY_DIR ??
-            "G:\\Users\\kirkl\\.openclaw\\workspace\\memory",
+        prismThread: process.env.NEXUS_PRISM_THREAD ?? "D:\\Projects\\.nexus\\bridge\\VS_Code\\Thread_Active.md",
+        hotline: process.env.NEXUS_HOTLINE ?? "D:\\Projects\\.nexus\\bridge\\hotline.md",
+        memoryDir: process.env.NEXUS_MEMORY_DIR ?? "G:\\Users\\kirkl\\.openclaw\\workspace\\memory",
     };
 }
 

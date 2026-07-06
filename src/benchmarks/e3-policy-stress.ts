@@ -1,11 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { mkdir, writeFile } from "node:fs/promises";
 import { PolicyEngine } from "../core/policy/engine.js";
-import {
-    BUSINESS_PROFILE,
-    INDIVIDUAL_PROFILE,
-    type ExecutionProfile,
-} from "../core/policy/execution-profiles.js";
+import { BUSINESS_PROFILE, INDIVIDUAL_PROFILE, type ExecutionProfile } from "../core/policy/execution-profiles.js";
 import type { PolicyContext } from "../core/policy/types.js";
 
 type Decision = "allow" | "deny" | "require_approval";
@@ -224,8 +220,12 @@ async function main(): Promise<void> {
     console.log(`- Iterations: ${artifact.iterations}`);
     console.log(`- Matrix checks: ${artifact.matrixChecks}`);
     console.log(`- Matrix mismatches: ${artifact.matrixMismatches}`);
-    console.log(`- Stress avg=${artifact.stress.avgMs.toFixed(6)}ms p50=${artifact.stress.p50Ms.toFixed(6)}ms p95=${artifact.stress.p95Ms.toFixed(6)}ms p99=${artifact.stress.p99Ms.toFixed(6)}ms max=${artifact.stress.maxMs.toFixed(6)}ms`);
-    console.log(`- Decisions: allow=${artifact.decisionDistribution.allow} deny=${artifact.decisionDistribution.deny} require_approval=${artifact.decisionDistribution.require_approval}`);
+    console.log(
+        `- Stress avg=${artifact.stress.avgMs.toFixed(6)}ms p50=${artifact.stress.p50Ms.toFixed(6)}ms p95=${artifact.stress.p95Ms.toFixed(6)}ms p99=${artifact.stress.p99Ms.toFixed(6)}ms max=${artifact.stress.maxMs.toFixed(6)}ms`,
+    );
+    console.log(
+        `- Decisions: allow=${artifact.decisionDistribution.allow} deny=${artifact.decisionDistribution.deny} require_approval=${artifact.decisionDistribution.require_approval}`,
+    );
     for (const gate of artifact.gateResults) {
         console.log(`- [${gate.passed ? "PASS" : "FAIL"}] ${gate.name}: ${gate.details}`);
     }

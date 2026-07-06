@@ -28,7 +28,7 @@ export enum ContainerState {
     EXECUTING = "executing",
     TIMEOUT = "timeout",
     STOPPED = "stopped",
-    DESTROYED = "destroyed"
+    DESTROYED = "destroyed",
 }
 
 export interface ResourceQuota {
@@ -68,9 +68,68 @@ export interface ExecInContainerResponse {
     timestamp: string;
 }
 
-const TIER1_KEYWORDS = ["ls", "cat", "grep", "pwd", "echo", "cd", "head", "tail", "wc", "find", "locate", "stat", "file", "ipconfig", "ifconfig", "ping", "nslookup", "dig", "tracert", "traceroute", "netstat", "arp", "hostname", "nbtstat", "pathping", "getmac", "ss", "curl", "wget"];
-const TIER2_KEYWORDS = ["mkdir", "touch", "cp", "mv", "chmod", "chgrp", "ln", "tar", "zip", "gzip", "sed", "awk", "netsh", "route"];
-const TIER3_KEYWORDS = ["rm", "sudo", "reboot", "dd", "mkfs", "halt", "shutdown", "kill", "chown", "fdisk", "format", "umount", "fsck"];
+const TIER1_KEYWORDS = [
+    "ls",
+    "cat",
+    "grep",
+    "pwd",
+    "echo",
+    "cd",
+    "head",
+    "tail",
+    "wc",
+    "find",
+    "locate",
+    "stat",
+    "file",
+    "ipconfig",
+    "ifconfig",
+    "ping",
+    "nslookup",
+    "dig",
+    "tracert",
+    "traceroute",
+    "netstat",
+    "arp",
+    "hostname",
+    "nbtstat",
+    "pathping",
+    "getmac",
+    "ss",
+    "curl",
+    "wget",
+];
+const TIER2_KEYWORDS = [
+    "mkdir",
+    "touch",
+    "cp",
+    "mv",
+    "chmod",
+    "chgrp",
+    "ln",
+    "tar",
+    "zip",
+    "gzip",
+    "sed",
+    "awk",
+    "netsh",
+    "route",
+];
+const TIER3_KEYWORDS = [
+    "rm",
+    "sudo",
+    "reboot",
+    "dd",
+    "mkfs",
+    "halt",
+    "shutdown",
+    "kill",
+    "chown",
+    "fdisk",
+    "format",
+    "umount",
+    "fsck",
+];
 
 export class ContainerSandboxAdapter {
     private db: sqlite3.Database;
@@ -82,7 +141,12 @@ export class ContainerSandboxAdapter {
     private initializationPromise: Promise<void>;
     private readonly runtimeBaseDir: string;
 
-    constructor(db: sqlite3.Database, policyEngine: PolicyEngine, activityBus: ActivityBus, executionProfile?: ExecutionProfile) {
+    constructor(
+        db: sqlite3.Database,
+        policyEngine: PolicyEngine,
+        activityBus: ActivityBus,
+        executionProfile?: ExecutionProfile,
+    ) {
         this.db = db;
         this.policyEngine = policyEngine;
         this.activityBus = activityBus;
@@ -105,7 +169,7 @@ export class ContainerSandboxAdapter {
     }
 
     getRuntimeBackend(): "docker" | "builtin-prism" {
-        return (process.env.PRISM_USE_DOCKER === "true" || process.env.PRISM_USE_DOCKER === "1")
+        return process.env.PRISM_USE_DOCKER === "true" || process.env.PRISM_USE_DOCKER === "1"
             ? "docker"
             : "builtin-prism";
     }
@@ -120,7 +184,8 @@ export class ContainerSandboxAdapter {
 
     private initializeDatabase(): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            this.db.run(`
+            this.db.run(
+                `
                 CREATE TABLE IF NOT EXISTS containers (
                     container_id TEXT PRIMARY KEY,
                     image TEXT NOT NULL,
@@ -133,13 +198,15 @@ export class ContainerSandboxAdapter {
                     stopped_at TEXT,
                     created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            `, (err: any) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
+            `,
+                (err: any) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
 
-                this.db.run(`
+                    this.db.run(
+                        `
                     CREATE TABLE IF NOT EXISTS container_snapshots (
                         snapshot_id TEXT PRIMARY KEY,
                         container_id TEXT NOT NULL,
@@ -152,13 +219,15 @@ export class ContainerSandboxAdapter {
                         created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY(container_id) REFERENCES containers(container_id)
                     )
-                `, (snapErr: any) => {
-                    if (snapErr) {
-                        reject(snapErr);
-                        return;
-                    }
+                `,
+                        (snapErr: any) => {
+                            if (snapErr) {
+                                reject(snapErr);
+                                return;
+                            }
 
-                    this.db.run(`
+                            this.db.run(
+                                `
                         CREATE TABLE IF NOT EXISTS container_command_history (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             container_id TEXT NOT NULL,
@@ -173,13 +242,15 @@ export class ContainerSandboxAdapter {
                             created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY(container_id) REFERENCES containers(container_id)
                         )
-                    `, (histErr: any) => {
-                        if (histErr) {
-                            reject(histErr);
-                            return;
-                        }
+                    `,
+                                (histErr: any) => {
+                                    if (histErr) {
+                                        reject(histErr);
+                                        return;
+                                    }
 
-                        this.db.run(`
+                                    this.db.run(
+                                        `
                             CREATE TABLE IF NOT EXISTS container_signal_log (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 container_id TEXT NOT NULL,
@@ -189,13 +260,18 @@ export class ContainerSandboxAdapter {
                                 created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                 FOREIGN KEY(container_id) REFERENCES containers(container_id)
                             )
-                        `, (signalErr: any) => {
-                            if (signalErr) reject(signalErr);
-                            else resolve();
-                        });
-                    });
-                });
-            });
+                        `,
+                                        (signalErr: any) => {
+                                            if (signalErr) reject(signalErr);
+                                            else resolve();
+                                        },
+                                    );
+                                },
+                            );
+                        },
+                    );
+                },
+            );
         });
     }
 
@@ -234,12 +310,18 @@ export class ContainerSandboxAdapter {
             // We use the container_id as the name to avoid collisions.
             const args = [
                 "create",
-                "--name", container_id,
-                "--memory", memoryLimit,
-                "--cpus", cpuLimit,
-                "--workdir", "/workspace",
+                "--name",
+                container_id,
+                "--memory",
+                memoryLimit,
+                "--cpus",
+                cpuLimit,
+                "--workdir",
+                "/workspace",
                 image,
-                "tail", "-f", "/dev/null" // Keep it alive
+                "tail",
+                "-f",
+                "/dev/null", // Keep it alive
             ];
 
             await this.runDockerCommand(args);
@@ -309,7 +391,11 @@ export class ContainerSandboxAdapter {
         return container;
     }
 
-    async execInContainer(container_id: string, command: string, timeout_ms: number = 30000): Promise<ExecInContainerResponse> {
+    async execInContainer(
+        container_id: string,
+        command: string,
+        timeout_ms: number = 30000,
+    ): Promise<ExecInContainerResponse> {
         await this.initializationPromise;
 
         const containerEntry = this.activeContainers.get(container_id);
@@ -358,7 +444,7 @@ export class ContainerSandboxAdapter {
                 proc.kill("SIGKILL");
                 if (backend === "docker") {
                     // Force kill the container process too
-                    spawn("docker", ["kill", container_id]).on("error", () => { });
+                    spawn("docker", ["kill", container_id]).on("error", () => {});
                 }
                 this.handleTimeout(container_id, timeout_ms);
             }, timeout_ms);
@@ -399,7 +485,11 @@ export class ContainerSandboxAdapter {
         return response;
     }
 
-    async snapshotContainer(container_id: string, snapshot_name: string, description?: string): Promise<ContainerSnapshot> {
+    async snapshotContainer(
+        container_id: string,
+        snapshot_name: string,
+        description?: string,
+    ): Promise<ContainerSnapshot> {
         await this.initializationPromise;
         const backend = this.getRuntimeBackend();
 
@@ -444,7 +534,8 @@ export class ContainerSandboxAdapter {
         const snapshot_id = uuidv4();
         const created_at = new Date().toISOString();
         const existingSnapshots = this.snapshots.get(container_id) || [];
-        const parent_snapshot_id = existingSnapshots.length > 0 ? existingSnapshots[existingSnapshots.length - 1].snapshot_id : undefined;
+        const parent_snapshot_id =
+            existingSnapshots.length > 0 ? existingSnapshots[existingSnapshots.length - 1].snapshot_id : undefined;
 
         const snapshotPath = join(snapshotsDir, snapshot_id);
         mkdirSync(snapshotPath, { recursive: true });
@@ -465,11 +556,7 @@ export class ContainerSandboxAdapter {
             adapter: "builtin-prism",
             schema_version: 1,
         };
-        writeFileSync(
-            join(snapshotPath, ".prism-snapshot.json"),
-            JSON.stringify(manifest, null, 2),
-            "utf-8",
-        );
+        writeFileSync(join(snapshotPath, ".prism-snapshot.json"), JSON.stringify(manifest, null, 2), "utf-8");
 
         const snapshot_size_mb = Math.max(0, Math.ceil(this.dirSizeBytes(snapshotPath) / (1024 * 1024)));
         const snapshot: ContainerSnapshot = {
@@ -536,20 +623,29 @@ export class ContainerSandboxAdapter {
             // To revert in Docker:
             // 1. Stop and remove current container
             // 2. Create and start a new container from the snapshot image
-            await this.runDockerCommand(["stop", container_id]).catch(() => { });
-            await this.runDockerCommand(["rm", container_id]).catch(() => { });
+            await this.runDockerCommand(["stop", container_id]).catch(() => {});
+            await this.runDockerCommand(["rm", container_id]).catch(() => {});
 
-            const memoryLimit = container.resource_quota.memory_limit_mb > 0 ? `${container.resource_quota.memory_limit_mb}m` : "512m";
-            const cpuLimit = container.resource_quota.cpu_limit > 0 ? String(container.resource_quota.cpu_limit) : "0.5";
+            const memoryLimit =
+                container.resource_quota.memory_limit_mb > 0 ? `${container.resource_quota.memory_limit_mb}m` : "512m";
+            const cpuLimit =
+                container.resource_quota.cpu_limit > 0 ? String(container.resource_quota.cpu_limit) : "0.5";
 
             const args = [
-                "run", "-d",
-                "--name", container_id,
-                "--memory", memoryLimit,
-                "--cpus", cpuLimit,
-                "--workdir", "/workspace",
+                "run",
+                "-d",
+                "--name",
+                container_id,
+                "--memory",
+                memoryLimit,
+                "--cpus",
+                cpuLimit,
+                "--workdir",
+                "/workspace",
                 snapshot.snapshot_id,
-                "tail", "-f", "/dev/null"
+                "tail",
+                "-f",
+                "/dev/null",
             ];
             await this.runDockerCommand(args);
 
@@ -595,10 +691,12 @@ export class ContainerSandboxAdapter {
         const container = await this.getContainerStatus(container_id);
         const backend = this.getRuntimeBackend();
 
-        this.db.run(
-            "INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-            [container_id, "SIGTERM", "graceful_stop", new Date().toISOString()],
-        );
+        this.db.run("INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)", [
+            container_id,
+            "SIGTERM",
+            "graceful_stop",
+            new Date().toISOString(),
+        ]);
 
         if (backend === "docker") {
             await this.runDockerCommand(["stop", container_id]);
@@ -636,7 +734,7 @@ export class ContainerSandboxAdapter {
             // Clean up any snapshot images
             const snaps = await this.listSnapshots(container_id);
             for (const s of snaps) {
-                await this.runDockerCommand(["rmi", "-f", s.snapshot_id]).catch(() => { });
+                await this.runDockerCommand(["rmi", "-f", s.snapshot_id]).catch(() => {});
             }
         }
 
@@ -647,10 +745,12 @@ export class ContainerSandboxAdapter {
             rmSync(this.containerDir(container_id), { recursive: true, force: true });
         }
 
-        this.db.run(
-            "INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-            [container_id, "SIGKILL", `destruction: ${reason}`, new Date().toISOString()],
-        );
+        this.db.run("INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)", [
+            container_id,
+            "SIGKILL",
+            `destruction: ${reason}`,
+            new Date().toISOString(),
+        ]);
 
         container.state = ContainerState.DESTROYED;
         await this.persistContainer(container);
@@ -714,16 +814,18 @@ export class ContainerSandboxAdapter {
                     if (err) {
                         reject(err);
                     } else {
-                        resolve(rows.map((r) => ({
-                            snapshot_id: r.snapshot_id,
-                            container_id: r.container_id,
-                            snapshot_name: r.snapshot_name,
-                            description: r.description,
-                            snapshot_size_mb: r.snapshot_size_mb,
-                            command_count: r.command_count,
-                            created_at: r.created_at,
-                            parent_snapshot_id: r.parent_snapshot_id,
-                        })));
+                        resolve(
+                            rows.map((r) => ({
+                                snapshot_id: r.snapshot_id,
+                                container_id: r.container_id,
+                                snapshot_name: r.snapshot_name,
+                                description: r.description,
+                                snapshot_size_mb: r.snapshot_size_mb,
+                                command_count: r.command_count,
+                                created_at: r.created_at,
+                                parent_snapshot_id: r.parent_snapshot_id,
+                            })),
+                        );
                     }
                 },
             );
@@ -815,10 +917,12 @@ export class ContainerSandboxAdapter {
         const containerEntry = this.activeContainers.get(container_id);
         if (!containerEntry) return;
 
-        this.db.run(
-            "INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
-            [container_id, "SIGTERM", `timeout_handler:${timeout_ms}`, new Date().toISOString()],
-        );
+        this.db.run("INSERT INTO container_signal_log (container_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)", [
+            container_id,
+            "SIGTERM",
+            `timeout_handler:${timeout_ms}`,
+            new Date().toISOString(),
+        ]);
 
         containerEntry.container.state = ContainerState.TIMEOUT;
         this.persistContainer(containerEntry.container);
@@ -939,7 +1043,7 @@ export class ContainerSandboxAdapter {
                 }
             });
         });
-     }
+    }
 
     /** Get all active container IDs */
     getActiveContainerIds(): string[] {

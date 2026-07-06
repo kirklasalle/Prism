@@ -69,7 +69,10 @@ export async function testSRNModelFanout(): Promise<void> {
         role: "custom" as const,
     }));
     const norm4 = normalizeSRConfig({ enabled: true, leftModel: null, rightModel: null, hemispheres: tooMany });
-    assert(norm4.errors.some(e => e.includes("SR_MAX_HEMISPHERES")), "cap must trigger error");
+    assert(
+        norm4.errors.some((e) => e.includes("SR_MAX_HEMISPHERES")),
+        "cap must trigger error",
+    );
 
     // ── Duplicate ids rejected ──
     const dup: HemisphereSpec[] = [
@@ -77,7 +80,10 @@ export async function testSRNModelFanout(): Promise<void> {
         { id: "x", providerId: "b", model: "m2", role: "logic" },
     ];
     const norm5 = normalizeSRConfig({ enabled: true, leftModel: null, rightModel: null, hemispheres: dup });
-    assert(norm5.errors.some(e => e.toLowerCase().includes("duplicate")), "duplicate id must error");
+    assert(
+        norm5.errors.some((e) => e.toLowerCase().includes("duplicate")),
+        "duplicate id must error",
+    );
 
     // ── Instance-isolation: same provider+model rejected ──
     const same: HemisphereSpec[] = [
@@ -85,7 +91,10 @@ export async function testSRNModelFanout(): Promise<void> {
         { id: "b", providerId: "openai", model: "gpt-4o", role: "creative" },
     ];
     const norm6 = normalizeSRConfig({ enabled: true, leftModel: null, rightModel: null, hemispheres: same });
-    assert(norm6.errors.some(e => e.toLowerCase().includes("isolation")), "isolation violation must error");
+    assert(
+        norm6.errors.some((e) => e.toLowerCase().includes("isolation")),
+        "isolation violation must error",
+    );
 
     // ── Phase B: profile registry sanity ──
     const ids = listHemisphereProfileIds();

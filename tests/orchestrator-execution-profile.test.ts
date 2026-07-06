@@ -35,13 +35,9 @@ export async function testOrchestratorExecutionProfile(): Promise<void> {
 
     // Test: should accept BUSINESS_PROFILE in constructor options
     {
-        orchestrator = new Orchestrator(
-            "session-2",
-            activityBus,
-            policyEngine,
-            toolRegistry,
-            { executionProfile: BUSINESS_PROFILE },
-        );
+        orchestrator = new Orchestrator("session-2", activityBus, policyEngine, toolRegistry, {
+            executionProfile: BUSINESS_PROFILE,
+        });
         assert(orchestrator !== undefined, "Orchestrator should accept BUSINESS_PROFILE");
     }
 
@@ -70,14 +66,9 @@ export async function testOrchestratorExecutionProfile(): Promise<void> {
             description: "Custom profile for testing",
         };
 
-        orchestrator = new Orchestrator(
-            "session-profile-test",
-            activityBus,
-            policyEngine,
-            toolRegistry,
-            { executionProfile: customProfile },
-        );
-
+        orchestrator = new Orchestrator("session-profile-test", activityBus, policyEngine, toolRegistry, {
+            executionProfile: customProfile,
+        });
 
         assert(true, "Orchestrator should accept custom profile and run tool");
     }

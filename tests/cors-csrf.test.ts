@@ -23,11 +23,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "mocha";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import {
-    applyCorsAndCsrf,
-    resolveAllowedOrigins,
-    type CorsCsrfConfig,
-} from "../src/core/security/cors-csrf.js";
+import { applyCorsAndCsrf, resolveAllowedOrigins, type CorsCsrfConfig } from "../src/core/security/cors-csrf.js";
 
 interface StubResponse {
     statusCode: number;
@@ -47,7 +43,9 @@ function mkRes(): StubResponse & ServerResponse {
         body: "",
         ended: false,
         headersSent: false,
-        setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
+        setHeader(name, value) {
+            this.headers[name.toLowerCase()] = value;
+        },
         writeHead(status, headers) {
             this.statusCode = status;
             this.headersSent = true;
@@ -55,7 +53,10 @@ function mkRes(): StubResponse & ServerResponse {
                 for (const [k, v] of Object.entries(headers)) this.headers[k.toLowerCase()] = v;
             }
         },
-        end(body) { this.ended = true; if (body) this.body = body; },
+        end(body) {
+            this.ended = true;
+            if (body) this.body = body;
+        },
     };
     return r as unknown as StubResponse & ServerResponse;
 }
@@ -97,11 +98,8 @@ describe("R2 — CORS + CSRF guard", () => {
             assert.ok(list.includes("https://admin.prism.example"));
         });
 
-        it("rejects PRISM_CORS_ORIGINS=\"*\"", () => {
-            assert.throws(
-                () => resolveAllowedOrigins(7070, { PRISM_CORS_ORIGINS: "*" }),
-                /not permitted/i,
-            );
+        it('rejects PRISM_CORS_ORIGINS="*"', () => {
+            assert.throws(() => resolveAllowedOrigins(7070, { PRISM_CORS_ORIGINS: "*" }), /not permitted/i);
         });
     });
 
@@ -173,7 +171,11 @@ describe("R2 — CORS + CSRF guard", () => {
             const req = mkReq("POST", "/api/setup/profile", {});
             const res = mkRes();
             const r = applyCorsAndCsrf(req, res, defaultConfig());
-            assert.equal(r.allowed, true, "non-browser POST without Origin must be allowed (bearer auth still applies)");
+            assert.equal(
+                r.allowed,
+                true,
+                "non-browser POST without Origin must be allowed (bearer auth still applies)",
+            );
             assert.equal(r.responseSent, false);
         });
 

@@ -32,7 +32,7 @@ function makeMockActivityBus(): { bus: ActivityBus; events: CapturedEvent[] } {
             events.push({ operation: event.operation, status: event.status, details: event.details });
             return event as any;
         },
-        subscribe: () => () => { },
+        subscribe: () => () => {},
         listEvents: () => [],
     } as unknown as ActivityBus;
     return { bus, events };
@@ -77,7 +77,7 @@ describe("Spectrum Refraction Advanced — Per-Hemisphere Timeout", () => {
             const model = selection?.model ?? "";
             // Left hemisphere is openai/gpt-4o with leftTimeoutMs:50
             if (provider === "openai" && model === "gpt-4o") {
-                await new Promise(() => { }); // intentionally never resolves — timeout wins
+                await new Promise(() => {}); // intentionally never resolves — timeout wins
                 return null;
             }
             return fakeOutput(`Response from ${provider}`, provider, model || "model");
@@ -85,37 +85,25 @@ describe("Spectrum Refraction Advanced — Per-Hemisphere Timeout", () => {
 
         const config = makeSRConfig({ leftTimeoutMs: 50, rightTimeoutMs: 5_000 });
 
-        const result = await mgr.generateSR(
-            { message: "test", conversation: [], systemPrompt: "sys" },
-            config,
-        );
+        const result = await mgr.generateSR({ message: "test", conversation: [], systemPrompt: "sys" }, config);
 
         assert.ok(result, "generateSR should return a result even with left timeout");
-        assert.ok(
-            result.hemispheres.left === null,
-            "Left hemisphere result should be null after timeout",
-        );
-        assert.ok(
-            result.content.length > 0,
-            "Aggregated content should still be returned",
-        );
+        assert.ok(result.hemispheres.left === null, "Left hemisphere result should be null after timeout");
+        assert.ok(result.content.length > 0, "Aggregated content should still be returned");
     }).timeout(10_000);
 
     it("returns partial result when right hemisphere times out", async () => {
         const mgr = makeManagedProvider(async (input: any, selection?: any) => {
             const provider = selection?.providerId ?? "openai";
             if (provider === "anthropic") {
-                await new Promise(() => { }); // right — never resolves
+                await new Promise(() => {}); // right — never resolves
                 return null;
             }
             return fakeOutput(`Response from ${provider}`, provider, selection?.model ?? "model");
         });
 
         const config = makeSRConfig({ leftTimeoutMs: 5_000, rightTimeoutMs: 50 });
-        const result = await mgr.generateSR(
-            { message: "test", conversation: [], systemPrompt: "sys" },
-            config,
-        );
+        const result = await mgr.generateSR({ message: "test", conversation: [], systemPrompt: "sys" }, config);
 
         assert.ok(result, "generateSR should return despite right timeout");
         assert.ok(result.hemispheres.right === null, "Right hemisphere should be null");
@@ -150,10 +138,7 @@ describe("Spectrum Refraction Advanced — Circuit Breaker", () => {
         const state = mgr.getSRCircuitBreakerState();
         assert.ok(state["left:openai"], "Circuit breaker state should exist for left:openai");
         assert.strictEqual(state["left:openai"]!.open, true, "Circuit should be open after threshold failures");
-        assert.ok(
-            state["left:openai"]!.openUntil > Date.now(),
-            "openUntil should be in the future",
-        );
+        assert.ok(state["left:openai"]!.openUntil > Date.now(), "openUntil should be in the future");
     });
 
     it("resets circuit after success", () => {
@@ -206,10 +191,7 @@ describe("Spectrum Refraction Advanced — Circuit Breaker", () => {
             return fakeOutput("right ok", selection?.providerId ?? "anthropic");
         };
 
-        await mgr.generateSR(
-            { message: "test", conversation: [], systemPrompt: "sys" },
-            config,
-        );
+        await mgr.generateSR({ message: "test", conversation: [], systemPrompt: "sys" }, config);
 
         assert.strictEqual(leftCalled, true, "Left should be called even if CB has prior state, when CB disabled");
     });
@@ -224,12 +206,9 @@ describe("Spectrum Refraction Advanced — Audit Trail", () => {
             return fakeOutput("ok", selection?.providerId ?? "openai", selection?.model ?? "gpt-4o");
         }, bus);
 
-        await mgr.generateSR(
-            { message: "hello", conversation: [], systemPrompt: "sys" },
-            makeSRConfig(),
-        );
+        await mgr.generateSR({ message: "hello", conversation: [], systemPrompt: "sys" }, makeSRConfig());
 
-        const startEvent = events.find(e => e.operation === "sr.fanout_start");
+        const startEvent = events.find((e) => e.operation === "sr.fanout_start");
         assert.ok(startEvent, "sr.fanout_start event should be emitted");
         assert.strictEqual(startEvent!.status, "started");
         assert.ok("leftProvider" in startEvent!.details);
@@ -243,12 +222,9 @@ describe("Spectrum Refraction Advanced — Audit Trail", () => {
             return fakeOutput("ok", selection?.providerId ?? "openai", selection?.model ?? "gpt-4o");
         }, bus);
 
-        await mgr.generateSR(
-            { message: "hello", conversation: [], systemPrompt: "sys" },
-            makeSRConfig(),
-        );
+        await mgr.generateSR({ message: "hello", conversation: [], systemPrompt: "sys" }, makeSRConfig());
 
-        const completeEvent = events.find(e => e.operation === "sr.fanout_complete");
+        const completeEvent = events.find((e) => e.operation === "sr.fanout_complete");
         assert.ok(completeEvent, "sr.fanout_complete event should be emitted");
         assert.strictEqual(completeEvent!.status, "succeeded");
         assert.ok(typeof completeEvent!.details["fanOutMs"] === "number");
@@ -260,12 +236,9 @@ describe("Spectrum Refraction Advanced — Audit Trail", () => {
             return fakeOutput("ok", selection?.providerId ?? "openai", selection?.model ?? "gpt-4o");
         }, bus);
 
-        await mgr.generateSR(
-            { message: "hello", conversation: [], systemPrompt: "sys" },
-            makeSRConfig(),
-        );
+        await mgr.generateSR({ message: "hello", conversation: [], systemPrompt: "sys" }, makeSRConfig());
 
-        const genComplete = events.find(e => e.operation === "sr.generation_complete");
+        const genComplete = events.find((e) => e.operation === "sr.generation_complete");
         assert.ok(genComplete, "sr.generation_complete event should be emitted");
         assert.strictEqual(genComplete!.status, "succeeded");
         assert.ok(typeof genComplete!.details["totalMs"] === "number");
@@ -289,7 +262,7 @@ describe("Spectrum Refraction Advanced — Audit Trail", () => {
             makeSRConfig({ circuitBreakerEnabled: true }),
         );
 
-        const cbEvent = events.find(e => e.operation === "sr.circuit_breaker_triggered");
+        const cbEvent = events.find((e) => e.operation === "sr.circuit_breaker_triggered");
         assert.ok(cbEvent, "sr.circuit_breaker_triggered should be emitted when CB is open");
         assert.strictEqual(cbEvent!.details["hemisphere"], "left");
     });
@@ -302,7 +275,7 @@ describe("Spectrum Refraction Advanced — Fan-out Concurrency", () => {
         const DELAY = 200;
 
         const mgr = makeManagedProvider(async (input: any, selection?: any) => {
-            await new Promise(r => setTimeout(r, DELAY));
+            await new Promise((r) => setTimeout(r, DELAY));
             return fakeOutput("ok", selection?.providerId ?? "openai", selection?.model ?? "model");
         });
 
@@ -344,8 +317,11 @@ describe("Spectrum Refraction Advanced — Cost Estimation", () => {
     it("totalEstimatedCostUsd ≥ sum of constituent parts", () => {
         const mgr = makeManagedProvider(async () => null);
         const estimate = mgr.estimateSRCost(makeSRConfig(), 2_000, 1_000);
-        const sum = estimate.leftEstimatedCostUsd + estimate.rightEstimatedCostUsd
-            + estimate.mainFanOutEstimatedCostUsd + estimate.aggregationEstimatedCostUsd;
+        const sum =
+            estimate.leftEstimatedCostUsd +
+            estimate.rightEstimatedCostUsd +
+            estimate.mainFanOutEstimatedCostUsd +
+            estimate.aggregationEstimatedCostUsd;
         assert.ok(
             Math.abs(estimate.totalEstimatedCostUsd - sum) < 0.0001,
             "totalEstimatedCostUsd should equal the sum of parts",

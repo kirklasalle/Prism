@@ -86,7 +86,7 @@ export function recordDecision(decision: MarketplaceReviewDecision): Marketplace
  */
 export function latestDecisionFor(entryId: string, version?: string): MarketplaceReviewDecision | null {
     const ledger = readLedger();
-    const candidates = ledger.decisions.filter(d => d.entryId === entryId && (!version || d.version === version));
+    const candidates = ledger.decisions.filter((d) => d.entryId === entryId && (!version || d.version === version));
     if (candidates.length === 0) return null;
     return candidates.reduce((latest, current) => {
         return current.reviewedAt > latest.reviewedAt ? current : latest;

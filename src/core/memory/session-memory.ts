@@ -23,7 +23,9 @@ export class SessionMemoryStore implements ActivitySubscriber {
     private initDb(): void {
         try {
             this.db?.close?.();
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
         this.db = new DatabaseSync(this.dbPath);
         this.migrate();
         this.upsertStmt = this.db.prepare(`
@@ -62,10 +64,7 @@ export class SessionMemoryStore implements ActivitySubscriber {
         ]);
     }
 
-    private ensureColumns(
-        tableName: string,
-        columns: Array<{ name: string; definition: string }>,
-    ): void {
+    private ensureColumns(tableName: string, columns: Array<{ name: string; definition: string }>): void {
         const rows = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
         const existing = new Set(rows.map((row) => row.name));
 
@@ -82,27 +81,35 @@ export class SessionMemoryStore implements ActivitySubscriber {
         // Read current counters
         let row: { total_events: number; failures: number; tool_executions: number } | undefined;
         try {
-            row = this.db.prepare(`
+            row = this.db
+                .prepare(
+                    `
       SELECT total_events, failures, tool_executions
       FROM session_summaries
       WHERE session_id = :sessionId
-    `).get({ sessionId: event.sessionId }) as any;
+    `,
+                )
+                .get({ sessionId: event.sessionId }) as any;
         } catch (err) {
             if (this.isDbClosedError(err)) {
                 this.initDb();
-                row = this.db.prepare(`
+                row = this.db
+                    .prepare(
+                        `
       SELECT total_events, failures, tool_executions
       FROM session_summaries
       WHERE session_id = :sessionId
-    `).get({ sessionId: event.sessionId }) as any;
+    `,
+                    )
+                    .get({ sessionId: event.sessionId }) as any;
             } else {
                 throw err;
             }
         }
 
-        const nextTotal = ((row?.total_events ?? 0) + 1);
-        const nextFailures = ((row?.failures ?? 0) + (event.status === "failed" ? 1 : 0));
-        const nextToolExecutions = ((row?.tool_executions ?? 0) + (event.layer === "tool_execution" ? 1 : 0));
+        const nextTotal = (row?.total_events ?? 0) + 1;
+        const nextFailures = (row?.failures ?? 0) + (event.status === "failed" ? 1 : 0);
+        const nextToolExecutions = (row?.tool_executions ?? 0) + (event.layer === "tool_execution" ? 1 : 0);
 
         try {
             this.upsertStmt.run({
@@ -131,19 +138,27 @@ export class SessionMemoryStore implements ActivitySubscriber {
     getSessionSummary(sessionId: string): SessionSummary | null {
         let row: any = undefined;
         try {
-            row = this.db.prepare(`
+            row = this.db
+                .prepare(
+                    `
       SELECT session_id, total_events, failures, tool_executions, updated_at
       FROM session_summaries
       WHERE session_id = :sessionId
-    `).get({ sessionId }) as any;
+    `,
+                )
+                .get({ sessionId }) as any;
         } catch (err) {
             if (this.isDbClosedError(err)) {
                 this.initDb();
-                row = this.db.prepare(`
+                row = this.db
+                    .prepare(
+                        `
       SELECT session_id, total_events, failures, updated_at
       FROM session_summaries
       WHERE session_id = :sessionId
-    `).get({ sessionId }) as any;
+    `,
+                    )
+                    .get({ sessionId }) as any;
             } else {
                 throw err;
             }

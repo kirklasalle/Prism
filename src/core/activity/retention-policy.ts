@@ -160,14 +160,19 @@ export class ActivityRetentionPolicy {
                 durationMs: result.durationMs,
                 retentionDays: this.config.retentionDays,
             },
-            sideEffects: deleted > 0 ? [{
-                type: "database",
-                description: `deleted ${deleted} activity_events row(s) older than ${cutoffIso}`,
-                action: "delete",
-                resource: "activity_events",
-                mutating: true,
-                reversible: false,
-            }] : [],
+            sideEffects:
+                deleted > 0
+                    ? [
+                          {
+                              type: "database",
+                              description: `deleted ${deleted} activity_events row(s) older than ${cutoffIso}`,
+                              action: "delete",
+                              resource: "activity_events",
+                              mutating: true,
+                              reversible: false,
+                          },
+                      ]
+                    : [],
         });
 
         return result;

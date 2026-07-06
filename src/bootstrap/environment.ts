@@ -33,15 +33,16 @@ export function validateEnvironment(): EnvValidationResult {
         if (isProduction) {
             fatals.push(
                 "PRISM_JWT_SECRET must be set to a string of at least 32 characters " +
-                "(generate via: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
+                    "(generate via: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
             );
         } else {
             // Dev convenience: auto-generate a persistent secret stored under
             // the workspace data dir so the warning does not fire on every
             // restart and so the same token survives across reboots.
             try {
-                const dataDir = process.env.PRISM_DATA_DIR
-                    ?? join(process.env.USERPROFILE ?? process.env.HOME ?? process.cwd(), ".prism");
+                const dataDir =
+                    process.env.PRISM_DATA_DIR ??
+                    join(process.env.USERPROFILE ?? process.env.HOME ?? process.cwd(), ".prism");
                 mkdirSync(dataDir, { recursive: true });
                 const secretPath = join(dataDir, ".prism-jwt-secret");
                 let secret = "";
@@ -53,8 +54,8 @@ export function validateEnvironment(): EnvValidationResult {
                     writeFileSync(secretPath, secret, { encoding: "utf8", mode: 0o600 });
                     console.warn(
                         `[PRISM][startup] PRISM_JWT_SECRET not set — generated a development ` +
-                        `secret at ${secretPath} (mode 0600). Set PRISM_JWT_SECRET explicitly for ` +
-                        `production deployments.`,
+                            `secret at ${secretPath} (mode 0600). Set PRISM_JWT_SECRET explicitly for ` +
+                            `production deployments.`,
                     );
                 }
                 resolvedJwtSecret = secret;
@@ -62,7 +63,7 @@ export function validateEnvironment(): EnvValidationResult {
             } catch (err) {
                 warnings.push(
                     "PRISM_JWT_SECRET not set and dev auto-generation failed " +
-                    `(${(err as Error).message}) — authentication may be insecure`,
+                        `(${(err as Error).message}) — authentication may be insecure`,
                 );
             }
         }
@@ -79,7 +80,7 @@ export function validateEnvironment(): EnvValidationResult {
     if (isProduction && !process.env.PRISM_DATA_DIR) {
         fatals.push(
             "PRISM_DATA_DIR must be set in production so SQLite databases, characters, " +
-            "plugin packs, and audit logs are persistent across container restarts",
+                "plugin packs, and audit logs are persistent across container restarts",
         );
     }
 
@@ -137,7 +138,7 @@ export function printEnvValidation(warnings: string[], fatals: string[], isProdu
         }
         console.error(
             "\nSet NODE_ENV=development for local work, or fix the environment and retry. " +
-            "See .env.example at the workspace root for documentation of every variable.",
+                "See .env.example at the workspace root for documentation of every variable.",
         );
         process.exit(1);
     }
@@ -161,12 +162,39 @@ export function ensureEnvFile(): void {
         copyFileSync(examplePath, envPath);
         console.warn(
             "[PRISM][startup] WARN: No .env found — created one from .env.example.\n" +
-            "  Open .env in your editor to configure PRISM_JWT_SECRET and other settings.",
+                "  Open .env in your editor to configure PRISM_JWT_SECRET and other settings.",
         );
     } catch (err) {
         console.warn(
-            "[PRISM][startup] WARN: Could not auto-create .env from .env.example: " +
-            `${(err as Error).message}`,
+            "[PRISM][startup] WARN: Could not auto-create .env from .env.example: " + `${(err as Error).message}`,
         );
+    }
+}
+
+/**
+ * Load .env file into process.env if it exists.
+ */
+export function loadEnvFile(): void {
+    const envPath = resolve(process.cwd(), ".env");
+    if (!existsSync(envPath)) return;
+    try {
+        const content = readFileSync(envPath, "utf8");
+        const lines = content.split(/\r?\n/);
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#")) continue;
+            const match = trimmed.match(/^([^=]+)=(.*)$/);
+            if (!match) continue;
+            const key = match[1].trim();
+            let value = match[2].trim();
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.substring(1, value.length - 1);
+            }
+            if (!(key in process.env)) {
+                process.env[key] = value;
+            }
+        }
+    } catch (err) {
+        console.warn(`[PRISM][startup] Failed to load .env file: ${(err as Error).message}`);
     }
 }

@@ -13,6 +13,7 @@ export interface BrowserProfileManifest {
     assignmentId?: string;
     operatorEmail?: string;
     clientId?: string;
+    characterId?: string;
     createdAt: string;
     lastUsedAt: string;
     updatedAt: string;
@@ -28,6 +29,7 @@ export interface BrowserProfileInfo {
     assignmentId?: string;
     operatorEmail?: string;
     clientId?: string;
+    characterId?: string;
     createdAt: string;
     lastUsedAt: string;
     updatedAt: string;
@@ -43,6 +45,7 @@ export interface CreateProfileOptions {
     assignmentId?: string;
     operatorEmail?: string;
     clientId?: string;
+    characterId?: string;
 }
 
 const MANIFEST_FILE = "profile-manifest.json";
@@ -97,6 +100,7 @@ export class BrowserProfileManager {
             assignmentId: options.assignmentId,
             operatorEmail: options.operatorEmail?.toLowerCase().trim(),
             clientId: options.clientId,
+            characterId: options.characterId,
             createdAt: now,
             lastUsedAt: now,
             updatedAt: now,
@@ -183,11 +187,7 @@ export class BrowserProfileManager {
         if (!existsSync(dir)) {
             mkdirSync(dir, { recursive: true });
         }
-        writeFileSync(
-            this.storageStatePath(profileId),
-            JSON.stringify(storageState, null, 2) + "\n",
-            "utf-8",
-        );
+        writeFileSync(this.storageStatePath(profileId), JSON.stringify(storageState, null, 2) + "\n", "utf-8");
 
         // Update manifest lastUsedAt
         const manifest = this.readManifest(profileId);

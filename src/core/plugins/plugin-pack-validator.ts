@@ -1,17 +1,17 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import { v4 as uuid } from 'uuid';
+import * as fs from "fs";
+import * as path from "path";
+import * as crypto from "crypto";
+import { v4 as uuid } from "uuid";
 
 // ── Ed25519 Signature Support ─────────────────────────────────────────────────
 
-export type PluginTrustTier = 'official' | 'community' | 'unsigned';
+export type PluginTrustTier = "official" | "community" | "unsigned";
 
 export interface SigningKeyEntry {
     keyId: string;
     tier: PluginTrustTier;
     label: string;
-    algorithm: 'ed25519';
+    algorithm: "ed25519";
     publicKeyBase64: string;
     addedAt: string;
     expiresAt: string | null;
@@ -34,15 +34,15 @@ export interface SigningKeyRegistry {
 export function verifyEd25519Signature(
     manifest: PluginPackManifest,
     signatureBase64: string,
-    publicKeyBase64: string
+    publicKeyBase64: string,
 ): boolean {
     try {
         // Build canonical payload: manifest without the signature field itself
         const payload = buildSignaturePayload(manifest);
-        const pubKeyDer = Buffer.from(publicKeyBase64, 'base64');
-        const publicKey = crypto.createPublicKey({ key: pubKeyDer, format: 'der', type: 'spki' });
-        const signature = Buffer.from(signatureBase64, 'base64');
-        return crypto.verify(null, Buffer.from(payload, 'utf-8'), publicKey, signature);
+        const pubKeyDer = Buffer.from(publicKeyBase64, "base64");
+        const publicKey = crypto.createPublicKey({ key: pubKeyDer, format: "der", type: "spki" });
+        const signature = Buffer.from(signatureBase64, "base64");
+        return crypto.verify(null, Buffer.from(payload, "utf-8"), publicKey, signature);
     } catch {
         return false;
     }
@@ -75,8 +75,8 @@ export function buildSignaturePayload(manifest: PluginPackManifest): string {
  * <project-root>/config/plugin-signing-keys.json).
  */
 export function loadSigningKeyRegistry(registryPath?: string): SigningKeyRegistry {
-    const resolved = registryPath ?? path.join(process.cwd(), 'config', 'plugin-signing-keys.json');
-    const raw = fs.readFileSync(resolved, 'utf-8');
+    const resolved = registryPath ?? path.join(process.cwd(), "config", "plugin-signing-keys.json");
+    const raw = fs.readFileSync(resolved, "utf-8");
     return JSON.parse(raw) as SigningKeyRegistry;
 }
 
@@ -87,10 +87,10 @@ export function loadSigningKeyRegistry(registryPath?: string): SigningKeyRegistr
  */
 export function resolvePluginTrustTier(
     manifest: PluginPackManifest,
-    registry: SigningKeyRegistry
+    registry: SigningKeyRegistry,
 ): { tier: PluginTrustTier; keyId: string | null } {
     const sig = manifest.security?.signature;
-    if (!sig) return { tier: 'unsigned', keyId: null };
+    if (!sig) return { tier: "unsigned", keyId: null };
 
     const now = Date.now();
     for (const entry of registry.keys) {
@@ -100,7 +100,7 @@ export function resolvePluginTrustTier(
         }
     }
     // Has signature but no key validated it — treat as unsigned (invalid sig)
-    return { tier: 'unsigned', keyId: null };
+    return { tier: "unsigned", keyId: null };
 }
 
 /**
@@ -126,7 +126,7 @@ export interface AdapterSpec {
         min_version?: string;
         max_version?: string;
     }>;
-    trust_level?: 'untrusted' | 'community' | 'verified' | 'official';
+    trust_level?: "untrusted" | "community" | "verified" | "official";
 }
 
 export interface PluginPackManifest {
@@ -195,7 +195,7 @@ export interface ValidationResult {
 export interface ValidationError {
     field: string;
     message: string;
-    severity: 'critical' | 'error';
+    severity: "critical" | "error";
 }
 
 export interface ValidationWarning {
@@ -209,7 +209,7 @@ export class PluginPackValidator {
     private packPath: string;
     private errors: ValidationError[] = [];
     private warnings: ValidationWarning[] = [];
-    private profile: 'individual' | 'business';
+    private profile: "individual" | "business";
     private signingKeyRegistry: SigningKeyRegistry | null;
 
     /**
@@ -221,8 +221,8 @@ export class PluginPackValidator {
     constructor(
         manifest: PluginPackManifest,
         packPath: string,
-        profile: 'individual' | 'business' = 'individual',
-        signingKeyRegistryPath?: string
+        profile: "individual" | "business" = "individual",
+        signingKeyRegistryPath?: string,
     ) {
         this.manifest = manifest;
         this.packPath = packPath;
@@ -263,7 +263,7 @@ export class PluginPackValidator {
             warnings: this.warnings,
             metadata: {
                 timestamp: new Date().toISOString(),
-                validatorVersion: '1.0.0',
+                validatorVersion: "1.0.0",
                 packName: this.manifest.pack_name,
                 packVersion: this.manifest.pack_version,
             },
@@ -273,18 +273,18 @@ export class PluginPackValidator {
     private validateManifestVersion(): void {
         if (!this.manifest.manifest_version) {
             this.errors.push({
-                field: 'manifest_version',
-                message: 'manifest_version is required',
-                severity: 'critical',
+                field: "manifest_version",
+                message: "manifest_version is required",
+                severity: "critical",
             });
             return;
         }
 
         if (!/^1\.0$/.test(this.manifest.manifest_version)) {
             this.errors.push({
-                field: 'manifest_version',
+                field: "manifest_version",
                 message: `Invalid manifest version: ${this.manifest.manifest_version} (must be 1.0)`,
-                severity: 'error',
+                severity: "error",
             });
         }
     }
@@ -292,26 +292,26 @@ export class PluginPackValidator {
     private validatePackName(): void {
         if (!this.manifest.pack_name) {
             this.errors.push({
-                field: 'pack_name',
-                message: 'pack_name is required',
-                severity: 'critical',
+                field: "pack_name",
+                message: "pack_name is required",
+                severity: "critical",
             });
             return;
         }
 
         if (!/^[a-z0-9-]+$/.test(this.manifest.pack_name)) {
             this.errors.push({
-                field: 'pack_name',
-                message: 'pack_name must contain only lowercase letters, numbers, and hyphens',
-                severity: 'error',
+                field: "pack_name",
+                message: "pack_name must contain only lowercase letters, numbers, and hyphens",
+                severity: "error",
             });
         }
 
         if (this.manifest.pack_name.length > 128) {
             this.errors.push({
-                field: 'pack_name',
-                message: 'pack_name must be <= 128 characters',
-                severity: 'error',
+                field: "pack_name",
+                message: "pack_name must be <= 128 characters",
+                severity: "error",
             });
         }
     }
@@ -319,9 +319,9 @@ export class PluginPackValidator {
     private validatePackVersion(): void {
         if (!this.manifest.pack_version) {
             this.errors.push({
-                field: 'pack_version',
-                message: 'pack_version is required',
-                severity: 'critical',
+                field: "pack_version",
+                message: "pack_version is required",
+                severity: "critical",
             });
             return;
         }
@@ -331,9 +331,9 @@ export class PluginPackValidator {
 
         if (!semverRegex.test(this.manifest.pack_version)) {
             this.errors.push({
-                field: 'pack_version',
+                field: "pack_version",
                 message: `Invalid semantic version: ${this.manifest.pack_version}`,
-                severity: 'error',
+                severity: "error",
             });
         }
     }
@@ -341,18 +341,18 @@ export class PluginPackValidator {
     private validateDescription(): void {
         if (!this.manifest.description) {
             this.errors.push({
-                field: 'description',
-                message: 'description is required',
-                severity: 'critical',
+                field: "description",
+                message: "description is required",
+                severity: "critical",
             });
             return;
         }
 
         if (this.manifest.description.length < 10) {
             this.warnings.push({
-                field: 'description',
-                message: 'Description is very short; consider adding more detail',
-                suggestion: 'Expand description to at least 50 characters',
+                field: "description",
+                message: "Description is very short; consider adding more detail",
+                suggestion: "Expand description to at least 50 characters",
             });
         }
     }
@@ -360,24 +360,24 @@ export class PluginPackValidator {
     private validateAuthor(): void {
         if (!this.manifest.author) {
             this.errors.push({
-                field: 'author',
-                message: 'author is required',
-                severity: 'critical',
+                field: "author",
+                message: "author is required",
+                severity: "critical",
             });
             return;
         }
 
         if (!this.manifest.author.name) {
             this.errors.push({
-                field: 'author.name',
-                message: 'author.name is required',
-                severity: 'error',
+                field: "author.name",
+                message: "author.name is required",
+                severity: "error",
             });
         }
 
         if (this.manifest.author.email && !this.isValidEmail(this.manifest.author.email)) {
             this.warnings.push({
-                field: 'author.email',
+                field: "author.email",
                 message: `Invalid email format: ${this.manifest.author.email}`,
             });
         }
@@ -385,31 +385,31 @@ export class PluginPackValidator {
 
     private validateLicense(): void {
         const validLicenses = [
-            'Apache-2.0',
-            'MIT',
-            'GPL-3.0',
-            'BSD-2-Clause',
-            'BSD-3-Clause',
-            'ISC',
-            'Unlicense',
-            'PRISM-EE',
-            'PRISM-Community',
+            "Apache-2.0",
+            "MIT",
+            "GPL-3.0",
+            "BSD-2-Clause",
+            "BSD-3-Clause",
+            "ISC",
+            "Unlicense",
+            "PRISM-EE",
+            "PRISM-Community",
         ];
 
         if (!this.manifest.license) {
             this.errors.push({
-                field: 'license',
-                message: 'license is required',
-                severity: 'critical',
+                field: "license",
+                message: "license is required",
+                severity: "critical",
             });
             return;
         }
 
         if (!validLicenses.includes(this.manifest.license)) {
             this.errors.push({
-                field: 'license',
-                message: `Unsupported license: ${this.manifest.license}. Supported: ${validLicenses.join(', ')}`,
-                severity: 'error',
+                field: "license",
+                message: `Unsupported license: ${this.manifest.license}. Supported: ${validLicenses.join(", ")}`,
+                severity: "error",
             });
         }
     }
@@ -417,9 +417,9 @@ export class PluginPackValidator {
     private validateAdapters(): void {
         if (!Array.isArray(this.manifest.adapters) || this.manifest.adapters.length === 0) {
             this.errors.push({
-                field: 'adapters',
-                message: 'adapters array is required and must contain at least one adapter',
-                severity: 'critical',
+                field: "adapters",
+                message: "adapters array is required and must contain at least one adapter",
+                severity: "critical",
             });
             return;
         }
@@ -434,7 +434,7 @@ export class PluginPackValidator {
                 this.errors.push({
                     field: `${prefix}.adapter_id`,
                     message: `Duplicate adapter_id: ${adapter.adapter_id}`,
-                    severity: 'error',
+                    severity: "error",
                 });
             }
             adapterIds.add(adapter.adapter_id);
@@ -443,24 +443,24 @@ export class PluginPackValidator {
             if (!adapter.adapter_id) {
                 this.errors.push({
                     field: `${prefix}.adapter_id`,
-                    message: 'adapter_id is required',
-                    severity: 'error',
+                    message: "adapter_id is required",
+                    severity: "error",
                 });
             }
 
             if (!adapter.adapter_type) {
                 this.errors.push({
                     field: `${prefix}.adapter_type`,
-                    message: 'adapter_type is required',
-                    severity: 'error',
+                    message: "adapter_type is required",
+                    severity: "error",
                 });
             } else {
-                const validTypes = ['terminal', 'container', 'protocol', 'system', 'application', 'custom'];
+                const validTypes = ["terminal", "container", "protocol", "system", "application", "custom"];
                 if (!validTypes.includes(adapter.adapter_type)) {
                     this.errors.push({
                         field: `${prefix}.adapter_type`,
-                        message: `Invalid adapter_type: ${adapter.adapter_type}. Valid types: ${validTypes.join(', ')}`,
-                        severity: 'error',
+                        message: `Invalid adapter_type: ${adapter.adapter_type}. Valid types: ${validTypes.join(", ")}`,
+                        severity: "error",
                     });
                 }
             }
@@ -468,24 +468,24 @@ export class PluginPackValidator {
             if (!adapter.entry_file) {
                 this.errors.push({
                     field: `${prefix}.entry_file`,
-                    message: 'entry_file is required',
-                    severity: 'error',
+                    message: "entry_file is required",
+                    severity: "error",
                 });
             }
 
             if (!Array.isArray(adapter.capabilities) || adapter.capabilities.length === 0) {
                 this.errors.push({
                     field: `${prefix}.capabilities`,
-                    message: 'capabilities is required and must contain at least one capability',
-                    severity: 'error',
+                    message: "capabilities is required and must contain at least one capability",
+                    severity: "error",
                 });
             }
 
             if (!adapter.tier_routing) {
                 this.errors.push({
                     field: `${prefix}.tier_routing`,
-                    message: 'tier_routing is required',
-                    severity: 'error',
+                    message: "tier_routing is required",
+                    severity: "error",
                 });
             } else {
                 const defaultTier = adapter.tier_routing.default_tier || 2;
@@ -493,14 +493,14 @@ export class PluginPackValidator {
                     this.errors.push({
                         field: `${prefix}.tier_routing.default_tier`,
                         message: `Invalid default_tier: ${defaultTier}. Must be 1, 2, or 3`,
-                        severity: 'error',
+                        severity: "error",
                     });
                 }
             }
 
             // Validate trust_level
             if (adapter.trust_level) {
-                const validTrustLevels = ['untrusted', 'community', 'verified', 'official'];
+                const validTrustLevels = ["untrusted", "community", "verified", "official"];
                 if (!validTrustLevels.includes(adapter.trust_level)) {
                     this.warnings.push({
                         field: `${prefix}.trust_level`,
@@ -514,38 +514,35 @@ export class PluginPackValidator {
     private validateCompatibility(): void {
         if (!this.manifest.compatibility) {
             this.errors.push({
-                field: 'compatibility',
-                message: 'compatibility is required',
-                severity: 'critical',
+                field: "compatibility",
+                message: "compatibility is required",
+                severity: "critical",
             });
             return;
         }
 
         if (!this.manifest.compatibility.prism_min_version) {
             this.errors.push({
-                field: 'compatibility.prism_min_version',
-                message: 'compatibility.prism_min_version is required',
-                severity: 'error',
+                field: "compatibility.prism_min_version",
+                message: "compatibility.prism_min_version is required",
+                severity: "error",
             });
         }
 
-        if (
-            !Array.isArray(this.manifest.compatibility.profiles) ||
-            this.manifest.compatibility.profiles.length === 0
-        ) {
+        if (!Array.isArray(this.manifest.compatibility.profiles) || this.manifest.compatibility.profiles.length === 0) {
             this.errors.push({
-                field: 'compatibility.profiles',
-                message: 'compatibility.profiles is required and must contain at least one profile',
-                severity: 'error',
+                field: "compatibility.profiles",
+                message: "compatibility.profiles is required and must contain at least one profile",
+                severity: "error",
             });
         } else {
-            const validProfiles = ['individual', 'business', 'both'];
+            const validProfiles = ["individual", "business", "both"];
             this.manifest.compatibility.profiles.forEach((profile) => {
                 if (!validProfiles.includes(profile)) {
                     this.errors.push({
-                        field: 'compatibility.profiles',
-                        message: `Invalid profile: ${profile}. Valid profiles: ${validProfiles.join(', ')}`,
-                        severity: 'error',
+                        field: "compatibility.profiles",
+                        message: `Invalid profile: ${profile}. Valid profiles: ${validProfiles.join(", ")}`,
+                        severity: "error",
                     });
                 }
             });
@@ -558,8 +555,8 @@ export class PluginPackValidator {
 
         if (req.disk_space_mb !== undefined && req.disk_space_mb < 0) {
             this.warnings.push({
-                field: 'install_requirements.disk_space_mb',
-                message: 'Negative disk space requirement is unusual',
+                field: "install_requirements.disk_space_mb",
+                message: "Negative disk space requirement is unusual",
             });
         }
     }
@@ -571,26 +568,28 @@ export class PluginPackValidator {
         if (this.signingKeyRegistry) {
             const { tier, keyId } = resolvePluginTrustTier(this.manifest, this.signingKeyRegistry);
 
-            if (tier === 'unsigned') {
-                if (this.profile === 'business') {
+            if (tier === "unsigned") {
+                if (this.profile === "business") {
                     this.errors.push({
-                        field: 'security.signature',
-                        message: 'Business profile requires all plugins to be signed. This plugin is unsigned or has an invalid signature.',
-                        severity: 'critical',
+                        field: "security.signature",
+                        message:
+                            "Business profile requires all plugins to be signed. This plugin is unsigned or has an invalid signature.",
+                        severity: "critical",
                     });
                 } else {
                     // Individual profile: warn but allow
                     this.warnings.push({
-                        field: 'security.signature',
-                        message: 'Plugin is unsigned. Unsigned plugins are permitted in Individual profile but not in Business profile.',
-                        suggestion: 'Request a signature from an official or community signer.',
+                        field: "security.signature",
+                        message:
+                            "Plugin is unsigned. Unsigned plugins are permitted in Individual profile but not in Business profile.",
+                        suggestion: "Request a signature from an official or community signer.",
                     });
                 }
             } else {
                 // Signed — add an informational warning for community tier
-                if (tier === 'community') {
+                if (tier === "community") {
                     this.warnings.push({
-                        field: 'security.signature',
+                        field: "security.signature",
                         message: `Plugin is signed by a community key (${keyId}). Verify trust before deployment.`,
                     });
                 }
@@ -598,9 +597,9 @@ export class PluginPackValidator {
             }
 
             // If a signature field exists but algorithm is wrong, flag it
-            if (sec?.signature && sec.signature_algorithm && sec.signature_algorithm !== 'ed25519') {
+            if (sec?.signature && sec.signature_algorithm && sec.signature_algorithm !== "ed25519") {
                 this.warnings.push({
-                    field: 'security.signature_algorithm',
+                    field: "security.signature_algorithm",
                     message: `Signature algorithm '${sec.signature_algorithm}' is not the preferred 'ed25519'. Verification was attempted with Ed25519.`,
                     suggestion: 'Use signature_algorithm: "ed25519"',
                 });
@@ -609,18 +608,18 @@ export class PluginPackValidator {
             // No registry available — fallback: warn if signature present without algorithm
             if (sec?.signature && !sec.signature_algorithm) {
                 this.warnings.push({
-                    field: 'security.signature',
-                    message: 'Signature present but signature_algorithm not specified',
+                    field: "security.signature",
+                    message: "Signature present but signature_algorithm not specified",
                     suggestion: 'Add signature_algorithm: "ed25519"',
                 });
             }
         }
 
-        if (sec?.review_status === 'unreviewed') {
+        if (sec?.review_status === "unreviewed") {
             this.warnings.push({
-                field: 'security.review_status',
-                message: 'Pack has not been security reviewed',
-                suggestion: 'Submit for community or security review before production use',
+                field: "security.review_status",
+                message: "Pack has not been security reviewed",
+                suggestion: "Submit for community or security review before production use",
             });
         }
     }
@@ -634,7 +633,7 @@ export class PluginPackValidator {
                     this.errors.push({
                         field: `adapters[${index}].entry_file`,
                         message: `Entry file not found: ${adapter.entry_file} (resolved to: ${entryPath})`,
-                        severity: 'error',
+                        severity: "error",
                     });
                 }
             } catch {
@@ -685,9 +684,9 @@ export class PluginPackValidator {
             if (!visited.has(adapterId)) {
                 if (hasCycle(adapterId)) {
                     this.errors.push({
-                        field: 'adapters.dependencies',
+                        field: "adapters.dependencies",
                         message: `Circular dependency detected involving adapter: ${adapterId}`,
-                        severity: 'error',
+                        severity: "error",
                     });
                     break;
                 }
@@ -708,11 +707,11 @@ export class PluginPackValidator {
 export async function validatePluginPack(
     manifestPath: string,
     packPath?: string,
-    profile: 'individual' | 'business' = 'individual',
-    signingKeyRegistryPath?: string
+    profile: "individual" | "business" = "individual",
+    signingKeyRegistryPath?: string,
 ): Promise<ValidationResult> {
     try {
-        const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+        const manifestContent = fs.readFileSync(manifestPath, "utf-8");
         const manifest: PluginPackManifest = JSON.parse(manifestContent);
 
         const resolvedPackPath = packPath || path.dirname(manifestPath);
@@ -724,17 +723,17 @@ export async function validatePluginPack(
             valid: false,
             errors: [
                 {
-                    field: 'manifest',
+                    field: "manifest",
                     message: `Failed to load manifest: ${error instanceof Error ? error.message : String(error)}`,
-                    severity: 'critical',
+                    severity: "critical",
                 },
             ],
             warnings: [],
             metadata: {
                 timestamp: new Date().toISOString(),
-                validatorVersion: '1.0.0',
-                packName: 'unknown',
-                packVersion: 'unknown',
+                validatorVersion: "1.0.0",
+                packName: "unknown",
+                packVersion: "unknown",
             },
         };
     }

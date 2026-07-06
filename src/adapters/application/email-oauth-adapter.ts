@@ -67,6 +67,7 @@ const GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/cloud-platform",
 ];
 
 const PROVIDER_KEY = "gmail";
@@ -86,9 +87,11 @@ export class GmailOAuthAdapter {
     get isAvailable(): boolean {
         const isMock = process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id";
         if (isMock) return true;
-        return this.googleapisModule !== null
-            && !!process.env.PRISM_GMAIL_CLIENT_ID
-            && !!process.env.PRISM_GMAIL_CLIENT_SECRET;
+        return (
+            this.googleapisModule !== null &&
+            !!process.env.PRISM_GMAIL_CLIENT_ID &&
+            !!process.env.PRISM_GMAIL_CLIENT_SECRET
+        );
     }
 
     /** Whether a valid (possibly expired) token is stored. */
@@ -114,7 +117,7 @@ export class GmailOAuthAdapter {
         return oauth2Client.generateAuthUrl({
             access_type: "offline",
             scope: GMAIL_SCOPES,
-            prompt: "consent",  // Force consent to always get a refresh token
+            prompt: "consent", // Force consent to always get a refresh token
         });
     }
 
@@ -149,9 +152,7 @@ export class GmailOAuthAdapter {
             const oauthToken: OAuthToken = {
                 accessToken: tokens.access_token,
                 refreshToken: tokens.refresh_token ?? null,
-                expiresAt: tokens.expiry_date
-                    ? new Date(tokens.expiry_date).toISOString()
-                    : null,
+                expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
                 scopes: GMAIL_SCOPES,
                 provider: PROVIDER_KEY,
             };
@@ -302,9 +303,7 @@ export class GmailOAuthAdapter {
             format: "full",
         });
 
-        const messages: GmailMessage[] = (threadResp.data.messages ?? []).map(
-            (m: any) => this.parseMessage(m)
-        );
+        const messages: GmailMessage[] = (threadResp.data.messages ?? []).map((m: any) => this.parseMessage(m));
 
         const subject = messages[0]?.subject ?? "(no subject)";
         const lastDate = messages.at(-1)?.date ?? new Date().toISOString();
@@ -320,12 +319,7 @@ export class GmailOAuthAdapter {
      * @param body Email body (plain text or HTML)
      * @param threadId Optional thread ID to reply in-thread
      */
-    async sendEmail(
-        to: string[],
-        subject: string,
-        body: string,
-        threadId?: string
-    ): Promise<GmailSendResult> {
+    async sendEmail(to: string[], subject: string, body: string, threadId?: string): Promise<GmailSendResult> {
         await this.initPromise;
         if (process.env.PRISM_GMAIL_CLIENT_ID === "mock_gmail_client_id") {
             return {
@@ -485,7 +479,7 @@ export class GmailOAuthAdapter {
         return new google.auth.OAuth2(
             process.env.PRISM_GMAIL_CLIENT_ID,
             process.env.PRISM_GMAIL_CLIENT_SECRET,
-            process.env.PRISM_GMAIL_REDIRECT_URI ?? "http://localhost:7070/api/auth/gmail/callback"
+            process.env.PRISM_GMAIL_REDIRECT_URI ?? "http://localhost:7070/api/auth/gmail/callback",
         );
     }
 
@@ -555,7 +549,7 @@ export class GmailOAuthAdapter {
 
     private parseMessage(message: any): GmailMessage {
         const headers: Record<string, string> = {};
-        for (const h of (message.payload?.headers ?? [])) {
+        for (const h of message.payload?.headers ?? []) {
             headers[h.name.toLowerCase()] = h.value;
         }
 
@@ -605,13 +599,7 @@ export class GmailOAuthAdapter {
         return "";
     }
 
-    private buildRawMessage(
-        from: string,
-        to: string[],
-        subject: string,
-        body: string,
-        threadId?: string
-    ): string {
+    private buildRawMessage(from: string, to: string[], subject: string, body: string, threadId?: string): string {
         const lines = [
             `From: ${from}`,
             `To: ${to.join(", ")}`,

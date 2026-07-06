@@ -56,7 +56,9 @@ export async function testSchedulerEngineScheduleOnce(): Promise<void> {
     const engine = new SchedulerEngine({
         activityBus: bus,
         sessionId: "test-session",
-        onAction: (entry) => { fired.push(entry.id); },
+        onAction: (entry) => {
+            fired.push(entry.id);
+        },
     });
 
     const runAt = new Date(Date.now() + 100);
@@ -84,7 +86,9 @@ export async function testSchedulerEngineCancel(): Promise<void> {
     const engine = new SchedulerEngine({
         activityBus: bus,
         sessionId: "test-session",
-        onAction: (entry) => { fired.push(entry.id); },
+        onAction: (entry) => {
+            fired.push(entry.id);
+        },
     });
 
     const runAt = new Date(Date.now() + 500);

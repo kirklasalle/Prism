@@ -2,12 +2,7 @@ import { randomUUID } from "node:crypto";
 import { resolve, normalize, sep, isAbsolute } from "node:path";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { Tool, ToolRequest, ToolResult } from "../tools/types.js";
-import type {
-    LlmToolDefinition,
-    LlmToolCall,
-    LlmStreamChunk,
-    LlmContentPart,
-} from "./llm-provider-manager.js";
+import type { LlmToolDefinition, LlmToolCall, LlmStreamChunk, LlmContentPart } from "./llm-provider-manager.js";
 import { toolsToLlmDefinitions } from "../tools/tool-schema-converter.js";
 import { resolveWorkspaceRoot } from "../config/workspace-resolver.js";
 
@@ -36,19 +31,57 @@ const DEFAULT_CONFIG: AgenticChatConfig = {
 function isResearchQuery(message: string): boolean {
     const lower = message.toLowerCase();
     const researchVerbs = [
-        "find", "search", "look up", "lookup", "locate", "fetch", "get",
-        "help me find", "help find", "check", "research", "investigate",
-        "show me", "list", "browse", "scan", "query", "retrieve",
+        "find",
+        "search",
+        "look up",
+        "lookup",
+        "locate",
+        "fetch",
+        "get",
+        "help me find",
+        "help find",
+        "check",
+        "research",
+        "investigate",
+        "show me",
+        "list",
+        "browse",
+        "scan",
+        "query",
+        "retrieve",
     ];
     const researchObjects = [
-        "car", "vehicle", "listing", "price", "deal", "sale", "product",
-        "job", "property", "house", "apartment", "flight", "hotel",
-        "restaurant", "business", "company", "person", "contact",
-        "news", "article", "data", "information", "details", "specs",
-        "stock", "weather", "event", "ticket",
+        "car",
+        "vehicle",
+        "listing",
+        "price",
+        "deal",
+        "sale",
+        "product",
+        "job",
+        "property",
+        "house",
+        "apartment",
+        "flight",
+        "hotel",
+        "restaurant",
+        "business",
+        "company",
+        "person",
+        "contact",
+        "news",
+        "article",
+        "data",
+        "information",
+        "details",
+        "specs",
+        "stock",
+        "weather",
+        "event",
+        "ticket",
     ];
-    const hasVerb = researchVerbs.some(v => lower.includes(v));
-    const hasObject = researchObjects.some(o => lower.includes(o));
+    const hasVerb = researchVerbs.some((v) => lower.includes(v));
+    const hasObject = researchObjects.some((o) => lower.includes(o));
     // Also detect explicit "I need" + something
     const hasNeed = /\b(i need|we need|please|can you|could you|help)\b/.test(lower);
     return hasVerb || (hasNeed && hasObject);
@@ -79,7 +112,7 @@ function isGaveUpResponse(text: string): boolean {
         /car auctions/,
         /set (up )?alerts/,
     ];
-    const matchCount = gaveUpPatterns.filter(p => p.test(lower)).length;
+    const matchCount = gaveUpPatterns.filter((p) => p.test(lower)).length;
     // Require at least 2 pattern matches to avoid false positives
     return matchCount >= 2;
 }
@@ -110,13 +143,16 @@ export interface AgenticResult {
     events: AgenticTurnEvent[];
 }
 
-type LlmGenerateFn = (input: {
-    message: string;
-    conversation: ConversationEntry[];
-    systemPrompt: string;
-    tools?: LlmToolDefinition[];
-    tool_choice?: "auto" | "none" | "required";
-}, selection?: { providerId?: string; model?: string }) => Promise<{
+type LlmGenerateFn = (
+    input: {
+        message: string;
+        conversation: ConversationEntry[];
+        systemPrompt: string;
+        tools?: LlmToolDefinition[];
+        tool_choice?: "auto" | "none" | "required";
+    },
+    selection?: { providerId?: string; model?: string },
+) => Promise<{
     content: string;
     toolCalls?: LlmToolCall[];
     stopReason?: string;
@@ -167,11 +203,17 @@ export class AgenticChatExecutor {
         const modelTier = options?.modelTier ?? 3;
         let activeTools = this.toolDefinitions;
         if (options?.allowedTools) {
-            activeTools = this.toolDefinitions.filter(t => options.allowedTools?.includes(t.name));
+            activeTools = this.toolDefinitions.filter((t) => options.allowedTools?.includes(t.name));
         } else if (modelTier <= 2) {
             // T1/T2 models only get minimal core tools by default
-            const coreTools = ["shell_exec", "file_read", "file_write", "prism_dashboard_control", "ask_reasoning_model"];
-            activeTools = this.toolDefinitions.filter(t => coreTools.includes(t.name));
+            const coreTools = [
+                "shell_exec",
+                "file_read",
+                "file_write",
+                "prism_dashboard_control",
+                "ask_reasoning_model",
+            ];
+            activeTools = this.toolDefinitions.filter((t) => coreTools.includes(t.name));
         }
 
         // Detect research/information-gathering queries — force tool use on first N passes
@@ -185,9 +227,11 @@ export class AgenticChatExecutor {
                 // For research tasks, force tool use for the first N iterations
                 // so the model must try multiple sources before it can give up
                 const toolChoice: "auto" | "none" | "required" =
-                    (activeTools.length > 0 && isResearch && iteration < RESEARCH_FORCED_TOOL_ITERATIONS)
+                    activeTools.length > 0 && isResearch && iteration < RESEARCH_FORCED_TOOL_ITERATIONS
                         ? "required"
-                        : (activeTools.length > 0 ? "auto" : "none");
+                        : activeTools.length > 0
+                          ? "auto"
+                          : "none";
 
                 result = await generateFn(
                     {
@@ -202,13 +246,23 @@ export class AgenticChatExecutor {
             } catch (llmError) {
                 emit({ type: "error", error: `LLM provider error: ${String(llmError)}`, iteration });
                 emit({ type: "done", iteration });
-                return { finalContent: finalContent || `LLM provider error: ${String(llmError)}`, toolCallsExecuted: totalToolCalls, iterations: iteration + 1, events };
+                return {
+                    finalContent: finalContent || `LLM provider error: ${String(llmError)}`,
+                    toolCallsExecuted: totalToolCalls,
+                    iterations: iteration + 1,
+                    events,
+                };
             }
 
             if (!result) {
                 emit({ type: "error", error: "LLM returned no response.", iteration });
                 emit({ type: "done", iteration });
-                return { finalContent: finalContent || "LLM returned no response.", toolCallsExecuted: totalToolCalls, iterations: iteration + 1, events };
+                return {
+                    finalContent: finalContent || "LLM returned no response.",
+                    toolCallsExecuted: totalToolCalls,
+                    iterations: iteration + 1,
+                    events,
+                };
             }
 
             // Accumulate text content
@@ -221,7 +275,12 @@ export class AgenticChatExecutor {
             if (!result.toolCalls?.length || result.stopReason !== "tool_use") {
                 // For research tasks: detect "gave up" responses and re-inject
                 // a continuation message forcing the model to keep trying
-                if (isResearch && result.content && isGaveUpResponse(result.content) && researchReinjections < MAX_RESEARCH_REINJECTIONS) {
+                if (
+                    isResearch &&
+                    result.content &&
+                    isGaveUpResponse(result.content) &&
+                    researchReinjections < MAX_RESEARCH_REINJECTIONS
+                ) {
                     researchReinjections++;
                     // Add the assistant's "gave up" message to conversation
                     conversation.push({
@@ -231,13 +290,18 @@ export class AgenticChatExecutor {
                     // Inject a user-role message telling the model to keep going
                     conversation.push({
                         role: "user",
-                        content: "Do NOT suggest steps for me to do. YOU must execute those steps yourself using your tools. "
-                            + "Try the specific sites and strategies you just mentioned — use http_request to fetch from Autotrader, Cars.com, Craigslist, or similar sites. "
-                            + "If http_request gets blocked or returns no useful data, use browser_control to launch a visible browser session and navigate to those sites. "
-                            + "Try broadening the search: increase the price range, expand the radius, or adjust mileage limits. "
-                            + "Keep searching until you find real results with actual prices, mileage, and URLs. Do NOT give up.",
+                        content:
+                            "Do NOT suggest steps for me to do. YOU must execute those steps yourself using your tools. " +
+                            "Try the specific sites and strategies you just mentioned — use http_request to fetch from Autotrader, Cars.com, Craigslist, or similar sites. " +
+                            "If http_request gets blocked or returns no useful data, use browser_control to launch a visible browser session and navigate to those sites. " +
+                            "Try broadening the search: increase the price range, expand the radius, or adjust mileage limits. " +
+                            "Keep searching until you find real results with actual prices, mileage, and URLs. Do NOT give up.",
                     });
-                    emit({ type: "text", text: `[PRISM Research Agent] Initial search yielded no results — retrying with broader strategy (attempt ${researchReinjections}/${MAX_RESEARCH_REINJECTIONS})...`, iteration });
+                    emit({
+                        type: "text",
+                        text: `[PRISM Research Agent] Initial search yielded no results — retrying with broader strategy (attempt ${researchReinjections}/${MAX_RESEARCH_REINJECTIONS})...`,
+                        iteration,
+                    });
                     // Continue the loop — don't exit
                     continue;
                 }
@@ -257,21 +321,25 @@ export class AgenticChatExecutor {
             // Execute each tool call
             for (const toolCall of result.toolCalls) {
                 totalToolCalls++;
-                emit({ type: "tool_call", toolCall: { id: toolCall.id, name: toolCall.name, arguments: toolCall.arguments }, iteration });
+                emit({
+                    type: "tool_call",
+                    toolCall: { id: toolCall.id, name: toolCall.name, arguments: toolCall.arguments },
+                    iteration,
+                });
 
-                const toolResult = await this.executeTool(
-                    toolCall,
-                    writeCount,
-                );
+                const toolResult = await this.executeTool(toolCall, writeCount);
 
                 if (toolResult.isWrite) writeCount++;
 
-                let outputStr = typeof toolResult.output === "string"
-                    ? toolResult.output
-                    : JSON.stringify(toolResult.output, null, 2);
+                let outputStr =
+                    typeof toolResult.output === "string"
+                        ? toolResult.output
+                        : JSON.stringify(toolResult.output, null, 2);
 
                 if (!toolResult.ok && modelTier <= 2 && outputStr.length > 500) {
-                    outputStr = outputStr.substring(0, 500) + "\n...[truncated]. Look at the first error line and try a different command or ask the reasoning model for help.";
+                    outputStr =
+                        outputStr.substring(0, 500) +
+                        "\n...[truncated]. Look at the first error line and try a different command or ask the reasoning model for help.";
                 }
 
                 emit({
@@ -282,14 +350,19 @@ export class AgenticChatExecutor {
 
                 // Assemble multimodal content parts if the output contains base64 image data
                 let contentVal: string | LlmContentPart[] = outputStr;
-                if (toolResult.ok && toolResult.output && typeof toolResult.output === "object" && typeof (toolResult.output as any).base64 === "string") {
+                if (
+                    toolResult.ok &&
+                    toolResult.output &&
+                    typeof toolResult.output === "object" &&
+                    typeof (toolResult.output as any).base64 === "string"
+                ) {
                     const format = (toolResult.output as any).format || "png";
                     const toolContentParts: LlmContentPart[] = [
                         { type: "text", text: "" },
                         {
                             type: "image_url",
-                            image_url: { url: `data:image/${format};base64,${(toolResult.output as any).base64}` }
-                        }
+                            image_url: { url: `data:image/${format};base64,${(toolResult.output as any).base64}` },
+                        },
                     ];
 
                     const shallowCopy = { ...toolResult.output } as any;
@@ -312,7 +385,12 @@ export class AgenticChatExecutor {
         // Max iterations hit
         emit({ type: "error", error: `Reached maximum iteration limit (${this.config.maxIterations}).` });
         emit({ type: "done" });
-        return { finalContent: finalContent || "I reached the maximum number of tool-calling iterations.", toolCallsExecuted: totalToolCalls, iterations: this.config.maxIterations, events };
+        return {
+            finalContent: finalContent || "I reached the maximum number of tool-calling iterations.",
+            toolCallsExecuted: totalToolCalls,
+            iterations: this.config.maxIterations,
+            events,
+        };
     }
 
     private async executeTool(
@@ -333,7 +411,9 @@ export class AgenticChatExecutor {
         if (isWrite && currentWriteCount >= this.config.maxWritesPerTurn) {
             return {
                 ok: false,
-                output: { error: `Write limit reached (${this.config.maxWritesPerTurn} per turn). Skipping ${toolName}.` },
+                output: {
+                    error: `Write limit reached (${this.config.maxWritesPerTurn} per turn). Skipping ${toolName}.`,
+                },
                 isWrite: false,
             };
         }
@@ -379,7 +459,14 @@ export class AgenticChatExecutor {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const WRITE_TOOLS = new Set(["file_write", "file_delete", "shell_exec", "terminal_session", "container_sandbox", "computer"]);
+const WRITE_TOOLS = new Set([
+    "file_write",
+    "file_delete",
+    "shell_exec",
+    "terminal_session",
+    "container_sandbox",
+    "computer",
+]);
 
 const FILE_TOOLS = new Set(["file_read", "file_write", "file_delete", "file_list"]);
 

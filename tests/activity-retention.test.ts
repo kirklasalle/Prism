@@ -5,10 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ActivityBus } from "../src/core/activity/bus.js";
 import type { ActivityEvent } from "../src/core/activity/types.js";
-import {
-    ActivityRetentionPolicy,
-    resolveRetentionConfigFromEnv,
-} from "../src/core/activity/retention-policy.js";
+import { ActivityRetentionPolicy, resolveRetentionConfigFromEnv } from "../src/core/activity/retention-policy.js";
 
 function seedDb(dbPath: string, rows: Array<{ id: string; timestamp: string }>): void {
     const db = new DatabaseSync(dbPath);
@@ -45,12 +42,21 @@ export async function testActivityRetention(): Promise<void> {
     const dbPath = join(tmp, "activity.db");
 
     // ── 1. resolveRetentionConfigFromEnv: disabled by default ───────────────
-    assert.strictEqual(resolveRetentionConfigFromEnv("/x", {}), null,
-        "missing PRISM_ACTIVITY_RETENTION_DAYS keeps policy disabled");
-    assert.strictEqual(resolveRetentionConfigFromEnv("/x", { PRISM_ACTIVITY_RETENTION_DAYS: "0" }), null,
-        "PRISM_ACTIVITY_RETENTION_DAYS=0 keeps policy disabled");
-    assert.strictEqual(resolveRetentionConfigFromEnv("/x", { PRISM_ACTIVITY_RETENTION_DAYS: "abc" }), null,
-        "non-numeric retention days keeps policy disabled");
+    assert.strictEqual(
+        resolveRetentionConfigFromEnv("/x", {}),
+        null,
+        "missing PRISM_ACTIVITY_RETENTION_DAYS keeps policy disabled",
+    );
+    assert.strictEqual(
+        resolveRetentionConfigFromEnv("/x", { PRISM_ACTIVITY_RETENTION_DAYS: "0" }),
+        null,
+        "PRISM_ACTIVITY_RETENTION_DAYS=0 keeps policy disabled",
+    );
+    assert.strictEqual(
+        resolveRetentionConfigFromEnv("/x", { PRISM_ACTIVITY_RETENTION_DAYS: "abc" }),
+        null,
+        "non-numeric retention days keeps policy disabled",
+    );
 
     const cfg = resolveRetentionConfigFromEnv("/fallback.db", {
         PRISM_ACTIVITY_RETENTION_DAYS: "30",
@@ -66,8 +72,7 @@ export async function testActivityRetention(): Promise<void> {
         PRISM_ACTIVITY_RETENTION_DAYS: "7",
         PRISM_ACTIVITY_RETENTION_SWEEP_MS: "10",
     });
-    assert.strictEqual(cfg2!.sweepIntervalMs, 60 * 60 * 1000,
-        "sweep interval below 1000ms falls back to default");
+    assert.strictEqual(cfg2!.sweepIntervalMs, 60 * 60 * 1000, "sweep interval below 1000ms falls back to default");
 
     // ── 2. sweep: deletes only rows older than cutoff ───────────────────────
     const fixedNow = new Date("2026-05-07T12:00:00.000Z");

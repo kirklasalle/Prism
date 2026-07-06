@@ -15,8 +15,7 @@ async function runTests() {
         try {
             await test.fn();
             passed++;
-        }
-        catch (error) {
+        } catch (error) {
             failed++;
             console.error(`✗ ${test.name} failed:`, error);
         }

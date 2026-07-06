@@ -87,8 +87,8 @@ export class CalendarPlanTool implements Tool {
     constructor(
         private readonly _dataDir?: string,
         private readonly gmailAdapter?: GmailOAuthAdapter,
-        private readonly outlookAdapter?: OutlookOAuthAdapter
-    ) { }
+        private readonly outlookAdapter?: OutlookOAuthAdapter,
+    ) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {
@@ -157,7 +157,12 @@ export class CalendarPlanTool implements Tool {
                     return {
                         ok: true,
                         output: { source: "google_calendar", eventId: result.id, status: "created/updated" },
-                        sideEffects: [{ type: "network", description: `Calendar event ${args.eventId ? "updated" : "created"} in Google Calendar` }],
+                        sideEffects: [
+                            {
+                                type: "network",
+                                description: `Calendar event ${args.eventId ? "updated" : "created"} in Google Calendar`,
+                            },
+                        ],
                     };
                 }
                 case "delete_event": {
@@ -208,7 +213,12 @@ export class CalendarPlanTool implements Tool {
                     return {
                         ok: true,
                         output: { source: "outlook_calendar", eventId: result.id, status: "created/updated" },
-                        sideEffects: [{ type: "network", description: `Calendar event ${args.eventId ? "updated" : "created"} in Outlook Calendar` }],
+                        sideEffects: [
+                            {
+                                type: "network",
+                                description: `Calendar event ${args.eventId ? "updated" : "created"} in Outlook Calendar`,
+                            },
+                        ],
                     };
                 }
                 case "delete_event": {
@@ -313,7 +323,9 @@ export class CalendarPlanTool implements Tool {
                 return {
                     ok: true,
                     output: { calendarId, deleted: eventId },
-                    sideEffects: [{ type: "file", description: `event deleted from calendar: ${calendarPath(dir, calendarId)}` }],
+                    sideEffects: [
+                        { type: "file", description: `event deleted from calendar: ${calendarPath(dir, calendarId)}` },
+                    ],
                 };
             }
 

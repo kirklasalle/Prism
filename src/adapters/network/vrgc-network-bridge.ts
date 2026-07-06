@@ -60,10 +60,7 @@ export interface ResearchResult {
  * Call a VRGC MCP tool via HTTP JSON-RPC style request.
  * VRGC exposes a simple HTTP API where each tool is a POST endpoint.
  */
-function callVrgcTool(
-    toolName: string,
-    args: Record<string, unknown>,
-): Promise<VrgcResult> {
+function callVrgcTool(toolName: string, args: Record<string, unknown>): Promise<VrgcResult> {
     return new Promise((resolve) => {
         const body = JSON.stringify({ tool: toolName, arguments: args });
         const req = http.request(

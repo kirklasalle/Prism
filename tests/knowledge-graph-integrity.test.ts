@@ -17,7 +17,12 @@ import { DatabaseSync } from "node:sqlite";
 
 const TEST_DB = "prism-kg-diag-integrity-test.db";
 
-function makeEvent(id: string, operation: string, layer: string = "tool_execution", details: Record<string, unknown> = {}): ActivityEvent {
+function makeEvent(
+    id: string,
+    operation: string,
+    layer: string = "tool_execution",
+    details: Record<string, unknown> = {},
+): ActivityEvent {
     return {
         id,
         timestamp: new Date().toISOString(),
@@ -137,7 +142,9 @@ describe("Knowledge Graph Integrity", function () {
 
         it("scores are bounded between 0 and 1", function () {
             for (let i = 0; i < 50; i++) {
-                index.onEvent(makeEvent(`score-${i}`, `operation_${i % 10}`, "tool_execution", { data: `payload_${i}` }));
+                index.onEvent(
+                    makeEvent(`score-${i}`, `operation_${i % 10}`, "tool_execution", { data: `payload_${i}` }),
+                );
             }
 
             const results = index.query("operation_5 payload", 50);
@@ -204,19 +211,33 @@ describe("Knowledge Graph Integrity", function () {
         let sessionMemory: SessionMemoryStore;
 
         before(function () {
-            try { unlinkSync(TEST_DB); } catch { /* ok */ }
+            try {
+                unlinkSync(TEST_DB);
+            } catch {
+                /* ok */
+            }
             sessionMemory = new SessionMemoryStore(TEST_DB);
         });
 
         after(function () {
-            try { sessionMemory.close(); } catch { /* ok */ }
-            try { unlinkSync(TEST_DB); } catch { /* ok */ }
+            try {
+                sessionMemory.close();
+            } catch {
+                /* ok */
+            }
+            try {
+                unlinkSync(TEST_DB);
+            } catch {
+                /* ok */
+            }
         });
 
         it("creates session_summaries table", function () {
             const db = new DatabaseSync(TEST_DB);
             try {
-                const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='session_summaries'").all();
+                const tables = db
+                    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='session_summaries'")
+                    .all();
                 assert.ok(tables.length > 0, "session_summaries table should exist");
             } finally {
                 db.close();
@@ -277,7 +298,11 @@ describe("Knowledge Graph Integrity", function () {
 
             const sem = new SemanticMemoryIndex();
             const ep = new EpisodicMemory(100);
-            try { unlinkSync(TEST_DB + ".coherence"); } catch { /* ok */ }
+            try {
+                unlinkSync(TEST_DB + ".coherence");
+            } catch {
+                /* ok */
+            }
             const sess = new SessionMemoryStore(TEST_DB + ".coherence");
 
             try {
@@ -299,7 +324,11 @@ describe("Knowledge Graph Integrity", function () {
                 assert.ok(summary!.totalEvents >= 1);
             } finally {
                 sess.close();
-                try { unlinkSync(TEST_DB + ".coherence"); } catch { /* ok */ }
+                try {
+                    unlinkSync(TEST_DB + ".coherence");
+                } catch {
+                    /* ok */
+                }
             }
         });
     });

@@ -25,7 +25,7 @@ export interface HemisphereRecommendation {
 
 function signatureFor(rec: SRGenerationRecord): string {
     return rec.hemispheres
-        .map(h => `${h.providerId}::${h.model}::${h.profileId ?? ""}`)
+        .map((h) => `${h.providerId}::${h.model}::${h.profileId ?? ""}`)
         .sort()
         .join("|");
 }
@@ -49,14 +49,16 @@ export function recommendHemisphereConfigs(opts: { role?: string; k?: number } =
     const recs: HemisphereRecommendation[] = [];
     for (const [signature, group] of groups) {
         const samples = group.length;
-        const utilSamples = group.filter(g => typeof g.observedUtility === "number");
-        const avgUtility = utilSamples.length === 0
-            ? null
-            : utilSamples.reduce((s, g) => s + (g.observedUtility ?? 0), 0) / utilSamples.length;
+        const utilSamples = group.filter((g) => typeof g.observedUtility === "number");
+        const avgUtility =
+            utilSamples.length === 0
+                ? null
+                : utilSamples.reduce((s, g) => s + (g.observedUtility ?? 0), 0) / utilSamples.length;
         const avgCostUsd = group.reduce((s, g) => s + g.estimatedCostUsd, 0) / samples;
-        const succeededRatio = group.reduce((s, g) => {
-            return s + (g.totalHemispheres === 0 ? 0 : g.succeededHemispheres / g.totalHemispheres);
-        }, 0) / samples;
+        const succeededRatio =
+            group.reduce((s, g) => {
+                return s + (g.totalHemispheres === 0 ? 0 : g.succeededHemispheres / g.totalHemispheres);
+            }, 0) / samples;
 
         // Blend: missing utility defaults to neutral 0.5 to avoid penalizing un-rated configs.
         const utilityComponent = avgUtility ?? 0.5;

@@ -8,13 +8,7 @@ import { useApi, useListNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, Loading, ErrorBox, KeyValue, SectionHeader } from "../components/ui.js";
 
-export function WorkspaceTab({
-    client,
-    focused,
-}: {
-    client: PrismClient;
-    focused: boolean;
-}): React.JSX.Element {
+export function WorkspaceTab({ client, focused }: { client: PrismClient; focused: boolean }): React.JSX.Element {
     const [currentPath, setCurrentPath] = useState<string | undefined>(undefined);
     const [pathHistory, setPathHistory] = useState<string[]>([]);
 
@@ -52,9 +46,7 @@ export function WorkspaceTab({
             {/* File browser */}
             <Panel title={`Files: ${currentPath ?? "/"}`}>
                 <Box marginBottom={1}>
-                    <Text color={colors.muted}>
-                        Enter: open dir | Backspace: back | j/k: navigate
-                    </Text>
+                    <Text color={colors.muted}>Enter: open dir | Backspace: back | j/k: navigate</Text>
                 </Box>
                 {files.loading && <Loading />}
                 {files.error && <ErrorBox message={files.error} />}
@@ -68,15 +60,11 @@ export function WorkspaceTab({
                             {file.name}
                         </Text>
                         {file.size !== undefined && !file.isDirectory && (
-                            <Text color={colors.muted}>
-                                {" "}({(file.size / 1024).toFixed(1)} KB)
-                            </Text>
+                            <Text color={colors.muted}> ({(file.size / 1024).toFixed(1)} KB)</Text>
                         )}
                     </Box>
                 ))}
-                {files.data?.length === 0 && (
-                    <Text color={colors.muted}>Empty directory.</Text>
-                )}
+                {files.data?.length === 0 && <Text color={colors.muted}>Empty directory.</Text>}
             </Panel>
 
             {/* Git status */}

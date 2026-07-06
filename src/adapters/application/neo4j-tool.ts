@@ -14,7 +14,10 @@ import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 
 type Neo4jDriver = {
     session(): {
-        run(cypher: string, params: Record<string, unknown>): Promise<{
+        run(
+            cypher: string,
+            params: Record<string, unknown>,
+        ): Promise<{
             records: Array<{ toObject(): Record<string, unknown> }>;
         }>;
         close(): Promise<void>;
@@ -52,8 +55,7 @@ export class Neo4jQueryTool implements Tool {
             return {
                 ok: false,
                 output: {
-                    error:
-                        "neo4j-driver not installed. Run: npm install neo4j-driver, then set NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD.",
+                    error: "neo4j-driver not installed. Run: npm install neo4j-driver, then set NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD.",
                 },
             };
         }
@@ -72,9 +74,7 @@ export class Neo4jQueryTool implements Tool {
             return {
                 ok: true,
                 output: { records, count: records.length },
-                sideEffects: [
-                    { type: "database", description: `neo4j_query: ${cypher.slice(0, 80)}` },
-                ],
+                sideEffects: [{ type: "database", description: `neo4j_query: ${cypher.slice(0, 80)}` }],
             };
         } catch (err: unknown) {
             return { ok: false, output: { error: String(err), cypher } };

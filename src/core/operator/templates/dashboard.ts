@@ -1,5 +1,5 @@
 export function dashboardHtml(port: number, authToken?: string): string {
-  return `<!doctype html>
+    return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -92,6 +92,7 @@ export function dashboardHtml(port: number, authToken?: string): string {
         <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:telemetry" data-tip-kind="shell-tab">Telemetry</button>
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:logs" data-tip-kind="shell-tab">Logs &amp; Debug</button>
         <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:scheduler" data-tip-kind="shell-tab">Scheduler</button>
+        <button id="tab-button-channels" type="button" class="tab-button" data-tab-id="channels" role="tab" aria-selected="false" aria-controls="tab-channels" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:channels" data-tip-kind="shell-tab">Channels</button>
         <button id="tab-button-wiki" type="button" class="tab-button" data-tab-id="wiki" role="tab" aria-selected="false" aria-controls="tab-wiki" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:wiki" data-tip-kind="shell-tab">Prism Wiki</button>
       </section>
 
@@ -116,6 +117,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
       <section id="tab-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-logs" aria-hidden="true"></section>
 
       <section id="tab-scheduler" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-scheduler" aria-hidden="true"></section>
+
+      <section id="tab-channels" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-channels" aria-hidden="true"></section>
 
       <section id="tab-wiki" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-wiki" aria-hidden="true"></section>
 
@@ -233,10 +236,15 @@ export function dashboardHtml(port: number, authToken?: string): string {
       
       setTimeout(() => {
         try {
-          window.open('about:blank', '_self').close();
-        } catch (e) {
+          window.open('', '_self');
           window.close();
-        }
+        } catch (e) {}
+        try {
+          window.open('about:blank', '_self').close();
+        } catch (e) {}
+        try {
+          window.close();
+        } catch (e) {}
       }, 1500);
     })
     .catch(err => {
@@ -395,6 +403,24 @@ export function dashboardHtml(port: number, authToken?: string): string {
           btnPerf.style.color = '#60a5fa';
         }
       }
+
+      // Persist paradigm visual state into the dashboard state object so
+      // renderBrandPanel can restore it without reading back from the DOM.
+      try {
+        if (typeof window !== 'undefined' && window.state) {
+          window.state.paradigm = {
+            badgeText: badge.innerText,
+            badgeBg: badge.style.background,
+            badgeColor: badge.style.color,
+            badgeShadow: badge.style.boxShadow,
+            descHtml: desc.innerHTML,
+            logHtml: (document.getElementById('prism-paradigm-log') || {}).innerHTML || '',
+            baseBtnStyle: { bg: btnBase.style.background, border: btnBase.style.borderColor, color: btnBase.style.color },
+            perfBtnStyle: { bg: btnPerf.style.background, border: btnPerf.style.borderColor, color: btnPerf.style.color },
+            autoBtnStyle: { bg: btnAuto.style.background, border: btnAuto.style.borderColor, color: btnAuto.style.color },
+          };
+        }
+      } catch (_) { /* noop */ }
     }
 
     window.setResourceParadigm = async function(targetBaseMode) {
@@ -431,7 +457,7 @@ export function dashboardHtml(port: number, authToken?: string): string {
         );
       } catch (e) {
         logEvent("ERROR: Paradigm swap failed.");
-        alert("Failed to switch resource paradigm: " + e.message);
+        showSystemToast('❌ Failed to switch resource paradigm: ' + e.message);
         checkParadigm();
       }
     };
@@ -477,8 +503,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
 }
 
 export function simpleModeHtml(port: number, authToken?: string): string {
-  void port;
-  return `<!doctype html>
+    void port;
+    return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />

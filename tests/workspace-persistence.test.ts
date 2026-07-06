@@ -29,7 +29,11 @@ describe("Workspace Persistence", () => {
         }
         // Clean temp
         if (tempDir && existsSync(tempDir)) {
-            try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* best effort */ }
+            try {
+                rmSync(tempDir, { recursive: true, force: true });
+            } catch {
+                /* best effort */
+            }
             tempDir = undefined;
         }
     });
@@ -37,17 +41,11 @@ describe("Workspace Persistence", () => {
     // ── setWorkspaceRoot ─────────────────────────────────────────────────
 
     it("setWorkspaceRoot rejects non-absolute paths", () => {
-        assert.throws(
-            () => setWorkspaceRoot("relative/path"),
-            { message: /absolute path/ },
-        );
+        assert.throws(() => setWorkspaceRoot("relative/path"), { message: /absolute path/ });
     });
 
     it("setWorkspaceRoot rejects empty string", () => {
-        assert.throws(
-            () => setWorkspaceRoot(""),
-            { message: /absolute path/ },
-        );
+        assert.throws(() => setWorkspaceRoot(""), { message: /absolute path/ });
     });
 
     it("setWorkspaceRoot updates the cached root", () => {

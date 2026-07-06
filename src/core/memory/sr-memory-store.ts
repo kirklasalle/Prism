@@ -85,7 +85,7 @@ export function recordSRGeneration(record: SRGenerationRecord): void {
 /** Read recent records, optionally filtered by role. Newest-last. */
 export function listSRRecords(opts: { role?: string; limit?: number } = {}): SRGenerationRecord[] {
     const all = readAll();
-    const filtered = opts.role ? all.filter(r => r.role === opts.role) : all;
+    const filtered = opts.role ? all.filter((r) => r.role === opts.role) : all;
     if (opts.limit && opts.limit > 0 && filtered.length > opts.limit) {
         return filtered.slice(filtered.length - opts.limit);
     }
@@ -95,7 +95,7 @@ export function listSRRecords(opts: { role?: string; limit?: number } = {}): SRG
 /** Update a record's observed utility by approximate timestamp match (idempotent on repeat). */
 export function attachUtilityFeedback(ts: string, observedUtility: number, note?: string): boolean {
     const all = readAll();
-    const idx = all.findIndex(r => r.ts === ts);
+    const idx = all.findIndex((r) => r.ts === ts);
     if (idx < 0) return false;
     all[idx]!.observedUtility = Math.max(0, Math.min(1, observedUtility));
     if (note !== undefined) all[idx]!.note = note;
@@ -114,7 +114,7 @@ export function srMemoryStats(): {
 } {
     const all = readAll();
     const total = all.length;
-    const fb = all.filter(r => typeof r.observedUtility === "number");
+    const fb = all.filter((r) => typeof r.observedUtility === "number");
     const withFeedback = fb.length;
     const avgUtility = fb.length === 0 ? null : fb.reduce((s, r) => s + (r.observedUtility ?? 0), 0) / fb.length;
     const avgCostUsd = total === 0 ? null : all.reduce((s, r) => s + r.estimatedCostUsd, 0) / total;

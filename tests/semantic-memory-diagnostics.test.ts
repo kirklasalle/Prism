@@ -9,7 +9,12 @@ import assert from "node:assert/strict";
 import { SemanticMemoryIndex } from "../src/core/memory/semantic-memory.js";
 import type { ActivityEvent } from "../src/core/activity/types.js";
 
-function makeEvent(id: string, operation: string, layer: string = "tool_execution", details: Record<string, unknown> = {}): ActivityEvent {
+function makeEvent(
+    id: string,
+    operation: string,
+    layer: string = "tool_execution",
+    details: Record<string, unknown> = {},
+): ActivityEvent {
     return {
         id,
         timestamp: new Date().toISOString(),
@@ -162,10 +167,12 @@ describe("SemanticMemoryIndex — Diagnostics", () => {
     });
 
     it("handles special characters in details gracefully", () => {
-        index.onEvent(makeEvent("e1", "file_write", "tool_execution", {
-            path: "/tmp/test file (1).txt",
-            content: "line1\nline2\ttab",
-        }));
+        index.onEvent(
+            makeEvent("e1", "file_write", "tool_execution", {
+                path: "/tmp/test file (1).txt",
+                content: "line1\nline2\ttab",
+            }),
+        );
         const results = index.query("test file", 5);
         assert.ok(results.length >= 1);
     });
@@ -177,9 +184,11 @@ describe("SemanticMemoryIndex — Diagnostics", () => {
     });
 
     it("handles events with nested details", () => {
-        index.onEvent(makeEvent("e1", "analysis", "tool_execution", {
-            deep: { nested: { value: "knowledge_graph_test" } },
-        }));
+        index.onEvent(
+            makeEvent("e1", "analysis", "tool_execution", {
+                deep: { nested: { value: "knowledge_graph_test" } },
+            }),
+        );
         const results = index.query("knowledge_graph_test", 5);
         assert.equal(results.length, 1);
     });
@@ -204,10 +213,12 @@ describe("SemanticMemoryIndex — Diagnostics", () => {
     it("indexes 1000 events in under 500ms", () => {
         const start = performance.now();
         for (let i = 0; i < 1000; i++) {
-            index.onEvent(makeEvent(`perf-${i}`, `operation_${i % 50}`, "tool_execution", {
-                idx: i,
-                payload: `data_chunk_${i}_with_extra_content`,
-            }));
+            index.onEvent(
+                makeEvent(`perf-${i}`, `operation_${i % 50}`, "tool_execution", {
+                    idx: i,
+                    payload: `data_chunk_${i}_with_extra_content`,
+                }),
+            );
         }
         const elapsed = performance.now() - start;
         assert.ok(elapsed < 500, `Ingestion took ${elapsed.toFixed(1)}ms (limit: 500ms)`);
@@ -215,10 +226,12 @@ describe("SemanticMemoryIndex — Diagnostics", () => {
 
     it("queries 1000-document index in under 50ms", () => {
         for (let i = 0; i < 1000; i++) {
-            index.onEvent(makeEvent(`perf-${i}`, `operation_${i % 50}`, "tool_execution", {
-                idx: i,
-                payload: `data_chunk_${i}`,
-            }));
+            index.onEvent(
+                makeEvent(`perf-${i}`, `operation_${i % 50}`, "tool_execution", {
+                    idx: i,
+                    payload: `data_chunk_${i}`,
+                }),
+            );
         }
 
         const start = performance.now();

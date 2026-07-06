@@ -22,11 +22,19 @@ describe("AuthGate", () => {
     const tokenPath = join(process.cwd(), ".prism-test-token");
 
     after(() => {
-        try { unlinkSync(tokenPath); } catch { /* ok */ }
+        try {
+            unlinkSync(tokenPath);
+        } catch {
+            /* ok */
+        }
     });
 
     it("generates and persists a token on first create", () => {
-        try { unlinkSync(tokenPath); } catch { /* ok */ }
+        try {
+            unlinkSync(tokenPath);
+        } catch {
+            /* ok */
+        }
         const gate = new AuthGate({ tokenFilePath: tokenPath });
         const token = gate.getToken();
         assert.ok(token.length >= 32, "token should be at least 32 chars");
@@ -69,6 +77,19 @@ describe("AuthGate", () => {
         const req = { headers: {}, url: "/public/dashboard.css" } as any;
         const result = gate.check(req);
         assert.equal(result.authenticated, true);
+    });
+
+    it("normalizes /api/v1/ requests for public routes and prefixes", () => {
+        const gate = new AuthGate({
+            tokenFilePath: tokenPath,
+            publicRoutes: ["/api/custom-route"],
+            publicPrefixes: ["/api/custom-prefix/"],
+        });
+        const reqRoute = { headers: {}, url: "/api/v1/custom-route" } as any;
+        assert.equal(gate.check(reqRoute).authenticated, true);
+
+        const reqPrefix = { headers: {}, url: "/api/v1/custom-prefix/subpath" } as any;
+        assert.equal(gate.check(reqPrefix).authenticated, true);
     });
 
     it("rejects missing auth header on protected routes", () => {

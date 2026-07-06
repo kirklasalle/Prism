@@ -37,7 +37,11 @@ export class HttpRequestTool implements Tool {
 
             const text = await response.text();
             let parsed: unknown = text;
-            try { parsed = JSON.parse(text); } catch { /* keep as string */ }
+            try {
+                parsed = JSON.parse(text);
+            } catch {
+                /* keep as string */
+            }
 
             return {
                 ok: response.ok,
@@ -47,9 +51,7 @@ export class HttpRequestTool implements Tool {
                     body: parsed,
                     headers: Object.fromEntries(response.headers.entries()),
                 },
-                sideEffects: [
-                    { type: "network", description: `${method} ${url} → ${response.status}` },
-                ],
+                sideEffects: [{ type: "network", description: `${method} ${url} → ${response.status}` }],
             };
         } catch (err: unknown) {
             return { ok: false, output: { error: String(err), url, method } };

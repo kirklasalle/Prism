@@ -41,10 +41,15 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });
@@ -52,20 +57,28 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
 
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? {} : { "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -87,7 +100,9 @@ async function createAssignment(suffix: string): Promise<string> {
 
 /** Get audit events for a specific assignment */
 async function getAuditForAssignment(assignmentId: string): Promise<any[]> {
-    const { body } = await fetchJson(`/api/workspace/character-audit?assignmentId=${encodeURIComponent(assignmentId)}&limit=100`);
+    const { body } = await fetchJson(
+        `/api/workspace/character-audit?assignmentId=${encodeURIComponent(assignmentId)}&limit=100`,
+    );
     return body.events || [];
 }
 
@@ -113,7 +128,7 @@ async function getAuditForAssignment(assignmentId: string): Promise<any[]> {
  * ─────────────────────────────────────────────────────────────────── */
 
 const ACTIONS = ["dispatch", "suspend", "resume", "revoke"] as const;
-type Action = typeof ACTIONS[number];
+type Action = (typeof ACTIONS)[number];
 
 interface TransitionSpec {
     action: Action;
@@ -125,15 +140,39 @@ interface TransitionSpec {
 
 const VALID_TRANSITIONS: TransitionSpec[] = [
     { action: "dispatch", fromState: "active", expectedState: "active", endpoint: "/api/workspace/character-dispatch" },
-    { action: "suspend", fromState: "active", expectedState: "suspended", endpoint: "/api/workspace/character-suspend", bodyExtra: { reason: "test" } },
-    { action: "revoke", fromState: "active", expectedState: "revoked", endpoint: "/api/workspace/character-revoke", bodyExtra: { reason: "test" } },
+    {
+        action: "suspend",
+        fromState: "active",
+        expectedState: "suspended",
+        endpoint: "/api/workspace/character-suspend",
+        bodyExtra: { reason: "test" },
+    },
+    {
+        action: "revoke",
+        fromState: "active",
+        expectedState: "revoked",
+        endpoint: "/api/workspace/character-revoke",
+        bodyExtra: { reason: "test" },
+    },
     { action: "resume", fromState: "suspended", expectedState: "active", endpoint: "/api/workspace/character-resume" },
-    { action: "revoke", fromState: "suspended", expectedState: "revoked", endpoint: "/api/workspace/character-revoke", bodyExtra: { reason: "terminal" } },
+    {
+        action: "revoke",
+        fromState: "suspended",
+        expectedState: "revoked",
+        endpoint: "/api/workspace/character-revoke",
+        bodyExtra: { reason: "terminal" },
+    },
 ];
 
 const INVALID_TRANSITIONS: TransitionSpec[] = [
     // NOTE: resume on active is a no-op (returns 200), not an error — tested separately
-    { action: "suspend", fromState: "revoked", expectedState: null, endpoint: "/api/workspace/character-suspend", bodyExtra: { reason: "impossible" } },
+    {
+        action: "suspend",
+        fromState: "revoked",
+        expectedState: null,
+        endpoint: "/api/workspace/character-suspend",
+        bodyExtra: { reason: "impossible" },
+    },
     { action: "resume", fromState: "revoked", expectedState: null, endpoint: "/api/workspace/character-resume" },
     { action: "dispatch", fromState: "revoked", expectedState: null, endpoint: "/api/workspace/character-dispatch" },
 ];
@@ -149,16 +188,20 @@ describe("Character Assignment State Machine — Formal Verification", function 
         const charDir = join(tmpDir, "characters");
         mkdirSync(charDir, { recursive: true });
         mkdirSync(join(tmpDir, "state"), { recursive: true });
-        writeFileSync(join(charDir, "sm-agent.json"), JSON.stringify({
-            id: "sm-agent",
-            name: "State Machine Test Agent",
-            archetype: "sentinel",
-            profile: "individual",
-            maxRiskTier: 1,
-            allowedTools: [],
-            systemPromptOverride: "SM test",
-            defaultEmail: "sm@prism.local",
-        }), "utf8");
+        writeFileSync(
+            join(charDir, "sm-agent.json"),
+            JSON.stringify({
+                id: "sm-agent",
+                name: "State Machine Test Agent",
+                archetype: "sentinel",
+                profile: "individual",
+                maxRiskTier: 1,
+                allowedTools: [],
+                systemPromptOverride: "SM test",
+                defaultEmail: "sm@prism.local",
+            }),
+            "utf8",
+        );
 
         _setWorkspaceRootForTest(tmpDir);
 
@@ -213,7 +256,8 @@ describe("Character Assignment State Machine — Formal Verification", function 
                 // Navigate to the required fromState
                 if (t.fromState === "suspended") {
                     await requestJson("POST", "/api/workspace/character-suspend", {
-                        assignmentId: id, reason: "setup",
+                        assignmentId: id,
+                        reason: "setup",
                     });
                 }
 
@@ -224,8 +268,11 @@ describe("Character Assignment State Machine — Formal Verification", function 
                 assert.strictEqual(body.ok, true);
 
                 if (t.action !== "dispatch") {
-                    assert.strictEqual(body.assignment.state, t.expectedState,
-                        `Expected state '${t.expectedState}', got '${body.assignment.state}'`);
+                    assert.strictEqual(
+                        body.assignment.state,
+                        t.expectedState,
+                        `Expected state '${t.expectedState}', got '${body.assignment.state}'`,
+                    );
                 }
             });
         }
@@ -241,11 +288,13 @@ describe("Character Assignment State Machine — Formal Verification", function 
                 // Navigate to the required fromState
                 if (t.fromState === "suspended") {
                     await requestJson("POST", "/api/workspace/character-suspend", {
-                        assignmentId: id, reason: "setup",
+                        assignmentId: id,
+                        reason: "setup",
                     });
                 } else if (t.fromState === "revoked") {
                     await requestJson("POST", "/api/workspace/character-revoke", {
-                        assignmentId: id, reason: "setup",
+                        assignmentId: id,
+                        reason: "setup",
                     });
                 }
 
@@ -255,8 +304,10 @@ describe("Character Assignment State Machine — Formal Verification", function 
 
                 // Should fail — either 400/409 or ok !== true
                 const failed = status !== 200 || body.ok !== true || body.error;
-                assert.ok(failed,
-                    `Transition ${t.fromState} --${t.action}--> should fail, got status=${status}, ok=${body.ok}`);
+                assert.ok(
+                    failed,
+                    `Transition ${t.fromState} --${t.action}--> should fail, got status=${status}, ok=${body.ok}`,
+                );
             });
         }
     });
@@ -267,7 +318,8 @@ describe("Character Assignment State Machine — Formal Verification", function 
         it("no action can resurrect a revoked assignment", async () => {
             const id = await createAssignment("terminal-revoke");
             await requestJson("POST", "/api/workspace/character-revoke", {
-                assignmentId: id, reason: "terminal test",
+                assignmentId: id,
+                reason: "terminal test",
             });
 
             for (const action of ACTIONS) {
@@ -282,8 +334,10 @@ describe("Character Assignment State Machine — Formal Verification", function 
 
                 const { status, body } = await requestJson("POST", endpointMap[action], payload);
                 const survived = status === 200 && body.ok === true && body.assignment?.state !== "revoked";
-                assert.ok(!survived,
-                    `Action '${action}' should not resurrect revoked assignment (status=${status}, state=${body.assignment?.state})`);
+                assert.ok(
+                    !survived,
+                    `Action '${action}' should not resurrect revoked assignment (status=${status}, state=${body.assignment?.state})`,
+                );
             }
         });
     });
@@ -302,13 +356,11 @@ describe("Character Assignment State Machine — Formal Verification", function 
 
             const events = await getAuditForAssignment(id);
             // Should have at least 5 events: assign + dispatch + suspend + resume + revoke
-            assert.ok(events.length >= 5,
-                `Expected >= 5 audit events, got ${events.length}`);
+            assert.ok(events.length >= 5, `Expected >= 5 audit events, got ${events.length}`);
 
             // Verify all events reference this assignment
             for (const event of events) {
-                assert.strictEqual(event.assignmentId, id,
-                    `Audit event should reference assignment ${id}`);
+                assert.strictEqual(event.assignmentId, id, `Audit event should reference assignment ${id}`);
             }
         });
 
@@ -320,16 +372,21 @@ describe("Character Assignment State Machine — Formal Verification", function 
             const operations = events.map((e: any) => e.operation);
 
             // Should contain assign and suspend operations
-            assert.ok(operations.some((op: string) => op.includes("assign")),
-                "Should have assign operation");
-            assert.ok(operations.some((op: string) => op.includes("suspend")),
-                "Should have suspend operation");
+            assert.ok(
+                operations.some((op: string) => op.includes("assign")),
+                "Should have assign operation",
+            );
+            assert.ok(
+                operations.some((op: string) => op.includes("suspend")),
+                "Should have suspend operation",
+            );
         });
 
         it("suspend audit event includes reason and previousState", async () => {
             const id = await createAssignment("audit-details");
             await requestJson("POST", "/api/workspace/character-suspend", {
-                assignmentId: id, reason: "audit detail test",
+                assignmentId: id,
+                reason: "audit detail test",
             });
 
             const events = await getAuditForAssignment(id);
@@ -337,12 +394,17 @@ describe("Character Assignment State Machine — Formal Verification", function 
 
             if (suspendEvent && suspendEvent.details) {
                 if (suspendEvent.details.reason) {
-                    assert.ok(suspendEvent.details.reason.includes("audit detail test"),
-                        "Suspend event should include reason");
+                    assert.ok(
+                        suspendEvent.details.reason.includes("audit detail test"),
+                        "Suspend event should include reason",
+                    );
                 }
                 if (suspendEvent.details.previousState) {
-                    assert.strictEqual(suspendEvent.details.previousState, "active",
-                        "Previous state should be 'active'");
+                    assert.strictEqual(
+                        suspendEvent.details.previousState,
+                        "active",
+                        "Previous state should be 'active'",
+                    );
                 }
             }
             // Pass even if details not present — structure varies by implementation
@@ -360,8 +422,7 @@ describe("Character Assignment State Machine — Formal Verification", function 
             const events = await getAuditForAssignment(id);
             for (const event of events) {
                 const ts = new Date(event.timestamp);
-                assert.ok(!isNaN(ts.getTime()),
-                    `Event timestamp '${event.timestamp}' should be valid ISO date`);
+                assert.ok(!isNaN(ts.getTime()), `Event timestamp '${event.timestamp}' should be valid ISO date`);
             }
         });
 
@@ -373,8 +434,7 @@ describe("Character Assignment State Machine — Formal Verification", function 
             const now = Date.now() + 5000; // 5s grace
             for (const event of events) {
                 const ts = new Date(event.timestamp).getTime();
-                assert.ok(ts <= now,
-                    `Event at ${event.timestamp} should not be in the future`);
+                assert.ok(ts <= now, `Event at ${event.timestamp} should not be in the future`);
             }
         });
     });

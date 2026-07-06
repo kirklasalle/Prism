@@ -30,7 +30,14 @@ export async function testSrShowcaseDemo(): Promise<void> {
 
     // aggregateHemispheres: longest output becomes primary
     const h1 = { profileId: "a", text: "short", latencyMs: 10, promptTokens: 1, completionTokens: 1, costUsd: 0.001 };
-    const h2 = { profileId: "b", text: "much longer output text here", latencyMs: 20, promptTokens: 2, completionTokens: 2, costUsd: 0.002 };
+    const h2 = {
+        profileId: "b",
+        text: "much longer output text here",
+        latencyMs: 20,
+        promptTokens: 2,
+        completionTokens: 2,
+        costUsd: 0.002,
+    };
     const agg = showcase.aggregateHemispheres([h1, h2]);
     assert.strictEqual(agg.primary.profileId, "b", "longer output is primary");
     assert.strictEqual(agg.supporting.length, 1);
@@ -52,5 +59,9 @@ export async function testSrShowcaseDemo(): Promise<void> {
     assert.strictEqual(persisted.profiles.length, 4);
 
     // Best-effort cleanup (don't fail the test on cleanup error)
-    try { rmSync(result.auditFile, { force: true }); } catch { /* */ }
+    try {
+        rmSync(result.auditFile, { force: true });
+    } catch {
+        /* */
+    }
 }

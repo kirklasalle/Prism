@@ -43,16 +43,17 @@ describe("useConnection hook", () => {
         await delay(200);
 
         const frameAfterConnect = inst.lastFrame() ?? "";
-        assert.ok(frameAfterConnect.includes("connected:true"),
-            `Expected connected:true, got: "${frameAfterConnect}"`);
+        assert.ok(frameAfterConnect.includes("connected:true"), `Expected connected:true, got: "${frameAfterConnect}"`);
 
         // Simulate disconnect
         wsClient.disconnect();
         await delay(200);
 
         const frameAfterDisconnect = inst.lastFrame() ?? "";
-        assert.ok(frameAfterDisconnect.includes("connected:false"),
-            `Expected connected:false, got: "${frameAfterDisconnect}"`);
+        assert.ok(
+            frameAfterDisconnect.includes("connected:false"),
+            `Expected connected:false, got: "${frameAfterDisconnect}"`,
+        );
 
         inst.unmount();
     });
@@ -81,15 +82,13 @@ describe("useWsEvent hook", () => {
         await delay(200);
 
         const frame1 = inst.lastFrame() ?? "";
-        assert.ok(frame1.includes("got:spawn"),
-            `Expected got:spawn, got: "${frame1}"`);
+        assert.ok(frame1.includes("got:spawn"), `Expected got:spawn, got: "${frame1}"`);
 
         wsClient.simulateMessage("activity_event", { action: "stop" });
         await delay(200);
 
         const frame2 = inst.lastFrame() ?? "";
-        assert.ok(frame2.includes("got:stop"),
-            `Expected got:stop, got: "${frame2}"`);
+        assert.ok(frame2.includes("got:stop"), `Expected got:stop, got: "${frame2}"`);
 
         inst.unmount();
     });

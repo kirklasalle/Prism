@@ -59,20 +59,70 @@ export interface ModalityInfo {
 /** All known modalities with display metadata. */
 export const ALL_MODALITIES: readonly ModalityInfo[] = [
     { id: "text", label: "Text", icon: "\u{1F4DD}", description: "Natural language text generation and understanding" },
-    { id: "code", label: "Code & Programming", icon: "\u{1F4BB}", description: "Software development, code generation, debugging" },
-    { id: "image-understanding", label: "Image Understanding", icon: "\u{1F5BC}", description: "Visual image analysis and description" },
-    { id: "image-generation", label: "Image Generation", icon: "\u{1F3A8}", description: "Creating images from text prompts" },
-    { id: "video-understanding", label: "Video Understanding", icon: "\u{1F3AC}", description: "Video content analysis and description" },
-    { id: "video-generation", label: "Video Generation", icon: "\u{1F3A5}", description: "Creating video from text or image prompts" },
+    {
+        id: "code",
+        label: "Code & Programming",
+        icon: "\u{1F4BB}",
+        description: "Software development, code generation, debugging",
+    },
+    {
+        id: "image-understanding",
+        label: "Image Understanding",
+        icon: "\u{1F5BC}",
+        description: "Visual image analysis and description",
+    },
+    {
+        id: "image-generation",
+        label: "Image Generation",
+        icon: "\u{1F3A8}",
+        description: "Creating images from text prompts",
+    },
+    {
+        id: "video-understanding",
+        label: "Video Understanding",
+        icon: "\u{1F3AC}",
+        description: "Video content analysis and description",
+    },
+    {
+        id: "video-generation",
+        label: "Video Generation",
+        icon: "\u{1F3A5}",
+        description: "Creating video from text or image prompts",
+    },
     { id: "voice-input", label: "Voice Input", icon: "\u{1F3A4}", description: "Processing spoken audio input" },
     { id: "voice-output", label: "Voice Output", icon: "\u{1F50A}", description: "Generating spoken audio output" },
     { id: "tts", label: "Text-to-Speech", icon: "\u{1F5E3}", description: "Converting text to natural speech" },
     { id: "stt", label: "Speech-to-Text", icon: "\u{1F4AC}", description: "Transcribing speech to text" },
-    { id: "music-generation", label: "Music Generation", icon: "\u{1F3B5}", description: "Composing music or single-instrument audio from prompts" },
-    { id: "sound-effects", label: "Sound Effects", icon: "\u{1F50A}", description: "Generating non-speech sound effects from prompts" },
-    { id: "realtime", label: "Realtime", icon: "\u26A1", description: "Low-latency streaming and realtime interaction" },
-    { id: "embedding", label: "Embedding", icon: "\u{1F9E9}", description: "Vector embeddings for search and similarity" },
-    { id: "multimodal-reasoning", label: "Multimodal Reasoning", icon: "\u{1F9E0}", description: "Cross-modal reasoning across text, image, audio" },
+    {
+        id: "music-generation",
+        label: "Music Generation",
+        icon: "\u{1F3B5}",
+        description: "Composing music or single-instrument audio from prompts",
+    },
+    {
+        id: "sound-effects",
+        label: "Sound Effects",
+        icon: "\u{1F50A}",
+        description: "Generating non-speech sound effects from prompts",
+    },
+    {
+        id: "realtime",
+        label: "Realtime",
+        icon: "\u26A1",
+        description: "Low-latency streaming and realtime interaction",
+    },
+    {
+        id: "embedding",
+        label: "Embedding",
+        icon: "\u{1F9E9}",
+        description: "Vector embeddings for search and similarity",
+    },
+    {
+        id: "multimodal-reasoning",
+        label: "Multimodal Reasoning",
+        icon: "\u{1F9E0}",
+        description: "Cross-modal reasoning across text, image, audio",
+    },
 ] as const;
 
 /** Where the model runs. */
@@ -197,7 +247,10 @@ export function getActiveProfiles(profiles?: readonly ModelCapabilityProfile[], 
 /**
  * Filter profiles to only deprecated or sunset models.
  */
-export function getDeprecatedProfiles(profiles?: readonly ModelCapabilityProfile[], now?: Date): ModelCapabilityProfile[] {
+export function getDeprecatedProfiles(
+    profiles?: readonly ModelCapabilityProfile[],
+    now?: Date,
+): ModelCapabilityProfile[] {
     const all = profiles ?? getKnownProfiles();
     return all.filter((p) => getDeprecationStatus(p, now) !== "active");
 }
@@ -254,9 +307,9 @@ export const PROVIDER_PROMPT_STRATEGIES: readonly ProviderPromptStrategy[] = [
         maxSystemPromptTokens: 2000,
         notes: [
             "Keep prompts simple and direct — reasoning happens internally",
-            "Do NOT use chain-of-thought instructions (\"think step by step\")",
+            'Do NOT use chain-of-thought instructions ("think step by step")',
             "Use developer messages (not system) in the API — PRISM maps this automatically",
-            "Prepend \"Formatting re-enabled\" for markdown output",
+            'Prepend "Formatting re-enabled" for markdown output',
             "Try zero-shot first, add few-shot only if needed",
             "Give high-level goals, not step-by-step prescriptive plans",
             "Provide specific success criteria and let the model reason",
@@ -300,7 +353,7 @@ export const PROVIDER_PROMPT_STRATEGIES: readonly ProviderPromptStrategy[] = [
             "Provide context and motivation behind instructions for better targeting",
             "For Claude 4.6+: dial back aggressive tool-use prompting — models are more proactive",
             "Use adaptive thinking with effort parameter rather than chain-of-thought prompting",
-            "Avoid \"think step by step\" for models with extended thinking enabled",
+            'Avoid "think step by step" for models with extended thinking enabled',
         ],
     },
     // ── Google Gemini ──
@@ -365,7 +418,7 @@ export const PROVIDER_PROMPT_STRATEGIES: readonly ProviderPromptStrategy[] = [
         fewShotStyle: "inline",
         maxSystemPromptTokens: 3000,
         notes: [
-            "Start with role + task definition: \"You are a <role>, your task is <task>\"",
+            'Start with role + task definition: "You are a <role>, your task is <task>"',
             "Use hierarchical structure with clear sections and subsections",
             "Markdown and XML formatting both well-supported (Markdown preferred)",
             "Avoid subjective/blurry words — provide objective measures",
@@ -472,8 +525,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemma3:1b",
         label: "Gemma 3 1B",
-        tier: 1, parameterSize: "tiny", parametersBillions: 1,
-        contextWindow: 2048, estimatedVramMb: 900, maxOutputTokens: 256,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 1,
+        contextWindow: 2048,
+        estimatedVramMb: 900,
+        maxOutputTokens: 256,
         adaptivePromptBudget: 200,
         strengths: ["instruction-following", "fast"],
         modalities: ["text"],
@@ -482,8 +539,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "tinyllama",
         label: "TinyLlama 1.1B",
-        tier: 1, parameterSize: "tiny", parametersBillions: 1.1,
-        contextWindow: 2048, estimatedVramMb: 900, maxOutputTokens: 256,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 1.1,
+        contextWindow: 2048,
+        estimatedVramMb: 900,
+        maxOutputTokens: 256,
         adaptivePromptBudget: 200,
         strengths: ["fast"],
         modalities: ["text"],
@@ -492,8 +553,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "granite3.1-moe:1b",
         label: "Granite 3.1 MoE 1B",
-        tier: 1, parameterSize: "tiny", parametersBillions: 1,
-        contextWindow: 2048, estimatedVramMb: 900, maxOutputTokens: 256,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 1,
+        contextWindow: 2048,
+        estimatedVramMb: 900,
+        maxOutputTokens: 256,
         adaptivePromptBudget: 200,
         strengths: ["instruction-following", "fast"],
         modalities: ["text"],
@@ -502,8 +567,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "driaforall/tiny-agent-a:1.5b",
         label: "Tiny Agent A 1.5B",
-        tier: 1, parameterSize: "tiny", parametersBillions: 1.5,
-        contextWindow: 2048, estimatedVramMb: 1200, maxOutputTokens: 256,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 1.5,
+        contextWindow: 2048,
+        estimatedVramMb: 1200,
+        maxOutputTokens: 256,
         adaptivePromptBudget: 250,
         strengths: ["instruction-following", "tool-use", "fast"],
         modalities: ["text"],
@@ -513,8 +582,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "qwen3-vl:2b",
         label: "Qwen3 VL 2B",
-        tier: 2, parameterSize: "small", parametersBillions: 2,
-        contextWindow: 4096, estimatedVramMb: 1600, maxOutputTokens: 512,
+        tier: 2,
+        parameterSize: "small",
+        parametersBillions: 2,
+        contextWindow: 4096,
+        estimatedVramMb: 1600,
+        maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "multimodal"],
         modalities: ["text", "image-understanding"],
@@ -523,8 +596,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "llama3.2:3b",
         label: "Llama 3.2 3B",
-        tier: 2, parameterSize: "small", parametersBillions: 3,
-        contextWindow: 4096, estimatedVramMb: 2200, maxOutputTokens: 512,
+        tier: 2,
+        parameterSize: "small",
+        parametersBillions: 3,
+        contextWindow: 4096,
+        estimatedVramMb: 2200,
+        maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning", "code"],
         modalities: ["text", "code"],
@@ -533,8 +610,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "granite3.1-moe:3b",
         label: "Granite 3.1 MoE 3B",
-        tier: 2, parameterSize: "small", parametersBillions: 3,
-        contextWindow: 4096, estimatedVramMb: 2200, maxOutputTokens: 512,
+        tier: 2,
+        parameterSize: "small",
+        parametersBillions: 3,
+        contextWindow: 4096,
+        estimatedVramMb: 2200,
+        maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning"],
         modalities: ["text"],
@@ -543,8 +624,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "phi4-mini",
         label: "Phi-4 Mini 3.8B",
-        tier: 2, parameterSize: "small", parametersBillions: 3.8,
-        contextWindow: 4096, estimatedVramMb: 2800, maxOutputTokens: 512,
+        tier: 2,
+        parameterSize: "small",
+        parametersBillions: 3.8,
+        contextWindow: 4096,
+        estimatedVramMb: 2800,
+        maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning", "code"],
         modalities: ["text", "code"],
@@ -554,8 +639,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "llama3.1:8b",
         label: "Llama 3.1 8B",
-        tier: 3, parameterSize: "medium", parametersBillions: 8,
-        contextWindow: 8192, estimatedVramMb: 5500, maxOutputTokens: 1024,
+        tier: 3,
+        parameterSize: "medium",
+        parametersBillions: 8,
+        contextWindow: 8192,
+        estimatedVramMb: 5500,
+        maxOutputTokens: 1024,
         adaptivePromptBudget: 600,
         strengths: ["instruction-following", "reasoning", "code", "tool-use"],
         modalities: ["text", "code"],
@@ -564,8 +653,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemma3:4b",
         label: "Gemma 3 4B",
-        tier: 2, parameterSize: "small", parametersBillions: 4,
-        contextWindow: 4096, estimatedVramMb: 3000, maxOutputTokens: 512,
+        tier: 2,
+        parameterSize: "small",
+        parametersBillions: 4,
+        contextWindow: 4096,
+        estimatedVramMb: 3000,
+        maxOutputTokens: 512,
         adaptivePromptBudget: 400,
         strengths: ["instruction-following", "reasoning"],
         modalities: ["text"],
@@ -575,8 +668,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-3.5-turbo",
         label: "GPT-3.5 Turbo",
-        tier: 2, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 16385, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 2,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 16385,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 1000,
         strengths: ["instruction-following", "code", "fast"],
         modalities: ["text", "code"],
@@ -585,8 +682,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4-turbo",
         label: "GPT-4 Turbo",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 3000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
         modalities: ["text", "code", "image-understanding"],
@@ -596,8 +697,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4o-mini",
         label: "GPT-4o Mini",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
         modalities: ["text", "code", "image-understanding"],
@@ -606,8 +711,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4o-audio",
         label: "GPT-4o Audio",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "multimodal"],
         modalities: ["text", "code", "image-understanding", "voice-input", "voice-output"],
@@ -616,8 +725,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4o-realtime",
         label: "GPT-4o Realtime",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
         modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
@@ -626,18 +739,34 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4o",
         label: "GPT-4o",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "multimodal"],
-        modalities: ["text", "code", "image-understanding", "voice-input", "voice-output", "realtime", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "voice-input",
+            "voice-output",
+            "realtime",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gpt-4.1-nano",
         label: "GPT-4.1 Nano",
-        tier: 2, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 2,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 1500,
         strengths: ["instruction-following", "code", "fast", "long-context"],
         modalities: ["text", "code"],
@@ -646,8 +775,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4.1-mini",
         label: "GPT-4.1 Mini",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
         modalities: ["text", "code", "image-understanding"],
@@ -656,8 +789,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4.1",
         label: "GPT-4.1",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -666,8 +803,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-4",
         label: "GPT-4 (Legacy)",
-        tier: 3, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 8192, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 3,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 8192,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 1500,
         strengths: ["instruction-following", "reasoning", "code"],
         modalities: ["text", "code"],
@@ -676,8 +817,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-5-mini",
         label: "GPT-5 Mini",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "fast"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -686,8 +831,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-5-nano",
         label: "GPT-5 Nano",
-        tier: 2, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 2,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 1500,
         strengths: ["instruction-following", "code", "fast", "long-context"],
         modalities: ["text", "code"],
@@ -696,8 +845,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-5-codex",
         label: "GPT-5 Codex",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 6000,
         strengths: ["code", "reasoning", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code"],
@@ -706,18 +859,34 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-5-pro",
         label: "GPT-5 Pro",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
-        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "image-generation",
+            "voice-input",
+            "voice-output",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gpt-5-chat",
         label: "GPT-5 Chat",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -726,38 +895,80 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-5",
         label: "GPT-5",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
-        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "realtime", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "image-generation",
+            "voice-input",
+            "voice-output",
+            "realtime",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gpt-5.5-pro",
         label: "GPT-5.5 Pro",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
-        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "image-generation",
+            "voice-input",
+            "voice-output",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gpt-5.5",
         label: "GPT-5.5",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
-        modalities: ["text", "code", "image-understanding", "image-generation", "voice-input", "voice-output", "realtime", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "image-generation",
+            "voice-input",
+            "voice-output",
+            "realtime",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gpt-realtime-2",
         label: "GPT Realtime 2",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
         modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
@@ -766,8 +977,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-realtime-mini",
         label: "GPT Realtime Mini",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
         modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
@@ -776,8 +991,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-realtime",
         label: "GPT Realtime",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "multimodal", "fast"],
         modalities: ["text", "code", "voice-input", "voice-output", "realtime"],
@@ -787,8 +1006,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "o1-pro",
         label: "OpenAI o1 Pro",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 100000,
         adaptivePromptBudget: 6000,
         strengths: ["reasoning", "code", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding"],
@@ -797,8 +1020,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "o1",
         label: "OpenAI o1",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 100000,
         adaptivePromptBudget: 6000,
         strengths: ["reasoning", "code", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding"],
@@ -807,8 +1034,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "o1-mini",
         label: "OpenAI o1 Mini",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 65536,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 65536,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "fast"],
         modalities: ["text", "code"],
@@ -817,8 +1048,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "o3",
         label: "OpenAI o3",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 100000,
         adaptivePromptBudget: 6000,
         strengths: ["reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding"],
@@ -827,8 +1062,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "o3-mini",
         label: "OpenAI o3 Mini",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 65536,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 65536,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "tool-use", "fast"],
         modalities: ["text", "code"],
@@ -837,8 +1076,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "o4-mini-deep-research",
         label: "OpenAI o4 Mini Deep Research",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 100000,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "tool-use", "fast", "agentic"],
         modalities: ["text", "code", "image-understanding"],
@@ -847,8 +1090,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "o4-mini",
         label: "OpenAI o4 Mini",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 100000,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 100000,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "tool-use", "fast", "agentic"],
         modalities: ["text", "code", "image-understanding"],
@@ -857,8 +1104,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "sora-2-pro",
         label: "Sora 2 Pro",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 0,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: ["multimodal"],
         modalities: ["video-generation"],
@@ -867,8 +1118,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "sora-2",
         label: "Sora 2",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 0,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: ["multimodal"],
         modalities: ["video-generation"],
@@ -878,8 +1133,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-opus-4-8",
         label: "Claude Opus 4.8",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 128000,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 128000,
         adaptivePromptBudget: 8000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -888,8 +1147,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-sonnet-4-6",
         label: "Claude Sonnet 4.6",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 64000,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 64000,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -898,8 +1161,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-haiku-4-5",
         label: "Claude Haiku 4.5",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 64000,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 64000,
         adaptivePromptBudget: 3000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
         modalities: ["text", "code", "image-understanding"],
@@ -908,8 +1175,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-3-5-haiku",
         label: "Claude 3.5 Haiku",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
         modalities: ["text", "code", "image-understanding"],
@@ -918,8 +1189,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-3-5-sonnet",
         label: "Claude 3.5 Sonnet",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -928,8 +1203,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-3-7-sonnet",
         label: "Claude 3.7 Sonnet",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -938,8 +1217,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-sonnet-4",
         label: "Claude Sonnet 4",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -948,8 +1231,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "claude-opus-4",
         label: "Claude Opus 4",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 200000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 200000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
         modalities: ["text", "code", "image-understanding", "multimodal-reasoning"],
@@ -959,8 +1246,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-3.5-flash",
         label: "Gemini 3.5 Flash",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 2000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use", "agentic"],
         modalities: ["text", "code", "image-understanding", "video-understanding", "multimodal-reasoning"],
@@ -969,18 +1260,33 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-3.1-pro",
         label: "Gemini 3.1 Pro",
-        tier: 5, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 2000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 6000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "agentic"],
-        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "video-understanding",
+            "voice-input",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gemini-3.1-flash-lite",
         label: "Gemini 3.1 Flash Lite",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use"],
         modalities: ["text", "code", "image-understanding"],
@@ -989,8 +1295,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-3.0-flash",
         label: "Gemini 3.0 Flash",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use", "agentic"],
         modalities: ["text", "code", "image-understanding", "video-understanding", "multimodal-reasoning"],
@@ -999,8 +1309,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-3-flash",
         label: "Gemini 3 Flash",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use", "agentic"],
         modalities: ["text", "code", "image-understanding", "video-understanding", "multimodal-reasoning"],
@@ -1009,18 +1323,33 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-2.5-pro",
         label: "Gemini 2.5 Pro",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 2000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context"],
-        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "video-understanding",
+            "voice-input",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gemini-2.5-flash-lite",
         label: "Gemini 2.5 Flash Lite",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "fast", "long-context"],
         modalities: ["text", "code", "image-understanding"],
@@ -1029,8 +1358,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-2.5-flash",
         label: "Gemini 2.5 Flash",
-        tier: 4, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 3000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context", "tool-use"],
         modalities: ["text", "code", "image-understanding", "video-understanding"],
@@ -1039,8 +1372,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-2.0-flash",
         label: "Gemini 2.0 Flash",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "reasoning", "fast", "long-context"],
         modalities: ["text", "code", "image-understanding", "video-understanding"],
@@ -1049,28 +1386,56 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gemini-2.0-pro",
         label: "Gemini 2.0 Pro",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "tool-use", "long-context", "multimodal"],
-        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "tts", "stt", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "video-understanding",
+            "voice-input",
+            "tts",
+            "stt",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "gemini-1.5-pro",
         label: "Gemini 1.5 Pro",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 2000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 2000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "long-context", "multimodal"],
-        modalities: ["text", "code", "image-understanding", "video-understanding", "voice-input", "multimodal-reasoning"],
+        modalities: [
+            "text",
+            "code",
+            "image-understanding",
+            "video-understanding",
+            "voice-input",
+            "multimodal-reasoning",
+        ],
         locality: "cloud",
     },
     {
         pattern: "computer-use-preview",
         label: "Computer Use Preview",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 1000000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 1000000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "tool-use", "agentic"],
         modalities: ["text", "code", "image-understanding"],
@@ -1080,8 +1445,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "llama-3.3-70b-versatile",
         label: "Llama 3.3 70B (Groq)",
-        tier: 4, parameterSize: "frontier", parametersBillions: 70,
-        contextWindow: 32768, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 70,
+        contextWindow: 32768,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
         modalities: ["text", "code"],
@@ -1090,8 +1459,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "llama-3.1-8b-instant",
         label: "Llama 3.1 8B (Groq)",
-        tier: 3, parameterSize: "medium", parametersBillions: 8,
-        contextWindow: 8192, estimatedVramMb: 0, maxOutputTokens: 2048,
+        tier: 3,
+        parameterSize: "medium",
+        parametersBillions: 8,
+        contextWindow: 8192,
+        estimatedVramMb: 0,
+        maxOutputTokens: 2048,
         adaptivePromptBudget: 600,
         strengths: ["instruction-following", "fast"],
         modalities: ["text"],
@@ -1101,8 +1474,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "deepseek-chat",
         label: "DeepSeek Chat",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 64000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 64000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code"],
         modalities: ["text", "code"],
@@ -1111,8 +1488,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "deepseek-reasoner",
         label: "DeepSeek Reasoner",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 64000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 64000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "agentic"],
         modalities: ["text", "code"],
@@ -1122,8 +1503,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "mistral-large",
         label: "Mistral Large",
-        tier: 4, parameterSize: "frontier", parametersBillions: 0,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "frontier",
+        parametersBillions: 0,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "multilingual"],
         modalities: ["text", "code"],
@@ -1132,8 +1517,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "mistral-small",
         label: "Mistral Small",
-        tier: 3, parameterSize: "large", parametersBillions: 0,
-        contextWindow: 32000, estimatedVramMb: 0, maxOutputTokens: 2048,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 0,
+        contextWindow: 32000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 2048,
         adaptivePromptBudget: 1000,
         strengths: ["instruction-following", "fast", "multilingual"],
         modalities: ["text"],
@@ -1143,8 +1532,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-oss:120b",
         label: "GPT-OSS 120B (Ollama Cloud)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 120,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 120,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "agentic"],
         modalities: ["text", "code"],
@@ -1153,8 +1546,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "gpt-oss:20b",
         label: "GPT-OSS 20B (Ollama Cloud)",
-        tier: 4, parameterSize: "large", parametersBillions: 20,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "large",
+        parametersBillions: 20,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 3000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
         modalities: ["text", "code"],
@@ -1163,8 +1560,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "deepseek-v3.1:671b",
         label: "DeepSeek V3.1 671B (Ollama Cloud)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 671,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 671,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "agentic", "long-context"],
         modalities: ["text", "code"],
@@ -1173,8 +1574,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "kimi-k2:1t",
         label: "Kimi K2 1T (Ollama Cloud)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 1000,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 1000,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "agentic", "long-context"],
         modalities: ["text", "code"],
@@ -1183,8 +1588,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "qwen3-coder:480b",
         label: "Qwen3 Coder 480B (Ollama Cloud)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 480,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 480,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["code", "reasoning", "instruction-following", "agentic"],
         modalities: ["text", "code"],
@@ -1193,8 +1602,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "kimi-k2-thinking",
         label: "Kimi K2 Thinking (Ollama Cloud)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 1000,
-        contextWindow: 128000, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 1000,
+        contextWindow: 128000,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["reasoning", "code", "agentic", "long-context"],
         modalities: ["text", "code"],
@@ -1203,8 +1616,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "whisper-1",
         label: "Whisper 1",
-        tier: 1, parameterSize: "tiny", parametersBillions: 0,
-        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 0,
+        contextWindow: 0,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["stt"],
@@ -1213,8 +1630,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "tts-1",
         label: "TTS 1",
-        tier: 1, parameterSize: "tiny", parametersBillions: 0,
-        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 0,
+        contextWindow: 0,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["tts"],
@@ -1223,8 +1644,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "tts-1-hd",
         label: "TTS 1 HD",
-        tier: 1, parameterSize: "tiny", parametersBillions: 0,
-        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 0,
+        contextWindow: 0,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["tts"],
@@ -1233,8 +1658,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "text-embedding-3-small",
         label: "Text Embedding 3 Small",
-        tier: 1, parameterSize: "tiny", parametersBillions: 0,
-        contextWindow: 8191, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 0,
+        contextWindow: 8191,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["embedding"],
@@ -1243,8 +1672,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "text-embedding-3-large",
         label: "Text Embedding 3 Large",
-        tier: 1, parameterSize: "tiny", parametersBillions: 0,
-        contextWindow: 8191, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 0,
+        contextWindow: 8191,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["embedding"],
@@ -1253,8 +1686,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "text-embedding-ada-002",
         label: "Ada 002 Embedding",
-        tier: 1, parameterSize: "tiny", parametersBillions: 0,
-        contextWindow: 8191, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 0,
+        contextWindow: 8191,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["embedding"],
@@ -1263,8 +1700,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "dall-e-2",
         label: "DALL-E 2",
-        tier: 1, parameterSize: "tiny", parametersBillions: 0,
-        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 1,
+        parameterSize: "tiny",
+        parametersBillions: 0,
+        contextWindow: 0,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["image-generation"],
@@ -1273,8 +1714,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "dall-e-3",
         label: "DALL-E 3",
-        tier: 2, parameterSize: "small", parametersBillions: 0,
-        contextWindow: 0, estimatedVramMb: 0, maxOutputTokens: 0,
+        tier: 2,
+        parameterSize: "small",
+        parametersBillions: 0,
+        contextWindow: 0,
+        estimatedVramMb: 0,
+        maxOutputTokens: 0,
         adaptivePromptBudget: 0,
         strengths: [],
         modalities: ["image-generation"],
@@ -1284,8 +1729,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "deepseek/deepseek-chat",
         label: "DeepSeek V3 (OpenRouter)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 671,
-        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 671,
+        contextWindow: 131072,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "agentic"],
         modalities: ["text", "code"],
@@ -1294,8 +1743,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "deepseek/deepseek-r1",
         label: "DeepSeek R1 (OpenRouter)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 671,
-        contextWindow: 163840, estimatedVramMb: 0, maxOutputTokens: 16384,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 671,
+        contextWindow: 163840,
+        estimatedVramMb: 0,
+        maxOutputTokens: 16384,
         adaptivePromptBudget: 6000,
         strengths: ["reasoning", "code", "agentic", "long-context"],
         modalities: ["text", "code"],
@@ -1304,8 +1757,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "qwen/qwen-2.5-72b-instruct",
         label: "Qwen 2.5 72B (OpenRouter)",
-        tier: 4, parameterSize: "large", parametersBillions: 72,
-        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "large",
+        parametersBillions: 72,
+        contextWindow: 131072,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 3000,
         strengths: ["instruction-following", "reasoning", "code", "multilingual"],
         modalities: ["text", "code"],
@@ -1314,8 +1771,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "meta-llama/llama-3.3-70b-instruct",
         label: "Llama 3.3 70B (OpenRouter)",
-        tier: 4, parameterSize: "large", parametersBillions: 70,
-        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "large",
+        parametersBillions: 70,
+        contextWindow: 131072,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 3000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
         modalities: ["text", "code"],
@@ -1324,8 +1785,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "meta-llama/llama-3.3-70b-instruct:free",
         label: "Llama 3.3 70B Free (OpenRouter)",
-        tier: 4, parameterSize: "large", parametersBillions: 70,
-        contextWindow: 131072, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 4,
+        parameterSize: "large",
+        parametersBillions: 70,
+        contextWindow: 131072,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 3000,
         strengths: ["instruction-following", "reasoning", "code", "fast"],
         modalities: ["text", "code"],
@@ -1334,8 +1799,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "mistralai/mistral-large-2512",
         label: "Mistral Large 3 (OpenRouter)",
-        tier: 5, parameterSize: "frontier", parametersBillions: 123,
-        contextWindow: 262144, estimatedVramMb: 0, maxOutputTokens: 8192,
+        tier: 5,
+        parameterSize: "frontier",
+        parametersBillions: 123,
+        contextWindow: 262144,
+        estimatedVramMb: 0,
+        maxOutputTokens: 8192,
         adaptivePromptBudget: 4000,
         strengths: ["instruction-following", "reasoning", "code", "multilingual", "agentic", "long-context"],
         modalities: ["text", "code"],
@@ -1344,8 +1813,12 @@ const KNOWN_PROFILES: ModelCapabilityProfile[] = [
     {
         pattern: "mistralai/mistral-small-2603",
         label: "Mistral Small 4 (OpenRouter)",
-        tier: 3, parameterSize: "large", parametersBillions: 24,
-        contextWindow: 262144, estimatedVramMb: 0, maxOutputTokens: 4096,
+        tier: 3,
+        parameterSize: "large",
+        parametersBillions: 24,
+        contextWindow: 262144,
+        estimatedVramMb: 0,
+        maxOutputTokens: 4096,
         adaptivePromptBudget: 2000,
         strengths: ["instruction-following", "fast", "multilingual"],
         modalities: ["text", "code"],
@@ -1417,7 +1890,8 @@ export function resolveProfile(modelName: string): ModelCapabilityProfile {
         const versionSuffix = extractVersionSuffix(modelName);
         if (versionSuffix && candidates.length > 1) {
             const constrained = candidates.find(
-                (c) => c.profile.versionConstraint && matchesVersionConstraint(versionSuffix, c.profile.versionConstraint),
+                (c) =>
+                    c.profile.versionConstraint && matchesVersionConstraint(versionSuffix, c.profile.versionConstraint),
             );
             if (constrained) return constrained.profile;
         }
@@ -1466,11 +1940,21 @@ export function matchesVersionConstraint(versionSuffix: string, constraint: stri
         const targPad = target.padEnd(8, "0");
 
         switch (op) {
-            case ">=": if (!(normPad >= targPad)) return false; break;
-            case "<=": if (!(normPad <= targPad)) return false; break;
-            case ">": if (!(normPad > targPad)) return false; break;
-            case "<": if (!(normPad < targPad)) return false; break;
-            case "=": if (normPad !== targPad) return false; break;
+            case ">=":
+                if (!(normPad >= targPad)) return false;
+                break;
+            case "<=":
+                if (!(normPad <= targPad)) return false;
+                break;
+            case ">":
+                if (!(normPad > targPad)) return false;
+                break;
+            case "<":
+                if (!(normPad < targPad)) return false;
+                break;
+            case "=":
+                if (normPad !== targPad) return false;
+                break;
         }
     }
     return validCount > 0;
@@ -1488,26 +1972,41 @@ function inferProfileFromName(modelName: string): ModelCapabilityProfile {
     let adaptivePromptBudget: number;
 
     if (billions > 0 && billions <= 2) {
-        tier = 1; parameterSize = "tiny";
-        contextWindow = 2048; estimatedVramMb = Math.round(billions * 800);
-        maxOutputTokens = 256; adaptivePromptBudget = 200;
+        tier = 1;
+        parameterSize = "tiny";
+        contextWindow = 2048;
+        estimatedVramMb = Math.round(billions * 800);
+        maxOutputTokens = 256;
+        adaptivePromptBudget = 200;
     } else if (billions > 2 && billions <= 5) {
-        tier = 2; parameterSize = "small";
-        contextWindow = 4096; estimatedVramMb = Math.round(billions * 700);
-        maxOutputTokens = 512; adaptivePromptBudget = 400;
+        tier = 2;
+        parameterSize = "small";
+        contextWindow = 4096;
+        estimatedVramMb = Math.round(billions * 700);
+        maxOutputTokens = 512;
+        adaptivePromptBudget = 400;
     } else if (billions > 5 && billions <= 15) {
-        tier = 3; parameterSize = "medium";
-        contextWindow = 8192; estimatedVramMb = Math.round(billions * 650);
-        maxOutputTokens = 1024; adaptivePromptBudget = 600;
+        tier = 3;
+        parameterSize = "medium";
+        contextWindow = 8192;
+        estimatedVramMb = Math.round(billions * 650);
+        maxOutputTokens = 1024;
+        adaptivePromptBudget = 600;
     } else if (billions > 15) {
-        tier = 4; parameterSize = "large";
-        contextWindow = 32000; estimatedVramMb = Math.round(billions * 600);
-        maxOutputTokens = 4096; adaptivePromptBudget = 2000;
+        tier = 4;
+        parameterSize = "large";
+        contextWindow = 32000;
+        estimatedVramMb = Math.round(billions * 600);
+        maxOutputTokens = 4096;
+        adaptivePromptBudget = 2000;
     } else {
         // Unknown size — assume cloud T3 as a safe middle ground
-        tier = 3; parameterSize = "large";
-        contextWindow = 32000; estimatedVramMb = 0;
-        maxOutputTokens = 2048; adaptivePromptBudget = 1000;
+        tier = 3;
+        parameterSize = "large";
+        contextWindow = 32000;
+        estimatedVramMb = 0;
+        maxOutputTokens = 2048;
+        adaptivePromptBudget = 1000;
     }
 
     const lower = modelName.toLowerCase();
@@ -1571,20 +2070,24 @@ export function getRoleRequirements(role: TaskRole): RoleTierRequirements {
 /** Get required modality for a task role. */
 export function getRoleRequiredModality(role: TaskRole): ModelModality {
     switch (role) {
-        case "speech-recognition": return "stt";
-        case "speech-synthesis": return "tts";
-        case "realtime-voice": return "realtime";
-        case "image-creation": return "image-generation";
-        case "video-creation": return "video-generation";
-        case "audio-production": return "sound-effects";
-        default: return "text";
+        case "speech-recognition":
+            return "stt";
+        case "speech-synthesis":
+            return "tts";
+        case "realtime-voice":
+            return "realtime";
+        case "image-creation":
+            return "image-generation";
+        case "video-creation":
+            return "video-generation";
+        case "audio-production":
+            return "sound-effects";
+        default:
+            return "text";
     }
 }
 
-export function selectModelForRole(
-    role: TaskRole,
-    available: AvailableModel[],
-): ModelRouterSelection | null {
+export function selectModelForRole(role: TaskRole, available: AvailableModel[]): ModelRouterSelection | null {
     if (available.length === 0) return null;
 
     const requiredModality = getRoleRequiredModality(role);
@@ -1615,8 +2118,12 @@ export function selectModelForRole(
 
             // Adaptive VRAM-Aware mode active: shift high-VRAM local models to the bottom if free VRAM is insufficient
             if (powerMode === "adaptive" && cachedHardwareSnapshot) {
-                const aOom = a.profile.locality === "local" && a.profile.estimatedVramMb > cachedHardwareSnapshot.estimatedFreeVramMb;
-                const bOom = b.profile.locality === "local" && b.profile.estimatedVramMb > cachedHardwareSnapshot.estimatedFreeVramMb;
+                const aOom =
+                    a.profile.locality === "local" &&
+                    a.profile.estimatedVramMb > cachedHardwareSnapshot.estimatedFreeVramMb;
+                const bOom =
+                    b.profile.locality === "local" &&
+                    b.profile.estimatedVramMb > cachedHardwareSnapshot.estimatedFreeVramMb;
                 if (aOom !== bOom) {
                     return aOom ? 1 : -1; // Push OOM-risk local models to the end
                 }
@@ -1640,9 +2147,7 @@ export function selectModelForRole(
     if (scored.length === 0) return null;
 
     // 1. Local that meets ideal
-    const idealLocal = scored.find(
-        (m) => m.profile.locality === "local" && m.profile.tier >= requirements.idealTier,
-    );
+    const idealLocal = scored.find((m) => m.profile.locality === "local" && m.profile.tier >= requirements.idealTier);
     if (idealLocal) {
         return {
             providerId: idealLocal.providerId,
@@ -1654,9 +2159,7 @@ export function selectModelForRole(
     }
 
     // 2. Cloud that meets ideal
-    const idealCloud = scored.find(
-        (m) => m.profile.locality === "cloud" && m.profile.tier >= requirements.idealTier,
-    );
+    const idealCloud = scored.find((m) => m.profile.locality === "cloud" && m.profile.tier >= requirements.idealTier);
     if (idealCloud) {
         return {
             providerId: idealCloud.providerId,
@@ -1668,9 +2171,7 @@ export function selectModelForRole(
     }
 
     // 3. Local that meets minimum (degraded)
-    const minLocal = scored.find(
-        (m) => m.profile.locality === "local" && m.profile.tier >= requirements.minimumTier,
-    );
+    const minLocal = scored.find((m) => m.profile.locality === "local" && m.profile.tier >= requirements.minimumTier);
     if (minLocal) {
         return {
             providerId: minLocal.providerId,
@@ -1682,9 +2183,7 @@ export function selectModelForRole(
     }
 
     // 4. Cloud that meets minimum (degraded)
-    const minCloud = scored.find(
-        (m) => m.profile.locality === "cloud" && m.profile.tier >= requirements.minimumTier,
-    );
+    const minCloud = scored.find((m) => m.profile.locality === "cloud" && m.profile.tier >= requirements.minimumTier);
     if (minCloud) {
         return {
             providerId: minCloud.providerId,
@@ -1716,7 +2215,10 @@ export function selectModelForRole(
  * When a ProviderPromptStrategy is provided (or auto-resolved), its
  * temperatureDefault overrides the tier-based default.
  */
-export function buildAdaptiveParams(profile: ModelCapabilityProfile, strategy?: ProviderPromptStrategy): AdaptivePromptParams {
+export function buildAdaptiveParams(
+    profile: ModelCapabilityProfile,
+    strategy?: ProviderPromptStrategy,
+): AdaptivePromptParams {
     const resolved = strategy ?? resolvePromptStrategy(profile.pattern);
     let params: AdaptivePromptParams;
     switch (profile.tier) {
@@ -1850,18 +2352,29 @@ function formatPromptForStrategy(
     switch (strategy.structureFormat) {
         case "xml":
             return (
-                "<identity>\n" + parts.identity + "\n</identity>\n"
-                + "<instructions>\n" + parts.instructions.join("\n") + "\n</instructions>"
+                "<identity>\n" +
+                parts.identity +
+                "\n</identity>\n" +
+                "<instructions>\n" +
+                parts.instructions.join("\n") +
+                "\n</instructions>"
             );
         case "markdown":
             return (
-                "# Identity\n" + parts.identity + "\n\n"
-                + "# Instructions\n" + parts.instructions.map((i) => "- " + i).join("\n")
+                "# Identity\n" +
+                parts.identity +
+                "\n\n" +
+                "# Instructions\n" +
+                parts.instructions.map((i) => "- " + i).join("\n")
             );
         case "mixed":
             return (
-                "# Identity\n" + parts.identity + "\n\n"
-                + "<instructions>\n" + parts.instructions.join("\n") + "\n</instructions>"
+                "# Identity\n" +
+                parts.identity +
+                "\n\n" +
+                "<instructions>\n" +
+                parts.instructions.join("\n") +
+                "\n</instructions>"
             );
         case "minimal":
         default:
@@ -1945,7 +2458,8 @@ export function buildAdaptiveSystemPrompt(
         const ctx: string[] = [];
         if (runtimeContext.mode) ctx.push(`Runtime mode: ${runtimeContext.mode}`);
         if (runtimeContext.environment) ctx.push(`Env: ${runtimeContext.environment}`);
-        if (runtimeContext.pendingApprovals !== undefined) ctx.push(`Pending approvals: ${runtimeContext.pendingApprovals}`);
+        if (runtimeContext.pendingApprovals !== undefined)
+            ctx.push(`Pending approvals: ${runtimeContext.pendingApprovals}`);
         if (ctx.length > 0) {
             if (resolved.structureFormat === "xml") {
                 base += "\n<context>\n" + ctx.join("\n") + "\n</context>";
@@ -1979,7 +2493,10 @@ export function getCachedHardwareSnapshot(): HardwareSnapshot | null {
  * Fetch currently loaded models from Ollama to determine VRAM usage.
  * Non-critical — returns empty snapshot on failure.
  */
-export async function fetchHardwareSnapshot(ollamaBaseUrl: string, totalVramMb: number = 4096): Promise<HardwareSnapshot> {
+export async function fetchHardwareSnapshot(
+    ollamaBaseUrl: string,
+    totalVramMb: number = 4096,
+): Promise<HardwareSnapshot> {
     try {
         const response = await fetch(`${ollamaBaseUrl}/api/ps`, {
             method: "GET",
@@ -1988,7 +2505,7 @@ export async function fetchHardwareSnapshot(ollamaBaseUrl: string, totalVramMb: 
         if (!response.ok) {
             return { totalVramMb, loadedModels: [], estimatedFreeVramMb: totalVramMb };
         }
-        const payload = await response.json() as {
+        const payload = (await response.json()) as {
             models?: Array<{ name?: string; size?: number; size_vram?: number }>;
         };
         const loadedModels = (payload.models ?? []).map((m) => ({
@@ -2012,13 +2529,24 @@ export async function fetchHardwareSnapshot(ollamaBaseUrl: string, totalVramMb: 
 // ---------------------------------------------------------------------------
 
 export const ALL_TASK_ROLES: TaskRole[] = [
-    "classification", "chat", "summarization",
-    "tool-selection", "code-generation", "memory-indexing",
-    "speech-synthesis", "speech-recognition", "realtime-voice",
-    "image-analysis", "image-creation",
-    "video-analysis", "video-creation",
-    "audio-production", "document-writing", "research",
-    "orchestrator", "reasoning",
+    "classification",
+    "chat",
+    "summarization",
+    "tool-selection",
+    "code-generation",
+    "memory-indexing",
+    "speech-synthesis",
+    "speech-recognition",
+    "realtime-voice",
+    "image-analysis",
+    "image-creation",
+    "video-analysis",
+    "video-creation",
+    "audio-production",
+    "document-writing",
+    "research",
+    "orchestrator",
+    "reasoning",
 ];
 
 /**
@@ -2026,11 +2554,16 @@ export const ALL_TASK_ROLES: TaskRole[] = [
  */
 export function tierLabel(tier: CapabilityTier): string {
     switch (tier) {
-        case 1: return "T1 Minimal";
-        case 2: return "T2 Basic";
-        case 3: return "T3 Standard";
-        case 4: return "T4 Advanced";
-        case 5: return "T5 Frontier";
+        case 1:
+            return "T1 Minimal";
+        case 2:
+            return "T2 Basic";
+        case 3:
+            return "T3 Standard";
+        case 4:
+            return "T4 Advanced";
+        case 5:
+            return "T5 Frontier";
     }
 }
 
@@ -2157,9 +2690,7 @@ export function selectModelForModality(
 /**
  * Get available modality info with model count for each modality.
  */
-export function getModalitySummary(
-    available: AvailableModel[],
-): Array<ModalityInfo & { modelCount: number }> {
+export function getModalitySummary(available: AvailableModel[]): Array<ModalityInfo & { modelCount: number }> {
     return ALL_MODALITIES.map((info) => {
         const count = available.filter((entry) => {
             const profile = resolveProfile(entry.model);
@@ -2197,9 +2728,7 @@ export function detectRequestModality(input: ModalityDetectionInput): ModelModal
 
     // Explicit modality takes priority
     if (input.explicitModality) {
-        const explicit = Array.isArray(input.explicitModality)
-            ? input.explicitModality
-            : [input.explicitModality];
+        const explicit = Array.isArray(input.explicitModality) ? input.explicitModality : [input.explicitModality];
         for (const m of explicit) detected.add(m);
         return [...detected];
     }
@@ -2224,18 +2753,26 @@ export function detectRequestModality(input: ModalityDetectionInput): ModelModal
 
     // Code detection: fenced code blocks or programming keywords
     const hasCodeFence = /```[\s\S]*?```/.test(msg);
-    const hasCodeKeywords = /\b(function|class|import|export|const|let|var|def |async |await |return |if \(|for \(|while \()/.test(msg);
+    const hasCodeKeywords =
+        /\b(function|class|import|export|const|let|var|def |async |await |return |if \(|for \(|while \()/.test(msg);
     if (hasCodeFence || hasCodeKeywords) {
         detected.add("code");
     }
 
     // Image generation detection
-    if (/\b(generate|create|draw|make|design)\b.{0,20}\b(image|picture|photo|illustration|diagram|art|icon)\b/i.test(msg)) {
+    if (
+        /\b(generate|create|draw|make|design)\b.{0,20}\b(image|picture|photo|illustration|diagram|art|icon)\b/i.test(
+            msg,
+        )
+    ) {
         detected.add("image-generation");
     }
 
     // Video detection
-    if (/\b(video|clip|footage|movie|animation)\b/i.test(msg) && /\b(analy[sz]e|describe|watch|review|understand|summarize)\b/i.test(msg)) {
+    if (
+        /\b(video|clip|footage|movie|animation)\b/i.test(msg) &&
+        /\b(analy[sz]e|describe|watch|review|understand|summarize)\b/i.test(msg)
+    ) {
         detected.add("video-understanding");
     }
     if (/\b(generate|create|make)\b.{0,20}\b(video|clip|animation)\b/i.test(msg)) {
@@ -2377,9 +2914,11 @@ export function normalizeSRConfig(cfg: SpectrumRefractionConfig): { hemispheres:
             seenIds.add(h.id);
         }
         // Pairwise instance-isolation check: at least two distinct (provider+model) pairs required.
-        const sigs = new Set(arr.map(h => `${h.providerId}::${h.model}`));
+        const sigs = new Set(arr.map((h) => `${h.providerId}::${h.model}`));
         if (arr.length >= 2 && sigs.size < 2) {
-            errors.push("SR hemispheres[] requires at least two distinct (providerId, model) pairs for instance isolation.");
+            errors.push(
+                "SR hemispheres[] requires at least two distinct (providerId, model) pairs for instance isolation.",
+            );
         }
         return { hemispheres: arr.slice(), errors };
     }
@@ -2417,7 +2956,7 @@ export function normalizeSRConfig(cfg: SpectrumRefractionConfig): { hemispheres:
  */
 export function validateSRLeftModel(profile: ModelCapabilityProfile): SRValidationResult {
     const missing: string[] = [];
-    const hasLogicStrength = profile.strengths.some(s => SR_LEFT_REQUIRED_STRENGTHS.includes(s));
+    const hasLogicStrength = profile.strengths.some((s) => SR_LEFT_REQUIRED_STRENGTHS.includes(s));
 
     if (!hasLogicStrength) {
         missing.push("Needs at least one of: code, reasoning, agentic, tool-use");
@@ -2430,18 +2969,18 @@ export function validateSRLeftModel(profile: ModelCapabilityProfile): SRValidati
     const level: SRValidationResult["level"] = !valid
         ? "insufficient"
         : profile.tier >= 5 && profile.strengths.includes("agentic")
-            ? "optimal"
-            : profile.tier >= 4
-                ? "standard"
-                : "minimum";
+          ? "optimal"
+          : profile.tier >= 4
+            ? "standard"
+            : "minimum";
 
     const advisoryText = !valid
         ? `Not qualified for Logic hemisphere. ${missing.join(". ")}.`
         : level === "optimal"
-            ? `Optimal: T${profile.tier} with full agentic capability.`
-            : level === "standard"
-                ? `Standard: T${profile.tier} logic model. T5 agentic recommended for best results.`
-                : `Minimum: T${profile.tier}. T4+ recommended for production SR workflows.`;
+          ? `Optimal: T${profile.tier} with full agentic capability.`
+          : level === "standard"
+            ? `Standard: T${profile.tier} logic model. T5 agentic recommended for best results.`
+            : `Minimum: T${profile.tier}. T4+ recommended for production SR workflows.`;
 
     return { valid, tier: profile.tier, level, missingCapabilities: missing, advisoryText };
 }
@@ -2466,18 +3005,18 @@ export function validateSRRightModel(profile: ModelCapabilityProfile): SRValidat
     const level: SRValidationResult["level"] = !valid
         ? "insufficient"
         : optimalCount >= 3
-            ? "optimal"
-            : optimalCount >= 2
-                ? "standard"
-                : "minimum";
+          ? "optimal"
+          : optimalCount >= 2
+            ? "standard"
+            : "minimum";
 
     const advisoryText = !valid
         ? `Not qualified for Creative hemisphere. ${missing.join(". ")}.`
         : level === "optimal"
-            ? `Optimal: Image + video + audio generation at T${profile.tier}.`
-            : level === "standard"
-                ? `Standard: ${hasImageGen ? "Image" : "Video"} generation + ${hasVideoGen && hasImageGen ? "video" : hasAudioOut ? "audio" : "image"}.`
-                : `Minimum: ${hasImageGen ? "Image" : "Video"} generation only.`;
+          ? `Optimal: Image + video + audio generation at T${profile.tier}.`
+          : level === "standard"
+            ? `Standard: ${hasImageGen ? "Image" : "Video"} generation + ${hasVideoGen && hasImageGen ? "video" : hasAudioOut ? "audio" : "image"}.`
+            : `Minimum: ${hasImageGen ? "Image" : "Video"} generation only.`;
 
     return { valid, tier: profile.tier, level, missingCapabilities: missing, advisoryText };
 }
@@ -2486,14 +3025,16 @@ export function validateSRRightModel(profile: ModelCapabilityProfile): SRValidat
  * Filter available models to those qualified for the SR Left (Logic) hemisphere.
  * Returns models sorted by tier descending (best first), prioritizing code/agentic strengths.
  */
-export function filterSRLogicModels(available: AvailableModel[]): Array<AvailableModel & { profile: ModelCapabilityProfile; validation: SRValidationResult }> {
+export function filterSRLogicModels(
+    available: AvailableModel[],
+): Array<AvailableModel & { profile: ModelCapabilityProfile; validation: SRValidationResult }> {
     return available
-        .map(entry => {
+        .map((entry) => {
             const profile = resolveProfile(entry.model);
             const validation = validateSRLeftModel(profile);
             return { ...entry, profile, validation };
         })
-        .filter(entry => entry.validation.valid)
+        .filter((entry) => entry.validation.valid)
         .sort((a, b) => {
             if (b.profile.tier !== a.profile.tier) {
                 return b.profile.tier - a.profile.tier;
@@ -2515,20 +3056,24 @@ export function filterSRLogicModels(available: AvailableModel[]): Array<Availabl
  * Filter available models to those qualified for the SR Right (Creative) hemisphere.
  * Returns models sorted by capability coverage descending (best first), prioritizing multimodal generation.
  */
-export function filterSRCreativeModels(available: AvailableModel[]): Array<AvailableModel & { profile: ModelCapabilityProfile; validation: SRValidationResult }> {
+export function filterSRCreativeModels(
+    available: AvailableModel[],
+): Array<AvailableModel & { profile: ModelCapabilityProfile; validation: SRValidationResult }> {
     return available
-        .map(entry => {
+        .map((entry) => {
             const profile = resolveProfile(entry.model);
             const validation = validateSRRightModel(profile);
             return { ...entry, profile, validation };
         })
-        .filter(entry => entry.validation.valid)
+        .filter((entry) => entry.validation.valid)
         .sort((a, b) => {
             const levelOrder = { optimal: 3, standard: 2, minimum: 1, insufficient: 0 };
             const diff = levelOrder[b.validation.level] - levelOrder[a.validation.level];
             if (diff !== 0) return diff;
-            const aHasBoth = a.profile.modalities.includes("image-generation") && a.profile.modalities.includes("video-generation");
-            const bHasBoth = b.profile.modalities.includes("image-generation") && b.profile.modalities.includes("video-generation");
+            const aHasBoth =
+                a.profile.modalities.includes("image-generation") && a.profile.modalities.includes("video-generation");
+            const bHasBoth =
+                b.profile.modalities.includes("image-generation") && b.profile.modalities.includes("video-generation");
             if (aHasBoth !== bHasBoth) {
                 return bHasBoth ? 1 : -1;
             }
@@ -2565,7 +3110,13 @@ export function validateSRTriad(
 
     // Both must be selected
     if (!left || !right) {
-        return { valid: false, isolationLevel: "insufficient", left: leftValidation, right: rightValidation, advisory: "Both Left and Right hemispheres must be configured." };
+        return {
+            valid: false,
+            isolationLevel: "insufficient",
+            left: leftValidation,
+            right: rightValidation,
+            advisory: "Both Left and Right hemispheres must be configured.",
+        };
     }
 
     // Instance isolation check: Left ≠ Right (MANDATORY — only hard gate)
@@ -2578,7 +3129,8 @@ export function validateSRTriad(
             isolationLevel: "insufficient",
             left: leftValidation,
             right: rightValidation,
-            advisory: "Left and Right must be separate instances — same provider + same model is not allowed. Use a different model or a different provider for each hemisphere.",
+            advisory:
+                "Left and Right must be separate instances — same provider + same model is not allowed. Use a different model or a different provider for each hemisphere.",
         };
     }
 
@@ -2603,7 +3155,8 @@ export function validateSRTriad(
     }
 
     // sameProvider, different model
-    const base = "Model-level isolation: same provider, different models — separate capabilities but shared API key and rate limits.";
+    const base =
+        "Model-level isolation: same provider, different models — separate capabilities but shared API key and rate limits.";
     return {
         valid: true,
         isolationLevel: "model",

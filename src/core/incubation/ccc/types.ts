@@ -11,26 +11,26 @@ export interface ConstitutionPrinciple {
     id: string;
     description?: string;
     appliesTo: {
-        operations?: string[];          // e.g. ["email_ops", "shell_exec"]; empty/undefined = all
-        risk?: RiskFilter[];            // e.g. ["medium", "high"]
+        operations?: string[]; // e.g. ["email_ops", "shell_exec"]; empty/undefined = all
+        risk?: RiskFilter[]; // e.g. ["medium", "high"]
     };
     require?: {
         rollbackPlan?: boolean;
         verifiedEmail?: boolean;
         cacBound?: boolean;
-        maxTimeoutMs?: number;          // step.timeoutMs must be ≤ this
+        maxTimeoutMs?: number; // step.timeoutMs must be ≤ this
     };
-    forbidIfReasonCode?: string[];      // e.g. ["CAC_PLACEHOLDER_IDENTITY_DENY"]
+    forbidIfReasonCode?: string[]; // e.g. ["CAC_PLACEHOLDER_IDENTITY_DENY"]
 }
 
 export interface MemoryInvariant {
     id: string;
     type: "min_coverage" | "min_utility" | "no_drift_above";
-    threshold: number;                  // [0,1] for coverage/utility, [0,∞) for drift
+    threshold: number; // [0,1] for coverage/utility, [0,∞) for drift
 }
 
 export interface Constitution {
-    version: string;                    // semver
+    version: string; // semver
     id: string;
     description?: string;
     principles: ConstitutionPrinciple[];
@@ -48,9 +48,9 @@ export interface CompiledStep {
     stepId: string;
     operation: string;
     risk: OperationRisk;
-    preconditions: string[];            // human-readable + machine-checkable invariant ids
+    preconditions: string[]; // human-readable + machine-checkable invariant ids
     postconditions: string[];
-    projectedDecision: PolicyResult;    // what PolicyEngine.evaluate() will say at runtime
+    projectedDecision: PolicyResult; // what PolicyEngine.evaluate() will say at runtime
     appliedPrincipleIds: string[];
     violations: PrincipleViolation[];
 }
@@ -61,7 +61,7 @@ export interface RuntimePlan {
     constitutionId: string;
     constitutionVersion: string;
     profileSegment: "individual" | "business";
-    compilationHash: string;            // sha256 of canonicalized plan
+    compilationHash: string; // sha256 of canonicalized plan
     generatedAt: string;
     steps: CompiledStep[];
     unsatisfiableSteps: PrincipleViolation[];

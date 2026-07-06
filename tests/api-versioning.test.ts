@@ -39,7 +39,10 @@ let tmpDir: string;
 let chatStore: ChatSessionStore;
 let originalPrefs: string | null = null;
 
-function fetchRaw(method: string, path: string): Promise<{ status: number; headers: http.IncomingMessage["headers"]; body: string }> {
+function fetchRaw(
+    method: string,
+    path: string,
+): Promise<{ status: number; headers: http.IncomingMessage["headers"]; body: string }> {
     return new Promise((resolve, reject) => {
         const req = http.request(
             {
@@ -50,11 +53,13 @@ function fetchRaw(method: string, path: string): Promise<{ status: number; heade
             },
             (res) => {
                 let payload = "";
-                res.on("data", (chunk: Buffer) => { payload += chunk; });
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
                 res.on("end", () => {
                     resolve({ status: res.statusCode!, headers: res.headers, body: payload });
                 });
-            }
+            },
         );
         req.on("error", reject);
         req.end();
@@ -63,8 +68,11 @@ function fetchRaw(method: string, path: string): Promise<{ status: number; heade
 
 function fetchJson(method: string, path: string): Promise<{ status: number; body: any }> {
     return fetchRaw(method, path).then(({ status, body }) => {
-        try { return { status, body: JSON.parse(body) }; }
-        catch { return { status, body }; }
+        try {
+            return { status, body: JSON.parse(body) };
+        } catch {
+            return { status, body };
+        }
     });
 }
 
@@ -81,9 +89,7 @@ describe("API Versioning (E3e)", function () {
         _setWorkspaceRootForTest(tmpDir);
 
         const realPrefsPath = preferencesPath();
-        originalPrefs = existsSync(realPrefsPath)
-            ? readFileSync(realPrefsPath, "utf-8")
-            : null;
+        originalPrefs = existsSync(realPrefsPath) ? readFileSync(realPrefsPath, "utf-8") : null;
         writeFileSync(realPrefsPath, JSON.stringify({ setupComplete: true }, null, 2) + "\n", "utf-8");
 
         const bus = new ActivityBus();
@@ -129,7 +135,11 @@ describe("API Versioning (E3e)", function () {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 100));
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows EPERM: non-fatal */ }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            /* Windows EPERM: non-fatal */
+        }
     });
 
     /* ── GET /api/v1/openapi.json ───────────────────────────────────── */
@@ -148,7 +158,10 @@ describe("API Versioning (E3e)", function () {
         it("has openapi field starting with 3.0", async () => {
             const res = await fetchJson("GET", "/api/v1/openapi.json");
             assert.ok(typeof res.body.openapi === "string", "openapi field is a string");
-            assert.ok(res.body.openapi.startsWith("3.0"), `openapi version should start with 3.0, got ${res.body.openapi}`);
+            assert.ok(
+                res.body.openapi.startsWith("3.0"),
+                `openapi version should start with 3.0, got ${res.body.openapi}`,
+            );
         });
 
         it("has info.title and info.version", async () => {

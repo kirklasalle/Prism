@@ -76,9 +76,7 @@ export function loadConstitution(path: string): Constitution {
     try {
         parsed = JSON.parse(raw);
     } catch (err) {
-        throw new ConstitutionValidationError([
-            `failed to parse JSON: ${(err as Error).message}`,
-        ]);
+        throw new ConstitutionValidationError([`failed to parse JSON: ${(err as Error).message}`]);
     }
     return validateConstitution(parsed);
 }

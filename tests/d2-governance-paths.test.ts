@@ -61,14 +61,10 @@ async function testTerminalGovernancePaths(): Promise<void> {
             rollbackPlan: undefined, // Missing rollback plan
             executionProfile: BUSINESS_PROFILE,
         });
-        assert.strictEqual(
-            policy.decision,
-            "deny",
-            "BUSINESS should deny terminal exec without rollback plan"
-        );
+        assert.strictEqual(policy.decision, "deny", "BUSINESS should deny terminal exec without rollback plan");
         assert(
             policy.reasons.some((r) => r.includes("rollback plan")),
-            "Reason should mention rollback plan"
+            "Reason should mention rollback plan",
         );
     }
 
@@ -96,11 +92,11 @@ async function testTerminalGovernancePaths(): Promise<void> {
         assert.strictEqual(
             policy.decision,
             "allow",
-            "INDIVIDUAL should allow terminal exec without rollback (with warning)"
+            "INDIVIDUAL should allow terminal exec without rollback (with warning)",
         );
         assert(
             policy.reasons.some((r) => r.includes("Warning")),
-            "INDIVIDUAL should include warning about missing rollback"
+            "INDIVIDUAL should include warning about missing rollback",
         );
     }
 
@@ -113,11 +109,7 @@ async function testTerminalGovernancePaths(): Promise<void> {
             rollbackPlan: "manual operator restore",
             executionProfile: INDIVIDUAL_PROFILE,
         });
-        assert.strictEqual(
-            policy.decision,
-            "require_approval",
-            "Terminal revoke should require approval"
-        );
+        assert.strictEqual(policy.decision, "require_approval", "Terminal revoke should require approval");
         assert.strictEqual(policy.tier, "tier3_approval", "Revoke should be tier3");
     }
 
@@ -133,16 +125,8 @@ async function testTerminalGovernancePaths(): Promise<void> {
         });
         assert.strictEqual(startResult.ok, true, "Terminal start should succeed");
         assert.strictEqual(startResult.output["state"], "running", "Session should be running");
-        assert.strictEqual(
-            startResult.sideEffects?.[0]?.action,
-            "start",
-            "Side effect should be recorded"
-        );
-        assert.strictEqual(
-            startResult.sideEffects?.[0]?.mutating,
-            true,
-            "Start is mutating operation"
-        );
+        assert.strictEqual(startResult.sideEffects?.[0]?.action, "start", "Side effect should be recorded");
+        assert.strictEqual(startResult.sideEffects?.[0]?.mutating, true, "Start is mutating operation");
     }
 
     // Test 8: Tool execution for terminal revoke (high-risk, non-reversible)
@@ -167,16 +151,8 @@ async function testTerminalGovernancePaths(): Promise<void> {
         });
         assert.strictEqual(revokeResult.ok, true, "Revoke should succeed");
         assert.strictEqual(revokeResult.output["state"], "revoked", "Session should be revoked");
-        assert.strictEqual(
-            revokeResult.sideEffects?.[0]?.action,
-            "revoke",
-            "Revoke action should be recorded"
-        );
-        assert.strictEqual(
-            revokeResult.sideEffects?.[0]?.reversible,
-            false,
-            "Revoke is non-reversible"
-        );
+        assert.strictEqual(revokeResult.sideEffects?.[0]?.action, "revoke", "Revoke action should be recorded");
+        assert.strictEqual(revokeResult.sideEffects?.[0]?.reversible, false, "Revoke is non-reversible");
     }
 }
 
@@ -222,11 +198,7 @@ async function testContainerGovernancePaths(): Promise<void> {
             rollbackPlan: undefined,
             executionProfile: BUSINESS_PROFILE,
         });
-        assert.strictEqual(
-            policy.decision,
-            "deny",
-            "BUSINESS should deny container create without rollback plan"
-        );
+        assert.strictEqual(policy.decision, "deny", "BUSINESS should deny container create without rollback plan");
     }
 
     // Test 4: REQUIRE_APPROVAL for container destroy (high-risk, non-reversible)
@@ -238,11 +210,7 @@ async function testContainerGovernancePaths(): Promise<void> {
             rollbackPlan: "recreate from known snapshot",
             executionProfile: INDIVIDUAL_PROFILE,
         });
-        assert.strictEqual(
-            policy.decision,
-            "require_approval",
-            "Container destroy should require approval"
-        );
+        assert.strictEqual(policy.decision, "require_approval", "Container destroy should require approval");
         assert.strictEqual(policy.tier, "tier3_approval", "Destroy should be tier3");
     }
 
@@ -255,11 +223,7 @@ async function testContainerGovernancePaths(): Promise<void> {
             rollbackPlan: "delete snapshot",
             executionProfile: BUSINESS_PROFILE,
         });
-        assert.strictEqual(
-            policy.decision,
-            "allow",
-            "Snapshot should be allowed with rollback plan"
-        );
+        assert.strictEqual(policy.decision, "allow", "Snapshot should be allowed with rollback plan");
     }
 
     // Test 6: Tool execution for container create
@@ -278,16 +242,8 @@ async function testContainerGovernancePaths(): Promise<void> {
         });
         assert.strictEqual(createResult.ok, true, "Container create should succeed");
         assert.strictEqual(createResult.output["state"], "created", "Sandbox should be created");
-        assert.strictEqual(
-            createResult.sideEffects?.[0]?.action,
-            "create",
-            "Create action should be recorded"
-        );
-        assert.strictEqual(
-            createResult.sideEffects?.[0]?.reversible,
-            true,
-            "Create is reversible (via destroy)"
-        );
+        assert.strictEqual(createResult.sideEffects?.[0]?.action, "create", "Create action should be recorded");
+        assert.strictEqual(createResult.sideEffects?.[0]?.reversible, true, "Create is reversible (via destroy)");
     }
 
     // Test 7: Tool execution for container snapshot and revert
@@ -328,11 +284,7 @@ async function testContainerGovernancePaths(): Promise<void> {
             },
         });
         assert.strictEqual(snapshotResult.ok, true);
-        assert.strictEqual(
-            snapshotResult.sideEffects?.[0]?.action,
-            "snapshot",
-            "Snapshot action recorded"
-        );
+        assert.strictEqual(snapshotResult.sideEffects?.[0]?.action, "snapshot", "Snapshot action recorded");
 
         // Revert to snapshot
         const revertResult = await tool.execute({
@@ -347,16 +299,8 @@ async function testContainerGovernancePaths(): Promise<void> {
             },
         });
         assert.strictEqual(revertResult.ok, true);
-        assert.strictEqual(
-            revertResult.sideEffects?.[0]?.action,
-            "revert",
-            "Revert action recorded"
-        );
-        assert.strictEqual(
-            revertResult.sideEffects?.[0]?.reversible,
-            false,
-            "Revert itself is non-reversible"
-        );
+        assert.strictEqual(revertResult.sideEffects?.[0]?.action, "revert", "Revert action recorded");
+        assert.strictEqual(revertResult.sideEffects?.[0]?.reversible, false, "Revert itself is non-reversible");
     }
 
     // Test 8: Tool execution for container destroy (non-reversible)
@@ -384,16 +328,8 @@ async function testContainerGovernancePaths(): Promise<void> {
             args: { action: "destroy", sandboxId: "destroy-test-sandbox" },
         });
         assert.strictEqual(destroyResult.ok, true);
-        assert.strictEqual(
-            destroyResult.sideEffects?.[0]?.action,
-            "destroy",
-            "Destroy action recorded"
-        );
-        assert.strictEqual(
-            destroyResult.sideEffects?.[0]?.reversible,
-            false,
-            "Destroy is non-reversible"
-        );
+        assert.strictEqual(destroyResult.sideEffects?.[0]?.action, "destroy", "Destroy action recorded");
+        assert.strictEqual(destroyResult.sideEffects?.[0]?.reversible, false, "Destroy is non-reversible");
 
         // Verify status fails after destroy
         const statusResult = await tool.execute({

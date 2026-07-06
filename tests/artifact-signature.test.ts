@@ -60,6 +60,10 @@ export async function testArtifactSignature(): Promise<void> {
         assert(!after.ok, "revoked key rejected");
         assert(findReleaseKey(registry, "test-key") === null, "revoked key not findable");
     } finally {
-        try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+            rmSync(tmp, { recursive: true, force: true });
+        } catch {
+            /* best effort */
+        }
     }
 }

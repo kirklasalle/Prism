@@ -35,9 +35,39 @@ import {
     type ResourceQuota,
 } from "./container-sandbox-adapter.js";
 
-const TIER1_KEYWORDS = ["ls", "cat", "grep", "pwd", "echo", "head", "tail", "wc", "find", "stat", "file", "ping", "nslookup", "dig", "curl", "wget"];
+const TIER1_KEYWORDS = [
+    "ls",
+    "cat",
+    "grep",
+    "pwd",
+    "echo",
+    "head",
+    "tail",
+    "wc",
+    "find",
+    "stat",
+    "file",
+    "ping",
+    "nslookup",
+    "dig",
+    "curl",
+    "wget",
+];
 const TIER2_KEYWORDS = ["mkdir", "touch", "cp", "mv", "chmod", "chgrp", "ln", "tar", "zip", "gzip", "sed", "awk"];
-const TIER3_KEYWORDS = ["rm", "sudo", "reboot", "dd", "mkfs", "halt", "shutdown", "kill", "chown", "fdisk", "umount", "fsck"];
+const TIER3_KEYWORDS = [
+    "rm",
+    "sudo",
+    "reboot",
+    "dd",
+    "mkfs",
+    "halt",
+    "shutdown",
+    "kill",
+    "chown",
+    "fdisk",
+    "umount",
+    "fsck",
+];
 
 /**
  * Real-Docker backed container adapter.
@@ -103,7 +133,8 @@ export class DockerContainerAdapter {
     private initializeDatabase(): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             this.db.serialize(() => {
-                this.db.run(`
+                this.db.run(
+                    `
                     CREATE TABLE IF NOT EXISTS docker_containers (
                         container_id TEXT PRIMARY KEY,
                         docker_id TEXT NOT NULL,
@@ -116,9 +147,14 @@ export class DockerContainerAdapter {
                         started_at TEXT,
                         stopped_at TEXT
                     )
-                `, (err: any) => {
-                    if (err) { reject(err); return; }
-                    this.db.run(`
+                `,
+                    (err: any) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+                        this.db.run(
+                            `
                         CREATE TABLE IF NOT EXISTS docker_container_snapshots (
                             snapshot_id TEXT PRIMARY KEY,
                             container_id TEXT NOT NULL,
@@ -129,9 +165,14 @@ export class DockerContainerAdapter {
                             created_at TEXT NOT NULL,
                             parent_snapshot_id TEXT
                         )
-                    `, (snapErr: any) => {
-                        if (snapErr) { reject(snapErr); return; }
-                        this.db.run(`
+                    `,
+                            (snapErr: any) => {
+                                if (snapErr) {
+                                    reject(snapErr);
+                                    return;
+                                }
+                                this.db.run(
+                                    `
                             CREATE TABLE IF NOT EXISTS docker_container_command_history (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 container_id TEXT NOT NULL,
@@ -143,11 +184,16 @@ export class DockerContainerAdapter {
                                 reason_code TEXT NOT NULL,
                                 timestamp TEXT NOT NULL
                             )
-                        `, (histErr: any) => {
-                            if (histErr) reject(histErr); else resolve();
-                        });
-                    });
-                });
+                        `,
+                                    (histErr: any) => {
+                                        if (histErr) reject(histErr);
+                                        else resolve();
+                                    },
+                                );
+                            },
+                        );
+                    },
+                );
             });
         });
     }
@@ -182,18 +228,21 @@ export class DockerContainerAdapter {
             AutoRemove: false,
         };
 
-        const dockerId = await this.engine.containerCreate({
-            Image: image,
-            Cmd: ["/bin/sh", "-c", "tail -f /dev/null"],
-            Tty: false,
-            AttachStdout: true,
-            AttachStderr: true,
-            HostConfig: hostConfig,
-            Labels: {
-                "prism.container_id": container_id,
-                "prism.execution_profile": this.executionProfile.segment,
+        const dockerId = await this.engine.containerCreate(
+            {
+                Image: image,
+                Cmd: ["/bin/sh", "-c", "tail -f /dev/null"],
+                Tty: false,
+                AttachStdout: true,
+                AttachStderr: true,
+                HostConfig: hostConfig,
+                Labels: {
+                    "prism.container_id": container_id,
+                    "prism.execution_profile": this.executionProfile.segment,
+                },
             },
-        }, `prism-${container_id}`);
+            `prism-${container_id}`,
+        );
 
         const container: Container = {
             container_id,
@@ -250,7 +299,11 @@ export class DockerContainerAdapter {
         return container;
     }
 
-    async execInContainer(container_id: string, command: string, timeout_ms = 30_000): Promise<ExecInContainerResponse> {
+    async execInContainer(
+        container_id: string,
+        command: string,
+        timeout_ms = 30_000,
+    ): Promise<ExecInContainerResponse> {
         await this.initializationPromise;
         const container = this.containers.get(container_id);
         const dockerId = this.dockerIds.get(container_id);
@@ -269,7 +322,9 @@ export class DockerContainerAdapter {
         await this.persistContainer(container, dockerId);
 
         const start = Date.now();
-        const { exitCode, stdout, stderr } = await this.engine.containerExec(dockerId, ["/bin/sh", "-c", command], { timeoutMs: timeout_ms });
+        const { exitCode, stdout, stderr } = await this.engine.containerExec(dockerId, ["/bin/sh", "-c", command], {
+            timeoutMs: timeout_ms,
+        });
         const response: ExecInContainerResponse = {
             container_id,
             command,
@@ -291,7 +346,11 @@ export class DockerContainerAdapter {
      * Snapshot via `POST /commit`. Repository is namespaced
      * `prism-snapshot/<container_id>` so PRISM can prune them on destroy.
      */
-    async snapshotContainer(container_id: string, snapshot_name: string, description?: string): Promise<ContainerSnapshot> {
+    async snapshotContainer(
+        container_id: string,
+        snapshot_name: string,
+        description?: string,
+    ): Promise<ContainerSnapshot> {
         await this.initializationPromise;
         const container = this.containers.get(container_id);
         const dockerId = this.dockerIds.get(container_id);
@@ -342,32 +401,43 @@ export class DockerContainerAdapter {
         const dockerId = this.dockerIds.get(container_id);
         if (!container || !dockerId) throw new Error(`Container ${container_id} not found`);
         const list = this.snapshots.get(container_id) ?? [];
-        const snap = list.find(s => s.snapshot_id === snapshot_id);
+        const snap = list.find((s) => s.snapshot_id === snapshot_id);
         if (!snap) throw new Error(`Snapshot ${snapshot_id} not found for container ${container_id}`);
 
         const imageRow = await this.lookupSnapshotImage(snapshot_id);
         if (!imageRow) throw new Error(`Snapshot ${snapshot_id} has no image_id row`);
 
         // Stop + remove old container.
-        try { await this.engine.containerStop(dockerId, 5); } catch { /* may already be stopped */ }
-        try { await this.engine.containerRemove(dockerId, { force: true }); } catch { /* may already be gone */ }
+        try {
+            await this.engine.containerStop(dockerId, 5);
+        } catch {
+            /* may already be stopped */
+        }
+        try {
+            await this.engine.containerRemove(dockerId, { force: true });
+        } catch {
+            /* may already be gone */
+        }
 
         // Recreate from snapshot image.
-        const newDockerId = await this.engine.containerCreate({
-            Image: imageRow,
-            Cmd: ["/bin/sh", "-c", "tail -f /dev/null"],
-            Tty: false,
-            HostConfig: {
-                Memory: container.resource_quota.memory_limit_mb * 1024 * 1024,
-                NanoCpus: Math.floor(container.resource_quota.cpu_limit * 1e9),
-                NetworkMode: this.executionProfile.segment === "business" ? "none" : "bridge",
-                AutoRemove: false,
+        const newDockerId = await this.engine.containerCreate(
+            {
+                Image: imageRow,
+                Cmd: ["/bin/sh", "-c", "tail -f /dev/null"],
+                Tty: false,
+                HostConfig: {
+                    Memory: container.resource_quota.memory_limit_mb * 1024 * 1024,
+                    NanoCpus: Math.floor(container.resource_quota.cpu_limit * 1e9),
+                    NetworkMode: this.executionProfile.segment === "business" ? "none" : "bridge",
+                    AutoRemove: false,
+                },
+                Labels: {
+                    "prism.container_id": container_id,
+                    "prism.reverted_to": snapshot_id,
+                },
             },
-            Labels: {
-                "prism.container_id": container_id,
-                "prism.reverted_to": snapshot_id,
-            },
-        }, `prism-${container_id}-r${Date.now()}`);
+            `prism-${container_id}-r${Date.now()}`,
+        );
         await this.engine.containerStart(newDockerId);
 
         this.dockerIds.set(container_id, newDockerId);
@@ -393,14 +463,22 @@ export class DockerContainerAdapter {
         await this.initializationPromise;
         const dockerId = this.dockerIds.get(container_id);
         if (!dockerId) throw new Error(`Container ${container_id} not found`);
-        try { await this.engine.containerRemove(dockerId, { force: true, removeVolumes: true }); } catch { /* tolerate already-gone */ }
+        try {
+            await this.engine.containerRemove(dockerId, { force: true, removeVolumes: true });
+        } catch {
+            /* tolerate already-gone */
+        }
 
         // Prune snapshot images.
         const list = this.snapshots.get(container_id) ?? [];
         for (const s of list) {
             const img = await this.lookupSnapshotImage(s.snapshot_id);
             if (img) {
-                try { await this.engine.imageRemove(img, true); } catch { /* tolerate */ }
+                try {
+                    await this.engine.imageRemove(img, true);
+                } catch {
+                    /* tolerate */
+                }
             }
         }
 
@@ -440,7 +518,11 @@ export class DockerContainerAdapter {
         return "tier2";
     }
 
-    private async routeThroughPolicy(container_id: string, tier: "tier1" | "tier2" | "tier3", command: string): Promise<"allow" | "deny" | "request_approval"> {
+    private async routeThroughPolicy(
+        container_id: string,
+        tier: "tier1" | "tier2" | "tier3",
+        command: string,
+    ): Promise<"allow" | "deny" | "request_approval"> {
         if (tier === "tier1") return "allow";
         if (tier === "tier3" && this.executionProfile.tier3ApprovalRequired) {
             this.activityBus.emit({
@@ -475,11 +557,18 @@ export class DockerContainerAdapter {
                  (container_id, docker_id, image, state, cpu_limit, memory_limit_mb, disk_limit_mb, created_at, started_at, stopped_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
-                    container.container_id, dockerId, container.image, container.state,
-                    container.resource_quota.cpu_limit, container.resource_quota.memory_limit_mb, container.resource_quota.disk_limit_mb,
-                    container.created_at, container.started_at ?? null, container.stopped_at ?? null,
+                    container.container_id,
+                    dockerId,
+                    container.image,
+                    container.state,
+                    container.resource_quota.cpu_limit,
+                    container.resource_quota.memory_limit_mb,
+                    container.resource_quota.disk_limit_mb,
+                    container.created_at,
+                    container.started_at ?? null,
+                    container.stopped_at ?? null,
                 ],
-                (err: any) => err ? reject(err) : resolve(),
+                (err: any) => (err ? reject(err) : resolve()),
             );
         });
     }
@@ -490,8 +579,17 @@ export class DockerContainerAdapter {
                 `INSERT INTO docker_container_snapshots
                  (snapshot_id, container_id, snapshot_name, description, image_id, command_count, created_at, parent_snapshot_id)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [snapshot.snapshot_id, snapshot.container_id, snapshot.snapshot_name, snapshot.description ?? null, imageId, snapshot.command_count, snapshot.created_at, snapshot.parent_snapshot_id ?? null],
-                (err: any) => err ? reject(err) : resolve(),
+                [
+                    snapshot.snapshot_id,
+                    snapshot.container_id,
+                    snapshot.snapshot_name,
+                    snapshot.description ?? null,
+                    imageId,
+                    snapshot.command_count,
+                    snapshot.created_at,
+                    snapshot.parent_snapshot_id ?? null,
+                ],
+                (err: any) => (err ? reject(err) : resolve()),
             );
         });
     }
@@ -502,8 +600,17 @@ export class DockerContainerAdapter {
                 `INSERT INTO docker_container_command_history
                  (container_id, command, exit_code, stdout, stderr, execution_time_ms, reason_code, timestamp)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [response.container_id, response.command, response.exit_code, response.stdout, response.stderr, response.execution_time_ms, reason_code, response.timestamp],
-                (err: any) => err ? reject(err) : resolve(),
+                [
+                    response.container_id,
+                    response.command,
+                    response.exit_code,
+                    response.stdout,
+                    response.stderr,
+                    response.execution_time_ms,
+                    reason_code,
+                    response.timestamp,
+                ],
+                (err: any) => (err ? reject(err) : resolve()),
             );
         });
     }
@@ -513,7 +620,7 @@ export class DockerContainerAdapter {
             this.db.get(
                 "SELECT image_id FROM docker_container_snapshots WHERE snapshot_id = ?",
                 [snapshot_id],
-                (err: any, row: { image_id?: string } | undefined) => err ? reject(err) : resolve(row?.image_id),
+                (err: any, row: { image_id?: string } | undefined) => (err ? reject(err) : resolve(row?.image_id)),
             );
         });
     }

@@ -39,11 +39,12 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
     let events: string[];
     let sessionId: string;
 
-    const TEST_HTML = '<html><head><title>Test Page</title></head><body>'
-        + '<h1 id="heading">Hello PRISM</h1>'
-        + '<a href="https://example.com">Link</a>'
-        + '<input id="input1" type="text"/>'
-        + '</body></html>';
+    const TEST_HTML =
+        "<html><head><title>Test Page</title></head><body>" +
+        '<h1 id="heading">Hello PRISM</h1>' +
+        '<a href="https://example.com">Link</a>' +
+        '<input id="input1" type="text"/>' +
+        "</body></html>";
 
     /** Inject fixture HTML into the current page via evaluate. */
     async function injectTestPage(): Promise<void> {
@@ -149,7 +150,9 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
     /* ── Type ───────────────────────────────────────────────────────────── */
 
     it("should type text into an input", async function () {
-        const result = await tool.execute(makeRequest({ action: "type", sessionId, selector: "#input1", text: "hello world" }));
+        const result = await tool.execute(
+            makeRequest({ action: "type", sessionId, selector: "#input1", text: "hello world" }),
+        );
         assert.strictEqual(result.ok, true, `Type failed: ${JSON.stringify(result.output)}`);
         assert.strictEqual((result.output as any).typed.length, 11);
     });
@@ -174,7 +177,9 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
     /* ── Console Logs ──────────────────────────────────────────────────── */
 
     it("should capture console output after evaluate", async function () {
-        await tool.execute(makeRequest({ action: "evaluate", sessionId, expression: "console.log('prism-test-marker')" }));
+        await tool.execute(
+            makeRequest({ action: "evaluate", sessionId, expression: "console.log('prism-test-marker')" }),
+        );
         const result = await tool.execute(makeRequest({ action: "get_console_logs", sessionId }));
         assert.strictEqual(result.ok, true);
         const logs = (result.output as any).logs;
@@ -245,13 +250,17 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
     /* ── Wait For Selector ─────────────────────────────────────────────── */
 
     it("should wait for existing selector successfully", async function () {
-        const result = await tool.execute(makeRequest({ action: "wait_for_selector", sessionId, selector: "#heading", timeout: 5000 }));
+        const result = await tool.execute(
+            makeRequest({ action: "wait_for_selector", sessionId, selector: "#heading", timeout: 5000 }),
+        );
         assert.strictEqual(result.ok, true);
         assert.strictEqual((result.output as any).found, true);
     });
 
     it("should return found=false for nonexistent selector", async function () {
-        const result = await tool.execute(makeRequest({ action: "wait_for_selector", sessionId, selector: "#nonexistent", timeout: 1000 }));
+        const result = await tool.execute(
+            makeRequest({ action: "wait_for_selector", sessionId, selector: "#nonexistent", timeout: 1000 }),
+        );
         assert.strictEqual(result.ok, true);
         assert.strictEqual((result.output as any).found, false);
     });
@@ -303,7 +312,9 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
     /* ── Profile-bound session ─────────────────────────────────────────── */
 
     it("should launch session with profile binding", async function () {
-        const createResult = await tool.execute(makeRequest({ action: "create_profile", email: "integration@test.com", segment: "individual" }));
+        const createResult = await tool.execute(
+            makeRequest({ action: "create_profile", email: "integration@test.com", segment: "individual" }),
+        );
         assert.strictEqual(createResult.ok, true);
         const profileId = (createResult.output as any).profileId;
 

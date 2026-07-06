@@ -90,7 +90,7 @@ export class A2ATaskAdapter {
 
     constructor(
         private readonly db: sqlite3.Database,
-        private readonly activityBus: ActivityBus
+        private readonly activityBus: ActivityBus,
     ) {
         this.initializationPromise = this.initializeDatabase();
     }
@@ -113,13 +113,16 @@ export class A2ATaskAdapter {
                     created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )`,
                 (err) => {
-                    if (err) { reject(err); return; }
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
                     this.db.run(
                         `CREATE INDEX IF NOT EXISTS idx_a2a_tasks_status
                          ON a2a_tasks (status)`,
-                        (err2) => (err2 ? reject(err2) : resolve())
+                        (err2) => (err2 ? reject(err2) : resolve()),
                     );
-                }
+                },
             );
         });
     }
@@ -145,8 +148,30 @@ export class A2ATaskAdapter {
     async submitTask(request: A2ATaskRequest): Promise<A2ATask> {
         await this.initializationPromise;
 
-        const task_id = (request.id && request.id.length > 0) ? request.id : randomUUID();
-        const character_id = request.metadata?.characterId ?? "aria-individual";
+        const task_id = request.id && request.id.length > 0 ? request.id : randomUUID();
+        let character_id = request.metadata?.characterId;
+        if (!character_id) {
+            try {
+                const activeAssign = await new Promise<{ character_id: string } | null>((resolve) => {
+                    this.db.get(
+                        `SELECT character_id FROM character_assignments WHERE state = 'active' ORDER BY updated_at DESC LIMIT 1`,
+                        [],
+                        (err, row) => {
+                            if (err) resolve(null);
+                            else resolve(row as { character_id: string } | null);
+                        },
+                    );
+                });
+                if (activeAssign) {
+                    character_id = activeAssign.character_id;
+                }
+            } catch {
+                // Ignore
+            }
+        }
+        if (!character_id) {
+            character_id = "unbound";
+        }
         const input_text = request.message.parts.map((p) => p.text).join("\n");
         const tier = this.classifyTaskTier(request.message);
         const policy_tier = tierToPolicyLabel(tier);
@@ -184,7 +209,7 @@ export class A2ATaskAdapter {
                     task.created_at,
                     task.completed_at,
                 ],
-                (err) => (err ? reject(err) : resolve())
+                (err) => (err ? reject(err) : resolve()),
             );
         });
 
@@ -217,9 +242,12 @@ export class A2ATaskAdapter {
                  FROM a2a_tasks WHERE task_id = ?`,
                 [taskId],
                 (err, row: A2ATask | undefined) => {
-                    if (err) { reject(err); return; }
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
                     resolve(row ?? null);
-                }
+                },
             );
         });
     }
@@ -244,7 +272,7 @@ export class A2ATaskAdapter {
             this.db.run(
                 `UPDATE a2a_tasks SET status = 'cancelled', completed_at = ? WHERE task_id = ?`,
                 [completed_at, taskId],
-                (err) => (err ? reject(err) : resolve())
+                (err) => (err ? reject(err) : resolve()),
             );
         });
 
@@ -272,7 +300,7 @@ export class A2ATaskAdapter {
             this.db.run(
                 `UPDATE a2a_tasks SET status = 'completed', output_text = ?, completed_at = ? WHERE task_id = ?`,
                 [outputText, completed_at, taskId],
-                (err) => (err ? reject(err) : resolve())
+                (err) => (err ? reject(err) : resolve()),
             );
         });
 
@@ -298,7 +326,7 @@ export class A2ATaskAdapter {
             this.db.run(
                 `UPDATE a2a_tasks SET status = 'failed', output_text = ?, completed_at = ? WHERE task_id = ?`,
                 [errorMessage, completed_at, taskId],
-                (err) => (err ? reject(err) : resolve())
+                (err) => (err ? reject(err) : resolve()),
             );
         });
 

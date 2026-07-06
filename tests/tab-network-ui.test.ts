@@ -138,10 +138,10 @@ describe("tab-network.js — Frontend Unit Tests", function () {
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
 
         const moduleUrl = pathToFileURL(join(tmpDir, "tab-network.js")).href;
-        mod = await import(moduleUrl) as TabNetworkModule;
+        mod = (await import(moduleUrl)) as TabNetworkModule;
 
         const coreUrl = pathToFileURL(join(tmpDir, "dashboard-core.js")).href;
-        core = await import(coreUrl) as MockCoreModule;
+        core = (await import(coreUrl)) as MockCoreModule;
     });
 
     after(() => {
@@ -392,9 +392,7 @@ describe("tab-network.js — Frontend Unit Tests", function () {
         });
 
         it("shows Recent Commands count header", () => {
-            core.state.networkCommandHistory = [
-                { command: "hostname", timestamp: new Date().toISOString(), ok: true },
-            ];
+            core.state.networkCommandHistory = [{ command: "hostname", timestamp: new Date().toISOString(), ok: true }];
             mod.renderNetworkConsolePanel();
             const el = dom.window.document.getElementById("network-history-list")!;
             assert.ok(el.innerHTML.includes("Recent Commands"), "Should show header");
@@ -438,7 +436,14 @@ describe("tab-network.js — Frontend Unit Tests", function () {
             input.value = "ipconfig";
             core._setMockResponseMap({
                 "/api/network/exec": { tier: "tier1", stdout: "data", stderr: "", exitCode: 0 },
-                "/api/network/telemetry": { totalCommands: 1, tier1Count: 1, tier2Count: 0, tier3Count: 0, errorCount: 0, lastCommand: "ipconfig" },
+                "/api/network/telemetry": {
+                    totalCommands: 1,
+                    tier1Count: 1,
+                    tier2Count: 0,
+                    tier3Count: 0,
+                    errorCount: 0,
+                    lastCommand: "ipconfig",
+                },
             });
             await mod.runNetworkCommand();
             assert.strictEqual(core.state.networkTelemetryData.totalCommands, 1, "Total should increment");
@@ -451,7 +456,14 @@ describe("tab-network.js — Frontend Unit Tests", function () {
             // Simulate exec request throwing, but telemetry refresh succeeds
             core._setMockResponse(Promise.reject(new Error("Command not recognized")));
             core._setMockResponseMap({
-                "/api/network/telemetry": { totalCommands: 1, tier1Count: 0, tier2Count: 0, tier3Count: 0, errorCount: 1, lastCommand: "bad_command" },
+                "/api/network/telemetry": {
+                    totalCommands: 1,
+                    tier1Count: 0,
+                    tier2Count: 0,
+                    tier3Count: 0,
+                    errorCount: 1,
+                    lastCommand: "bad_command",
+                },
             });
             // runNetworkCommand handles errors internally
             await mod.runNetworkCommand();
@@ -492,8 +504,14 @@ describe("tab-network.js — Frontend Unit Tests", function () {
             mod.renderNetworkSettingsPanel();
             core._setMockResponse({
                 interfaces: [
-                    { name: "Ethernet adapter Ethernet", details: "IPv4 Address: 192.168.1.100\nSubnet Mask: 255.255.255.0" },
-                    { name: "Wireless LAN adapter Wi-Fi", details: "IPv4 Address: 192.168.1.101\nSubnet Mask: 255.255.255.0" },
+                    {
+                        name: "Ethernet adapter Ethernet",
+                        details: "IPv4 Address: 192.168.1.100\nSubnet Mask: 255.255.255.0",
+                    },
+                    {
+                        name: "Wireless LAN adapter Wi-Fi",
+                        details: "IPv4 Address: 192.168.1.101\nSubnet Mask: 255.255.255.0",
+                    },
                 ],
             });
             await mod.refreshNetworkInterfaces();
@@ -638,7 +656,10 @@ describe("tab-network.js — Frontend Unit Tests", function () {
             mod.renderNetworkToolsPanel();
             const el = dom.window.document.getElementById("network-tools-panel")!;
             assert.ok(el.innerHTML.includes("Read-Only"), "Tier 1 should be labeled Read-Only");
-            assert.ok(el.innerHTML.includes("auto-allow") || el.innerHTML.includes("Diagnostics"), "Tier 1 should be auto-allow");
+            assert.ok(
+                el.innerHTML.includes("auto-allow") || el.innerHTML.includes("Diagnostics"),
+                "Tier 1 should be auto-allow",
+            );
         });
 
         it("tier-2 commands require conditional approval", () => {
@@ -711,7 +732,10 @@ describe("tab-network.js — Frontend Unit Tests", function () {
             mod.renderNetworkToolsPanel();
             const el = dom.window.document.getElementById("network-tools-panel")!;
             assert.ok(el.innerHTML.includes("curl -I"), "HTTP headers via curl -I");
-            assert.ok(el.innerHTML.includes("HEAD request") || el.innerHTML.includes("response headers"), "HEAD request described");
+            assert.ok(
+                el.innerHTML.includes("HEAD request") || el.innerHTML.includes("response headers"),
+                "HEAD request described",
+            );
         });
 
         it("covers DNS trace via dig +trace", () => {
@@ -774,7 +798,14 @@ describe("tab-network.js — Frontend Unit Tests", function () {
             input.value = "net use";
             core._setMockResponseMap({
                 "/api/network/exec": { tier: "tier2", stdout: "New connections...", stderr: "", exitCode: 0 },
-                "/api/network/telemetry": { totalCommands: 1, tier1Count: 0, tier2Count: 1, tier3Count: 0, errorCount: 0, lastCommand: "net use" },
+                "/api/network/telemetry": {
+                    totalCommands: 1,
+                    tier1Count: 0,
+                    tier2Count: 1,
+                    tier3Count: 0,
+                    errorCount: 0,
+                    lastCommand: "net use",
+                },
             });
             await mod.runNetworkCommand();
             assert.strictEqual(core.state.networkTelemetryData.tier2Count, 1, "Tier 2 should increment");
@@ -786,7 +817,14 @@ describe("tab-network.js — Frontend Unit Tests", function () {
             input.value = "netsh interface set";
             core._setMockResponseMap({
                 "/api/network/exec": { tier: "tier3", stdout: "Ok.", stderr: "", exitCode: 0 },
-                "/api/network/telemetry": { totalCommands: 1, tier1Count: 0, tier2Count: 0, tier3Count: 1, errorCount: 0, lastCommand: "netsh interface set" },
+                "/api/network/telemetry": {
+                    totalCommands: 1,
+                    tier1Count: 0,
+                    tier2Count: 0,
+                    tier3Count: 1,
+                    errorCount: 0,
+                    lastCommand: "netsh interface set",
+                },
             });
             await mod.runNetworkCommand();
             assert.strictEqual(core.state.networkTelemetryData.tier3Count, 1, "Tier 3 should increment");
@@ -803,7 +841,14 @@ describe("tab-network.js — Frontend Unit Tests", function () {
                 cmdCount++;
                 core._setMockResponseMap({
                     "/api/network/exec": { tier: "tier1", stdout: "out", stderr: "", exitCode: 0 },
-                    "/api/network/telemetry": { totalCommands: cmdCount, tier1Count: cmdCount, tier2Count: 0, tier3Count: 0, errorCount: 0, lastCommand: cmd },
+                    "/api/network/telemetry": {
+                        totalCommands: cmdCount,
+                        tier1Count: cmdCount,
+                        tier2Count: 0,
+                        tier3Count: 0,
+                        errorCount: 0,
+                        lastCommand: cmd,
+                    },
                 });
                 input.value = cmd;
                 await mod.runNetworkCommand();
@@ -825,7 +870,12 @@ describe("tab-network.js — Frontend Unit Tests", function () {
         it("console output shows stderr when present", async () => {
             const input = dom.window.document.getElementById("network-console-input") as any;
             input.value = "ping badhost";
-            core._setMockResponse({ tier: "tier1", stdout: "", stderr: "Ping request could not find host", exitCode: 1 });
+            core._setMockResponse({
+                tier: "tier1",
+                stdout: "",
+                stderr: "Ping request could not find host",
+                exitCode: 1,
+            });
             await mod.runNetworkCommand();
             const output = dom.window.document.getElementById("network-console-output")!;
             assert.ok(output.textContent!.includes("STDERR"), "Should show STDERR section");

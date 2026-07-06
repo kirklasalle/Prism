@@ -76,21 +76,21 @@ export class SessionPackageSqliteStore {
         `);
 
         this.ensureColumns("session_packages", [
-            { name: "title",                definition: "TEXT NOT NULL DEFAULT 'Session Package'" },
-            { name: "area_of_interest",     definition: "TEXT" },
-            { name: "objective",            definition: "TEXT" },
-            { name: "success_criteria",     definition: "TEXT" },
-            { name: "dependencies",         definition: "TEXT NOT NULL DEFAULT '[]'" },
-            { name: "last_run_at",          definition: "TEXT" },
-            { name: "last_export_at",       definition: "TEXT" },
+            { name: "title", definition: "TEXT NOT NULL DEFAULT 'Session Package'" },
+            { name: "area_of_interest", definition: "TEXT" },
+            { name: "objective", definition: "TEXT" },
+            { name: "success_criteria", definition: "TEXT" },
+            { name: "dependencies", definition: "TEXT NOT NULL DEFAULT '[]'" },
+            { name: "last_run_at", definition: "TEXT" },
+            { name: "last_export_at", definition: "TEXT" },
             { name: "export_artifact_path", definition: "TEXT" },
         ]);
         this.ensureColumns("session_package_history", [
-            { name: "title",             definition: "TEXT NOT NULL DEFAULT 'Session Package'" },
-            { name: "previous_status",   definition: "TEXT" },
-            { name: "next_status",       definition: "TEXT" },
-            { name: "source",            definition: "TEXT NOT NULL DEFAULT 'dashboard_api'" },
-            { name: "message",           definition: "TEXT" },
+            { name: "title", definition: "TEXT NOT NULL DEFAULT 'Session Package'" },
+            { name: "previous_status", definition: "TEXT" },
+            { name: "next_status", definition: "TEXT" },
+            { name: "source", definition: "TEXT NOT NULL DEFAULT 'dashboard_api'" },
+            { name: "message", definition: "TEXT" },
             { name: "target_session_id", definition: "TEXT" },
         ]);
     }
@@ -106,7 +106,9 @@ export class SessionPackageSqliteStore {
     }
 
     upsertPackage(row: PackageRow): void {
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT OR REPLACE INTO session_packages
                 (package_id, title, area_of_interest, objective, success_criteria,
                  dependencies, status, created_at, updated_at, session_ids,
@@ -115,91 +117,94 @@ export class SessionPackageSqliteStore {
                 (:packageId, :title, :areaOfInterest, :objective, :successCriteria,
                  :dependencies, :status, :createdAt, :updatedAt, :sessionIds,
                  :lastRunAt, :lastExportAt, :exportArtifactPath)
-        `).run({
-            packageId: row.packageId,
-            title: row.title,
-            areaOfInterest: row.areaOfInterest ?? null,
-            objective: row.objective ?? null,
-            successCriteria: row.successCriteria ?? null,
-            dependencies: JSON.stringify(row.dependencies),
-            status: row.status,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-            sessionIds: JSON.stringify(row.sessionIds),
-            lastRunAt: row.lastRunAt ?? null,
-            lastExportAt: row.lastExportAt ?? null,
-            exportArtifactPath: row.exportArtifactPath ?? null,
-        });
+        `,
+            )
+            .run({
+                packageId: row.packageId,
+                title: row.title,
+                areaOfInterest: row.areaOfInterest ?? null,
+                objective: row.objective ?? null,
+                successCriteria: row.successCriteria ?? null,
+                dependencies: JSON.stringify(row.dependencies),
+                status: row.status,
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+                sessionIds: JSON.stringify(row.sessionIds),
+                lastRunAt: row.lastRunAt ?? null,
+                lastExportAt: row.lastExportAt ?? null,
+                exportArtifactPath: row.exportArtifactPath ?? null,
+            });
     }
 
     deletePackage(packageId: string): void {
-        this.db.prepare(
-            "DELETE FROM session_packages WHERE package_id = :packageId"
-        ).run({ packageId });
+        this.db.prepare("DELETE FROM session_packages WHERE package_id = :packageId").run({ packageId });
     }
 
     listPackages(): PackageRow[] {
-        const rows = this.db.prepare(
-            "SELECT * FROM session_packages ORDER BY updated_at DESC"
-        ).all({}) as Record<string, unknown>[];
+        const rows = this.db.prepare("SELECT * FROM session_packages ORDER BY updated_at DESC").all({}) as Record<
+            string,
+            unknown
+        >[];
         return rows.map((row) => this.rowToPackage(row));
     }
 
     getPackage(packageId: string): PackageRow | undefined {
-        const row = this.db.prepare(
-            "SELECT * FROM session_packages WHERE package_id = :packageId"
-        ).get({ packageId }) as Record<string, unknown> | undefined;
+        const row = this.db
+            .prepare("SELECT * FROM session_packages WHERE package_id = :packageId")
+            .get({ packageId }) as Record<string, unknown> | undefined;
         return row ? this.rowToPackage(row) : undefined;
     }
 
     countPackages(): number {
-        const result = this.db.prepare(
-            "SELECT COUNT(*) as cnt FROM session_packages"
-        ).get({}) as { cnt: number };
+        const result = this.db.prepare("SELECT COUNT(*) as cnt FROM session_packages").get({}) as { cnt: number };
         return result.cnt;
     }
 
     upsertHistoryEntry(row: PackageHistoryRow): void {
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT OR IGNORE INTO session_package_history
                 (history_id, package_id, title, action, timestamp, status,
                  previous_status, next_status, source, message, target_session_id)
             VALUES
                 (:historyId, :packageId, :title, :action, :timestamp, :status,
                  :previousStatus, :nextStatus, :source, :message, :targetSessionId)
-        `).run({
-            historyId: row.historyId,
-            packageId: row.packageId,
-            title: row.title,
-            action: row.action,
-            timestamp: row.timestamp,
-            status: row.status,
-            previousStatus: row.previousStatus ?? null,
-            nextStatus: row.nextStatus ?? null,
-            source: row.source,
-            message: row.message ?? null,
-            targetSessionId: row.targetSessionId ?? null,
-        });
+        `,
+            )
+            .run({
+                historyId: row.historyId,
+                packageId: row.packageId,
+                title: row.title,
+                action: row.action,
+                timestamp: row.timestamp,
+                status: row.status,
+                previousStatus: row.previousStatus ?? null,
+                nextStatus: row.nextStatus ?? null,
+                source: row.source,
+                message: row.message ?? null,
+                targetSessionId: row.targetSessionId ?? null,
+            });
     }
 
     listHistory(limit: number): PackageHistoryRow[] {
-        const rows = this.db.prepare(
-            "SELECT * FROM session_package_history ORDER BY timestamp DESC LIMIT :limit"
-        ).all({ limit: Math.max(1, limit) }) as Record<string, unknown>[];
+        const rows = this.db
+            .prepare("SELECT * FROM session_package_history ORDER BY timestamp DESC LIMIT :limit")
+            .all({ limit: Math.max(1, limit) }) as Record<string, unknown>[];
         return rows.map((row) => this.rowToHistory(row));
     }
 
     countHistory(): number {
-        const result = this.db.prepare(
-            "SELECT COUNT(*) as cnt FROM session_package_history"
-        ).get({}) as { cnt: number };
+        const result = this.db.prepare("SELECT COUNT(*) as cnt FROM session_package_history").get({}) as {
+            cnt: number;
+        };
         return result.cnt;
     }
 
     packageCountByStatus(): Record<string, number> {
-        const rows = this.db.prepare(
-            "SELECT status, COUNT(*) as cnt FROM session_packages GROUP BY status"
-        ).all({}) as Array<{ status: string; cnt: number }>;
+        const rows = this.db
+            .prepare("SELECT status, COUNT(*) as cnt FROM session_packages GROUP BY status")
+            .all({}) as Array<{ status: string; cnt: number }>;
         const result: Record<string, number> = {};
         for (const row of rows) {
             result[row.status] = row.cnt;
@@ -210,20 +215,26 @@ export class SessionPackageSqliteStore {
     packageCreatedPerDay(days: number): Array<{ day: string; count: number }> {
         // Use parameterized date filter to avoid injection
         const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().substring(0, 10);
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT substr(created_at, 1, 10) as day, COUNT(*) as count
             FROM session_packages
             WHERE substr(created_at, 1, 10) >= :cutoff
             GROUP BY day
             ORDER BY day ASC
-        `).all({ cutoff }) as Array<{ day: string; count: number }>;
+        `,
+            )
+            .all({ cutoff }) as Array<{ day: string; count: number }>;
         return rows;
     }
 
     actionFrequency(limit: number): Array<{ action: string; count: number }> {
-        const rows = this.db.prepare(
-            "SELECT action, COUNT(*) as count FROM session_package_history GROUP BY action ORDER BY count DESC LIMIT :limit"
-        ).all({ limit: Math.max(1, limit) }) as Array<{ action: string; count: number }>;
+        const rows = this.db
+            .prepare(
+                "SELECT action, COUNT(*) as count FROM session_package_history GROUP BY action ORDER BY count DESC LIMIT :limit",
+            )
+            .all({ limit: Math.max(1, limit) }) as Array<{ action: string; count: number }>;
         return rows;
     }
 

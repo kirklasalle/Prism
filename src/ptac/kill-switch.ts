@@ -166,7 +166,10 @@ export class PtacKillSwitch {
                 };
             };
             const listener = new mod.GlobalKeyboardListener();
-            const wantParts = this.opts.panicChord.toLowerCase().split("+").map((s) => s.trim());
+            const wantParts = this.opts.panicChord
+                .toLowerCase()
+                .split("+")
+                .map((s) => s.trim());
             const wantKey = wantParts[wantParts.length - 1];
             const wantCtrl = wantParts.includes("ctrl");
             const wantAlt = wantParts.includes("alt");

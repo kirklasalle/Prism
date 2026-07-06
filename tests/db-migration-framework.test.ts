@@ -14,7 +14,12 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, unlinkSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { runMigrations, getSchemaVersion, listMigrations, type Migration } from "../src/core/database/migrations/framework.js";
+import {
+    runMigrations,
+    getSchemaVersion,
+    listMigrations,
+    type Migration,
+} from "../src/core/database/migrations/framework.js";
 import { MIGRATIONS } from "../src/core/database/migrations/definitions.js";
 
 const TEST_DB = "./prism-test-migration-framework.db";
@@ -115,9 +120,9 @@ describe("Canonical Schema Migrations", () => {
     });
 
     it("creates all expected tables", () => {
-        const tables = db.prepare(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
-        ).all() as { name: string }[];
+        const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as {
+            name: string;
+        }[];
         const tableNames = tables.map((t) => t.name);
 
         assert.ok(tableNames.includes("activity_events"));

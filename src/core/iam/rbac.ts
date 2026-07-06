@@ -18,9 +18,7 @@ export type RoleName = DefaultRoleName;
 /** Lower index = higher privilege. */
 const ROLE_ORDER: readonly RoleName[] = ["root", "admin", "operator", "viewer"] as const;
 
-const ROLE_INDEX: Record<string, number> = Object.freeze(
-    Object.fromEntries(ROLE_ORDER.map((r, i) => [r, i])),
-);
+const ROLE_INDEX: Record<string, number> = Object.freeze(Object.fromEntries(ROLE_ORDER.map((r, i) => [r, i])));
 
 /**
  * The minimal authenticated identity carried by `AuthResult.principal`.
@@ -78,7 +76,11 @@ export function highestRole(principal: IamPrincipal | undefined | null): RoleNam
 export class RbacError extends Error {
     readonly statusCode = 403;
     readonly code = "forbidden";
-    constructor(message: string, readonly required: RoleName, readonly held: readonly string[]) {
+    constructor(
+        message: string,
+        readonly required: RoleName,
+        readonly held: readonly string[],
+    ) {
         super(message);
         this.name = "RbacError";
     }
@@ -90,11 +92,7 @@ export function requireRole(principal: IamPrincipal | undefined | null, required
         throw new RbacError("authentication required", required, []);
     }
     if (!principalHasRole(principal, required)) {
-        throw new RbacError(
-            `role '${required}' or higher required`,
-            required,
-            principal.roles,
-        );
+        throw new RbacError(`role '${required}' or higher required`, required, principal.roles);
     }
 }
 

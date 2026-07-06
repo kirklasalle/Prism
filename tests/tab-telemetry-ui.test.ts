@@ -160,7 +160,7 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
         (global as any).render = () => {};
 
         const moduleUrl = pathToFileURL(join(tmpDir, "tab-telemetry.js")).href;
-        mod = await import(moduleUrl) as TabTelemetryModule;
+        mod = (await import(moduleUrl)) as TabTelemetryModule;
 
         const coreUrl = pathToFileURL(join(tmpDir, "dashboard-core.js")).href;
         mockCore = await import(coreUrl);
@@ -267,14 +267,28 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
                 caps: { sessionCap: null, dailyCap: null, monthlyCap: null },
                 byModel: [
                     {
-                        model: "gpt-4o", label: "GPT-4o", provider: "openai", tier: 5,
-                        requests: 30, inputTokens: 40000, outputTokens: 10000,
-                        inputPer1M: 2.50, outputPer1M: 10.00, totalCostUsd: 1.00,
+                        model: "gpt-4o",
+                        label: "GPT-4o",
+                        provider: "openai",
+                        tier: 5,
+                        requests: 30,
+                        inputTokens: 40000,
+                        outputTokens: 10000,
+                        inputPer1M: 2.5,
+                        outputPer1M: 10.0,
+                        totalCostUsd: 1.0,
                     },
                     {
-                        model: "claude-3-haiku", label: "Claude 3 Haiku", provider: "anthropic", tier: 3,
-                        requests: 12, inputTokens: 10000, outputTokens: 2000,
-                        inputPer1M: 0.25, outputPer1M: 1.25, totalCostUsd: 0.25,
+                        model: "claude-3-haiku",
+                        label: "Claude 3 Haiku",
+                        provider: "anthropic",
+                        tier: 3,
+                        requests: 12,
+                        inputTokens: 10000,
+                        outputTokens: 2000,
+                        inputPer1M: 0.25,
+                        outputPer1M: 1.25,
+                        totalCostUsd: 0.25,
                     },
                 ],
             };
@@ -290,7 +304,10 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("shows 'No LLM calls recorded yet' when byModel is empty", () => {
             mockState.usageSummary = {
-                totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, totalRequests: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalRequests: 0,
                 caps: { sessionCap: null, dailyCap: null, monthlyCap: null },
                 byModel: [],
             };
@@ -301,9 +318,14 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("shows progress bars when caps are set", () => {
             mockState.usageSummary = {
-                totalCostUsd: 0.5, totalInputTokens: 1000, totalOutputTokens: 500, totalRequests: 5,
-                sessionCostUsd: 0.3, dailyCostUsd: 0.5, monthlyCostUsd: 0.5,
-                caps: { sessionCap: 1.00, dailyCap: 5.00, monthlyCap: 20.00 },
+                totalCostUsd: 0.5,
+                totalInputTokens: 1000,
+                totalOutputTokens: 500,
+                totalRequests: 5,
+                sessionCostUsd: 0.3,
+                dailyCostUsd: 0.5,
+                monthlyCostUsd: 0.5,
+                caps: { sessionCap: 1.0, dailyCap: 5.0, monthlyCap: 20.0 },
                 byModel: [],
             };
             mod.renderUsagePanel();
@@ -328,7 +350,10 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("formats large token counts with K/M suffixes", () => {
             mockState.usageSummary = {
-                totalCostUsd: 0, totalInputTokens: 1500000, totalOutputTokens: 2500, totalRequests: 1,
+                totalCostUsd: 0,
+                totalInputTokens: 1500000,
+                totalOutputTokens: 2500,
+                totalRequests: 1,
                 caps: { sessionCap: null, dailyCap: null, monthlyCap: null },
                 byModel: [],
             };
@@ -340,11 +365,36 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("shows tier labels in model table", () => {
             mockState.usageSummary = {
-                totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, totalRequests: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalRequests: 0,
                 caps: { sessionCap: null, dailyCap: null, monthlyCap: null },
                 byModel: [
-                    { model: "m1", label: "m1", provider: "p", tier: 5, requests: 1, inputTokens: 0, outputTokens: 0, inputPer1M: 0, outputPer1M: 0, totalCostUsd: 0 },
-                    { model: "m2", label: "m2", provider: "p", tier: 0, requests: 1, inputTokens: 0, outputTokens: 0, inputPer1M: 0, outputPer1M: 0, totalCostUsd: 0 },
+                    {
+                        model: "m1",
+                        label: "m1",
+                        provider: "p",
+                        tier: 5,
+                        requests: 1,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        inputPer1M: 0,
+                        outputPer1M: 0,
+                        totalCostUsd: 0,
+                    },
+                    {
+                        model: "m2",
+                        label: "m2",
+                        provider: "p",
+                        tier: 0,
+                        requests: 1,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        inputPer1M: 0,
+                        outputPer1M: 0,
+                        totalCostUsd: 0,
+                    },
                 ],
             };
             mod.renderUsagePanel();
@@ -359,11 +409,36 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
     describe("setUsageSort", () => {
         it("re-renders with active sort class on the selected button", () => {
             mockState.usageSummary = {
-                totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, totalRequests: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalRequests: 0,
                 caps: { sessionCap: null, dailyCap: null, monthlyCap: null },
                 byModel: [
-                    { model: "a", label: "Cheap", provider: "x", tier: 2, requests: 100, inputTokens: 0, outputTokens: 0, inputPer1M: 0, outputPer1M: 0, totalCostUsd: 0.01 },
-                    { model: "b", label: "Expensive", provider: "x", tier: 5, requests: 10, inputTokens: 0, outputTokens: 0, inputPer1M: 10, outputPer1M: 30, totalCostUsd: 5.00 },
+                    {
+                        model: "a",
+                        label: "Cheap",
+                        provider: "x",
+                        tier: 2,
+                        requests: 100,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        inputPer1M: 0,
+                        outputPer1M: 0,
+                        totalCostUsd: 0.01,
+                    },
+                    {
+                        model: "b",
+                        label: "Expensive",
+                        provider: "x",
+                        tier: 5,
+                        requests: 10,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        inputPer1M: 10,
+                        outputPer1M: 30,
+                        totalCostUsd: 5.0,
+                    },
                 ],
             };
             mod.setUsageSort("power");
@@ -377,11 +452,36 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("cost sort orders cheapest first", () => {
             mockState.usageSummary = {
-                totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, totalRequests: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalRequests: 0,
                 caps: { sessionCap: null, dailyCap: null, monthlyCap: null },
                 byModel: [
-                    { model: "a", label: "Expensive", provider: "x", tier: 5, requests: 10, inputTokens: 0, outputTokens: 0, inputPer1M: 10, outputPer1M: 30, totalCostUsd: 5.00 },
-                    { model: "b", label: "Cheap", provider: "x", tier: 2, requests: 100, inputTokens: 0, outputTokens: 0, inputPer1M: 0, outputPer1M: 0, totalCostUsd: 0.01 },
+                    {
+                        model: "a",
+                        label: "Expensive",
+                        provider: "x",
+                        tier: 5,
+                        requests: 10,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        inputPer1M: 10,
+                        outputPer1M: 30,
+                        totalCostUsd: 5.0,
+                    },
+                    {
+                        model: "b",
+                        label: "Cheap",
+                        provider: "x",
+                        tier: 2,
+                        requests: 100,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        inputPer1M: 0,
+                        outputPer1M: 0,
+                        totalCostUsd: 0.01,
+                    },
                 ],
             };
             mod.setUsageSort("cost");
@@ -792,8 +892,21 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("renders package history table", () => {
             mockState.sessionPackageHistory = [
-                { timestamp: new Date().toISOString(), title: "Core Package", packageId: "pkg-001", action: "export", status: "complete", message: "Exported successfully" },
-                { timestamp: new Date().toISOString(), title: "UI Kit", packageId: "pkg-002", action: "create", status: "running" },
+                {
+                    timestamp: new Date().toISOString(),
+                    title: "Core Package",
+                    packageId: "pkg-001",
+                    action: "export",
+                    status: "complete",
+                    message: "Exported successfully",
+                },
+                {
+                    timestamp: new Date().toISOString(),
+                    title: "UI Kit",
+                    packageId: "pkg-002",
+                    action: "create",
+                    status: "running",
+                },
             ];
             mod.renderPackageHistory();
             const el = dom.window.document.getElementById("package-history");
@@ -888,10 +1001,24 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
     describe("XSS safety", () => {
         it("escapes HTML in model labels", () => {
             mockState.usageSummary = {
-                totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, totalRequests: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalRequests: 0,
                 caps: { sessionCap: null, dailyCap: null, monthlyCap: null },
                 byModel: [
-                    { model: "<script>alert(1)</script>", label: "<img onerror=alert(1)>", provider: "x", tier: 3, requests: 1, inputTokens: 0, outputTokens: 0, inputPer1M: 0, outputPer1M: 0, totalCostUsd: 0 },
+                    {
+                        model: "<script>alert(1)</script>",
+                        label: "<img onerror=alert(1)>",
+                        provider: "x",
+                        tier: 3,
+                        requests: 1,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        inputPer1M: 0,
+                        outputPer1M: 0,
+                        totalCostUsd: 0,
+                    },
                 ],
             };
             mod.renderUsagePanel();
@@ -920,7 +1047,9 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("escapes HTML in alert messages", () => {
             mockState.prioritizedAlerts = {
-                criticalCount: 1, warningCount: 0, infoCount: 0,
+                criticalCount: 1,
+                warningCount: 0,
+                infoCount: 0,
                 alerts: [{ severity: "critical", message: '<img src=x onerror="alert(1)">' }],
             };
             mod.renderRetrievalObservability();
@@ -935,7 +1064,7 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
                 cadence: "hourly",
                 generatedAt: new Date().toISOString(),
                 metrics: { eventsTotal: 1, failures: 0 },
-                recommendations: ['<script>document.cookie</script>'],
+                recommendations: ["<script>document.cookie</script>"],
             };
             mod.renderSelfReview();
             const el = dom.window.document.getElementById("self-review");
@@ -944,7 +1073,14 @@ describe("tab-telemetry.js — Frontend Unit Tests", function () {
 
         it("escapes HTML in package history entries", () => {
             mockState.sessionPackageHistory = [
-                { timestamp: new Date().toISOString(), title: "<b>XSS</b>", packageId: "p1", action: "test", status: "ok", message: '<script>alert("xss")</script>' },
+                {
+                    timestamp: new Date().toISOString(),
+                    title: "<b>XSS</b>",
+                    packageId: "p1",
+                    action: "test",
+                    status: "ok",
+                    message: '<script>alert("xss")</script>',
+                },
             ];
             mod.renderPackageHistory();
             const el = dom.window.document.getElementById("package-history");

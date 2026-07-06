@@ -16,7 +16,11 @@ describe("Approval auto-run flow", () => {
         // Isolate prefs/env similar to other tests
         const isolatedPrefsDir = mkdtempSync(join(tmpdir(), "prism-prefs-test-"));
         const isolatedPrefsFile = join(isolatedPrefsDir, "prefs.json");
-        writeFileSync(isolatedPrefsFile, JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }) + "\n", "utf-8");
+        writeFileSync(
+            isolatedPrefsFile,
+            JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }) + "\n",
+            "utf-8",
+        );
         const activityBus = new ActivityBus();
         const approvalQueue = new ApprovalQueue();
         const chatSessionStore = new ChatSessionStore(":memory:");
@@ -42,18 +46,35 @@ describe("Approval auto-run flow", () => {
 
         // Capture broadcasted events
         const events: any[] = [];
-        dashboardService.broadcastEvent = (evt) => { events.push(evt); };
+        dashboardService.broadcastEvent = (evt) => {
+            events.push(evt);
+        };
 
         // Stub agenticExecutor so we don't call external LLMs; simulate events
         (dashboardService as any).agenticExecutor = {
-            execute: async (userMessage: string, conversation: any, systemPrompt: string, generateFn: any, sel: any, onEvent: any) => {
+            execute: async (
+                userMessage: string,
+                conversation: any,
+                systemPrompt: string,
+                generateFn: any,
+                sel: any,
+                onEvent: any,
+            ) => {
                 if (onEvent) {
-                    onEvent({ type: "tool_call", toolCall: { id: "t1", name: "browser_control", arguments: { url: "https://example.com" } }, iteration: 1 });
-                    onEvent({ type: "tool_result", toolResult: { id: "t1", name: "browser_control", ok: true, output: { navigated: true } }, iteration: 1 });
+                    onEvent({
+                        type: "tool_call",
+                        toolCall: { id: "t1", name: "browser_control", arguments: { url: "https://example.com" } },
+                        iteration: 1,
+                    });
+                    onEvent({
+                        type: "tool_result",
+                        toolResult: { id: "t1", name: "browser_control", ok: true, output: { navigated: true } },
+                        iteration: 1,
+                    });
                     onEvent({ type: "done", text: "Auto-run completed", iteration: 1 });
                 }
                 return { finalContent: "Auto-run completed", toolCallsExecuted: 1, iterations: 1, events: [] } as any;
-            }
+            },
         };
 
         // Prepare classification matching Tier-2 purchase pattern
@@ -76,6 +97,8 @@ describe("Approval auto-run flow", () => {
         const agentic = events.find((e) => e.type === "agentic_event");
         assert.ok(agentic, "agentic_event should be broadcast");
         // Cleanup
-        try { rmSync(isolatedPrefsDir, { recursive: true, force: true }); } catch { }
+        try {
+            rmSync(isolatedPrefsDir, { recursive: true, force: true });
+        } catch {}
     });
 });

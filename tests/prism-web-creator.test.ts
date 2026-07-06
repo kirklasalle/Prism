@@ -12,32 +12,32 @@ import {
     WebAssetsOptimizeTool,
     WebVisualAuditTool,
     PrismIdeModifyTool,
-    PrismIdeLintTool
+    PrismIdeLintTool,
 } from "../src/adapters/system/web-builder-tools.js";
 
 // Mock LLM Provider Manager for dependency-free, high-speed execution testing
 class MockLlmProviderManager extends LlmProviderManager {
-  public generateCalled = 0;
-  constructor() {
-    super(process.env, [], undefined, undefined, undefined, new ActivityBus());
-  }
+    public generateCalled = 0;
+    constructor() {
+        super(process.env, [], undefined, undefined, undefined, new ActivityBus());
+    }
 
-  override async generate(input: any, selection?: any): Promise<any> {
-    this.generateCalled++;
-    return {
-      providerId: "mock-provider",
-      model: "mock-model",
-      content: 'Step executed successfully! {"theme": "obsidian-glass", "compiledHtml": "<h1>Success</h1>"}',
-      toolCalls: []
-    };
-  }
+    override async generate(input: any, selection?: any): Promise<any> {
+        this.generateCalled++;
+        return {
+            providerId: "mock-provider",
+            model: "mock-model",
+            content: 'Step executed successfully! {"theme": "obsidian-glass", "compiledHtml": "<h1>Success</h1>"}',
+            toolCalls: [],
+        };
+    }
 }
 
 describe("PRISM Autonomous Web Builder & IDE System", () => {
     const workspaceRoot = process.cwd();
     const testProjectDir = join(workspaceRoot, "temp_prism_web_creator_test_dir");
     const testDbFile = join(workspaceRoot, "prism-activity.db");
-    
+
     // Tools
     const pageInitTool = new WebPageInitializeTool();
     const componentInjectTool = new WebComponentInjectTool();
@@ -82,8 +82,8 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
                 args: {
                     path: testProjectDir,
                     theme: "obsidian-glass",
-                    title: "Prism Test Site"
-                }
+                    title: "Prism Test Site",
+                },
             });
 
             assert.ok(result.ok);
@@ -98,7 +98,7 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
 
         it("injects component cards and appends layouts cleanly", async () => {
             const indexHtmlPath = join(testProjectDir, "index.html");
-            
+
             // Inject Hero Component
             const heroResult = await componentInjectTool.execute({
                 operation: "test",
@@ -108,8 +108,8 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
                     filePath: indexHtmlPath,
                     componentType: "hero",
                     title: "Visual Consensus Portal",
-                    subtitle: "Empowering next-gen operators"
-                }
+                    subtitle: "Empowering next-gen operators",
+                },
             });
             assert.ok(heroResult.ok);
 
@@ -120,8 +120,8 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
                 mutatesState: true,
                 args: {
                     filePath: indexHtmlPath,
-                    componentType: "features"
-                }
+                    componentType: "features",
+                },
             });
             assert.ok(featResult.ok);
 
@@ -133,7 +133,7 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
         it("performs surgical code modifications in Prism IDE", async () => {
             const styleCssPath = join(testProjectDir, "style.css");
             const originalCss = await fs.readFile(styleCssPath, "utf-8");
-            
+
             // Ensure search target exists
             assert.ok(originalCss.includes("--violet-glow: #8b5cf6;"));
 
@@ -144,8 +144,8 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
                 args: {
                     filePath: styleCssPath,
                     targetContent: "--violet-glow: #8b5cf6;",
-                    replacementContent: "--violet-glow: #aa11ff; /* surgically edited */"
-                }
+                    replacementContent: "--violet-glow: #aa11ff; /* surgically edited */",
+                },
             });
 
             assert.ok(modifyResult.ok);
@@ -156,14 +156,14 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
 
         it("detects and flags syntax/structure anomalies via Prism IDE linter", async () => {
             const indexHtmlPath = join(testProjectDir, "index.html");
-            
+
             const lintResult = await ideLintTool.execute({
                 operation: "test",
                 risk: "low",
                 mutatesState: true,
                 args: {
-                    filePath: indexHtmlPath
-                }
+                    filePath: indexHtmlPath,
+                },
             });
 
             assert.ok(lintResult.ok);
@@ -176,14 +176,14 @@ describe("PRISM Autonomous Web Builder & IDE System", () => {
 
         it("runs comprehensive visual and reference verification audits", async () => {
             const indexHtmlPath = join(testProjectDir, "index.html");
-            
+
             const auditResult = await visualAuditTool.execute({
                 operation: "test",
                 risk: "low",
                 mutatesState: true,
                 args: {
-                    filePath: indexHtmlPath
-                }
+                    filePath: indexHtmlPath,
+                },
             });
 
             assert.ok(auditResult.ok);

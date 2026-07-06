@@ -29,7 +29,7 @@ export async function testLlreSuite(): Promise<void> {
         steps: [{ tool: "search", success: true }],
         latencyMs: 1500,
         tokensConsumed: 100,
-        costUsd: 0.0015
+        costUsd: 0.0015,
     });
     assert.ok(metrics.teq >= 0);
     assert.ok(metrics.rsi >= 0);
@@ -39,7 +39,9 @@ export async function testLlreSuite(): Promise<void> {
     // 3. Test Database Layer
     const testDir = join(process.cwd(), "state-llre-test");
     if (existsSync(testDir)) {
-        try { rmSync(testDir, { recursive: true, force: true }); } catch {}
+        try {
+            rmSync(testDir, { recursive: true, force: true });
+        } catch {}
     }
     mkdirSync(testDir, { recursive: true });
 
@@ -63,7 +65,7 @@ export async function testLlreSuite(): Promise<void> {
             rsi: 0.9,
             csr: 0.75,
             tca: 1.0,
-            teq: score
+            teq: score,
         });
 
         // Query telemetry
@@ -79,7 +81,7 @@ export async function testLlreSuite(): Promise<void> {
                     if (event.operation === "llre.telemetry.recorded") {
                         resolve();
                     }
-                }
+                },
             });
         });
 
@@ -97,8 +99,8 @@ export async function testLlreSuite(): Promise<void> {
                 teq: 0.9,
                 rsi: 0.85,
                 csr: 0.7,
-                tca: 1.0
-            }
+                tca: 1.0,
+            },
         });
 
         await interceptPromise;
@@ -112,13 +114,13 @@ export async function testLlreSuite(): Promise<void> {
         const mockDashboard = {
             getActivityStore() {
                 return store;
-            }
+            },
         } as any;
 
         const apiHandler = new ApiHandler();
         const req = {
             url: `/api/llre/summary?sessionId=${sessionId}`,
-            method: "GET"
+            method: "GET",
         } as any;
 
         let resJson: any = null;
@@ -129,7 +131,7 @@ export async function testLlreSuite(): Promise<void> {
             },
             end(body: string) {
                 resJson = JSON.parse(body);
-            }
+            },
         } as any;
 
         const handled = apiHandler.match(req);
@@ -144,13 +146,51 @@ export async function testLlreSuite(): Promise<void> {
         assert.ok(resJson.tca > 0);
         assert.ok(resJson.costUsd > 0);
 
+        // 5. Test LLRE enable/disable preference toggling logic
+        const { readPreferences, writePreferences } = await import("../src/core/config/workspace-resolver.js");
+        const initialPrefs = readPreferences() || { lastModified: "" };
+        const originalLlreEnabled = initialPrefs?.runtimeSettings?.llreEnabled;
+        try {
+            // Disable LLRE
+            writePreferences({
+                runtimeSettings: {
+                    ...initialPrefs.runtimeSettings,
+                    llreEnabled: false,
+                },
+            });
+            const prefsAfterDisable = readPreferences();
+            assert.strictEqual(prefsAfterDisable?.runtimeSettings?.llreEnabled, false);
+
+            // Enable LLRE
+            writePreferences({
+                runtimeSettings: {
+                    ...initialPrefs.runtimeSettings,
+                    llreEnabled: true,
+                },
+            });
+            const prefsAfterEnable = readPreferences();
+            assert.strictEqual(prefsAfterEnable?.runtimeSettings?.llreEnabled, true);
+        } finally {
+            // Restore
+            writePreferences({
+                runtimeSettings: {
+                    ...initialPrefs.runtimeSettings,
+                    llreEnabled: originalLlreEnabled,
+                },
+            });
+        }
+
         console.log("✓ LLRE tests passed");
     } finally {
         if (store) {
-            try { store.close(); } catch {}
+            try {
+                store.close();
+            } catch {}
         }
         if (existsSync(testDir)) {
-            try { rmSync(testDir, { recursive: true, force: true }); } catch {}
+            try {
+                rmSync(testDir, { recursive: true, force: true });
+            } catch {}
         }
     }
 }

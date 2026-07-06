@@ -25,10 +25,7 @@ export async function testLlmProviderManager(): Promise<void> {
     assert.strictEqual(switched.activeProviderId, "ollama");
     assert.strictEqual(switched.activeModel, availableModel);
 
-    await assert.rejects(
-        () => manager.setActiveSelection("ollama", "missing-model"),
-        /Model is not available/i,
-    );
+    await assert.rejects(() => manager.setActiveSelection("ollama", "missing-model"), /Model is not available/i);
 
     const explicitOpenAi = await manager.getCatalog({ providerId: "openai", model: null });
     assert.strictEqual(explicitOpenAi.activeProviderId, "openai");
@@ -44,15 +41,17 @@ export async function testLlmProviderManager(): Promise<void> {
             PRISM_OLLAMA_MODELS: "llama3.1:8b",
             PRISM_OPENAI_MODELS: "gpt-4.1,gpt-5-mini",
         },
-        [{
-            providerId: "openai",
-            baseUrl: "https://api.openai.com/v1",
-            apiKeyHeader: "Authorization",
-            models: ["gpt-4.1", "gpt-5-mini"],
-            defaultModel: "gpt-5-mini",
-            updatedAt: new Date().toISOString(),
-            source: "test",
-        }],
+        [
+            {
+                providerId: "openai",
+                baseUrl: "https://api.openai.com/v1",
+                apiKeyHeader: "Authorization",
+                models: ["gpt-4.1", "gpt-5-mini"],
+                defaultModel: "gpt-5-mini",
+                updatedAt: new Date().toISOString(),
+                source: "test",
+            },
+        ],
         secretStore,
     );
 

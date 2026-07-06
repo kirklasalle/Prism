@@ -54,6 +54,10 @@ export async function testMultiTenantWorkspace(): Promise<void> {
         else process.env.PRISM_WORKSPACE_ROOT = prevRoot;
         if (prevFlag === undefined) delete process.env.PRISM_MULTI_TENANT;
         else process.env.PRISM_MULTI_TENANT = prevFlag;
-        try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+            rmSync(tmp, { recursive: true, force: true });
+        } catch {
+            /* best effort */
+        }
     }
 }

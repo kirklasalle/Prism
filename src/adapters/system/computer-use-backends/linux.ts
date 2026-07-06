@@ -88,10 +88,16 @@ export class LinuxComputerUseBackend implements ComputerUseBackend {
     async mouseDrag(x1: number, y1: number, x2: number, y2: number): Promise<void> {
         if (await this.hasXdotool) {
             await execFileAsync("xdotool", [
-                "mousemove", String(Math.round(x1)), String(Math.round(y1)),
-                "mousedown", "1",
-                "mousemove", String(Math.round(x2)), String(Math.round(y2)),
-                "mouseup", "1"
+                "mousemove",
+                String(Math.round(x1)),
+                String(Math.round(y1)),
+                "mousedown",
+                "1",
+                "mousemove",
+                String(Math.round(x2)),
+                String(Math.round(y2)),
+                "mouseup",
+                "1",
             ]);
             return;
         }
@@ -155,36 +161,57 @@ function which(bin: string): Promise<boolean> {
 /** Normalise a chord like "ctrl+shift+escape" to xdotool's expected form. */
 function normaliseForXdotool(chord: string): string {
     const map: Record<string, string> = {
-        ctrl: "ctrl", control: "ctrl",
+        ctrl: "ctrl",
+        control: "ctrl",
         shift: "shift",
-        alt: "alt", meta: "alt",
-        win: "super", super: "super",
-        enter: "Return", return: "Return",
-        esc: "Escape", escape: "Escape",
+        alt: "alt",
+        meta: "alt",
+        win: "super",
+        super: "super",
+        enter: "Return",
+        return: "Return",
+        esc: "Escape",
+        escape: "Escape",
         space: "space",
         tab: "Tab",
         backspace: "BackSpace",
-        delete: "Delete", del: "Delete",
-        up: "Up", down: "Down", left: "Left", right: "Right",
-        home: "Home", end: "End",
-        pageup: "Prior", page_up: "Prior", pagedown: "Next", page_down: "Next",
+        delete: "Delete",
+        del: "Delete",
+        up: "Up",
+        down: "Down",
+        left: "Left",
+        right: "Right",
+        home: "Home",
+        end: "End",
+        pageup: "Prior",
+        page_up: "Prior",
+        pagedown: "Next",
+        page_down: "Next",
     };
-    const parts = chord.split(/[+\-]/).map((p) => p.trim()).filter(Boolean);
+    const parts = chord
+        .split(/[+\-]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
     return parts.map((p) => map[p.toLowerCase()] ?? p).join("+");
 }
 
 /** Build wtype argv for a chord. Falls through to a single -k for the last token. */
 function wtypeArgsForChord(chord: string): string[] {
-    const parts = chord.split(/[+\-]/).map((p) => p.trim()).filter(Boolean);
+    const parts = chord
+        .split(/[+\-]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
     if (parts.length === 0) return [];
     const args: string[] = [];
     const main = parts[parts.length - 1];
     const modifiers = parts.slice(0, -1);
     const wtypeMod: Record<string, string> = {
-        ctrl: "ctrl", control: "ctrl",
+        ctrl: "ctrl",
+        control: "ctrl",
         shift: "shift",
         alt: "alt",
-        win: "logo", super: "logo",
+        win: "logo",
+        super: "logo",
     };
     for (const m of modifiers) {
         const flag = wtypeMod[m.toLowerCase()];

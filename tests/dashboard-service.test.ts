@@ -6,10 +6,7 @@ import { ActivityBus } from "../src/core/activity/bus.js";
 import { SqliteActivityStore } from "../src/core/activity/sqlite-store.js";
 import { ApprovalQueue } from "../src/core/approval/approval-queue.js";
 import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
-import {
-    DashboardService,
-    type TelemetrySummary,
-} from "../src/core/operator/dashboard-service.js";
+import { DashboardService, type TelemetrySummary } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 
 export async function testDashboardService(): Promise<void> {
@@ -17,9 +14,14 @@ export async function testDashboardService(): Promise<void> {
     // the "API key is missing" assertion to fail.
     const savedEnvKeys: Record<string, string | undefined> = {};
     const providerEnvVars = [
-        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY",
-        "MISTRAL_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY",
-        "XAI_API_KEY", "OPENROUTER_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "MISTRAL_API_KEY",
+        "GROQ_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "XAI_API_KEY",
+        "OPENROUTER_API_KEY",
     ];
     for (const key of providerEnvVars) {
         savedEnvKeys[key] = process.env[key];
@@ -38,10 +40,14 @@ export async function testDashboardService(): Promise<void> {
     process.env.PRISM_PREFERENCES_PATH = isolatedPrefsFile;
     // Seed setupComplete=true so GET / serves the dashboard shell instead of
     // redirecting to the setup wizard. The test asserts on dashboard shell HTML.
-    writeFileSync(isolatedPrefsFile, JSON.stringify({
-        setupComplete: true,
-        lastModified: new Date().toISOString(),
-    }) + "\n", "utf-8");
+    writeFileSync(
+        isolatedPrefsFile,
+        JSON.stringify({
+            setupComplete: true,
+            lastModified: new Date().toISOString(),
+        }) + "\n",
+        "utf-8",
+    );
     try {
         await _runDashboardServiceTests();
     } finally {
@@ -53,7 +59,9 @@ export async function testDashboardService(): Promise<void> {
         }
         try {
             rmSync(isolatedPrefsDir, { recursive: true, force: true });
-        } catch { /* best-effort */ }
+        } catch {
+            /* best-effort */
+        }
         // Restore auth setting
         if (savedAuthDisabled !== undefined) {
             process.env.PRISM_AUTH_DISABLED = savedAuthDisabled;
@@ -146,11 +154,15 @@ async function _runDashboardServiceTests(): Promise<void> {
     const initialCatalog = await dashboardService.getSessionLlmCatalog(session.sessionId);
     assert.ok(initialCatalog.providers.length > 0);
 
-    await dashboardService.saveProviderSettings("ollama", {
-        baseUrl: "http://127.0.0.1:11434",
-        models: ["mistral:7b"],
-        defaultModel: "mistral:7b",
-    }, "test");
+    await dashboardService.saveProviderSettings(
+        "ollama",
+        {
+            baseUrl: "http://127.0.0.1:11434",
+            models: ["mistral:7b"],
+            defaultModel: "mistral:7b",
+        },
+        "test",
+    );
 
     const updatedCatalog = await dashboardService.setSessionLlmSelection(session.sessionId, "ollama");
     assert.strictEqual(updatedCatalog.activeProviderId, "ollama");
@@ -160,12 +172,16 @@ async function _runDashboardServiceTests(): Promise<void> {
         /API key is missing/i,
     );
 
-    const savedProviderSettings = await dashboardService.saveProviderSettings("openai", {
-        baseUrl: "https://api.openai.com/v1",
-        apiKeyHeader: "Authorization",
-        models: ["gpt-4.1", "gpt-5-mini"],
-        defaultModel: "gpt-5-mini",
-    }, "test");
+    const savedProviderSettings = await dashboardService.saveProviderSettings(
+        "openai",
+        {
+            baseUrl: "https://api.openai.com/v1",
+            apiKeyHeader: "Authorization",
+            models: ["gpt-4.1", "gpt-5-mini"],
+            defaultModel: "gpt-5-mini",
+        },
+        "test",
+    );
     assert.strictEqual(savedProviderSettings.providerId, "openai");
     assert.strictEqual(savedProviderSettings.defaultModel, "gpt-5-mini");
     assert.strictEqual(savedProviderSettings.hasApiKey, false);
@@ -218,25 +234,38 @@ async function _runDashboardServiceTests(): Promise<void> {
     const discarded = dashboardService.discardSessionLlmConfigDraft(draftSession.sessionId);
     assert.strictEqual(discarded.draft, null);
 
-    const readinessBefore = await (dashboardService as unknown as {
-        getReadinessSnapshot: (sessionId?: string) => Promise<{ ready: boolean; requirements: Array<{ id: string; passed: boolean }> }>;
-    }).getReadinessSnapshot(session.sessionId);
+    const readinessBefore = await (
+        dashboardService as unknown as {
+            getReadinessSnapshot: (
+                sessionId?: string,
+            ) => Promise<{ ready: boolean; requirements: Array<{ id: string; passed: boolean }> }>;
+        }
+    ).getReadinessSnapshot(session.sessionId);
     assert.ok(Array.isArray(readinessBefore.requirements));
     assert.ok(readinessBefore.requirements.length > 0);
 
+    // Because new sessions carry configuration forward, this session starts ready!
     const unconfiguredSession = dashboardService.createChatSession({ title: "Onboarding Session", allowUnbound: true });
-    const readinessAfter = await (dashboardService as unknown as {
-        getReadinessSnapshot: (sessionId?: string) => Promise<{ ready: boolean; requirements: Array<{ id: string; passed: boolean }> }>;
-        emitReadinessAudit: (source: string, snapshot: { ready: boolean }) => void;
-    }).getReadinessSnapshot(unconfiguredSession.sessionId);
-    assert.strictEqual(readinessAfter.ready, false);
-    const bindingRequirement = readinessAfter.requirements.find((requirement) => requirement.id === "provider-model-selected");
+    const readinessAfter = await (
+        dashboardService as unknown as {
+            getReadinessSnapshot: (
+                sessionId?: string,
+            ) => Promise<{ ready: boolean; requirements: Array<{ id: string; passed: boolean }> }>;
+            emitReadinessAudit: (source: string, snapshot: { ready: boolean }) => void;
+        }
+    ).getReadinessSnapshot(unconfiguredSession.sessionId);
+    assert.strictEqual(readinessAfter.ready, true);
+    const bindingRequirement = readinessAfter.requirements.find(
+        (requirement) => requirement.id === "provider-model-selected",
+    );
     assert.ok(bindingRequirement);
-    assert.strictEqual(bindingRequirement!.passed, false);
+    assert.strictEqual(bindingRequirement!.passed, true);
 
-    (dashboardService as unknown as {
-        emitReadinessAudit: (source: string, snapshot: { ready: boolean }) => void;
-    }).emitReadinessAudit("test", readinessAfter);
+    (
+        dashboardService as unknown as {
+            emitReadinessAudit: (source: string, snapshot: { ready: boolean }) => void;
+        }
+    ).emitReadinessAudit("test", readinessAfter);
 
     const readinessAuditEvents = activityBus
         .listEvents()
@@ -251,9 +280,27 @@ async function _runDashboardServiceTests(): Promise<void> {
 
     // Phase 4 — Telemetry signal quality
     // Emit some known events into the bus so the window can detect them
-    activityBus.emit({ sessionId: "test-session", layer: "tool_execution", operation: "test.op_a", status: "succeeded", details: {} });
-    activityBus.emit({ sessionId: "test-session", layer: "tool_execution", operation: "test.op_a", status: "failed", details: {} });
-    activityBus.emit({ sessionId: "test-session", layer: "tool_execution", operation: "test.op_b", status: "succeeded", details: {} });
+    activityBus.emit({
+        sessionId: "test-session",
+        layer: "tool_execution",
+        operation: "test.op_a",
+        status: "succeeded",
+        details: {},
+    });
+    activityBus.emit({
+        sessionId: "test-session",
+        layer: "tool_execution",
+        operation: "test.op_a",
+        status: "failed",
+        details: {},
+    });
+    activityBus.emit({
+        sessionId: "test-session",
+        layer: "tool_execution",
+        operation: "test.op_b",
+        status: "succeeded",
+        details: {},
+    });
 
     // Validate telemetry summary via the service (start on ephemeral port, call API, stop)
     const telemetryBus = new ActivityBus();
@@ -262,7 +309,13 @@ async function _runDashboardServiceTests(): Promise<void> {
     const telemetryService = new DashboardService(
         new ApprovalQueue(),
         telemetryBus,
-        { sessionId: "tel-session", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString(), executionProfileSegment: "individual" },
+        {
+            sessionId: "tel-session",
+            environmentProfile: "test",
+            mode: "server",
+            startedAt: new Date().toISOString(),
+            executionProfileSegment: "individual",
+        },
         telemetryStore,
         [],
         0,
@@ -281,59 +334,95 @@ async function _runDashboardServiceTests(): Promise<void> {
     });
     telemetryService.start();
     await new Promise((resolve) => setTimeout(resolve, 20)); // wait for listen
-    const serverAddress = (telemetryService as unknown as { server: { address(): { port: number } | null } }).server.address();
+    const serverAddress = (
+        telemetryService as unknown as { server: { address(): { port: number } | null } }
+    ).server.address();
     const telemetryPort = serverAddress ? serverAddress.port : 0;
     assert.ok(telemetryPort > 0, "server should bind to a real port");
 
     // Emit events into this isolated bus
-    telemetryBus.emit({ sessionId: "tel-session", layer: "tool_execution", operation: "chat.send", status: "succeeded", details: {} });
-    telemetryBus.emit({ sessionId: "tel-session", layer: "tool_execution", operation: "chat.send", status: "failed", details: {} });
-    telemetryBus.emit({ sessionId: "tel-session", layer: "governance", operation: "approval.requested", status: "succeeded", details: {} });
+    telemetryBus.emit({
+        sessionId: "tel-session",
+        layer: "tool_execution",
+        operation: "chat.send",
+        status: "succeeded",
+        details: {},
+    });
+    telemetryBus.emit({
+        sessionId: "tel-session",
+        layer: "tool_execution",
+        operation: "chat.send",
+        status: "failed",
+        details: {},
+    });
+    telemetryBus.emit({
+        sessionId: "tel-session",
+        layer: "governance",
+        operation: "approval.requested",
+        status: "succeeded",
+        details: {},
+    });
 
     const { default: http } = await import("node:http");
 
-    const fetchJson = (path: string): Promise<unknown> => new Promise((resolve, reject) => {
-        http.get({ hostname: "127.0.0.1", port: telemetryPort, path }, (res) => {
-            let body = "";
-            res.on("data", (chunk: Buffer) => { body += chunk; });
-            res.on("end", () => {
-                try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
-            });
-        }).on("error", reject);
-    });
-
-    const fetchText = (path: string): Promise<string> => new Promise((resolve, reject) => {
-        http.get({ hostname: "127.0.0.1", port: telemetryPort, path }, (res) => {
-            let body = "";
-            res.on("data", (chunk: Buffer) => { body += chunk; });
-            res.on("end", () => resolve(body));
-        }).on("error", reject);
-    });
-
-    const requestJson = (method: string, path: string, body?: unknown): Promise<unknown> => new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port: telemetryPort,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try {
-                    resolve(JSON.parse(payload || "{}"));
-                } catch (error) {
-                    reject(error);
-                }
-            });
+    const fetchJson = (path: string): Promise<unknown> =>
+        new Promise((resolve, reject) => {
+            http.get({ hostname: "127.0.0.1", port: telemetryPort, path }, (res) => {
+                let body = "";
+                res.on("data", (chunk: Buffer) => {
+                    body += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve(JSON.parse(body));
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }).on("error", reject);
         });
-        req.on("error", reject);
-        if (body != null) {
-            req.write(JSON.stringify(body));
-        }
-        req.end();
-    });
+
+    const fetchText = (path: string): Promise<string> =>
+        new Promise((resolve, reject) => {
+            http.get({ hostname: "127.0.0.1", port: telemetryPort, path }, (res) => {
+                let body = "";
+                res.on("data", (chunk: Buffer) => {
+                    body += chunk;
+                });
+                res.on("end", () => resolve(body));
+            }).on("error", reject);
+        });
+
+    const requestJson = (method: string, path: string, body?: unknown): Promise<unknown> =>
+        new Promise((resolve, reject) => {
+            const req = http.request(
+                {
+                    hostname: "127.0.0.1",
+                    port: telemetryPort,
+                    path,
+                    method,
+                    headers: body == null ? {} : { "Content-Type": "application/json" },
+                },
+                (res) => {
+                    let payload = "";
+                    res.on("data", (chunk: Buffer) => {
+                        payload += chunk;
+                    });
+                    res.on("end", () => {
+                        try {
+                            resolve(JSON.parse(payload || "{}"));
+                        } catch (error) {
+                            reject(error);
+                        }
+                    });
+                },
+            );
+            req.on("error", reject);
+            if (body != null) {
+                req.write(JSON.stringify(body));
+            }
+            req.end();
+        });
 
     const shellHtml = await fetchText("/");
     assert.ok(shellHtml.includes('role="tablist" aria-label="Dashboard sections"'));
@@ -342,10 +431,10 @@ async function _runDashboardServiceTests(): Promise<void> {
     // to it and that the rules exist in that stylesheet.
     assert.ok(shellHtml.includes('href="/public/dashboard.css"'));
     const dashboardCss = await fetchText("/public/dashboard.css");
-    assert.ok(dashboardCss.includes('body.js-ready .tab-panel'));
-    assert.ok(dashboardCss.includes('body.js-ready .tab-panel.active'));
+    assert.ok(dashboardCss.includes("body.js-ready .tab-panel"));
+    assert.ok(dashboardCss.includes("body.js-ready .tab-panel.active"));
 
-    const summary = await fetchJson("/api/telemetry/summary?window=1d") as TelemetrySummary;
+    const summary = (await fetchJson("/api/telemetry/summary?window=1d")) as TelemetrySummary;
     assert.ok(summary.generatedAt, "generatedAt present");
     assert.strictEqual(summary.window.windowLabel, "1d");
     assert.ok(typeof summary.window.eventsTotal === "number");
@@ -367,11 +456,11 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(chatSendOp!.failures, 1);
 
     // Retrieval prioritized alerts — no collector → 501
-    const prioritizedRaw = await fetchJson("/api/retrieval/prioritized-alerts") as { error: string };
+    const prioritizedRaw = (await fetchJson("/api/retrieval/prioritized-alerts")) as { error: string };
     assert.ok(prioritizedRaw.error?.includes("not initialized"), "501 when no collector");
 
     // Runtime excellence snapshot
-    const runtimeExcellence = await fetchJson("/api/runtime/excellence?window=1d") as {
+    const runtimeExcellence = (await fetchJson("/api/runtime/excellence?window=1d")) as {
         generatedAt: string;
         window: string;
         metrics: {
@@ -396,7 +485,7 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.ok(runtimeExcellence.selfHealingSuggestions.length >= 1);
 
     // Release validation snapshot endpoint should always return a report envelope
-    const releaseValidation = await fetchJson("/api/release/validation/latest") as {
+    const releaseValidation = (await fetchJson("/api/release/validation/latest")) as {
         report: null | { generatedAt?: string; passed?: boolean; gates?: unknown[] };
     };
     assert.ok("report" in releaseValidation);
@@ -404,7 +493,7 @@ async function _runDashboardServiceTests(): Promise<void> {
         assert.ok(typeof releaseValidation.report.passed === "boolean");
     }
 
-    const releaseDecision = await fetchJson("/api/release/decision/latest") as {
+    const releaseDecision = (await fetchJson("/api/release/decision/latest")) as {
         report: null | { recommendation?: string; riskLevel?: string };
     };
     assert.ok("report" in releaseDecision);
@@ -435,7 +524,7 @@ async function _runDashboardServiceTests(): Promise<void> {
         },
     });
 
-    const traces = await fetchJson("/api/traces?limit=10") as {
+    const traces = (await fetchJson("/api/traces?limit=10")) as {
         traces: Array<{
             correlationId: string;
             eventCount: number;
@@ -450,7 +539,7 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(traceAbc!.failures, 1);
     assert.strictEqual(traceAbc!.status, "failed");
 
-    const selectedTrace = await fetchJson("/api/traces?correlationId=trace-abc") as {
+    const selectedTrace = (await fetchJson("/api/traces?correlationId=trace-abc")) as {
         selectedCorrelationId: string | null;
         selectedTraceEvents: Array<{ operation: string }>;
     };
@@ -462,14 +551,14 @@ async function _runDashboardServiceTests(): Promise<void> {
     // matching. Phase E3 routes were once authored against the un-normalized
     // form and silently 404'd; this block prevents a recurrence by exercising
     // each endpoint family through the real HTTP path.
-    const utilitiesResp = await fetchJson("/api/v1/utilities") as { utilities?: unknown[] };
+    const utilitiesResp = (await fetchJson("/api/v1/utilities")) as { utilities?: unknown[] };
     assert.ok(Array.isArray(utilitiesResp.utilities), "GET /api/v1/utilities must return { utilities: [...] }");
-    const riskResp = await fetchJson("/api/v1/tools/risk-overrides") as { overrides?: unknown[] };
+    const riskResp = (await fetchJson("/api/v1/tools/risk-overrides")) as { overrides?: unknown[] };
     assert.ok(Array.isArray(riskResp.overrides), "GET /api/v1/tools/risk-overrides must return { overrides: [...] }");
-    const cacResp = await fetchJson("/api/v1/cac/assignments") as { assignments?: unknown[] };
+    const cacResp = (await fetchJson("/api/v1/cac/assignments")) as { assignments?: unknown[] };
     assert.ok(Array.isArray(cacResp.assignments), "GET /api/v1/cac/assignments must return { assignments: [...] }");
     // Incubation gate is off by default → expect a structured 503, NOT a 404.
-    const incResp = await fetchJson("/api/v1/incubation/dlma/weights") as { error?: string; prototype?: boolean };
+    const incResp = (await fetchJson("/api/v1/incubation/dlma/weights")) as { error?: string; prototype?: boolean };
     assert.ok(
         incResp && (incResp.error === "incubation_disabled" || incResp.prototype === true),
         "GET /api/v1/incubation/* must reach the incubation gate (503/200 with prototype:true), not the final 404",
@@ -486,7 +575,13 @@ async function _runDashboardServiceTests(): Promise<void> {
     const packageService = new DashboardService(
         new ApprovalQueue(),
         packageBus,
-        { sessionId: "pkg-session", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString(), executionProfileSegment: "individual" },
+        {
+            sessionId: "pkg-session",
+            environmentProfile: "test",
+            mode: "server",
+            startedAt: new Date().toISOString(),
+            executionProfileSegment: "individual",
+        },
         packageChatStore,
         [],
         0,
@@ -499,34 +594,42 @@ async function _runDashboardServiceTests(): Promise<void> {
     );
     packageService.start();
     await new Promise((resolve) => setTimeout(resolve, 20));
-    const packageAddress = (packageService as unknown as { server: { address(): { port: number } | null } }).server.address();
+    const packageAddress = (
+        packageService as unknown as { server: { address(): { port: number } | null } }
+    ).server.address();
     const packagePort = packageAddress ? packageAddress.port : 0;
     assert.ok(packagePort > 0, "package service should bind to a real port");
 
-    const packageRequestJson = (method: string, path: string, body?: unknown): Promise<unknown> => new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port: packagePort,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try {
-                    resolve(JSON.parse(payload || "{}"));
-                } catch (error) {
-                    reject(error);
-                }
-            });
+    const packageRequestJson = (method: string, path: string, body?: unknown): Promise<unknown> =>
+        new Promise((resolve, reject) => {
+            const req = http.request(
+                {
+                    hostname: "127.0.0.1",
+                    port: packagePort,
+                    path,
+                    method,
+                    headers: body == null ? {} : { "Content-Type": "application/json" },
+                },
+                (res) => {
+                    let payload = "";
+                    res.on("data", (chunk: Buffer) => {
+                        payload += chunk;
+                    });
+                    res.on("end", () => {
+                        try {
+                            resolve(JSON.parse(payload || "{}"));
+                        } catch (error) {
+                            reject(error);
+                        }
+                    });
+                },
+            );
+            req.on("error", reject);
+            if (body != null) {
+                req.write(JSON.stringify(body));
+            }
+            req.end();
         });
-        req.on("error", reject);
-        if (body != null) {
-            req.write(JSON.stringify(body));
-        }
-        req.end();
-    });
 
     const chapterOne = packageService.createChatSession({ title: "Chapter One", allowUnbound: true });
     const chapterTwo = packageService.createChatSession({ title: "Chapter Two", allowUnbound: true });
@@ -550,14 +653,14 @@ async function _runDashboardServiceTests(): Promise<void> {
         details: { chatSessionId: chapterTwo.sessionId, reasonCode: "needs_approval" },
     });
 
-    const createdPackage = await packageRequestJson("POST", "/api/session-packages", {
+    const createdPackage = (await packageRequestJson("POST", "/api/session-packages", {
         title: "Release Binder",
         areaOfInterest: "release",
         objective: "Drive release evidence",
         successCriteria: "Binder exported",
         dependencies: ["release-validation"],
         sessionIds: [chapterOne.sessionId, chapterTwo.sessionId],
-    }) as {
+    })) as {
         package: {
             packageId: string;
             status: string;
@@ -570,16 +673,24 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(createdPackage.package.summary.completedChapterCount, 1);
     assert.strictEqual(createdPackage.package.summary.latestPolicyDecision, "require_approval");
 
-    const patchedPackage = await packageRequestJson("PATCH", "/api/session-packages/" + encodeURIComponent(createdPackage.package.packageId), {
-        status: "blocked",
-        historyAction: "workflow_blocked",
-        message: "Blocked during dashboard test.",
-    }) as {
+    const patchedPackage = (await packageRequestJson(
+        "PATCH",
+        "/api/session-packages/" + encodeURIComponent(createdPackage.package.packageId),
+        {
+            status: "blocked",
+            historyAction: "workflow_blocked",
+            message: "Blocked during dashboard test.",
+        },
+    )) as {
         package: { status: string };
     };
     assert.strictEqual(patchedPackage.package.status, "blocked");
 
-    const exportedPackage = await packageRequestJson("POST", "/api/session-packages/" + encodeURIComponent(createdPackage.package.packageId) + "/export", {}) as {
+    const exportedPackage = (await packageRequestJson(
+        "POST",
+        "/api/session-packages/" + encodeURIComponent(createdPackage.package.packageId) + "/export",
+        {},
+    )) as {
         artifactPath: string;
         package: { exportArtifactPath: string | null; lastExportAt: string | null };
         aggregate: { totalEvents: number; totalPolicyRecords: number; chaptersExported: number };
@@ -590,10 +701,12 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(exportedPackage.aggregate.chaptersExported, 2);
     assert.ok(exportedPackage.aggregate.totalEvents >= 2);
     assert.ok(exportedPackage.aggregate.totalPolicyRecords >= 2);
-    const exportArtifact = JSON.parse(readFileSync(exportedPackage.artifactPath, "utf-8")) as { package: { title: string } };
+    const exportArtifact = JSON.parse(readFileSync(exportedPackage.artifactPath, "utf-8")) as {
+        package: { title: string };
+    };
     assert.strictEqual(exportArtifact.package.title, "Release Binder");
 
-    const packageList = await packageRequestJson("GET", "/api/session-packages") as {
+    const packageList = (await packageRequestJson("GET", "/api/session-packages")) as {
         packages: Array<{ packageId: string; title?: string }>;
         releaseSnapshot: { exportedCount: number; latestExportArtifactPath: string | null };
     };
@@ -603,15 +716,27 @@ async function _runDashboardServiceTests(): Promise<void> {
     assert.strictEqual(packageList.releaseSnapshot.exportedCount, 1);
     assert.strictEqual(packageList.releaseSnapshot.latestExportArtifactPath, exportedPackage.artifactPath);
 
-    const packageHistory = await packageRequestJson("GET", "/api/session-packages/history?limit=10") as {
+    const packageHistory = (await packageRequestJson("GET", "/api/session-packages/history?limit=10")) as {
         history: Array<{ action: string; packageId: string }>;
     };
-    assert.ok(packageHistory.history.some((entry) => entry.action === "created" && entry.packageId === createdPackage.package.packageId));
-    assert.ok(packageHistory.history.some((entry) => entry.action === "workflow_blocked" && entry.packageId === createdPackage.package.packageId));
-    assert.ok(packageHistory.history.some((entry) => entry.action === "exported" && entry.packageId === createdPackage.package.packageId));
+    assert.ok(
+        packageHistory.history.some(
+            (entry) => entry.action === "created" && entry.packageId === createdPackage.package.packageId,
+        ),
+    );
+    assert.ok(
+        packageHistory.history.some(
+            (entry) => entry.action === "workflow_blocked" && entry.packageId === createdPackage.package.packageId,
+        ),
+    );
+    assert.ok(
+        packageHistory.history.some(
+            (entry) => entry.action === "exported" && entry.packageId === createdPackage.package.packageId,
+        ),
+    );
 
     // -- Metrics endpoint --
-    const metrics = await packageRequestJson("GET", "/api/session-packages/metrics") as {
+    const metrics = (await packageRequestJson("GET", "/api/session-packages/metrics")) as {
         generatedAt: string;
         totals: { all: number; byStatus: { planned: number; running: number; blocked: number; complete: number } };
         chapterStats: { total: number; avg: number; min: number; max: number };
@@ -645,7 +770,13 @@ async function _runDashboardServiceTests(): Promise<void> {
     const reloadService = new DashboardService(
         new ApprovalQueue(),
         new ActivityBus(),
-        { sessionId: "pkg-reload", environmentProfile: "test", mode: "server", startedAt: new Date().toISOString(), executionProfileSegment: "individual" },
+        {
+            sessionId: "pkg-reload",
+            environmentProfile: "test",
+            mode: "server",
+            startedAt: new Date().toISOString(),
+            executionProfileSegment: "individual",
+        },
         reloadChatStore,
         [],
         0,
@@ -659,12 +790,18 @@ async function _runDashboardServiceTests(): Promise<void> {
     const reloadedPackages = reloadService.listSessionPackages();
     const reloadHasSeededCert = reloadedPackages.some((p) => /testing@prism\.ai/i.test(p.title || ""));
     const reloadExpectedLength = reloadHasSeededCert ? 2 : 1;
-    assert.strictEqual(reloadedPackages.length, reloadExpectedLength, "packages must persist across service restart via SQLite");
+    assert.strictEqual(
+        reloadedPackages.length,
+        reloadExpectedLength,
+        "packages must persist across service restart via SQLite",
+    );
     const reloadedReleaseBinder = reloadedPackages.find((p) => p.packageId === createdPackage.package.packageId);
     assert.ok(reloadedReleaseBinder);
     assert.strictEqual(reloadedReleaseBinder.sessionIds.length, 2);
     assert.ok(reloadedReleaseBinder.exportArtifactPath, "export path must survive restart");
-    await reloadService.stop().catch(() => { /* ignore */ });
+    await reloadService.stop().catch(() => {
+        /* ignore */
+    });
     reloadSqlite.close();
     reloadChatStore.close();
 

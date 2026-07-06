@@ -43,7 +43,11 @@ describe("MemoryQueryTool — Diagnostics", () => {
     beforeEach(() => {
         semanticIndex = new SemanticMemoryIndex();
         episodicMemory = new EpisodicMemory(100);
-        try { unlinkSync(TEST_DB); } catch { /* ok */ }
+        try {
+            unlinkSync(TEST_DB);
+        } catch {
+            /* ok */
+        }
         sessionMemory = new SessionMemoryStore(TEST_DB);
         tool = new MemoryQueryTool(semanticIndex, episodicMemory, sessionMemory);
     });
@@ -123,7 +127,9 @@ describe("MemoryQueryTool — Diagnostics", () => {
         episodicMemory.onEvent(makeEvent("e2", "op2"));
         sessionMemory.onEvent(makeEvent("e3", "op3"));
 
-        const result = await tool.execute(makeRequest({ mode: "all", query: "file_write", limit: 5, sessionId: "test-session" }));
+        const result = await tool.execute(
+            makeRequest({ mode: "all", query: "file_write", limit: 5, sessionId: "test-session" }),
+        );
         assert.equal(result.ok, true);
         const output = result.output as Record<string, unknown>;
         assert.ok(output.semanticMatches);
@@ -166,7 +172,9 @@ describe("MemoryQueryTool — Diagnostics", () => {
 
     it("handles non-number limit gracefully", async () => {
         semanticIndex.onEvent(makeEvent("e1", "file_write"));
-        const result = await tool.execute(makeRequest({ mode: "semantic", query: "file_write", limit: "not_a_number" }));
+        const result = await tool.execute(
+            makeRequest({ mode: "semantic", query: "file_write", limit: "not_a_number" }),
+        );
         assert.equal(result.ok, true);
     });
 });
@@ -176,7 +184,11 @@ describe("SemanticQueryTool — Diagnostics", () => {
         const semanticIndex = new SemanticMemoryIndex();
         const episodicMemory = new EpisodicMemory(100);
         let sessionMemory: SessionMemoryStore;
-        try { unlinkSync(TEST_DB + ".sq"); } catch { /* ok */ }
+        try {
+            unlinkSync(TEST_DB + ".sq");
+        } catch {
+            /* ok */
+        }
         sessionMemory = new SessionMemoryStore(TEST_DB + ".sq");
         const tool = new SemanticQueryTool(semanticIndex, episodicMemory, sessionMemory);
         assert.equal(tool.name, "semantic_query");
@@ -186,7 +198,11 @@ describe("SemanticQueryTool — Diagnostics", () => {
         const semanticIndex = new SemanticMemoryIndex();
         const episodicMemory = new EpisodicMemory(100);
         let sessionMemory: SessionMemoryStore;
-        try { unlinkSync(TEST_DB + ".sq2"); } catch { /* ok */ }
+        try {
+            unlinkSync(TEST_DB + ".sq2");
+        } catch {
+            /* ok */
+        }
         sessionMemory = new SessionMemoryStore(TEST_DB + ".sq2");
         const tool = new SemanticQueryTool(semanticIndex, episodicMemory, sessionMemory);
 

@@ -10,6 +10,9 @@ const injectedTabs = new Set();  // tabIds whose HTML has been injected into the
 const inflightFetches = new Map(); // tabId -> Promise<string>
 const inflightInjections = new Map(); // tabId -> Promise<void>
 
+import { applyAllPanelCollapseStates } from './dashboard-core.js';
+import { renderPanelSummaries } from './tab-tools.js';
+
 // Lazy-imported to avoid circular dependency with dashboard-app.js bootstrap.
 let _tooltipsModulePromise = null;
 function autoRegisterTabTooltips(tabId) {
@@ -71,6 +74,8 @@ export async function loadTabHtml(tabId) {
         target.removeAttribute('aria-busy');
         injectedTabs.add(tabId);
         autoRegisterTabTooltips(tabId);
+        try { applyAllPanelCollapseStates(); } catch (_) { }
+        try { renderPanelSummaries(); } catch (_) { }
       } else {
         console.error(`[tab-loader] Container not found for tab: ${tabId}`);
       }

@@ -243,11 +243,15 @@ export class AgentPool {
         this.onDispatch?.(agent.agentId);
 
         try {
-            const result = await this.llmDelegate.generateForRole(agent.role, {
-                message: request.goal,
-                conversation: [],
-                systemPrompt,
-            }, agent.agentId);
+            const result = await this.llmDelegate.generateForRole(
+                agent.role,
+                {
+                    message: request.goal,
+                    conversation: [],
+                    systemPrompt,
+                },
+                agent.agentId,
+            );
 
             if (!result) {
                 const fail = failure(traceId, start, agent.agentId, `No model available for role: ${agent.role}`);
@@ -276,13 +280,13 @@ export class AgentPool {
 
     private buildSystemPrompt(agent: SubAgentDefinition, extraContext?: string): string {
         const parts: string[] = [];
-        
+
         if (this.josephineMode) {
             parts.push(
                 `[COGNITIVE DIRECTIVE: JOSEPHINE MODE ENABLED]\n` +
-                `1. Absolute Precision: You are Josephine, the hallmark of flawless execution. You produce fully complete, ready-to-use solutions with zero placeholders, zero hand-waving, and fully realized logic.\n` +
-                `2. Proactive Rigor & Verification: Self-correct intermediate thoughts. Verify all edge cases, imports, syntax, and safety policies before returning your final answer.\n` +
-                `3. Premium Delight: Communicate with warm, helpful, encouraging, yet highly professional and crisp clarity. Emphasize micro-optimizations, elegant structures, and premium typography.`
+                    `1. Absolute Precision: You are Josephine, the hallmark of flawless execution. You produce fully complete, ready-to-use solutions with zero placeholders, zero hand-waving, and fully realized logic.\n` +
+                    `2. Proactive Rigor & Verification: Self-correct intermediate thoughts. Verify all edge cases, imports, syntax, and safety policies before returning your final answer.\n` +
+                    `3. Premium Delight: Communicate with warm, helpful, encouraging, yet highly professional and crisp clarity. Emphasize micro-optimizations, elegant structures, and premium typography.`,
             );
         }
 
@@ -296,12 +300,7 @@ export class AgentPool {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
-function failure(
-    traceId: string,
-    startMs: number,
-    agentId: string,
-    error: string,
-): SubAgentResult {
+function failure(traceId: string, startMs: number, agentId: string, error: string): SubAgentResult {
     return {
         ok: false,
         content: "",

@@ -95,13 +95,14 @@ export class WorkflowSynthesizer {
             ...s,
             id: `${candidateId}-step-${i}`,
         }));
-        const proposedFallbacks: WorkflowFallback[] = proposedSteps.length > 1
-            ? proposedSteps.slice(0, -1).map((s, i) => ({
-                stepId: s.id,
-                condition: "on_failure" as const,
-                nextStepId: proposedSteps[i + 1].id,
-            }))
-            : [];
+        const proposedFallbacks: WorkflowFallback[] =
+            proposedSteps.length > 1
+                ? proposedSteps.slice(0, -1).map((s, i) => ({
+                      stepId: s.id,
+                      condition: "on_failure" as const,
+                      nextStepId: proposedSteps[i + 1].id,
+                  }))
+                : [];
 
         const validation = this.validator.validate({
             candidateId,
@@ -144,37 +145,38 @@ export class WorkflowSynthesizer {
 
         // Route through ApprovalQueue tier-3 — never auto-execute.
         // We explicitly DO NOT await — caller decides how to consume.
-        this.approvals.request(
-            this.sessionId,
-            `incubation.shws.apply.${candidateId}`,
-            {
-                candidateId,
-                dagId: input.dag.id,
-                failedStepId: input.failedStepId,
-                proposedSteps,
-                compilationHash: validation.plan.compilationHash,
-            },
-            120_000,
-        ).then((approved) => {
-            if (approved) {
-                this.stats = { ...this.stats, approvedCount: this.stats.approvedCount + 1 };
-            } else {
-                this.stats = { ...this.stats, rejectedCount: this.stats.rejectedCount + 1 };
-            }
-            this.activeByWorkflow.delete(input.dag.id);
-            this.bus.emit({
-                sessionId: this.sessionId,
-                layer: "governance",
-                operation: approved
-                    ? "incubation.shws.candidate_approved"
-                    : "incubation.shws.candidate_denied",
-                status: approved ? "succeeded" : "failed",
-                policyDecision: approved ? "allow" : "deny",
-                details: { candidateId, dagId: input.dag.id, depth },
+        this.approvals
+            .request(
+                this.sessionId,
+                `incubation.shws.apply.${candidateId}`,
+                {
+                    candidateId,
+                    dagId: input.dag.id,
+                    failedStepId: input.failedStepId,
+                    proposedSteps,
+                    compilationHash: validation.plan.compilationHash,
+                },
+                120_000,
+            )
+            .then((approved) => {
+                if (approved) {
+                    this.stats = { ...this.stats, approvedCount: this.stats.approvedCount + 1 };
+                } else {
+                    this.stats = { ...this.stats, rejectedCount: this.stats.rejectedCount + 1 };
+                }
+                this.activeByWorkflow.delete(input.dag.id);
+                this.bus.emit({
+                    sessionId: this.sessionId,
+                    layer: "governance",
+                    operation: approved ? "incubation.shws.candidate_approved" : "incubation.shws.candidate_denied",
+                    status: approved ? "succeeded" : "failed",
+                    policyDecision: approved ? "allow" : "deny",
+                    details: { candidateId, dagId: input.dag.id, depth },
+                });
+            })
+            .catch(() => {
+                this.activeByWorkflow.delete(input.dag.id);
             });
-        }).catch(() => {
-            this.activeByWorkflow.delete(input.dag.id);
-        });
 
         const candidate: SynthesizedCandidate = {
             candidateId,

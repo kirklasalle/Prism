@@ -33,7 +33,10 @@ import { workspacePath, resolveWorkspaceRoot } from "../../core/config/workspace
 
 // Same FetchLike shape used by ImageGenerateTool — kept duplicated to avoid
 // cross-tool coupling and keep each tool independently injectable in tests.
-type FetchLike = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: string | Uint8Array }) => Promise<{
+type FetchLike = (
+    input: string,
+    init?: { method?: string; headers?: Record<string, string>; body?: string | Uint8Array },
+) => Promise<{
     ok: boolean;
     status: number;
     text: () => Promise<string>;
@@ -63,10 +66,7 @@ function defaultFetch(): FetchLike {
     return (globalThis as unknown as { fetch: FetchLike }).fetch;
 }
 
-async function resolveProvider(
-    manager: LlmProviderManager,
-    modalities: string[],
-): Promise<RoutedProvider | null> {
+async function resolveProvider(manager: LlmProviderManager, modalities: string[]): Promise<RoutedProvider | null> {
     const routing = await manager.suggestRoutingForAllModalities();
     for (const m of modalities) {
         const sel = routing[m];
@@ -165,7 +165,11 @@ export class VideoGenerateTool implements Tool {
         } catch (err) {
             return {
                 ok: false,
-                output: { reason: "routing_failed", error: String(err), advisory: "Could not query the model-capability matrix for a video-generation model." },
+                output: {
+                    reason: "routing_failed",
+                    error: String(err),
+                    advisory: "Could not query the model-capability matrix for a video-generation model.",
+                },
             };
         }
         if (!routed) {
@@ -173,7 +177,8 @@ export class VideoGenerateTool implements Tool {
                 ok: false,
                 output: {
                     reason: "no_video_capable_model",
-                    advisory: "No video-generation provider is configured. Add an OpenAI (sora-2), Google (veo-3), or compatible provider in Settings → Providers, then retry.",
+                    advisory:
+                        "No video-generation provider is configured. Add an OpenAI (sora-2), Google (veo-3), or compatible provider in Settings → Providers, then retry.",
                 },
             };
         }
@@ -182,7 +187,15 @@ export class VideoGenerateTool implements Tool {
         const apiKey = this.secretStore.getApiKey(routed.providerId as never) ?? "";
 
         try {
-            const dispatched = await this.dispatch({ providerId: routed.providerId, model: routed.model, baseUrl, apiKey, prompt, seconds, size });
+            const dispatched = await this.dispatch({
+                providerId: routed.providerId,
+                model: routed.model,
+                baseUrl,
+                apiKey,
+                prompt,
+                seconds,
+                size,
+            });
             // Pending job (e.g. OpenAI Sora returns an async job_id). Surface as
             // a successful structured result rather than blocking — operator can
             // poll later in v0.20.5.
@@ -195,14 +208,22 @@ export class VideoGenerateTool implements Tool {
                         model: routed.model,
                         job_id: dispatched.jobId,
                         status: dispatched.status ?? "queued",
-                        advisory: "Video generation job submitted. The provider will produce the video asynchronously; check the job_id for completion.",
+                        advisory:
+                            "Video generation job submitted. The provider will produce the video asynchronously; check the job_id for completion.",
                         prompt,
                     },
-                    sideEffects: [{ type: "network", description: `video generation job: ${routed.providerId}/${routed.model}` }],
+                    sideEffects: [
+                        { type: "network", description: `video generation job: ${routed.providerId}/${routed.model}` },
+                    ],
                 };
             }
             const root = this.workspaceRootOverride ?? workspacePath("videos");
-            const saved = await writeMediaFile(dispatched.bytes, root, savePath, `prism-video-${timestamp()}.${dispatched.ext}`);
+            const saved = await writeMediaFile(
+                dispatched.bytes,
+                root,
+                savePath,
+                `prism-video-${timestamp()}.${dispatched.ext}`,
+            );
             return {
                 ok: true,
                 output: { saved_path: saved, provider: routed.providerId, model: routed.model, prompt, seconds, size },
@@ -214,14 +235,26 @@ export class VideoGenerateTool implements Tool {
         } catch (err) {
             return {
                 ok: false,
-                output: { reason: "provider_request_failed", error: String(err), provider: routed.providerId, model: routed.model },
+                output: {
+                    reason: "provider_request_failed",
+                    error: String(err),
+                    provider: routed.providerId,
+                    model: routed.model,
+                },
             };
         }
     }
 
-    private async dispatch(opts: { providerId: string; model: string; baseUrl: string; apiKey: string; prompt: string; seconds: number; size: string }): Promise<
-        | { kind: "bytes"; bytes: Uint8Array; ext: string }
-        | { kind: "pending"; jobId: string; status?: string }
+    private async dispatch(opts: {
+        providerId: string;
+        model: string;
+        baseUrl: string;
+        apiKey: string;
+        prompt: string;
+        seconds: number;
+        size: string;
+    }): Promise<
+        { kind: "bytes"; bytes: Uint8Array; ext: string } | { kind: "pending"; jobId: string; status?: string }
     > {
         if (opts.providerId === "openai" || opts.providerId === "openrouter") {
             if (!opts.apiKey) throw new Error(`Provider ${opts.providerId} has no API key configured`);
@@ -231,12 +264,20 @@ export class VideoGenerateTool implements Tool {
             const resp = await this.fetchImpl(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${opts.apiKey}` },
-                body: JSON.stringify({ model: opts.model, prompt: opts.prompt, seconds: opts.seconds, size: opts.size }),
+                body: JSON.stringify({
+                    model: opts.model,
+                    prompt: opts.prompt,
+                    seconds: opts.seconds,
+                    size: opts.size,
+                }),
             });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 500)}`);
             const payload = (await resp.json()) as {
                 data?: Array<{ b64_json?: string; url?: string }>;
-                id?: string; status?: string; url?: string; b64_json?: string;
+                id?: string;
+                status?: string;
+                url?: string;
+                b64_json?: string;
             };
             const first = payload.data?.[0];
             if (first?.b64_json) return { kind: "bytes", bytes: Buffer.from(first.b64_json, "base64"), ext: "mp4" };
@@ -262,8 +303,11 @@ export class VideoGenerateTool implements Tool {
             });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 500)}`);
             const payload = (await resp.json()) as {
-                candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }>;
-                name?: string; done?: boolean;
+                candidates?: Array<{
+                    content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> };
+                }>;
+                name?: string;
+                done?: boolean;
             };
             const inline = payload.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
             if (inline?.data) {
@@ -319,20 +363,22 @@ export class AudioGenerateTool implements Tool {
         const voice = String(request.args.voice ?? "alloy");
         const format = this.normalizeFormat(String(request.args.format ?? "mp3"));
         const kindRaw = String(request.args.kind ?? "speech").toLowerCase();
-        const kind: "speech" | "music" | "sfx" = kindRaw === "music" || kindRaw === "song" || kindRaw === "instrument"
-            ? "music"
-            : (kindRaw === "sfx" || kindRaw === "sound" || kindRaw === "sound-effect" || kindRaw === "sound_effect")
-                ? "sfx"
-                : "speech";
+        const kind: "speech" | "music" | "sfx" =
+            kindRaw === "music" || kindRaw === "song" || kindRaw === "instrument"
+                ? "music"
+                : kindRaw === "sfx" || kindRaw === "sound" || kindRaw === "sound-effect" || kindRaw === "sound_effect"
+                  ? "sfx"
+                  : "speech";
         const duration = Math.max(1, Math.min(300, Number(request.args.duration ?? 0) || 0));
 
         // Route by kind. Each kind has a primary modality and a graceful fallback
         // chain so a TTS-only deployment still answers structurally.
-        const modalityOrder: string[] = kind === "music"
-            ? ["music-generation", "sound-effects", "voice-output"]
-            : kind === "sfx"
-                ? ["sound-effects", "music-generation", "voice-output"]
-                : ["tts", "voice-output"];
+        const modalityOrder: string[] =
+            kind === "music"
+                ? ["music-generation", "sound-effects", "voice-output"]
+                : kind === "sfx"
+                  ? ["sound-effects", "music-generation", "voice-output"]
+                  : ["tts", "voice-output"];
 
         let routed: RoutedProvider | null;
         try {
@@ -340,16 +386,26 @@ export class AudioGenerateTool implements Tool {
         } catch (err) {
             return {
                 ok: false,
-                output: { reason: "routing_failed", error: String(err), advisory: `Could not query the model-capability matrix for a ${kind}-capable model.` },
+                output: {
+                    reason: "routing_failed",
+                    error: String(err),
+                    advisory: `Could not query the model-capability matrix for a ${kind}-capable model.`,
+                },
             };
         }
         if (!routed) {
-            const advisory = kind === "music"
-                ? "No music-generation provider is configured. Add a music model (e.g. Suno, Udio, Stable Audio, MusicGen) in Settings → Providers, then retry."
-                : kind === "sfx"
-                    ? "No sound-effects provider is configured. Add an SFX-capable provider (e.g. ElevenLabs Sound Effects, Stable Audio) in Settings → Providers, then retry."
-                    : "No text-to-speech provider is configured. Add an OpenAI (gpt-4o-mini-tts / tts-1), Google Gemini (with audio output), or compatible TTS provider in Settings → Providers, then retry.";
-            const reason = kind === "music" ? "no_music_capable_model" : kind === "sfx" ? "no_sfx_capable_model" : "no_tts_capable_model";
+            const advisory =
+                kind === "music"
+                    ? "No music-generation provider is configured. Add a music model (e.g. Suno, Udio, Stable Audio, MusicGen) in Settings → Providers, then retry."
+                    : kind === "sfx"
+                      ? "No sound-effects provider is configured. Add an SFX-capable provider (e.g. ElevenLabs Sound Effects, Stable Audio) in Settings → Providers, then retry."
+                      : "No text-to-speech provider is configured. Add an OpenAI (gpt-4o-mini-tts / tts-1), Google Gemini (with audio output), or compatible TTS provider in Settings → Providers, then retry.";
+            const reason =
+                kind === "music"
+                    ? "no_music_capable_model"
+                    : kind === "sfx"
+                      ? "no_sfx_capable_model"
+                      : "no_tts_capable_model";
             return { ok: false, output: { reason, advisory } };
         }
 
@@ -357,22 +413,50 @@ export class AudioGenerateTool implements Tool {
         const apiKey = this.secretStore.getApiKey(routed.providerId as never) ?? "";
 
         try {
-            const bytes = await this.dispatch({ providerId: routed.providerId, model: routed.model, baseUrl, apiKey, text, voice, format, kind, duration });
+            const bytes = await this.dispatch({
+                providerId: routed.providerId,
+                model: routed.model,
+                baseUrl,
+                apiKey,
+                text,
+                voice,
+                format,
+                kind,
+                duration,
+            });
             const root = this.workspaceRootOverride ?? workspacePath("audio");
             const subPrefix = kind === "music" ? "prism-music" : kind === "sfx" ? "prism-sfx" : "prism-audio";
             const saved = await writeMediaFile(bytes, root, savePath, `${subPrefix}-${timestamp()}.${format}`);
             return {
                 ok: true,
-                output: { saved_path: saved, provider: routed.providerId, model: routed.model, kind, voice: kind === "speech" ? voice : undefined, format, characters: text.length, duration: duration || undefined },
+                output: {
+                    saved_path: saved,
+                    provider: routed.providerId,
+                    model: routed.model,
+                    kind,
+                    voice: kind === "speech" ? voice : undefined,
+                    format,
+                    characters: text.length,
+                    duration: duration || undefined,
+                },
                 sideEffects: [
-                    { type: "network", description: `${kind === "speech" ? "tts" : kind}: ${routed.providerId}/${routed.model}` },
+                    {
+                        type: "network",
+                        description: `${kind === "speech" ? "tts" : kind}: ${routed.providerId}/${routed.model}`,
+                    },
                     { type: "file", description: `wrote audio: ${saved}`, mutating: true, reversible: true },
                 ],
             };
         } catch (err) {
             return {
                 ok: false,
-                output: { reason: "provider_request_failed", error: String(err), provider: routed.providerId, model: routed.model, kind },
+                output: {
+                    reason: "provider_request_failed",
+                    error: String(err),
+                    provider: routed.providerId,
+                    model: routed.model,
+                    kind,
+                },
             };
         }
     }
@@ -382,7 +466,17 @@ export class AudioGenerateTool implements Tool {
         return allowed.has(raw) ? raw : "mp3";
     }
 
-    private async dispatch(opts: { providerId: string; model: string; baseUrl: string; apiKey: string; text: string; voice: string; format: string; kind: "speech" | "music" | "sfx"; duration: number }): Promise<Uint8Array> {
+    private async dispatch(opts: {
+        providerId: string;
+        model: string;
+        baseUrl: string;
+        apiKey: string;
+        text: string;
+        voice: string;
+        format: string;
+        kind: "speech" | "music" | "sfx";
+        duration: number;
+    }): Promise<Uint8Array> {
         if (opts.providerId === "openai" || opts.providerId === "openrouter") {
             if (!opts.apiKey) throw new Error(`Provider ${opts.providerId} has no API key configured`);
             // OpenAI returns audio bytes directly (not JSON). Same endpoint covers
@@ -403,11 +497,12 @@ export class AudioGenerateTool implements Tool {
         if (opts.providerId === "gemini") {
             if (!opts.apiKey) throw new Error("Provider gemini has no API key configured");
             const url = `${trimTrailingSlash(opts.baseUrl)}/v1beta/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
-            const promptText = opts.kind === "music"
-                ? `Generate music: ${opts.text}`
-                : opts.kind === "sfx"
-                    ? `Generate a sound effect: ${opts.text}`
-                    : opts.text;
+            const promptText =
+                opts.kind === "music"
+                    ? `Generate music: ${opts.text}`
+                    : opts.kind === "sfx"
+                      ? `Generate a sound effect: ${opts.text}`
+                      : opts.text;
             const resp = await this.fetchImpl(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -471,7 +566,11 @@ export class AudioTranscribeTool implements Tool {
         } catch (err) {
             return {
                 ok: false,
-                output: { reason: "routing_failed", error: String(err), advisory: "Could not query the model-capability matrix for an STT model." },
+                output: {
+                    reason: "routing_failed",
+                    error: String(err),
+                    advisory: "Could not query the model-capability matrix for an STT model.",
+                },
             };
         }
         if (!routed) {
@@ -479,7 +578,8 @@ export class AudioTranscribeTool implements Tool {
                 ok: false,
                 output: {
                     reason: "no_stt_capable_model",
-                    advisory: "No speech-to-text provider is configured. Add an OpenAI (whisper-1 / gpt-4o-transcribe) or compatible STT provider in Settings → Providers, then retry.",
+                    advisory:
+                        "No speech-to-text provider is configured. Add an OpenAI (whisper-1 / gpt-4o-transcribe) or compatible STT provider in Settings → Providers, then retry.",
                 },
             };
         }
@@ -509,18 +609,38 @@ export class AudioTranscribeTool implements Tool {
             });
             return {
                 ok: true,
-                output: { text, provider: routed.providerId, model: routed.model, sourcePath: audioPath, characters: text.length },
+                output: {
+                    text,
+                    provider: routed.providerId,
+                    model: routed.model,
+                    sourcePath: audioPath,
+                    characters: text.length,
+                },
                 sideEffects: [{ type: "network", description: `stt: ${routed.providerId}/${routed.model}` }],
             };
         } catch (err) {
             return {
                 ok: false,
-                output: { reason: "provider_request_failed", error: String(err), provider: routed.providerId, model: routed.model },
+                output: {
+                    reason: "provider_request_failed",
+                    error: String(err),
+                    provider: routed.providerId,
+                    model: routed.model,
+                },
             };
         }
     }
 
-    private async dispatch(opts: { providerId: string; model: string; baseUrl: string; apiKey: string; audioBytes: Buffer; fileName: string; language?: string; prompt?: string }): Promise<string> {
+    private async dispatch(opts: {
+        providerId: string;
+        model: string;
+        baseUrl: string;
+        apiKey: string;
+        audioBytes: Buffer;
+        fileName: string;
+        language?: string;
+        prompt?: string;
+    }): Promise<string> {
         if (opts.providerId === "openai" || opts.providerId === "openrouter") {
             if (!opts.apiKey) throw new Error(`Provider ${opts.providerId} has no API key configured`);
             const url = `${trimTrailingSlash(opts.baseUrl)}/audio/transcriptions`;
@@ -534,13 +654,18 @@ export class AudioTranscribeTool implements Tool {
             if (opts.language) pushField("language", opts.language);
             if (opts.prompt) pushField("prompt", opts.prompt);
             pushField("response_format", "json");
-            parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${opts.fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`);
+            parts.push(
+                `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${opts.fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+            );
             parts.push(opts.audioBytes);
             parts.push(`\r\n--${boundary}--\r\n`);
             const body = Buffer.concat(parts.map((p) => (typeof p === "string" ? Buffer.from(p, "utf8") : p)));
             const resp = await this.fetchImpl(url, {
                 method: "POST",
-                headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, Authorization: `Bearer ${opts.apiKey}` },
+                headers: {
+                    "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                    Authorization: `Bearer ${opts.apiKey}`,
+                },
                 body,
             });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 500)}`);
@@ -555,12 +680,14 @@ export class AudioTranscribeTool implements Tool {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: opts.prompt ?? "Transcribe this audio." },
-                            { inlineData: { mimeType: "audio/mpeg", data: opts.audioBytes.toString("base64") } },
-                        ],
-                    }],
+                    contents: [
+                        {
+                            parts: [
+                                { text: opts.prompt ?? "Transcribe this audio." },
+                                { inlineData: { mimeType: "audio/mpeg", data: opts.audioBytes.toString("base64") } },
+                            ],
+                        },
+                    ],
                 }),
             });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 500)}`);

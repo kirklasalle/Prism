@@ -19,9 +19,18 @@ import { VideoGenerateTool, AudioGenerateTool, AudioTranscribeTool } from "../sr
 import type { LlmProviderManager } from "../src/core/operator/llm-provider-manager.js";
 import type { ProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 
-interface FetchInit { method?: string; headers?: Record<string, string>; body?: string | Uint8Array }
+interface FetchInit {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | Uint8Array;
+}
 
-interface Capture { url?: string; init?: FetchInit; bodyJson?: unknown; bodyBytes?: Uint8Array }
+interface Capture {
+    url?: string;
+    init?: FetchInit;
+    bodyJson?: unknown;
+    bodyBytes?: Uint8Array;
+}
 
 function jsonFetch(opts: { payload: unknown; status?: number; capture?: Capture }) {
     return async (url: string, init?: FetchInit) => {
@@ -29,7 +38,11 @@ function jsonFetch(opts: { payload: unknown; status?: number; capture?: Capture 
             opts.capture.url = url;
             opts.capture.init = init;
             if (typeof init?.body === "string") {
-                try { opts.capture.bodyJson = JSON.parse(init.body); } catch { /* keep raw */ }
+                try {
+                    opts.capture.bodyJson = JSON.parse(init.body);
+                } catch {
+                    /* keep raw */
+                }
             } else if (init?.body) {
                 opts.capture.bodyBytes = init.body as Uint8Array;
             }
@@ -51,7 +64,11 @@ function bytesFetch(opts: { bytes: Uint8Array; status?: number; capture?: Captur
             opts.capture.url = url;
             opts.capture.init = init;
             if (typeof init?.body === "string") {
-                try { opts.capture.bodyJson = JSON.parse(init.body); } catch { /* keep raw */ }
+                try {
+                    opts.capture.bodyJson = JSON.parse(init.body);
+                } catch {
+                    /* keep raw */
+                }
             }
         }
         const status = opts.status ?? 200;
@@ -60,20 +77,46 @@ function bytesFetch(opts: { bytes: Uint8Array; status?: number; capture?: Captur
             status,
             text: async () => "",
             json: async () => ({}),
-            arrayBuffer: async (): Promise<ArrayBuffer> => opts.bytes.buffer.slice(opts.bytes.byteOffset, opts.bytes.byteOffset + opts.bytes.byteLength) as ArrayBuffer,
+            arrayBuffer: async (): Promise<ArrayBuffer> =>
+                opts.bytes.buffer.slice(
+                    opts.bytes.byteOffset,
+                    opts.bytes.byteOffset + opts.bytes.byteLength,
+                ) as ArrayBuffer,
         };
     };
 }
 
-function fakeProviderManager(routing: Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>): LlmProviderManager {
+function fakeProviderManager(
+    routing: Record<
+        string,
+        { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null
+    >,
+): LlmProviderManager {
     return {
-        async suggestRoutingForAllModalities() { return routing; },
+        async suggestRoutingForAllModalities() {
+            return routing;
+        },
         async getCatalog() {
             return {
                 providers: [
-                    { id: "openai", baseUrl: "https://api.openai.com/v1", enabled: true, models: ["sora-2", "tts-1", "whisper-1"] },
-                    { id: "openrouter", baseUrl: "https://openrouter.ai/api/v1", enabled: true, models: ["openai/tts-1"] },
-                    { id: "gemini", baseUrl: "https://generativelanguage.googleapis.com", enabled: true, models: ["gemini-2.0-pro"] },
+                    {
+                        id: "openai",
+                        baseUrl: "https://api.openai.com/v1",
+                        enabled: true,
+                        models: ["sora-2", "tts-1", "whisper-1"],
+                    },
+                    {
+                        id: "openrouter",
+                        baseUrl: "https://openrouter.ai/api/v1",
+                        enabled: true,
+                        models: ["openai/tts-1"],
+                    },
+                    {
+                        id: "gemini",
+                        baseUrl: "https://generativelanguage.googleapis.com",
+                        enabled: true,
+                        models: ["gemini-2.0-pro"],
+                    },
                 ],
             };
         },
@@ -82,11 +125,21 @@ function fakeProviderManager(routing: Record<string, { providerId: string; model
 
 function fakeSecretStore(keys: Record<string, string>): ProviderSecretStore {
     return {
-        hasApiKey(p: string) { return Boolean(keys[p]); },
-        getApiKey(p: string) { return keys[p] ?? null; },
-        setApiKey() { /* no-op */ },
-        clearApiKey() { /* no-op */ },
-        listSlots() { return []; },
+        hasApiKey(p: string) {
+            return Boolean(keys[p]);
+        },
+        getApiKey(p: string) {
+            return keys[p] ?? null;
+        },
+        setApiKey() {
+            /* no-op */
+        },
+        clearApiKey() {
+            /* no-op */
+        },
+        listSlots() {
+            return [];
+        },
     } as unknown as ProviderSecretStore;
 }
 
@@ -214,7 +267,13 @@ export async function testAudioGenerateTool(): Promise<void> {
         const capture: Capture = {};
         const tool = new AudioGenerateTool({
             providerManager: fakeProviderManager({
-                "music-generation": { providerId: "gemini", model: "gemini-music", tier: 4, degraded: false, reason: "ok" },
+                "music-generation": {
+                    providerId: "gemini",
+                    model: "gemini-music",
+                    tier: 4,
+                    degraded: false,
+                    reason: "ok",
+                },
             }),
             secretStore: fakeSecretStore({ gemini: "g-test-key" }),
             workspaceRootOverride: wsDir,
@@ -244,7 +303,10 @@ export async function testAudioGenerateTool(): Promise<void> {
         const wsDir = mkdtempSync(join(tmpdir(), "prism-audiogen-sfx-none-"));
         const tool = new AudioGenerateTool({
             providerManager: fakeProviderManager({
-                "sound-effects": null, "music-generation": null, "voice-output": null, tts: null,
+                "sound-effects": null,
+                "music-generation": null,
+                "voice-output": null,
+                tts: null,
             }),
             secretStore: fakeSecretStore({}),
             workspaceRootOverride: wsDir,

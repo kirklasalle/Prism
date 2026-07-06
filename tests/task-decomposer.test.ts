@@ -76,7 +76,14 @@ const PARALLEL_PLAN_JSON = JSON.stringify({
     steps: [
         { id: "s1", description: "Fetch A", role: "chat", goal: "get A", dependsOn: [], risk: "low" },
         { id: "s2", description: "Fetch B", role: "chat", goal: "get B", dependsOn: [], risk: "low" },
-        { id: "s3", description: "Combine", role: "summarization", goal: "combine A and B", dependsOn: ["s1", "s2"], risk: "low" },
+        {
+            id: "s3",
+            description: "Combine",
+            role: "summarization",
+            goal: "combine A and B",
+            dependsOn: ["s1", "s2"],
+            risk: "low",
+        },
     ],
 });
 
@@ -117,7 +124,9 @@ describe("TaskDecomposer", () => {
 
     it("returns ok=false when planner returns no content", async () => {
         const pool = new AgentPool({
-            async generateForRole() { return null; },
+            async generateForRole() {
+                return null;
+            },
         });
         const decomposer = new TaskDecomposer(pool);
         const plan = await decomposer.decompose("do something");

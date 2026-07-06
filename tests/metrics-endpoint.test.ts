@@ -88,9 +88,9 @@ describe("MetricsStore", function () {
 
         it("maintains cumulative bucket counts", () => {
             store.registerHistogram("test_cumulative_ms", "Cumulative test", [10, 20, 30]);
-            store.observe("test_cumulative_ms", 5);   // fits all three buckets
-            store.observe("test_cumulative_ms", 15);  // fits 20 and 30
-            store.observe("test_cumulative_ms", 25);  // fits 30 only
+            store.observe("test_cumulative_ms", 5); // fits all three buckets
+            store.observe("test_cumulative_ms", 15); // fits 20 and 30
+            store.observe("test_cumulative_ms", 25); // fits 30 only
             const output = store.render();
             assert.ok(output.includes('test_cumulative_ms_bucket{le="10"} 1'));
             assert.ok(output.includes('test_cumulative_ms_bucket{le="20"} 2'));
@@ -149,7 +149,7 @@ describe("MetricsStore", function () {
         });
 
         it("escapes special characters in label values", () => {
-            store.inc('test_escaped_total', { msg: 'say "hello"\nworld' });
+            store.inc("test_escaped_total", { msg: 'say "hello"\nworld' });
             const output = store.render();
             assert.ok(output.includes('\\"hello\\"'), "double quotes must be escaped");
             assert.ok(output.includes("\\n"), "newlines must be escaped");
@@ -189,7 +189,7 @@ describe("OtelExporter", function () {
         const output = store.render();
         assert.ok(
             output.includes('prism_activity_events_total{layer="agent",status="succeeded"}'),
-            "should track agent event"
+            "should track agent event",
         );
     });
 
@@ -204,7 +204,7 @@ describe("OtelExporter", function () {
         const output = store.render();
         assert.ok(
             output.includes('prism_errors_total{layer="tool_execution",operation="run_tool"}'),
-            "should track failed events"
+            "should track failed events",
         );
     });
 
@@ -217,10 +217,7 @@ describe("OtelExporter", function () {
             details: {},
         });
         const output = store.render();
-        assert.ok(
-            output.includes('prism_llm_requests_total{status="succeeded"}'),
-            "should track LLM requests"
-        );
+        assert.ok(output.includes('prism_llm_requests_total{status="succeeded"}'), "should track LLM requests");
     });
 
     it("records histogram observation for durationMs", () => {
@@ -247,7 +244,7 @@ describe("OtelExporter", function () {
         const output = store.render();
         assert.ok(
             output.includes('prism_governance_hooks_total{decision="allow",hook="pre_tool_use"}'),
-            "should track governance hook evaluations"
+            "should track governance hook evaluations",
         );
     });
 
@@ -262,7 +259,7 @@ describe("OtelExporter", function () {
         const output = store.render();
         assert.ok(
             output.includes('prism_tool_executions_total{operation="read_file",status="succeeded"}'),
-            "should track tool executions"
+            "should track tool executions",
         );
     });
 
@@ -277,7 +274,7 @@ describe("OtelExporter", function () {
         const output = store.render();
         assert.ok(
             output.includes('prism_agent_lifecycle_total{operation="a2a_task_submitted"}'),
-            "should track agent lifecycle events"
+            "should track agent lifecycle events",
         );
     });
 
@@ -312,10 +309,7 @@ describe("OtelExporter", function () {
         const storeAfter = store.render();
 
         // After stop, the after_stop operation should NOT appear
-        assert.ok(
-            !storeAfter.includes('operation="after_stop"'),
-            "events after stop() should not be counted"
-        );
+        assert.ok(!storeAfter.includes('operation="after_stop"'), "events after stop() should not be counted");
 
         // Re-subscribe for remaining tests (cleanup)
         exporter.start();
@@ -326,8 +320,20 @@ describe("OtelExporter", function () {
     it("Go/No-Go gate: at least 10 distinct named metrics present in output", () => {
         // Trigger a2a and governance events so all counters are primed
         bus.emit({ layer: "agent", operation: "a2a_task_submitted", status: "succeeded", sessionId: "s", details: {} });
-        bus.emit({ layer: "governance", operation: "pre_tool_use_evaluated", status: "succeeded", sessionId: "s", details: { permission_decision: "allow" } });
-        bus.emit({ layer: "governance", operation: "post_tool_use_recorded", status: "succeeded", sessionId: "s", details: {} });
+        bus.emit({
+            layer: "governance",
+            operation: "pre_tool_use_evaluated",
+            status: "succeeded",
+            sessionId: "s",
+            details: { permission_decision: "allow" },
+        });
+        bus.emit({
+            layer: "governance",
+            operation: "post_tool_use_recorded",
+            status: "succeeded",
+            sessionId: "s",
+            details: {},
+        });
 
         const output = store.render();
         const typeLines = output.match(/^# TYPE \S+/gm) ?? [];
@@ -335,7 +341,7 @@ describe("OtelExporter", function () {
 
         assert.ok(
             metricNames.size >= 10,
-            `Go/No-Go gate requires ≥10 metrics; found ${metricNames.size}: ${[...metricNames].join(", ")}`
+            `Go/No-Go gate requires ≥10 metrics; found ${metricNames.size}: ${[...metricNames].join(", ")}`,
         );
     });
 });

@@ -95,7 +95,7 @@ export class LlamaCppSupervisor extends EventEmitter {
     }
 
     public getSnapshot(): LlamaModelSlot[] {
-        return this.slots.map(s => ({ ...s }));
+        return this.slots.map((s) => ({ ...s }));
     }
 
     /**
@@ -107,8 +107,8 @@ export class LlamaCppSupervisor extends EventEmitter {
         if (!this.config.modelsDir || !existsSync(this.config.modelsDir)) return [];
         try {
             return readdirSync(this.config.modelsDir)
-                .filter(f => f.endsWith(".gguf") && !f.toLowerCase().startsWith("mmproj-"))
-                .map(f => f.replace(/\.gguf$/i, ""));
+                .filter((f) => f.endsWith(".gguf") && !f.toLowerCase().startsWith("mmproj-"))
+                .map((f) => f.replace(/\.gguf$/i, ""));
         } catch {
             return [];
         }
@@ -126,7 +126,7 @@ export class LlamaCppSupervisor extends EventEmitter {
 
     /** Returns the port of the running model, or null if not loaded. */
     public getPortForAlias(modelAlias: string): number | null {
-        const slot = this.slots.find(s => s.modelAlias === modelAlias && s.status === "ready");
+        const slot = this.slots.find((s) => s.modelAlias === modelAlias && s.status === "ready");
         if (slot) {
             slot.lastActive = Date.now();
             return slot.port;
@@ -135,14 +135,17 @@ export class LlamaCppSupervisor extends EventEmitter {
     }
 
     /** Instructs the supervisor to load a model. Sweeps an LRU slot if full. */
-    public async loadModel(modelPath: string, modelAlias: string, ctxSizeOrOpts?: number | LlamaLoadOptions): Promise<LlamaModelSlot> {
+    public async loadModel(
+        modelPath: string,
+        modelAlias: string,
+        ctxSizeOrOpts?: number | LlamaLoadOptions,
+    ): Promise<LlamaModelSlot> {
         // Normalize options
-        const opts: LlamaLoadOptions = typeof ctxSizeOrOpts === "number"
-            ? { ctxSize: ctxSizeOrOpts }
-            : ctxSizeOrOpts ?? {};
+        const opts: LlamaLoadOptions =
+            typeof ctxSizeOrOpts === "number" ? { ctxSize: ctxSizeOrOpts } : (ctxSizeOrOpts ?? {});
 
         // 1. Is it already loaded?
-        let slot = this.slots.find(s => s.modelAlias === modelAlias || s.modelPath === modelPath);
+        let slot = this.slots.find((s) => s.modelAlias === modelAlias || s.modelPath === modelPath);
         if (slot) {
             if (slot.status === "error") {
                 const ctxSize = opts.ctxSize ?? slot.contextSize;
@@ -173,7 +176,7 @@ export class LlamaCppSupervisor extends EventEmitter {
         }
 
         // 2. Find an empty slot
-        slot = this.slots.find(s => s.status === "empty" || s.status === "error");
+        slot = this.slots.find((s) => s.status === "empty" || s.status === "error");
 
         // 3. Fallback to LRU Eviction
         if (!slot) {
@@ -212,13 +215,13 @@ export class LlamaCppSupervisor extends EventEmitter {
     }
 
     public async unloadModel(modelAlias: string): Promise<boolean> {
-        const slot = this.slots.find(s => s.modelAlias === modelAlias);
+        const slot = this.slots.find((s) => s.modelAlias === modelAlias);
         if (!slot) return false;
         return this.unloadSlot(slot.id);
     }
 
     private async unloadSlot(slotId: number): Promise<boolean> {
-        const slot = this.slots.find(s => s.id === slotId);
+        const slot = this.slots.find((s) => s.id === slotId);
         if (!slot) return false;
 
         const proc = this.processes.get(slot.id);
@@ -244,12 +247,16 @@ export class LlamaCppSupervisor extends EventEmitter {
         return new Promise((resolve, reject) => {
             const isBaseMode = process.env.PRISM_BASE_MODE === "true";
             const effectiveCtxSize = isBaseMode ? Math.min(ctxSize, 2048) : ctxSize;
-            
+
             const args = [
-                "--model", slot.modelPath!,
-                "--alias", slot.modelAlias!,
-                "--port", String(slot.port),
-                "--ctx-size", String(effectiveCtxSize),
+                "--model",
+                slot.modelPath!,
+                "--alias",
+                slot.modelAlias!,
+                "--port",
+                String(slot.port),
+                "--ctx-size",
+                String(effectiveCtxSize),
                 // Always enable native tool calling (Jinja templates)
                 "--jinja",
             ];
@@ -330,8 +337,11 @@ export class LlamaCppSupervisor extends EventEmitter {
             proc.on("exit", (code) => {
                 this.processes.delete(slot.id);
                 if (!isReady) {
-                    reject(new Error(`llama-server exited prematurely with code ${code}. Error logs: ${capturedError}`));
-                } else if (slot.status !== "empty") { // Not an intentional unload
+                    reject(
+                        new Error(`llama-server exited prematurely with code ${code}. Error logs: ${capturedError}`),
+                    );
+                } else if (slot.status !== "empty") {
+                    // Not an intentional unload
                     slot.status = "error";
                     slot.error = `Process crashed with exit code ${code}. Logs: ${capturedError}`;
                     slot.pid = null;
@@ -343,7 +353,11 @@ export class LlamaCppSupervisor extends EventEmitter {
             setTimeout(() => {
                 if (!isReady) {
                     proc.kill("SIGKILL");
-                    reject(new Error("Timeout waiting for llama-server to report ready. Is the model valid and port free?"));
+                    reject(
+                        new Error(
+                            "Timeout waiting for llama-server to report ready. Is the model valid and port free?",
+                        ),
+                    );
                 }
             }, 90000);
         });

@@ -33,6 +33,7 @@ import { testContainerSandboxAdapter } from "./container-sandbox-adapter.test.js
 import { testDockerContainerAdapter } from "./docker-container-adapter.test.js";
 import { testComputerUseCrossPlatform } from "./computer-use-cross-platform.test.js";
 import { testOAuthAdapters } from "./oauth-adapters.test.js";
+import { testOperatorPresenceChannels } from "./operator-presence-channels.test.js";
 import {
     testUtilityRegistry,
     testRiskOverrideStore,
@@ -69,16 +70,12 @@ import { testHealthExtendedEndpoint } from "./health-extended-endpoint.test.js";
 import { testApprovalQueueEndpoints } from "./approval-queue-endpoints.test.js";
 import { testImageGenerateTool } from "./image-generate-tool.test.js";
 import { testVideoGenerateTool, testAudioGenerateTool, testAudioTranscribeTool } from "./media-tools.test.js";
+import { testWikiHandler } from "./wiki-handler.test.js";
 import { testOpenAiCompatShim } from "./openai-compat-shim.test.js";
 import { testOpenAiCompatRoutes } from "./openai-compat-routes.test.js";
 import { testIamStore } from "./iam-store.test.js";
 import { testIamRbac } from "./iam-rbac.test.js";
-import {
-    testIamSsoSession,
-    testIamSsoOidc,
-    testIamSsoSaml,
-    testIamRoutesEndToEnd,
-} from "./iam-sso.test.js";
+import { testIamSsoSession, testIamSsoOidc, testIamSsoSaml, testIamRoutesEndToEnd } from "./iam-sso.test.js";
 import { testScimRoutes, testIamAdminRoutes } from "./iam-scim-admin.test.js";
 import { testHelmLint } from "./helm-lint.test.js";
 import { testSoc2Exporter } from "./soc2-exporter.test.js";
@@ -108,8 +105,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
             reject(new Error(`TIMEOUT after ${ms}ms -- "${label}" did not complete. Check for hanging async ops.`));
         }, ms);
         promise.then(
-            (v) => { clearTimeout(timer); resolve(v); },
-            (e) => { clearTimeout(timer); reject(e); }
+            (v) => {
+                clearTimeout(timer);
+                resolve(v);
+            },
+            (e) => {
+                clearTimeout(timer);
+                reject(e);
+            },
         );
     });
 }
@@ -213,6 +216,7 @@ async function runTests(): Promise<void> {
         { name: "HealthExtendedEndpoint", fn: testHealthExtendedEndpoint },
         { name: "ApprovalQueueEndpoints", fn: testApprovalQueueEndpoints },
         { name: "ImageGenerateTool", fn: testImageGenerateTool },
+        { name: "WikiHandler", fn: testWikiHandler },
         { name: "VideoGenerateTool", fn: testVideoGenerateTool },
         { name: "AudioGenerateTool", fn: testAudioGenerateTool },
         { name: "AudioTranscribeTool", fn: testAudioTranscribeTool },
@@ -231,6 +235,7 @@ async function runTests(): Promise<void> {
         { name: "LlreSuite", fn: testLlreSuite },
         { name: "DsvarSuite", fn: testDsvarSuite },
         { name: "GuiRlSuite", fn: testGuiRlSuite },
+        { name: "OperatorPresenceChannels", fn: testOperatorPresenceChannels },
     ];
 
     let passed = 0;
@@ -257,7 +262,11 @@ async function runTests(): Promise<void> {
         }
     } finally {
         // Clean up isolated workspace
-        try { rmSync(testWorkspace, { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+            rmSync(testWorkspace, { recursive: true, force: true });
+        } catch {
+            /* best effort */
+        }
     }
 
     console.log(`\n${"=".repeat(60)}`);

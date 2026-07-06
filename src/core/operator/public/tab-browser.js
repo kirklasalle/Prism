@@ -1,10 +1,12 @@
-import { state, request, escapeHtml, dashboardLog, authHeaders } from './dashboard-core.js';
+import { state, request, escapeHtml, dashboardLog, authHeaders, withButtonFeedback } from './dashboard-core.js';
 
 /* ── Local state ── */
 let currentBrowserView = 'sessions';
 let currentStorageSubView = 'cookies';
 let browserDevToolsOpen = false;
 const actionLog = [];
+let _lastScreenshotBlobUrl = null;
+let _browserAutopilotInterval = null;
 
 export function getCurrentBrowserView() {
   return currentBrowserView;
@@ -51,7 +53,10 @@ export function setBrowserView(view) {
     if (panel) panel.style.display = views[i] === view ? '' : 'none';
     var btn = document.getElementById('bv-' + views[i]);
     if (btn) {
-      btn.classList.toggle('active', views[i] === view);
+      var isActive = views[i] === view;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      btn.setAttribute('tabindex', isActive ? '0' : '-1');
     }
   }
   if (view === 'viewport') populateBrowserSessionDropdowns();
@@ -262,10 +267,11 @@ export async function browserDeleteProfile(profileId) {
 /* ── Sessions ── */
 
 export async function browserLaunchSession(headless) {
+  var btnId = headless ? '#browser-launch-headless-btn' : '#browser-launch-headed-btn';
   var profileSelect = document.getElementById('browser-launch-profile');
   var profileId = profileSelect ? profileSelect.value : '';
   browserLogAction('launch', (headless ? 'Headless' : 'Headed') + ' session' + (profileId ? ' [profile: ' + profileId + ']' : ''));
-  try {
+  await withButtonFeedback(btnId, async function () {
     var body = { headless: headless };
     if (profileId) body.profileId = profileId;
     var session = await request('/api/browser/launch', {
@@ -276,9 +282,11 @@ export async function browserLaunchSession(headless) {
     browserLogAction('launch', 'Session started: ' + (session.sessionId || 'unknown'));
     await refreshSessionsList();
     setBrowserView('viewport');
-  } catch (e) {
-    browserLogAction('launch', 'Failed: ' + e.message);
-  }
+  }, {
+    pending: 'Launching browser session...',
+    success: 'Browser session launched',
+    error: 'Failed to launch session'
+  });
 }
 
 export async function browserCloseSession(sessionId) {
@@ -346,7 +354,7 @@ export async function browserNavigate() {
   browserLogAction('navigate', targetUrl);
   var pageInfo = document.getElementById('browser-page-info');
   if (pageInfo) pageInfo.textContent = 'Navigating to ' + targetUrl + '...';
-  try {
+  await withButtonFeedback('#browser-go-btn', async function () {
     var result = await request('/api/browser/navigate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -355,10 +363,11 @@ export async function browserNavigate() {
     if (pageInfo) pageInfo.textContent = 'Loaded: ' + (result.url || targetUrl);
     browserLogAction('navigate', 'OK \u2014 ' + targetUrl);
     await browserTakeScreenshot();
-  } catch (e) {
-    if (pageInfo) pageInfo.textContent = 'Navigation failed: ' + e.message;
-    browserLogAction('navigate', 'Failed: ' + e.message);
-  }
+  }, {
+    pending: 'Navigating to ' + targetUrl + '...',
+    success: 'Navigation complete',
+    error: 'Navigation failed'
+  });
 }
 
 export async function browserTakeScreenshot() {
@@ -366,21 +375,24 @@ export async function browserTakeScreenshot() {
   if (!sessionId) return;
   var container = document.getElementById('browser-viewport-container');
   if (container) container.innerHTML = '<span class="muted">Capturing screenshot...</span>';
-  try {
+  await withButtonFeedback('#browser-screenshot-btn', async function () {
     var response = await fetch('/api/v1/browser/screenshot/' + encodeURIComponent(sessionId), {
       headers: authHeaders()
     });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     var blob = await response.blob();
+    if (_lastScreenshotBlobUrl) { try { URL.revokeObjectURL(_lastScreenshotBlobUrl); } catch (_) { } }
     var url = URL.createObjectURL(blob);
+    _lastScreenshotBlobUrl = url;
     if (container) {
       container.innerHTML = '<img src="' + url + '" alt="Browser screenshot" style="max-width:100%;max-height:600px;object-fit:contain;cursor:pointer;" onclick="window.open(this.src,\'_blank\')" title="Click to open full size" />';
     }
     browserLogAction('screenshot', 'Captured for session ' + sessionId);
-  } catch (e) {
-    if (container) container.innerHTML = '<span class="muted">Screenshot failed: ' + escapeHtml(e.message) + '</span>';
-    browserLogAction('screenshot', 'Failed: ' + e.message);
-  }
+  }, {
+    pending: 'Capturing screenshot...',
+    success: 'Screenshot captured',
+    error: 'Screenshot failed'
+  });
 }
 
 export async function browserClickElement() {
@@ -391,7 +403,7 @@ export async function browserClickElement() {
     browserLogAction('click', 'Session and selector required');
     return;
   }
-  try {
+  await withButtonFeedback('#browser-click-btn', async function () {
     await request('/api/browser/click', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -399,9 +411,11 @@ export async function browserClickElement() {
     });
     browserLogAction('click', 'Clicked: ' + selector);
     await browserTakeScreenshot();
-  } catch (e) {
-    browserLogAction('click', 'Failed: ' + e.message);
-  }
+  }, {
+    pending: 'Clicking ' + selector + '...',
+    success: 'Clicked ' + selector,
+    error: 'Click failed'
+  });
 }
 
 export async function browserTypeText() {
@@ -414,7 +428,7 @@ export async function browserTypeText() {
     browserLogAction('type', 'Session and selector required');
     return;
   }
-  try {
+  await withButtonFeedback('#browser-type-btn', async function () {
     await request('/api/browser/type', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -422,9 +436,11 @@ export async function browserTypeText() {
     });
     browserLogAction('type', 'Typed into ' + selector);
     await browserTakeScreenshot();
-  } catch (e) {
-    browserLogAction('type', 'Failed: ' + e.message);
-  }
+  }, {
+    pending: 'Typing text...',
+    success: 'Typed successfully',
+    error: 'Type failed'
+  });
 }
 
 export async function browserEvaluate() {
@@ -440,7 +456,7 @@ export async function browserEvaluate() {
     resultEl.style.display = 'block';
     resultEl.textContent = 'Evaluating...';
   }
-  try {
+  await withButtonFeedback('#browser-eval-btn', async function () {
     var data = await request('/api/browser/evaluate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -451,12 +467,86 @@ export async function browserEvaluate() {
       resultEl.innerHTML = '<span style="color:#7ecf7e;">Result:</span> <pre style="margin:4px 0;white-space:pre-wrap;word-break:break-all;">' + escapeHtml(output) + '</pre>';
     }
     browserLogAction('evaluate', 'Evaluated: ' + expression.substring(0, 80));
-  } catch (e) {
-    if (resultEl) resultEl.innerHTML = '<span style="color:#ff8d8d;">Error:</span> ' + escapeHtml(e.message);
-    browserLogAction('evaluate', 'Failed: ' + e.message);
-  }
+  }, {
+    pending: 'Evaluating script...',
+    success: 'Evaluation complete',
+    error: 'Evaluation failed'
+  });
 }
 
+/* ── Navigation helpers (Back / Forward / Reload / Scroll) ── */
+
+export async function browserGoBack() {
+  var sessionId = getActiveSessionId();
+  if (!sessionId) { browserLogAction('back', 'No session selected'); return; }
+  await withButtonFeedback('#browser-back-btn', async function () {
+    await request('/api/browser/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId, expression: 'window.history.back()' })
+    });
+    browserLogAction('back', 'Navigated back');
+    setTimeout(function () { browserTakeScreenshot(); }, 500);
+  }, {
+    pending: 'Going back...',
+    success: 'Navigated back',
+    error: 'Failed to go back'
+  });
+}
+
+export async function browserGoForward() {
+  var sessionId = getActiveSessionId();
+  if (!sessionId) { browserLogAction('forward', 'No session selected'); return; }
+  await withButtonFeedback('#browser-forward-btn', async function () {
+    await request('/api/browser/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId, expression: 'window.history.forward()' })
+    });
+    browserLogAction('forward', 'Navigated forward');
+    setTimeout(function () { browserTakeScreenshot(); }, 500);
+  }, {
+    pending: 'Going forward...',
+    success: 'Navigated forward',
+    error: 'Failed to go forward'
+  });
+}
+
+export async function browserReload() {
+  var sessionId = getActiveSessionId();
+  if (!sessionId) { browserLogAction('reload', 'No session selected'); return; }
+  await withButtonFeedback('#browser-reload-btn', async function () {
+    await request('/api/browser/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId, expression: 'window.location.reload()' })
+    });
+    browserLogAction('reload', 'Page reloaded');
+    setTimeout(function () { browserTakeScreenshot(); }, 800);
+  }, {
+    pending: 'Reloading page...',
+    success: 'Page reloaded',
+    error: 'Failed to reload'
+  });
+}
+
+export async function browserScrollDown() {
+  var sessionId = getActiveSessionId();
+  if (!sessionId) { browserLogAction('scroll', 'No session selected'); return; }
+  await withButtonFeedback('#browser-scroll-btn', async function () {
+    await request('/api/browser/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId, expression: 'window.scrollBy(0, window.innerHeight * 0.8)' })
+    });
+    browserLogAction('scroll', 'Scrolled down');
+    setTimeout(function () { browserTakeScreenshot(); }, 300);
+  }, {
+    pending: 'Scrolling down...',
+    success: 'Scrolled',
+    error: 'Failed to scroll'
+  });
+}
 /* ── Network / Console / DOM panels ── */
 
 export async function browserRefreshNetwork() {
@@ -485,7 +575,7 @@ export async function browserRefreshNetwork() {
       html += '<td style="padding:4px 8px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(e.url || '') + '">' + escapeHtml(e.url || '') + '</td>';
       html += '<td style="padding:4px 8px;color:' + statusColor + ';">' + escapeHtml(String(e.status || '')) + '</td>';
       html += '<td style="padding:4px 8px;">' + escapeHtml(e.resourceType || e.type || '') + '</td>';
-      html += '<td style="padding:4px 8px;">' + (e.timing ? escapeHtml(String(Math.round(e.timing)) + 'ms') : '\u2014') + '</td>';
+      html += '<td style="padding:4px 8px;">' + (e.durationMs !== undefined && e.durationMs !== null ? escapeHtml(String(Math.round(e.durationMs)) + 'ms') : '\u2014') + '</td>';
       html += '</tr>';
     }
     tbody.innerHTML = html;
@@ -541,8 +631,9 @@ export async function browserRefreshDom() {
   container.textContent = 'Loading DOM snapshot...';
   try {
     var data = await request('/api/browser/dom-snapshot/' + encodeURIComponent(sessionId));
-    container.textContent = data.html || 'Empty document.';
-    browserLogAction('dom', 'Snapshot loaded (' + (data.length || 0) + ' chars)');
+    var domHtml = data.html || data.dom || '';
+    container.textContent = domHtml || 'Empty document.';
+    browserLogAction('dom', 'Snapshot loaded (' + (domHtml.length || 0) + ' chars)');
   } catch (e) {
     container.textContent = 'Failed: ' + e.message;
   }
@@ -775,6 +866,8 @@ export async function stopBrowserAutopilot() {
 
 function pollBrowserAutopilot(goalId) {
   if (!goalId) return;
+  // Clear any existing autopilot polling interval before starting a new one
+  if (_browserAutopilotInterval) { clearInterval(_browserAutopilotInterval); _browserAutopilotInterval = null; }
   var interval = setInterval(async function () {
     try {
       var data = await request('/api/v1/autonomous/status');
@@ -805,6 +898,7 @@ function pollBrowserAutopilot(goalId) {
       }
     } catch { /* best-effort */ }
   }, 2000);
+  _browserAutopilotInterval = interval;
 }
 
 /* ── SSHP & CSH Integration helpers ── */
@@ -857,3 +951,19 @@ export async function resumeActiveCsh() {
   }
 }
 
+/* ── Cleanup (called on tab switch) ── */
+
+export function cleanupBrowserTab() {
+  if (_browserAutopilotInterval) {
+    clearInterval(_browserAutopilotInterval);
+    _browserAutopilotInterval = null;
+  }
+  if (window._browserWsRefreshTimer) {
+    clearTimeout(window._browserWsRefreshTimer);
+    window._browserWsRefreshTimer = null;
+  }
+  if (_lastScreenshotBlobUrl) {
+    try { URL.revokeObjectURL(_lastScreenshotBlobUrl); } catch (_) {}
+    _lastScreenshotBlobUrl = null;
+  }
+}

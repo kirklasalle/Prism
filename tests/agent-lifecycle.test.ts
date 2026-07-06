@@ -147,7 +147,11 @@ describe("AgentLifecycleManager", () => {
     });
 
     it("clearModelOverride() removes agent model override", () => {
-        lifecycle.spawn({ agentId: "test-agent", role: "chat", modelOverride: { providerId: "openai", model: "gpt-4" } });
+        lifecycle.spawn({
+            agentId: "test-agent",
+            role: "chat",
+            modelOverride: { providerId: "openai", model: "gpt-4" },
+        });
         const result = lifecycle.clearModelOverride("test-agent");
         assert.ok(result);
         assert.equal(lifecycle.get("test-agent")?.modelOverride, undefined);
@@ -172,9 +176,12 @@ describe("AgentLifecycleManager", () => {
 
     it("reapIdleEphemerals() removes idle ephemerals past timeout", () => {
         // Create with very short timeout
-        const manager = new AgentLifecycleManager({
-            onReap: (id) => events.reaped.push(id),
-        }, 0); // 0 ms timeout
+        const manager = new AgentLifecycleManager(
+            {
+                onReap: (id) => events.reaped.push(id),
+            },
+            0,
+        ); // 0 ms timeout
 
         const inst = manager.spawn({ role: "chat" }); // ephemeral by default
         // Force lastActiveAt to the past

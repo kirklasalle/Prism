@@ -201,15 +201,15 @@ export interface BrowserDriveStep extends StepBase {
     readonly kind: "browserDrive";
     /** Curated sub-action; mirrors browser-control-tool's governed surface. */
     readonly action:
-    | "launch"
-    | "close"
-    | "navigate"
-    | "click"
-    | "type"
-    | "screenshot"
-    | "assertText"
-    | "assertSelector"
-    | "waitForSelector";
+        | "launch"
+        | "close"
+        | "navigate"
+        | "click"
+        | "type"
+        | "screenshot"
+        | "assertText"
+        | "assertSelector"
+        | "waitForSelector";
     /** Browser session id. `launch` allocates one; subsequent steps reuse it. */
     readonly sessionId?: string;
     /** Action-specific arguments — URL, selector, text, etc. */
@@ -226,12 +226,7 @@ export interface BrowserDriveStep extends StepBase {
 export interface ComputerUseStep extends StepBase {
     readonly kind: "computerUse";
     /** Curated sub-action; mirrors computer-use-tool's governed surface. */
-    readonly action:
-    | "screenshot"
-    | "mouse_move"
-    | "mouse_click"
-    | "type"
-    | "key";
+    readonly action: "screenshot" | "mouse_move" | "mouse_click" | "type" | "key";
     /** Action-specific arguments — coordinates, text, key chord, etc. */
     readonly args?: Record<string, unknown>;
     /** When set, the orchestrator asserts this exact value appears in the response body. */

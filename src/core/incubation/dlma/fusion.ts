@@ -53,17 +53,10 @@ export function fuseLenses(inputs: FusionInputs, limit: number = 10): FusedMatch
         });
     }
 
-    return fused
-        .sort((a, b) => b.fusedScore - a.fusedScore)
-        .slice(0, Math.max(1, limit));
+    return fused.sort((a, b) => b.fusedScore - a.fusedScore).slice(0, Math.max(1, limit));
 }
 
-function computeConfidence(
-    sem: number,
-    cau: number,
-    wSem: number,
-    wCau: number,
-): number {
+function computeConfidence(sem: number, cau: number, wSem: number, wCau: number): number {
     // Variance proxy: how far each lens is from the fused mean.
     const fused = wSem * sem + wCau * cau;
     const varSem = (sem - fused) ** 2;
@@ -74,16 +67,12 @@ function computeConfidence(
     return Math.max(0, Math.min(1, confidence));
 }
 
-function explain(
-    sem: number,
-    cau: number,
-    wSem: number,
-    wCau: number,
-    consequence: ConsequenceProfile,
-): string {
+function explain(sem: number, cau: number, wSem: number, wCau: number, consequence: ConsequenceProfile): string {
     const dominant = sem * wSem >= cau * wCau ? "semantic" : "causal";
-    return `dominant=${dominant} semantic=${sem.toFixed(2)} causal=${cau.toFixed(2)} `
-        + `weights=[${wSem.toFixed(2)},${wCau.toFixed(2)}] trust=${consequence.trust.toFixed(2)}`;
+    return (
+        `dominant=${dominant} semantic=${sem.toFixed(2)} causal=${cau.toFixed(2)} ` +
+        `weights=[${wSem.toFixed(2)},${wCau.toFixed(2)}] trust=${consequence.trust.toFixed(2)}`
+    );
 }
 
 function clampUnit(x: number): number {

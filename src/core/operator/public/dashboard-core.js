@@ -52,9 +52,9 @@ export const state = {
   matrixDraftLocality: 'local',
   matrixDraftStrengths: '',
   matrixEditingPattern: null,
-  sessionProviderCollapsed: false,
+  sessionProviderCollapsed: true,
   providerConfigCollapsed: true,
-  modelMatrixCollapsed: false,
+  modelMatrixCollapsed: true,
   modelRoutingCollapsed: true,
   routingStrategy: 'single',
   routingRoleOverrides: {},
@@ -76,33 +76,55 @@ export const state = {
   srActivating: false,
   srIsolationLevel: null,
   srIsolationAdvisory: null,
-  settingsPanelCollapsed: false,
-  llmAuditCollapsed: false,
+  settingsPanelCollapsed: true,
+  llmAuditCollapsed: true,
   toolsPanelCollapsed: true,
   pluginsPanelCollapsed: true,
   utilitiesPanelCollapsed: true,
-  networkToolsCollapsed: false,
-  networkSettingsCollapsed: false,
-  networkTelemetryCollapsed: false,
-  networkConsoleCollapsed: false,
+  skillsPanelCollapsed: true,
+  networkToolsCollapsed: true,
+  networkSettingsCollapsed: true,
+  networkTelemetryCollapsed: true,
+  networkConsoleCollapsed: true,
   networkCommandHistory: [],
   networkTelemetryData: { totalCommands: 0, tier1Count: 0, tier2Count: 0, tier3Count: 0, lastCommand: null, errorCount: 0 },
   vrgcAvailable: false,
-  agentMgmtCollapsed: false,
-  subAgentCollapsed: false,
-  swarmControlCollapsed: false,
-  agentTelemetryCollapsed: false,
-  localControlCollapsed: false,
-  consoleViewCollapsed: false,
-  computerConfigCollapsed: false,
-  policyControlCollapsed: false,
-  browserControlCollapsed: false,
-  deviceManagerCollapsed: false,
-  characterPanelCollapsed: false,
-  workspaceLocationCollapsed: false,
-  workspaceFilesCollapsed: false,
-  importManagerCollapsed: false,
-  workspaceSettingsCollapsed: false,
+  agentMgmtCollapsed: true,
+  subAgentCollapsed: true,
+  swarmControlCollapsed: true,
+  agentTelemetryCollapsed: true,
+  localControlCollapsed: true,
+  consoleViewCollapsed: true,
+  computerConfigCollapsed: true,
+  policyControlCollapsed: true,
+  browserControlCollapsed: true,
+  deviceManagerCollapsed: true,
+  characterPanelCollapsed: true,
+  workspaceLocationCollapsed: true,
+  workspaceFilesCollapsed: true,
+  importManagerCollapsed: true,
+  workspaceSettingsCollapsed: true,
+  agentControlCollapsed: true,
+  guardianAgentCollapsed: true,
+  cshHandoffCollapsed: true,
+  aabLedgerCollapsed: true,
+  autonomousGoalsCollapsed: true,
+  hardwareSwarmCollapsed: true,
+  browserAutopilotCollapsed: true,
+  autonomousControlCollapsed: true,
+  visionFramebufferCollapsed: true,
+  releaseValidationCollapsed: true,
+  ptacDemoCollapsed: true,
+  supportDeskCollapsed: true,
+  unifiedTelemetryCollapsed: true,
+  logsLiveTimelineCollapsed: true,
+  identitySessionsCollapsed: true,
+  networkIntelligenceCollapsed: true,
+  usageCostCollapsed: true,
+  sloGaugesCollapsed: true,
+  compliancePanelCollapsed: true,
+  healthWidgetCollapsed: true,
+  approvalQueueCollapsed: true,
   characterAssignments: [],
   availableCharacters: [],
   characterAuditEvents: [],
@@ -227,6 +249,7 @@ export const tabs = [
   { id: 'telemetry', label: 'Telemetry' },
   { id: 'logs', label: 'Logs & Debug' },
   { id: 'scheduler', label: 'Scheduler' },
+  { id: 'channels', label: 'Channels' },
   { id: 'wiki', label: 'Prism Wiki' }
 ];
 
@@ -560,6 +583,31 @@ export
   try { document.dispatchEvent(new CustomEvent('panel-collapse-toggle', { detail: { panelKey: panelKey, collapsed: state[stateKey] } })); } catch (_) { }
 }
 
+export function applyPanelCollapseState(panelKey) {
+  var stateKey = panelKey + 'Collapsed';
+  if (!(stateKey in state)) return;
+  var collapsed = !!state[stateKey];
+  var chevron = document.getElementById('chevron-' + panelKey) || document.getElementById(panelKey + '-collapse-icon');
+  var body = document.getElementById('body-' + panelKey) || document.getElementById(panelKey + '-collapsible');
+  if (chevron) { chevron.textContent = collapsed ? '\u25B6' : '\u25BC'; }
+  if (body) {
+    if (collapsed) { body.classList.add('collapsed'); }
+    else { body.classList.remove('collapsed'); }
+  }
+  var summary = document.getElementById(panelKey + '-summary');
+  if (summary) {
+    summary.style.display = collapsed ? '' : 'none';
+  }
+}
+
+export function applyAllPanelCollapseStates() {
+  for (var stateKey in state) {
+    if (!stateKey.endsWith('Collapsed')) continue;
+    var panelKey = stateKey.slice(0, -9);
+    applyPanelCollapseState(panelKey);
+  }
+}
+
 export
   function safeRenderStep(name, fn) {
   try {
@@ -823,4 +871,393 @@ window.openLocalPath = async function (path) {
     alert('Error opening path: ' + String(err));
   }
 };
+
+export function showConfirm(message) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'prism-confirm-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(8, 8, 16, 0.7);backdrop-filter:blur(8px);z-index:100000;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s ease;padding:20px;box-sizing:border-box;';
+
+    const container = document.createElement('div');
+    container.className = 'prism-confirm-modal';
+    container.style.cssText = 'background:rgba(22, 22, 34, 0.95);border:1px solid rgba(139, 92, 246, 0.35);border-radius:12px;box-shadow:0 8px 32px rgba(0, 0, 0, 0.5);width:100%;max-width:420px;padding:24px;color:#e2e8f0;font-family:system-ui, -apple-system, sans-serif;transform:scale(0.9);transition:transform 0.2s ease;box-sizing:border-box;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:16px;';
+    header.innerHTML = `
+      <div style="width:36px;height:36px;border-radius:50%;background:rgba(139, 92, 246, 0.15);display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:18px;font-weight:bold;flex-shrink:0;">❓</div>
+      <div style="font-size:16px;font-weight:600;color:#ffffff;line-height:1.2;">PRISM Confirmation</div>
+    `;
+    container.appendChild(header);
+
+    const msgEl = document.createElement('div');
+    msgEl.style.cssText = 'font-size:14px;color:#94a3b8;line-height:1.5;margin-bottom:24px;white-space:pre-wrap;word-break:break-word;';
+    msgEl.textContent = message;
+    container.appendChild(msgEl);
+
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display:flex;justify-content:flex-end;gap:12px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'padding:8px 16px;border-radius:6px;background:transparent;border:1px solid rgba(148, 163, 184, 0.3);color:#e2e8f0;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s ease;outline:none;';
+    cancelBtn.onmouseenter = () => { cancelBtn.style.background = 'rgba(255, 255, 255, 0.05)'; };
+    cancelBtn.onmouseleave = () => { cancelBtn.style.background = 'transparent'; };
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = 'Confirm';
+    confirmBtn.style.cssText = 'padding:8px 16px;border-radius:6px;background:#6d28d9;border:1px solid #7c3aed;color:#ffffff;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s ease;outline:none;box-shadow:0 2px 4px rgba(109, 40, 217, 0.3);';
+    confirmBtn.onmouseenter = () => { confirmBtn.style.background = '#7c3aed'; };
+    confirmBtn.onmouseleave = () => { confirmBtn.style.background = '#6d28d9'; };
+
+    btnContainer.appendChild(cancelBtn);
+    btnContainer.appendChild(confirmBtn);
+    container.appendChild(btnContainer);
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      container.style.transform = 'scale(1)';
+    });
+
+    const cleanup = (value) => {
+      overlay.style.opacity = '0';
+      container.style.transform = 'scale(0.9)';
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay);
+        }
+        resolve(value);
+      }, 200);
+    };
+
+    confirmBtn.onclick = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    overlay.onclick = (e) => {
+      if (e.target === overlay) cleanup(false);
+    };
+
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        document.removeEventListener('keydown', handleKeydown);
+        cleanup(false);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        document.removeEventListener('keydown', handleKeydown);
+        cleanup(true);
+      }
+    };
+    document.addEventListener('keydown', handleKeydown);
+  });
+}
+
+window.showConfirm = showConfirm;
+
+
+/**
+ * Premium text-input modal — a styled replacement for the native `prompt()`.
+ * Resolves with the trimmed string, or null if the user cancels.
+ *
+ * @param {string} message   Prompt label/question.
+ * @param {object} [opts]
+ * @param {string} [opts.defaultValue]  Prefilled value.
+ * @param {string} [opts.placeholder]   Input placeholder.
+ * @param {string} [opts.confirmLabel]  Confirm button text (default "OK").
+ * @param {string} [opts.icon]          Header icon (default "✏️").
+ * @returns {Promise<string|null>}
+ */
+export function showPrompt(message, opts = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'prism-prompt-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(8, 8, 16, 0.7);backdrop-filter:blur(8px);z-index:100000;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s ease;padding:20px;box-sizing:border-box;';
+
+    const container = document.createElement('div');
+    container.className = 'prism-prompt-modal';
+    container.style.cssText = 'background:rgba(22, 22, 34, 0.95);border:1px solid rgba(139, 92, 246, 0.35);border-radius:12px;box-shadow:0 8px 32px rgba(0, 0, 0, 0.5);width:100%;max-width:460px;padding:24px;color:#e2e8f0;font-family:system-ui, -apple-system, sans-serif;transform:scale(0.9);transition:transform 0.2s ease;box-sizing:border-box;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:16px;';
+    const iconEl = document.createElement('div');
+    iconEl.style.cssText = 'width:36px;height:36px;border-radius:50%;background:rgba(139, 92, 246, 0.15);display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:18px;flex-shrink:0;';
+    iconEl.textContent = opts.icon || '✏️';
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-size:15px;font-weight:600;color:#ffffff;line-height:1.3;white-space:pre-wrap;';
+    titleEl.textContent = message;
+    header.appendChild(iconEl);
+    header.appendChild(titleEl);
+    container.appendChild(header);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = opts.defaultValue || '';
+    input.placeholder = opts.placeholder || '';
+    input.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 12px;border-radius:6px;background:rgba(8, 8, 16, 0.6);border:1px solid rgba(148, 163, 184, 0.3);color:#e2e8f0;font-size:14px;margin-bottom:24px;outline:none;';
+    input.onfocus = () => { input.style.borderColor = 'rgba(139, 92, 246, 0.6)'; };
+    input.onblur = () => { input.style.borderColor = 'rgba(148, 163, 184, 0.3)'; };
+    container.appendChild(input);
+
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display:flex;justify-content:flex-end;gap:12px;';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'padding:8px 16px;border-radius:6px;background:transparent;border:1px solid rgba(148, 163, 184, 0.3);color:#e2e8f0;font-size:13px;font-weight:500;cursor:pointer;outline:none;';
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = opts.confirmLabel || 'OK';
+    confirmBtn.style.cssText = 'padding:8px 16px;border-radius:6px;background:#6d28d9;border:1px solid #7c3aed;color:#ffffff;font-size:13px;font-weight:500;cursor:pointer;outline:none;box-shadow:0 2px 4px rgba(109, 40, 217, 0.3);';
+    btnContainer.appendChild(cancelBtn);
+    btnContainer.appendChild(confirmBtn);
+    container.appendChild(btnContainer);
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      container.style.transform = 'scale(1)';
+      input.focus();
+      input.select();
+    });
+
+    const cleanup = (value) => {
+      overlay.style.opacity = '0';
+      container.style.transform = 'scale(0.9)';
+      document.removeEventListener('keydown', handleKeydown);
+      setTimeout(() => {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        resolve(value);
+      }, 200);
+    };
+
+    confirmBtn.onclick = () => { const v = input.value.trim(); cleanup(v === '' ? null : v); };
+    cancelBtn.onclick = () => cleanup(null);
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+      else if (e.key === 'Enter') { e.preventDefault(); const v = input.value.trim(); cleanup(v === '' ? null : v); }
+    };
+    document.addEventListener('keydown', handleKeydown);
+  });
+}
+
+window.showPrompt = showPrompt;
+
+
+/**
+ * Premium single-choice selection modal — a styled replacement for numbered
+ * `prompt()` menus. Resolves with the chosen option's `value`, or null on cancel.
+ *
+ * @param {string} message  Prompt label/question.
+ * @param {Array<{value:string,label:string,description?:string}>} options
+ * @param {object} [opts]
+ * @param {string} [opts.icon]  Header icon (default "📋").
+ * @returns {Promise<string|null>}
+ */
+export function showSelect(message, options, opts = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'prism-select-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(8, 8, 16, 0.7);backdrop-filter:blur(8px);z-index:100000;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s ease;padding:20px;box-sizing:border-box;';
+
+    const container = document.createElement('div');
+    container.className = 'prism-select-modal';
+    container.style.cssText = 'background:rgba(22, 22, 34, 0.95);border:1px solid rgba(139, 92, 246, 0.35);border-radius:12px;box-shadow:0 8px 32px rgba(0, 0, 0, 0.5);width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;padding:24px;color:#e2e8f0;font-family:system-ui, -apple-system, sans-serif;transform:scale(0.9);transition:transform 0.2s ease;box-sizing:border-box;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-shrink:0;';
+    const iconEl = document.createElement('div');
+    iconEl.style.cssText = 'width:36px;height:36px;border-radius:50%;background:rgba(139, 92, 246, 0.15);display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:18px;flex-shrink:0;';
+    iconEl.textContent = opts.icon || '📋';
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-size:15px;font-weight:600;color:#ffffff;line-height:1.3;';
+    titleEl.textContent = message;
+    header.appendChild(iconEl);
+    header.appendChild(titleEl);
+    container.appendChild(header);
+
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:6px;overflow:auto;margin-bottom:20px;';
+    (options || []).forEach((opt) => {
+      const row = document.createElement('button');
+      row.style.cssText = 'text-align:left;padding:10px 12px;border-radius:8px;background:rgba(8, 8, 16, 0.4);border:1px solid rgba(148, 163, 184, 0.2);color:#e2e8f0;cursor:pointer;transition:all 0.15s ease;outline:none;';
+      row.onmouseenter = () => { row.style.background = 'rgba(139, 92, 246, 0.15)'; row.style.borderColor = 'rgba(139, 92, 246, 0.5)'; };
+      row.onmouseleave = () => { row.style.background = 'rgba(8, 8, 16, 0.4)'; row.style.borderColor = 'rgba(148, 163, 184, 0.2)'; };
+      const labelEl = document.createElement('div');
+      labelEl.style.cssText = 'font-size:13px;font-weight:600;';
+      labelEl.textContent = opt.label;
+      row.appendChild(labelEl);
+      if (opt.description) {
+        const descEl = document.createElement('div');
+        descEl.style.cssText = 'font-size:11px;color:#94a3b8;margin-top:2px;';
+        descEl.textContent = opt.description;
+        row.appendChild(descEl);
+      }
+      row.onclick = () => cleanup(opt.value);
+      list.appendChild(row);
+    });
+    container.appendChild(list);
+
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display:flex;justify-content:flex-end;flex-shrink:0;';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'padding:8px 16px;border-radius:6px;background:transparent;border:1px solid rgba(148, 163, 184, 0.3);color:#e2e8f0;font-size:13px;font-weight:500;cursor:pointer;outline:none;';
+    btnContainer.appendChild(cancelBtn);
+    container.appendChild(btnContainer);
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      container.style.transform = 'scale(1)';
+    });
+
+    const cleanup = (value) => {
+      overlay.style.opacity = '0';
+      container.style.transform = 'scale(0.9)';
+      document.removeEventListener('keydown', handleKeydown);
+      setTimeout(() => {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        resolve(value);
+      }, 200);
+    };
+
+    cancelBtn.onclick = () => cleanup(null);
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+    const handleKeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); cleanup(null); } };
+    document.addEventListener('keydown', handleKeydown);
+  });
+}
+
+window.showSelect = showSelect;
+
+
+/**
+ * Premium multi-field form modal — replaces chains of `prompt()` calls.
+ * Resolves with an object keyed by field `name`, or null on cancel.
+ *
+ * @param {string} title  Modal heading.
+ * @param {Array<{name:string, label:string, type?:'text'|'textarea'|'email', placeholder?:string, defaultValue?:string, required?:boolean, description?:string}>} fields
+ * @param {object} [opts]
+ * @param {string} [opts.confirmLabel]  Confirm button text (default "Save").
+ * @param {string} [opts.icon]          Header icon (default "📝").
+ * @returns {Promise<Record<string,string>|null>}
+ */
+export function showForm(title, fields, opts = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'prism-form-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(8, 8, 16, 0.7);backdrop-filter:blur(8px);z-index:100000;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s ease;padding:20px;box-sizing:border-box;';
+
+    const container = document.createElement('div');
+    container.className = 'prism-form-modal';
+    container.style.cssText = 'background:rgba(22, 22, 34, 0.97);border:1px solid rgba(139, 92, 246, 0.35);border-radius:12px;box-shadow:0 8px 40px rgba(0, 0, 0, 0.6);width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;color:#e2e8f0;font-family:system-ui, -apple-system, sans-serif;transform:scale(0.92);transition:transform 0.2s ease;box-sizing:border-box;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:12px;padding:20px 24px 16px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;';
+    const iconEl = document.createElement('div');
+    iconEl.style.cssText = 'width:36px;height:36px;border-radius:50%;background:rgba(139, 92, 246, 0.15);display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:18px;flex-shrink:0;';
+    iconEl.textContent = opts.icon || '📝';
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-size:16px;font-weight:700;color:#ffffff;';
+    titleEl.textContent = title;
+    header.appendChild(iconEl);
+    header.appendChild(titleEl);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = 'margin-left:auto;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:4px 8px;border-radius:4px;flex-shrink:0;';
+    closeBtn.onclick = () => cleanup(null);
+    header.appendChild(closeBtn);
+    container.appendChild(header);
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:20px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;flex:1;';
+
+    const inputRefs = {};
+    (fields || []).forEach((field) => {
+      const fieldWrapper = document.createElement('div');
+      const labelEl = document.createElement('label');
+      labelEl.style.cssText = 'display:block;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;';
+      labelEl.textContent = field.label + (field.required ? ' *' : '');
+      fieldWrapper.appendChild(labelEl);
+      if (field.description) {
+        const descEl = document.createElement('div');
+        descEl.style.cssText = 'font-size:11px;color:#64748b;margin-bottom:5px;';
+        descEl.textContent = field.description;
+        fieldWrapper.appendChild(descEl);
+      }
+      const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:6px;background:rgba(8, 8, 16, 0.5);border:1px solid rgba(148, 163, 184, 0.25);color:#e2e8f0;font-size:13px;font-family:inherit;outline:none;resize:vertical;';
+      let input;
+      if (field.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.rows = 3;
+      } else {
+        input = document.createElement('input');
+        input.type = field.type || 'text';
+      }
+      input.value = field.defaultValue || '';
+      input.placeholder = field.placeholder || '';
+      input.style.cssText = inputStyle;
+      input.onfocus = () => { input.style.borderColor = 'rgba(139, 92, 246, 0.6)'; };
+      input.onblur = () => { input.style.borderColor = 'rgba(148, 163, 184, 0.25)'; };
+      inputRefs[field.name] = input;
+      fieldWrapper.appendChild(input);
+      body.appendChild(fieldWrapper);
+    });
+    container.appendChild(body);
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:16px 24px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'padding:9px 18px;border-radius:6px;background:transparent;border:1px solid rgba(148, 163, 184, 0.3);color:#e2e8f0;font-size:13px;font-weight:500;cursor:pointer;';
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = opts.confirmLabel || 'Save';
+    confirmBtn.style.cssText = 'padding:9px 18px;border-radius:6px;background:#6d28d9;border:1px solid #7c3aed;color:#ffffff;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(109, 40, 217, 0.3);';
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    container.appendChild(footer);
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      container.style.transform = 'scale(1)';
+      const first = Object.values(inputRefs)[0];
+      if (first) first.focus();
+    });
+
+    const cleanup = (value) => {
+      overlay.style.opacity = '0';
+      container.style.transform = 'scale(0.92)';
+      document.removeEventListener('keydown', handleKeydown);
+      setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); resolve(value); }, 200);
+    };
+
+    const submit = () => {
+      for (const field of (fields || [])) {
+        if (field.required && !inputRefs[field.name].value.trim()) {
+          inputRefs[field.name].style.borderColor = 'rgba(239, 68, 68, 0.7)';
+          inputRefs[field.name].focus();
+          return;
+        }
+      }
+      const result = {};
+      for (const field of (fields || [])) { result[field.name] = inputRefs[field.name].value.trim(); }
+      cleanup(result);
+    };
+
+    confirmBtn.onclick = submit;
+    cancelBtn.onclick = () => cleanup(null);
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+    };
+    document.addEventListener('keydown', handleKeydown);
+  });
+}
+
+window.showForm = showForm;
 

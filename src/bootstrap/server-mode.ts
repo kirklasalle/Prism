@@ -62,12 +62,21 @@ export async function runServerMode(ctx: AppContext): Promise<void> {
     if (cliSetup) {
         const setupUrl = `http://localhost:${dashboardPort}/setup`;
         console.log(`[PRISM] --setup flag detected, opening wizard: ${setupUrl}`);
-        import("node:child_process").then(({ exec }) => {
-            const cmd = process.platform === "win32" ? `start "" "${setupUrl}"`
-                : process.platform === "darwin" ? `open "${setupUrl}"`
-                    : `xdg-open "${setupUrl}"`;
-            exec(cmd, () => {/* best-effort */ });
-        }).catch(() => {/* ignore */ });
+        import("node:child_process")
+            .then(({ exec }) => {
+                const cmd =
+                    process.platform === "win32"
+                        ? `start "" "${setupUrl}"`
+                        : process.platform === "darwin"
+                          ? `open "${setupUrl}"`
+                          : `xdg-open "${setupUrl}"`;
+                exec(cmd, () => {
+                    /* best-effort */
+                });
+            })
+            .catch(() => {
+                /* ignore */
+            });
     }
 
     await waitForShutdown(async () => {
@@ -125,7 +134,7 @@ export async function runServerMode(ctx: AppContext): Promise<void> {
 
         console.log("[PRISM][system] [TRACE] Terminating all active browser control sessions...");
         try {
-            const browserTool = ctx.dashboardService.tools.find(t => t.name === "browser_control") as any;
+            const browserTool = ctx.dashboardService.tools.find((t) => t.name === "browser_control") as any;
             const mgr = browserTool?.getManager();
             if (mgr) {
                 await mgr.closeAll();
@@ -178,7 +187,9 @@ export async function runServerMode(ctx: AppContext): Promise<void> {
                 try {
                     process.kill(-ppid, "SIGKILL");
                 } catch {
-                    try { process.kill(ppid, "SIGKILL"); } catch {}
+                    try {
+                        process.kill(ppid, "SIGKILL");
+                    } catch {}
                 }
                 process.exit(0);
             }
@@ -191,25 +202,44 @@ export async function runServerMode(ctx: AppContext): Promise<void> {
  * orchestrator to exercise all governance tiers.
  */
 export async function runDemoMode(ctx: AppContext): Promise<void> {
-    const { orchestrator, activityBus, sessionId, workflowExecutor, semanticIndex, episodicMemory, sessionMemory, metricsCollector, retrievalDashboardStore, dashboardPort, approvalQueue } = ctx;
+    const {
+        orchestrator,
+        activityBus,
+        sessionId,
+        workflowExecutor,
+        semanticIndex,
+        episodicMemory,
+        sessionMemory,
+        metricsCollector,
+        retrievalDashboardStore,
+        dashboardPort,
+        approvalQueue,
+    } = ctx;
 
     console.log("\n--- DEMO 1: Tier 1 autonomous (file_list) ---");
     await orchestrator.run({
-        operation: "file_list", args: { path: "." }, risk: "low", mutatesState: false,
+        operation: "file_list",
+        args: { path: "." },
+        risk: "low",
+        mutatesState: false,
     });
 
     console.log("\n--- DEMO 2: Tier 2 conditional (file_write) ---");
     await orchestrator.run({
         operation: "file_write",
         args: { path: "./prism-output/hello.txt", content: "PRISM Phase 1 operational\n" },
-        risk: "medium", mutatesState: true,
+        risk: "medium",
+        mutatesState: true,
         rollbackPlan: "delete prism-output/hello.txt",
     });
 
     console.log("\n--- DEMO 3: Tier 2 conditional (shell_exec) ---");
     await orchestrator.run({
-        operation: "shell_exec", args: { command: "node --version", timeoutMs: 5000 },
-        risk: "medium", mutatesState: false, rollbackPlan: "read-only command",
+        operation: "shell_exec",
+        args: { command: "node --version", timeoutMs: 5000 },
+        risk: "medium",
+        mutatesState: false,
+        rollbackPlan: "read-only command",
     });
 
     console.log("\n--- DEMO 4: Tier 3 approval-gated (file_write critical) ---");
@@ -223,20 +253,25 @@ export async function runDemoMode(ctx: AppContext): Promise<void> {
     await orchestrator.run({
         operation: "file_write",
         args: { path: "./prism-output/critical.cfg", content: "PRISM_MODE=production\n" },
-        risk: "high", mutatesState: true,
+        risk: "high",
+        mutatesState: true,
         rollbackPlan: "restore critical.cfg from git checkpoint",
     });
 
     console.log("\n--- DEMO 5: Tier 1 autonomous (semantic_query) ---");
     await orchestrator.run({
-        operation: "semantic_query", args: { query: "approval file_write", limit: 3, sessionId },
-        risk: "low", mutatesState: false,
+        operation: "semantic_query",
+        args: { query: "approval file_write", limit: 3, sessionId },
+        risk: "low",
+        mutatesState: false,
     });
 
     console.log("\n--- DEMO 6: Tier 1 autonomous (memory_query mode=all) ---");
     await orchestrator.run({
-        operation: "memory_query", args: { mode: "all", query: "approval file_write", limit: 3, sessionId },
-        risk: "low", mutatesState: false,
+        operation: "memory_query",
+        args: { mode: "all", query: "approval file_write", limit: 3, sessionId },
+        risk: "low",
+        mutatesState: false,
     });
 
     console.log("\n--- DEMO 7: Multi-step workflow with fallbacks ---");
@@ -244,7 +279,13 @@ export async function runDemoMode(ctx: AppContext): Promise<void> {
         "Demo Workflow",
         [
             { id: "step1", operation: "file_list", args: { path: "." }, risk: "low", mutatesState: false },
-            { id: "step2", operation: "memory_query", args: { mode: "episodic_recent", limit: 2 }, risk: "low", mutatesState: false },
+            {
+                id: "step2",
+                operation: "memory_query",
+                args: { mode: "episodic_recent", limit: 2 },
+                risk: "low",
+                mutatesState: false,
+            },
         ],
         [],
     );
@@ -259,7 +300,9 @@ export async function runDemoMode(ctx: AppContext): Promise<void> {
     const retrievalDiagnostics = metricsCollector.getGrowthAndDriftDiagnostics(5, 0.12);
     const retrievalCohorts = metricsCollector.getCohortDashboard(50, 3, 1);
     (ctx as any).retrievalDashboardStore.saveSnapshot?.(sessionId, retrievalCohorts);
-    const cohortTrend = (ctx as any).retrievalDashboardStore.getTrendReport?.(sessionId, 10, 3, { trendP95LatencyIncreaseMs: 80 });
+    const cohortTrend = (ctx as any).retrievalDashboardStore.getTrendReport?.(sessionId, 10, 3, {
+        trendP95LatencyIncreaseMs: 80,
+    });
 
     console.log("\n" + "=".repeat(60));
     console.log("  Activity events recorded : " + events.length);

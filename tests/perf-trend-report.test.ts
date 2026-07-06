@@ -30,8 +30,16 @@ export async function testPerfTrendReport(): Promise<void> {
 
     // Markdown rendering smoke-test
     const md = mod.renderMarkdown([
-        { profile: "individual", current: { count: 10, p50Ms: 1.2, p95Ms: 4.5 }, drift: { driftRatio: 0, driftPct: 0, status: "baseline" } },
-        { profile: "business", current: { count: 10, p50Ms: 1.5, p95Ms: 5.0 }, drift: { driftRatio: 0.2, driftPct: 20, status: "warn" } },
+        {
+            profile: "individual",
+            current: { count: 10, p50Ms: 1.2, p95Ms: 4.5 },
+            drift: { driftRatio: 0, driftPct: 0, status: "baseline" },
+        },
+        {
+            profile: "business",
+            current: { count: 10, p50Ms: 1.5, p95Ms: 5.0 },
+            drift: { driftRatio: 0.2, driftPct: 20, status: "warn" },
+        },
     ]);
     assert.match(md, /Profile-differentiated perf trend report/);
     assert.match(md, /individual/);

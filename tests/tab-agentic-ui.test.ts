@@ -81,6 +81,10 @@ export function showTransientNotice(message, duration = 3000) {}
 export function withButtonFeedback(btn, promise) { return promise; }
 export function trimAgenticEvent(evt) { return evt; }
 export function showAnchoredToast(message, el, severity = 'info', timeout = 4000) {}
+export function showConfirm(message) { return Promise.resolve(true); }
+export function showForm(title, fields, opts = {}) { return Promise.resolve(null); }
+export function showPrompt(message, opts = {}) { return Promise.resolve(null); }
+export function safeRenderStep(name, fn) { try { fn(); } catch(e) {} }
 `;
 
 /* ── Module types ─────────────────────────────────────────────────────── */
@@ -126,10 +130,10 @@ describe("tab-agentic.js — Frontend Unit Tests", function () {
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
         // Mock prompt/alert for launchNewAgent/createSwarm
         (global as any).prompt = () => null;
-        (global as any).alert = () => { };
+        (global as any).alert = () => {};
 
         const moduleUrl = pathToFileURL(join(tmpDir, "tab-agentic.js")).href;
-        mod = await import(moduleUrl) as TabAgenticModule;
+        mod = (await import(moduleUrl)) as TabAgenticModule;
 
         const coreUrl = pathToFileURL(join(tmpDir, "dashboard-core.js")).href;
         const core = await import(coreUrl);
@@ -289,8 +293,18 @@ describe("tab-agentic.js — Frontend Unit Tests", function () {
                 lastHealthCheck: new Date().toISOString(),
                 lastAction: "health_check",
                 recentActions: [
-                    { timestamp: new Date().toISOString(), action: "health_check", result: "success", detail: "All systems OK" },
-                    { timestamp: new Date().toISOString(), action: "repair", result: "escalated", detail: "Escalated to operator" },
+                    {
+                        timestamp: new Date().toISOString(),
+                        action: "health_check",
+                        result: "success",
+                        detail: "All systems OK",
+                    },
+                    {
+                        timestamp: new Date().toISOString(),
+                        action: "repair",
+                        result: "escalated",
+                        detail: "Escalated to operator",
+                    },
                 ],
                 slotInfo: null,
             };
@@ -339,9 +353,9 @@ describe("tab-agentic.js — Frontend Unit Tests", function () {
             assert.ok(html.includes("chat"), "should show role");
             assert.ok(html.includes("coder"), "should show role");
             assert.ok(html.includes("10 tasks"), "should show task count");
-            assert.ok(html.includes("stopAgent"), "should have stop button");
-            assert.ok(html.includes("promoteAgent"), "should have promote button");
-            assert.ok(html.includes("demoteAgent"), "should have demote button");
+            assert.ok(html.includes('data-agent-action="stop"'), "should have stop button");
+            assert.ok(html.includes('data-agent-action="promote"'), "should have promote button");
+            assert.ok(html.includes('data-agent-action="demote"'), "should have demote button");
         });
 
         it("shows correct status colors", () => {
@@ -502,7 +516,7 @@ describe("tab-agentic.js — Frontend Unit Tests", function () {
             const html = el!.innerHTML;
             assert.ok(html.includes("5%"), "should show 5% error rate");
             // 5% error rate should use accent color, not red
-            // The error rate card's value div should contain var(--accent). 
+            // The error rate card's value div should contain var(--accent).
             // We check that #ff8d8d does NOT appear in the error rate context
             // (note: it may appear elsewhere for other elements, so we check the 5% is not red)
             const errorRateSection = html.split("Error Rate")[1]?.split("Avg Response")[0] || "";

@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, dashboardLog } from './dashboard-core.js';
+import { state, request, escapeHtml, dashboardLog, showConfirm } from './dashboard-core.js';
 import { registerTooltipById } from './prism-tooltips.js';
 
 // ── Character archetype icons ────────────────────────────────────────────────
@@ -332,6 +332,18 @@ export function renderCharacterAssignmentForm() {
   registerCharacterTooltips(chars);
   updateDynamicLabels();
   renderCharacterDefinitionPreview();
+
+  // Auto-populate operator credentials if authenticated
+  if (state.principal && state.principal.email) {
+    var operatorEmailEl = document.getElementById('character-assign-operator-email');
+    if (operatorEmailEl && !operatorEmailEl.value) {
+      operatorEmailEl.value = state.principal.email;
+    }
+    var operatorIdEl = document.getElementById('character-assign-operator-id');
+    if (operatorIdEl && (!operatorIdEl.value || operatorIdEl.value === 'workspace-operator')) {
+      operatorIdEl.value = state.principal.userId || state.principal.email;
+    }
+  }
 }
 
 // ── Character Chip Strip (sibling to <select>; full Prism Tooltip support) ──
@@ -632,7 +644,7 @@ export async function revokeCharacterAssignment(assignmentId) {
 }
 
 window.deleteCharacterAssignment = async function (assignmentId) {
-  if (!confirm('Are you sure you want to permanently delete this assignment?')) return;
+  if (!await showConfirm('Are you sure you want to permanently delete this assignment?')) return;
   try {
     const result = await request('/api/workspace/character-assignment-delete', {
       method: 'POST',

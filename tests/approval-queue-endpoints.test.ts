@@ -27,16 +27,24 @@ import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 
-interface JsonRes { status: number; body: any; }
+interface JsonRes {
+    status: number;
+    body: any;
+}
 
 function get(port: number, path: string): Promise<JsonRes> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let body = "";
-            res.on("data", (c: Buffer) => { body += c; });
+            res.on("data", (c: Buffer) => {
+                body += c;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode ?? 0, body: body ? JSON.parse(body) : null }); }
-                catch (e) { reject(e); }
+                try {
+                    resolve({ status: res.statusCode ?? 0, body: body ? JSON.parse(body) : null });
+                } catch (e) {
+                    reject(e);
+                }
             });
         }).on("error", reject);
     });
@@ -44,20 +52,28 @@ function get(port: number, path: string): Promise<JsonRes> {
 
 function post(port: number, path: string): Promise<JsonRes> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Content-Length": "2" },
-        }, (res) => {
-            let body = "";
-            res.on("data", (c: Buffer) => { body += c; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode ?? 0, body: body ? JSON.parse(body) : null }); }
-                catch (e) { reject(e); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Content-Length": "2" },
+            },
+            (res) => {
+                let body = "";
+                res.on("data", (c: Buffer) => {
+                    body += c;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode ?? 0, body: body ? JSON.parse(body) : null });
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         req.write("{}");
         req.end();
@@ -71,7 +87,11 @@ export async function testApprovalQueueEndpoints(): Promise<void> {
     const prefsDir = mkdtempSync(join(tmpdir(), "prism-approval-q-"));
     const prefsFile = join(prefsDir, "prefs.json");
     process.env.PRISM_PREFERENCES_PATH = prefsFile;
-    writeFileSync(prefsFile, JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }) + "\n", "utf8");
+    writeFileSync(
+        prefsFile,
+        JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }) + "\n",
+        "utf8",
+    );
 
     const queue = new ApprovalQueue();
     const bus = new ActivityBus();
@@ -158,7 +178,9 @@ export async function testApprovalQueueEndpoints(): Promise<void> {
         }
     } finally {
         await service.stop();
-        if (savedAuth === undefined) delete process.env.PRISM_AUTH_DISABLED; else process.env.PRISM_AUTH_DISABLED = savedAuth;
-        if (savedPrefs === undefined) delete process.env.PRISM_PREFERENCES_PATH; else process.env.PRISM_PREFERENCES_PATH = savedPrefs;
+        if (savedAuth === undefined) delete process.env.PRISM_AUTH_DISABLED;
+        else process.env.PRISM_AUTH_DISABLED = savedAuth;
+        if (savedPrefs === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = savedPrefs;
     }
 }

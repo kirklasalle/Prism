@@ -3,7 +3,14 @@ import { ContainerSandboxTool } from "../../adapters/system/container-sandbox-to
 import { FileDeleteTool, FileListTool, FileReadTool, FileWriteTool } from "../../adapters/system/file-tools.js";
 import { ShellTool } from "../../adapters/system/shell-tool.js";
 import { TerminalSessionTool } from "../../adapters/system/terminal-session-tool.js";
-import { WebAssetsOptimizeTool, WebComponentInjectTool, WebPageInitializeTool, WebVisualAuditTool, PrismIdeModifyTool, PrismIdeLintTool } from "../../adapters/system/web-builder-tools.js";
+import {
+    WebAssetsOptimizeTool,
+    WebComponentInjectTool,
+    WebPageInitializeTool,
+    WebVisualAuditTool,
+    PrismIdeModifyTool,
+    PrismIdeLintTool,
+} from "../../adapters/system/web-builder-tools.js";
 
 import { Neo4jQueryTool } from "../../adapters/application/neo4j-tool.js";
 import { PrismDashboardControlTool } from "../../adapters/application/prism-dashboard-tool.js";
@@ -12,6 +19,7 @@ import { VisionCaptureTool } from "../../adapters/system/vision-capture-tool.js"
 import { BrowserControlTool } from "../../adapters/system/browser-control-tool.js";
 import { EmailOpsTool } from "../../adapters/application/email-tool.js";
 import { CalendarPlanTool } from "../../adapters/application/calendar-tool.js";
+import { SmsCommunicationTool } from "../../adapters/application/sms-adapter.js";
 import { NotesExtractTool } from "../../adapters/application/notes-tool.js";
 import { TasksTimelineTool } from "../../adapters/application/tasks-tool.js";
 import type { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
@@ -50,6 +58,7 @@ export function builtinTools(
         new Neo4jQueryTool(),
         new EmailOpsTool(undefined, gmail, outlook),
         new CalendarPlanTool(undefined, gmail, outlook),
+        new SmsCommunicationTool(gmail, outlook),
         new NotesExtractTool(),
         new TasksTimelineTool(),
         // Vision adapters

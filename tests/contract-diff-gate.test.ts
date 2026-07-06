@@ -44,17 +44,34 @@ describe("Contract Diff Gate (scripts/contract-diff-gate.cjs)", function () {
         // Identical (no change)
         writeFileSync(candidateSamePath, JSON.stringify(baselineSnapshot, null, 2), "utf8");
         // Breaking — drop "bravo", schema-change "alpha"
-        writeFileSync(candidateBreakingPath, JSON.stringify({
-            generatedAt: "2024-02-01T00:00:00.000Z",
-            toolCount: 1,
-            tools: [
-                { name: "alpha", version: "1.0.0", contractHash: "hash-alpha-CHANGED", args: { type: "object" } },
-            ],
-        }, null, 2), "utf8");
+        writeFileSync(
+            candidateBreakingPath,
+            JSON.stringify(
+                {
+                    generatedAt: "2024-02-01T00:00:00.000Z",
+                    toolCount: 1,
+                    tools: [
+                        {
+                            name: "alpha",
+                            version: "1.0.0",
+                            contractHash: "hash-alpha-CHANGED",
+                            args: { type: "object" },
+                        },
+                    ],
+                },
+                null,
+                2,
+            ),
+            "utf8",
+        );
     });
 
     after(() => {
-        try { rmSync(workDir, { recursive: true, force: true }); } catch { /* noop */ }
+        try {
+            rmSync(workDir, { recursive: true, force: true });
+        } catch {
+            /* noop */
+        }
     });
 
     function runGate(args: string[]): { status: number | null; stdout: string; stderr: string } {
@@ -97,9 +114,12 @@ describe("Contract Diff Gate (scripts/contract-diff-gate.cjs)", function () {
     it("writes a markdown report when --report-out is provided", () => {
         const reportPath = join(workDir, "diff-report.md");
         const r = runGate([
-            "--baseline", baselinePath,
-            "--candidate", candidateBreakingPath,
-            "--report-out", reportPath,
+            "--baseline",
+            baselinePath,
+            "--candidate",
+            candidateBreakingPath,
+            "--report-out",
+            reportPath,
             "--allow-breaking",
         ]);
         assert.strictEqual(r.status, 0);

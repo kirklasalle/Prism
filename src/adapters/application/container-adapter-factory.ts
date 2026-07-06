@@ -48,13 +48,15 @@ export async function createContainerAdapter(
     executionProfile?: ExecutionProfile,
     options: ContainerAdapterFactoryOptions = {},
 ): Promise<ContainerSandboxAdapter | DockerContainerAdapter> {
-    const requested = (options.backend ?? (process.env.PRISM_CONTAINER_BACKEND as ContainerBackend | undefined) ?? "builtin-prism") as ContainerBackend;
+    const requested = (options.backend ??
+        (process.env.PRISM_CONTAINER_BACKEND as ContainerBackend | undefined) ??
+        "builtin-prism") as ContainerBackend;
 
     if (requested === "docker") {
         const engine = new DockerEngineClient(options.socketPath ? { socketPath: options.socketPath } : {});
         const ok = await engine.ping();
         if (!ok) {
-            const required = options.requireBackend ?? (process.env.NODE_ENV === "production");
+            const required = options.requireBackend ?? process.env.NODE_ENV === "production";
             const msg = `PRISM_CONTAINER_BACKEND=docker but Docker Engine API at ${engine.getSocketPath()} is unreachable`;
             if (required) throw new Error(msg);
             // Soft fall-back for dev environments.

@@ -53,12 +53,17 @@ function fetchJson(method: string, path: string, body?: unknown): Promise<{ stat
             },
             (res) => {
                 let payload = "";
-                res.on("data", (chunk: Buffer) => { payload += chunk; });
-                res.on("end", () => {
-                    try { resolve({ status: res.statusCode!, body: JSON.parse(payload) }); }
-                    catch { resolve({ status: res.statusCode!, body: payload }); }
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
                 });
-            }
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload) });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
         );
         req.on("error", reject);
         if (bodyStr != null) req.write(bodyStr);
@@ -79,9 +84,7 @@ describe("SLO Gauge Panel (E3c)", function () {
         _setWorkspaceRootForTest(tmpDir);
 
         const realPrefsPath = preferencesPath();
-        originalPrefs = existsSync(realPrefsPath)
-            ? readFileSync(realPrefsPath, "utf-8")
-            : null;
+        originalPrefs = existsSync(realPrefsPath) ? readFileSync(realPrefsPath, "utf-8") : null;
         writeFileSync(realPrefsPath, JSON.stringify({ setupComplete: true }, null, 2) + "\n", "utf-8");
 
         const bus = new ActivityBus();
@@ -127,7 +130,11 @@ describe("SLO Gauge Panel (E3c)", function () {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 100));
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows EPERM: non-fatal */ }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            /* Windows EPERM: non-fatal */
+        }
     });
 
     // ── HTTP endpoint ─────────────────────────────────────────────────────────
@@ -151,11 +158,17 @@ describe("SLO Gauge Panel (E3c)", function () {
             for (const m of body.metrics) {
                 assert.ok(typeof m.name === "string" && m.name.length > 0, `Metric name must be non-empty string`);
                 assert.ok(typeof m.label === "string" && m.label.length > 0, `Metric label must be non-empty string`);
-                assert.ok(typeof m.targetP95Ms === "number" && m.targetP95Ms > 0, `targetP95Ms must be positive number`);
-                assert.ok(typeof m.targetP99Ms === "number" && m.targetP99Ms > 0, `targetP99Ms must be positive number`);
+                assert.ok(
+                    typeof m.targetP95Ms === "number" && m.targetP95Ms > 0,
+                    `targetP95Ms must be positive number`,
+                );
+                assert.ok(
+                    typeof m.targetP99Ms === "number" && m.targetP99Ms > 0,
+                    `targetP99Ms must be positive number`,
+                );
                 assert.ok(
                     ["green", "yellow", "red", "no_data"].includes(m.status),
-                    `status must be one of green/yellow/red/no_data, got: ${m.status}`
+                    `status must be one of green/yellow/red/no_data, got: ${m.status}`,
                 );
             }
         });
@@ -191,7 +204,7 @@ describe("SLO Gauge Panel (E3c)", function () {
             for (const m of body.metrics) {
                 assert.ok(
                     m.targetP99Ms >= m.targetP95Ms,
-                    `${m.name}: targetP99Ms (${m.targetP99Ms}) should be >= targetP95Ms (${m.targetP95Ms})`
+                    `${m.name}: targetP99Ms (${m.targetP99Ms}) should be >= targetP95Ms (${m.targetP95Ms})`,
                 );
             }
         });
@@ -225,9 +238,9 @@ describe("SLO Gauge Panel (E3c)", function () {
         it("cumulative bucket counts are correct", () => {
             const store = new MetricsStore();
             store.registerHistogram("lat", "Latency", [10, 50, 100]);
-            store.observe("lat", 5);   // falls in ≤10, ≤50, ≤100
-            store.observe("lat", 30);  // falls in ≤50, ≤100  (not ≤10)
-            store.observe("lat", 75);  // falls in ≤100       (not ≤10, not ≤50)
+            store.observe("lat", 5); // falls in ≤10, ≤50, ≤100
+            store.observe("lat", 30); // falls in ≤50, ≤100  (not ≤10)
+            store.observe("lat", 75); // falls in ≤100       (not ≤10, not ≤50)
             store.observe("lat", 200); // falls in none of the buckets (only +Inf)
 
             const snap = store.getHistogramSnapshot()[0];
@@ -258,7 +271,7 @@ describe("SLO Gauge Panel (E3c)", function () {
             store.observe("multi_lat", 10, { op: "a" });
             store.observe("multi_lat", 20, { op: "b" });
 
-            const snaps = store.getHistogramSnapshot().filter(s => s.name === "multi_lat");
+            const snaps = store.getHistogramSnapshot().filter((s) => s.name === "multi_lat");
             assert.strictEqual(snaps.length, 2, "Should have 2 entries for 2 label sets");
         });
     });

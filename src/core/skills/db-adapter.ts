@@ -2,15 +2,15 @@ import { DatabaseSync } from "node:sqlite";
 import { SkillSession, SkillSessionStatus } from "./types.js";
 
 export class SkillsDbAdapter {
-  private readonly db: DatabaseSync;
+    private readonly db: DatabaseSync;
 
-  constructor(dbPath: string = "prism-activity.db") {
-    this.db = new DatabaseSync(dbPath);
-    this.migrate();
-  }
+    constructor(dbPath: string = "prism-activity.db") {
+        this.db = new DatabaseSync(dbPath);
+        this.migrate();
+    }
 
-  private migrate(): void {
-    this.db.exec(`
+    private migrate(): void {
+        this.db.exec(`
       CREATE TABLE IF NOT EXISTS prism_skill_sessions (
         session_id TEXT PRIMARY KEY,
         skill_id TEXT NOT NULL,
@@ -30,20 +30,22 @@ export class SkillsDbAdapter {
       ON prism_skill_sessions (parent_chat_session);
     `);
 
-    // Add new columns for Phase S CAC/Guardian integration
-    this.ensureColumn("prism_skill_sessions", "assignment_id", "TEXT");
-    this.ensureColumn("prism_skill_sessions", "guardian_triggered", "INTEGER DEFAULT 0");
-    this.ensureColumn("prism_skill_sessions", "executor", "TEXT DEFAULT 'agent_loop'");
-  }
+        // Add new columns for Phase S CAC/Guardian integration
+        this.ensureColumn("prism_skill_sessions", "assignment_id", "TEXT");
+        this.ensureColumn("prism_skill_sessions", "guardian_triggered", "INTEGER DEFAULT 0");
+        this.ensureColumn("prism_skill_sessions", "executor", "TEXT DEFAULT 'agent_loop'");
+    }
 
-  private ensureColumn(table: string, column: string, definition: string): void {
-    const rows = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-    if (rows.some((row: any) => row.name === column)) return;
-    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
+    private ensureColumn(table: string, column: string, definition: string): void {
+        const rows = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+        if (rows.some((row: any) => row.name === column)) return;
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
 
-  public saveSession(session: SkillSession): void {
-    this.db.prepare(`
+    public saveSession(session: SkillSession): void {
+        this.db
+            .prepare(
+                `
       INSERT OR REPLACE INTO prism_skill_sessions (
         session_id, skill_id, current_step, state_payload,
         parent_chat_session, step_history, status, created_at, updated_at,
@@ -53,85 +55,99 @@ export class SkillsDbAdapter {
         :parentChatSession, :stepHistory, :status, :createdAt, :updatedAt,
         :assignmentId, :guardianTriggered, :executor
       )
-    `).run({
-      sessionId: session.sessionId,
-      skillId: session.skillId,
-      currentStep: session.currentStep,
-      statePayload: JSON.stringify(session.statePayload),
-      parentChatSession: session.parentChatSession,
-      stepHistory: JSON.stringify(session.stepHistory),
-      status: session.status,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-      assignmentId: session.assignmentId,
-      guardianTriggered: session.guardianTriggered ? 1 : 0,
-      executor: session.executor
-    });
-  }
+    `,
+            )
+            .run({
+                sessionId: session.sessionId,
+                skillId: session.skillId,
+                currentStep: session.currentStep,
+                statePayload: JSON.stringify(session.statePayload),
+                parentChatSession: session.parentChatSession,
+                stepHistory: JSON.stringify(session.stepHistory),
+                status: session.status,
+                createdAt: session.createdAt,
+                updatedAt: session.updatedAt,
+                assignmentId: session.assignmentId,
+                guardianTriggered: session.guardianTriggered ? 1 : 0,
+                executor: session.executor,
+            });
+    }
 
-  public getSession(sessionId: string): SkillSession | null {
-    const row = this.db.prepare(`
+    public getSession(sessionId: string): SkillSession | null {
+        const row = this.db
+            .prepare(
+                `
       SELECT * FROM prism_skill_sessions WHERE session_id = :sessionId
-    `).get({ sessionId }) as Record<string, unknown> | undefined;
+    `,
+            )
+            .get({ sessionId }) as Record<string, unknown> | undefined;
 
-    if (!row) {
-      return null;
+        if (!row) {
+            return null;
+        }
+
+        return this.toSession(row);
     }
 
-    return this.toSession(row);
-  }
-
-  public listSessions(): SkillSession[] {
-    const rows = this.db.prepare(`
+    public listSessions(): SkillSession[] {
+        const rows = this.db
+            .prepare(
+                `
       SELECT * FROM prism_skill_sessions ORDER BY updated_at DESC
-    `).all() as Record<string, unknown>[];
+    `,
+            )
+            .all() as Record<string, unknown>[];
 
-    return rows.map(row => this.toSession(row));
-  }
+        return rows.map((row) => this.toSession(row));
+    }
 
-  public deleteSession(sessionId: string): void {
-    this.db.prepare(`
+    public deleteSession(sessionId: string): void {
+        this.db
+            .prepare(
+                `
       DELETE FROM prism_skill_sessions WHERE session_id = :sessionId
-    `).run({ sessionId });
-  }
-
-  public close(): void {
-    this.db.close();
-  }
-
-  private toSession(row: Record<string, unknown>): SkillSession {
-    let statePayload: Record<string, any> = {};
-    try {
-      if (row.state_payload) {
-        statePayload = JSON.parse(String(row.state_payload));
-      }
-    } catch {
-      statePayload = {};
+    `,
+            )
+            .run({ sessionId });
     }
 
-    let stepHistory: any[] = [];
-    try {
-      if (row.step_history) {
-        stepHistory = JSON.parse(String(row.step_history));
-      }
-    } catch {
-      stepHistory = [];
+    public close(): void {
+        this.db.close();
     }
 
-    return {
-      sessionId: String(row.session_id),
-      skillId: String(row.skill_id),
-      currentStep: String(row.current_step),
-      statePayload,
-      parentChatSession: row.parent_chat_session != null ? String(row.parent_chat_session) : null,
-      assignmentId: row.assignment_id != null ? String(row.assignment_id) : null,
-      accountabilityChain: null,
-      guardianTriggered: row.guardian_triggered === 1 || row.guardian_triggered === true,
-      executor: (row.executor as any) ?? "agent_loop",
-      stepHistory,
-      status: String(row.status) as SkillSessionStatus,
-      createdAt: String(row.created_at),
-      updatedAt: String(row.updated_at)
-    };
-  }
+    private toSession(row: Record<string, unknown>): SkillSession {
+        let statePayload: Record<string, any> = {};
+        try {
+            if (row.state_payload) {
+                statePayload = JSON.parse(String(row.state_payload));
+            }
+        } catch {
+            statePayload = {};
+        }
+
+        let stepHistory: any[] = [];
+        try {
+            if (row.step_history) {
+                stepHistory = JSON.parse(String(row.step_history));
+            }
+        } catch {
+            stepHistory = [];
+        }
+
+        return {
+            sessionId: String(row.session_id),
+            skillId: String(row.skill_id),
+            currentStep: String(row.current_step),
+            statePayload,
+            parentChatSession: row.parent_chat_session != null ? String(row.parent_chat_session) : null,
+            assignmentId: row.assignment_id != null ? String(row.assignment_id) : null,
+            accountabilityChain: null,
+            guardianTriggered: row.guardian_triggered === 1 || row.guardian_triggered === true,
+            executor: (row.executor as any) ?? "agent_loop",
+            stepHistory,
+            status: String(row.status) as SkillSessionStatus,
+            createdAt: String(row.created_at),
+            updatedAt: String(row.updated_at),
+        };
+    }
 }

@@ -19,7 +19,9 @@ export async function testProjectStoreCreateAndList(): Promise<void> {
         const store = new ProjectStoreTool(dir);
 
         // Create project
-        const createResult = await store.execute(req({ action: "create_project", title: "Test Project", description: "A test" }));
+        const createResult = await store.execute(
+            req({ action: "create_project", title: "Test Project", description: "A test" }),
+        );
         assert.strictEqual(createResult.ok, true);
         const project = createResult.output as Record<string, unknown>;
         assert.ok(project.id);
@@ -62,7 +64,9 @@ export async function testProjectStoreUpdateProject(): Promise<void> {
         const createResult = await store.execute(req({ action: "create_project", title: "Update Test" }));
         const project = createResult.output as Record<string, unknown>;
 
-        const updateResult = await store.execute(req({ action: "update_project", projectId: project.id, title: "Updated Title", status: "active" }));
+        const updateResult = await store.execute(
+            req({ action: "update_project", projectId: project.id, title: "Updated Title", status: "active" }),
+        );
         assert.strictEqual(updateResult.ok, true);
         assert.strictEqual((updateResult.output as Record<string, unknown>).title, "Updated Title");
         assert.strictEqual((updateResult.output as Record<string, unknown>).status, "active");
@@ -96,7 +100,9 @@ export async function testProjectStoreMilestones(): Promise<void> {
         const project = createResult.output as Record<string, unknown>;
 
         // Create milestone
-        const msResult = await store.execute(req({ action: "create_milestone", projectId: project.id, title: "v1.0 Release", dueDate: "2025-12-31" }));
+        const msResult = await store.execute(
+            req({ action: "create_milestone", projectId: project.id, title: "v1.0 Release", dueDate: "2025-12-31" }),
+        );
         assert.strictEqual(msResult.ok, true);
         const ms = msResult.output as Record<string, unknown>;
         assert.ok(ms.id);
@@ -120,7 +126,15 @@ export async function testProjectStoreTasks(): Promise<void> {
         const project = createResult.output as Record<string, unknown>;
 
         // Create task
-        const taskResult = await store.execute(req({ action: "create_task", projectId: project.id, title: "Build feature X", priority: "high", status: "todo" }));
+        const taskResult = await store.execute(
+            req({
+                action: "create_task",
+                projectId: project.id,
+                title: "Build feature X",
+                priority: "high",
+                status: "todo",
+            }),
+        );
         assert.strictEqual(taskResult.ok, true);
         const task = taskResult.output as Record<string, unknown>;
         assert.ok(task.id);
@@ -128,13 +142,17 @@ export async function testProjectStoreTasks(): Promise<void> {
         assert.strictEqual(task.priority, "high");
 
         // Update task
-        const updateResult = await store.execute(req({ action: "update_task", projectId: project.id, taskId: task.id, status: "in-progress", progress: 50 }));
+        const updateResult = await store.execute(
+            req({ action: "update_task", projectId: project.id, taskId: task.id, status: "in-progress", progress: 50 }),
+        );
         assert.strictEqual(updateResult.ok, true);
         assert.strictEqual((updateResult.output as Record<string, unknown>).status, "in-progress");
         assert.strictEqual((updateResult.output as Record<string, unknown>).progress, 50);
 
         // Delete task
-        const deleteResult = await store.execute(req({ action: "delete_task", projectId: project.id, taskId: task.id }));
+        const deleteResult = await store.execute(
+            req({ action: "delete_task", projectId: project.id, taskId: task.id }),
+        );
         assert.strictEqual(deleteResult.ok, true);
 
         const getResult = await store.execute(req({ action: "get_project", projectId: project.id }));

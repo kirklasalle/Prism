@@ -42,9 +42,7 @@ export function Panel({
                 <Text color={colors.brand} bold>
                     {open ? "▼" : "▶"} {title}
                 </Text>
-                {badge && (
-                    <Text color={colors.muted}> [{badge}]</Text>
-                )}
+                {badge && <Text color={colors.muted}> [{badge}]</Text>}
             </Box>
             {open && (
                 <Box flexDirection="column" marginLeft={2}>
@@ -105,14 +103,12 @@ export function DataTable({
                     </Box>
                 ))}
             </Box>
-            <Text color={colors.border}>
-                {columns.map((col) => borders.top.repeat(col.width ?? 16)).join(" ")}
-            </Text>
+            <Text color={colors.border}>{columns.map((col) => borders.top.repeat(col.width ?? 16)).join(" ")}</Text>
             {/* Rows */}
             {data.map((row, ri) => (
                 <Box key={ri}>
                     {selectedIndex === ri && <Text color={colors.brand}>{symbols.arrow} </Text>}
-                    {selectedIndex !== ri && selectedIndex !== undefined && <Text>  </Text>}
+                    {selectedIndex !== ri && selectedIndex !== undefined && <Text> </Text>}
                     {columns.map((col, ci) => (
                         <Box key={ci} width={col.width ?? 16}>
                             <Text color={getColor(row, col)} wrap="truncate">
@@ -213,7 +209,9 @@ export function Loading({ label = "Loading..." }: { label?: string }): React.JSX
 export function ErrorBox({ message }: { message: string }): React.JSX.Element {
     return (
         <Box borderStyle="single" borderColor={colors.error} paddingX={1}>
-            <Text color={colors.error}>{symbols.cross} {message}</Text>
+            <Text color={colors.error}>
+                {symbols.cross} {message}
+            </Text>
         </Box>
     );
 }
@@ -235,7 +233,9 @@ export function Header({
     return (
         <Box borderStyle="single" borderColor={colors.brand} paddingX={1} justifyContent="space-between">
             <Box>
-                <Text bold color={colors.brand}>PRISM</Text>
+                <Text bold color={colors.brand}>
+                    PRISM
+                </Text>
                 <Text color={colors.muted}> v{version}</Text>
             </Box>
             <Box>
@@ -270,12 +270,9 @@ export function TabBar({
                 const active = tab.id === activeTab;
                 return (
                     <Box key={tab.id}>
-                        <Text
-                            color={active ? colors.brand : colors.muted}
-                            bold={active}
-                            inverse={active}
-                        >
-                            {" "}{tab.shortcut}:{tab.label}{" "}
+                        <Text color={active ? colors.brand : colors.muted} bold={active} inverse={active}>
+                            {" "}
+                            {tab.shortcut}:{tab.label}{" "}
                         </Text>
                     </Box>
                 );
@@ -313,17 +310,19 @@ export function StatusBar({
 export function HelpOverlay(): React.JSX.Element {
     return (
         <Box flexDirection="column" borderStyle="double" borderColor={colors.brand} paddingX={2} paddingY={1}>
-            <Text bold color={colors.brand}>Keyboard Shortcuts</Text>
+            <Text bold color={colors.brand}>
+                Keyboard Shortcuts
+            </Text>
             <Text> </Text>
-            <Text color={colors.text}>1-9, 0, -, =   Switch tabs</Text>
+            <Text color={colors.text}>1-9, 0, -, = Switch tabs</Text>
             <Text color={colors.text}>Tab / Shift+Tab Focus cycle</Text>
-            <Text color={colors.text}>j / k / ↑ / ↓  Navigate lists</Text>
-            <Text color={colors.text}>g / G           Jump to top/bottom</Text>
-            <Text color={colors.text}>Enter           Select / Confirm</Text>
-            <Text color={colors.text}>Escape          Back / Dismiss</Text>
-            <Text color={colors.text}>r               Refresh current view</Text>
-            <Text color={colors.text}>?               Toggle this help</Text>
-            <Text color={colors.text}>q               Quit PRISM TUI</Text>
+            <Text color={colors.text}>j / k / ↑ / ↓ Navigate lists</Text>
+            <Text color={colors.text}>g / G Jump to top/bottom</Text>
+            <Text color={colors.text}>Enter Select / Confirm</Text>
+            <Text color={colors.text}>Escape Back / Dismiss</Text>
+            <Text color={colors.text}>r Refresh current view</Text>
+            <Text color={colors.text}>? Toggle this help</Text>
+            <Text color={colors.text}>q Quit PRISM TUI</Text>
         </Box>
     );
 }
@@ -336,7 +335,9 @@ export function SectionHeader({ title }: { title: string }): React.JSX.Element {
     return (
         <Box marginTop={1} marginBottom={0}>
             <Text bold color={colors.brand}>
-                {borders.teeLeft}{borders.top}{borders.top} {title} {borders.top.repeat(30)}
+                {borders.teeLeft}
+                {borders.top}
+                {borders.top} {title} {borders.top.repeat(30)}
             </Text>
         </Box>
     );
@@ -361,11 +362,7 @@ export function SubTabBar({
                 const active = tab.id === activeTab;
                 return (
                     <Box key={tab.id}>
-                        <Text
-                            color={active ? colors.info : colors.muted}
-                            bold={active}
-                            underline={active}
-                        >
+                        <Text color={active ? colors.info : colors.muted} bold={active} underline={active}>
                             {tab.label}
                         </Text>
                     </Box>

@@ -10,7 +10,7 @@ export class CausalLens {
     constructor(
         private readonly episodic: EpisodicMemory,
         private readonly windowSize: number = 200,
-    ) { }
+    ) {}
 
     /**
      * Score recent events against a free-text query. Score combines:
@@ -46,9 +46,7 @@ export class CausalLens {
             for (const s of out) s.score = s.score / max;
         }
 
-        return out
-            .sort((a, b) => b.score - a.score)
-            .slice(0, Math.max(1, limit));
+        return out.sort((a, b) => b.score - a.score).slice(0, Math.max(1, limit));
     }
 
     /** Public helper exposed for the arbiter / dashboard introspection. */
@@ -93,9 +91,7 @@ function tokenize(input: string): string[] {
 
 function lexicalOverlap(ev: ActivityEvent, terms: string[]): number {
     if (terms.length === 0) return 0;
-    const text = [ev.operation, ev.layer, JSON.stringify(ev.details ?? {})]
-        .join(" ")
-        .toLowerCase();
+    const text = [ev.operation, ev.layer, JSON.stringify(ev.details ?? {})].join(" ").toLowerCase();
     let hits = 0;
     for (const t of terms) if (text.includes(t)) hits++;
     return hits / terms.length;

@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, appendFileSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
@@ -59,6 +59,7 @@ export class SelfReviewScheduler {
     private readonly minimumIntervalMs: number;
     private readonly warnings: string[] = [];
     private readonly timers = new Map<SelfReviewCadence, NodeJS.Timeout>();
+    private readonly lastRunTimes = new Map<SelfReviewCadence, number>();
 
     constructor(private readonly options: SelfReviewSchedulerOptions) {
         this.outputDir = options.outputDir ?? "prism-output";
@@ -72,9 +73,56 @@ export class SelfReviewScheduler {
 
     start(): void {
         this.stop();
-        this.schedule("daily");
-        this.schedule("weekly");
-        this.schedule("monthly");
+
+        // Initialize lastRunTimes from persisted files
+        for (const cadence of ["daily", "weekly", "monthly"] as SelfReviewCadence[]) {
+            const cadencePath = join(this.outputDir, `self-review-${cadence}.json`);
+            if (existsSync(cadencePath)) {
+                try {
+                    const report = JSON.parse(readFileSync(cadencePath, "utf-8"));
+                    if (report && report.generatedAt) {
+                        const ts = Date.parse(report.generatedAt);
+                        if (Number.isFinite(ts)) {
+                            this.lastRunTimes.set(cadence, ts);
+                        }
+                    }
+                } catch {
+                    // Ignore read/parse errors
+                }
+            }
+        }
+
+        // Run checking loop
+        // Adapt interval based on the minimum configuration interval to support fast test cadences
+        const pollInterval = Math.max(100, Math.min(1000, ...Object.values(this.intervalsMs)));
+
+        const timer = setInterval(() => {
+            const now = Date.now();
+            for (const cadence of ["daily", "weekly", "monthly"] as SelfReviewCadence[]) {
+                const lastRun = this.lastRunTimes.get(cadence) ?? 0;
+                const interval = this.intervalsMs[cadence];
+                if (now - lastRun >= interval) {
+                    this.lastRunTimes.set(cadence, now);
+                    try {
+                        this.runReview(cadence);
+                    } catch (error) {
+                        this.options.activityBus.emit({
+                            sessionId: this.options.sessionId,
+                            layer: "performance",
+                            operation: `prism.self_review.${cadence}`,
+                            status: "failed",
+                            details: {
+                                reason: String(error),
+                            },
+                        });
+                    }
+                }
+            }
+        }, pollInterval);
+        timer.unref();
+
+        // Storing the timer under a standard key so tests or external callers calling stop() clean it up
+        this.timers.set("daily", timer);
     }
 
     stop(): void {
@@ -85,11 +133,7 @@ export class SelfReviewScheduler {
     }
 
     runInitialPass(): SelfReviewReport[] {
-        return [
-            this.runReview("daily"),
-            this.runReview("weekly"),
-            this.runReview("monthly"),
-        ];
+        return [this.runReview("daily"), this.runReview("weekly"), this.runReview("monthly")];
     }
 
     runReview(cadence: SelfReviewCadence): SelfReviewReport {
@@ -145,26 +189,6 @@ export class SelfReviewScheduler {
         };
     }
 
-    private schedule(cadence: SelfReviewCadence): void {
-        const timer = setInterval(() => {
-            try {
-                this.runReview(cadence);
-            } catch (error) {
-                this.options.activityBus.emit({
-                    sessionId: this.options.sessionId,
-                    layer: "performance",
-                    operation: `prism.self_review.${cadence}`,
-                    status: "failed",
-                    details: {
-                        reason: String(error),
-                    },
-                });
-            }
-        }, this.intervalsMs[cadence]);
-
-        this.timers.set(cadence, timer);
-    }
-
     private persistReport(report: SelfReviewReport): void {
         mkdirSync(this.outputDir, { recursive: true });
 
@@ -216,13 +240,13 @@ function countByStatus(events: readonly ActivityEvent[], status: ActivityEvent["
 
 function buildRecommendations(events: readonly ActivityEvent[]): string[] {
     if (events.length === 0) {
-        return [
-            "No events in review window. Verify scheduled workflows and operator activity are healthy.",
-        ];
+        return ["No events in review window. Verify scheduled workflows and operator activity are healthy."];
     }
 
     const failures = events.filter((event) => event.status === "failed").length;
-    const approvalTimeouts = events.filter((event) => event.operation.includes("approval") && event.status === "failed").length;
+    const approvalTimeouts = events.filter(
+        (event) => event.operation.includes("approval") && event.status === "failed",
+    ).length;
     const retrievalEvents = events.filter((event) => event.layer === "retrieval").length;
 
     const recommendations: string[] = [];
@@ -230,10 +254,14 @@ function buildRecommendations(events: readonly ActivityEvent[]): string[] {
         recommendations.push(`Investigate ${failures} failed events from the current review window.`);
     }
     if (approvalTimeouts > 0) {
-        recommendations.push(`Review approval workflow latency; observed ${approvalTimeouts} approval-related failures.`);
+        recommendations.push(
+            `Review approval workflow latency; observed ${approvalTimeouts} approval-related failures.`,
+        );
     }
     if (retrievalEvents === 0) {
-        recommendations.push("No retrieval-layer activity observed; run retrieval diagnostics to validate memory quality.");
+        recommendations.push(
+            "No retrieval-layer activity observed; run retrieval diagnostics to validate memory quality.",
+        );
     }
     if (recommendations.length === 0) {
         recommendations.push("System health is stable. Continue scheduled monitoring and weekly hardening review.");

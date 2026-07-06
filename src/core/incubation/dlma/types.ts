@@ -6,8 +6,8 @@ export interface LensScore {
     operation: string;
     layer: string;
     timestamp: string;
-    score: number;        // [0, 1] — normalized within the lens
-    weight: number;       // raw source weight contribution before fusion
+    score: number; // [0, 1] — normalized within the lens
+    weight: number; // raw source weight contribution before fusion
 }
 
 export interface ConsequenceProfile {
@@ -26,7 +26,7 @@ export interface FusedMatch {
     semanticScore: number;
     causalScore: number;
     fusedScore: number;
-    confidence: number;            // [0, 1] — agreement between lenses
+    confidence: number; // [0, 1] — agreement between lenses
     consequence: ConsequenceProfile;
     explanation: string;
 }
@@ -38,7 +38,7 @@ export interface ArbitrationWeights {
 
 export interface ArbiterFeedback {
     queryId: string;
-    observedUtility: number;       // [0, 1] — how useful the top-k turned out to be
+    observedUtility: number; // [0, 1] — how useful the top-k turned out to be
     chosenLens: "semantic" | "causal" | "fused";
 }
 

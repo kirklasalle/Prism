@@ -1,8 +1,5 @@
 import assert from "node:assert";
-import {
-    getPerformanceSloProfile,
-    resolveEnvironmentProfile,
-} from "../src/core/config/environment-profiles.js";
+import { getPerformanceSloProfile, resolveEnvironmentProfile } from "../src/core/config/environment-profiles.js";
 import {
     resolveRetrievalAlertProfile,
     withRetrievalAlertPolicyProfile,

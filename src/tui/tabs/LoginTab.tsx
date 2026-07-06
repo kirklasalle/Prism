@@ -12,17 +12,12 @@ interface LoginTabProps {
     onLaunchWizard: () => void;
 }
 
-export function LoginTab({
-    client,
-    focused,
-    onSuccess,
-    onLaunchWizard,
-}: LoginTabProps): React.JSX.Element {
+export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTabProps): React.JSX.Element {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-    
+
     // 0: Email field, 1: Password field, 2: Autofill Admin, 3: Autofill Testing, 4: Launch Wizard, 5: Quit
     const [activeIndex, setActiveIndex] = useState(0);
     const { exit } = useApp();
@@ -32,34 +27,37 @@ export function LoginTab({
         process.exit(0);
     }, [exit]);
 
-    const handleLogin = useCallback(async (customEmail?: string, customPassword?: string) => {
-        const targetEmail = (customEmail ?? email).trim();
-        const targetPassword = customPassword ?? password;
+    const handleLogin = useCallback(
+        async (customEmail?: string, customPassword?: string) => {
+            const targetEmail = (customEmail ?? email).trim();
+            const targetPassword = customPassword ?? password;
 
-        if (!targetEmail || !targetPassword) {
-            setError("Email and Password are required.");
-            return;
-        }
-
-        setError(null);
-        setSubmitting(true);
-
-        try {
-            const res = await client.login(targetEmail, targetPassword);
-            if (res.ok) {
-                // PrismClient request automatically stores the cookie.
-                // We also pass back the token if any.
-                onSuccess(res.dashboardToken || null, client.getCookie());
-            } else {
-                setError("Authentication failed.");
+            if (!targetEmail || !targetPassword) {
+                setError("Email and Password are required.");
+                return;
             }
-        } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : String(e));
-        } finally {
-            setSubmitting(false);
-        }
-    }, [client, email, password, onSuccess]);
- 
+
+            setError(null);
+            setSubmitting(true);
+
+            try {
+                const res = await client.login(targetEmail, targetPassword);
+                if (res.ok) {
+                    // PrismClient request automatically stores the cookie.
+                    // We also pass back the token if any.
+                    onSuccess(res.dashboardToken || null, client.getCookie());
+                } else {
+                    setError("Authentication failed.");
+                }
+            } catch (e: unknown) {
+                setError(e instanceof Error ? e.message : String(e));
+            } finally {
+                setSubmitting(false);
+            }
+        },
+        [client, email, password, onSuccess],
+    );
+
     const handleReturnKey = useCallback(() => {
         if (activeIndex === 0) {
             if (!password) {
@@ -147,7 +145,15 @@ export function LoginTab({
                 </Box>
             )}
 
-            <Box width={50} flexDirection="column" borderStyle="single" borderColor={colors.brandDim} paddingX={2} paddingY={1} marginBottom={1}>
+            <Box
+                width={50}
+                flexDirection="column"
+                borderStyle="single"
+                borderColor={colors.brandDim}
+                paddingX={2}
+                paddingY={1}
+                marginBottom={1}
+            >
                 {/* Email Field */}
                 <Box marginBottom={1}>
                     <Text color={activeIndex === 0 ? colors.brand : colors.muted} bold={activeIndex === 0}>
@@ -162,9 +168,7 @@ export function LoginTab({
                             onSubmit={handleReturnKey}
                         />
                     ) : (
-                        <Text color={email ? colors.text : colors.muted}>
-                            {email || "operator@prism.ai"}
-                        </Text>
+                        <Text color={email ? colors.text : colors.muted}>{email || "operator@prism.ai"}</Text>
                     )}
                 </Box>
 
@@ -191,7 +195,14 @@ export function LoginTab({
             </Box>
 
             {/* Quick Actions */}
-            <Box width={50} flexDirection="column" borderStyle="single" borderColor={colors.muted} paddingX={2} paddingY={1}>
+            <Box
+                width={50}
+                flexDirection="column"
+                borderStyle="single"
+                borderColor={colors.muted}
+                paddingX={2}
+                paddingY={1}
+            >
                 <Box marginBottom={1}>
                     <Text color={colors.muted} bold>
                         QUICK ACTIONS
@@ -227,9 +238,7 @@ export function LoginTab({
             )}
 
             <Box marginTop={1}>
-                <Text color={colors.muted}>
-                    Use Tab/Arrows to navigate | Enter to select | Esc to quit
-                </Text>
+                <Text color={colors.muted}>Use Tab/Arrows to navigate | Enter to select | Esc to quit</Text>
             </Box>
         </Box>
     );

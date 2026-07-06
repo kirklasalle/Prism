@@ -32,9 +32,14 @@ describe("TelemetryTab", () => {
 
     it("renders with zero metrics", async () => {
         const client = createMockClient({
-            getTelemetrySummary: () => Promise.resolve({
-                totalEvents: 0, errorCount: 0, avgLatencyMs: 0, p95LatencyMs: 0, uptimeSeconds: 0,
-            }),
+            getTelemetrySummary: () =>
+                Promise.resolve({
+                    totalEvents: 0,
+                    errorCount: 0,
+                    avgLatencyMs: 0,
+                    p95LatencyMs: 0,
+                    uptimeSeconds: 0,
+                }),
             getRetrievalCohorts: () => Promise.resolve([]),
             getRetrievalAlerts: () => Promise.resolve([]),
             getPendingApprovals: () => Promise.resolve([]),

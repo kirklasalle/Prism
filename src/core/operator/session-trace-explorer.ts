@@ -50,7 +50,7 @@ export interface SessionTraceSummary {
 }
 
 export class SessionTraceExplorer {
-    constructor(private readonly store: SqliteActivityStore) { }
+    constructor(private readonly store: SqliteActivityStore) {}
 
     /**
      * Query events with rich filter semantics. Results are ordered oldest → newest

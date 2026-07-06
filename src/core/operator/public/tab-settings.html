@@ -1,149 +1,411 @@
-<div class="tab-grid" style="grid-template-columns:1fr;">
-
-  <section class="rail-section panel llre-cognitive-widget" style="border: 1px solid rgba(79, 70, 229, 0.4); background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); margin-bottom: 24px; padding: 18px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(49, 46, 129, 0.6); padding-bottom: 12px; margin-bottom: 16px;">
-      <h3 style="margin: 0; color: #c7d2fe; font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-        ⚡ Cognitive Economics & Prompt Efficacy <span style="background: #4f46e5; font-size: 10px; color: #fff; padding: 3px 8px; border-radius: 9999px; font-weight: 600;">LLRE Port Active</span>
-      </h3>
-      <span id="llre-last-sync" style="color: #64748b; font-size: 11px; font-weight: 500;">Last synced: Just now</span>
-    </div>
-
-    <!-- Metric Dial Grid -->
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
-      
-      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
-        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Token Efficacy (TEQ)</div>
-        <div id="llre-teq-value" style="font-size: 26px; font-weight: 800; color: #38bdf8; margin: 4px 0; font-family: monospace;">--</div>
-        <div style="color: #475569; font-size: 9px; font-weight: 500;">Quality / ($ * Latency)</div>
-      </div>
-
-      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
-        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Satisfaction Index (RSI)</div>
-        <div id="llre-rsi-value" style="font-size: 26px; font-weight: 800; color: #34d399; margin: 4px 0; font-family: monospace;">--</div>
-        <div style="color: #475569; font-size: 9px; font-weight: 500;">Goal criteria passed</div>
-      </div>
-
-      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
-        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Context Saturation (CSR)</div>
-        <div id="llre-csr-value" style="font-size: 26px; font-weight: 800; color: #fbbf24; margin: 4px 0; font-family: monospace;">--</div>
-        <div style="color: #475569; font-size: 9px; font-weight: 500;">Instruction SNR Density</div>
-      </div>
-
-      <div style="background: #090d16; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
-        <div style="color: #94a3b8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Tool Call Accuracy (TCA)</div>
-        <div id="llre-tca-value" style="font-size: 26px; font-weight: 800; color: #f87171; margin: 4px 0; font-family: monospace;">--</div>
-        <div style="color: #475569; font-size: 9px; font-weight: 500;">Valid tool executions</div>
-      </div>
-
-    </div>
-
-    <div style="display: flex; justify-content: space-between; align-items: center; color: #94a3b8; font-size: 12px; padding: 4px 4px 0;">
-      <div><strong>Accumulated Session Cost:</strong> <span id="llre-cost-accumulated" style="color: #f1f5f9; font-weight: 700; font-family: monospace; font-size: 13px;">$0.0000</span></div>
-      <div><strong>Signal-to-Noise Rating:</strong> <span id="llre-snr-rating" style="color: #c7d2fe; font-weight: 700;">No Active Runs</span></div>
-    </div>
-  </section>
-
-  <section class="rail-section panel" id="sr-section" data-tip-id="settings:sr-toggle" data-tip-kind="settings"
-    style="border:1px solid rgba(139,92,246,0.25);background:linear-gradient(135deg,rgba(139,92,246,0.06),rgba(59,130,246,0.04));">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 8px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:18px;">🌈</span>
-        <div>
-          <div style="font-size:13px;font-weight:600;color:#a78bfa;">Prism SR:</div>
-          <div style="font-size:11px;color:var(--fg-muted);">Compounding model orchestration — Logic + Creative + Main
-            model synthesis</div>
+<div class="tab-grid" style="grid-template-columns: 1fr">
+    <section
+        class="rail-section panel llre-cognitive-widget"
+        style="
+            border: 1px solid rgba(79, 70, 229, 0.4);
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+            margin-bottom: 24px;
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        "
+    >
+        <div
+            style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid rgba(49, 46, 129, 0.6);
+                padding-bottom: 12px;
+                margin-bottom: 16px;
+            "
+        >
+            <h3
+                style="
+                    margin: 0;
+                    color: #c7d2fe;
+                    font-weight: 700;
+                    font-size: 15px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                "
+            >
+                ⚡ Cognitive Economics & Prompt Efficacy
+                <span
+                    id="llre-active-status-badge"
+                    style="
+                        background: #4f46e5;
+                        font-size: 10px;
+                        color: #fff;
+                        padding: 3px 8px;
+                        border-radius: 9999px;
+                        font-weight: 600;
+                        transition: background-color 0.3s ease;
+                    "
+                    >LLRE Port Active</span
+                >
+            </h3>
+            <div style="display: flex; align-items: center; gap: 14px">
+                <span id="llre-last-sync" style="color: #64748b; font-size: 11px; font-weight: 500"
+                    >Last synced: Just now</span
+                >
+                <label
+                    style="
+                        display: inline-flex;
+                        align-items: center;
+                        cursor: pointer;
+                        user-select: none;
+                        gap: 8px;
+                        background: rgba(30, 41, 59, 0.5);
+                        padding: 4px 10px;
+                        border-radius: 20px;
+                        border: 1px solid rgba(79, 70, 229, 0.3);
+                        transition: all 0.3s ease;
+                    "
+                >
+                    <input
+                        type="checkbox"
+                        id="llre-toggle"
+                        onchange="toggleLlrePreference(this.checked)"
+                        style="
+                            accent-color: #6366f1;
+                            width: 14px;
+                            height: 14px;
+                            cursor: pointer;
+                            margin: 0;
+                            filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.5));
+                        "
+                    />
+                    <span style="font-size: 11px; font-weight: 600; color: #c7d2fe; letter-spacing: 0.3px"
+                        >Enable Telemetry</span
+                    >
+                </label>
+            </div>
         </div>
-      </div>
-      <button class="btn btn-primary" onclick="toggleSRPanel()"
-        style="background:linear-gradient(135deg,#8b5cf6,#3b82f6);border:none;font-weight:600;font-size:12px;padding:6px 16px;border-radius:6px;cursor:pointer;color:#fff;">
-        Spectrum Refraction
-      </button>
-    </div>
-    <div id="sr-panel" style="display:none;">
-      <div id="sr-panel-content" class="stack"></div>
-    </div>
-  </section>
 
-  <section class="rail-section panel">
-    <div class="collapsible-header" onclick="togglePanelCollapse('sessionProvider')"
-      data-tip-id="settings:session-provider" data-tip-kind="settings">
-      <h3>Session Provider Assignment</h3>
-      <span class="collapse-chevron" id="chevron-sessionProvider">▼</span>
-    </div>
-    <div class="collapsible-body" id="body-sessionProvider">
-      <div id="llm-provider" class="stack"></div>
-    </div>
-  </section>
+        <!-- Metric Dial Grid -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px">
+            <div
+                style="
+                    background: #090d16;
+                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    border-radius: 8px;
+                    padding: 12px 8px;
+                    text-align: center;
+                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+                "
+            >
+                <div
+                    style="
+                        color: #94a3b8;
+                        font-size: 10px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    "
+                >
+                    Token Efficacy (TEQ)
+                </div>
+                <div
+                    id="llre-teq-value"
+                    style="font-size: 26px; font-weight: 800; color: #38bdf8; margin: 4px 0; font-family: monospace"
+                >
+                    --
+                </div>
+                <div style="color: #475569; font-size: 9px; font-weight: 500">Quality / ($ * Latency)</div>
+            </div>
 
-  <section class="rail-section panel">
-    <div class="collapsible-header" onclick="togglePanelCollapse('modelRouting')" data-tip-id="settings:model-routing"
-      data-tip-kind="settings">
-      <h3>🔀 Model Routing</h3>
-      <span class="collapse-chevron" id="chevron-modelRouting">▶</span>
-    </div>
-    <div class="collapsible-body collapsed" id="body-modelRouting">
-      <div class="muted" style="margin-bottom:8px;">Configure how PRISM routes tasks to models. Single-provider uses the
-        active provider for all roles. Multi-provider enables per-role and per-agent model assignment.</div>
-      <div id="model-routing-container" class="stack"></div>
-    </div>
-  </section>
+            <div
+                style="
+                    background: #090d16;
+                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    border-radius: 8px;
+                    padding: 12px 8px;
+                    text-align: center;
+                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+                "
+            >
+                <div
+                    style="
+                        color: #94a3b8;
+                        font-size: 10px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    "
+                >
+                    Satisfaction Index (RSI)
+                </div>
+                <div
+                    id="llre-rsi-value"
+                    style="font-size: 26px; font-weight: 800; color: #34d399; margin: 4px 0; font-family: monospace"
+                >
+                    --
+                </div>
+                <div style="color: #475569; font-size: 9px; font-weight: 500">Goal criteria passed</div>
+            </div>
 
-  <div id="provider-matrix-row" style="display: flex; align-items: stretch; gap: 0; min-width: 0;">
-    <section id="provider-config-panel" class="rail-section panel"
-      style="flex: 0 0 50%; min-width: 200px; overflow: hidden; box-sizing: border-box;">
-      <div class="collapsible-header" onclick="togglePanelCollapse('providerConfig')"
-        data-tip-id="settings:provider-config" data-tip-kind="settings">
-        <h3>Provider Configuration</h3>
-        <span class="collapse-chevron" id="chevron-providerConfig">▶</span>
-      </div>
-      <div class="collapsible-body collapsed" id="body-providerConfig">
-        <div class="muted" style="margin-bottom:12px;">Configure API keys and settings for each provider. Expand a card
-          to manage.</div>
-        <div id="provider-cards-container" class="stack"></div>
-      </div>
-      <div id="providerConfig-summary" style="padding:8px 12px;"></div>
+            <div
+                style="
+                    background: #090d16;
+                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    border-radius: 8px;
+                    padding: 12px 8px;
+                    text-align: center;
+                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+                "
+            >
+                <div
+                    style="
+                        color: #94a3b8;
+                        font-size: 10px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    "
+                >
+                    Context Saturation (CSR)
+                </div>
+                <div
+                    id="llre-csr-value"
+                    style="font-size: 26px; font-weight: 800; color: #fbbf24; margin: 4px 0; font-family: monospace"
+                >
+                    --
+                </div>
+                <div style="color: #475569; font-size: 9px; font-weight: 500">Instruction SNR Density</div>
+            </div>
+
+            <div
+                style="
+                    background: #090d16;
+                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    border-radius: 8px;
+                    padding: 12px 8px;
+                    text-align: center;
+                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+                "
+            >
+                <div
+                    style="
+                        color: #94a3b8;
+                        font-size: 10px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    "
+                >
+                    Tool Call Accuracy (TCA)
+                </div>
+                <div
+                    id="llre-tca-value"
+                    style="font-size: 26px; font-weight: 800; color: #f87171; margin: 4px 0; font-family: monospace"
+                >
+                    --
+                </div>
+                <div style="color: #475569; font-size: 9px; font-weight: 500">Valid tool executions</div>
+            </div>
+        </div>
+
+        <div
+            style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                color: #94a3b8;
+                font-size: 12px;
+                padding: 4px 4px 0;
+            "
+        >
+            <div>
+                <strong>Accumulated Session Cost:</strong>
+                <span
+                    id="llre-cost-accumulated"
+                    style="color: #f1f5f9; font-weight: 700; font-family: monospace; font-size: 13px"
+                    >$0.0000</span
+                >
+            </div>
+            <div>
+                <strong>Signal-to-Noise Rating:</strong>
+                <span id="llre-snr-rating" style="color: #c7d2fe; font-weight: 700">No Active Runs</span>
+            </div>
+        </div>
     </section>
-    <div id="provider-matrix-divider" title="Drag to resize" data-tip-id="settings:divider" data-tip-kind="settings"
-      style="width:8px;cursor:col-resize;flex-shrink:0;position:relative;user-select:none;z-index:1;">
-      <div
-        style="position:absolute;top:8%;bottom:8%;left:50%;transform:translateX(-50%);width:2px;background:rgba(148,163,184,0.15);border-radius:2px;pointer-events:none;">
-      </div>
-    </div>
-    <section id="model-matrix-panel" class="rail-section panel"
-      style="flex: 1 1 0; min-width: 200px; overflow: hidden; box-sizing: border-box;">
-      <div class="collapsible-header" onclick="togglePanelCollapse('modelMatrix')"
-        data-tip-id="settings:capability-matrix" data-tip-kind="settings">
-        <h3>Model Capability Matrix</h3>
-        <span class="collapse-chevron" id="chevron-modelMatrix">▼</span>
-      </div>
-      <div class="collapsible-body" id="body-modelMatrix">
-        <div class="muted" style="margin-bottom:8px;">Available models scored by capability tier (T1 Minimal → T5
-          Frontier). Role routing selects the best model for each task.</div>
-        <div id="capability-matrix" class="stack"></div>
-      </div>
+
+    <section
+        class="rail-section panel"
+        id="sr-section"
+        data-tip-id="settings:sr-toggle"
+        data-tip-kind="settings"
+        style="
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(59, 130, 246, 0.04));
+        "
+    >
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 8px">
+            <div style="display: flex; align-items: center; gap: 10px">
+                <span style="font-size: 18px">🌈</span>
+                <div>
+                    <div style="font-size: 13px; font-weight: 600; color: #a78bfa">Prism SR:</div>
+                    <div style="font-size: 11px; color: var(--fg-muted)">
+                        Compounding model orchestration — Logic + Creative + Main model synthesis
+                    </div>
+                </div>
+            </div>
+            <button
+                class="btn btn-primary"
+                onclick="toggleSRPanel()"
+                style="
+                    background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+                    border: none;
+                    font-weight: 600;
+                    font-size: 12px;
+                    padding: 6px 16px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    color: #fff;
+                "
+            >
+                Spectrum Refraction
+            </button>
+        </div>
+        <div id="sr-panel" style="display: none">
+            <div id="sr-panel-content" class="stack"></div>
+        </div>
     </section>
-  </div>
 
-  <section class="rail-section panel">
-    <div class="collapsible-header" onclick="togglePanelCollapse('settingsPanel')" data-tip-id="settings:settings-panel"
-      data-tip-kind="settings">
-      <h3>Settings</h3>
-      <span class="collapse-chevron" id="chevron-settingsPanel">▼</span>
-    </div>
-    <div class="collapsible-body" id="body-settingsPanel">
-      <div id="settings-panel" class="stack"></div>
-      <div id="phase-e3-cac-panel" class="stack" style="margin-top:12px"></div>
-    </div>
-  </section>
+    <section class="rail-section panel">
+        <div
+            class="collapsible-header"
+            onclick="togglePanelCollapse('sessionProvider')"
+            data-tip-id="settings:session-provider"
+            data-tip-kind="settings"
+        >
+            <h3>Session Provider Assignment</h3>
+            <span class="collapse-chevron" id="chevron-sessionProvider">▼</span>
+        </div>
+        <div class="collapsible-body" id="body-sessionProvider">
+            <div id="llm-provider" class="stack"></div>
+        </div>
+    </section>
 
-  <section class="rail-section panel">
-    <div class="collapsible-header" onclick="togglePanelCollapse('llmAudit')" data-tip-id="settings:llm-audit"
-      data-tip-kind="settings">
-      <h3>LLM Audit Trail</h3>
-      <span class="collapse-chevron" id="chevron-llmAudit">▼</span>
+    <section class="rail-section panel">
+        <div
+            class="collapsible-header"
+            onclick="togglePanelCollapse('modelRouting')"
+            data-tip-id="settings:model-routing"
+            data-tip-kind="settings"
+        >
+            <h3>🔀 Model Routing</h3>
+            <span class="collapse-chevron" id="chevron-modelRouting">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-modelRouting">
+            <div class="muted" style="margin-bottom: 8px">
+                Configure how PRISM routes tasks to models. Single-provider uses the active provider for all roles.
+                Multi-provider enables per-role and per-agent model assignment.
+            </div>
+            <div id="model-routing-container" class="stack"></div>
+        </div>
+    </section>
+
+    <div id="provider-matrix-row" style="display: flex; align-items: stretch; gap: 0; min-width: 0">
+        <section
+            id="provider-config-panel"
+            class="rail-section panel"
+            style="flex: 0 0 50%; min-width: 200px; overflow: hidden; box-sizing: border-box"
+        >
+            <div
+                class="collapsible-header"
+                onclick="togglePanelCollapse('providerConfig')"
+                data-tip-id="settings:provider-config"
+                data-tip-kind="settings"
+            >
+                <h3>Provider Configuration</h3>
+                <span class="collapse-chevron" id="chevron-providerConfig">▶</span>
+            </div>
+            <div class="collapsible-body collapsed" id="body-providerConfig">
+                <div class="muted" style="margin-bottom: 12px">
+                    Configure API keys and settings for each provider. Expand a card to manage.
+                </div>
+                <div id="provider-cards-container" class="stack"></div>
+            </div>
+            <div id="providerConfig-summary" style="padding: 8px 12px"></div>
+        </section>
+        <div
+            id="provider-matrix-divider"
+            title="Drag to resize"
+            data-tip-id="settings:divider"
+            data-tip-kind="settings"
+            style="width: 8px; cursor: col-resize; flex-shrink: 0; position: relative; user-select: none; z-index: 1"
+        >
+            <div
+                style="
+                    position: absolute;
+                    top: 8%;
+                    bottom: 8%;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 2px;
+                    background: rgba(148, 163, 184, 0.15);
+                    border-radius: 2px;
+                    pointer-events: none;
+                "
+            ></div>
+        </div>
+        <section
+            id="model-matrix-panel"
+            class="rail-section panel"
+            style="flex: 1 1 0; min-width: 200px; overflow: hidden; box-sizing: border-box"
+        >
+            <div
+                class="collapsible-header"
+                onclick="togglePanelCollapse('modelMatrix')"
+                data-tip-id="settings:capability-matrix"
+                data-tip-kind="settings"
+            >
+                <h3>Model Capability Matrix</h3>
+                <span class="collapse-chevron" id="chevron-modelMatrix">▼</span>
+            </div>
+            <div class="collapsible-body" id="body-modelMatrix">
+                <div class="muted" style="margin-bottom: 8px">
+                    Available models scored by capability tier (T1 Minimal → T5 Frontier). Role routing selects the best
+                    model for each task.
+                </div>
+                <div id="capability-matrix" class="stack"></div>
+            </div>
+        </section>
     </div>
-    <div class="collapsible-body" id="body-llmAudit">
-      <div id="llm-audit"></div>
-    </div>
-  </section>
+
+    <section class="rail-section panel">
+        <div
+            class="collapsible-header"
+            onclick="togglePanelCollapse('settingsPanel')"
+            data-tip-id="settings:settings-panel"
+            data-tip-kind="settings"
+        >
+            <h3>Settings</h3>
+            <span class="collapse-chevron" id="chevron-settingsPanel">▼</span>
+        </div>
+        <div class="collapsible-body" id="body-settingsPanel">
+            <div id="settings-panel" class="stack"></div>
+            <div id="phase-e3-cac-panel" class="stack" style="margin-top: 12px"></div>
+        </div>
+    </section>
+
+    <section class="rail-section panel">
+        <div
+            class="collapsible-header"
+            onclick="togglePanelCollapse('llmAudit')"
+            data-tip-id="settings:llm-audit"
+            data-tip-kind="settings"
+        >
+            <h3>LLM Audit Trail</h3>
+            <span class="collapse-chevron" id="chevron-llmAudit">▼</span>
+        </div>
+        <div class="collapsible-body" id="body-llmAudit">
+            <div id="llm-audit"></div>
+        </div>
+    </section>
 </div>

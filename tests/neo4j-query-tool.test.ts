@@ -70,20 +70,24 @@ describe("Neo4jQueryTool — Diagnostics", () => {
 
     it("handles params argument gracefully", async () => {
         tool = new Neo4jQueryTool();
-        const result = await tool.execute(makeRequest({
-            cypher: "MATCH (n {name: $name}) RETURN n",
-            params: { name: "test" },
-        }));
+        const result = await tool.execute(
+            makeRequest({
+                cypher: "MATCH (n {name: $name}) RETURN n",
+                params: { name: "test" },
+            }),
+        );
         // Should not throw — either a clean error (no driver) or success
         assert.ok(typeof result.ok === "boolean");
     });
 
     it("handles non-object params fallback", async () => {
         tool = new Neo4jQueryTool();
-        const result = await tool.execute(makeRequest({
-            cypher: "MATCH (n) RETURN n LIMIT 1",
-            params: "invalid_not_object",
-        }));
+        const result = await tool.execute(
+            makeRequest({
+                cypher: "MATCH (n) RETURN n LIMIT 1",
+                params: "invalid_not_object",
+            }),
+        );
         assert.ok(typeof result.ok === "boolean");
     });
 

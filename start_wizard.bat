@@ -92,8 +92,8 @@ REM If you wish to force local Ollama, uncomment the lines below:
 REM if not defined PRISM_LLM_PROVIDER set PRISM_LLM_PROVIDER=ollama
 REM if not defined PRISM_LLM_MODEL set PRISM_LLM_MODEL=gemma3:1b
 
-echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will stay open to inspect.
-start "PRISM Server" cmd /k npm start
+echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will close upon exit.
+start "PRISM Server" cmd /c npm start
 
 echo [WAIT] Waiting for PRISM server on port %PRISM_DASHBOARD_PORT%...
 :wait_loop
@@ -109,7 +109,13 @@ goto :wait_loop
 echo [WIZARD] Launching Setup Wizard at http://localhost:%PRISM_DASHBOARD_PORT%/setup
 start "" "http://localhost:%PRISM_DASHBOARD_PORT%/setup?rerun=true"
 
-pause
+echo [MONITOR] PRISM is running. Monitoring for shutdown...
+:monitor_loop
+timeout /t 2 /nobreak >nul
+netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
+if %errorlevel% equ 0 goto :monitor_loop
+
+echo [SHUTDOWN] PRISM server has shut down. Exiting launcher.
 goto :eof
 
 :fail

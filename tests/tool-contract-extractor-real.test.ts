@@ -13,10 +13,7 @@ import sqlite3 from "sqlite3";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import {
-    ToolContractExtractor,
-    ExtractionRequest
-} from "../src/core/tools/tool-contract-extractor.js";
+import { ToolContractExtractor, ExtractionRequest } from "../src/core/tools/tool-contract-extractor.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -24,7 +21,7 @@ import type { Tool, ToolRequest, ToolResult } from "../src/core/tools/types.js";
 
 const noopExecute = async (_req: ToolRequest): Promise<ToolResult> => ({
     ok: true,
-    output: {}
+    output: {},
 });
 
 describe("Tool Contract Extractor — Real Extraction", () => {
@@ -41,15 +38,15 @@ describe("Tool Contract Extractor — Real Extraction", () => {
         await new Promise<void>((resolve, reject) => {
             db.close((err) => (err ? reject(err) : resolve()));
         });
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            /* ignore */
+        }
     });
 
     beforeEach(() => {
-        extractor = new ToolContractExtractor(
-            db,
-            new PolicyEngine(),
-            new ActivityBus()
-        );
+        extractor = new ToolContractExtractor(db, new PolicyEngine(), new ActivityBus());
     });
 
     describe("Manifest File Parsing", () => {
@@ -63,8 +60,8 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                     version: "2.0.0",
                     parameters: { query: "string", path: "string" },
                     return_type: "SearchResult[]",
-                    description: "Search files by content"
-                })
+                    description: "Search files by content",
+                }),
             );
 
             extractor.addManifestPath(manifestDir);
@@ -75,14 +72,14 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
             assert.strictEqual(result.status, "success");
             assert.ok(result.extracted_contracts.length >= 1);
 
-            const fileSearch = result.extracted_contracts.find(c => c.tool_name === "file-search");
+            const fileSearch = result.extracted_contracts.find((c) => c.tool_name === "file-search");
             assert.ok(fileSearch, "Should find file-search contract from manifest");
             assert.strictEqual(fileSearch!.version, "2.0.0");
             assert.strictEqual(fileSearch!.extraction_method, "manifest");
@@ -104,8 +101,8 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                             contractHash: "abc123",
                             args: {
                                 title: { type: "string", required: true },
-                                date: { type: "string", required: true }
-                            }
+                                date: { type: "string", required: true },
+                            },
                         },
                         {
                             name: "email_ops",
@@ -113,11 +110,11 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                             contractHash: "def456",
                             args: {
                                 to: { type: "string", required: true },
-                                body: { type: "string" }
-                            }
-                        }
-                    ]
-                })
+                                body: { type: "string" },
+                            },
+                        },
+                    ],
+                }),
             );
 
             extractor.addManifestPath(snapshotDir);
@@ -128,14 +125,14 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
             assert.strictEqual(result.status, "success");
             assert.strictEqual(result.extracted_contracts.length, 2);
-            assert.ok(result.extracted_contracts.some(c => c.tool_name === "calendar_plan"));
-            assert.ok(result.extracted_contracts.some(c => c.tool_name === "email_ops"));
+            assert.ok(result.extracted_contracts.some((c) => c.tool_name === "calendar_plan"));
+            assert.ok(result.extracted_contracts.some((c) => c.tool_name === "email_ops"));
         });
 
         it("extracts from per-tool subdirectory manifests", async () => {
@@ -149,8 +146,8 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                     version: "3.0.0",
                     parameters: { input: "string" },
                     return_type: "object",
-                    description: "A subdirectory tool"
-                })
+                    description: "A subdirectory tool",
+                }),
             );
 
             extractor.addManifestPath(subDir);
@@ -161,11 +158,11 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
-            assert.ok(result.extracted_contracts.some(c => c.tool_name === "my-tool"));
+            assert.ok(result.extracted_contracts.some((c) => c.tool_name === "my-tool"));
         });
 
         it("falls back to simulated data when no manifest path configured", async () => {
@@ -175,7 +172,7 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
@@ -197,7 +194,7 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             // Should not throw; falls back to simulated
@@ -215,20 +212,20 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                     version: "1.0.0",
                     args: {
                         query: { type: "string", required: true },
-                        limit: { type: "number" }
-                    }
+                        limit: { type: "number" },
+                    },
                 },
-                execute: noopExecute
+                execute: noopExecute,
             });
             registry.register({
                 name: "memory_query",
                 contract: {
                     version: "2.0.0",
                     args: {
-                        topic: { type: "string", required: true }
-                    }
+                        topic: { type: "string", required: true },
+                    },
                 },
-                execute: noopExecute
+                execute: noopExecute,
             });
 
             extractor.setToolRegistry(registry);
@@ -239,22 +236,22 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
             assert.strictEqual(result.status, "success");
             assert.strictEqual(result.extracted_contracts.length, 2);
-            assert.ok(result.extracted_contracts.some(c => c.tool_name === "notes_extract"));
-            assert.ok(result.extracted_contracts.some(c => c.tool_name === "memory_query"));
-            assert.ok(result.extracted_contracts.every(c => c.extraction_method === "decorator"));
+            assert.ok(result.extracted_contracts.some((c) => c.tool_name === "notes_extract"));
+            assert.ok(result.extracted_contracts.some((c) => c.tool_name === "memory_query"));
+            assert.ok(result.extracted_contracts.every((c) => c.extraction_method === "decorator"));
         });
 
         it("returns empty when registry has no tools with contracts", async () => {
             const registry = new ToolRegistry();
             registry.register({
                 name: "bare-tool",
-                execute: noopExecute
+                execute: noopExecute,
             });
 
             extractor.setToolRegistry(registry);
@@ -265,7 +262,7 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
@@ -281,10 +278,10 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 governance: {
                     actions: {
                         run: { minimumRisk: "high" as any, mutating: true, rollbackRequired: true },
-                        status: { minimumRisk: "low" as any, mutating: false, rollbackRequired: false }
-                    }
+                        status: { minimumRisk: "low" as any, mutating: false, rollbackRequired: false },
+                    },
                 },
-                execute: noopExecute
+                execute: noopExecute,
             });
 
             extractor.setToolRegistry(registry);
@@ -295,7 +292,7 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
@@ -316,24 +313,24 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 name: "file_read",
                 contract: {
                     version: "1.0.0",
-                    args: { path: { type: "string", required: true } }
+                    args: { path: { type: "string", required: true } },
                 },
-                execute: noopExecute
+                execute: noopExecute,
             });
             // Tool with only governance → dynamic extraction
             registry.register({
                 name: "file_delete",
                 governance: {
                     actions: {
-                        delete: { minimumRisk: "high" as any, mutating: true, rollbackRequired: true }
-                    }
+                        delete: { minimumRisk: "high" as any, mutating: true, rollbackRequired: true },
+                    },
                 },
-                execute: noopExecute
+                execute: noopExecute,
             });
             // Tool with neither → skipped by both
             registry.register({
                 name: "bare-tool",
-                execute: noopExecute
+                execute: noopExecute,
             });
 
             extractor.setToolRegistry(registry);
@@ -344,7 +341,7 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const dynamicReq: ExtractionRequest = {
@@ -353,7 +350,7 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const decoratorResult = await extractor.extractContracts(decoratorReq);
@@ -374,22 +371,22 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 name: "safe_reader",
                 contract: {
                     version: "1.0.0",
-                    args: { query: { type: "string" } }
+                    args: { query: { type: "string" } },
                 },
-                execute: noopExecute
+                execute: noopExecute,
             });
             registry.register({
                 name: "dangerous_writer",
                 contract: {
                     version: "1.0.0",
-                    args: { data: { type: "string" } }
+                    args: { data: { type: "string" } },
                 },
                 governance: {
                     actions: {
-                        write: { minimumRisk: "high" as any, mutating: true, rollbackRequired: true }
-                    }
+                        write: { minimumRisk: "high" as any, mutating: true, rollbackRequired: true },
+                    },
                 },
-                execute: noopExecute
+                execute: noopExecute,
             });
 
             extractor.setToolRegistry(registry);
@@ -400,12 +397,12 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 baseline_comparison: false,
                 risk_assessment: true,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
-            const safe = result.extracted_contracts.find(c => c.tool_name === "safe_reader");
-            const dangerous = result.extracted_contracts.find(c => c.tool_name === "dangerous_writer");
+            const safe = result.extracted_contracts.find((c) => c.tool_name === "safe_reader");
+            const dangerous = result.extracted_contracts.find((c) => c.tool_name === "dangerous_writer");
 
             assert.ok(safe);
             assert.ok(dangerous);
@@ -413,7 +410,7 @@ describe("Tool Contract Extractor — Real Extraction", () => {
             assert.strictEqual(safe!.risk_tier, "tier1");
             assert.ok(
                 dangerous!.risk_tier === "tier2" || dangerous!.risk_tier === "tier3",
-                `Expected tier2 or tier3 for mutating tool, got ${dangerous!.risk_tier}`
+                `Expected tier2 or tier3 for mutating tool, got ${dangerous!.risk_tier}`,
             );
         });
 
@@ -427,15 +424,12 @@ describe("Tool Contract Extractor — Real Extraction", () => {
                 description: "Deploy artifact",
                 extraction_method: "dynamic" as const,
                 risk_tier: "tier1" as const,
-                extracted_at: new Date().toISOString()
+                extracted_at: new Date().toISOString(),
             };
 
             const tier = await (extractor as any).assessRiskTier(contract);
             // "deploy" in name (+2), target/force/overwrite/recursive params (+4) = 6 → tier2
-            assert.ok(
-                tier === "tier2" || tier === "tier3",
-                `Expected tier2+ for mutation params, got ${tier}`
-            );
+            assert.ok(tier === "tier2" || tier === "tier3", `Expected tier2+ for mutation params, got ${tier}`);
         });
     });
 });

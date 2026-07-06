@@ -28,10 +28,15 @@ function fetchJson(port: number, path: string): Promise<{ status: number; body: 
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let body = "";
-            res.on("data", (chunk: Buffer) => { body += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                body += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode ?? 0, body: JSON.parse(body) }); }
-                catch (e) { reject(e); }
+                try {
+                    resolve({ status: res.statusCode ?? 0, body: JSON.parse(body) });
+                } catch (e) {
+                    reject(e);
+                }
             });
         }).on("error", reject);
     });
@@ -46,7 +51,11 @@ export async function testHealthExtendedEndpoint(): Promise<void> {
     const prefsDir = mkdtempSync(join(tmpdir(), "prism-health-ext-"));
     const prefsFile = join(prefsDir, "prefs.json");
     process.env.PRISM_PREFERENCES_PATH = prefsFile;
-    writeFileSync(prefsFile, JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }) + "\n", "utf8");
+    writeFileSync(
+        prefsFile,
+        JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }) + "\n",
+        "utf8",
+    );
 
     const queue = new ApprovalQueue();
     const bus = new ActivityBus();
@@ -108,7 +117,9 @@ export async function testHealthExtendedEndpoint(): Promise<void> {
         for (const p of queue.list()) queue.deny(p.id);
     } finally {
         await service.stop();
-        if (savedAuth === undefined) delete process.env.PRISM_AUTH_DISABLED; else process.env.PRISM_AUTH_DISABLED = savedAuth;
-        if (savedPrefs === undefined) delete process.env.PRISM_PREFERENCES_PATH; else process.env.PRISM_PREFERENCES_PATH = savedPrefs;
+        if (savedAuth === undefined) delete process.env.PRISM_AUTH_DISABLED;
+        else process.env.PRISM_AUTH_DISABLED = savedAuth;
+        if (savedPrefs === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = savedPrefs;
     }
 }

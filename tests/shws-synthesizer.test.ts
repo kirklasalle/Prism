@@ -110,14 +110,27 @@ export async function testShwsSynthesizer(): Promise<void> {
         succeeded: true,
         recordedAt: new Date().toISOString(),
         repairSteps: [
-            { id: "bad-1", operation: "delete.records", args: {}, risk: "medium", mutatesState: true /* no rollbackPlan */ },
+            {
+                id: "bad-1",
+                operation: "delete.records",
+                args: {},
+                risk: "medium",
+                mutatesState: true /* no rollbackPlan */,
+            },
         ],
     });
     const synth2 = new WorkflowSynthesizer(badHistory, validator, new ApprovalQueue(), bus);
     // Need to use BUSINESS_PROFILE so constitution's rollback rule actually denies
     const { BUSINESS_PROFILE } = await import("../src/core/policy/execution-profiles.js");
     const dag3 = executor.createDAG("test-wf-3", [
-        { id: "send-2", operation: "send.email.bad", args: {}, risk: "medium", mutatesState: true, rollbackPlan: "noop" },
+        {
+            id: "send-2",
+            operation: "send.email.bad",
+            args: {},
+            risk: "medium",
+            mutatesState: true,
+            rollbackPlan: "noop",
+        },
     ]);
     const rejected = synth2.proposeFallback({
         failedStepId: "send-2",

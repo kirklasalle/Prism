@@ -68,17 +68,13 @@ function getAppliedMigrations(db: DatabaseSync): Set<number> {
  */
 export function runMigrations(db: DatabaseSync, migrations: Migration[]): Migration[] {
     const applied = getAppliedMigrations(db);
-    const pending = migrations
-        .filter((m) => !applied.has(m.id))
-        .sort((a, b) => a.id - b.id);
+    const pending = migrations.filter((m) => !applied.has(m.id)).sort((a, b) => a.id - b.id);
 
     if (pending.length === 0) {
         return [];
     }
 
-    const insertStmt = db.prepare(
-        `INSERT INTO ${SCHEMA_TABLE} (id, description) VALUES (:id, :description)`,
-    );
+    const insertStmt = db.prepare(`INSERT INTO ${SCHEMA_TABLE} (id, description) VALUES (:id, :description)`);
 
     for (const migration of pending) {
         try {
@@ -102,12 +98,13 @@ export function runMigrations(db: DatabaseSync, migrations: Migration[]): Migrat
  */
 export function getSchemaVersion(db: DatabaseSync): { current: number; migrations: number; appliedAt: string | null } {
     ensureSchemaTable(db);
-    const maxRow = db.prepare(
-        `SELECT MAX(id) as current, COUNT(*) as migrations FROM ${SCHEMA_TABLE}`,
-    ).get() as { current: number | null; migrations: number };
-    const latestRow = db.prepare(
-        `SELECT applied_at FROM ${SCHEMA_TABLE} ORDER BY id DESC LIMIT 1`,
-    ).get() as { applied_at: string } | undefined;
+    const maxRow = db.prepare(`SELECT MAX(id) as current, COUNT(*) as migrations FROM ${SCHEMA_TABLE}`).get() as {
+        current: number | null;
+        migrations: number;
+    };
+    const latestRow = db.prepare(`SELECT applied_at FROM ${SCHEMA_TABLE} ORDER BY id DESC LIMIT 1`).get() as
+        | { applied_at: string }
+        | undefined;
 
     return {
         current: maxRow.current ?? 0,
@@ -120,7 +117,5 @@ export function getSchemaVersion(db: DatabaseSync): { current: number; migration
  * List all known migrations (for diagnostics / CI gates).
  */
 export function listMigrations(migrations: Migration[]): { id: number; description: string }[] {
-    return migrations
-        .map((m) => ({ id: m.id, description: m.description }))
-        .sort((a, b) => a.id - b.id);
+    return migrations.map((m) => ({ id: m.id, description: m.description })).sort((a, b) => a.id - b.id);
 }

@@ -1,9 +1,9 @@
 /**
  * Tool Contract Extractor Tests
- * 
+ *
  * Test coverage for contract extraction, comparison, risk tier assignment,
  * and policy gating for tool staging
- * 
+ *
  * @test tests/tool-contract-extractor.test.ts
  */
 
@@ -11,11 +11,7 @@ import * as assert from "assert";
 import { describe, it, before, after } from "mocha";
 import sqlite3 from "sqlite3";
 import { join } from "node:path";
-import {
-    ToolContractExtractor,
-    ToolContract,
-    ExtractionRequest
-} from "../src/core/tools/tool-contract-extractor.js";
+import { ToolContractExtractor, ToolContract, ExtractionRequest } from "../src/core/tools/tool-contract-extractor.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
 import { Tool } from "../src/core/tools/types.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
@@ -32,17 +28,17 @@ describe("Tool Contract Extractor", () => {
         policyEngine = new PolicyEngine();
         activityBus = new ActivityBus();
         extractor = new ToolContractExtractor(db, policyEngine, activityBus);
-        
+
         const registry = new ToolRegistry();
-        
+
         // 1. Tool with contract (decorator extraction)
         registry.register({
             name: "tool-decorator",
             contract: {
                 version: "1.0.0",
-                args: { id: { type: "string" } }
+                args: { id: { type: "string" } },
             },
-            execute: async () => ({ ok: true, output: { status: "done" } })
+            execute: async () => ({ ok: true, output: { status: "done" } }),
         });
 
         // 2. Tool with governance (dynamic extraction)
@@ -50,10 +46,10 @@ describe("Tool Contract Extractor", () => {
             name: "tool-dynamic",
             governance: {
                 actions: {
-                    run: { mutating: true, minimumRisk: "medium", rollbackRequired: false }
-                }
+                    run: { mutating: true, minimumRisk: "medium", rollbackRequired: false },
+                },
             },
-            execute: async () => ({ ok: true, output: { status: "done" } })
+            execute: async () => ({ ok: true, output: { status: "done" } }),
         });
 
         // 3. Another tool for count
@@ -61,14 +57,14 @@ describe("Tool Contract Extractor", () => {
             name: "tool-hybrid",
             contract: {
                 version: "2.0.0",
-                args: { limit: { type: "number" } }
+                args: { limit: { type: "number" } },
             },
             governance: {
                 actions: {
-                    search: { mutating: false, minimumRisk: "low", rollbackRequired: false }
-                }
+                    search: { mutating: false, minimumRisk: "low", rollbackRequired: false },
+                },
             },
-            execute: async () => ({ ok: true, output: { status: "done" } })
+            execute: async () => ({ ok: true, output: { status: "done" } }),
         });
 
         extractor.setToolRegistry(registry);
@@ -89,7 +85,7 @@ describe("Tool Contract Extractor", () => {
                 baseline_comparison: true,
                 risk_assessment: true,
                 approval_routing: true,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
@@ -107,7 +103,7 @@ describe("Tool Contract Extractor", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
@@ -124,7 +120,7 @@ describe("Tool Contract Extractor", () => {
                 baseline_comparison: false,
                 risk_assessment: false,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             const result = await extractor.extractContracts(request);
@@ -139,7 +135,7 @@ describe("Tool Contract Extractor", () => {
                 baseline_comparison: true,
                 risk_assessment: true,
                 approval_routing: false,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
             };
 
             await extractor.extractContracts(request);
@@ -164,7 +160,7 @@ describe("Tool Contract Extractor", () => {
                 description: "Read status metrics",
                 extraction_method: "manifest",
                 risk_tier: "tier1",
-                extracted_at: new Date().toISOString()
+                extracted_at: new Date().toISOString(),
             };
 
             const tier = await (extractor as any).assessRiskTier(contract);
@@ -181,7 +177,7 @@ describe("Tool Contract Extractor", () => {
                 description: "Delete destroy shutdown critical system data",
                 extraction_method: "dynamic",
                 risk_tier: "tier1",
-                extracted_at: new Date().toISOString()
+                extracted_at: new Date().toISOString(),
             };
 
             const tier = await (extractor as any).assessRiskTier(contract);
@@ -198,7 +194,7 @@ describe("Tool Contract Extractor", () => {
                 description: "Safe query tool",
                 extraction_method: "manifest",
                 risk_tier: "tier1",
-                extracted_at: new Date().toISOString()
+                extracted_at: new Date().toISOString(),
             };
 
             const comparison = await (extractor as any).compareWithBaseline(contract);
@@ -218,17 +214,19 @@ describe("Tool Contract Extractor", () => {
                 description: "Updated tool",
                 extraction_method: "manifest",
                 risk_tier: "tier2",
-                extracted_at: new Date().toISOString()
+                extracted_at: new Date().toISOString(),
             };
 
             (extractor as any).baselineCache.set("has-baseline", {
                 ...current,
                 version: "1.0.0",
-                parameters: { query: "string", limit: "number" }
+                parameters: { query: "string", limit: "number" },
             });
 
             const comparison = await (extractor as any).compareWithBaseline(current);
-            assert.ok(comparison?.breaking_changes.some((change: string) => change.includes("removed_parameter: limit")));
+            assert.ok(
+                comparison?.breaking_changes.some((change: string) => change.includes("removed_parameter: limit")),
+            );
             assert.strictEqual(comparison?.requires_approval, true);
         });
     });
@@ -246,18 +244,8 @@ describe("Tool Contract Extractor", () => {
                     `INSERT INTO contract_changes
                      (change_id, tool_id, baseline_version, current_version, change_type, breaking, risk_score, details, approval_status)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [
-                        "change-1",
-                        "tool-1",
-                        "1.0.0",
-                        "1.1.0",
-                        "signature_change",
-                        1,
-                        2,
-                        "[]",
-                        "pending"
-                    ],
-                    (err) => (err ? reject(err) : resolve())
+                    ["change-1", "tool-1", "1.0.0", "1.1.0", "signature_change", 1, 2, "[]", "pending"],
+                    (err) => (err ? reject(err) : resolve()),
                 );
             });
 
@@ -267,7 +255,7 @@ describe("Tool Contract Extractor", () => {
             const approvedCount = await new Promise<number>((resolve, reject) => {
                 db.get(
                     `SELECT COUNT(*) AS count FROM contract_changes WHERE approval_status = 'approved'`,
-                    (err, row: { count: number }) => (err ? reject(err) : resolve(row.count))
+                    (err, row: { count: number }) => (err ? reject(err) : resolve(row.count)),
                 );
             });
 
@@ -275,7 +263,7 @@ describe("Tool Contract Extractor", () => {
 
             const events = activityBus.listEvents();
             const hasStagingEvent = events.some(
-                (event) => event.operation === "contract_staging" && event.status === "succeeded"
+                (event) => event.operation === "contract_staging" && event.status === "succeeded",
             );
             assert.strictEqual(hasStagingEvent, true);
         });

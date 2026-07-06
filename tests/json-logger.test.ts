@@ -7,11 +7,7 @@
 
 import assert from "node:assert";
 
-import {
-    formatRecord,
-    Logger,
-    resolveLoggerConfig,
-} from "../src/core/observability/logger.js";
+import { formatRecord, Logger, resolveLoggerConfig } from "../src/core/observability/logger.js";
 
 export async function testJsonLogger(): Promise<void> {
     // ── resolveLoggerConfig env switch ───────────────────────────────
@@ -56,10 +52,7 @@ export async function testJsonLogger(): Promise<void> {
         assert.ok(out.includes("ip=1.2.3.4"), "text has ip kv");
 
         // Quoted value when it contains whitespace or `=`.
-        const quoted = formatRecord(
-            { ts: "t", level: "error", msg: "boom", path: "C:/Program Files/x" },
-            "text",
-        );
+        const quoted = formatRecord({ ts: "t", level: "error", msg: "boom", path: "C:/Program Files/x" }, "text");
         assert.ok(quoted.includes('path="C:/Program Files/x"'), "whitespace value is JSON-quoted");
     }
 
@@ -67,7 +60,7 @@ export async function testJsonLogger(): Promise<void> {
     {
         const lines: string[] = [];
         const log = new Logger({ format: "json", minLevel: "info", sink: (l) => lines.push(l) });
-        log.debug("ignored");          // below minLevel
+        log.debug("ignored"); // below minLevel
         log.info("served", { status: 200 });
         log.warn("slow", { ms: 1234 });
         log.error("oops", { op: "boot" });

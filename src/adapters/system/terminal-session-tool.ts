@@ -132,11 +132,7 @@ export class TerminalSessionTool implements Tool {
         if (this.adapter) {
             try {
                 const shell = process.platform === "win32" ? "cmd.exe" : "/bin/bash";
-                const session = await this.adapter.startSession(
-                    shell,
-                    cwd ?? process.cwd(),
-                    "prism-agent",
-                );
+                const session = await this.adapter.startSession(shell, cwd ?? process.cwd(), "prism-agent");
                 adapterSessionId = session.session_id;
             } catch {
                 // Adapter start failed — fall back to direct exec mode
@@ -164,15 +160,17 @@ export class TerminalSessionTool implements Tool {
                 updatedAt: record.updatedAt,
                 ptyEnabled: !!adapterSessionId,
             },
-            sideEffects: [{
-                type: "process",
-                action: "start",
-                resource: id,
-                mutating: true,
-                reversible: true,
-                rollbackPlan: request.rollbackPlan,
-                description: `terminal_session start: ${id}`,
-            }],
+            sideEffects: [
+                {
+                    type: "process",
+                    action: "start",
+                    resource: id,
+                    mutating: true,
+                    reversible: true,
+                    rollbackPlan: request.rollbackPlan,
+                    description: `terminal_session start: ${id}`,
+                },
+            ],
         };
     }
 
@@ -205,9 +203,7 @@ export class TerminalSessionTool implements Tool {
         record.updatedAt = nowIso();
         sessions.set(record.id, record);
 
-        const timeoutMs = typeof request.args.timeout_ms === "number"
-            ? request.args.timeout_ms
-            : DEFAULT_TIMEOUT_MS;
+        const timeoutMs = typeof request.args.timeout_ms === "number" ? request.args.timeout_ms : DEFAULT_TIMEOUT_MS;
 
         // ── Route 1: Full adapter with PTY/policy/persistence ────────────
         if (this.adapter && record.adapterSessionId) {
@@ -231,15 +227,17 @@ export class TerminalSessionTool implements Tool {
                         backend: "pty-adapter",
                         updatedAt: record.updatedAt,
                     },
-                    sideEffects: [{
-                        type: "process",
-                        action: "exec",
-                        resource: record.id,
-                        mutating: true,
-                        reversible: true,
-                        rollbackPlan: request.rollbackPlan,
-                        description: `terminal_session exec: ${record.id}`,
-                    }],
+                    sideEffects: [
+                        {
+                            type: "process",
+                            action: "exec",
+                            resource: record.id,
+                            mutating: true,
+                            reversible: true,
+                            rollbackPlan: request.rollbackPlan,
+                            description: `terminal_session exec: ${record.id}`,
+                        },
+                    ],
                 };
             } catch (adapterErr) {
                 // Adapter execution failed — fall through to direct exec
@@ -259,9 +257,10 @@ export class TerminalSessionTool implements Tool {
                 timeout: timeoutMs,
                 maxBuffer: MAX_BUFFER,
                 cwd: record.cwd ?? undefined,
-                env: typeof request.args.env === "object" && request.args.env !== null
-                    ? { ...process.env, ...(request.args.env as Record<string, string>) }
-                    : undefined,
+                env:
+                    typeof request.args.env === "object" && request.args.env !== null
+                        ? { ...process.env, ...(request.args.env as Record<string, string>) }
+                        : undefined,
             });
             const executionTimeMs = Date.now() - start;
 
@@ -279,15 +278,17 @@ export class TerminalSessionTool implements Tool {
                     backend: "child_process",
                     updatedAt: record.updatedAt,
                 },
-                sideEffects: [{
-                    type: "process",
-                    action: "exec",
-                    resource: record.id,
-                    mutating: true,
-                    reversible: true,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `terminal_session exec: ${record.id}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "process",
+                        action: "exec",
+                        resource: record.id,
+                        mutating: true,
+                        reversible: true,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `terminal_session exec: ${record.id}`,
+                    },
+                ],
             };
         } catch (error: unknown) {
             const err = error as { stdout?: string; stderr?: string; message?: string; code?: number };
@@ -304,15 +305,17 @@ export class TerminalSessionTool implements Tool {
                     backend: "child_process",
                     updatedAt: record.updatedAt,
                 },
-                sideEffects: [{
-                    type: "process",
-                    action: "exec",
-                    resource: record.id,
-                    mutating: true,
-                    reversible: true,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `terminal_session exec: ${record.id}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "process",
+                        action: "exec",
+                        resource: record.id,
+                        mutating: true,
+                        reversible: true,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `terminal_session exec: ${record.id}`,
+                    },
+                ],
             };
         }
     }
@@ -333,15 +336,17 @@ export class TerminalSessionTool implements Tool {
         return {
             ok: true,
             output: { sessionId: record.id, state: record.state, updatedAt: record.updatedAt },
-            sideEffects: [{
-                type: "process",
-                action: "stop",
-                resource: record.id,
-                mutating: true,
-                reversible: true,
-                rollbackPlan: request.rollbackPlan,
-                description: `terminal_session stop: ${record.id}`,
-            }],
+            sideEffects: [
+                {
+                    type: "process",
+                    action: "stop",
+                    resource: record.id,
+                    mutating: true,
+                    reversible: true,
+                    rollbackPlan: request.rollbackPlan,
+                    description: `terminal_session stop: ${record.id}`,
+                },
+            ],
         };
     }
 
@@ -361,15 +366,17 @@ export class TerminalSessionTool implements Tool {
         return {
             ok: true,
             output: { sessionId: record.id, state: record.state, updatedAt: record.updatedAt },
-            sideEffects: [{
-                type: "process",
-                action: "revoke",
-                resource: record.id,
-                mutating: true,
-                reversible: false,
-                rollbackPlan: request.rollbackPlan,
-                description: `terminal_session revoke: ${record.id}`,
-            }],
+            sideEffects: [
+                {
+                    type: "process",
+                    action: "revoke",
+                    resource: record.id,
+                    mutating: true,
+                    reversible: false,
+                    rollbackPlan: request.rollbackPlan,
+                    description: `terminal_session revoke: ${record.id}`,
+                },
+            ],
         };
     }
 

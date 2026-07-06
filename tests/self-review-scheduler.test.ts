@@ -74,9 +74,7 @@ export async function testSelfReviewScheduler(): Promise<void> {
         const historyLines = readFileSync(historyPath, "utf-8").trim().split("\n");
         assert.strictEqual(historyLines.length, 3);
 
-        const selfReviewEvents = bus
-            .listEvents()
-            .filter((event) => event.operation.startsWith("prism.self_review."));
+        const selfReviewEvents = bus.listEvents().filter((event) => event.operation.startsWith("prism.self_review."));
         assert.strictEqual(selfReviewEvents.length, 3);
         assert.ok(selfReviewEvents.every((event) => event.status === "succeeded"));
 
@@ -94,8 +92,8 @@ export async function testSelfReviewScheduler(): Promise<void> {
 
         assert.strictEqual(overflowConfiguration.intervalsMs.monthly, 2_147_000_000);
         assert.ok(
-            overflowConfiguration.warnings.some((warning) =>
-                warning.includes("monthly self-review interval") && warning.includes("clamped"),
+            overflowConfiguration.warnings.some(
+                (warning) => warning.includes("monthly self-review interval") && warning.includes("clamped"),
             ),
         );
 

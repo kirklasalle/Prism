@@ -8,8 +8,15 @@ import type { PrismWsClient } from "../api/ws-client.js";
 import { useApi, useWsEvent, useListNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
-    Panel, DataTable, StatusBadge, SubTabBar,
-    Loading, ErrorBox, KeyValue, SectionHeader, ProgressBar,
+    Panel,
+    DataTable,
+    StatusBadge,
+    SubTabBar,
+    Loading,
+    ErrorBox,
+    KeyValue,
+    SectionHeader,
+    ProgressBar,
 } from "../components/ui.js";
 
 export function ToolsTab({
@@ -53,7 +60,17 @@ export function ToolsTab({
         if (diagComplete) setDiagRunning(false);
     }, [diagComplete]);
 
-    const DIAG_SUITES = ["browser", "agent", "computer", "network", "knowledge-graph", "workspace", "telemetry", "logs", "scheduler"];
+    const DIAG_SUITES = [
+        "browser",
+        "agent",
+        "computer",
+        "network",
+        "knowledge-graph",
+        "workspace",
+        "telemetry",
+        "logs",
+        "scheduler",
+    ];
 
     return (
         <Box flexDirection="column">
@@ -87,23 +104,21 @@ export function ToolsTab({
                                 },
                                 {
                                     header: "Success",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        `${r.successes ?? 0}/${r.invocations ?? 0}`),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        `${r.successes ?? 0}/${r.invocations ?? 0}`,
                                     width: 12,
                                 },
                                 {
                                     header: "Avg ms",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        (r.avgLatencyMs as number)?.toFixed(0) ?? "-"),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        (r.avgLatencyMs as number)?.toFixed(0) ?? "-",
                                     width: 8,
                                 },
                                 {
                                     header: "Status",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.enabled ? "enabled" : "disabled"),
+                                    accessor: (r: Record<string, unknown>) => (r.enabled ? "enabled" : "disabled"),
                                     width: 10,
-                                    color: ((r: Record<string, unknown>) =>
-                                        r.enabled ? colors.success : colors.muted),
+                                    color: (r: Record<string, unknown>) => (r.enabled ? colors.success : colors.muted),
                                 },
                             ]}
                             selectedIndex={toolNav.selectedIndex}
@@ -124,18 +139,16 @@ export function ToolsTab({
                                 { header: "Plugin", accessor: "name", width: 24 },
                                 {
                                     header: "Health",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.healthy ? "healthy" : "unhealthy"),
+                                    accessor: (r: Record<string, unknown>) => (r.healthy ? "healthy" : "unhealthy"),
                                     width: 12,
-                                    color: ((r: Record<string, unknown>) =>
-                                        r.healthy ? colors.success : colors.error),
+                                    color: (r: Record<string, unknown>) => (r.healthy ? colors.success : colors.error),
                                 },
                                 { header: "Requests", accessor: "requests", width: 10 },
                                 { header: "Errors", accessor: "errors", width: 8 },
                                 {
                                     header: "Avg ms",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        (r.avgResponseMs as number)?.toFixed(0) ?? "-"),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        (r.avgResponseMs as number)?.toFixed(0) ?? "-",
                                     width: 10,
                                 },
                             ]}
@@ -158,16 +171,20 @@ export function ToolsTab({
                                     header: "Result",
                                     accessor: "lastResult",
                                     width: 10,
-                                    color: ((r: Record<string, unknown>) => {
+                                    color: (r: Record<string, unknown>) => {
                                         const lr = String(r.lastResult ?? "");
-                                        return lr === "pass" ? colors.success : lr === "fail" ? colors.error : colors.muted;
-                                    }),
+                                        return lr === "pass"
+                                            ? colors.success
+                                            : lr === "fail"
+                                              ? colors.error
+                                              : colors.muted;
+                                    },
                                 },
                                 { header: "Runs", accessor: "runCount", width: 8 },
                                 {
                                     header: "Last Run",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.lastRun ? new Date(r.lastRun as string).toLocaleTimeString() : "never"),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        r.lastRun ? new Date(r.lastRun as string).toLocaleTimeString() : "never",
                                     width: 14,
                                 },
                             ]}
@@ -199,7 +216,9 @@ export function ToolsTab({
                     </Box>
                     {diagRunning && <Loading label={`Running ${diagSuite} suite...`} />}
                     {diagLog.map((line, i) => (
-                        <Text key={i} color={colors.textDim}>{line}</Text>
+                        <Text key={i} color={colors.textDim}>
+                            {line}
+                        </Text>
                     ))}
                 </Box>
             )}

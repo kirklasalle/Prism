@@ -42,4 +42,3 @@ export interface PolicyResult {
     /** Phase E3b: optional UI remediation link (e.g. the CAC identity panel). */
     remediation?: string;
 }
-

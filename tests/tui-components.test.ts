@@ -10,9 +10,19 @@ import assert from "node:assert/strict";
 import React from "react";
 import { render } from "ink-testing-library";
 import {
-    StatusBadge, Panel, DataTable, Sparkline, ProgressBar,
-    KeyValue, ErrorBox, Header, TabBar, StatusBar,
-    HelpOverlay, SectionHeader, SubTabBar,
+    StatusBadge,
+    Panel,
+    DataTable,
+    Sparkline,
+    ProgressBar,
+    KeyValue,
+    ErrorBox,
+    Header,
+    TabBar,
+    StatusBar,
+    HelpOverlay,
+    SectionHeader,
+    SubTabBar,
 } from "../src/tui/components/ui.js";
 import { TABS } from "../src/tui/theme.js";
 import { createMockClient } from "./tui-mocks.js";
@@ -67,29 +77,39 @@ describe("ErrorBox", () => {
 
 describe("Header", () => {
     it("renders PRISM branding", () => {
-        const { lastFrame } = render(React.createElement(Header, { profile: "individual", connected: true, version: "0.2.0" }));
+        const { lastFrame } = render(
+            React.createElement(Header, { profile: "individual", connected: true, version: "0.2.0" }),
+        );
         const frame = lastFrame() ?? "";
         assert.ok(frame.includes("PRISM"));
         assert.ok(frame.includes("0.2.0"));
     });
 
     it("shows INDIVIDUAL for individual profile", () => {
-        const { lastFrame } = render(React.createElement(Header, { profile: "individual", connected: true, version: "0.2.0" }));
+        const { lastFrame } = render(
+            React.createElement(Header, { profile: "individual", connected: true, version: "0.2.0" }),
+        );
         assert.ok(lastFrame()?.includes("INDIVIDUAL"));
     });
 
     it("shows BUSINESS for business profile", () => {
-        const { lastFrame } = render(React.createElement(Header, { profile: "business", connected: true, version: "0.2.0" }));
+        const { lastFrame } = render(
+            React.createElement(Header, { profile: "business", connected: true, version: "0.2.0" }),
+        );
         assert.ok(lastFrame()?.includes("BUSINESS"));
     });
 
     it("shows Connected when connected", () => {
-        const { lastFrame } = render(React.createElement(Header, { profile: "individual", connected: true, version: "0.2.0" }));
+        const { lastFrame } = render(
+            React.createElement(Header, { profile: "individual", connected: true, version: "0.2.0" }),
+        );
         assert.ok(lastFrame()?.includes("Connected"));
     });
 
     it("shows Disconnected when not connected", () => {
-        const { lastFrame } = render(React.createElement(Header, { profile: "individual", connected: false, version: "0.2.0" }));
+        const { lastFrame } = render(
+            React.createElement(Header, { profile: "individual", connected: false, version: "0.2.0" }),
+        );
         assert.ok(lastFrame()?.includes("Disconnected"));
     });
 });
@@ -100,11 +120,13 @@ describe("Header", () => {
 
 describe("TabBar", () => {
     it("renders all tab labels", () => {
-        const { lastFrame } = render(React.createElement(TabBar, {
-            tabs: TABS,
-            activeTab: "chat",
-            onSelect: () => {},
-        }));
+        const { lastFrame } = render(
+            React.createElement(TabBar, {
+                tabs: TABS,
+                activeTab: "chat",
+                onSelect: () => {},
+            }),
+        );
         const frame = lastFrame() ?? "";
         for (const tab of TABS) {
             assert.ok(frame.includes(tab.label), `should include tab label "${tab.label}"`);
@@ -112,11 +134,13 @@ describe("TabBar", () => {
     });
 
     it("renders tab shortcuts", () => {
-        const { lastFrame } = render(React.createElement(TabBar, {
-            tabs: TABS.slice(0, 3),
-            activeTab: "chat",
-            onSelect: () => {},
-        }));
+        const { lastFrame } = render(
+            React.createElement(TabBar, {
+                tabs: TABS.slice(0, 3),
+                activeTab: "chat",
+                onSelect: () => {},
+            }),
+        );
         const frame = lastFrame() ?? "";
         assert.ok(frame.includes("1:"));
         assert.ok(frame.includes("2:"));
@@ -130,11 +154,13 @@ describe("TabBar", () => {
 
 describe("StatusBar", () => {
     it("renders left/center/right sections", () => {
-        const { lastFrame } = render(React.createElement(StatusBar, {
-            left: "chat",
-            center: "warning msg",
-            right: "q: quit",
-        }));
+        const { lastFrame } = render(
+            React.createElement(StatusBar, {
+                left: "chat",
+                center: "warning msg",
+                right: "q: quit",
+            }),
+        );
         const frame = lastFrame() ?? "";
         assert.ok(frame.includes("chat"));
         assert.ok(frame.includes("warning msg"));
@@ -164,11 +190,13 @@ describe("SubTabBar", () => {
             { id: "details", label: "Details" },
             { id: "history", label: "History" },
         ];
-        const { lastFrame } = render(React.createElement(SubTabBar, {
-            tabs,
-            activeTab: "overview",
-            onSelect: () => {},
-        }));
+        const { lastFrame } = render(
+            React.createElement(SubTabBar, {
+                tabs,
+                activeTab: "overview",
+                onSelect: () => {},
+            }),
+        );
         const frame = lastFrame() ?? "";
         for (const t of tabs) {
             assert.ok(frame.includes(t.label), `should include sub-tab "${t.label}"`);
@@ -199,11 +227,13 @@ describe("DataTable", () => {
     });
 
     it("shows empty message when data is empty", () => {
-        const { lastFrame } = render(React.createElement(DataTable, {
-            data: [],
-            columns: [{ header: "X", accessor: "x" }],
-            emptyMessage: "Nothing here",
-        }));
+        const { lastFrame } = render(
+            React.createElement(DataTable, {
+                data: [],
+                columns: [{ header: "X", accessor: "x" }],
+                emptyMessage: "Nothing here",
+            }),
+        );
         assert.ok(lastFrame()?.includes("Nothing here"));
     });
 
@@ -278,8 +308,10 @@ describe("HelpOverlay", () => {
         const { lastFrame } = render(React.createElement(HelpOverlay, {}));
         const frame = lastFrame() ?? "";
         // Should mention help-related text
-        assert.ok(frame.includes("q") || frame.includes("quit") || frame.includes("help"),
-            "should include some keyboard hint");
+        assert.ok(
+            frame.includes("q") || frame.includes("quit") || frame.includes("help"),
+            "should include some keyboard hint",
+        );
     });
 });
 
@@ -290,12 +322,14 @@ describe("HelpOverlay", () => {
 describe("LoginTab", () => {
     it("renders operator authentication fields", () => {
         const client = createMockClient();
-        const { lastFrame } = render(React.createElement(LoginTab, {
-            client,
-            focused: true,
-            onSuccess: () => {},
-            onLaunchWizard: () => {},
-        }));
+        const { lastFrame } = render(
+            React.createElement(LoginTab, {
+                client,
+                focused: true,
+                onSuccess: () => {},
+                onLaunchWizard: () => {},
+            }),
+        );
         const frame = lastFrame() ?? "";
         assert.ok(frame.includes("OPERATOR AUTHENTICATION"));
         assert.ok(frame.includes("Email:"));
@@ -307,12 +341,14 @@ describe("LoginTab", () => {
         const client = createMockClient({
             login: () => Promise.resolve({ ok: true, user: {}, session: {}, dashboardToken: "tok" }),
         });
-        const inst = render(React.createElement(LoginTab, {
-            client,
-            focused: true,
-            onSuccess: () => {},
-            onLaunchWizard: () => {},
-        }));
+        const inst = render(
+            React.createElement(LoginTab, {
+                client,
+                focused: true,
+                onSuccess: () => {},
+                onLaunchWizard: () => {},
+            }),
+        );
         // Write shortcut key "t" to trigger testing operator autofill
         await inst.stdin.write("t");
         await new Promise((r) => setTimeout(r, 100));
@@ -330,35 +366,37 @@ describe("LoginTab", () => {
                 return Promise.resolve({ ok: true, user: {}, session: {}, dashboardToken: "tok" });
             },
         });
-        const inst = render(React.createElement(LoginTab, {
-            client,
-            focused: true,
-            onSuccess: () => {},
-            onLaunchWizard: () => {},
-        }));
-        
+        const inst = render(
+            React.createElement(LoginTab, {
+                client,
+                focused: true,
+                onSuccess: () => {},
+                onLaunchWizard: () => {},
+            }),
+        );
+
         // Type email character-by-character
         for (const char of "test@prism.ai") {
             await inst.stdin.write(char);
             await new Promise((r) => setTimeout(r, 10));
         }
         await new Promise((r) => setTimeout(r, 50));
-        
+
         // Press Enter
         await inst.stdin.write("\r");
         await new Promise((r) => setTimeout(r, 50));
-        
+
         // Type password character-by-character
         for (const char of "password") {
             await inst.stdin.write(char);
             await new Promise((r) => setTimeout(r, 10));
         }
         await new Promise((r) => setTimeout(r, 50));
-        
+
         // Press Enter
         await inst.stdin.write("\r");
         await new Promise((r) => setTimeout(r, 50));
-        
+
         assert.ok(loginCalled, "login should be called");
         inst.unmount();
     });

@@ -50,7 +50,10 @@ export interface SamlVerifiedIdentity {
 }
 
 export class SamlError extends Error {
-    constructor(message: string, readonly code: string = "saml_error") {
+    constructor(
+        message: string,
+        readonly code: string = "saml_error",
+    ) {
         super(message);
         this.name = "SamlError";
     }
@@ -106,7 +109,7 @@ export class SamlProvider {
     completeAuth(_input: { samlResponse: string; state: SamlAuthnRequestState }): SamlVerifiedIdentity {
         throw new SamlError(
             "SAML response verification is not yet implemented in this build (Phase H-2.1). " +
-            "Use the OIDC provider, which is fully supported.",
+                "Use the OIDC provider, which is fully supported.",
             "not_implemented",
         );
     }

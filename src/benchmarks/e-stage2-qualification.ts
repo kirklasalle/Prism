@@ -41,35 +41,35 @@ const stages: Array<{
     artifactPath: string;
     envOverrides?: Record<string, string>;
 }> = [
-        {
-            stage: "E1",
-            scriptPath: "dist/src/benchmarks/e1-individual-qualification.js",
-            artifactPath: process.env.PRISM_E1_OUTPUT_PATH ?? "prism-output/e1-individual-qualification.json",
-            envOverrides: {
-                PRISM_ENV_PROFILE: "dev",
-                PRISM_EXECUTION_PROFILE: "individual",
-            },
+    {
+        stage: "E1",
+        scriptPath: "dist/src/benchmarks/e1-individual-qualification.js",
+        artifactPath: process.env.PRISM_E1_OUTPUT_PATH ?? "prism-output/e1-individual-qualification.json",
+        envOverrides: {
+            PRISM_ENV_PROFILE: "dev",
+            PRISM_EXECUTION_PROFILE: "individual",
         },
-        {
-            stage: "E2",
-            scriptPath: "dist/src/benchmarks/e2-business-qualification.js",
-            artifactPath: process.env.PRISM_E2_OUTPUT_PATH ?? "prism-output/e2-business-qualification.json",
-            envOverrides: {
-                PRISM_ENV_PROFILE: "dev",
-                PRISM_EXECUTION_PROFILE: "business",
-            },
+    },
+    {
+        stage: "E2",
+        scriptPath: "dist/src/benchmarks/e2-business-qualification.js",
+        artifactPath: process.env.PRISM_E2_OUTPUT_PATH ?? "prism-output/e2-business-qualification.json",
+        envOverrides: {
+            PRISM_ENV_PROFILE: "dev",
+            PRISM_EXECUTION_PROFILE: "business",
         },
-        {
-            stage: "E3",
-            scriptPath: "dist/src/benchmarks/e3-policy-stress.js",
-            artifactPath: process.env.PRISM_E3_OUTPUT_PATH ?? "prism-output/e3-policy-stress.json",
-        },
-        {
-            stage: "E4",
-            scriptPath: "dist/src/benchmarks/e4-profile-switch-qualification.js",
-            artifactPath: process.env.PRISM_E4_OUTPUT_PATH ?? "prism-output/e4-profile-switch-qualification.json",
-        },
-    ];
+    },
+    {
+        stage: "E3",
+        scriptPath: "dist/src/benchmarks/e3-policy-stress.js",
+        artifactPath: process.env.PRISM_E3_OUTPUT_PATH ?? "prism-output/e3-policy-stress.json",
+    },
+    {
+        stage: "E4",
+        scriptPath: "dist/src/benchmarks/e4-profile-switch-qualification.js",
+        artifactPath: process.env.PRISM_E4_OUTPUT_PATH ?? "prism-output/e4-profile-switch-qualification.json",
+    },
+];
 
 function normalizePath(path: string): string {
     return path.replaceAll("\\", "/");
@@ -121,7 +121,9 @@ async function writeArtifact(artifact: Stage2QualificationArtifact): Promise<voi
 
     try {
         const workspaceTarget = workspacePath("artifacts", "ci-gates", "e-stage2-qualification-summary.json");
-        const wsDir = workspaceTarget.replaceAll("\\", "/").slice(0, workspaceTarget.replaceAll("\\", "/").lastIndexOf("/"));
+        const wsDir = workspaceTarget
+            .replaceAll("\\", "/")
+            .slice(0, workspaceTarget.replaceAll("\\", "/").lastIndexOf("/"));
         await mkdir(wsDir, { recursive: true });
         await writeFile(workspaceTarget, content, "utf-8");
         console.log(`- Mirrored Stage 2 artifact to workspace: ${workspaceTarget}`);

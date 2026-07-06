@@ -161,8 +161,14 @@ async function testGovernanceNormalization(): Promise<void> {
     );
     assert.strictEqual(terminalNorm.risk, "medium", "Terminal start should auto-promote to medium");
     assert.ok(terminalNorms.length > 0, "Should have normalizations");
-    assert.ok(terminalNorms.some((n) => n.field === "risk"), "Should normalize risk");
-    assert.ok(terminalNorms.some((n) => n.field === "mutatesState"), "Should normalize mutatesState");
+    assert.ok(
+        terminalNorms.some((n) => n.field === "risk"),
+        "Should normalize risk",
+    );
+    assert.ok(
+        terminalNorms.some((n) => n.field === "mutatesState"),
+        "Should normalize mutatesState",
+    );
 
     // Test 2: Container tool auto-promotes low to high for destroy action
     const containerDestroyLow = {

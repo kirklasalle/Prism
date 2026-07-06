@@ -71,7 +71,9 @@ export function SetupWizardTab({
                 ]);
                 setWizard((w) => ({
                     ...w,
-                    profile: (status.executionProfileSegment === "business" ? "business" : "individual") as "individual" | "business",
+                    profile: (status.executionProfileSegment === "business" ? "business" : "individual") as
+                        | "individual"
+                        | "business",
                     workspaceRoot: status.workspaceRoot ?? "",
                 }));
                 setPrereqs(prereqData.checks ?? []);
@@ -225,9 +227,10 @@ export function SetupWizardTab({
                     {symbols.gear} Setup Wizard
                 </Text>
                 <Text color={colors.muted}>
-                    {" "}— Step {step} of {TOTAL_STEPS}
+                    {" "}
+                    — Step {step} of {TOTAL_STEPS}
                 </Text>
-                <Text color={colors.muted}>  [</Text>
+                <Text color={colors.muted}> [</Text>
                 {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
                     <Text key={i} color={i < step ? colors.brand : colors.muted}>
                         {i < step ? "█" : "░"}
@@ -245,8 +248,17 @@ export function SetupWizardTab({
                     <Box marginTop={1} flexDirection="column">
                         {(["individual", "business"] as const).map((p, i) => (
                             <Box key={p}>
-                                <Text color={wizard.profile === p ? colors.brand : (selectedIndex === i ? colors.text : colors.muted)}>
-                                    {wizard.profile === p ? symbols.bullet : symbols.circle} {p === "individual" ? "Individual" : "Business / Enterprise"}
+                                <Text
+                                    color={
+                                        wizard.profile === p
+                                            ? colors.brand
+                                            : selectedIndex === i
+                                              ? colors.text
+                                              : colors.muted
+                                    }
+                                >
+                                    {wizard.profile === p ? symbols.bullet : symbols.circle}{" "}
+                                    {p === "individual" ? "Individual" : "Business / Enterprise"}
                                 </Text>
                                 {selectedIndex === i && <Text color={colors.muted}> {symbols.arrow}</Text>}
                             </Box>
@@ -261,7 +273,9 @@ export function SetupWizardTab({
             {/* Step 2: Workspace */}
             {step === 2 && (
                 <Panel title="Step 2 — Workspace Directory">
-                    <Text color={colors.text}>Enter your PRISM workspace path, or leave blank to use the default workspace.</Text>
+                    <Text color={colors.text}>
+                        Enter your PRISM workspace path, or leave blank to use the default workspace.
+                    </Text>
                     <Box marginTop={1}>
                         <Text color={colors.brand}>{symbols.arrow} </Text>
                         <TextInput
@@ -272,7 +286,9 @@ export function SetupWizardTab({
                     </Box>
                     {prereqs.length > 0 && (
                         <Box marginTop={1} flexDirection="column">
-                            <Text color={colors.muted} bold>Prerequisites:</Text>
+                            <Text color={colors.muted} bold>
+                                Prerequisites:
+                            </Text>
                             {prereqs.map((c) => (
                                 <Box key={c.id}>
                                     <Text color={c.passed ? colors.success : colors.error}>
@@ -296,7 +312,15 @@ export function SetupWizardTab({
                     <Box marginTop={1} flexDirection="column">
                         {PROVIDERS.map((p, i) => (
                             <Box key={p.id}>
-                                <Text color={wizard.provider === p.id ? colors.brand : (selectedIndex === i ? colors.text : colors.muted)}>
+                                <Text
+                                    color={
+                                        wizard.provider === p.id
+                                            ? colors.brand
+                                            : selectedIndex === i
+                                              ? colors.text
+                                              : colors.muted
+                                    }
+                                >
                                     {wizard.provider === p.id ? symbols.bullet : symbols.circle} {p.label}
                                 </Text>
                                 {selectedIndex === i && <Text color={colors.muted}> {symbols.arrow}</Text>}
@@ -331,30 +355,40 @@ export function SetupWizardTab({
             {/* Step 4: Summary */}
             {step === 4 && (
                 <Panel title="Step 4 — Summary">
-                    <Text color={colors.text} bold>Review your configuration:</Text>
+                    <Text color={colors.text} bold>
+                        Review your configuration:
+                    </Text>
                     <Box marginTop={1} flexDirection="column">
                         <Box>
-                            <Text color={colors.muted}>Profile:    </Text>
+                            <Text color={colors.muted}>Profile: </Text>
                             <Text color={colors.info}>{wizard.profile ?? "not set"}</Text>
                         </Box>
                         <Box>
-                            <Text color={colors.muted}>Workspace:  </Text>
+                            <Text color={colors.muted}>Workspace: </Text>
                             <Text color={colors.info}>{wizard.workspaceRoot || "default"}</Text>
                         </Box>
                         <Box>
-                            <Text color={colors.muted}>Provider:   </Text>
-                            <Text color={colors.info}>{PROVIDERS.find((p) => p.id === wizard.provider)?.label ?? wizard.provider}</Text>
+                            <Text color={colors.muted}>Provider: </Text>
+                            <Text color={colors.info}>
+                                {PROVIDERS.find((p) => p.id === wizard.provider)?.label ?? wizard.provider}
+                            </Text>
                         </Box>
                         <Box>
-                            <Text color={colors.muted}>API Key:    </Text>
+                            <Text color={colors.muted}>API Key: </Text>
                             <Text color={wizard.apiKey ? colors.success : colors.warning}>
-                                {wizard.apiKey ? "configured" : PROVIDERS.find((p) => p.id === wizard.provider)?.needsKey ? "not set" : "not required"}
+                                {wizard.apiKey
+                                    ? "configured"
+                                    : PROVIDERS.find((p) => p.id === wizard.provider)?.needsKey
+                                      ? "not set"
+                                      : "not required"}
                             </Text>
                         </Box>
                     </Box>
                     {completeSummary && (
                         <Box marginTop={1} flexDirection="column">
-                            <Text color={colors.success} bold>{symbols.check} Setup complete!</Text>
+                            <Text color={colors.success} bold>
+                                {symbols.check} Setup complete!
+                            </Text>
                             <Text color={colors.muted}>Press any key to continue to PRISM.</Text>
                         </Box>
                     )}
@@ -371,7 +405,8 @@ export function SetupWizardTab({
             {/* Navigation hint */}
             <Box marginTop={1}>
                 <Text color={colors.muted}>
-                    {step > 1 ? "Esc: back  " : ""}Enter: {step === 4 ? (completeSummary ? "finish" : "complete setup") : "next"}
+                    {step > 1 ? "Esc: back  " : ""}Enter:{" "}
+                    {step === 4 ? (completeSummary ? "finish" : "complete setup") : "next"}
                 </Text>
             </Box>
         </Box>

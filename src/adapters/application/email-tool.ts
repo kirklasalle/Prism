@@ -93,8 +93,8 @@ export class EmailOpsTool implements Tool {
     constructor(
         private readonly _dataDir?: string,
         private readonly gmailAdapter?: GmailOAuthAdapter,
-        private readonly outlookAdapter?: OutlookOAuthAdapter
-    ) { }
+        private readonly outlookAdapter?: OutlookOAuthAdapter,
+    ) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {
@@ -119,10 +119,7 @@ export class EmailOpsTool implements Tool {
         if (useGmail) {
             switch (action) {
                 case "list_inbox": {
-                    const threads = await this.gmailAdapter!.listThreads(
-                        args.maxResults ?? 20,
-                        args.query
-                    );
+                    const threads = await this.gmailAdapter!.listThreads(args.maxResults ?? 20, args.query);
                     return {
                         ok: true,
                         output: {
@@ -189,7 +186,7 @@ export class EmailOpsTool implements Tool {
                         to,
                         args.subject ?? "(no subject)",
                         args.body ?? "",
-                        args.threadId !== "thread-default" ? args.threadId : undefined
+                        args.threadId !== "thread-default" ? args.threadId : undefined,
                     );
                     return {
                         ok: true,
@@ -262,7 +259,7 @@ export class EmailOpsTool implements Tool {
                     const result = await this.outlookAdapter!.sendEmail(
                         to,
                         args.subject ?? "(no subject)",
-                        args.body ?? ""
+                        args.body ?? "",
                     );
                     return {
                         ok: true,

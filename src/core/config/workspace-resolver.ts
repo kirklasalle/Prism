@@ -103,6 +103,14 @@ export interface PrismPreferences {
     powerMode?: "performance" | "eco" | "adaptive";
     activeLlmProviderId?: string;
     activeLlmModel?: string;
+    setupToken?: string;
+    operatorPresence?: {
+        status?: "online" | "away" | "dnd" | "offline";
+        autoAway?: boolean;
+        autoAwayTimeout?: number;
+        smsPhone?: string;
+        smsCarrier?: string;
+    };
     lastModified: string;
 }
 
@@ -162,7 +170,7 @@ export function resolveWorkspaceRoot(): string {
         _resolvedRoot = prefs.workspaceRoot;
         return _resolvedRoot;
     }
-    // Fall back to env var 
+    // Fall back to env var
     const envOverride = process.env.PRISM_WORKSPACE_ROOT?.trim();
     if (envOverride) {
         _resolvedRoot = envOverride;
@@ -315,12 +323,7 @@ export interface LegacyPathDetection {
  * Returns a list of paths that exist so callers can log a migration notice.
  */
 export function detectLegacyPaths(): LegacyPathDetection {
-    const candidates = [
-        "prism-output",
-        "prism-data",
-        "prism-activity.db",
-        ".mcp/mcp-settings.json",
-    ];
+    const candidates = ["prism-output", "prism-data", "prism-activity.db", ".mcp/mcp-settings.json"];
     const found = candidates.filter((p) => existsSync(p));
     return { found: found.length > 0, paths: found };
 }
@@ -347,7 +350,9 @@ export function setWorkspaceRoot(newPath: string): void {
             console.log(`[PRISM][workspace] Workspace preference persisted to ${filePath}: ${newPath}`);
         }
     } catch (err: unknown) {
-        console.warn(`[PRISM][workspace] Failed to persist workspace preference to ${preferencesPath()}: ${String(err)}`);
+        console.warn(
+            `[PRISM][workspace] Failed to persist workspace preference to ${preferencesPath()}: ${String(err)}`,
+        );
     }
 }
 

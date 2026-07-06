@@ -66,8 +66,11 @@ function parseArgs(argv: string[]): CliArgs {
     if (!["fast", "full", "demo", "custom", "osworld"].includes(suite)) {
         throw new Error(`--suite must be one of fast|full|demo|custom|osworld (got "${suite}")`);
     }
-    const dataDir = process.env.PRISM_PTAC_OUTPUT_DIR
-        ?? (process.env.PRISM_DATA_DIR ? join(process.env.PRISM_DATA_DIR, "ptac") : join(process.cwd(), "prism-output", "ptac"));
+    const dataDir =
+        process.env.PRISM_PTAC_OUTPUT_DIR ??
+        (process.env.PRISM_DATA_DIR
+            ? join(process.env.PRISM_DATA_DIR, "ptac")
+            : join(process.cwd(), "prism-output", "ptac"));
     return {
         profile,
         suite,
@@ -111,8 +114,8 @@ async function main(): Promise<number> {
     if (args.profile === "host" && !args.hostConfirmed) {
         console.error(
             "[ptac] --profile=host requires --i-understand-host-control. The host profile " +
-            "drives real keyboard/mouse input on your desktop. Use --profile=sandbox unless " +
-            "you intend to run a live demo with the operator present.",
+                "drives real keyboard/mouse input on your desktop. Use --profile=sandbox unless " +
+                "you intend to run a live demo with the operator present.",
         );
         return 2;
     }
@@ -124,9 +127,9 @@ async function main(): Promise<number> {
         if (process.env.PRISM_PTAC_SAFE !== "1" || process.env.PRISM_PTAC_RECORD_VIDEO !== "1") {
             console.error(
                 "[ptac] --record-video requires both PRISM_PTAC_SAFE=1 and " +
-                "PRISM_PTAC_RECORD_VIDEO=1 to be set in the environment. " +
-                "These dual gates ensure the host is prepared and the operator " +
-                "explicitly opted in to recording artefacts being written to disk.",
+                    "PRISM_PTAC_RECORD_VIDEO=1 to be set in the environment. " +
+                    "These dual gates ensure the host is prepared and the operator " +
+                    "explicitly opted in to recording artefacts being written to disk.",
             );
             return 2;
         }
@@ -136,8 +139,8 @@ async function main(): Promise<number> {
     if (scenarios.length === 0) {
         console.error(
             `[ptac] no scenarios matched suite=${args.suite}` +
-            (args.tags.length > 0 ? ` tags=[${args.tags.join(",")}]` : "") +
-            ". Production scenarios are added per docs/PRISM_FULL_AUDIT_2026_Q3_AND_PTAC_PLAN.md.",
+                (args.tags.length > 0 ? ` tags=[${args.tags.join(",")}]` : "") +
+                ". Production scenarios are added per docs/PRISM_FULL_AUDIT_2026_Q3_AND_PTAC_PLAN.md.",
         );
         return 3;
     }
@@ -193,9 +196,9 @@ async function main(): Promise<number> {
         if (!isReachable) {
             console.error(
                 `\n[ptac] [ERROR] Target dashboard server at ${args.dashboard} is not running and auto-start timed out.\n` +
-                `Please ensure the server is started before running PTAC:\n` +
-                `  On Windows:  start_web.bat\n` +
-                `  On Unix:     ./start_web.sh\n`
+                    `Please ensure the server is started before running PTAC:\n` +
+                    `  On Windows:  start_web.bat\n` +
+                    `  On Unix:     ./start_web.sh\n`,
             );
             if (childServerProcess) {
                 try {
@@ -208,7 +211,7 @@ async function main(): Promise<number> {
 
     console.log(
         `[ptac] starting profile=${args.profile} suite=${args.suite} ` +
-        `scenarios=${scenarios.length} dashboard=${args.dashboard}`,
+            `scenarios=${scenarios.length} dashboard=${args.dashboard}`,
     );
 
     const request: PtacRunRequest = {

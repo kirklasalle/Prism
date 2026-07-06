@@ -78,7 +78,9 @@ export async function testAdapterSafetyRegression(): Promise<void> {
     assert.strictEqual(empty.ok, false);
     assert.match(String((empty.output as { error?: string }).error ?? ""), /No command supplied/i);
 
-    const shellSuccess = await shell.execute(makeRequest("shell_exec", { command: "echo prism-shell-ok" }, false, "low"));
+    const shellSuccess = await shell.execute(
+        makeRequest("shell_exec", { command: "echo prism-shell-ok" }, false, "low"),
+    );
     assert.strictEqual(shellSuccess.ok, true);
     assert.match(String((shellSuccess.output as { stdout?: string }).stdout ?? ""), /prism-shell-ok/i);
 
@@ -90,11 +92,21 @@ export async function testAdapterSafetyRegression(): Promise<void> {
     const lister = new FileListTool();
     const deleter = new FileDeleteTool();
 
-    const writeResult = await writer.execute(makeRequest("file_write", { path: testFile, content: "alpha" }, true, "medium", "delete file"));
+    const writeResult = await writer.execute(
+        makeRequest("file_write", { path: testFile, content: "alpha" }, true, "medium", "delete file"),
+    );
     assert.strictEqual(writeResult.ok, true);
     assert.strictEqual(Array.isArray(writeResult.sideEffects), true);
 
-    const appendResult = await writer.execute(makeRequest("file_write", { path: testFile, content: "-beta", append: true }, true, "medium", "restore from backup"));
+    const appendResult = await writer.execute(
+        makeRequest(
+            "file_write",
+            { path: testFile, content: "-beta", append: true },
+            true,
+            "medium",
+            "restore from backup",
+        ),
+    );
     assert.strictEqual(appendResult.ok, true);
 
     const readResult = await reader.execute(makeRequest("file_read", { path: testFile }, false, "low"));
@@ -104,9 +116,14 @@ export async function testAdapterSafetyRegression(): Promise<void> {
     const listResult = await lister.execute(makeRequest("file_list", { path: testDir }, false, "low"));
     assert.strictEqual(listResult.ok, true);
     const entries = (listResult.output as { entries?: Array<{ name: string }> }).entries ?? [];
-    assert.strictEqual(entries.some((entry) => entry.name === "sample.txt"), true);
+    assert.strictEqual(
+        entries.some((entry) => entry.name === "sample.txt"),
+        true,
+    );
 
-    const deleteResult = await deleter.execute(makeRequest("file_delete", { path: testFile }, true, "medium", "restore file"));
+    const deleteResult = await deleter.execute(
+        makeRequest("file_delete", { path: testFile }, true, "medium", "restore file"),
+    );
     assert.strictEqual(deleteResult.ok, true);
 
     const missingRead = await reader.execute(makeRequest("file_read", { path: testFile }, false, "low"));
@@ -119,21 +136,25 @@ export async function testAdapterSafetyRegression(): Promise<void> {
 
     const server = await createTestServer();
     try {
-        const getResult = await http.execute(makeRequest("http_request", { url: `${server.baseUrl}/json`, method: "GET" }, false, "low"));
+        const getResult = await http.execute(
+            makeRequest("http_request", { url: `${server.baseUrl}/json`, method: "GET" }, false, "low"),
+        );
         assert.strictEqual(getResult.ok, true);
         assert.strictEqual((getResult.output as { status?: number }).status, 200);
         assert.deepStrictEqual((getResult.output as { body?: unknown }).body, { ok: true, mode: "get" });
 
-        const postResult = await http.execute(makeRequest(
-            "http_request",
-            {
-                url: `${server.baseUrl}/echo`,
-                method: "POST",
-                body: { probe: "adapter-regression" },
-            },
-            false,
-            "low",
-        ));
+        const postResult = await http.execute(
+            makeRequest(
+                "http_request",
+                {
+                    url: `${server.baseUrl}/echo`,
+                    method: "POST",
+                    body: { probe: "adapter-regression" },
+                },
+                false,
+                "low",
+            ),
+        );
 
         assert.strictEqual(postResult.ok, true);
         assert.deepStrictEqual((postResult.output as { body?: unknown }).body, {

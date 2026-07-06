@@ -12,13 +12,7 @@ import type { WorkflowDAG } from "../../runtime/workflow.js";
 import type { PolicyEngine } from "../../policy/engine.js";
 import type { PolicyContext, PolicyResult } from "../../policy/types.js";
 import type { ExecutionProfile } from "../../policy/execution-profiles.js";
-import type {
-    CompiledStep,
-    Constitution,
-    ConstitutionPrinciple,
-    PrincipleViolation,
-    RuntimePlan,
-} from "./types.js";
+import type { CompiledStep, Constitution, ConstitutionPrinciple, PrincipleViolation, RuntimePlan } from "./types.js";
 
 export interface CompileOptions {
     profile: ExecutionProfile;
@@ -30,7 +24,7 @@ export interface CompileOptions {
 }
 
 export class CausalCompiler {
-    constructor(private readonly policyEngine: PolicyEngine) { }
+    constructor(private readonly policyEngine: PolicyEngine) {}
 
     compile(dag: WorkflowDAG, opts: CompileOptions): RuntimePlan {
         const steps: CompiledStep[] = [];
@@ -74,8 +68,7 @@ export class CausalCompiler {
             unsatisfiable.push(...violations);
         }
 
-        const enforceable = unsatisfiable.length === 0
-            && steps.every((s) => s.projectedDecision.decision !== "deny");
+        const enforceable = unsatisfiable.length === 0 && steps.every((s) => s.projectedDecision.decision !== "deny");
 
         const skeleton = {
             dagId: dag.id,
@@ -146,9 +139,11 @@ function checkPrinciple(
             reasonCode: "CCC_ROLLBACK_PLAN_REQUIRED",
         };
     }
-    if (p.require?.maxTimeoutMs !== undefined
-        && step.timeoutMs !== undefined
-        && step.timeoutMs > p.require.maxTimeoutMs) {
+    if (
+        p.require?.maxTimeoutMs !== undefined &&
+        step.timeoutMs !== undefined &&
+        step.timeoutMs > p.require.maxTimeoutMs
+    ) {
         return {
             reason: `principle ${p.id}: timeoutMs ${step.timeoutMs} exceeds maxTimeoutMs ${p.require.maxTimeoutMs}`,
             reasonCode: "CCC_TIMEOUT_EXCEEDED",

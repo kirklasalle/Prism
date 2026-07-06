@@ -53,7 +53,7 @@ async function renderUtilitiesRunner(host) {
         list.querySelectorAll('.e3-run-btn').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const id = btn.getAttribute('data-uid');
-                if (!confirm(`Run utility "${id}"?`)) return;
+                if (!await window.showConfirm(`Run utility "${id}"?`)) return;
                 btn.disabled = true; btn.textContent = 'Running…';
                 const log = host.querySelector('#e3-util-runs');
                 try {
@@ -112,7 +112,7 @@ async function renderRiskOverrides(host) {
         list.querySelectorAll('.e3-ro-clear').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const tid = btn.getAttribute('data-tid');
-                if (!confirm(`Clear override for ${tid}?`)) return;
+                if (!await window.showConfirm(`Clear override for ${tid}?`)) return;
                 try { await fetchJson(`/api/v1/tools/${encodeURIComponent(tid)}/risk`, { method: 'DELETE' }); renderRiskOverrides(host); } catch (e) { alert(e.message); }
             });
         });

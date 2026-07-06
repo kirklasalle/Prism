@@ -95,18 +95,14 @@ export function LogsTab({
 
             {!filterMode && (
                 <Box marginBottom={1}>
-                    <Text color={colors.muted}>
-                        /: filter | c: clear | Tab: switch view
-                    </Text>
+                    <Text color={colors.muted}>/: filter | c: clear | Tab: switch view</Text>
                 </Box>
             )}
 
             {/* Live stream */}
             {subTab === "live" && (
                 <Box flexDirection="column" flexGrow={1}>
-                    {displayLogs.length === 0 && (
-                        <Text color={colors.muted}>Waiting for events...</Text>
-                    )}
+                    {displayLogs.length === 0 && <Text color={colors.muted}>Waiting for events...</Text>}
                     {displayLogs.map((line, i) => {
                         const isError = line.includes("error") || line.includes("Error");
                         const isWarning = line.includes("warn") || line.includes("Warning");
@@ -134,9 +130,7 @@ export function LogsTab({
                                 <Text color={i === eventNav.selectedIndex ? colors.brand : colors.muted}>
                                     {i === eventNav.selectedIndex ? `${symbols.arrow} ` : "  "}
                                 </Text>
-                                <Text color={colors.muted}>
-                                    {new Date(evt.timestamp).toLocaleTimeString()}
-                                </Text>
+                                <Text color={colors.muted}>{new Date(evt.timestamp).toLocaleTimeString()}</Text>
                                 <Text> </Text>
                                 <Text color={colors.info}>{evt.operation}</Text>
                                 <Text color={colors.textDim}> [{evt.type}]</Text>

@@ -58,7 +58,10 @@ const TIER3_PATTERNS: ReadonlyArray<{ readonly re: RegExp; readonly label: strin
     { re: /\bdrop\s+(database|schema|table)\b/i, label: "drop database/schema/table" },
     { re: /\btruncate\s+table\b/i, label: "truncate table" },
     { re: /:\s*\(\s*\)\s*\{\s*:\|:&\s*\}\s*;\s*:/, label: "fork bomb" },
-    { re: /\b(wipe|destroy|nuke|obliterate)\s+(the\s+)?(disk|drive|filesystem|fs|system|machine|host)\b/i, label: "wipe/destroy <fs>" },
+    {
+        re: /\b(wipe|destroy|nuke|obliterate)\s+(the\s+)?(disk|drive|filesystem|fs|system|machine|host)\b/i,
+        label: "wipe/destroy <fs>",
+    },
     { re: /\b(shutdown|reboot)\s+\/[a-z]\b/i, label: "shutdown /<flag>" },
     { re: /\bget-childitem\s+.*-recurse.*remove-item/i, label: "PowerShell recursive remove" },
     { re: /\bremove-item\s+.*-recurse\b/i, label: "Remove-Item -Recurse" },
@@ -82,7 +85,10 @@ const TIER2_PATTERNS: ReadonlyArray<{ readonly re: RegExp; readonly label: strin
     { re: /\b(run|execute|invoke)\s+(the\s+)?(command|script|tool)\b/i, label: "run/execute command" },
     { re: /\b(modify|update|change|edit)\s+(the\s+)?(file|setting|config|configuration)\b/i, label: "modify config" },
     { re: /\bschedule\s+(a\s+)?(meeting|event|task|reminder)\b/i, label: "schedule event" },
-    { re: /\bpost\s+(to|on)\s+(twitter|x|linkedin|facebook|instagram|reddit|slack|discord)\b/i, label: "post to social" },
+    {
+        re: /\bpost\s+(to|on)\s+(twitter|x|linkedin|facebook|instagram|reddit|slack|discord)\b/i,
+        label: "post to social",
+    },
     { re: /\b(call|invoke)\s+(an?\s+)?api\b/i, label: "call api" },
     { re: /\b(make|submit)\s+(a\s+)?(http|https|web)\s+request\b/i, label: "http request" },
 ];

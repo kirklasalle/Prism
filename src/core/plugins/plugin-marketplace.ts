@@ -53,7 +53,14 @@ export interface MarketplaceCatalog {
 export interface InstallResult {
     ok: boolean;
     error?: string;
-    code?: "marketplace_disabled" | "catalog_missing" | "entry_not_found" | "installation_unsupported_transport" | "source_missing" | "rejected_unsigned_business_profile" | "validation_failed";
+    code?:
+        | "marketplace_disabled"
+        | "catalog_missing"
+        | "entry_not_found"
+        | "installation_unsupported_transport"
+        | "source_missing"
+        | "rejected_unsigned_business_profile"
+        | "validation_failed";
     installedAt?: string;
     targetPath?: string;
     advisory?: string;
@@ -96,13 +103,13 @@ export function listEntries(opts: { tag?: string; curated?: boolean } = {}): Cat
     if (!cat) return [];
     let entries = cat.entries;
     if (opts.tag) {
-        entries = entries.filter(e => (e.tags ?? []).includes(opts.tag!));
+        entries = entries.filter((e) => (e.tags ?? []).includes(opts.tag!));
     }
     if (opts.curated === true) {
         // Trust the ledger over the denormalized flag — flag may drift; ledger is source of truth.
-        entries = entries.filter(e => isApproved(e.id, e.version));
+        entries = entries.filter((e) => isApproved(e.id, e.version));
     } else if (opts.curated === false) {
-        entries = entries.filter(e => !isApproved(e.id, e.version));
+        entries = entries.filter((e) => !isApproved(e.id, e.version));
     }
     return entries;
 }
@@ -112,15 +119,17 @@ export function listEntries(opts: { tag?: string; curated?: boolean } = {}): Cat
  * marketplace UIs that need to render review state without performing a
  * second lookup per entry.
  */
-export function listEntriesWithCuration(opts: { tag?: string; curated?: boolean } = {}): Array<CatalogEntry & { curationDecision: MarketplaceReviewDecision | null }> {
-    return listEntries(opts).map(e => ({
+export function listEntriesWithCuration(
+    opts: { tag?: string; curated?: boolean } = {},
+): Array<CatalogEntry & { curationDecision: MarketplaceReviewDecision | null }> {
+    return listEntries(opts).map((e) => ({
         ...e,
         curationDecision: latestDecisionFor(e.id, e.version),
     }));
 }
 
 export function findEntry(id: string): CatalogEntry | null {
-    return listEntries().find(e => e.id === id) ?? null;
+    return listEntries().find((e) => e.id === id) ?? null;
 }
 
 export interface InstallOptions {
@@ -134,15 +143,25 @@ export interface InstallOptions {
  */
 export function installFromCatalog(id: string, opts: InstallOptions = {}): InstallResult {
     if (!isMarketplaceEnabled()) {
-        return { ok: false, error: "marketplace_disabled", code: "marketplace_disabled", advisory: "Set PRISM_MARKETPLACE=on to enable." };
+        return {
+            ok: false,
+            error: "marketplace_disabled",
+            code: "marketplace_disabled",
+            advisory: "Set PRISM_MARKETPLACE=on to enable.",
+        };
     }
     const cat = readCatalog();
     if (!cat) return { ok: false, error: "catalog_missing", code: "catalog_missing" };
-    const entry = cat.entries.find(e => e.id === id);
+    const entry = cat.entries.find((e) => e.id === id);
     if (!entry) return { ok: false, error: "entry_not_found", code: "entry_not_found" };
 
     if (opts.profile === "business" && entry.trust === "unsigned") {
-        return { ok: false, error: "rejected_unsigned_business_profile", code: "rejected_unsigned_business_profile", advisory: "Business profile blocks unsigned entries." };
+        return {
+            ok: false,
+            error: "rejected_unsigned_business_profile",
+            code: "rejected_unsigned_business_profile",
+            advisory: "Business profile blocks unsigned entries.",
+        };
     }
 
     if (entry.source.startsWith("http://") || entry.source.startsWith("https://")) {
@@ -161,7 +180,12 @@ export function installFromCatalog(id: string, opts: InstallOptions = {}): Insta
     const rel = entry.source.replace(/^file:\/\//, "");
     const sourcePath = workspacePath(rel);
     if (!existsSync(sourcePath)) {
-        return { ok: false, error: "source_missing", code: "source_missing", advisory: `Source not found: ${sourcePath}` };
+        return {
+            ok: false,
+            error: "source_missing",
+            code: "source_missing",
+            advisory: `Source not found: ${sourcePath}`,
+        };
     }
 
     mkdirSync(installedDir(), { recursive: true });

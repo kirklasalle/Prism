@@ -15,7 +15,14 @@ export async function testStressHarness(): Promise<void> {
     const require = createRequire(import.meta.url);
     const harness = require(resolve(process.cwd(), "scripts/stress-concurrent-sessions.cjs")) as {
         percentile: (sorted: number[], p: number) => number;
-        summarize: (latencies: number[]) => { count: number; p50: number; p95: number; p99: number; max: number; min: number };
+        summarize: (latencies: number[]) => {
+            count: number;
+            p50: number;
+            p95: number;
+            p99: number;
+            max: number;
+            min: number;
+        };
         verdict: (stats: { count: number; p95: number }, sloP95Ms: number) => string;
         defaultSloFor: (profile: string) => number;
     };

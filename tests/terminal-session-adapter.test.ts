@@ -203,10 +203,7 @@ async function testCommandHistory(): Promise<void> {
         assert.strictEqual(history.length, 1, "Should have 1 history entry");
         assert.strictEqual(history[0].command, echoCmd, "History should record the command");
         assert.strictEqual(history[0].exit_code, 0, "History should record exit code");
-        assert.ok(
-            history[0].stdout.includes("history-test"),
-            "History should record real stdout",
-        );
+        assert.ok(history[0].stdout.includes("history-test"), "History should record real stdout");
 
         await adapter.stopSession(session.session_id);
     } finally {
@@ -258,20 +255,12 @@ async function testActivityBusEvents(): Promise<void> {
         const events = bus.listEvents();
 
         // Verify start event
-        const startEvents = events.filter(
-            (e) => e.operation === "terminal_session_start" && e.status === "succeeded",
-        );
+        const startEvents = events.filter((e) => e.operation === "terminal_session_start" && e.status === "succeeded");
         assert.ok(startEvents.length >= 1, "Should emit terminal_session_start event");
-        assert.strictEqual(
-            startEvents[0].sessionId,
-            session.session_id,
-            "Start event should reference the session",
-        );
+        assert.strictEqual(startEvents[0].sessionId, session.session_id, "Start event should reference the session");
 
         // Verify stop event
-        const stopEvents = events.filter(
-            (e) => e.operation === "terminal_session_stop" && e.status === "succeeded",
-        );
+        const stopEvents = events.filter((e) => e.operation === "terminal_session_stop" && e.status === "succeeded");
         assert.ok(stopEvents.length >= 1, "Should emit terminal_session_stop event");
     } finally {
         await closeDb(db);
@@ -342,15 +331,11 @@ async function testSessionRevocation(): Promise<void> {
         );
 
         // Verify revocation event emitted
-        const revokeEvents = bus.listEvents().filter(
-            (e) => e.operation === "terminal_session_revoke" && e.status === "succeeded",
-        );
+        const revokeEvents = bus
+            .listEvents()
+            .filter((e) => e.operation === "terminal_session_revoke" && e.status === "succeeded");
         assert.ok(revokeEvents.length >= 1, "Should emit terminal_session_revoke event");
-        assert.strictEqual(
-            revokeEvents[0].authorityTier,
-            "tier3_approval",
-            "Revocation should be tier3",
-        );
+        assert.strictEqual(revokeEvents[0].authorityTier, "tier3_approval", "Revocation should be tier3");
     } finally {
         await closeDb(db);
     }
@@ -421,19 +406,11 @@ async function testExecutionProfileSwitching(): Promise<void> {
     const { adapter, db } = createTestAdapter(INDIVIDUAL_PROFILE);
     try {
         // Verify initial profile
-        assert.strictEqual(
-            adapter.getExecutionProfile().segment,
-            "individual",
-            "Should start with individual profile",
-        );
+        assert.strictEqual(adapter.getExecutionProfile().segment, "individual", "Should start with individual profile");
 
         // Switch to business profile
         adapter.setExecutionProfile(BUSINESS_PROFILE);
-        assert.strictEqual(
-            adapter.getExecutionProfile().segment,
-            "business",
-            "Should switch to business profile",
-        );
+        assert.strictEqual(adapter.getExecutionProfile().segment, "business", "Should switch to business profile");
 
         // Business profile should have audit requirements
         assert.strictEqual(
@@ -449,11 +426,7 @@ async function testExecutionProfileSwitching(): Promise<void> {
 
         // Switch back to individual
         adapter.setExecutionProfile(INDIVIDUAL_PROFILE);
-        assert.strictEqual(
-            adapter.getExecutionProfile().segment,
-            "individual",
-            "Should switch back to individual",
-        );
+        assert.strictEqual(adapter.getExecutionProfile().segment, "individual", "Should switch back to individual");
     } finally {
         await closeDb(db);
     }
@@ -472,11 +445,19 @@ async function testPauseResumeSession(): Promise<void> {
 
         await adapter.pauseSession(session.session_id);
         const paused = await adapter.getSessionStatus(session.session_id);
-        assert.strictEqual(paused.state, TerminalSessionState.SUSPENDED, "Session should report SUSPENDED after pauseSession");
+        assert.strictEqual(
+            paused.state,
+            TerminalSessionState.SUSPENDED,
+            "Session should report SUSPENDED after pauseSession",
+        );
 
         await adapter.resumeSession(session.session_id);
         const resumed = await adapter.getSessionStatus(session.session_id);
-        assert.strictEqual(resumed.state, TerminalSessionState.ACTIVE, "Session should report ACTIVE after resumeSession");
+        assert.strictEqual(
+            resumed.state,
+            TerminalSessionState.ACTIVE,
+            "Session should report ACTIVE after resumeSession",
+        );
 
         // Resumed session must still execute commands.
         const result = await adapter.execCommand(session.session_id, "echo prism-resume", 5000);
@@ -490,12 +471,18 @@ async function testPauseResumeSession(): Promise<void> {
             db.all(
                 "SELECT signal, reason FROM terminal_signal_log WHERE session_id = ? ORDER BY id ASC",
                 [session.session_id],
-                (err: any, rows: any[]) => err ? reject(err) : resolve(rows as any),
+                (err: any, rows: any[]) => (err ? reject(err) : resolve(rows as any)),
             );
         });
-        const signalNames = signals.map(s => s.signal);
-        assert.ok(signalNames.includes(expectedPause), `Signal log should include ${expectedPause}; got ${signalNames.join(",")}`);
-        assert.ok(signalNames.includes(expectedResume), `Signal log should include ${expectedResume}; got ${signalNames.join(",")}`);
+        const signalNames = signals.map((s) => s.signal);
+        assert.ok(
+            signalNames.includes(expectedPause),
+            `Signal log should include ${expectedPause}; got ${signalNames.join(",")}`,
+        );
+        assert.ok(
+            signalNames.includes(expectedResume),
+            `Signal log should include ${expectedResume}; got ${signalNames.join(",")}`,
+        );
 
         await adapter.stopSession(session.session_id);
     } finally {

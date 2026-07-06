@@ -76,9 +76,15 @@ function timedDelegate(delayMs = 0): { delegate: LlmDelegate; callLog: string[] 
     return { delegate, callLog };
 }
 
-function makePlan(steps: Array<{
-    id: string; goal: string; role?: string; dependsOn?: string[]; risk?: string;
-}>) {
+function makePlan(
+    steps: Array<{
+        id: string;
+        goal: string;
+        role?: string;
+        dependsOn?: string[];
+        risk?: string;
+    }>,
+) {
     return {
         goal: "test goal",
         ok: true,
@@ -95,13 +101,7 @@ function makePlan(steps: Array<{
 }
 
 function makeOrchestrator(agentPool: AgentPool): Orchestrator {
-    return new Orchestrator(
-        "test-session",
-        new ActivityBus(),
-        new PolicyEngine(),
-        new ToolRegistry(),
-        { agentPool },
-    );
+    return new Orchestrator("test-session", new ActivityBus(), new PolicyEngine(), new ToolRegistry(), { agentPool });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -240,8 +240,22 @@ describe("Orchestrator.runDecomposed", () => {
     it("decompose + runDecomposed end-to-end", async () => {
         const planJson = JSON.stringify({
             steps: [
-                { id: "s1", description: "classify", role: "classification", goal: "classify the input", dependsOn: [], risk: "low" },
-                { id: "s2", description: "summarize", role: "summarization", goal: "summarize it", dependsOn: ["s1"], risk: "low" },
+                {
+                    id: "s1",
+                    description: "classify",
+                    role: "classification",
+                    goal: "classify the input",
+                    dependsOn: [],
+                    risk: "low",
+                },
+                {
+                    id: "s2",
+                    description: "summarize",
+                    role: "summarization",
+                    goal: "summarize it",
+                    dependsOn: ["s1"],
+                    risk: "low",
+                },
             ],
         });
         const pool = new AgentPool(echoDelegate());

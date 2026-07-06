@@ -180,10 +180,7 @@ describe("PTAC scenario registry", () => {
 
     it("every scenario participates in ≥1 suite", () => {
         for (const scenario of listScenarios()) {
-            assert.ok(
-                scenario.suites.length >= 1,
-                `${scenario.id} must declare at least one suite`,
-            );
+            assert.ok(scenario.suites.length >= 1, `${scenario.id} must declare at least one suite`);
         }
     });
 

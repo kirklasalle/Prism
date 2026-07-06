@@ -28,20 +28,28 @@ let tmpDir: string;
 
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? {} : { "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -72,14 +80,14 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
             },
             chatStore,
             [],
-            0,                                           // port = ephemeral
-            undefined,                                   // metricsCollector
-            undefined,                                   // retrievalDashboardStore
-            new InMemoryProviderSecretStore(),            // providerSecretStore
-            undefined,                                   // activityStore
-            join(tmpDir, "session-packages.json"),        // sessionPackageStorePath
-            join(tmpDir, "exports"),                      // sessionPackageExportDir
-            registry,                                    // toolRegistry
+            0, // port = ephemeral
+            undefined, // metricsCollector
+            undefined, // retrievalDashboardStore
+            new InMemoryProviderSecretStore(), // providerSecretStore
+            undefined, // activityStore
+            join(tmpDir, "session-packages.json"), // sessionPackageStorePath
+            join(tmpDir, "exports"), // sessionPackageExportDir
+            registry, // toolRegistry
         );
 
         service.start();
@@ -91,7 +99,11 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
 
     after(() => {
         service.stop();
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* noop */ }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            /* noop */
+        }
     });
 
     it("should return 400 when sources is missing", async () => {

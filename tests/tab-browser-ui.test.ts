@@ -110,6 +110,7 @@ export function escapeHtml(str) {
 }
 export function dashboardLog() {}
 export function authHeaders(extra) { return extra || {}; }
+export async function withButtonFeedback(btnEl, fn, opts = {}) { return await fn(); }
 `;
 
 /* â”€â”€ Module types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -161,7 +162,7 @@ describe("tab-browser.js â€“ Frontend Unit Tests", function () {
 
         // Import the module from the temp directory (resolves ./dashboard-core.js to our mock)
         const moduleUrl = pathToFileURL(join(tmpDir, "tab-browser.js")).href;
-        mod = await import(moduleUrl) as TabBrowserModule;
+        mod = (await import(moduleUrl)) as TabBrowserModule;
 
         // Grab the mock state reference
         const coreUrl = pathToFileURL(join(tmpDir, "dashboard-core.js")).href;
@@ -239,7 +240,13 @@ describe("tab-browser.js â€“ Frontend Unit Tests", function () {
 
         it("renders session cards with session IDs", () => {
             mod.renderBrowserSessions([
-                { sessionId: "s1", id: "s1", headless: true, url: "https://example.com", createdAt: new Date().toISOString() },
+                {
+                    sessionId: "s1",
+                    id: "s1",
+                    headless: true,
+                    url: "https://example.com",
+                    createdAt: new Date().toISOString(),
+                },
                 { sessionId: "s2", id: "s2", headless: false, url: "", createdAt: new Date().toISOString() },
             ]);
             const el = dom.window.document.getElementById("browser-sessions-list");
@@ -250,9 +257,7 @@ describe("tab-browser.js â€“ Frontend Unit Tests", function () {
         });
 
         it("displays profile badge when profileId is present", () => {
-            mod.renderBrowserSessions([
-                { sessionId: "s1", id: "s1", headless: true, profileId: "prof-abc" },
-            ]);
+            mod.renderBrowserSessions([{ sessionId: "s1", id: "s1", headless: true, profileId: "prof-abc" }]);
             const el = dom.window.document.getElementById("browser-sessions-list");
             assert.ok(el!.innerHTML.includes("prof-abc"));
             assert.ok(el!.innerHTML.includes("Profile:"));
@@ -313,10 +318,7 @@ describe("tab-browser.js â€“ Frontend Unit Tests", function () {
 
         it("truncates long values at 200 chars", () => {
             const longVal = "x".repeat(300);
-            mod.renderStorageContent(
-                { cookies: "", local: JSON.stringify({ key: longVal }), session: "{}" },
-                "local",
-            );
+            mod.renderStorageContent({ cookies: "", local: JSON.stringify({ key: longVal }), session: "{}" }, "local");
             const el = dom.window.document.getElementById("browser-storage-content");
             // Should contain truncated version (200 chars + ellipsis), not the full 300
             assert.ok(!el!.innerHTML.includes("x".repeat(300)));
@@ -335,7 +337,12 @@ describe("tab-browser.js â€“ Frontend Unit Tests", function () {
 
         it("renders profile cards with display name and email", () => {
             mod.renderBrowserProfiles([
-                { id: "p1", displayName: "Work Profile", prismUserEmail: "kirk@co.com", executionProfileSegment: "enterprise" },
+                {
+                    id: "p1",
+                    displayName: "Work Profile",
+                    prismUserEmail: "kirk@co.com",
+                    executionProfileSegment: "enterprise",
+                },
                 { id: "p2", displayName: "Personal", prismUserEmail: "me@home.com" },
             ]);
             const el = dom.window.document.getElementById("browser-profiles-list");
@@ -376,20 +383,21 @@ describe("tab-browser.js â€“ Frontend Unit Tests", function () {
         });
 
         it("auto-selects the only session when there is exactly one", () => {
-            mockState.browserSessions = [
-                { sessionId: "only-one", id: "only-one", headless: true },
-            ];
+            mockState.browserSessions = [{ sessionId: "only-one", id: "only-one", headless: true }];
             mod.populateBrowserSessionDropdowns();
             const sel = dom.window.document.getElementById("browser-active-session") as any;
             assert.strictEqual(sel!.value, "only-one");
         });
 
         it("syncs all panel dropdowns", () => {
-            mockState.browserSessions = [
-                { sessionId: "sync-test", id: "sync-test", headless: true },
-            ];
+            mockState.browserSessions = [{ sessionId: "sync-test", id: "sync-test", headless: true }];
             mod.populateBrowserSessionDropdowns();
-            const ids = ["browser-network-session", "browser-console-session", "browser-dom-session", "browser-storage-session"];
+            const ids = [
+                "browser-network-session",
+                "browser-console-session",
+                "browser-dom-session",
+                "browser-storage-session",
+            ];
             for (const id of ids) {
                 const sel = dom.window.document.getElementById(id) as any;
                 assert.ok(sel!.querySelectorAll("option").length >= 2, `${id} should have options`);
@@ -439,9 +447,7 @@ describe("tab-browser.js â€“ Frontend Unit Tests", function () {
         });
 
         it("updates page info text with session URL", () => {
-            mockState.browserSessions = [
-                { sessionId: "s1", id: "s1", headless: true, url: "https://test.com" },
-            ];
+            mockState.browserSessions = [{ sessionId: "s1", id: "s1", headless: true, url: "https://test.com" }];
             mod.populateBrowserSessionDropdowns();
             const mainSel = dom.window.document.getElementById("browser-active-session") as any;
             mainSel!.value = "s1";

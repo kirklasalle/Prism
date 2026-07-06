@@ -87,7 +87,9 @@ export class CharacterAccountabilityManager {
             state: assignment.state,
         });
 
-        console.log(`[PRISM][accountability] Character assigned: CharacterId=${assignment.characterId}, Operator=${assignment.operatorEmail} (${assignment.operatorId}), Agent=${assignment.prismUserEmail}, Workspace Label=${assignment.workspaceHub}, Profile=${assignment.executionProfileSegment}`);
+        console.log(
+            `[PRISM][accountability] Character assigned: CharacterId=${assignment.characterId}, Operator=${assignment.operatorEmail} (${assignment.operatorId}), Agent=${assignment.prismUserEmail}, Workspace Label=${assignment.workspaceHub}, Profile=${assignment.executionProfileSegment}`,
+        );
 
         // Automatically dispatch the newly assigned agent
         const dispatched = this.recordDispatch(assignment.assignmentId);
@@ -108,7 +110,10 @@ export class CharacterAccountabilityManager {
         const activeAssignments = this.store.list({ state: "active" });
         for (const act of activeAssignments) {
             if (act.assignmentId !== assignmentId) {
-                this.suspend(act.assignmentId, "Single main agent policy: suspended to allow other main agent resumption.");
+                this.suspend(
+                    act.assignmentId,
+                    "Single main agent policy: suspended to allow other main agent resumption.",
+                );
             }
         }
 
@@ -125,7 +130,9 @@ export class CharacterAccountabilityManager {
             state: updated.state,
         });
 
-        console.log(`[PRISM][accountability] Character assignment resumed: ID=${updated.assignmentId}, CharacterId=${updated.characterId}, Operator=${updated.operatorEmail}, Agent=${updated.prismUserEmail}`);
+        console.log(
+            `[PRISM][accountability] Character assignment resumed: ID=${updated.assignmentId}, CharacterId=${updated.characterId}, Operator=${updated.operatorEmail}, Agent=${updated.prismUserEmail}`,
+        );
 
         return updated;
     }
@@ -153,13 +160,38 @@ export class CharacterAccountabilityManager {
             dispatchCount: updated.dispatchCount,
         });
 
-        console.log(`[PRISM][accountability] Character dispatched: ID=${updated.assignmentId}, CharacterId=${updated.characterId}, DispatchCount=${updated.dispatchCount}`);
+        console.log(
+            `[PRISM][accountability] Character dispatched: ID=${updated.assignmentId}, CharacterId=${updated.characterId}, DispatchCount=${updated.dispatchCount}`,
+        );
 
         return updated;
     }
 
     get(assignmentId: string): CharacterAssignment | null {
         return this.store.get(assignmentId);
+    }
+
+    updateAssignmentEmails(
+        assignmentId: string,
+        operatorEmail: string,
+        prismUserEmail?: string,
+    ): CharacterAssignment | null {
+        const existing = this.store.get(assignmentId);
+        if (!existing) return null;
+
+        const now = new Date().toISOString();
+        const updated: CharacterAssignment = {
+            ...existing,
+            operatorEmail: operatorEmail ? normalizeEmail(operatorEmail) : existing.operatorEmail,
+            prismUserEmail: prismUserEmail ? normalizeEmail(prismUserEmail) : existing.prismUserEmail,
+            updatedAt: now,
+        };
+
+        this.store.save(updated);
+        console.log(
+            `[PRISM][accountability] Updated character assignment emails for assignment ${assignmentId}: operatorEmail=${updated.operatorEmail}, prismUserEmail=${updated.prismUserEmail}`,
+        );
+        return updated;
     }
 
     queryByCharacter(characterId: string): CharacterAssignment[] {
@@ -228,14 +260,11 @@ export class CharacterAccountabilityManager {
 
         this.store.delete(assignmentId);
 
-        this.emitLifecycleEvent(
-            "character_accountability.deleted",
-            existing,
-            "succeeded",
-            {}
-        );
+        this.emitLifecycleEvent("character_accountability.deleted", existing, "succeeded", {});
 
-        console.log(`[PRISM][accountability] Character assignment deleted: ID=${existing.assignmentId}, CharacterId=${existing.characterId}, Operator=${existing.operatorEmail}, Agent=${existing.prismUserEmail}`);
+        console.log(
+            `[PRISM][accountability] Character assignment deleted: ID=${existing.assignmentId}, CharacterId=${existing.characterId}, Operator=${existing.operatorEmail}, Agent=${existing.prismUserEmail}`,
+        );
 
         return true;
     }
@@ -251,15 +280,9 @@ export class CharacterAccountabilityManager {
 
         for (const assignment of active) {
             const scopes = assignment.permissionScopes ?? [];
-            const hasExpired = scopes.some(
-                (s) => s.expiresAt !== null && new Date(s.expiresAt).getTime() < now
-            );
+            const hasExpired = scopes.some((s) => s.expiresAt !== null && new Date(s.expiresAt).getTime() < now);
             if (hasExpired) {
-                const result = this.transitionState(
-                    assignment.assignmentId,
-                    "revoked",
-                    "permission_scope_expired"
-                );
+                const result = this.transitionState(assignment.assignmentId, "revoked", "permission_scope_expired");
                 if (result) revoked.push(result);
             }
         }
@@ -308,7 +331,7 @@ export class CharacterAccountabilityManager {
         if (!existing || !existing.emailVerifiedAt) return false;
         const t = new Date(existing.emailVerifiedAt).getTime();
         if (isNaN(t)) return false;
-        return (Date.now() - t) <= maxAgeMs;
+        return Date.now() - t <= maxAgeMs;
     }
 
     /**
@@ -324,7 +347,8 @@ export class CharacterAccountabilityManager {
         if (!assignment) return null;
         const now = Date.now();
         const scopes = assignment.permissionScopes ?? [];
-        let active = 0; let expired = 0;
+        let active = 0;
+        let expired = 0;
         for (const s of scopes) {
             if (s.expiresAt === null || new Date(s.expiresAt).getTime() > now) active += 1;
             else expired += 1;
@@ -341,9 +365,7 @@ export class CharacterAccountabilityManager {
             workspaceHub: assignment.workspaceHub,
         };
         const verifiedAtMs = assignment.emailVerifiedAt ? new Date(assignment.emailVerifiedAt).getTime() : null;
-        const freshDays = verifiedAtMs && !isNaN(verifiedAtMs)
-            ? Math.floor((now - verifiedAtMs) / 86_400_000)
-            : null;
+        const freshDays = verifiedAtMs && !isNaN(verifiedAtMs) ? Math.floor((now - verifiedAtMs) / 86_400_000) : null;
         return {
             assignment,
             chain,
@@ -380,7 +402,8 @@ export class CharacterAccountabilityManager {
         const now = Date.now();
         return rows.map((a) => {
             const scopes = a.permissionScopes ?? [];
-            let active = 0; let expired = 0;
+            let active = 0;
+            let expired = 0;
             for (const s of scopes) {
                 if (s.expiresAt === null || new Date(s.expiresAt).getTime() > now) active += 1;
                 else expired += 1;
@@ -423,18 +446,15 @@ export class CharacterAccountabilityManager {
         };
 
         this.store.save(updated);
-        this.emitLifecycleEvent(
-            `character_accountability.${nextState}`,
-            updated,
-            "succeeded",
-            {
-                previousState: existing.state,
-                state: updated.state,
-                reason,
-            },
-        );
+        this.emitLifecycleEvent(`character_accountability.${nextState}`, updated, "succeeded", {
+            previousState: existing.state,
+            state: updated.state,
+            reason,
+        });
 
-        console.log(`[PRISM][accountability] Character assignment transitioned: ID=${updated.assignmentId}, State=${nextState}, Reason=${reason}, CharacterId=${updated.characterId}, Operator=${updated.operatorEmail}, Agent=${updated.prismUserEmail}`);
+        console.log(
+            `[PRISM][accountability] Character assignment transitioned: ID=${updated.assignmentId}, State=${nextState}, Reason=${reason}, CharacterId=${updated.characterId}, Operator=${updated.operatorEmail}, Agent=${updated.prismUserEmail}`,
+        );
 
         return updated;
     }
@@ -557,8 +577,8 @@ function assertNotPlaceholderEmail(email: string, field: string): void {
     const domain = emailDomain(email);
     if (isPlaceholderEmailDomain(domain)) {
         throw new Error(
-            `Business profile rejects placeholder ${field}: "${email}" uses a non-production domain (`
-            + `"${domain}"). Use a real, routable domain (e.g. your corporate or SSO provider domain).`,
+            `Business profile rejects placeholder ${field}: "${email}" uses a non-production domain (` +
+                `"${domain}"). Use a real, routable domain (e.g. your corporate or SSO provider domain).`,
         );
     }
 }

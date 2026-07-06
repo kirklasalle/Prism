@@ -41,8 +41,10 @@ describe("optional-deps probe", () => {
             if (r.status === "available") {
                 assert.strictEqual(r.error, null, `available module should not have error: ${r.module}`);
             } else {
-                assert.ok(typeof r.error === "string" && r.error.length > 0,
-                    `${r.status} module must include error message: ${r.module}`);
+                assert.ok(
+                    typeof r.error === "string" && r.error.length > 0,
+                    `${r.status} module must include error message: ${r.module}`,
+                );
             }
         }
     });

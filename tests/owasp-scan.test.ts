@@ -29,11 +29,7 @@ export async function testOwaspScan(): Promise<void> {
     try {
         mkdirSync(join(tmp, "src"));
         // File with a finding.
-        writeFileSync(
-            join(tmp, "src", "bad.ts"),
-            "const x = eval('1+1');\nconst y = 2;\n",
-            "utf-8",
-        );
+        writeFileSync(join(tmp, "src", "bad.ts"), "const x = eval('1+1');\nconst y = 2;\n", "utf-8");
         // File with allow-listed annotation.
         writeFileSync(
             join(tmp, "src", "allowed.ts"),
@@ -52,6 +48,10 @@ export async function testOwaspScan(): Promise<void> {
         assert(findings.length === 1, `expected 1 finding, got ${findings.length}`);
         assert(findings[0].file.endsWith("bad.ts"), "bad.ts flagged");
     } finally {
-        try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+            rmSync(tmp, { recursive: true, force: true });
+        } catch {
+            /* best effort */
+        }
     }
 }

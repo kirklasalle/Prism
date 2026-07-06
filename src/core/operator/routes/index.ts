@@ -31,6 +31,7 @@ import { ToolsHandler } from "./tools-handler.js";
 import { CacHandler } from "./cac-handler.js";
 import { IncubationHandler } from "./incubation-handler.js";
 import { PluginsHandler } from "./plugins-handler.js";
+import { PresenceHandler } from "./presence-handler.js";
 
 export * from "./types.js";
 export * from "./dashboard-handler.js";
@@ -57,77 +58,78 @@ export * from "./tools-handler.js";
 export * from "./cac-handler.js";
 export * from "./incubation-handler.js";
 export * from "./plugins-handler.js";
+export * from "./presence-handler.js";
 
 export class Router {
-  private handlers: IRouteHandler[] = [];
+    private handlers: IRouteHandler[] = [];
 
-  constructor(iam: IamRouteHandler) {
-    this.handlers.push(new DashboardHandler());
-    this.handlers.push(new SetupHandler());
-    this.handlers.push(new LoginHandler());
-    this.handlers.push(new WorkspaceHandler());
-    this.handlers.push(new SchedulerHandler());
-    this.handlers.push(new TooltipsHandler());
-    this.handlers.push(new ApiHandler());
-    this.handlers.push(new WikiHandler());
-    this.handlers.push(new AutonomousHandler());
-    this.handlers.push(new OpenAiCompatHandler());
-    this.handlers.push(new BrowserHandler());
-    this.handlers.push(new ComputerHandler());
-    this.handlers.push(new AgenticHandler());
-    this.handlers.push(new ChatHandler());
-    this.handlers.push(new SettingsHandler());
-    this.handlers.push(new LlmHandler());
-    this.handlers.push(new DiagnosticsHandler());
-    this.handlers.push(new SessionPackageHandler());
-    this.handlers.push(new GuardianHandler());
-    this.handlers.push(new ModelHandler());
-    this.handlers.push(new TelemetryHandler());
-    this.handlers.push(new UtilitiesHandler());
-    this.handlers.push(new ToolsHandler());
-    this.handlers.push(new CacHandler());
-    this.handlers.push(new IncubationHandler());
-    this.handlers.push(new OAuthHandler());
-    this.handlers.push(new PluginsHandler());
+    constructor(iam: IamRouteHandler) {
+        this.handlers.push(new DashboardHandler());
+        this.handlers.push(new SetupHandler());
+        this.handlers.push(new LoginHandler());
+        this.handlers.push(new WorkspaceHandler());
+        this.handlers.push(new SchedulerHandler());
+        this.handlers.push(new TooltipsHandler());
+        this.handlers.push(new ApiHandler());
+        this.handlers.push(new WikiHandler());
+        this.handlers.push(new AutonomousHandler());
+        this.handlers.push(new OpenAiCompatHandler());
+        this.handlers.push(new BrowserHandler());
+        this.handlers.push(new ComputerHandler());
+        this.handlers.push(new AgenticHandler());
+        this.handlers.push(new ChatHandler());
+        this.handlers.push(new SettingsHandler());
+        this.handlers.push(new LlmHandler());
+        this.handlers.push(new DiagnosticsHandler());
+        this.handlers.push(new SessionPackageHandler());
+        this.handlers.push(new GuardianHandler());
+        this.handlers.push(new ModelHandler());
+        this.handlers.push(new TelemetryHandler());
+        this.handlers.push(new UtilitiesHandler());
+        this.handlers.push(new ToolsHandler());
+        this.handlers.push(new CacHandler());
+        this.handlers.push(new IncubationHandler());
+        this.handlers.push(new OAuthHandler());
+        this.handlers.push(new PluginsHandler());
+        this.handlers.push(new PresenceHandler());
 
-    this.handlers.push(new IamAdminRouteHandler({ iam }));
-    this.handlers.push(iam);
-    if (isScimEnabled()) {
-      this.handlers.push(new ScimRouteHandler({ iamStore: iam.getStore() }));
-    }
-  }
-
-
-  async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<boolean> {
-    // Normalize /api/v1/* → /api/* so handler match() functions work with versioned client URLs.
-    // We restore the original URL if no handler matches, so the inline handle() code in
-    // dashboard-service.ts still sees the original URL for its own normalization + redirect logic.
-    const originalUrl = req.url ?? "";
-    if (originalUrl.startsWith("/api/v1/")) {
-      (req as any).url = "/api/" + originalUrl.substring("/api/v1/".length);
-    }
-    for (const handler of this.handlers) {
-      if (handler.match(req)) {
-        await handler.handle(req, res, service);
-        return true;
-      }
-    }
-    // No handler matched — restore original URL for inline handle() processing
-    (req as any).url = originalUrl;
-
-    // Backward-compat: redirect unversioned GET /api/<path> to /api/v1/<path> if unhandled
-    const method = req.method?.toUpperCase() ?? "GET";
-    if (method === "GET" && originalUrl.startsWith("/api/") && !originalUrl.startsWith("/api/v1/")) {
-      const redirectedPath = "/api/v1/" + originalUrl.substring("/api/".length);
-      res.writeHead(301, {
-        "Location": redirectedPath,
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
-      });
-      res.end(`Redirecting to ${redirectedPath}`);
-      return true;
+        this.handlers.push(new IamAdminRouteHandler({ iam }));
+        this.handlers.push(iam);
+        if (isScimEnabled()) {
+            this.handlers.push(new ScimRouteHandler({ iamStore: iam.getStore() }));
+        }
     }
 
-    return false;
-  }
+    async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<boolean> {
+        // Normalize /api/v1/* → /api/* so handler match() functions work with versioned client URLs.
+        // We restore the original URL if no handler matches, so the inline handle() code in
+        // dashboard-service.ts still sees the original URL for its own normalization + redirect logic.
+        const originalUrl = req.url ?? "";
+        if (originalUrl.startsWith("/api/v1/")) {
+            (req as any).url = "/api/" + originalUrl.substring("/api/v1/".length);
+        }
+        for (const handler of this.handlers) {
+            if (handler.match(req)) {
+                await handler.handle(req, res, service);
+                return true;
+            }
+        }
+        // No handler matched — restore original URL for inline handle() processing
+        (req as any).url = originalUrl;
+
+        // Backward-compat: redirect unversioned GET /api/<path> to /api/v1/<path> if unhandled
+        const method = req.method?.toUpperCase() ?? "GET";
+        if (method === "GET" && originalUrl.startsWith("/api/") && !originalUrl.startsWith("/api/v1/")) {
+            const redirectedPath = "/api/v1/" + originalUrl.substring("/api/".length);
+            res.writeHead(301, {
+                Location: redirectedPath,
+                "Content-Type": "text/plain; charset=utf-8",
+                "Cache-Control": "no-store",
+            });
+            res.end(`Redirecting to ${redirectedPath}`);
+            return true;
+        }
+
+        return false;
+    }
 }

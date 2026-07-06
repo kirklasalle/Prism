@@ -22,7 +22,7 @@ import type {
     CacAuthResponse,
     CacCertificateInfo,
     CacAuditInfo,
-    CacAuthErrorCode
+    CacAuthErrorCode,
 } from "../types.js";
 
 export class WindowsCacProvider implements CacProvider {
@@ -70,7 +70,7 @@ export class WindowsCacProvider implements CacProvider {
                 startTime,
                 request,
                 error instanceof Error ? error.message : "Unknown error",
-                "system_error"
+                "system_error",
             );
         }
     }
@@ -129,18 +129,18 @@ ${certificatePem}
                 thumbprint: result.Thumbprint || "",
                 certificatePem,
                 chainValid: result.Valid || false,
-                revocationStatus: result.Valid ? "valid" : "unknown"
+                revocationStatus: result.Valid ? "valid" : "unknown",
             };
 
             return {
                 valid: result.Valid || false,
                 info: certificateInfo,
-                error: result.Valid ? undefined : result.ChainStatus || "Certificate validation failed"
+                error: result.Valid ? undefined : result.ChainStatus || "Certificate validation failed",
             };
         } catch (error) {
             return {
                 valid: false,
-                error: error instanceof Error ? error.message : "Certificate validation error"
+                error: error instanceof Error ? error.message : "Certificate validation error",
             };
         }
     }
@@ -207,7 +207,7 @@ ${certificatePem}
             const results = JSON.parse(stdout);
             const certs = Array.isArray(results) ? results : [results];
 
-            return certs.map(cert => ({
+            return certs.map((cert) => ({
                 commonName: cert.CommonName || "",
                 email: cert.Email || "",
                 cacId: this.extractCacId(cert.CommonName || ""),
@@ -218,7 +218,7 @@ ${certificatePem}
                 thumbprint: cert.Thumbprint || "",
                 certificatePem: cert.CertificatePem || "",
                 chainValid: true,
-                revocationStatus: "unknown" as const
+                revocationStatus: "unknown" as const,
             }));
         } catch {
             return [];
@@ -228,15 +228,15 @@ ${certificatePem}
     private async authenticateWithCardReader(
         request: CacAuthRequest,
         attemptId: string,
-        startTime: number
+        startTime: number,
     ): Promise<CacAuthResponse> {
-        if (!await this.isCardPresent()) {
+        if (!(await this.isCardPresent())) {
             return this.createErrorResponse(
                 attemptId,
                 startTime,
                 request,
                 "No CAC card present in reader",
-                "card_not_present"
+                "card_not_present",
             );
         }
 
@@ -250,7 +250,7 @@ ${certificatePem}
                 startTime,
                 request,
                 "No valid CAC certificates found",
-                "certificate_invalid"
+                "certificate_invalid",
             );
         }
 
@@ -261,7 +261,7 @@ ${certificatePem}
     private async authenticateWithCertificate(
         request: CacAuthRequest,
         attemptId: string,
-        startTime: number
+        startTime: number,
     ): Promise<CacAuthResponse> {
         if (!request.certificateData) {
             return this.createErrorResponse(
@@ -269,7 +269,7 @@ ${certificatePem}
                 startTime,
                 request,
                 "Certificate data is required for certificate authentication",
-                "certificate_invalid"
+                "certificate_invalid",
             );
         }
 
@@ -281,7 +281,7 @@ ${certificatePem}
                 startTime,
                 request,
                 validation.error || "Certificate validation failed",
-                "certificate_invalid"
+                "certificate_invalid",
             );
         }
 
@@ -291,7 +291,7 @@ ${certificatePem}
     private async authenticateWithMock(
         request: CacAuthRequest,
         attemptId: string,
-        startTime: number
+        startTime: number,
     ): Promise<CacAuthResponse> {
         // Mock CAC authentication for development
         const mockCertificate: CacCertificateInfo = {
@@ -305,7 +305,7 @@ ${certificatePem}
             thumbprint: createHash("sha256").update("mock-certificate").digest("hex").toUpperCase(),
             certificatePem: "-----BEGIN CERTIFICATE-----\nMOCK CERTIFICATE DATA\n-----END CERTIFICATE-----",
             chainValid: true,
-            revocationStatus: "valid"
+            revocationStatus: "valid",
         };
 
         return this.createSuccessResponse(attemptId, startTime, request, mockCertificate);
@@ -315,7 +315,7 @@ ${certificatePem}
         attemptId: string,
         startTime: number,
         request: CacAuthRequest,
-        certificateInfo: CacCertificateInfo
+        certificateInfo: CacCertificateInfo,
     ): CacAuthResponse {
         const sessionId = this.generateSessionId();
         const expiresAt = new Date(Date.now() + (request.sessionTimeoutMs || 8 * 60 * 60 * 1000)).toISOString();
@@ -332,8 +332,8 @@ ${certificatePem}
             metadata: {
                 securityLevel: request.securityLevel,
                 privilegeLevel: request.operatorPrivilege,
-                tenantId: request.tenantId
-            }
+                tenantId: request.tenantId,
+            },
         };
 
         return {
@@ -343,7 +343,7 @@ ${certificatePem}
             privilegeLevel: request.operatorPrivilege,
             securityLevel: request.securityLevel,
             expiresAt,
-            auditInfo
+            auditInfo,
         };
     }
 
@@ -352,7 +352,7 @@ ${certificatePem}
         startTime: number,
         request: CacAuthRequest,
         error: string,
-        errorCode: CacAuthErrorCode
+        errorCode: CacAuthErrorCode,
     ): CacAuthResponse {
         const auditInfo: CacAuditInfo = {
             attemptId,
@@ -366,15 +366,15 @@ ${certificatePem}
             metadata: {
                 securityLevel: request.securityLevel,
                 privilegeLevel: request.operatorPrivilege,
-                tenantId: request.tenantId
-            }
+                tenantId: request.tenantId,
+            },
         };
 
         return {
             success: false,
             error,
             errorCode,
-            auditInfo
+            auditInfo,
         };
     }
 
@@ -382,7 +382,7 @@ ${certificatePem}
         return new Promise((resolve, reject) => {
             const child = spawn("powershell.exe", ["-Command", script], {
                 timeout: this.timeoutMs,
-                stdio: ["pipe", "pipe", "pipe"]
+                stdio: ["pipe", "pipe", "pipe"],
             });
 
             let stdout = "";

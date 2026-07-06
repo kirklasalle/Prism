@@ -73,10 +73,7 @@ export class RetrievalDashboardStore {
         ]);
     }
 
-    private ensureColumns(
-        tableName: string,
-        columns: Array<{ name: string; definition: string }>,
-    ): void {
+    private ensureColumns(tableName: string, columns: Array<{ name: string; definition: string }>): void {
         const rows = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
         const existing = new Set(rows.map((row) => row.name));
 
@@ -118,9 +115,7 @@ export class RetrievalDashboardStore {
     `;
 
         const stmt = this.db.prepare(query);
-        const rows = sessionId
-            ? stmt.all({ sessionId, limit: boundedLimit })
-            : stmt.all({ limit: boundedLimit });
+        const rows = sessionId ? stmt.all({ sessionId, limit: boundedLimit }) : stmt.all({ limit: boundedLimit });
 
         return (rows as Array<Record<string, unknown>>).map((row) => ({
             id: Number(row.id),
@@ -179,7 +174,9 @@ export class RetrievalDashboardStore {
                 alerts.push(`Cohort ${trend.cohortKey} hit rate dropped by ${(trend.hitRateDelta * 100).toFixed(1)}%.`);
             }
             if (trend.p95LatencyDeltaMs > alertPolicy.trendP95LatencyIncreaseMs) {
-                alerts.push(`Cohort ${trend.cohortKey} p95 latency increased by ${trend.p95LatencyDeltaMs.toFixed(1)}ms.`);
+                alerts.push(
+                    `Cohort ${trend.cohortKey} p95 latency increased by ${trend.p95LatencyDeltaMs.toFixed(1)}ms.`,
+                );
             }
         }
 

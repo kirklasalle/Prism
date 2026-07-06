@@ -25,7 +25,7 @@
     if (activeTabButton && activeTabButton.dataset.tabId === 'wiki') {
       refreshWikiList();
     }
-    
+
     // Wire premium draggable divider resizing
     initSidebarResizer();
 
@@ -59,7 +59,7 @@
         headers: { 'Authorization': `Bearer ${getAuthToken()}` }
       });
       if (!response.ok) throw new Error('API failed to return document list');
-      
+
       const data = await response.json();
       documents = data.documents || [];
       applyFiltersAndSort();
@@ -92,13 +92,13 @@
   function applyFiltersAndSort() {
     const sortVal = document.getElementById('wiki-sort')?.value || 'title-asc';
     const filterVal = document.getElementById('wiki-filter-type')?.value || 'all';
-    
+
     // 1. Search query filter
     let filtered = documents;
     if (currentSearchQuery.trim()) {
       const q = currentSearchQuery.toLowerCase().trim();
-      filtered = documents.filter(doc => 
-        doc.title.toLowerCase().includes(q) || 
+      filtered = documents.filter(doc =>
+        doc.title.toLowerCase().includes(q) ||
         doc.filename.toLowerCase().includes(q)
       );
     }
@@ -108,10 +108,14 @@
     const remaining = [];
 
     filtered.forEach(doc => {
-      const isGuideOrFaq = doc.filename.toLowerCase().includes('guide') || 
-                           doc.filename.toLowerCase() === 'prism_faq.md' ||
-                           doc.title.toLowerCase().includes('guide') ||
-                           doc.title.toLowerCase().includes('faq');
+      const category = doc.category?.toLowerCase() || '';
+      const tags = Array.isArray(doc.tags) ? doc.tags.map(t => t.toLowerCase()) : [];
+      const isGuideOrFaq = category === 'guide' || category === 'faq' ||
+        tags.includes('guide') || tags.includes('faq') ||
+        doc.filename.toLowerCase().includes('guide') ||
+        doc.filename.toLowerCase() === 'prism_faq.md' ||
+        doc.title.toLowerCase().includes('guide') ||
+        doc.title.toLowerCase().includes('faq');
       if (isGuideOrFaq) {
         pinned.push(doc);
       } else {
@@ -145,14 +149,16 @@
     remaining.forEach(doc => {
       const filename = doc.filename.toLowerCase();
       const title = doc.title.toLowerCase();
+      const category = doc.category?.toLowerCase() || '';
+      const tags = Array.isArray(doc.tags) ? doc.tags.map(t => t.toLowerCase()) : [];
 
-      if (filename.includes('runbook')) {
+      if (category === 'runbook' || filename.includes('runbook') || tags.includes('runbook')) {
         categorized.runbook.push(doc);
-      } else if (filename.includes('policy')) {
+      } else if (category === 'policy' || filename.includes('policy') || tags.includes('policy')) {
         categorized.policy.push(doc);
-      } else if (filename.includes('spec') || filename.includes('design') || filename.includes('schema')) {
+      } else if (category === 'spec' || category === 'design' || filename.includes('spec') || filename.includes('design') || filename.includes('schema') || tags.includes('spec') || tags.includes('design')) {
         categorized.spec.push(doc);
-      } else if (filename.includes('plan') || filename.includes('manifest') || filename.includes('roadmap')) {
+      } else if (category === 'plan' || filename.includes('plan') || filename.includes('manifest') || filename.includes('roadmap') || tags.includes('plan') || tags.includes('roadmap')) {
         categorized.plan.push(doc);
       } else {
         categorized.other.push(doc);
@@ -318,7 +324,7 @@
       btn.style.flex = 'none';
       btn.style.height = 'auto';
       btn.style.minHeight = 'unset';
-      
+
       const isMicroDesk = doc.filename.toLowerCase().includes('micro-support') || doc.filename.toLowerCase().includes('support-desk');
       const emoji = isMicroDesk ? '🎧' : '📄';
 
@@ -329,6 +335,7 @@
         <div class="muted" style="font-size:9.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-left:16px; text-align:left; width:100%;">
           ${doc.filename}
         </div>
+        ${doc.excerpt ? `<div class="muted" style="font-size:8.8px; color:var(--text-muted); padding-left:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${doc.excerpt}</div>` : ''}
       `;
 
       btn.onclick = () => {
@@ -389,12 +396,13 @@
       });
       if (!response.ok) throw new Error('Failed to retrieve content');
       const data = await response.json();
-      
+
       if (titleHeader) titleHeader.innerText = data.title;
       if (metaHeader) metaHeader.innerText = `Source File: docs/${data.filename} • Last Modified: ${new Date(data.mtime).toLocaleString()}`;
-      
+
       if (viewport) {
-        viewport.innerHTML = renderMarkdown(data.content);
+        viewport.innerHTML = data.html || renderMarkdown(data.content);
+        attachInternalWikiLinks();
       }
     } catch (err) {
       console.error('[WikiTab] Error loading document:', err);
@@ -402,6 +410,30 @@
         viewport.innerHTML = '<div class="muted" style="padding:24px; color:var(--red);">❌ Failed to render document. Ensure the file exists.</div>';
       }
     }
+  }
+
+  function attachInternalWikiLinks() {
+    const viewport = document.getElementById('wiki-viewport');
+    if (!viewport) return;
+
+    const links = Array.from(viewport.querySelectorAll('a[data-doc-path]'));
+    links.forEach((link) => {
+      link.onclick = (event) => {
+        event.preventDefault();
+        const rawPath = link.getAttribute('data-doc-path');
+        if (!rawPath) return;
+        const decoded = decodeURIComponent(rawPath);
+        const [path, hash] = decoded.split('#');
+        loadWikiDoc(path).then(() => {
+          if (hash) {
+            const target = document.getElementById(hash);
+            if (target) {
+              target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        }).catch(() => { });
+      };
+    });
   }
 
   /**
@@ -451,7 +483,7 @@
       if (trimmed.startsWith('```')) {
         closeListIfActive();
         closeBlockquoteIfActive();
-        
+
         if (inCodeBlock) {
           // Close block
           const escapedCode = escapeHtmlTags(codeContent.join('\n'));
@@ -638,7 +670,7 @@
     if (!activeTabButton || activeTabButton.dataset.tabId !== 'wiki') return;
 
     const isSearchFocused = document.activeElement === document.getElementById('wiki-search');
-    
+
     if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
       // Find all visible and focusable tree rows
       const rows = Array.from(document.querySelectorAll('.wiki-tree-row')).filter(el => {
@@ -732,15 +764,15 @@
 
     document.addEventListener('mousemove', (e) => {
       if (!isResizing) return;
-      
+
       const containerRect = container.getBoundingClientRect();
       // Calculate mouse position relative to container
       let newWidth = e.clientX - containerRect.left;
-      
+
       // Enforce robust boundaries (200px min, 600px max)
       if (newWidth < 200) newWidth = 200;
       if (newWidth > 600) newWidth = 600;
-      
+
       sidebar.style.width = `${newWidth}px`;
       sidebar.style.flexBasis = `${newWidth}px`;
     });
@@ -751,12 +783,12 @@
         resizer.classList.remove('resizing');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-        
+
         // Save preferred width dynamically
         localStorage.setItem('wiki_sidebar_width', sidebar.style.width);
       }
     });
-    
+
     // Restore preferred width from localStorage
     const savedWidth = localStorage.getItem('wiki_sidebar_width');
     if (savedWidth) {

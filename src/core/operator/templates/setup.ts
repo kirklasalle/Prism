@@ -1,5 +1,5 @@
 export function setupWizardHtml(port: number): string {
-  return `<!doctype html>
+    return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -496,7 +496,7 @@ export function setupWizardHtml(port: number): string {
 }
 
 export function setupWizardAdvancedHtml(port: number): string {
-  return `<!doctype html>
+    return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />

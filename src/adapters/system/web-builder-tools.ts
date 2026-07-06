@@ -23,7 +23,7 @@ export class WebPageInitializeTool implements Tool {
 
         try {
             await fs.mkdir(projectDir, { recursive: true });
-            
+
             const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -265,7 +265,11 @@ export class WebComponentInjectTool implements Tool {
         version: "1.0.0",
         args: {
             filePath: { type: "string", required: true },
-            componentType: { type: "string", required: true, enum: ["hero", "features", "testimonials", "live-dashboard"] },
+            componentType: {
+                type: "string",
+                required: true,
+                enum: ["hero", "features", "testimonials", "live-dashboard"],
+            },
             title: { type: "string" },
             subtitle: { type: "string" },
         },
@@ -275,11 +279,13 @@ export class WebComponentInjectTool implements Tool {
         const filePath = String(request.args.filePath ?? "");
         const componentType = String(request.args.componentType ?? "hero");
         const title = String(request.args.title ?? "Specular Refraction Engine");
-        const subtitle = String(request.args.subtitle ?? "Dramatically scaling parallel cognitive hemispheres into absolute consensus.");
+        const subtitle = String(
+            request.args.subtitle ?? "Dramatically scaling parallel cognitive hemispheres into absolute consensus.",
+        );
 
         try {
             const htmlContent = await fs.readFile(filePath, "utf-8");
-            
+
             // Build component markups
             let markup = "";
             let cssMarkup = "";
@@ -486,7 +492,10 @@ export class WebComponentInjectTool implements Tool {
             const mainIndex = htmlContent.indexOf(mainPlaceholder);
 
             if (mainIndex === -1) {
-                return { ok: false, output: { error: "Could not find target <main id='app-root'> placeholder in HTML file." } };
+                return {
+                    ok: false,
+                    output: { error: "Could not find target <main id='app-root'> placeholder in HTML file." },
+                };
             }
 
             const insertPosition = mainIndex + mainPlaceholder.length;
@@ -495,7 +504,11 @@ export class WebComponentInjectTool implements Tool {
             // Append CSS to style.css
             const cssPath = path.join(path.dirname(filePath), "style.css");
             let styleContent = "";
-            try { styleContent = await fs.readFile(cssPath, "utf-8"); } catch (_) { /* ignore */ }
+            try {
+                styleContent = await fs.readFile(cssPath, "utf-8");
+            } catch (_) {
+                /* ignore */
+            }
             const updatedCss = styleContent + "\n\n" + cssMarkup;
 
             await fs.writeFile(filePath, updatedHtml, "utf-8");
@@ -510,7 +523,6 @@ export class WebComponentInjectTool implements Tool {
                 },
                 sideEffects: [{ type: "file", description: `Injected component ${componentType} into ${filePath}` }],
             };
-
         } catch (err: unknown) {
             return { ok: false, output: { error: String(err) } };
         }
@@ -541,7 +553,8 @@ export class WebAssetsOptimizeTool implements Tool {
             if (library === "lucide-icons") {
                 scriptTag = '\n    <script src="https://unpkg.com/lucide@latest"></script>';
             } else if (library === "gsap-animation") {
-                scriptTag = '\n    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>';
+                scriptTag =
+                    '\n    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>';
             }
 
             if (scriptTag && !htmlContent.includes(scriptTag.trim())) {
@@ -561,7 +574,6 @@ export class WebAssetsOptimizeTool implements Tool {
                     filePath,
                 },
             };
-
         } catch (err: unknown) {
             return { ok: false, output: { error: String(err) } };
         }
@@ -584,12 +596,13 @@ export class WebVisualAuditTool implements Tool {
         const filePath = String(request.args.filePath ?? "");
         try {
             const htmlContent = await fs.readFile(filePath, "utf-8");
-            
+
             // Basic audits: check for script tags, CSS tags, missing links
-            const hasStyle = htmlContent.includes('link rel="stylesheet"') || htmlContent.includes('<style>');
-            const hasScript = htmlContent.includes('src="script.js"') || htmlContent.includes('<script>');
+            const hasStyle = htmlContent.includes('link rel="stylesheet"') || htmlContent.includes("<style>");
+            const hasScript = htmlContent.includes('src="script.js"') || htmlContent.includes("<script>");
             const brokenImages = (htmlContent.match(/<img[^>]+src=""[^>]*>/gi) || []).length;
-            const divMismatches = (htmlContent.match(/<div/g) || []).length !== (htmlContent.match(/<\/div>/g) || []).length;
+            const divMismatches =
+                (htmlContent.match(/<div/g) || []).length !== (htmlContent.match(/<\/div>/g) || []).length;
 
             const passes = hasStyle && hasScript && brokenImages === 0 && !divMismatches;
 
@@ -632,25 +645,28 @@ export class PrismIdeModifyTool implements Tool {
 
         try {
             const content = await fs.readFile(filePath, "utf-8");
-            
+
             // Validate unique occurrence of targetContent to prevent bad edits
             const firstIndex = content.indexOf(targetContent);
             if (firstIndex === -1) {
                 return {
                     ok: false,
-                    output: { error: `Target content not found in the file: ${filePath}` }
+                    output: { error: `Target content not found in the file: ${filePath}` },
                 };
             }
-            
+
             const lastIndex = content.lastIndexOf(targetContent);
             if (firstIndex !== lastIndex) {
                 return {
                     ok: false,
-                    output: { error: `Multiple occurrences of target content found. Please provide more context lines to ensure uniqueness.` }
+                    output: {
+                        error: `Multiple occurrences of target content found. Please provide more context lines to ensure uniqueness.`,
+                    },
                 };
             }
 
-            const updatedContent = content.slice(0, firstIndex) + replacementContent + content.slice(firstIndex + targetContent.length);
+            const updatedContent =
+                content.slice(0, firstIndex) + replacementContent + content.slice(firstIndex + targetContent.length);
 
             // Simple AST / Brackets validation for basic syntax checking
             const hasBalancedBrackets = (str: string): boolean => {
@@ -711,7 +727,7 @@ export class PrismIdeLintTool implements Tool {
 
         try {
             const htmlContent = await fs.readFile(filePath, "utf-8");
-            
+
             // 1. Audit structural tags
             const divOpenCount = (htmlContent.match(/<div/g) || []).length;
             const divCloseCount = (htmlContent.match(/<\/div>/g) || []).length;
@@ -759,7 +775,7 @@ export class PrismIdeLintTool implements Tool {
 
             // 4. Audit images and accessibility tags
             const imgMatch = htmlContent.match(/<img[^>]+/g) || [];
-            const missingAlts: number = imgMatch.filter(tag => !tag.includes('alt=')).length;
+            const missingAlts: number = imgMatch.filter((tag) => !tag.includes("alt=")).length;
 
             const passes = isDivBalanced && missingStylesheets.length === 0 && missingScripts.length === 0;
 
@@ -774,12 +790,11 @@ export class PrismIdeLintTool implements Tool {
                         missingStylesheets,
                         missingScripts,
                         missingAltsOnImages: missingAlts,
-                    }
-                }
+                    },
+                },
             };
         } catch (err: unknown) {
             return { ok: false, output: { error: String(err) } };
         }
     }
 }
-

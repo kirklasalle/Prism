@@ -53,25 +53,32 @@ function pickPort(): number {
     return 35000 + Math.floor(Math.random() * 20_000);
 }
 
-function httpJson(port: number, path: string, timeoutMs = 5_000): Promise<{ status: number; body: unknown; contentType: string }> {
+function httpJson(
+    port: number,
+    path: string,
+    timeoutMs = 5_000,
+): Promise<{ status: number; body: unknown; contentType: string }> {
     return new Promise((resolve, reject) => {
-        const req = http.request(
-            { hostname: "127.0.0.1", port, path, method: "GET", timeout: timeoutMs },
-            (res) => {
-                let buf = "";
-                res.on("data", (c) => (buf += c));
-                res.on("end", () => {
-                    const contentType = String(res.headers["content-type"] ?? "");
-                    let body: unknown = buf;
-                    if (contentType.includes("application/json")) {
-                        try { body = JSON.parse(buf); } catch { body = buf; }
+        const req = http.request({ hostname: "127.0.0.1", port, path, method: "GET", timeout: timeoutMs }, (res) => {
+            let buf = "";
+            res.on("data", (c) => (buf += c));
+            res.on("end", () => {
+                const contentType = String(res.headers["content-type"] ?? "");
+                let body: unknown = buf;
+                if (contentType.includes("application/json")) {
+                    try {
+                        body = JSON.parse(buf);
+                    } catch {
+                        body = buf;
                     }
-                    resolve({ status: res.statusCode ?? 0, body, contentType });
-                });
-            },
-        );
+                }
+                resolve({ status: res.statusCode ?? 0, body, contentType });
+            });
+        });
         req.on("error", reject);
-        req.on("timeout", () => { req.destroy(new Error(`HTTP timeout for ${path}`)); });
+        req.on("timeout", () => {
+            req.destroy(new Error(`HTTP timeout for ${path}`));
+        });
         req.end();
     });
 }
@@ -120,12 +127,16 @@ describe("E2E smoke (Playwright + HTTP)", function () {
         // 302-redirect GET / to /setup. The smoke contract is "the dashboard
         // shell is reachable", not "first-run wizard works".
         const prefsPath = join(dataDir, ".prism-preferences.json");
-        writeFileSync(prefsPath, JSON.stringify({
-            setupComplete: true,
-            uiMode: "advanced",
-            executionProfileSegment: "individual",
-            lastModified: new Date().toISOString(),
-        }), "utf-8");
+        writeFileSync(
+            prefsPath,
+            JSON.stringify({
+                setupComplete: true,
+                uiMode: "advanced",
+                executionProfileSegment: "individual",
+                lastModified: new Date().toISOString(),
+            }),
+            "utf-8",
+        );
 
         const env: NodeJS.ProcessEnv = {
             ...process.env,
@@ -168,7 +179,8 @@ describe("E2E smoke (Playwright + HTTP)", function () {
         try {
             await waitForHealth(port, 60_000);
         } catch (err) {
-            const msg = `failed to start server on port ${port}: ${String(err)}\n` +
+            const msg =
+                `failed to start server on port ${port}: ${String(err)}\n` +
                 `--- stdout (tail) ---\n${stdoutTail}\n` +
                 `--- stderr (tail) ---\n${stderrTail}`;
             throw new Error(msg);
@@ -187,18 +199,27 @@ describe("E2E smoke (Playwright + HTTP)", function () {
                     }
                     resolve();
                 }, 2_000);
-                proc.once("exit", () => { clearTimeout(timer); resolve(); });
+                proc.once("exit", () => {
+                    clearTimeout(timer);
+                    resolve();
+                });
             });
         }
-        try { rmSync(dataDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+        try {
+            rmSync(dataDir, { recursive: true, force: true });
+        } catch {
+            /* best-effort */
+        }
     });
 
     /* ── HTTP smoke (always runs) ─────────────────────────────────────── */
 
     it("GET /api/health returns 200 with the production-grade payload", async () => {
         const { status, body } = await httpJson(port, "/api/health");
-        assert.ok(status === 200 || status === 503,
-            `expected 200 or 503 (degraded), got ${status}: ${JSON.stringify(body).slice(0, 400)}`);
+        assert.ok(
+            status === 200 || status === 503,
+            `expected 200 or 503 (degraded), got ${status}: ${JSON.stringify(body).slice(0, 400)}`,
+        );
         assert.equal(typeof body, "object");
         const h = body as HealthBody;
         assert.equal(typeof h.version, "string", "health.version must be a string");
@@ -246,7 +267,9 @@ describe("E2E smoke (Playwright + HTTP)", function () {
             } catch (err) {
                 const msg = String(err);
                 if (/Executable doesn't exist/i.test(msg) || /browserType\.launch/i.test(msg)) {
-                    console.warn(`  ⚠ Chromium binary not installed — run \`npx playwright install chromium\`. Skipping. (${msg.split("\n")[0]})`);
+                    console.warn(
+                        `  ⚠ Chromium binary not installed — run \`npx playwright install chromium\`. Skipping. (${msg.split("\n")[0]})`,
+                    );
                     return this.skip();
                 }
                 throw err;
@@ -269,7 +292,11 @@ describe("E2E smoke (Playwright + HTTP)", function () {
             assert.equal(fatal.length, 0, `uncaught page errors: ${fatal.join("; ")}`);
         } finally {
             if (browser) {
-                try { await browser.close(); } catch { /* ignore */ }
+                try {
+                    await browser.close();
+                } catch {
+                    /* ignore */
+                }
             }
         }
     });

@@ -32,10 +32,7 @@ const MOCK_ROUTING: ModelRouterSelection = {
 };
 
 /** Creates a delegate that returns a classification JSON from a provided mapping. */
-function classifierDelegate(
-    classifyContent: string,
-    dispatchContent = "dispatch reply",
-): LlmDelegate {
+function classifierDelegate(classifyContent: string, dispatchContent = "dispatch reply"): LlmDelegate {
     let callCount = 0;
     return {
         async generateForRole(role, input) {

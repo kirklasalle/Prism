@@ -9,7 +9,7 @@ export class WorkflowHistoryIndex {
     private readonly fragments: HistoryFragment[] = [];
     private readonly byOperation = new Map<string, HistoryFragment[]>();
 
-    constructor(private readonly maxFragments: number = 200) { }
+    constructor(private readonly maxFragments: number = 200) {}
 
     record(fragment: HistoryFragment): void {
         this.fragments.push(fragment);

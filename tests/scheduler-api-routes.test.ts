@@ -30,10 +30,15 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });
@@ -41,20 +46,28 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
 
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? {} : { "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -83,14 +96,14 @@ describe("Scheduler API Routes (/api/scheduler/*)", function () {
                 executionProfileSegment: "individual",
             },
             chatStore,
-            [],                                          // actions
-            0,                                           // port = ephemeral
-            undefined,                                   // metricsCollector
-            undefined,                                   // retrievalDashboardStore
-            new InMemoryProviderSecretStore(),            // providerSecretStore
-            undefined,                                   // activityStore
-            join(tmpDir, "session-packages.json"),        // sessionPackageStorePath
-            join(tmpDir, "exports"),                      // sessionPackageExportDir
+            [], // actions
+            0, // port = ephemeral
+            undefined, // metricsCollector
+            undefined, // retrievalDashboardStore
+            new InMemoryProviderSecretStore(), // providerSecretStore
+            undefined, // activityStore
+            join(tmpDir, "session-packages.json"), // sessionPackageStorePath
+            join(tmpDir, "exports"), // sessionPackageExportDir
         );
 
         service.start();
@@ -326,9 +339,13 @@ describe("Scheduler API Routes (/api/scheduler/*)", function () {
         it("moves tasks through all kanban stages", async () => {
             const stages = ["todo", "in-progress", "review", "done"];
             for (let i = 0; i < stages.length && i < taskIds.length; i++) {
-                const { status } = await requestJson("PUT", `/api/scheduler/tasks/${taskIds[i]}?projectId=${projectId}`, {
-                    status: stages[i],
-                });
+                const { status } = await requestJson(
+                    "PUT",
+                    `/api/scheduler/tasks/${taskIds[i]}?projectId=${projectId}`,
+                    {
+                        status: stages[i],
+                    },
+                );
                 assert.strictEqual(status, 200);
             }
 

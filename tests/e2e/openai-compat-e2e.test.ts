@@ -67,7 +67,11 @@ function httpRequest(
                 res.on("data", (c) => (buf += c));
                 res.on("end", () => {
                     let parsed: unknown = buf;
-                    try { parsed = JSON.parse(buf); } catch { /* leave raw */ }
+                    try {
+                        parsed = JSON.parse(buf);
+                    } catch {
+                        /* leave raw */
+                    }
                     resolve({ status: res.statusCode ?? 0, body: parsed });
                 });
             },
@@ -98,7 +102,9 @@ describe("E2E /v1/* OpenAI compat surface", function () {
     this.timeout(120_000);
 
     if (!existsSync(serverEntry)) {
-        it.skip("requires `npm run build` to have produced dist/src/index.js — skipping", () => { /* no-op */ });
+        it.skip("requires `npm run build` to have produced dist/src/index.js — skipping", () => {
+            /* no-op */
+        });
         return;
     }
 
@@ -125,7 +131,9 @@ describe("E2E /v1/* OpenAI compat surface", function () {
             stdio: ["ignore", "pipe", "pipe"],
         });
         serverProc = proc;
-        proc.stderr?.on("data", (c) => { stderrTail = (stderrTail + String(c)).slice(-4_000); });
+        proc.stderr?.on("data", (c) => {
+            stderrTail = (stderrTail + String(c)).slice(-4_000);
+        });
         try {
             await waitForHealth(port, 60_000);
         } catch (err) {
@@ -142,10 +150,17 @@ describe("E2E /v1/* OpenAI compat surface", function () {
                     if (proc.exitCode === null) proc.kill("SIGKILL");
                     resolve();
                 }, 2_000);
-                proc.once("exit", () => { clearTimeout(timer); resolve(); });
+                proc.once("exit", () => {
+                    clearTimeout(timer);
+                    resolve();
+                });
             });
         }
-        try { rmSync(dataDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+        try {
+            rmSync(dataDir, { recursive: true, force: true });
+        } catch {
+            /* best-effort */
+        }
     });
 
     it("POST /v1/chat/completions returns an OpenAI-shaped response with prism_metadata", async () => {

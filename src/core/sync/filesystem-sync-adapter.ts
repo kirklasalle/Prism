@@ -53,10 +53,10 @@ export class FilesystemSyncAdapter implements SyncAdapter {
     }
 
     async push(batch: SyncBatch): Promise<{ accepted: number; rejected: number }> {
-        const filtered = batch.events.filter(e => this.layers.includes(e.layer));
+        const filtered = batch.events.filter((e) => this.layers.includes(e.layer));
         if (filtered.length === 0) return { accepted: 0, rejected: batch.events.length - filtered.length };
         const file = join(this.root, "outbound", `${this.instanceId}-${Date.now()}.jsonl`);
-        const lines = filtered.map(e => JSON.stringify(e)).join("\n") + "\n";
+        const lines = filtered.map((e) => JSON.stringify(e)).join("\n") + "\n";
         appendFileSync(file, lines, "utf-8");
         this.queuedOutbound += filtered.length;
         this.lastPushAt = new Date().toISOString();
@@ -68,8 +68,8 @@ export class FilesystemSyncAdapter implements SyncAdapter {
         if (!existsSync(outboundDir)) return null;
 
         const files = readdirSync(outboundDir)
-            .filter(f => f.endsWith(".jsonl") && !f.startsWith(`${this.instanceId}-`))
-            .map(f => ({ name: f, mtime: statSync(join(outboundDir, f)).mtimeMs }))
+            .filter((f) => f.endsWith(".jsonl") && !f.startsWith(`${this.instanceId}-`))
+            .map((f) => ({ name: f, mtime: statSync(join(outboundDir, f)).mtimeMs }))
             .sort((a, b) => a.mtime - b.mtime);
 
         const events: SyncEvent[] = [];

@@ -52,8 +52,7 @@ function buildRedactor(): (s: string) => string {
             }
         }
         // Also redact the admin-token printout regardless of env presence.
-        out = out.replace(/(\[AUTH\][^\n]*?token[^\n]*?:\s*)([A-Za-z0-9+/=._-]{8,})/gi,
-            "$1[REDACTED]");
+        out = out.replace(/(\[AUTH\][^\n]*?token[^\n]*?:\s*)([A-Za-z0-9+/=._-]{8,})/gi, "$1[REDACTED]");
         return out;
     };
 }
@@ -110,7 +109,8 @@ export class ConsoleInterceptor {
                         // never let capture break stdio
                     }
                 }
-                void encodingOrCb; void cb;
+                void encodingOrCb;
+                void cb;
                 return result as boolean;
             };
             return wrapped as typeof process.stdout.write;
@@ -131,7 +131,9 @@ export class ConsoleInterceptor {
     /** Subscribe to live lines. Returns an unsubscribe function. */
     onLine(listener: ConsoleLineListener): () => void {
         this.listeners.add(listener);
-        return () => { this.listeners.delete(listener); };
+        return () => {
+            this.listeners.delete(listener);
+        };
     }
 
     /** Snapshot of the most recent up to `limit` lines (oldest first). */
@@ -151,10 +153,8 @@ export class ConsoleInterceptor {
     }
 
     private captureChunk(stream: "stdout" | "stderr", chunk: unknown): void {
-        const text = typeof chunk === "string"
-            ? chunk
-            : Buffer.isBuffer(chunk) ? chunk.toString("utf-8")
-            : String(chunk);
+        const text =
+            typeof chunk === "string" ? chunk : Buffer.isBuffer(chunk) ? chunk.toString("utf-8") : String(chunk);
         const combined = this.pending[stream] + text;
         const parts = combined.split(/\r?\n/);
         // Last element is the partial trailing fragment (no newline yet).
@@ -192,7 +192,11 @@ export class ConsoleInterceptor {
         this.inEmit = true;
         try {
             for (const listener of this.listeners) {
-                try { listener(entry); } catch { /* swallow listener errors */ }
+                try {
+                    listener(entry);
+                } catch {
+                    /* swallow listener errors */
+                }
             }
         } finally {
             this.inEmit = false;

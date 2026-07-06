@@ -49,20 +49,33 @@ let service: DashboardService;
 let port: number;
 let tmpDir: string;
 let chatStore: ChatSessionStore;
+let authToken = "";
 
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1", port, path, method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const authHeader: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? authHeader : { ...authHeader, "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -97,8 +110,15 @@ export async function request(url, opts) { return globalThis.request(url, opts);
 export function escapeHtml(s) { return globalThis.escapeHtml(s); }
 export function dashboardLog() {}
 export function safeRenderStep(name, fn) { fn(); }
+export function showConfirm() { return Promise.resolve(true); }
+export function showPrompt(message, opts) { return Promise.resolve((opts && opts.defaultValue) || null); }
+export function showSelect(message, options) { return Promise.resolve(options && options[0] ? options[0].value : null); }
+export function showTransientNotice() {}
 `;
         writeFileSync(join(modTmpDir, "dashboard-core.js"), mockCoreContent, "utf8");
+        // tab-characters.js also imports ./prism-tooltips.js — provide a stub so
+        // the dynamic import resolves in the isolated temp directory.
+        writeFileSync(join(modTmpDir, "prism-tooltips.js"), "export function registerTooltipById() {}\n", "utf8");
         copyFileSync(
             join(process.cwd(), "src", "core", "operator", "public", "tab-workspace.js"),
             join(modTmpDir, "tab-workspace.js"),
@@ -128,23 +148,28 @@ export function safeRenderStep(name, fn) { fn(); }
         const charDir = join(tmpDir, "characters");
         mkdirSync(charDir, { recursive: true });
         mkdirSync(join(tmpDir, "state"), { recursive: true });
-        writeFileSync(join(charDir, "prop-agent.json"), JSON.stringify({
-            id: "prop-agent",
-            name: "Property Test Agent",
-            archetype: "sentinel",
-            profile: "individual",
-            maxRiskTier: 1,
-            allowedTools: [],
-            systemPromptOverride: "Property test",
-            defaultEmail: "prop@prism.local",
-        }), "utf8");
+        writeFileSync(
+            join(charDir, "prop-agent.json"),
+            JSON.stringify({
+                id: "prop-agent",
+                name: "Property Test Agent",
+                archetype: "sentinel",
+                profile: "individual",
+                maxRiskTier: 1,
+                allowedTools: [],
+                systemPromptOverride: "Property test",
+                defaultEmail: "prop@prism.local",
+            }),
+            "utf8",
+        );
         _setWorkspaceRootForTest(tmpDir);
 
         const bus = new ActivityBus();
         chatStore = new ChatSessionStore(":memory:");
         const registry = new ToolRegistry();
         service = new DashboardService(
-            new ApprovalQueue(), bus,
+            new ApprovalQueue(),
+            bus,
             {
                 sessionId: "prop-test-session",
                 environmentProfile: "test",
@@ -152,7 +177,11 @@ export function safeRenderStep(name, fn) { fn(); }
                 startedAt: new Date().toISOString(),
                 executionProfileSegment: "individual",
             },
-            chatStore, [], 0, undefined, undefined,
+            chatStore,
+            [],
+            0,
+            undefined,
+            undefined,
             new InMemoryProviderSecretStore(),
             undefined,
             join(tmpDir, "session-packages.json"),
@@ -164,13 +193,23 @@ export function safeRenderStep(name, fn) { fn(); }
         const addr = (service as unknown as { server: { address(): { port: number } | null } }).server.address();
         port = addr ? addr.port : 0;
         assert.ok(port > 0, "DashboardService must bind");
+
+        // Capture the admin token so requests pass the AuthGate.
+        authToken = service.getAuthGate().getToken();
+        assert.ok(authToken.length > 0, "AuthGate should expose an admin token");
     });
 
     after(async () => {
-        await service.stop();
-        chatStore.close();
+        if (service) await service.stop();
+        if (chatStore) chatStore.close();
         _resetWorkspaceRootCache();
-        rmSync(tmpDir, { recursive: true, force: true });
+        if (tmpDir) {
+            try {
+                rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+            } catch {
+                /* Windows file-lock tolerance */
+            }
+        }
     });
 
     /* ── P1. formatFileSize monotonicity ─────────────────────────────── */
@@ -178,11 +217,9 @@ export function safeRenderStep(name, fn) { fn(); }
     describe("P1: formatFileSize monotonicity", () => {
         it("larger bytes ⟹ larger or equal parsed value", () => {
             const { formatFileSize } = tabWorkspace;
-            const unitRank: Record<string, number> = { "B": 0, "KB": 1, "MB": 2, "GB": 3 };
-            fc.assert(fc.property(
-                fc.nat({ max: 2 ** 40 }),
-                fc.nat({ max: 2 ** 40 }),
-                (a: number, b: number) => {
+            const unitRank: Record<string, number> = { B: 0, KB: 1, MB: 2, GB: 3 };
+            fc.assert(
+                fc.property(fc.nat({ max: 2 ** 40 }), fc.nat({ max: 2 ** 40 }), (a: number, b: number) => {
                     const lo = Math.min(a, b);
                     const hi = Math.max(a, b);
                     const loResult = formatFileSize(lo) as string;
@@ -197,8 +234,9 @@ export function safeRenderStep(name, fn) { fn(); }
                     const hiRank = unitRank[hiMatch[2]] ?? -1;
                     // Higher unit rank OR same unit with higher number
                     return hiRank > loRank || (hiRank === loRank && hiNum >= loNum);
-                },
-            ), { numRuns: 500 });
+                }),
+                { numRuns: 500 },
+            );
         });
     });
 
@@ -207,13 +245,13 @@ export function safeRenderStep(name, fn) { fn(); }
     describe("P2: formatFileSize never returns empty or undefined", () => {
         it("always returns a non-empty string for non-negative integers", () => {
             const { formatFileSize } = tabWorkspace;
-            fc.assert(fc.property(
-                fc.nat({ max: Number.MAX_SAFE_INTEGER }),
-                (n) => {
+            fc.assert(
+                fc.property(fc.nat({ max: Number.MAX_SAFE_INTEGER }), (n) => {
                     const result = formatFileSize(n);
                     return typeof result === "string" && result.length > 0;
-                },
-            ), { numRuns: 1000 });
+                }),
+                { numRuns: 1000 },
+            );
         });
     });
 
@@ -222,16 +260,16 @@ export function safeRenderStep(name, fn) { fn(); }
     describe("P3: formatFileSize produces correct unit for magnitude", () => {
         it("bytes < 1024 → B, < 1M → KB, < 1G → MB, else GB", () => {
             const { formatFileSize } = tabWorkspace;
-            fc.assert(fc.property(
-                fc.integer({ min: 1, max: 2 ** 40 }),
-                (n) => {
+            fc.assert(
+                fc.property(fc.integer({ min: 1, max: 2 ** 40 }), (n) => {
                     const result = formatFileSize(n);
                     if (n < 1024) return result.endsWith("B") && !result.endsWith("KB");
                     if (n < 1024 ** 2) return result.endsWith("KB");
                     if (n < 1024 ** 3) return result.endsWith("MB");
                     return result.endsWith("GB");
-                },
-            ), { numRuns: 500 });
+                }),
+                { numRuns: 500 },
+            );
         });
     });
 
@@ -240,21 +278,25 @@ export function safeRenderStep(name, fn) { fn(); }
     describe("P4: path traversal sequences are always rejected", () => {
         it("any filename containing .. is rejected by the import endpoint", async () => {
             // Generate filenames containing path traversal
-            await fc.assert(fc.asyncProperty(
-                fc.array(fc.constantFrom("a", ".", "/", "\\", "..", ".."), { minLength: 1, maxLength: 30 })
-                    .map((a) => a.join(""))
-                    .filter((s) => s.includes("..")),
-                async (evilName: string) => {
-                    const { status, body } = await requestJson("POST", "/api/workspace/import", {
-                        mode: "general",
-                        fileName: evilName,
-                        content: btoa("test"),
-                        targetDir: "data",
-                    });
-                    // Must be rejected
-                    return status === 400 || status === 403 || body.error != null;
-                },
-            ), { numRuns: 50 });
+            await fc.assert(
+                fc.asyncProperty(
+                    fc
+                        .array(fc.constantFrom("a", ".", "/", "\\", "..", ".."), { minLength: 1, maxLength: 30 })
+                        .map((a) => a.join(""))
+                        .filter((s) => s.includes("..")),
+                    async (evilName: string) => {
+                        const { status, body } = await requestJson("POST", "/api/workspace/import", {
+                            mode: "general",
+                            fileName: evilName,
+                            content: btoa("test"),
+                            targetDir: "data",
+                        });
+                        // Must be rejected
+                        return status === 400 || status === 403 || body.error != null;
+                    },
+                ),
+                { numRuns: 50 },
+            );
         });
     });
 
@@ -265,23 +307,32 @@ export function safeRenderStep(name, fn) { fn(); }
 
         it("user@domain.tld always matches", () => {
             // Generate safe non-whitespace users and alpha-only domain/tld
-            const safeUser = fc.string({ minLength: 1, maxLength: 20 }).filter((s: string) => !/\s/.test(s) && s.length > 0);
-            const safeDomain = fc.string({ minLength: 1, maxLength: 15 }).filter((s: string) => !/[\s@.]/.test(s) && s.length > 0);
-            const safeTld = fc.string({ minLength: 1, maxLength: 10 }).filter((s: string) => !/[\s@.]/.test(s) && s.length > 0);
-            fc.assert(fc.property(
-                safeUser, safeDomain, safeTld,
-                (user: string, domain: string, tld: string) => {
+            const safeUser = fc
+                .string({ minLength: 1, maxLength: 20 })
+                .filter((s: string) => !/\s/.test(s) && s.length > 0);
+            const safeDomain = fc
+                .string({ minLength: 1, maxLength: 15 })
+                .filter((s: string) => !/[\s@.]/.test(s) && s.length > 0);
+            const safeTld = fc
+                .string({ minLength: 1, maxLength: 10 })
+                .filter((s: string) => !/[\s@.]/.test(s) && s.length > 0);
+            fc.assert(
+                fc.property(safeUser, safeDomain, safeTld, (user: string, domain: string, tld: string) => {
                     const email = `${user}@${domain}.${tld}`;
                     return emailPattern.test(email);
-                },
-            ), { numRuns: 200 });
+                }),
+                { numRuns: 200 },
+            );
         });
 
         it("strings without @ never match", () => {
-            fc.assert(fc.property(
-                fc.string({ minLength: 1, maxLength: 40 }).filter((s: string) => !s.includes("@")),
-                (s: string) => !emailPattern.test(s),
-            ), { numRuns: 200 });
+            fc.assert(
+                fc.property(
+                    fc.string({ minLength: 1, maxLength: 40 }).filter((s: string) => !s.includes("@")),
+                    (s: string) => !emailPattern.test(s),
+                ),
+                { numRuns: 200 },
+            );
         });
     });
 
@@ -289,17 +340,19 @@ export function safeRenderStep(name, fn) { fn(); }
 
     describe("P6: same domain always passes business domain check", () => {
         it("matching domains never trigger mismatch error", () => {
-            const safeAlpha = fc.string({ minLength: 1, maxLength: 10 }).filter((s: string) => !/[\s@.]/.test(s) && s.length > 0);
-            fc.assert(fc.property(
-                safeAlpha, safeAlpha, safeAlpha,
-                (user1: string, user2: string, domain: string) => {
+            const safeAlpha = fc
+                .string({ minLength: 1, maxLength: 10 })
+                .filter((s: string) => !/[\s@.]/.test(s) && s.length > 0);
+            fc.assert(
+                fc.property(safeAlpha, safeAlpha, safeAlpha, (user1: string, user2: string, domain: string) => {
                     const email1 = `${user1}@${domain}.com`;
                     const email2 = `${user2}@${domain}.com`;
                     const d1 = email1.split("@").pop()!.toLowerCase();
                     const d2 = email2.split("@").pop()!.toLowerCase();
                     return d1 === d2;
-                },
-            ), { numRuns: 200 });
+                }),
+                { numRuns: 200 },
+            );
         });
     });
 
@@ -308,33 +361,36 @@ export function safeRenderStep(name, fn) { fn(); }
     describe("P7: file filter is case-insensitive substring match", () => {
         it("any substring of a path always passes the filter", () => {
             const { filterWorkspaceFiles, renderWorkspaceFileTree } = tabWorkspace;
-            const pathArb = fc.array(fc.constantFrom("a", "b", "c", "/", ".", "_"), { minLength: 1, maxLength: 20 }).map((a) => a.join(""));
-            fc.assert(fc.property(
-                fc.array(
-                    fc.record({
-                        path: pathArb,
-                        name: fc.constant("file"),
-                        type: fc.constant("file" as const),
-                        size: fc.nat({ max: 10000 }),
-                    }),
-                    { minLength: 1, maxLength: 10 },
+            const pathArb = fc
+                .array(fc.constantFrom("a", "b", "c", "/", ".", "_"), { minLength: 1, maxLength: 20 })
+                .map((a) => a.join(""));
+            fc.assert(
+                fc.property(
+                    fc.array(
+                        fc.record({
+                            path: pathArb,
+                            name: fc.constant("file"),
+                            type: fc.constant("file" as const),
+                            size: fc.nat({ max: 10000 }),
+                        }),
+                        { minLength: 1, maxLength: 10 },
+                    ),
+                    (entries) => {
+                        // Pick a random entry and extract a substring of its path
+                        const target = entries[0];
+                        const fullPath = target.path as string;
+                        if (fullPath.length === 0) return true;
+                        const start = 0;
+                        const end = Math.min(3, fullPath.length);
+                        const query = fullPath.substring(start, end);
+                        const lower = query.toLowerCase();
+                        const filtered = entries.filter((e: any) => e.path.toLowerCase().indexOf(lower) !== -1);
+                        // The target entry should always be in the result (if query is substring)
+                        return filtered.some((e: any) => e.path === target.path);
+                    },
                 ),
-                (entries) => {
-                    // Pick a random entry and extract a substring of its path
-                    const target = entries[0];
-                    const fullPath = target.path as string;
-                    if (fullPath.length === 0) return true;
-                    const start = 0;
-                    const end = Math.min(3, fullPath.length);
-                    const query = fullPath.substring(start, end);
-                    const lower = query.toLowerCase();
-                    const filtered = entries.filter((e: any) =>
-                        e.path.toLowerCase().indexOf(lower) !== -1,
-                    );
-                    // The target entry should always be in the result (if query is substring)
-                    return filtered.some((e: any) => e.path === target.path);
-                },
-            ), { numRuns: 200 });
+                { numRuns: 200 },
+            );
         });
     });
 
@@ -344,23 +400,28 @@ export function safeRenderStep(name, fn) { fn(); }
         it("non-empty entries always render to non-empty innerHTML", () => {
             const { renderWorkspaceFileTree } = tabWorkspace;
             const container = (globalThis as any).document.getElementById("workspace-file-tree");
-            const pathArb = fc.array(fc.constantFrom("a", "b", "/", "_"), { minLength: 1, maxLength: 15 }).map((a) => a.join(""));
+            const pathArb = fc
+                .array(fc.constantFrom("a", "b", "/", "_"), { minLength: 1, maxLength: 15 })
+                .map((a) => a.join(""));
             const nameArb = fc.array(fc.constantFrom("a", "b"), { minLength: 1, maxLength: 8 }).map((a) => a.join(""));
-            fc.assert(fc.property(
-                fc.array(
-                    fc.record({
-                        path: pathArb,
-                        name: nameArb,
-                        type: fc.constantFrom("file" as const, "dir" as const),
-                        size: fc.nat({ max: 999999 }),
-                    }),
-                    { minLength: 1, maxLength: 10 },
+            fc.assert(
+                fc.property(
+                    fc.array(
+                        fc.record({
+                            path: pathArb,
+                            name: nameArb,
+                            type: fc.constantFrom("file" as const, "dir" as const),
+                            size: fc.nat({ max: 999999 }),
+                        }),
+                        { minLength: 1, maxLength: 10 },
+                    ),
+                    (entries) => {
+                        renderWorkspaceFileTree(entries, container);
+                        return container.innerHTML.trim().length > 0;
+                    },
                 ),
-                (entries) => {
-                    renderWorkspaceFileTree(entries, container);
-                    return container.innerHTML.trim().length > 0;
-                },
-            ), { numRuns: 200 });
+                { numRuns: 200 },
+            );
         });
     });
 
@@ -368,19 +429,24 @@ export function safeRenderStep(name, fn) { fn(); }
 
     describe("P9: collision-avoidance timestamp creates unique names", () => {
         it("same base name + different timestamps → different filenames", () => {
-            const baseArb = fc.array(fc.constantFrom("a", "b", "c", "1", "2"), { minLength: 1, maxLength: 10 }).map((a) => a.join(""));
-            fc.assert(fc.property(
-                baseArb,
-                fc.constantFrom(".json", ".txt", ".md", ".yaml"),
-                fc.integer({ min: 1000000000000, max: 9999999999999 }),
-                fc.integer({ min: 1000000000000, max: 9999999999999 }),
-                (base: string, ext: string, ts1: number, ts2: number) => {
-                    if (ts1 === ts2) return true;
-                    const name1 = `${base}_${ts1}${ext}`;
-                    const name2 = `${base}_${ts2}${ext}`;
-                    return name1 !== name2;
-                },
-            ), { numRuns: 500 });
+            const baseArb = fc
+                .array(fc.constantFrom("a", "b", "c", "1", "2"), { minLength: 1, maxLength: 10 })
+                .map((a) => a.join(""));
+            fc.assert(
+                fc.property(
+                    baseArb,
+                    fc.constantFrom(".json", ".txt", ".md", ".yaml"),
+                    fc.integer({ min: 1000000000000, max: 9999999999999 }),
+                    fc.integer({ min: 1000000000000, max: 9999999999999 }),
+                    (base: string, ext: string, ts1: number, ts2: number) => {
+                        if (ts1 === ts2) return true;
+                        const name1 = `${base}_${ts1}${ext}`;
+                        const name2 = `${base}_${ts2}${ext}`;
+                        return name1 !== name2;
+                    },
+                ),
+                { numRuns: 500 },
+            );
         });
     });
 
@@ -388,10 +454,11 @@ export function safeRenderStep(name, fn) { fn(); }
 
     describe("P10: no generated filename escapes target directory", () => {
         it("posix path.join(targetDir, sanitized) stays inside targetDir", () => {
-            const rawArb = fc.array(fc.constantFrom("a", ".", "/", "\\", "..", "~", "$"), { minLength: 1, maxLength: 30 }).map((a) => a.join(""));
-            fc.assert(fc.property(
-                rawArb,
-                (rawName: string) => {
+            const rawArb = fc
+                .array(fc.constantFrom("a", ".", "/", "\\", "..", "~", "$"), { minLength: 1, maxLength: 30 })
+                .map((a) => a.join(""));
+            fc.assert(
+                fc.property(rawArb, (rawName: string) => {
                     const sanitized = rawName
                         .replace(/\.\./g, "_")
                         .replace(/[/\\]/g, "_")
@@ -401,8 +468,9 @@ export function safeRenderStep(name, fn) { fn(); }
                     const resolved = posix.join(targetDir, sanitized);
                     // Must be inside targetDir
                     return resolved.startsWith(targetDir);
-                },
-            ), { numRuns: 500 });
+                }),
+                { numRuns: 500 },
+            );
         });
     });
 });

@@ -124,10 +124,7 @@ function stableNormalize(value: unknown): unknown {
 }
 
 function sanitizeDynamicTokens(value: string): string {
-    const withoutUuids = value.replace(
-        /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
-        "<id>",
-    );
+    const withoutUuids = value.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<id>");
 
     return withoutUuids.replace(/\bworkflow-[a-z0-9]+\b/gi, "workflow-<id>");
 }

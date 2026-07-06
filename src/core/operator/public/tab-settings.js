@@ -1,24 +1,8 @@
-import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, safeRenderStep, dashboardLog, togglePanelCollapse, formatUptime, toCsvValue } from './dashboard-core.js';
+import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, safeRenderStep, dashboardLog, togglePanelCollapse, formatUptime, toCsvValue, showConfirm, authHeaders, showPrompt, showTransientNotice } from './dashboard-core.js';
 
-function renderNotice() {
-  let el = document.getElementById('global-notice-toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'global-notice-toast';
-    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:8888;padding:10px 20px;border-radius:8px;font-size:13px;pointer-events:none;transition:opacity 0.3s;opacity:0;max-width:480px;text-align:center;';
-    document.body.appendChild(el);
-  }
-  clearTimeout(el._timer);
-  if (!state.notice) { el.style.opacity = '0'; return; }
-  const msg = typeof state.notice === 'object' ? state.notice.message : String(state.notice);
-  const isError = typeof state.notice === 'object' && state.notice.type === 'error';
-  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:8888;padding:10px 20px;border-radius:8px;font-size:13px;pointer-events:none;transition:opacity 0.3s;opacity:1;max-width:480px;text-align:center;'
-    + (isError
-      ? 'background:rgba(255,80,80,0.18);color:#ff8d8d;border:1px solid rgba(255,80,80,0.4);'
-      : 'background:rgba(124,241,200,0.12);color:#7cf1c8;border:1px solid rgba(124,241,200,0.4);');
-  el.textContent = msg;
-  el._timer = setTimeout(() => { state.notice = null; el.style.opacity = '0'; }, 4000);
-}
+// renderNotice() removed — use showTransientNotice() from dashboard-core.js instead.
+// All state.notice usages in this file route through showTransientNotice().
+
 
 var PROVIDER_META = {
   openai: { icon: '\u{1F916}', desc: 'OpenAI \u2014 GPT-5-mini, GPT-5.1, GPT-3.5 and more.' },
@@ -372,11 +356,11 @@ export
     } else {
       state.notice = 'Provider switched to ' + providerId + ' / ' + (model || 'default') + '.';
     }
-    safeRenderStep('notice', renderNotice);
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   } catch (err) {
     console.error(err);
     state.notice = { type: 'error', message: 'Failed to switch provider: ' + String(err) };
-    safeRenderStep('notice', renderNotice);
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -404,11 +388,11 @@ export
     } else {
       state.notice = 'Model switched to ' + model + '.';
     }
-    safeRenderStep('notice', renderNotice);
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   } catch (err) {
     console.error(err);
     state.notice = { type: 'error', message: 'Failed to switch model: ' + String(err) };
-    safeRenderStep('notice', renderNotice);
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -489,7 +473,7 @@ export
     safeRenderStep('header', renderHeader);
   } catch (err) {
     state.notice = { type: 'error', message: String(err) };
-    safeRenderStep('notice', renderNotice);
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -593,7 +577,7 @@ export
 export
   async function deleteMatrixEntry(pattern) {
   if (!pattern) return;
-  if (!confirm('Delete model matrix entry "' + pattern + '"?')) return;
+  if (!await showConfirm('Delete model matrix entry "' + pattern + '"?')) return;
   try {
     await request('/api/models/matrix/' + encodeURIComponent(pattern), { method: 'DELETE' });
     await refreshChrome();
@@ -1440,16 +1424,52 @@ export
       html += '<div class="ps-field"><label>Base URL</label>';
       html += '<input type="text" id="ps-url-' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.baseUrl || '') + '" placeholder="https://..." /></div>';
 
+      if (provider.supportsOauth) {
+        const useOauth = provider.useOauth || false;
+        html += '<div class="ps-field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;background:rgba(255,255,255,0.02);padding:8px 12px;border-radius:6px;border:1px solid rgba(148,163,184,0.1);">';
+        html += '  <div>';
+        html += '    <div style="font-weight:600;font-size:12px;color:#a78bfa;">OAuth Authentication</div>';
+        html += '    <div style="font-size:10px;color:var(--fg-muted);">Authenticate with Google Account instead of API key</div>';
+        html += '  </div>';
+        html += '  <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;">';
+        html += '    <input type="checkbox" id="ps-useoauth-' + escapeHtml(provider.id) + '"' + (useOauth ? ' checked' : '') + ' onchange="toggleProviderUseOauth(\'' + escapeHtml(provider.id) + '\')" style="display:none;" />';
+        html += '    <span style="position:absolute;top:0;left:0;right:0;bottom:0;background-color:' + (useOauth ? '#4f46e5' : '#334155') + ';transition:background-color .3s;border-radius:22px;border:1px solid rgba(255,255,255,0.1);">';
+        html += '      <span style="position:absolute;content:\'\';height:14px;width:14px;left:4px;bottom:3px;background-color:white;transition:transform .3s;border-radius:50%;transform:' + (useOauth ? 'translateX(18px)' : 'none') + ';"></span>';
+        html += '    </span>';
+        html += '  </label>';
+        html += '</div>';
+      }
+
       if (provider.requiresApiKey) {
-        html += '<div class="ps-field"><label>API Key</label>';
-        html += '<div class="ps-key-row">';
-        html += '<input type="' + (isKeyVisible ? 'text' : 'password') + '" id="ps-key-' + escapeHtml(provider.id) + '" placeholder="' + (provider.hasApiKey ? 'Key is set (enter new to replace)' : 'Enter API key') + '" />';
-        html += '<button class="secondary-button" onclick="toggleApiKeyVisibility(\'' + escapeHtml(provider.id) + '\')" style="white-space:nowrap;">' + (isKeyVisible ? 'Hide' : 'Show') + '</button>';
-        html += '</div>';
-        if (meta.apiKeyUrl) {
-          html += '<div style="margin-top:4px;"><a href="' + escapeHtml(meta.apiKeyUrl) + '" target="_blank" rel="noopener noreferrer" style="color:#7eb8ff;font-size:12px;">\u{1F511} Get API Key \u2192</a></div>';
+        const useOauth = provider.supportsOauth && (provider.useOauth || false);
+        if (useOauth) {
+          html += '<div class="ps-field"><label>OAuth Connection Status</label>';
+          if (provider.hasApiKey) {
+            html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(105,219,124,0.08);border:1px solid rgba(105,219,124,0.25);border-radius:6px;color:#69db7c;font-size:12px;">';
+            html += '  <span style="font-size:14px;">✔</span>';
+            html += '  <span>Connected via Google OAuth</span>';
+            html += '</div>';
+          } else {
+            html += '<div style="display:flex;flex-direction:column;gap:8px;padding:12px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.25);border-radius:8px;color:#ff8d8d;font-size:12px;">';
+            html += '  <div style="display:flex;align-items:center;gap:8px;">';
+            html += '    <span style="font-size:14px;">✖</span>';
+            html += '    <span>Disconnected</span>';
+            html += '  </div>';
+            html += '  <div style="color:var(--fg-muted);font-size:11px;">Please link your Google Account in the <strong>Channels</strong> tab to authenticate.</div>';
+            html += '</div>';
+          }
+          html += '</div>';
+        } else {
+          html += '<div class="ps-field"><label>API Key</label>';
+          html += '<div class="ps-key-row">';
+          html += '<input type="' + (isKeyVisible ? 'text' : 'password') + '" id="ps-key-' + escapeHtml(provider.id) + '" placeholder="' + (provider.hasApiKey ? 'Key is set (enter new to replace)' : 'Enter API key') + '" />';
+          html += '<button class="secondary-button" onclick="toggleApiKeyVisibility(\'' + escapeHtml(provider.id) + '\')" style="white-space:nowrap;">' + (isKeyVisible ? 'Hide' : 'Show') + '</button>';
+          html += '</div>';
+          if (meta.apiKeyUrl) {
+            html += '<div style="margin-top:4px;"><a href="' + escapeHtml(meta.apiKeyUrl) + '" target="_blank" rel="noopener noreferrer" style="color:#7eb8ff;font-size:12px;">\u{1F511} Get API Key \u2192</a></div>';
+          }
+          html += '</div>';
         }
-        html += '</div>';
       }
 
       html += '<div class="ps-field"><label>Models (comma-separated)</label>';
@@ -1492,12 +1512,14 @@ export
     const keyEl = document.getElementById('ps-key-' + eid);
     const modelsEl = document.getElementById('ps-models-' + eid);
     const defaultEl = document.getElementById('ps-default-' + eid);
-    if (urlEl || keyEl || modelsEl || defaultEl) {
+    const oauthEl = document.getElementById('ps-useoauth-' + eid);
+    if (urlEl || keyEl || modelsEl || defaultEl || oauthEl) {
       state.providerSettingsCache[eid] = {
         url: urlEl ? urlEl.value : null,
         key: keyEl ? keyEl.value : null,
         models: modelsEl ? modelsEl.value : null,
-        default: defaultEl ? defaultEl.value : null
+        default: defaultEl ? defaultEl.value : null,
+        useOauth: oauthEl ? oauthEl.checked : null
       };
     }
   }
@@ -1555,10 +1577,12 @@ export
     const keyEl = document.getElementById('ps-key-' + eid);
     const modelsEl = document.getElementById('ps-models-' + eid);
     const defaultEl = document.getElementById('ps-default-' + eid);
+    const oauthEl = document.getElementById('ps-useoauth-' + eid);
     if (urlEl && cached.url !== null) urlEl.value = cached.url;
     if (keyEl && cached.key !== null) keyEl.value = cached.key;
     if (modelsEl && cached.models !== null) modelsEl.value = cached.models;
     if (defaultEl && cached.default !== null) defaultEl.value = cached.default;
+    if (oauthEl && cached.useOauth !== null) oauthEl.checked = cached.useOauth;
   }
 }
 
@@ -1579,10 +1603,12 @@ export
   const urlInput = document.getElementById('ps-url-' + providerId);
   const modelsInput = document.getElementById('ps-models-' + providerId);
   const defaultInput = document.getElementById('ps-default-' + providerId);
+  const oauthCheckbox = document.getElementById('ps-useoauth-' + providerId);
   const baseUrl = urlInput ? urlInput.value.trim() : '';
   const modelsRaw = modelsInput ? modelsInput.value : '';
   const models = modelsRaw.split(',').map(function (m) { return m.trim(); }).filter(Boolean);
   const defaultModel = defaultInput ? defaultInput.value.trim() : '';
+  const useOauth = oauthCheckbox ? oauthCheckbox.checked : false;
 
   state.notice = null;
   var ok = true;
@@ -1590,7 +1616,13 @@ export
     await request('/api/llm/provider-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providerId: providerId, baseUrl: baseUrl, models: models, defaultModel: defaultModel })
+      body: JSON.stringify({
+        providerId: providerId,
+        baseUrl: baseUrl,
+        models: models,
+        defaultModel: defaultModel,
+        useOauth: useOauth
+      })
     });
     delete state.providerSettingsCache[providerId];
     await refreshChrome();
@@ -1602,6 +1634,42 @@ export
   }
   render();
   return ok;
+}
+
+export
+  async function toggleProviderUseOauth(providerId) {
+  const checkbox = document.getElementById('ps-useoauth-' + providerId);
+  const useOauth = checkbox ? checkbox.checked : false;
+
+  const urlInput = document.getElementById('ps-url-' + providerId);
+  const modelsInput = document.getElementById('ps-models-' + providerId);
+  const defaultInput = document.getElementById('ps-default-' + providerId);
+  const baseUrl = urlInput ? urlInput.value.trim() : '';
+  const modelsRaw = modelsInput ? modelsInput.value : '';
+  const models = modelsRaw.split(',').map(function (m) { return m.trim(); }).filter(Boolean);
+  const defaultModel = defaultInput ? defaultInput.value.trim() : '';
+
+  state.notice = null;
+  try {
+    await request('/api/llm/provider-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: providerId,
+        baseUrl: baseUrl,
+        models: models,
+        defaultModel: defaultModel,
+        useOauth: useOauth
+      })
+    });
+    delete state.providerSettingsCache[providerId];
+    await refreshChrome();
+    safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
+    state.notice = 'OAuth toggle updated for ' + providerId + '.';
+  } catch (error) {
+    state.notice = String(error);
+  }
+  render();
 }
 
 function parseDiscoveredModels(result) {
@@ -1648,18 +1716,21 @@ export
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providerId: providerId, apiKey: apiKey })
     });
+    // Clear the key from the DOM input and cache immediately after a successful save.
+    if (keyInput) keyInput.value = '';
     if (state.providerSettingsCache[providerId]) state.providerSettingsCache[providerId].key = null;
     await refreshChrome();
-    state.notice = 'API key saved for ' + providerId + '.';
+    showTransientNotice('API key saved for ' + providerId + '.', 'success');
+    state.notice = null;
   } catch (error) {
-    state.notice = String(error);
+    showTransientNotice('Failed to save API key: ' + String(error), 'error');
   }
   render();
 }
 
 export
   async function removeProviderCardApiKey(providerId) {
-  if (!confirm('Remove API key for ' + providerId + '?')) return;
+  if (!await showConfirm('Remove API key for ' + providerId + '?')) return;
   state.notice = null;
   try {
     await request('/api/llm/provider-secret?providerId=' + encodeURIComponent(providerId), { method: 'DELETE' });
@@ -2006,7 +2077,7 @@ export
       readonlyRow('Dashboard Port', location.port || '7070');
       readonlyRow('Session ID', s.sessionId);
       readonlyRow('Uptime', formatUptime(s.uptimeSeconds));
-      readonlyRow('Version', 'v0.2.0');
+      readonlyRow('Version', 'v' + (state.status && state.status.serviceVersion ? state.status.serviceVersion : (s && s.serviceVersion ? s.serviceVersion : '—')));
       readonlyRow('Node', (s.nodeVersion || '\u2014'));
       readonlyRow('Platform', (s.platform || '\u2014'));
     } else {
@@ -2017,16 +2088,35 @@ export
   /* ── Section 1b: Character Accountability (CAC) ── */
   sec('cac', 'Character Accountability (CAC)', function () {
     var cac = state.cacChain;
-    if (!cac || !cac.chains || cac.chains.length === 0) {
+    var chains = (cac && cac.chains) || [];
+
+    // Fallback: If no chains for this session, but the session character has an active assignment
+    if (chains.length === 0) {
+      var session = state.sessions ? state.sessions.find(function (x) { return x.sessionId === state.selectedSessionId; }) : null;
+      if (session && session.characterId && state.characterAssignments) {
+        var activeAss = state.characterAssignments.find(function (a) {
+          return a.characterId === session.characterId && a.state === 'active';
+        });
+        if (activeAss) {
+          chains = [{
+            assignment: activeAss,
+            events: []
+          }];
+        }
+      }
+    }
+
+    if (chains.length === 0) {
       html += '<div class="muted">No active Character Accountability Chain found for this session.</div>';
     } else {
-      for (var i = 0; i < cac.chains.length; i++) {
-        var chain = cac.chains[i];
+      for (var i = 0; i < chains.length; i++) {
+        var chain = chains[i];
         var a = chain.assignment;
         html += '<div style="border:1px solid var(--border-color);border-radius:6px;padding:12px;margin-bottom:8px;">';
         html += '<div style="font-weight:600;margin-bottom:8px;">Assignment ID: <span class="mono" style="font-size:11px;">' + escapeHtml(a.assignmentId) + '</span></div>';
         readonlyRow('Character', a.characterId);
         readonlyRow('Operator Email', a.operatorEmail);
+        readonlyRow('Operator ID (Name)', a.operatorId || 'N/A');
         readonlyRow('Prism User Email', a.prismUserEmail || 'N/A');
         readonlyRow('State', a.state);
         readonlyRow('Assigned At', formatRelativeTime(a.assignedAt));
@@ -2489,27 +2579,19 @@ export
           html += '        </span>';
           html += '      </td>';
 
-          // Actions
+          // Actions — use data-* attributes; a delegated listener handles clicks.
+          // This avoids injecting operator IDs/emails into onclick strings (XSS risk).
           html += '      <td style="padding:8px 6px; text-align:right; white-space:nowrap;">';
-          var escapedEmail = escapeHtml(op.email.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
           if (!isSelf) {
-            // Status Toggle (Suspend / Activate)
             var nextStatus = op.status === 'active' ? 'suspended' : 'active';
             var statusBtnLabel = op.status === 'active' ? '⛔ Suspend' : '✅ Activate';
-            html += '        <button class="secondary-button" onclick="changeOperatorStatus(\'' + op.id + '\', \'' + nextStatus + '\')" style="font-size:10px; padding:2px 6px; margin-right:4px;">' + statusBtnLabel + '</button>';
-
-            // Role Toggle (Admin/Viewer)
+            html += '        <button class="secondary-button op-action-btn" data-op-id="' + escapeHtml(op.id) + '" data-op-email="' + escapeHtml(op.email) + '" data-op-action="status" data-op-next="' + escapeHtml(nextStatus) + '" style="font-size:10px; padding:2px 6px; margin-right:4px;">' + statusBtnLabel + '</button>';
             var roleBtnLabel = hasAdmin ? '⬇️ Revoke Admin' : '🛡️ Make Admin';
-            html += '        <button class="secondary-button" onclick="toggleOperatorAdminRole(\'' + op.id + '\', ' + hasAdmin + ')" style="font-size:10px; padding:2px 6px; margin-right:4px;">' + roleBtnLabel + '</button>';
-
-            // Change Password
-            html += '        <button class="secondary-button" onclick="changeOperatorPassword(\'' + op.id + '\', \'' + escapedEmail + '\')" style="font-size:10px; padding:2px 6px; margin-right:4px;">🔑 Change PW</button>';
-
-            // Delete Operator
-            html += '        <button class="secondary-button" onclick="deleteOperator(\'' + op.id + '\', \'' + escapedEmail + '\')" style="font-size:10px; padding:2px 6px; color:#f87171; border-color:rgba(248,113,113,0.3);">🗑️ Delete</button>';
+            html += '        <button class="secondary-button op-action-btn" data-op-id="' + escapeHtml(op.id) + '" data-op-email="' + escapeHtml(op.email) + '" data-op-action="role" data-op-has-admin="' + (hasAdmin ? '1' : '0') + '" style="font-size:10px; padding:2px 6px; margin-right:4px;">' + roleBtnLabel + '</button>';
+            html += '        <button class="secondary-button op-action-btn" data-op-id="' + escapeHtml(op.id) + '" data-op-email="' + escapeHtml(op.email) + '" data-op-action="password" style="font-size:10px; padding:2px 6px; margin-right:4px;">🔑 Change PW</button>';
+            html += '        <button class="secondary-button op-action-btn" data-op-id="' + escapeHtml(op.id) + '" data-op-email="' + escapeHtml(op.email) + '" data-op-action="delete" style="font-size:10px; padding:2px 6px; color:#f87171; border-color:rgba(248,113,113,0.3);">🗑️ Delete</button>';
           } else {
-            // Self: can change password, but not modify roles/status or delete
-            html += '        <button class="secondary-button" onclick="changeOperatorPassword(\'' + op.id + '\', \'' + escapedEmail + '\')" style="font-size:10px; padding:2px 6px; margin-right:4px;">🔑 Change PW</button>';
+            html += '        <button class="secondary-button op-action-btn" data-op-id="' + escapeHtml(op.id) + '" data-op-email="' + escapeHtml(op.email) + '" data-op-action="password" style="font-size:10px; padding:2px 6px; margin-right:4px;">🔑 Change PW</button>';
             html += '        <span class="muted" style="font-size:10px; padding-right:8px;">(Self)</span>';
           }
           html += '      </td>';
@@ -2525,74 +2607,133 @@ export
   }
 
   container.innerHTML = html;
-}
 
-export
-  /* ── helper: section wrapper ── */
-  function sec(id, title, contentFn) {
-  var open = state.settingsSections[id] !== false;
-  html += '<div class="stg-section">';
-  html += '<div class="stg-section-header" onclick="toggleSettingsSection(\'' + id + '\')">';
-  html += '<span>' + escapeHtml(title) + '</span>';
-  html += '<span>' + (open ? '\u25BC' : '\u25B6') + '</span>';
-  html += '</div>';
-  html += '<div class="stg-section-body' + (open ? '' : ' stg-collapsed') + '">';
-  contentFn();
-  html += '</div></div>';
-}
-
-export
-  function readonlyRow(label, value, hint) {
-  html += '<div class="stg-row">';
-  html += '<span class="stg-label">' + escapeHtml(label);
-  if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-  html += '</span>';
-  html += '<span class="stg-value">' + escapeHtml(String(value || '\u2014')) + '</span>';
-  html += '</div>';
-}
-
-export
-  function badgeRow(label, value, cls) {
-  html += '<div class="stg-row">';
-  html += '<span class="stg-label">' + escapeHtml(label) + '</span>';
-  html += '<span class="stg-badge ' + cls + '">' + escapeHtml(String(value)) + '</span>';
-  html += '</div>';
-}
-
-export
-  function numberRow(label, key, hint, suffix) {
-  var val = rs ? (rs[key] != null ? rs[key] : '') : '';
-  html += '<div class="stg-row">';
-  html += '<span class="stg-label">' + escapeHtml(label);
-  if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-  html += '</span>';
-  html += '<span style="display:flex;align-items:center;gap:4px;">';
-  html += '<input class="stg-input" type="number" id="stg-' + key + '" value="' + escapeHtml(String(val)) + '" onchange="markSettingDirty(\'' + key + '\')" />';
-  if (suffix) html += '<span class="muted" style="font-size:11px;">' + escapeHtml(suffix) + '</span>';
-  html += '</span>';
-  html += '</div>';
-}
-
-export
-  function selectRow(label, key, options, hint) {
-  var val = rs ? String(rs[key] || '') : '';
-  html += '<div class="stg-row">';
-  html += '<span class="stg-label">' + escapeHtml(label);
-  if (hint) html += ' <span class="stg-hint">' + escapeHtml(hint) + '</span>';
-  html += '</span>';
-  html += '<select class="stg-select" id="stg-' + key + '" onchange="markSettingDirty(\'' + key + '\')">';
-  for (var oi = 0; oi < options.length; oi++) {
-    var opt = options[oi];
-    html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === val ? ' selected' : '') + '>' + escapeHtml(opt.label) + '</option>';
+  // Restore SR panel expand state — renderSettingsPanel injects fresh HTML from
+  // the template each time, which resets the inline display:none.  We must
+  // re-apply state.srPanelExpanded after every render so a click-to-expand
+  // isn't wiped by the next poll cycle.
+  var srPanel = document.getElementById('sr-panel');
+  if (srPanel) {
+    srPanel.style.display = state.srPanelExpanded ? '' : 'none';
+    if (state.srPanelExpanded) safeRenderStep('srPanel', renderSRPanel);
   }
-  html += '</select>';
-  html += '</div>';
+  // Attached fresh every render since container.innerHTML replaces all nodes.
+  // Reads operator identity from data-* attributes so no JS is injected into
+  // onclick strings (XSS mitigation for items 4 & 7).
+  container.querySelectorAll('.op-action-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.dataset.opId || '';
+      var email = btn.dataset.opEmail || '';
+      var action = btn.dataset.opAction || '';
+      if (action === 'status') _opChangeStatus(id, btn.dataset.opNext || 'active');
+      else if (action === 'role') _opToggleAdminRole(id, btn.dataset.opHasAdmin === '1');
+      else if (action === 'password') _opChangePassword(id, email);
+      else if (action === 'delete') _opDelete(id, email);
+    });
+  });
 }
+
+// ── Operator Management actions ──────────────────────────────────────────────
+
+export function toggleCreateOperatorForm() {
+  state.showCreateOperatorForm = !state.showCreateOperatorForm;
+  safeRenderStep('settingsPanel', renderSettingsPanel);
+}
+
+export async function submitCreateOperator() {
+  var emailEl = document.getElementById('new-op-email');
+  var nameEl = document.getElementById('new-op-name');
+  var pwEl = document.getElementById('new-op-password');
+  var email = emailEl ? emailEl.value.trim() : '';
+  var displayName = nameEl ? nameEl.value.trim() : '';
+  var password = pwEl ? pwEl.value : '';
+  if (!email || !password) { showTransientNotice('Email and password are required.', 'error'); return; }
+  try {
+    await request('/api/iam/operators', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, displayName: displayName || email.split('@')[0], password })
+    });
+    state.showCreateOperatorForm = false;
+    showTransientNotice('Operator "' + email + '" created.', 'success');
+    await _opRefreshList();
+  } catch (err) { showTransientNotice('Create failed: ' + String(err), 'error'); }
+}
+
+async function _opRefreshList() {
+  try {
+    var data = await request('/api/iam/operators');
+    state.operatorList = Array.isArray(data.operators) ? data.operators : [];
+  } catch (_) { }
+  safeRenderStep('settingsPanel', renderSettingsPanel);
+}
+
+async function _opChangeStatus(id, nextStatus) {
+  try {
+    await request('/api/iam/operators/' + encodeURIComponent(id) + '/status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus })
+    });
+    showTransientNotice('Operator status updated to ' + nextStatus + '.', 'success');
+    await _opRefreshList();
+  } catch (err) { showTransientNotice('Status change failed: ' + String(err), 'error'); }
+}
+
+async function _opToggleAdminRole(id, hasAdmin) {
+  try {
+    var method = hasAdmin ? 'DELETE' : 'PUT';
+    await request('/api/iam/operators/' + encodeURIComponent(id) + '/roles/admin', { method });
+    showTransientNotice(hasAdmin ? 'Admin role revoked.' : 'Admin role granted.', 'success');
+    await _opRefreshList();
+  } catch (err) { showTransientNotice('Role change failed: ' + String(err), 'error'); }
+}
+
+async function _opChangePassword(id, email) {
+  var newPw = await showPrompt('Set new password for "' + email + '":', {
+    placeholder: 'New password\u2026',
+    confirmLabel: 'Set Password',
+    icon: '\uD83D\uDD11'
+  });
+  if (!newPw || !newPw.trim()) return;
+  try {
+    await request('/api/iam/operators/' + encodeURIComponent(id) + '/password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPw.trim() })
+    });
+    showTransientNotice('Password updated for "' + email + '".', 'success');
+  } catch (err) { showTransientNotice('Password change failed: ' + String(err), 'error'); }
+}
+
+async function _opDelete(id, email) {
+  var confirmed = await showConfirm('Delete operator "' + email + '"?\n\nThis cannot be undone.');
+  if (!confirmed) return;
+  try {
+    await request('/api/iam/operators/' + encodeURIComponent(id), { method: 'DELETE' });
+    showTransientNotice('Operator "' + email + '" deleted.', 'success');
+    await _opRefreshList();
+  } catch (err) { showTransientNotice('Delete failed: ' + String(err), 'error'); }
+}
+
+// Expose helpers on window so any legacy/global call sites still resolve.
+export function changeOperatorStatus(id, status) { return _opChangeStatus(id, status); }
+export function toggleOperatorAdminRole(id, hasAdmin) { return _opToggleAdminRole(id, hasAdmin); }
+export function changeOperatorPassword(id, email) { return _opChangePassword(id, email); }
+export function deleteOperator(id, email) { return _opDelete(id, email); }
+
+// Exported stubs — importable symbols only; real logic is in renderSettingsPanel closure.
+export function sec() { /* closure inside renderSettingsPanel */ }
+export function readonlyRow() { /* closure inside renderSettingsPanel */ }
+export function badgeRow() { /* closure inside renderSettingsPanel */ }
+export function numberRow() { /* closure inside renderSettingsPanel */ }
+export function selectRow() { /* closure inside renderSettingsPanel */ }
 
 export
   function toggleSettingsSection(id) {
   state.settingsSections[id] = !state.settingsSections[id];
-  render();
+  // Only re-render the settings panel, not the entire dashboard.
+  safeRenderStep('settingsPanel', renderSettingsPanel);
 }
 
 export
@@ -2634,16 +2775,11 @@ export
     } else {
       state.runtimeSettings = { autoRunApprovedTier2: checked };
     }
-    state.notice = 'Auto-run on approval is now ' + (checked ? 'ENABLED' : 'DISABLED') + '.';
-    var noticeToast = document.getElementById('global-notice-toast');
-    if (noticeToast) {
-      noticeToast.textContent = state.notice;
-      noticeToast.style.opacity = '1';
-      setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
-    }
+    showTransientNotice('Auto-run on approval is now ' + (checked ? 'ENABLED' : 'DISABLED') + '.', 'success');
+    state.notice = null;
   } catch (e) {
     console.error('[settings] toggle auto-run failed', e);
-    state.notice = { type: 'error', message: 'Failed to toggle auto-run: ' + String(e) };
+    showTransientNotice('Failed to toggle auto-run: ' + String(e), 'error');
   }
   render();
 }
@@ -2813,10 +2949,17 @@ export
   state.srPanelExpanded = !state.srPanelExpanded;
   panel.style.display = state.srPanelExpanded ? '' : 'none';
   if (state.srPanelExpanded) {
-    await refreshSRStatus();
-    await refreshSRPresets();
-    await refreshSRCatalog();
-    renderSRPanel();
+    // Always render something immediately so the panel isn't blank on click.
+    safeRenderStep('srPanel', renderSRPanel);
+    // Then fetch fresh data and re-render with real content.
+    // refreshSRStatus() silently no-ops when no session is active, which is fine
+    // — renderSRPanel will show the config form using whatever state exists.
+    await Promise.all([
+      refreshSRStatus().catch(() => { }),
+      refreshSRPresets().catch(() => { }),
+      refreshSRCatalog().catch(() => { })
+    ]);
+    safeRenderStep('srPanel', renderSRPanel);
   }
 }
 
@@ -3108,7 +3251,7 @@ export
     state.srConfig.leftProviderId = sel.value;
     state.srConfig.leftModel = null;
   }
-  renderSRPanel();
+  safeRenderStep('srPanel', renderSRPanel);
 }
 
 export
@@ -3118,7 +3261,7 @@ export
     state.srConfig.rightProviderId = sel.value;
     state.srConfig.rightModel = null;
   }
-  renderSRPanel();
+  safeRenderStep('srPanel', renderSRPanel);
 }
 
 export
@@ -3150,11 +3293,11 @@ export
     state.srValidation = result.validation;
     state.srIsolationLevel = result.isolationLevel || null;
     state.notice = { message: 'SR configuration saved.', type: 'success' };
-    renderNotice();
-    renderSRPanel();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
+    safeRenderStep('srPanel', renderSRPanel);
   } catch (e) {
     state.notice = { message: 'SR save failed: ' + e, type: 'error' };
-    renderNotice();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -3173,11 +3316,11 @@ export
     state.srConfig = result.config;
     if (result.isolationLevel) state.srIsolationLevel = result.isolationLevel;
     state.notice = { message: isActive ? 'SR deactivated.' : 'SR activated! Prompts now fan out to 3 models.', type: 'success' };
-    renderNotice();
-    renderSRPanel();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
+    safeRenderStep('srPanel', renderSRPanel);
   } catch (e) {
     state.notice = { message: 'SR toggle failed: ' + e, type: 'error' };
-    renderNotice();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -3201,11 +3344,11 @@ export
     state.srIsolationLevel = result.isolationLevel || null;
     state.srIsolationAdvisory = result.isolationAdvisory || null;
     state.notice = { message: 'Preset loaded.', type: 'success' };
-    renderNotice();
-    renderSRPanel();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
+    safeRenderStep('srPanel', renderSRPanel);
   }).catch(function (e) {
     state.notice = { message: 'Load preset failed: ' + e, type: 'error' };
-    renderNotice();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   });
 }
 
@@ -3228,7 +3371,7 @@ export
   var inp = document.getElementById('sr-preset-name-input');
   if (!inp || !inp.value.trim()) {
     state.notice = { message: 'Please enter a preset name.', type: 'error' };
-    renderNotice();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
     return;
   }
   var leftProvider = document.getElementById('sr-left-provider');
@@ -3252,11 +3395,11 @@ export
     cancelSaveSRPreset();
     await refreshSRPresets();
     state.notice = { message: 'Preset "' + inp.value.trim() + '" saved.', type: 'success' };
-    renderNotice();
-    renderSRPanel();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
+    safeRenderStep('srPanel', renderSRPanel);
   } catch (e) {
     state.notice = { message: 'Save preset failed: ' + e, type: 'error' };
-    renderNotice();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -3269,17 +3412,17 @@ export
   for (var i = 0; i < (state.srPresets || []).length; i++) {
     if (state.srPresets[i].id === presetId) { presetName = state.srPresets[i].name; break; }
   }
-  if (!confirm('Delete preset "' + presetName + '"?')) return;
+  if (!await showConfirm('Delete preset "' + presetName + '"?')) return;
 
   try {
     await request('/api/sr/presets/' + encodeURIComponent(presetId), { method: 'DELETE' });
     await refreshSRPresets();
     state.notice = { message: 'Preset deleted.', type: 'success' };
-    renderNotice();
-    renderSRPanel();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
+    safeRenderStep('srPanel', renderSRPanel);
   } catch (e) {
     state.notice = { message: 'Delete preset failed: ' + e, type: 'error' };
-    renderNotice();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -3301,7 +3444,7 @@ export
     var data = await request(url);
     if (!data.left && !data.right) {
       state.notice = { message: data.reasoning || 'No qualified models available.', type: 'error' };
-      renderNotice();
+      showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
       return;
     }
     // Apply suggestions to state
@@ -3315,11 +3458,11 @@ export
       state.srConfig.rightModel = data.right.model;
     }
     state.notice = { message: '\u2728 ' + (data.reasoning || 'Models suggested.'), type: 'success' };
-    renderNotice();
-    renderSRPanel();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
+    safeRenderStep('srPanel', renderSRPanel);
   } catch (e) {
     state.notice = { message: 'Suggest models failed: ' + e, type: 'error' };
-    renderNotice();
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), typeof state.notice === 'object' && state.notice.type === 'error' ? 'error' : 'info');
   }
 }
 
@@ -3335,7 +3478,9 @@ export function initSettingsTab() {
 
   // Periodically refresh LLRE Telemetry
   refreshLlreTelemetry();
-  setInterval(refreshLlreTelemetry, 5000);
+  // Guard against interval leak on hot-reload / re-init: clear any existing interval.
+  if (window._llreTelemetryInterval) clearInterval(window._llreTelemetryInterval);
+  window._llreTelemetryInterval = setInterval(refreshLlreTelemetry, 5000);
 
   // Restore saved split
   var savedPct = localStorage.getItem('prism-provider-matrix-split');
@@ -3383,6 +3528,24 @@ export function initSettingsTab() {
 export async function refreshLlreTelemetry() {
   const sessionId = state.selectedSessionId || '';
   try {
+    const isLlreEnabled = state.runtimeSettings ? (state.runtimeSettings.llreEnabled !== false) : true;
+
+    const toggleEl = document.getElementById('llre-toggle');
+    if (toggleEl) {
+      toggleEl.checked = isLlreEnabled;
+    }
+
+    const activeBadge = document.getElementById('llre-active-status-badge');
+    if (activeBadge) {
+      if (isLlreEnabled) {
+        activeBadge.textContent = 'LLRE Port Active';
+        activeBadge.style.backgroundColor = '#4f46e5';
+      } else {
+        activeBadge.textContent = 'LLRE Port Disabled';
+        activeBadge.style.backgroundColor = '#64748b';
+      }
+    }
+
     const data = await request('/api/llre/summary?sessionId=' + encodeURIComponent(sessionId));
 
     const teqEl = document.getElementById('llre-teq-value');
@@ -3393,17 +3556,17 @@ export async function refreshLlreTelemetry() {
     const lastSyncEl = document.getElementById('llre-last-sync');
     const snrEl = document.getElementById('llre-snr-rating');
 
-    if (teqEl) teqEl.textContent = typeof data.teq === 'number' && data.count > 0 ? data.teq.toFixed(2) : '--';
-    if (rsiEl) rsiEl.textContent = typeof data.rsi === 'number' && data.count > 0 ? data.rsi.toFixed(2) : '--';
-    if (csrEl) csrEl.textContent = typeof data.csr === 'number' && data.count > 0 ? data.csr.toFixed(2) : '--';
-    if (tcaEl) tcaEl.textContent = typeof data.tca === 'number' && data.count > 0 ? data.tca.toFixed(2) : '--';
+    if (teqEl) teqEl.textContent = isLlreEnabled && typeof data.teq === 'number' && data.count > 0 ? data.teq.toFixed(2) : '--';
+    if (rsiEl) rsiEl.textContent = isLlreEnabled && typeof data.rsi === 'number' && data.count > 0 ? data.rsi.toFixed(2) : '--';
+    if (csrEl) csrEl.textContent = isLlreEnabled && typeof data.csr === 'number' && data.count > 0 ? data.csr.toFixed(2) : '--';
+    if (tcaEl) tcaEl.textContent = isLlreEnabled && typeof data.tca === 'number' && data.count > 0 ? data.tca.toFixed(2) : '--';
 
     if (costEl) {
-      costEl.textContent = typeof data.costUsd === 'number' ? '$' + data.costUsd.toFixed(4) : '$0.0000';
+      costEl.textContent = isLlreEnabled && typeof data.costUsd === 'number' ? '$' + data.costUsd.toFixed(4) : '$0.0000';
     }
 
     if (snrEl) {
-      if (typeof data.csr === 'number' && data.count > 0) {
+      if (isLlreEnabled && typeof data.csr === 'number' && data.count > 0) {
         if (data.csr >= 0.8) {
           snrEl.textContent = 'HIGH (Optimal)';
           snrEl.style.color = '#34d399';
@@ -3415,8 +3578,8 @@ export async function refreshLlreTelemetry() {
           snrEl.style.color = '#f87171';
         }
       } else {
-        snrEl.textContent = 'No Active Runs';
-        snrEl.style.color = '#c7d2fe';
+        snrEl.textContent = isLlreEnabled ? 'No Active Runs' : 'LLRE Disabled';
+        snrEl.style.color = isLlreEnabled ? '#c7d2fe' : '#64748b';
       }
     }
 
@@ -3425,6 +3588,31 @@ export async function refreshLlreTelemetry() {
     }
   } catch (err) {
     console.error('[LLRE] Telemetry fetch failed:', err);
+  }
+}
+
+export async function toggleLlrePreference(checked) {
+  dashboardLog('settings', 'llre.toggle', 'Toggling LLRE Telemetry: ' + checked);
+  try {
+    await request('/api/preferences/llre-efficacy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: checked })
+    });
+    if (state.runtimeSettings) {
+      state.runtimeSettings.llreEnabled = checked;
+    } else {
+      state.runtimeSettings = { llreEnabled: checked };
+    }
+    state.notice = 'LLRE Cognitive Economics is now ' + (checked ? 'ENABLED' : 'DISABLED') + '.';
+    showTransientNotice(state.notice, 'success');
+    state.notice = null;
+    
+    // Dynamically refresh LLRE Telemetry UI
+    refreshLlreTelemetry();
+  } catch (e) {
+    console.error('[settings] llre toggle failed', e);
+    showTransientNotice('Failed to toggle LLRE: ' + String(e), 'error');
   }
 }
 
@@ -3475,7 +3663,11 @@ export async function oauthDisconnect(provider) {
 
 export async function refreshCacChain() {
   try {
-    const res = await request('/api/cac/chain');
+    var url = '/api/cac/chain';
+    if (state.selectedSessionId) {
+      url += '?sessionId=' + encodeURIComponent(state.selectedSessionId);
+    }
+    const res = await request(url);
     state.cacChain = res;
     render();
   } catch (e) {
@@ -3497,14 +3689,26 @@ export async function refreshCacChain() {
 
 export function exportCacAuditJson(assignmentId) {
   var cac = state.cacChain;
-  if (!cac || !cac.chains) return;
-  var chain = cac.chains.find(function (c) { return c.assignment && c.assignment.assignmentId === assignmentId; });
-  if (!chain) return;
+  var chain = null;
+  if (cac && cac.chains) {
+    chain = cac.chains.find(function (c) { return c.assignment && c.assignment.assignmentId === assignmentId; });
+  }
+
+  var assignment = null;
+  var events = [];
+  if (chain) {
+    assignment = chain.assignment;
+    events = chain.events || [];
+  } else if (state.characterAssignments) {
+    assignment = state.characterAssignments.find(function (a) { return a.assignmentId === assignmentId; });
+  }
+
+  if (!assignment) return;
 
   var payload = {
     exportedAt: new Date().toISOString(),
-    assignment: chain.assignment,
-    events: chain.events || []
+    assignment: assignment,
+    events: events
   };
 
   var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -3517,7 +3721,7 @@ export function exportCacAuditJson(assignmentId) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-};
+}
 
 export async function toggleSshpPreference(checked) {
   dashboardLog('settings', 'sshp.toggle', 'Toggling SSHP Visual/DOM Redaction: ' + checked);
@@ -3533,18 +3737,14 @@ export async function toggleSshpPreference(checked) {
       state.runtimeSettings = { sshpRedactionEnabled: checked };
     }
     state.notice = 'SSHP Redaction is now ' + (checked ? 'ENABLED' : 'DISABLED') + '.';
-    var noticeToast = document.getElementById('global-notice-toast');
-    if (noticeToast) {
-      noticeToast.textContent = state.notice;
-      noticeToast.style.opacity = '1';
-      setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
-    }
+    showTransientNotice(state.notice, 'success');
+    state.notice = null;
     if (window.updateSshpShieldIndicator) {
       window.updateSshpShieldIndicator();
     }
   } catch (e) {
     console.error('[settings] sshp toggle failed', e);
-    state.notice = { type: 'error', message: 'Failed to toggle SSHP: ' + String(e) };
+    showTransientNotice('Failed to toggle SSHP: ' + String(e), 'error');
   }
 }
 
@@ -3557,16 +3757,11 @@ export async function savePowerModePreference(mode) {
       body: JSON.stringify({ powerMode: mode })
     });
     state.powerMode = data.powerMode || mode;
-    state.notice = 'LLM Power Manager switched to: ' + mode.toUpperCase() + '.';
-    var noticeToast = document.getElementById('global-notice-toast');
-    if (noticeToast) {
-      noticeToast.textContent = state.notice;
-      noticeToast.style.opacity = '1';
-      setTimeout(() => { noticeToast.style.opacity = '0'; }, 3000);
-    }
+    showTransientNotice('LLM Power Manager switched to: ' + mode.toUpperCase() + '.', 'success');
+    state.notice = null;
 
     // Rerender Settings panel to apply styling
-    renderSettingsPanel();
+    safeRenderStep('settingsPanel', renderSettingsPanel);
 
     // Trigger matrix update in case dynamic model routing preferences changed!
     if (window.updateModelMatrix) {
@@ -3574,7 +3769,7 @@ export async function savePowerModePreference(mode) {
     }
   } catch (e) {
     console.error('[settings] power mode change failed', e);
-    state.notice = { type: 'error', message: 'Failed to switch Power Mode: ' + String(e) };
+    showTransientNotice('Failed to switch Power Mode: ' + String(e), 'error');
   }
 }
 
@@ -3671,129 +3866,14 @@ export async function updatePowerTelemetry() {
   }
 }
 
-// ── Operator Management Action Handlers ──
-window.toggleCreateOperatorForm = function () {
-  state.showCreateOperatorForm = !state.showCreateOperatorForm;
-  renderSettingsPanel();
-};
-
-window.submitCreateOperator = async function () {
-  var emailEl = document.getElementById('new-op-email');
-  var nameEl = document.getElementById('new-op-name');
-  var passwordEl = document.getElementById('new-op-password');
-
-  var email = emailEl ? emailEl.value.trim() : '';
-  var name = nameEl ? nameEl.value.trim() : '';
-  var password = passwordEl ? passwordEl.value.trim() : '';
-
-  if (!email) {
-    state.notice = { type: 'error', message: 'Email address is required.' };
-    renderNotice();
-    return;
-  }
-
-  try {
-    await request('/api/iam/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, displayName: name, password: password })
-    });
-
-    state.notice = { type: 'success', message: 'Operator created successfully.' };
-    renderNotice();
-    state.showCreateOperatorForm = false;
-    await refreshOperatorList();
-  } catch (e) {
-    state.notice = { type: 'error', message: 'Failed to create operator: ' + e.message };
-    renderNotice();
-  }
-};
-
-window.changeOperatorStatus = async function (userId, newStatus) {
-  if (!confirm('Are you sure you want to set this operator status to ' + newStatus + '?')) return;
-  try {
-    await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus })
-    });
-    state.notice = { type: 'success', message: 'Operator status updated.' };
-    renderNotice();
-    await refreshOperatorList();
-  } catch (e) {
-    state.notice = { type: 'error', message: 'Failed to update status: ' + e.message };
-    renderNotice();
-  }
-};
-
-window.toggleOperatorAdminRole = async function (userId, currentlyAdmin) {
-  var action = currentlyAdmin ? 'remove' : 'add';
-  if (!confirm('Are you sure you want to ' + (currentlyAdmin ? 'revoke' : 'grant') + ' admin rights for this operator?')) return;
-  try {
-    if (currentlyAdmin) {
-      await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/roles/admin', {
-        method: 'DELETE'
-      });
-    } else {
-      await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/roles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'admin' })
-      });
-    }
-    state.notice = { type: 'success', message: 'Operator role updated.' };
-    renderNotice();
-    await refreshOperatorList();
-  } catch (e) {
-    state.notice = { type: 'error', message: 'Failed to update role: ' + e.message };
-    renderNotice();
-  }
-};
-
+// ── refreshOperatorList (used by operator management handlers above) ──
 export async function refreshOperatorList() {
   try {
     var data = await request('/api/iam/admin/users');
     state.operatorList = data.users || [];
-    renderSettingsPanel();
+    safeRenderStep('settingsPanel', renderSettingsPanel);
   } catch (e) {
     console.error('Failed to fetch operator list', e);
   }
 }
-
-window.deleteOperator = async function (userId, email) {
-  if (!confirm('Are you sure you want to permanently delete operator "' + email + '"? This cannot be undone.')) return;
-  try {
-    await request('/api/iam/admin/users/' + encodeURIComponent(userId), {
-      method: 'DELETE'
-    });
-    state.notice = { type: 'success', message: 'Operator deleted successfully.' };
-    renderNotice();
-    await refreshOperatorList();
-  } catch (e) {
-    state.notice = { type: 'error', message: 'Failed to delete operator: ' + e.message };
-    renderNotice();
-  }
-};
-
-window.changeOperatorPassword = async function (userId, email) {
-  var newPassword = prompt('Enter a new password for operator "' + email + '":');
-  if (newPassword === null) return; // cancelled
-  newPassword = newPassword.trim();
-  if (!newPassword) {
-    alert('Password cannot be empty.');
-    return;
-  }
-  try {
-    await request('/api/iam/admin/users/' + encodeURIComponent(userId) + '/password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: newPassword })
-    });
-    state.notice = { type: 'success', message: 'Operator password changed successfully.' };
-    renderNotice();
-  } catch (e) {
-    state.notice = { type: 'error', message: 'Failed to change password: ' + e.message };
-    renderNotice();
-  }
-};
 

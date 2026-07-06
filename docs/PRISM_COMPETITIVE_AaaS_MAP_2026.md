@@ -108,6 +108,9 @@ All of these are **tools** or **builders**. None has constitutional governance, 
 | Tri-model parallel fan-out (SR) | ❌ | ❌ | ✅ |
 | Multi-topology swarm primitives | ⚠️ rare | ❌ | ✅ |
 | Audit trail with SHA-256 chain | ⚠️ varies | ❌ | ✅ |
+| AI-Assisted Model Routing | ⚠️ varies | ❌ | ✅ |
+| Dynamic VRAM-Aware Scheduling | ❌ | ❌ | ✅ |
+| Deprecation & Sunset Lifecycle | ❌ | ❌ | ✅ |
 | Enterprise IAM (SSO, RBAC) | ✅ | ❌ | ❌ (Phase H) |
 
 **Recommended positioning:** *"PRISM — the open-source, self-hostable, governance-native Agents-as-a-Service runtime."*
@@ -144,6 +147,8 @@ PRISM is the **only** open-source / self-hostable / governance-native AaaS platf
 6. **SHA-256 activity hash chain.** Reproducibility is a first-class property.
 7. **Profile-aware policy engine with hard tier caps** actually enforced at runtime (verified in `policy/engine.ts`). Business profile physically cannot execute `shell_exec`; it is not a configuration suggestion.
 8. **Cryptographic governance CI gate (Gate 9).** Release blocked on unauthorized directive modification.
+9. **Advanced Model Routing & VRAM Tracking.** Hardware auto-discovery via local Ollama `/api/ps` endpoints allows VRAM-aware OOM prevention, power profile adaptation (`eco` vs `performance` vs `adaptive`), and AI-assisted model-to-role auto-configurations.
+10. **Operator-Exclusive Model Matrix.** Proprietary registry mapping providers, models, capabilities, and detailed deprecation timelines (deprecatedAt, sunsetDate, successor, deprecationReason) to maintain consistent fallback operations and prevent silent third-party endpoint breakage.
 
 ---
 

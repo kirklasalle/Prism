@@ -77,7 +77,7 @@ export class TabToolAdapter implements Tool {
     constructor(
         private readonly toolRegistry: ToolRegistry,
         private readonly consoleInterceptor?: ConsoleInterceptor,
-    ) { }
+    ) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const tab = String(request.args.tab ?? "").toLowerCase();
@@ -159,8 +159,18 @@ export class TabToolAdapter implements Tool {
                 output: {
                     tab: "settings",
                     description: "Provider & Settings — manage LLM providers, model matrix, routing, SR config",
-                    capabilities: ["list_providers", "test_provider", "view_routing", "view_model_matrix", "view_sr_config"],
-                    endpoints: ["GET /api/settings/providers", "GET /api/settings/routing", "GET /api/settings/model-matrix"],
+                    capabilities: [
+                        "list_providers",
+                        "test_provider",
+                        "view_routing",
+                        "view_model_matrix",
+                        "view_sr_config",
+                    ],
+                    endpoints: [
+                        "GET /api/settings/providers",
+                        "GET /api/settings/routing",
+                        "GET /api/settings/model-matrix",
+                    ],
                 },
             };
         }
@@ -190,7 +200,8 @@ export class TabToolAdapter implements Tool {
                 ok: true,
                 output: {
                     tab: "browser",
-                    description: "Browser Control — launch headless/visible sessions, navigate, click, type, screenshot",
+                    description:
+                        "Browser Control — launch headless/visible sessions, navigate, click, type, screenshot",
                     capabilities: ["list_sessions", "get_session_info", "diagnostics"],
                     endpoints: ["GET /api/browser/sessions", "GET /api/browser/diagnostics"],
                 },
@@ -247,7 +258,9 @@ export class TabToolAdapter implements Tool {
     private executeLogs(action: string, operation?: string, params?: Record<string, unknown>): ToolResult {
         if (action === "inspect") {
             const recentLines = this.consoleInterceptor
-                ? (this.consoleInterceptor as any).getLines(20).map((l: any) => ({ ts: l.ts, stream: l.stream, line: l.line }))
+                ? (this.consoleInterceptor as any)
+                      .getLines(20)
+                      .map((l: any) => ({ ts: l.ts, stream: l.stream, line: l.line }))
                 : [];
             return {
                 ok: true,

@@ -174,9 +174,13 @@ export async function testRetrievalMetricsCollector(): Promise<void> {
     assert.ok(stats.p95LatencyMs >= stats.p50LatencyMs);
     assert.ok(stats.p99LatencyMs >= stats.p95LatencyMs);
 
-    const diagnostics = collector.getGrowthAndDriftDiagnostics(3, 0.10);
+    const diagnostics = collector.getGrowthAndDriftDiagnostics(3, 0.1);
     assert.ok(diagnostics.metricsBufferUtilization > 0);
-    assert.ok(diagnostics.queryVolumeTrend === "up" || diagnostics.queryVolumeTrend === "stable" || diagnostics.queryVolumeTrend === "down");
+    assert.ok(
+        diagnostics.queryVolumeTrend === "up" ||
+            diagnostics.queryVolumeTrend === "stable" ||
+            diagnostics.queryVolumeTrend === "down",
+    );
     assert.ok(diagnostics.driftScore >= 0);
     assert.ok(diagnostics.alerts.length >= 0);
 

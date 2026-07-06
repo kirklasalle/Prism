@@ -8,19 +8,19 @@ import type { PrismClient } from "../api/prism-client.js";
 import { useApi, useListNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
-    Panel, DataTable, SubTabBar, StatusBadge,
-    Loading, ErrorBox, KeyValue, SectionHeader,
+    Panel,
+    DataTable,
+    SubTabBar,
+    StatusBadge,
+    Loading,
+    ErrorBox,
+    KeyValue,
+    SectionHeader,
 } from "../components/ui.js";
 
 const KANBAN_COLS = ["Backlog", "To Do", "In Progress", "Review", "Done"];
 
-export function SchedulerTab({
-    client,
-    focused,
-}: {
-    client: PrismClient;
-    focused: boolean;
-}): React.JSX.Element {
+export function SchedulerTab({ client, focused }: { client: PrismClient; focused: boolean }): React.JSX.Element {
     const [subTab, setSubTab] = useState("calendar");
     const events = useApi(client, (c) => c.getSchedulerEvents(), 10000);
     const projects = useApi(client, (c) => c.getProjects(), 15000);
@@ -37,8 +37,12 @@ export function SchedulerTab({
         }
         if (subTab === "calendar" && input === "d" && events.data?.[eventNav.selectedIndex]) {
             const evt = events.data[eventNav.selectedIndex]!;
-            client.deleteSchedulerEvent(evt.id)
-                .then(() => { setActionMsg(`Deleted: ${evt.title}`); events.refresh(); })
+            client
+                .deleteSchedulerEvent(evt.id)
+                .then(() => {
+                    setActionMsg(`Deleted: ${evt.title}`);
+                    events.refresh();
+                })
                 .catch((e: Error) => setActionMsg(`Error: ${e.message}`));
         }
     });
@@ -75,7 +79,9 @@ export function SchedulerTab({
 
             {actionMsg && (
                 <Box marginBottom={1}>
-                    <Text color={colors.info}>{symbols.arrow} {actionMsg}</Text>
+                    <Text color={colors.info}>
+                        {symbols.arrow} {actionMsg}
+                    </Text>
                 </Box>
             )}
 
@@ -95,20 +101,20 @@ export function SchedulerTab({
                                 { header: "Category", accessor: "category", width: 12 },
                                 {
                                     header: "Start",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.start ? new Date(r.start as string).toLocaleString() : ""),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        r.start ? new Date(r.start as string).toLocaleString() : "",
                                     width: 22,
                                 },
                                 {
                                     header: "End",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.end ? new Date(r.end as string).toLocaleString() : ""),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        r.end ? new Date(r.end as string).toLocaleString() : "",
                                     width: 22,
                                 },
                                 {
                                     header: "Recurring",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.recurring ? `${symbols.check} ${r.cron ?? ""}` : symbols.cross),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        r.recurring ? `${symbols.check} ${r.cron ?? ""}` : symbols.cross,
                                     width: 14,
                                 },
                             ]}
@@ -133,10 +139,14 @@ export function SchedulerTab({
                                     header: "Status",
                                     accessor: "status",
                                     width: 12,
-                                    color: ((r: Record<string, unknown>) => {
+                                    color: (r: Record<string, unknown>) => {
                                         const s = String(r.status);
-                                        return s === "active" ? colors.success : s === "completed" ? colors.info : colors.muted;
-                                    }),
+                                        return s === "active"
+                                            ? colors.success
+                                            : s === "completed"
+                                              ? colors.info
+                                              : colors.muted;
+                                    },
                                 },
                                 { header: "Milestones", accessor: "milestones", width: 12 },
                                 { header: "Tasks", accessor: "tasks", width: 8 },
@@ -155,11 +165,11 @@ export function SchedulerTab({
                     <Box gap={2}>
                         {KANBAN_COLS.map((col) => (
                             <Box key={col} flexDirection="column" width={20}>
-                                <Text bold color={colors.brand}>{col}</Text>
+                                <Text bold color={colors.brand}>
+                                    {col}
+                                </Text>
                                 <Text color={colors.border}>{"─".repeat(18)}</Text>
-                                {kanbanData[col]!.length === 0 && (
-                                    <Text color={colors.muted}>(empty)</Text>
-                                )}
+                                {kanbanData[col]!.length === 0 && <Text color={colors.muted}>(empty)</Text>}
                                 {kanbanData[col]!.map((task, i) => (
                                     <Box key={i} marginBottom={0}>
                                         <Text color={colors.text} wrap="truncate">
@@ -191,9 +201,7 @@ export function SchedulerTab({
                             </Box>
                         );
                     })}
-                    {events.data?.length === 0 && (
-                        <Text color={colors.muted}>No events for timeline.</Text>
-                    )}
+                    {events.data?.length === 0 && <Text color={colors.muted}>No events for timeline.</Text>}
                 </Box>
             )}
         </Box>

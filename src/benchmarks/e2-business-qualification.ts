@@ -26,9 +26,7 @@ interface E2QualificationArtifact {
 const OUTPUT_PATH = process.env.PRISM_E2_OUTPUT_PATH ?? "prism-output/e2-business-qualification.json";
 
 async function main(): Promise<void> {
-    const envProfile = resolveEnvironmentProfile(
-        process.env.PRISM_ENV_PROFILE ?? (process.env.CI ? "staging" : "dev"),
-    );
+    const envProfile = resolveEnvironmentProfile(process.env.PRISM_ENV_PROFILE ?? (process.env.CI ? "staging" : "dev"));
     const requestedExecutionProfile = process.env.PRISM_EXECUTION_PROFILE ?? null;
     const resolvedProfile = resolveExecutionProfileFromEnv(envProfile);
     const resolvedDescription = describeExecutionProfileResolution(resolvedProfile, envProfile);

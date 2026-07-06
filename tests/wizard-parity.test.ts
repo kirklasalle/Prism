@@ -23,14 +23,33 @@ import { SetupApiClient } from "../src/cli/api-client.js";
 
 /** Web wizard provider IDs (from setup-wizard.js and setup-wizard-advanced.js) */
 const WEB_PROVIDERS_NEEDING_KEY = [
-    "openai", "anthropic", "google", "mistral", "cohere", "groq",
-    "together", "deepseek", "perplexity", "fireworks", "openrouter",
+    "openai",
+    "anthropic",
+    "google",
+    "mistral",
+    "cohere",
+    "groq",
+    "together",
+    "deepseek",
+    "perplexity",
+    "fireworks",
+    "openrouter",
 ];
 
 /** CLI wizard provider IDs */
 const CLI_PROVIDERS = [
-    "ollama", "openai", "anthropic", "google", "mistral", "groq",
-    "together", "deepseek", "openrouter", "perplexity", "fireworks", "cohere",
+    "ollama",
+    "openai",
+    "anthropic",
+    "google",
+    "mistral",
+    "groq",
+    "together",
+    "deepseek",
+    "openrouter",
+    "perplexity",
+    "fireworks",
+    "cohere",
 ];
 
 /** CLI providers that need API keys */
@@ -38,8 +57,15 @@ const CLI_PROVIDERS_NEEDING_KEY = CLI_PROVIDERS.filter((p) => p !== "ollama");
 
 /** TUI wizard provider IDs (from SetupWizardTab.tsx — smaller subset) */
 const TUI_PROVIDERS = [
-    "ollama", "openai", "anthropic", "google", "mistral", "groq",
-    "together", "deepseek", "openrouter",
+    "ollama",
+    "openai",
+    "anthropic",
+    "google",
+    "mistral",
+    "groq",
+    "together",
+    "deepseek",
+    "openrouter",
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -47,14 +73,26 @@ const TUI_PROVIDERS = [
 // ──────────────────────────────────────────────────────────────────────────────
 
 const WEB_ADVANCED_STEPS = [
-    "profile", "workspace", "provider", "routing",
-    "guardian", "cac", "browser-scheduler", "summary-certificate",
+    "profile",
+    "workspace",
+    "provider",
+    "routing",
+    "guardian",
+    "cac",
+    "browser-scheduler",
+    "summary-certificate",
 ];
 
 /** CLI Advanced Wizard Steps (from setup-wizard-advanced.ts) */
 const CLI_ADVANCED_STEPS = [
-    "profile", "workspace", "provider", "routing",
-    "guardian", "cac", "browser-scheduler", "summary-certificate",
+    "profile",
+    "workspace",
+    "provider",
+    "routing",
+    "guardian",
+    "cac",
+    "browser-scheduler",
+    "summary-certificate",
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -62,13 +100,25 @@ const CLI_ADVANCED_STEPS = [
 // ──────────────────────────────────────────────────────────────────────────────
 
 const WEB_ROUTING_ROLES = [
-    "chat", "code-generation", "reasoning", "tool-selection",
-    "summarization", "classification", "memory-indexing", "vision",
+    "chat",
+    "code-generation",
+    "reasoning",
+    "tool-selection",
+    "summarization",
+    "classification",
+    "memory-indexing",
+    "vision",
 ];
 
 const CLI_ROUTING_ROLES = [
-    "chat", "code-generation", "reasoning", "tool-selection",
-    "summarization", "classification", "memory-indexing", "vision",
+    "chat",
+    "code-generation",
+    "reasoning",
+    "tool-selection",
+    "summarization",
+    "classification",
+    "memory-indexing",
+    "vision",
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -76,10 +126,7 @@ const CLI_ROUTING_ROLES = [
 // ──────────────────────────────────────────────────────────────────────────────
 
 /** Required fields in .prism-preferences.json from any wizard surface */
-const REQUIRED_PREFS_FIELDS = [
-    "executionProfileSegment",
-    "setupComplete",
-];
+const REQUIRED_PREFS_FIELDS = ["executionProfileSegment", "setupComplete"];
 
 /** Valid execution profile values */
 const VALID_PROFILES = ["individual", "business"];
@@ -108,10 +155,7 @@ describe("Wizard Parity — Provider List Consistency", () => {
 
     it("TUI providers are a subset of CLI providers", () => {
         for (const p of TUI_PROVIDERS) {
-            assert.ok(
-                CLI_PROVIDERS.includes(p),
-                `TUI provider '${p}' must exist in CLI provider list`,
-            );
+            assert.ok(CLI_PROVIDERS.includes(p), `TUI provider '${p}' must exist in CLI provider list`);
         }
     });
 
@@ -123,7 +167,11 @@ describe("Wizard Parity — Provider List Consistency", () => {
     it("No duplicate providers in any surface", () => {
         assert.strictEqual(new Set(CLI_PROVIDERS).size, CLI_PROVIDERS.length, "CLI: no duplicates");
         assert.strictEqual(new Set(TUI_PROVIDERS).size, TUI_PROVIDERS.length, "TUI: no duplicates");
-        assert.strictEqual(new Set(WEB_PROVIDERS_NEEDING_KEY).size, WEB_PROVIDERS_NEEDING_KEY.length, "Web: no duplicates");
+        assert.strictEqual(
+            new Set(WEB_PROVIDERS_NEEDING_KEY).size,
+            WEB_PROVIDERS_NEEDING_KEY.length,
+            "Web: no duplicates",
+        );
     });
 });
 
@@ -182,7 +230,9 @@ describe("Wizard Parity — Preferences Schema Consistency", () => {
     afterEach(() => {
         try {
             rmSync(testDir, { recursive: true, force: true });
-        } catch { /* best-effort */ }
+        } catch {
+            /* best-effort */
+        }
     });
 
     it("individual profile preferences have required fields", () => {
@@ -315,9 +365,16 @@ describe("Wizard Parity — Certificate Structure", () => {
     it("advanced wizard certificate contains all required sections", () => {
         // Certificate structure from both web and CLI advanced wizards
         const requiredSections = [
-            "profile", "workspace", "provider", "routing",
-            "guardian", "agents", "cac", "browserProfile",
-            "scheduler", "readiness",
+            "profile",
+            "workspace",
+            "provider",
+            "routing",
+            "guardian",
+            "agents",
+            "cac",
+            "browserProfile",
+            "scheduler",
+            "readiness",
         ];
 
         // Simulate certificate
@@ -328,7 +385,13 @@ describe("Wizard Parity — Certificate Structure", () => {
             routing: { strategy: "single", roleOverrides: "none" },
             guardian: { model: "not configured", authorityTier: "tier1_autonomous", autoStart: true },
             agents: { defaultSwarmTopology: "mesh" },
-            cac: { character: "not assigned", operatorEmail: "not set", prismUserEmail: "not set", assignmentId: "pending", workspaceHub: "not set" },
+            cac: {
+                character: "not assigned",
+                operatorEmail: "not set",
+                prismUserEmail: "not set",
+                assignmentId: "pending",
+                workspaceHub: "not set",
+            },
             browserProfile: { email: "not set", segment: "individual", profileId: "pending" },
             scheduler: { enabledTasks: "none" },
             readiness: { timestamp: new Date().toISOString(), ready: false },
@@ -344,10 +407,7 @@ describe("Wizard Parity — Certificate Structure", () => {
     it("certificate source is either web or cli", () => {
         const validSources = ["web", "cli"];
         for (const source of validSources) {
-            assert.ok(
-                source === "web" || source === "cli",
-                `Certificate source '${source}' must be web or cli`,
-            );
+            assert.ok(source === "web" || source === "cli", `Certificate source '${source}' must be web or cli`);
         }
     });
 

@@ -24,7 +24,10 @@ describe("SchedulerTab", () => {
         await new Promise((r) => setTimeout(r, 200));
         const frame = inst.lastFrame() ?? "";
         assert.ok(
-            frame.includes("Daily standup") || frame.includes("Calendar") || frame.includes("Scheduler") || frame.length > 10,
+            frame.includes("Daily standup") ||
+                frame.includes("Calendar") ||
+                frame.includes("Scheduler") ||
+                frame.length > 10,
             "should show scheduler content",
         );
         inst.unmount();

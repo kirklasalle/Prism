@@ -40,13 +40,15 @@ function mockDelegate(onGenerate?: (systemPrompt: string) => void): LlmDelegate 
 describe("Josephine Mode Prompt Wrapping", () => {
     it("wraps the system prompt with the Josephine Cognitive Directive when enabled", async () => {
         let capturedPrompt = "";
-        const pool = new AgentPool(mockDelegate((prompt) => {
-            capturedPrompt = prompt;
-        }));
-        
+        const pool = new AgentPool(
+            mockDelegate((prompt) => {
+                capturedPrompt = prompt;
+            }),
+        );
+
         pool.setJosephineMode(true);
         const result = await pool.dispatch({ goal: "say hello", agentId: "chat" });
-        
+
         assert.ok(result.ok);
         assert.ok(capturedPrompt.includes("COGNITIVE DIRECTIVE: JOSEPHINE MODE ENABLED"));
         assert.ok(capturedPrompt.includes("Absolute Precision: You are Josephine"));
@@ -55,13 +57,15 @@ describe("Josephine Mode Prompt Wrapping", () => {
 
     it("does not wrap the system prompt with the directive when disabled", async () => {
         let capturedPrompt = "";
-        const pool = new AgentPool(mockDelegate((prompt) => {
-            capturedPrompt = prompt;
-        }));
-        
+        const pool = new AgentPool(
+            mockDelegate((prompt) => {
+                capturedPrompt = prompt;
+            }),
+        );
+
         pool.setJosephineMode(false);
         const result = await pool.dispatch({ goal: "say hello", agentId: "chat" });
-        
+
         assert.ok(result.ok);
         assert.ok(!capturedPrompt.includes("COGNITIVE DIRECTIVE: JOSEPHINE MODE ENABLED"));
     });
@@ -75,18 +79,18 @@ describe("Guardian Agent Self-Healing with Skills Engine", () => {
         },
         async loadModel() {
             // No-op
-        }
+        },
     };
 
     it("sets SkillsEngine successfully", () => {
         const bus = new ActivityBus();
         const guardian = new GuardianAgent(bus, mockSupervisor, [], { modelPath: "models/test.gguf" });
-        
+
         let engineRegistered = false;
         const mockSkillsEngine = {
-            isMock: true
+            isMock: true,
         };
-        
+
         guardian.setSkillsEngine(mockSkillsEngine);
         assert.equal((guardian as any).skillsEngine, mockSkillsEngine);
     });
@@ -94,18 +98,18 @@ describe("Guardian Agent Self-Healing with Skills Engine", () => {
     it("autonomously queries the SkillsEngine and runs dynamic self-healing skill session", async () => {
         const bus = new ActivityBus();
         const guardian = new GuardianAgent(bus, mockSupervisor, [], { modelPath: "models/test.gguf" });
-        
+
         let routedQuery = "";
         let sessionCreatedFor = "";
         let executedSessionId = "";
-        
+
         const mockSkillsEngine = {
             async routeQuery(query: string) {
                 routedQuery = query;
                 return {
                     id: "recover_mcp_server",
                     name: "MCP Server Self-Healing Skill",
-                    tags: ["mcp", "self-heal"]
+                    tags: ["mcp", "self-heal"],
                 };
             },
             async createSession(skillId: string, parentSession: string) {
@@ -113,7 +117,7 @@ describe("Guardian Agent Self-Healing with Skills Engine", () => {
                 return {
                     sessionId: "test_sess_123",
                     skillId,
-                    status: "running"
+                    status: "running",
                 };
             },
             async executeStep(sessionId: string) {
@@ -121,21 +125,21 @@ describe("Guardian Agent Self-Healing with Skills Engine", () => {
                 return {
                     sessionId,
                     skillId: "recover_mcp_server",
-                    status: "completed"
+                    status: "completed",
                 };
-            }
+            },
         };
 
         guardian.setSkillsEngine(mockSkillsEngine);
-        
+
         // Trigger self heal
         await (guardian as any).attemptSelfHeal("mcp_server_down");
-        
+
         assert.equal(routedQuery, "mcp_server_down");
         assert.equal(sessionCreatedFor, "recover_mcp_server");
         assert.equal(executedSessionId, "test_sess_123");
         assert.equal(guardian.getStatus().issuesResolved, 1);
-        
+
         const lastAction = guardian.getStatus().recentActions.pop();
         assert.ok(lastAction);
         assert.equal(lastAction.result, "success");

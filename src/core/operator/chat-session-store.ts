@@ -50,6 +50,8 @@ export interface CreateSessionInput {
     executionProfile?: string | null;
     operatorEmail?: string | null;
     assistantEmail?: string | null;
+    llmProviderId?: string | null;
+    llmModel?: string | null;
 }
 
 export interface ChatMessage {
@@ -100,6 +102,7 @@ export interface ProviderSettingsInput {
     apiKeyHeader?: string | null;
     models?: string[];
     defaultModel?: string | null;
+    useOauth?: boolean | null;
 }
 
 import type { ISessionStore } from "../database/store-interfaces.js";
@@ -121,12 +124,12 @@ export class ChatSessionStore implements ISessionStore {
             INSERT INTO chat_sessions (
                 session_id, title, created_at, updated_at,
                 character_id, cac_assignment_id, execution_profile,
-                operator_email, assistant_email
+                operator_email, assistant_email, llm_provider_id, llm_model
             )
             VALUES (
                 :sessionId, :title, :createdAt, :updatedAt,
                 :characterId, :cacAssignmentId, :executionProfile,
-                :operatorEmail, :assistantEmail
+                :operatorEmail, :assistantEmail, :llmProviderId, :llmModel
             )
         `);
         this.insertMessageStmt = this.db.prepare(`
@@ -216,6 +219,7 @@ export class ChatSessionStore implements ISessionStore {
             );
         `);
 
+        this.ensureColumn("provider_settings", "use_oauth", "INTEGER DEFAULT 0");
         this.ensureColumn("chat_sessions", "llm_provider_id", "TEXT");
         this.ensureColumn("chat_sessions", "llm_model", "TEXT");
 
@@ -344,6 +348,54 @@ export class ChatSessionStore implements ISessionStore {
         this.ensureColumn("sr_config", "right_timeout_ms", "INTEGER");
         this.ensureColumn("sr_config", "circuit_breaker_enabled", "INTEGER DEFAULT 1");
         this.ensureColumn("sr_config", "show_hemispheres", "INTEGER DEFAULT 0");
+
+        // Database Write Protection triggers for Initialization Certificate
+        this.db.exec(`
+            DROP TRIGGER IF EXISTS prevent_cert_message_delete;
+            DROP TRIGGER IF EXISTS prevent_cert_session_delete;
+
+            CREATE TRIGGER IF NOT EXISTS prevent_cert_message_update
+            BEFORE UPDATE ON chat_messages
+            FOR EACH ROW
+            WHEN OLD.metadata_json LIKE '%"type":"certificate"%'
+            BEGIN
+                SELECT RAISE(FAIL, 'Modification of immutable Initialization Certificate is forbidden');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS prevent_cert_message_delete
+            BEFORE DELETE ON chat_messages
+            FOR EACH ROW
+            WHEN OLD.metadata_json LIKE '%"type":"certificate"%'
+              AND (SELECT COUNT(*) FROM chat_messages WHERE metadata_json LIKE '%"type":"certificate"%') <= 1
+            BEGIN
+                SELECT RAISE(FAIL, 'Deletion of immutable Initialization Certificate is forbidden');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS prevent_cert_session_update
+            BEFORE UPDATE ON chat_sessions
+            FOR EACH ROW
+            WHEN OLD.title LIKE '%Initialization Certificate%'
+            BEGIN
+                SELECT CASE
+                    WHEN NEW.title != OLD.title OR (
+                        OLD.operator_email IS NOT NULL AND 
+                        OLD.operator_email != 'operator@prism.local' AND 
+                        OLD.operator_email != 'not set' AND 
+                        NEW.operator_email != OLD.operator_email
+                    )
+                    THEN RAISE(FAIL, 'Modification of immutable Initialization Certificate session is forbidden')
+                END;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS prevent_cert_session_delete
+            BEFORE DELETE ON chat_sessions
+            FOR EACH ROW
+            WHEN OLD.title LIKE '%Initialization Certificate%'
+              AND (SELECT COUNT(*) FROM chat_sessions WHERE title LIKE '%Initialization Certificate%') <= 1
+            BEGIN
+                SELECT RAISE(FAIL, 'Deletion of immutable Initialization Certificate session is forbidden');
+            END;
+        `);
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {
@@ -358,17 +410,84 @@ export class ChatSessionStore implements ISessionStore {
         const opts: CreateSessionInput = typeof input === "string" ? { title: input } : input;
         const now = new Date().toISOString();
         const sessionId = randomUUID();
+
+        // Carry forward configurations from the previous session if any exist
+        const sessions = this.listSessions();
+        const lastSession = sessions.length > 0 ? sessions[0] : null;
+
+        const characterId =
+            opts.characterId !== undefined ? opts.characterId : lastSession ? lastSession.characterId : null;
+        const cacAssignmentId =
+            opts.cacAssignmentId !== undefined
+                ? opts.cacAssignmentId
+                : lastSession
+                  ? lastSession.cacAssignmentId
+                  : null;
+        const executionProfile =
+            opts.executionProfile !== undefined
+                ? opts.executionProfile
+                : lastSession
+                  ? lastSession.executionProfile
+                  : null;
+        const operatorEmail =
+            opts.operatorEmail !== undefined ? opts.operatorEmail : lastSession ? lastSession.operatorEmail : null;
+        const assistantEmail =
+            opts.assistantEmail !== undefined ? opts.assistantEmail : lastSession ? lastSession.assistantEmail : null;
+        const llmProviderId =
+            opts.llmProviderId !== undefined ? opts.llmProviderId : lastSession ? lastSession.llmProviderId : null;
+        const llmModel = opts.llmModel !== undefined ? opts.llmModel : lastSession ? lastSession.llmModel : null;
+
         this.insertSessionStmt.run({
             sessionId,
             title: sanitizeTitle(opts.title ?? "New Session"),
             createdAt: now,
             updatedAt: now,
-            characterId: opts.characterId ?? null,
-            cacAssignmentId: opts.cacAssignmentId ?? null,
-            executionProfile: opts.executionProfile ?? null,
-            operatorEmail: opts.operatorEmail ?? null,
-            assistantEmail: opts.assistantEmail ?? null,
+            characterId,
+            cacAssignmentId,
+            executionProfile,
+            operatorEmail,
+            assistantEmail,
+            llmProviderId,
+            llmModel,
         });
+
+        // Copy configuration draft if it exists in the last session
+        if (lastSession) {
+            try {
+                const lastDraft = this.getSessionConfigDraft(lastSession.sessionId);
+                if (lastDraft) {
+                    this.upsertSessionConfigDraft(sessionId, lastDraft.providerId, lastDraft.model, lastDraft.source);
+                }
+            } catch (_) {
+                /* non-fatal */
+            }
+
+            // Copy Spectrum Refraction session config if it exists in the last session
+            try {
+                const lastSrConfig = this.getSRConfig(lastSession.sessionId);
+                if (lastSrConfig) {
+                    this.saveSRConfig(
+                        sessionId,
+                        lastSrConfig.enabled,
+                        lastSrConfig.leftProviderId,
+                        lastSrConfig.leftModel,
+                        lastSrConfig.rightProviderId,
+                        lastSrConfig.rightModel,
+                        {
+                            leftSlot: lastSrConfig.leftSlot,
+                            rightSlot: lastSrConfig.rightSlot,
+                            leftTimeoutMs: lastSrConfig.leftTimeoutMs,
+                            rightTimeoutMs: lastSrConfig.rightTimeoutMs,
+                            circuitBreakerEnabled: lastSrConfig.circuitBreakerEnabled,
+                            showHemispheres: lastSrConfig.showHemispheres,
+                        },
+                    );
+                }
+            } catch (_) {
+                /* non-fatal */
+            }
+        }
+
         return this.getSession(sessionId)!;
     }
 
@@ -376,15 +495,20 @@ export class ChatSessionStore implements ISessionStore {
      * Phase E3b: (re)bind an existing session to a character + CAC identity.
      * Returns the refreshed session summary, or null if the session does not exist.
      */
-    bindSessionCharacter(sessionId: string, input: {
-        characterId: string;
-        cacAssignmentId?: string | null;
-        executionProfile?: string | null;
-        operatorEmail?: string | null;
-        assistantEmail?: string | null;
-    }): ChatSessionSummary | null {
+    bindSessionCharacter(
+        sessionId: string,
+        input: {
+            characterId: string;
+            cacAssignmentId?: string | null;
+            executionProfile?: string | null;
+            operatorEmail?: string | null;
+            assistantEmail?: string | null;
+        },
+    ): ChatSessionSummary | null {
         const now = new Date().toISOString();
-        const result = this.db.prepare(`
+        const result = this.db
+            .prepare(
+                `
             UPDATE chat_sessions
             SET character_id = :characterId,
                 cac_assignment_id = :cacAssignmentId,
@@ -393,15 +517,17 @@ export class ChatSessionStore implements ISessionStore {
                 assistant_email = :assistantEmail,
                 updated_at = :updatedAt
             WHERE session_id = :sessionId
-        `).run({
-            sessionId,
-            characterId: input.characterId,
-            cacAssignmentId: input.cacAssignmentId ?? null,
-            executionProfile: input.executionProfile ?? null,
-            operatorEmail: input.operatorEmail ?? null,
-            assistantEmail: input.assistantEmail ?? null,
-            updatedAt: now,
-        });
+        `,
+            )
+            .run({
+                sessionId,
+                characterId: input.characterId,
+                cacAssignmentId: input.cacAssignmentId ?? null,
+                executionProfile: input.executionProfile ?? null,
+                operatorEmail: input.operatorEmail ?? null,
+                assistantEmail: input.assistantEmail ?? null,
+                updatedAt: now,
+            });
         if (!result.changes) {
             return null;
         }
@@ -409,7 +535,9 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     listSessions(): ChatSessionSummary[] {
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT
                 s.session_id,
                 s.title,
@@ -448,7 +576,9 @@ export class ChatSessionStore implements ISessionStore {
                 GROUP BY session_id
             ) m ON m.session_id = s.session_id
             ORDER BY s.updated_at DESC
-        `).all() as Array<{
+        `,
+            )
+            .all() as Array<{
             session_id: string;
             title: string;
             created_at: string;
@@ -489,12 +619,16 @@ export class ChatSessionStore implements ISessionStore {
 
     getMessages(sessionId: string): ChatMessage[] {
         this.assertSessionExists(sessionId);
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT message_id, session_id, role, content, created_at, metadata_json
             FROM chat_messages
             WHERE session_id = :sessionId
             ORDER BY created_at ASC, message_id ASC
-        `).all({ sessionId }) as Array<{
+        `,
+            )
+            .all({ sessionId }) as Array<{
             message_id: string;
             session_id: string;
             role: "user" | "assistant" | "system" | "tool";
@@ -559,16 +693,20 @@ export class ChatSessionStore implements ISessionStore {
      */
     updateSessionOperatorEmail(sessionId: string, operatorEmail: string): void {
         this.assertSessionExists(sessionId);
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             UPDATE chat_sessions
             SET operator_email = :operatorEmail,
                 updated_at = :updatedAt
             WHERE session_id = :sessionId
-        `).run({
-            sessionId,
-            operatorEmail: operatorEmail.trim().toLowerCase(),
-            updatedAt: new Date().toISOString(),
-        });
+        `,
+            )
+            .run({
+                sessionId,
+                operatorEmail: operatorEmail.trim().toLowerCase(),
+                updatedAt: new Date().toISOString(),
+            });
     }
 
     updateSessionLlmSelection(sessionId: string, providerId: string | null, model: string | null): void {
@@ -583,25 +721,35 @@ export class ChatSessionStore implements ISessionStore {
 
     deleteSession(sessionId: string): void {
         this.assertSessionExists(sessionId);
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             DELETE FROM chat_sessions
             WHERE session_id = :sessionId
-        `).run({ sessionId });
+        `,
+            )
+            .run({ sessionId });
     }
 
     getSessionConfigDraft(sessionId: string): SessionConfigDraft | null {
         this.assertSessionExists(sessionId);
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(
+                `
             SELECT session_id, provider_id, model, updated_at, source
             FROM chat_config_drafts
             WHERE session_id = :sessionId
-        `).get({ sessionId }) as {
-            session_id: string;
-            provider_id: string | null;
-            model: string | null;
-            updated_at: string;
-            source: string;
-        } | undefined;
+        `,
+            )
+            .get({ sessionId }) as
+            | {
+                  session_id: string;
+                  provider_id: string | null;
+                  model: string | null;
+                  updated_at: string;
+                  source: string;
+              }
+            | undefined;
 
         if (!row) {
             return null;
@@ -616,11 +764,18 @@ export class ChatSessionStore implements ISessionStore {
         };
     }
 
-    upsertSessionConfigDraft(sessionId: string, providerId: string | null, model: string | null, source: string): SessionConfigDraft {
+    upsertSessionConfigDraft(
+        sessionId: string,
+        providerId: string | null,
+        model: string | null,
+        source: string,
+    ): SessionConfigDraft {
         this.assertSessionExists(sessionId);
         const updatedAt = new Date().toISOString();
 
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO chat_config_drafts (session_id, provider_id, model, updated_at, source)
             VALUES (:sessionId, :providerId, :model, :updatedAt, :source)
             ON CONFLICT(session_id) DO UPDATE SET
@@ -628,23 +783,29 @@ export class ChatSessionStore implements ISessionStore {
                 model = excluded.model,
                 updated_at = excluded.updated_at,
                 source = excluded.source
-        `).run({
-            sessionId,
-            providerId: providerId?.trim() || null,
-            model: model?.trim() || null,
-            updatedAt,
-            source: source.trim() || "dashboard",
-        });
+        `,
+            )
+            .run({
+                sessionId,
+                providerId: providerId?.trim() || null,
+                model: model?.trim() || null,
+                updatedAt,
+                source: source.trim() || "dashboard",
+            });
 
         return this.getSessionConfigDraft(sessionId)!;
     }
 
     clearSessionConfigDraft(sessionId: string): void {
         this.assertSessionExists(sessionId);
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             DELETE FROM chat_config_drafts
             WHERE session_id = :sessionId
-        `).run({ sessionId });
+        `,
+            )
+            .run({ sessionId });
     }
 
     appendSessionConfigHistory(
@@ -660,7 +821,9 @@ export class ChatSessionStore implements ISessionStore {
         const appliedAt = new Date().toISOString();
         const changedFields = getChangedConfigFields(previousProviderId, previousModel, nextProviderId, nextModel);
 
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO chat_config_history (
                 history_id,
                 session_id,
@@ -682,17 +845,19 @@ export class ChatSessionStore implements ISessionStore {
                 :appliedAt,
                 :source
             )
-        `).run({
-            historyId,
-            sessionId,
-            previousProviderId: previousProviderId?.trim() || null,
-            previousModel: previousModel?.trim() || null,
-            nextProviderId: nextProviderId?.trim() || null,
-            nextModel: nextModel?.trim() || null,
-            changedFieldsJson: JSON.stringify(changedFields),
-            appliedAt,
-            source: source.trim() || "dashboard",
-        });
+        `,
+            )
+            .run({
+                historyId,
+                sessionId,
+                previousProviderId: previousProviderId?.trim() || null,
+                previousModel: previousModel?.trim() || null,
+                nextProviderId: nextProviderId?.trim() || null,
+                nextModel: nextModel?.trim() || null,
+                changedFieldsJson: JSON.stringify(changedFields),
+                appliedAt,
+                source: source.trim() || "dashboard",
+            });
 
         return {
             historyId,
@@ -710,7 +875,9 @@ export class ChatSessionStore implements ISessionStore {
     listSessionConfigHistory(sessionId: string, limit: number = 10): SessionConfigHistoryEntry[] {
         this.assertSessionExists(sessionId);
         const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT
                 history_id,
                 session_id,
@@ -725,7 +892,9 @@ export class ChatSessionStore implements ISessionStore {
             WHERE session_id = :sessionId
             ORDER BY applied_at DESC
             LIMIT :limit
-        `).all({ sessionId, limit: safeLimit }) as Array<{
+        `,
+            )
+            .all({ sessionId, limit: safeLimit }) as Array<{
             history_id: string;
             session_id: string;
             previous_provider_id: string | null;
@@ -751,19 +920,26 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     getProviderSettings(providerId: PrismLlmProviderId): PersistedProviderSettings | null {
-        const row = this.db.prepare(`
-            SELECT provider_id, base_url, api_key_header, models_json, default_model, updated_at, source
+        const row = this.db
+            .prepare(
+                `
+            SELECT provider_id, base_url, api_key_header, models_json, default_model, updated_at, source, use_oauth
             FROM provider_settings
             WHERE provider_id = :providerId
-        `).get({ providerId }) as {
-            provider_id: PrismLlmProviderId;
-            base_url: string | null;
-            api_key_header: string | null;
-            models_json: string;
-            default_model: string | null;
-            updated_at: string;
-            source: string;
-        } | undefined;
+        `,
+            )
+            .get({ providerId }) as
+            | {
+                  provider_id: PrismLlmProviderId;
+                  base_url: string | null;
+                  api_key_header: string | null;
+                  models_json: string;
+                  default_model: string | null;
+                  updated_at: string;
+                  source: string;
+                  use_oauth: number;
+              }
+            | undefined;
 
         if (!row) {
             return null;
@@ -777,15 +953,20 @@ export class ChatSessionStore implements ISessionStore {
             defaultModel: row.default_model,
             updatedAt: row.updated_at,
             source: row.source,
+            useOauth: Boolean(row.use_oauth),
         };
     }
 
     listProviderSettings(): PersistedProviderSettings[] {
-        const rows = this.db.prepare(`
-            SELECT provider_id, base_url, api_key_header, models_json, default_model, updated_at, source
+        const rows = this.db
+            .prepare(
+                `
+            SELECT provider_id, base_url, api_key_header, models_json, default_model, updated_at, source, use_oauth
             FROM provider_settings
             ORDER BY provider_id ASC
-        `).all() as Array<{
+        `,
+            )
+            .all() as Array<{
             provider_id: PrismLlmProviderId;
             base_url: string | null;
             api_key_header: string | null;
@@ -793,6 +974,7 @@ export class ChatSessionStore implements ISessionStore {
             default_model: string | null;
             updated_at: string;
             source: string;
+            use_oauth: number;
         }>;
 
         return rows.map((row) => ({
@@ -803,6 +985,7 @@ export class ChatSessionStore implements ISessionStore {
             defaultModel: row.default_model,
             updatedAt: row.updated_at,
             source: row.source,
+            useOauth: Boolean(row.use_oauth),
         }));
     }
 
@@ -814,11 +997,12 @@ export class ChatSessionStore implements ISessionStore {
         const updatedAt = new Date().toISOString();
         const models = normalizeProviderModels(settings.models ?? []);
         const defaultModel = normalizeOptionalText(settings.defaultModel);
-        const resolvedDefaultModel = defaultModel && models.includes(defaultModel)
-            ? defaultModel
-            : (defaultModel || models[0] || null);
+        const resolvedDefaultModel =
+            defaultModel && models.includes(defaultModel) ? defaultModel : defaultModel || models[0] || null;
 
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO provider_settings (
                 provider_id,
                 base_url,
@@ -826,7 +1010,8 @@ export class ChatSessionStore implements ISessionStore {
                 models_json,
                 default_model,
                 updated_at,
-                source
+                source,
+                use_oauth
             ) VALUES (
                 :providerId,
                 :baseUrl,
@@ -834,7 +1019,8 @@ export class ChatSessionStore implements ISessionStore {
                 :modelsJson,
                 :defaultModel,
                 :updatedAt,
-                :source
+                :source,
+                :useOauth
             )
             ON CONFLICT(provider_id) DO UPDATE SET
                 base_url = excluded.base_url,
@@ -842,16 +1028,20 @@ export class ChatSessionStore implements ISessionStore {
                 models_json = excluded.models_json,
                 default_model = excluded.default_model,
                 updated_at = excluded.updated_at,
-                source = excluded.source
-        `).run({
-            providerId,
-            baseUrl: normalizeOptionalText(settings.baseUrl),
-            apiKeyHeader: normalizeOptionalText(settings.apiKeyHeader),
-            modelsJson: JSON.stringify(models),
-            defaultModel: resolvedDefaultModel,
-            updatedAt,
-            source: source.trim() || "dashboard",
-        });
+                source = excluded.source,
+                use_oauth = excluded.use_oauth
+        `,
+            )
+            .run({
+                providerId,
+                baseUrl: normalizeOptionalText(settings.baseUrl),
+                apiKeyHeader: normalizeOptionalText(settings.apiKeyHeader),
+                modelsJson: JSON.stringify(models),
+                defaultModel: resolvedDefaultModel,
+                updatedAt,
+                source: source.trim() || "dashboard",
+                useOauth: settings.useOauth ? 1 : 0,
+            });
 
         return this.getProviderSettings(providerId)!;
     }
@@ -860,7 +1050,9 @@ export class ChatSessionStore implements ISessionStore {
 
     saveRoutingConfig(config: RoutingConfig): void {
         const updatedAt = new Date().toISOString();
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO routing_config (
                 config_key, strategy,
                 role_overrides_json, agent_overrides_json,
@@ -877,35 +1069,43 @@ export class ChatSessionStore implements ISessionStore {
                 modality_overrides_json = excluded.modality_overrides_json,
                 preferred_modality = excluded.preferred_modality,
                 updated_at = excluded.updated_at
-        `).run({
-            strategy: config.strategy || "single",
-            roleOverridesJson: JSON.stringify(config.roleOverrides ?? {}),
-            agentOverridesJson: JSON.stringify(config.agentOverrides ?? {}),
-            modalityOverridesJson: JSON.stringify(config.modalityOverrides ?? {}),
-            preferredModality: config.preferredModality ?? null,
-            updatedAt,
-        });
+        `,
+            )
+            .run({
+                strategy: config.strategy || "single",
+                roleOverridesJson: JSON.stringify(config.roleOverrides ?? {}),
+                agentOverridesJson: JSON.stringify(config.agentOverrides ?? {}),
+                modalityOverridesJson: JSON.stringify(config.modalityOverrides ?? {}),
+                preferredModality: config.preferredModality ?? null,
+                updatedAt,
+            });
     }
 
     loadRoutingConfig(): RoutingConfig | null {
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(
+                `
             SELECT strategy, role_overrides_json, agent_overrides_json,
                    modality_overrides_json, preferred_modality
             FROM routing_config
             WHERE config_key = 'default'
             LIMIT 1
-        `).get() as {
-            strategy: string;
-            role_overrides_json: string;
-            agent_overrides_json: string;
-            modality_overrides_json: string;
-            preferred_modality: string | null;
-        } | undefined;
+        `,
+            )
+            .get() as
+            | {
+                  strategy: string;
+                  role_overrides_json: string;
+                  agent_overrides_json: string;
+                  modality_overrides_json: string;
+                  preferred_modality: string | null;
+              }
+            | undefined;
 
         if (!row) return null;
 
         return {
-            strategy: (row.strategy === "multi" || row.strategy === "modality") ? row.strategy : "single",
+            strategy: row.strategy === "multi" || row.strategy === "modality" ? row.strategy : "single",
             roleOverrides: safeJsonParse(row.role_overrides_json),
             agentOverrides: safeJsonParse(row.agent_overrides_json),
             modalityOverrides: safeJsonParse(row.modality_overrides_json),
@@ -916,7 +1116,9 @@ export class ChatSessionStore implements ISessionStore {
     // ── Model profile persistence ─────────────────────────────────────
 
     listModelProfiles(): ModelCapabilityProfile[] {
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT pattern, label, tier, parameter_size, parameters_billions,
                    context_window, estimated_vram_mb, max_output_tokens,
                    adaptive_prompt_budget, strengths_json, modalities_json,
@@ -924,7 +1126,9 @@ export class ChatSessionStore implements ISessionStore {
                    deprecated, deprecated_at, sunset_date, successor, deprecation_reason
             FROM model_profiles
             ORDER BY pattern ASC
-        `).all() as Array<{
+        `,
+            )
+            .all() as Array<{
             pattern: string;
             label: string;
             tier: number;
@@ -945,31 +1149,36 @@ export class ChatSessionStore implements ISessionStore {
             deprecation_reason: string | null;
         }>;
 
-        return rows.map((row) => ({
-            pattern: row.pattern,
-            label: row.label,
-            tier: row.tier as 1 | 2 | 3 | 4 | 5,
-            parameterSize: row.parameter_size as "tiny" | "small" | "medium" | "large" | "frontier",
-            parametersBillions: row.parameters_billions,
-            contextWindow: row.context_window,
-            estimatedVramMb: row.estimated_vram_mb,
-            maxOutputTokens: row.max_output_tokens,
-            adaptivePromptBudget: row.adaptive_prompt_budget,
-            strengths: (JSON.parse(row.strengths_json || "[]") as string[]),
-            modalities: (JSON.parse(row.modalities_json || '["text"]') as string[]),
-            locality: row.locality as "local" | "cloud",
-            ...(row.version_constraint ? { versionConstraint: row.version_constraint } : {}),
-            ...(row.deprecated ? { deprecated: true } : {}),
-            ...(row.deprecated_at ? { deprecatedAt: row.deprecated_at } : {}),
-            ...(row.sunset_date ? { sunsetDate: row.sunset_date } : {}),
-            ...(row.successor ? { successor: row.successor } : {}),
-            ...(row.deprecation_reason ? { deprecationReason: row.deprecation_reason } : {}),
-        } as ModelCapabilityProfile));
+        return rows.map(
+            (row) =>
+                ({
+                    pattern: row.pattern,
+                    label: row.label,
+                    tier: row.tier as 1 | 2 | 3 | 4 | 5,
+                    parameterSize: row.parameter_size as "tiny" | "small" | "medium" | "large" | "frontier",
+                    parametersBillions: row.parameters_billions,
+                    contextWindow: row.context_window,
+                    estimatedVramMb: row.estimated_vram_mb,
+                    maxOutputTokens: row.max_output_tokens,
+                    adaptivePromptBudget: row.adaptive_prompt_budget,
+                    strengths: JSON.parse(row.strengths_json || "[]") as string[],
+                    modalities: JSON.parse(row.modalities_json || '["text"]') as string[],
+                    locality: row.locality as "local" | "cloud",
+                    ...(row.version_constraint ? { versionConstraint: row.version_constraint } : {}),
+                    ...(row.deprecated ? { deprecated: true } : {}),
+                    ...(row.deprecated_at ? { deprecatedAt: row.deprecated_at } : {}),
+                    ...(row.sunset_date ? { sunsetDate: row.sunset_date } : {}),
+                    ...(row.successor ? { successor: row.successor } : {}),
+                    ...(row.deprecation_reason ? { deprecationReason: row.deprecation_reason } : {}),
+                }) as ModelCapabilityProfile,
+        );
     }
 
     upsertModelProfile(profile: ModelCapabilityProfile): void {
         const updatedAt = new Date().toISOString();
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO model_profiles (
                 pattern, label, tier, parameter_size, parameters_billions,
                 context_window, estimated_vram_mb, max_output_tokens,
@@ -1004,33 +1213,39 @@ export class ChatSessionStore implements ISessionStore {
                 successor = excluded.successor,
                 deprecation_reason = excluded.deprecation_reason,
                 updated_at = excluded.updated_at
-        `).run({
-            pattern: profile.pattern,
-            label: profile.label,
-            tier: profile.tier,
-            parameterSize: profile.parameterSize,
-            parametersBillions: profile.parametersBillions,
-            contextWindow: profile.contextWindow,
-            estimatedVramMb: profile.estimatedVramMb,
-            maxOutputTokens: profile.maxOutputTokens,
-            adaptivePromptBudget: profile.adaptivePromptBudget,
-            strengthsJson: JSON.stringify(profile.strengths ?? []),
-            modalitiesJson: JSON.stringify(profile.modalities ?? ["text"]),
-            locality: profile.locality,
-            versionConstraint: (profile as any).versionConstraint ?? null,
-            deprecated: profile.deprecated ? 1 : 0,
-            deprecatedAt: profile.deprecatedAt ?? null,
-            sunsetDate: profile.sunsetDate ?? null,
-            successor: profile.successor ?? null,
-            deprecationReason: profile.deprecationReason ?? null,
-            updatedAt,
-        });
+        `,
+            )
+            .run({
+                pattern: profile.pattern,
+                label: profile.label,
+                tier: profile.tier,
+                parameterSize: profile.parameterSize,
+                parametersBillions: profile.parametersBillions,
+                contextWindow: profile.contextWindow,
+                estimatedVramMb: profile.estimatedVramMb,
+                maxOutputTokens: profile.maxOutputTokens,
+                adaptivePromptBudget: profile.adaptivePromptBudget,
+                strengthsJson: JSON.stringify(profile.strengths ?? []),
+                modalitiesJson: JSON.stringify(profile.modalities ?? ["text"]),
+                locality: profile.locality,
+                versionConstraint: (profile as any).versionConstraint ?? null,
+                deprecated: profile.deprecated ? 1 : 0,
+                deprecatedAt: profile.deprecatedAt ?? null,
+                sunsetDate: profile.sunsetDate ?? null,
+                successor: profile.successor ?? null,
+                deprecationReason: profile.deprecationReason ?? null,
+                updatedAt,
+            });
     }
 
     removeModelProfile(pattern: string): boolean {
-        const result = this.db.prepare(`
+        const result = this.db
+            .prepare(
+                `
             DELETE FROM model_profiles WHERE pattern = :pattern
-        `).run({ pattern });
+        `,
+            )
+            .run({ pattern });
         return (result as any).changes > 0;
     }
 
@@ -1039,11 +1254,15 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     private assertSessionExists(sessionId: string): void {
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(
+                `
             SELECT session_id
             FROM chat_sessions
             WHERE session_id = :sessionId
-        `).get({ sessionId }) as { session_id: string } | undefined;
+        `,
+            )
+            .get({ sessionId }) as { session_id: string } | undefined;
 
         if (!row) {
             throw new Error(`Unknown chat session: ${sessionId}`);
@@ -1055,35 +1274,49 @@ export class ChatSessionStore implements ISessionStore {
     saveAttachment(attachment: Omit<ChatAttachment, "attachmentId" | "createdAt">): ChatAttachment {
         const attachmentId = randomUUID();
         const createdAt = new Date().toISOString();
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO chat_attachments (attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at)
             VALUES (:attachmentId, :messageId, :sessionId, :fileName, :mimeType, :sizeBytes, :storagePath, :thumbnailPath, :includeInContext, :createdAt)
-        `).run({
-            attachmentId,
-            messageId: attachment.messageId,
-            sessionId: attachment.sessionId,
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
-            sizeBytes: attachment.sizeBytes,
-            storagePath: attachment.storagePath,
-            thumbnailPath: attachment.thumbnailPath ?? null,
-            includeInContext: attachment.includeInContext ? 1 : 0,
-            createdAt,
-        });
+        `,
+            )
+            .run({
+                attachmentId,
+                messageId: attachment.messageId,
+                sessionId: attachment.sessionId,
+                fileName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                sizeBytes: attachment.sizeBytes,
+                storagePath: attachment.storagePath,
+                thumbnailPath: attachment.thumbnailPath ?? null,
+                includeInContext: attachment.includeInContext ? 1 : 0,
+                createdAt,
+            });
         return { ...attachment, attachmentId, createdAt };
     }
 
     getAttachments(messageId: string): ChatAttachment[] {
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at
             FROM chat_attachments
             WHERE message_id = :messageId
             ORDER BY created_at ASC
-        `).all({ messageId }) as Array<{
-            attachment_id: string; message_id: string; session_id: string;
-            file_name: string; mime_type: string; size_bytes: number;
-            storage_path: string; thumbnail_path: string | null;
-            include_in_context: number; created_at: string;
+        `,
+            )
+            .all({ messageId }) as Array<{
+            attachment_id: string;
+            message_id: string;
+            session_id: string;
+            file_name: string;
+            mime_type: string;
+            size_bytes: number;
+            storage_path: string;
+            thumbnail_path: string | null;
+            include_in_context: number;
+            created_at: string;
         }>;
 
         return rows.map((row) => ({
@@ -1101,16 +1334,26 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     getSessionAttachments(sessionId: string): ChatAttachment[] {
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at
             FROM chat_attachments
             WHERE session_id = :sessionId
             ORDER BY created_at ASC
-        `).all({ sessionId }) as Array<{
-            attachment_id: string; message_id: string; session_id: string;
-            file_name: string; mime_type: string; size_bytes: number;
-            storage_path: string; thumbnail_path: string | null;
-            include_in_context: number; created_at: string;
+        `,
+            )
+            .all({ sessionId }) as Array<{
+            attachment_id: string;
+            message_id: string;
+            session_id: string;
+            file_name: string;
+            mime_type: string;
+            size_bytes: number;
+            storage_path: string;
+            thumbnail_path: string | null;
+            include_in_context: number;
+            created_at: string;
         }>;
 
         return rows.map((row) => ({
@@ -1128,17 +1371,29 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     getAttachmentById(attachmentId: string): ChatAttachment | undefined {
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(
+                `
             SELECT attachment_id, message_id, session_id, file_name, mime_type, size_bytes, storage_path, thumbnail_path, include_in_context, created_at
             FROM chat_attachments
             WHERE attachment_id = :attachmentId
             LIMIT 1
-        `).get({ attachmentId }) as {
-            attachment_id: string; message_id: string; session_id: string;
-            file_name: string; mime_type: string; size_bytes: number;
-            storage_path: string; thumbnail_path: string | null;
-            include_in_context: number; created_at: string;
-        } | undefined;
+        `,
+            )
+            .get({ attachmentId }) as
+            | {
+                  attachment_id: string;
+                  message_id: string;
+                  session_id: string;
+                  file_name: string;
+                  mime_type: string;
+                  size_bytes: number;
+                  storage_path: string;
+                  thumbnail_path: string | null;
+                  include_in_context: number;
+                  created_at: string;
+              }
+            | undefined;
 
         if (!row) {
             return undefined;
@@ -1159,9 +1414,13 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     deleteAttachment(attachmentId: string): boolean {
-        const result = this.db.prepare(`
+        const result = this.db
+            .prepare(
+                `
             DELETE FROM chat_attachments WHERE attachment_id = :attachmentId
-        `).run({ attachmentId });
+        `,
+            )
+            .run({ attachmentId });
         return (result as any).changes > 0;
     }
 
@@ -1180,25 +1439,31 @@ export class ChatSessionStore implements ISessionStore {
         circuitBreakerEnabled: boolean;
         showHemispheres: boolean;
     } | null {
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(
+                `
             SELECT enabled, left_provider_id, left_model, right_provider_id, right_model,
                    left_slot, right_slot, left_timeout_ms, right_timeout_ms,
                    circuit_breaker_enabled, show_hemispheres
             FROM sr_config
             WHERE session_id = :sessionId
-        `).get({ sessionId }) as {
-            enabled: number;
-            left_provider_id: string | null;
-            left_model: string | null;
-            right_provider_id: string | null;
-            right_model: string | null;
-            left_slot: string | null;
-            right_slot: string | null;
-            left_timeout_ms: number | null;
-            right_timeout_ms: number | null;
-            circuit_breaker_enabled: number | null;
-            show_hemispheres: number | null;
-        } | undefined;
+        `,
+            )
+            .get({ sessionId }) as
+            | {
+                  enabled: number;
+                  left_provider_id: string | null;
+                  left_model: string | null;
+                  right_provider_id: string | null;
+                  right_model: string | null;
+                  left_slot: string | null;
+                  right_slot: string | null;
+                  left_timeout_ms: number | null;
+                  right_timeout_ms: number | null;
+                  circuit_breaker_enabled: number | null;
+                  show_hemispheres: number | null;
+              }
+            | undefined;
 
         if (!row) return null;
 
@@ -1235,7 +1500,9 @@ export class ChatSessionStore implements ISessionStore {
     ): void {
         this.assertSessionExists(sessionId);
         const updatedAt = new Date().toISOString();
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO sr_config (session_id, enabled, left_provider_id, left_model, right_provider_id, right_model,
                 left_slot, right_slot, left_timeout_ms, right_timeout_ms, circuit_breaker_enabled, show_hemispheres, updated_at)
             VALUES (:sessionId, :enabled, :leftProviderId, :leftModel, :rightProviderId, :rightModel,
@@ -1253,41 +1520,63 @@ export class ChatSessionStore implements ISessionStore {
                 circuit_breaker_enabled = excluded.circuit_breaker_enabled,
                 show_hemispheres = excluded.show_hemispheres,
                 updated_at = excluded.updated_at
-        `).run({
-            sessionId,
-            enabled: enabled ? 1 : 0,
-            leftProviderId: leftProviderId?.trim() || null,
-            leftModel: leftModel?.trim() || null,
-            rightProviderId: rightProviderId?.trim() || null,
-            rightModel: rightModel?.trim() || null,
-            leftSlot: opts?.leftSlot ?? null,
-            rightSlot: opts?.rightSlot ?? null,
-            leftTimeoutMs: opts?.leftTimeoutMs ?? null,
-            rightTimeoutMs: opts?.rightTimeoutMs ?? null,
-            circuitBreakerEnabled: opts?.circuitBreakerEnabled !== false ? 1 : 0,
-            showHemispheres: opts?.showHemispheres ? 1 : 0,
-            updatedAt,
-        });
+        `,
+            )
+            .run({
+                sessionId,
+                enabled: enabled ? 1 : 0,
+                leftProviderId: leftProviderId?.trim() || null,
+                leftModel: leftModel?.trim() || null,
+                rightProviderId: rightProviderId?.trim() || null,
+                rightModel: rightModel?.trim() || null,
+                leftSlot: opts?.leftSlot ?? null,
+                rightSlot: opts?.rightSlot ?? null,
+                leftTimeoutMs: opts?.leftTimeoutMs ?? null,
+                rightTimeoutMs: opts?.rightTimeoutMs ?? null,
+                circuitBreakerEnabled: opts?.circuitBreakerEnabled !== false ? 1 : 0,
+                showHemispheres: opts?.showHemispheres ? 1 : 0,
+                updatedAt,
+            });
     }
 
     deleteSRConfig(sessionId: string): void {
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             DELETE FROM sr_config WHERE session_id = :sessionId
-        `).run({ sessionId });
+        `,
+            )
+            .run({ sessionId });
     }
 
     // ── SR Presets (named saved configurations) ─────────────────────────
 
-    listSRPresets(scope: "global" | "session", scopeId?: string): Array<{
-        id: string; name: string; scope: string; scopeId: string | null;
-        leftProviderId: string | null; leftModel: string | null;
-        rightProviderId: string | null; rightModel: string | null;
-        createdAt: string; updatedAt: string;
+    listSRPresets(
+        scope: "global" | "session",
+        scopeId?: string,
+    ): Array<{
+        id: string;
+        name: string;
+        scope: string;
+        scopeId: string | null;
+        leftProviderId: string | null;
+        leftModel: string | null;
+        rightProviderId: string | null;
+        rightModel: string | null;
+        createdAt: string;
+        updatedAt: string;
     }> {
-        const rows = scope === "global"
-            ? this.db.prepare(`SELECT * FROM sr_presets WHERE scope = 'global' ORDER BY updated_at DESC`).all() as any[]
-            : this.db.prepare(`SELECT * FROM sr_presets WHERE scope = 'session' AND scope_id = :scopeId ORDER BY updated_at DESC`).all({ scopeId: scopeId ?? "" }) as any[];
-        return rows.map(r => ({
+        const rows =
+            scope === "global"
+                ? (this.db
+                      .prepare(`SELECT * FROM sr_presets WHERE scope = 'global' ORDER BY updated_at DESC`)
+                      .all() as any[])
+                : (this.db
+                      .prepare(
+                          `SELECT * FROM sr_presets WHERE scope = 'session' AND scope_id = :scopeId ORDER BY updated_at DESC`,
+                      )
+                      .all({ scopeId: scopeId ?? "" }) as any[]);
+        return rows.map((r) => ({
             id: r.id,
             name: r.name,
             scope: r.scope,
@@ -1312,7 +1601,9 @@ export class ChatSessionStore implements ISessionStore {
         rightModel: string | null,
     ): void {
         const now = new Date().toISOString();
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO sr_presets (id, name, scope, scope_id, left_provider_id, left_model, right_provider_id, right_model, created_at, updated_at)
             VALUES (:id, :name, :scope, :scopeId, :leftProviderId, :leftModel, :rightProviderId, :rightModel, :now, :now)
             ON CONFLICT(id) DO UPDATE SET
@@ -1322,17 +1613,19 @@ export class ChatSessionStore implements ISessionStore {
                 right_provider_id = excluded.right_provider_id,
                 right_model = excluded.right_model,
                 updated_at = excluded.updated_at
-        `).run({
-            id,
-            name: name.trim().slice(0, 80),
-            scope,
-            scopeId: scopeId ?? null,
-            leftProviderId: leftProviderId?.trim() || null,
-            leftModel: leftModel?.trim() || null,
-            rightProviderId: rightProviderId?.trim() || null,
-            rightModel: rightModel?.trim() || null,
-            now,
-        });
+        `,
+            )
+            .run({
+                id,
+                name: name.trim().slice(0, 80),
+                scope,
+                scopeId: scopeId ?? null,
+                leftProviderId: leftProviderId?.trim() || null,
+                leftModel: leftModel?.trim() || null,
+                rightProviderId: rightProviderId?.trim() || null,
+                rightModel: rightModel?.trim() || null,
+                now,
+            });
     }
 
     deleteSRPreset(id: string): boolean {
@@ -1341,9 +1634,14 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     getSRPreset(id: string): {
-        id: string; name: string; scope: string; scopeId: string | null;
-        leftProviderId: string | null; leftModel: string | null;
-        rightProviderId: string | null; rightModel: string | null;
+        id: string;
+        name: string;
+        scope: string;
+        scopeId: string | null;
+        leftProviderId: string | null;
+        leftModel: string | null;
+        rightProviderId: string | null;
+        rightModel: string | null;
     } | null {
         const row = this.db.prepare(`SELECT * FROM sr_presets WHERE id = :id`).get({ id }) as any;
         if (!row) return null;
@@ -1372,19 +1670,23 @@ export class ChatSessionStore implements ISessionStore {
         const now = new Date().toISOString();
         const metaJson = JSON.stringify(ticket.metadata || {});
 
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT INTO support_tickets (ticket_id, title, description, source, status, severity, created_at, updated_at, resolution_log, metadata_json)
             VALUES (:ticketId, :title, :description, :source, :status, :severity, :now, :now, NULL, :metaJson)
-        `).run({
-            ticketId,
-            title: ticket.title,
-            description: ticket.description,
-            source: ticket.source,
-            status,
-            severity: ticket.severity,
-            now,
-            metaJson,
-        });
+        `,
+            )
+            .run({
+                ticketId,
+                title: ticket.title,
+                description: ticket.description,
+                source: ticket.source,
+                status,
+                severity: ticket.severity,
+                now,
+                metaJson,
+            });
 
         return {
             ticketId,
@@ -1401,10 +1703,14 @@ export class ChatSessionStore implements ISessionStore {
     }
 
     listSupportTickets(): SupportTicket[] {
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT * FROM support_tickets
             ORDER BY created_at DESC
-        `).all() as any[];
+        `,
+            )
+            .all() as any[];
 
         return rows.map((r) => ({
             ticketId: r.ticket_id,
@@ -1422,26 +1728,34 @@ export class ChatSessionStore implements ISessionStore {
 
     updateSupportTicket(ticketId: string, status: string, resolutionLog?: string | null): boolean {
         const now = new Date().toISOString();
-        const result = this.db.prepare(`
+        const result = this.db
+            .prepare(
+                `
             UPDATE support_tickets
             SET status = :status,
                 resolution_log = COALESCE(:resolutionLog, resolution_log),
                 updated_at = :now
             WHERE ticket_id = :ticketId
-        `).run({
-            ticketId,
-            status,
-            resolutionLog: resolutionLog !== undefined ? resolutionLog : null,
-            now,
-        });
+        `,
+            )
+            .run({
+                ticketId,
+                status,
+                resolutionLog: resolutionLog !== undefined ? resolutionLog : null,
+                now,
+            });
         return (result as any).changes > 0;
     }
 
     deleteSupportTicket(ticketId: string): boolean {
-        const result = this.db.prepare(`
+        const result = this.db
+            .prepare(
+                `
             DELETE FROM support_tickets
             WHERE ticket_id = :ticketId
-        `).run({ ticketId });
+        `,
+            )
+            .run({ ticketId });
         return (result as any).changes > 0;
     }
 }

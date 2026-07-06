@@ -44,10 +44,10 @@ import type { ActivityEvent, ActivitySubscriber } from "../activity/types.js";
 // ── Public types ─────────────────────────────────────────────────────────────
 
 export type Soc2Control =
-    | "CC6.1"   // logical access
-    | "CC6.6"   // boundary protection
-    | "CC7.2"   // anomaly detection
-    | "CC8.1";  // change management
+    | "CC6.1" // logical access
+    | "CC6.6" // boundary protection
+    | "CC7.2" // anomaly detection
+    | "CC8.1"; // change management
 
 export interface Soc2EvidenceRecord {
     /** Stable record identifier — mirrors the source ActivityEvent.id. */
@@ -336,8 +336,8 @@ export class Soc2EvidenceExporter implements ActivitySubscriber {
             outputDir: config.outputDir ?? resolve(process.cwd(), "prism-output", "soc2"),
             webhookUrl: config.webhookUrl ?? process.env.PRISM_SOC2_WEBHOOK_URL,
             webhookToken: config.webhookToken ?? process.env.PRISM_SOC2_WEBHOOK_TOKEN,
-            webhookFlavor: config.webhookFlavor ??
-                ((process.env.PRISM_SOC2_WEBHOOK_FLAVOR as WebhookFlavor) || "generic"),
+            webhookFlavor:
+                config.webhookFlavor ?? ((process.env.PRISM_SOC2_WEBHOOK_FLAVOR as WebhookFlavor) || "generic"),
             batchSize: config.batchSize ?? 32,
             flushIntervalMs: config.flushIntervalMs ?? 60_000,
             now: config.now ?? (() => new Date()),
@@ -405,7 +405,11 @@ export class Soc2EvidenceExporter implements ActivitySubscriber {
             this.unsubscribe = null;
         }
         if (this.transport) {
-            try { await this.transport.flush(); } catch { /* swallow */ }
+            try {
+                await this.transport.flush();
+            } catch {
+                /* swallow */
+            }
             this.transport.close();
             this.transport = null;
         }
@@ -418,9 +422,7 @@ export class Soc2EvidenceExporter implements ActivitySubscriber {
         if (this.config.mode === "webhook") {
             const url = this.config.webhookUrl;
             if (!url) {
-                throw new Error(
-                    "Soc2EvidenceExporter: PRISM_SOC2_EXPORTER=webhook requires PRISM_SOC2_WEBHOOK_URL.",
-                );
+                throw new Error("Soc2EvidenceExporter: PRISM_SOC2_EXPORTER=webhook requires PRISM_SOC2_WEBHOOK_URL.");
             }
             const poster = this.config.httpPoster ?? defaultHttpPoster;
             return new WebhookTransport(

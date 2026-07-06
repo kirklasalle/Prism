@@ -264,4 +264,26 @@ To configure PRISM’s Settings Panel for optimal price-to-performance stability
 - **Automatic High-VRAM Eviction**: Checked/On (Prevents local Ollama models from overloading host GPUs when cloud models fail).
 
 ---
-*Document Version: 6.3.0 (SOTA Gemini, OpenAI, Claude & OpenRouter Rollout)*
+
+## 8. Dynamic Operator-Exclusive Matrix & Lifecycles
+
+Unlike static configuration files, the PRISM Model Matrix is a **dynamically updated capability store** running in memory and persisted via runtime configurations. This matrix is exclusive to the PRISM platform and its operators.
+
+### A. Dynamic Model Registration
+- **Runtime Profiles**: In addition to the static `KNOWN_PROFILES` database, operators can register, edit, or evict custom model capability profiles at runtime. This allows immediate support for new fine-tuned models, private APIs, or proprietary endpoints.
+- **API and Code Hooks**: Dynamic edits are managed via `registerModelProfile()`, `updateModelProfile()`, and `removeModelProfile()`.
+
+### B. Local Model Auto-Discovery
+- **Hardware & VRAM Awareness**: PRISM periodically queries the local Ollama instance (using `/api/ps`) to discover active models and estimate their VRAM consumption.
+- **Proactive Eviction & Routing**: In `adaptive` routing mode, the model matrix flags local models that present an OOM risk based on current hardware overhead. The routing engine uses this flag to deprioritize local models and route tasks to cloud fallbacks, avoiding host GPU exhaustion.
+
+### C. Deprecation & Sunset Lifecycles
+To maintain historical telemetry consistency and regression checks, models are never silently deleted from the matrix when sunset.
+- **Lifecycle Tracking**: Models are classified using fields for `deprecated`, `deprecatedAt`, `sunsetDate`, `successor` (recommended replacement), and `deprecationReason`.
+- **Status Evaluation**:
+  - `Active`: Normal operation.
+  - `Deprecated`: Approaching sunset. Eligible for fallback/historical execution, but de-prioritized in active routing. Generates warning traces in the ActivityBus.
+  - `Sunset`: Pass-through warning or blocked.
+
+---
+*Document Version: 6.4.0 (SOTA Gemini, OpenAI, Claude, OpenRouter, and Dynamic Operator Matrix Rollout)*

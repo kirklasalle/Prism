@@ -4,11 +4,12 @@ import { state, request, escapeHtml, dashboardLog } from './dashboard-core.js';
 let currentSchedulerView = 'calendar';
 let calMode = 'day';
 let calCursor = new Date();
+let ganttCursor = new Date(); // To support Gantt timeline navigation
 let cachedEvents = [];
 let cachedProjects = [];
 let cachedTasks = [];
 let cachedCronJobs = [];
-let modalType = null; // 'event' | 'task' | 'project' | 'cron'
+let modalType = null; // 'event' | 'task' | 'project' | 'cron' | 'project-detail'
 let modalEditId = null;
 
 /* ── Date helpers ── */
@@ -18,29 +19,29 @@ export function daysInMonth(year, month) {
 }
 
 export function formatDateStr(d) {
-  var y = d.getFullYear();
-  var m = String(d.getMonth() + 1).padStart(2, '0');
-  var day = String(d.getDate()).padStart(2, '0');
-  return y + '-' + m + '-' + day;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export function isToday(d) {
-  var t = new Date();
+  const t = new Date();
   return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
 }
 
 export function mondayOfWeek(d) {
-  var clone = new Date(d);
-  var day = clone.getDay();
-  var diff = (day === 0 ? -6 : 1) - day;
+  const clone = new Date(d);
+  const day = clone.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
   clone.setDate(clone.getDate() + diff);
   return clone;
 }
 
 export function eventsForDate(dateStr) {
-  return cachedEvents.filter(function (e) {
-    var eStart = (e.start || e.startDate || '').substring(0, 10);
-    var eEnd = (e.end || e.endDate || e.start || e.startDate || '').substring(0, 10);
+  return cachedEvents.filter(e => {
+    const eStart = (e.start || e.startDate || '').substring(0, 10);
+    const eEnd = (e.end || e.endDate || e.start || e.startDate || '').substring(0, 10);
     return dateStr >= eStart && dateStr <= eEnd;
   });
 }
@@ -48,39 +49,52 @@ export function eventsForDate(dateStr) {
 /* ── Data loading ── */
 
 export async function refreshSchedulerData() {
+  const indicator = document.getElementById('sched-loading-indicator');
+  if (indicator) indicator.style.display = 'inline-flex';
+
   dashboardLog('scheduler', 'scheduler.refresh', 'Fetching scheduler data');
+  
+  // Dynamic query window based on calCursor year (queries yearBefore to yearAfter)
+  const year = calCursor.getFullYear();
+  const yearStart = `${year - 1}-01-01`;
+  const yearEnd = `${year + 1}-12-31`;
+
   try {
-    var now = new Date();
-    var yearStart = now.getFullYear() + '-01-01';
-    var yearEnd = now.getFullYear() + '-12-31';
-    var evtData = await request('/api/scheduler/events?start=' + yearStart + '&end=' + yearEnd);
+    const evtData = await request(`/api/scheduler/events?start=${yearStart}&end=${yearEnd}`);
     cachedEvents = Array.isArray(evtData.events) ? evtData.events : Array.isArray(evtData) ? evtData : [];
-  } catch (_) {
+  } catch (err) {
+    dashboardLog('scheduler', 'scheduler.error', `Failed to load events: ${err.message}`);
     cachedEvents = [];
   }
+
   try {
-    var projData = await request('/api/scheduler/projects');
+    const projData = await request('/api/scheduler/projects');
     cachedProjects = Array.isArray(projData.projects) ? projData.projects : Array.isArray(projData) ? projData : [];
+    
     // Collect all tasks from projects
     cachedTasks = [];
-    for (var i = 0; i < cachedProjects.length; i++) {
-      var p = cachedProjects[i];
+    for (const p of cachedProjects) {
       if (p.tasks && Array.isArray(p.tasks)) {
-        for (var j = 0; j < p.tasks.length; j++) {
-          cachedTasks.push(Object.assign({ projectId: p.id || p.projectId }, p.tasks[j]));
+        for (const t of p.tasks) {
+          cachedTasks.push(Object.assign({ projectId: p.id || p.projectId, projectName: p.name }, t));
         }
       }
     }
-  } catch (_) {
+  } catch (err) {
+    dashboardLog('scheduler', 'scheduler.error', `Failed to load projects: ${err.message}`);
     cachedProjects = [];
     cachedTasks = [];
   }
+
   try {
-    var cronData = await request('/api/scheduler/cron');
+    const cronData = await request('/api/scheduler/cron');
     cachedCronJobs = Array.isArray(cronData) ? cronData : [];
-  } catch (_) {
+  } catch (err) {
+    dashboardLog('scheduler', 'scheduler.error', `Failed to load cron jobs: ${err.message}`);
     cachedCronJobs = [];
   }
+
+  if (indicator) indicator.style.display = 'none';
   renderSchedulerPanel();
 }
 
@@ -88,14 +102,14 @@ export async function refreshSchedulerData() {
 
 export function switchSchedulerView(view) {
   currentSchedulerView = view;
-  var views = ['calendar', 'projects', 'board', 'timeline', 'cron'];
-  for (var i = 0; i < views.length; i++) {
-    var panel = document.getElementById('sched-view-' + views[i]);
-    if (panel) panel.style.display = views[i] === view ? '' : 'none';
-    var btns = document.querySelectorAll('.sched-subnav-btn[data-sched-view]');
-    for (var b = 0; b < btns.length; b++) {
-      btns[b].classList.toggle('active', btns[b].getAttribute('data-sched-view') === view);
-    }
+  const views = ['calendar', 'projects', 'board', 'timeline', 'cron'];
+  for (const v of views) {
+    const panel = document.getElementById(`sched-view-${v}`);
+    if (panel) panel.style.display = v === view ? '' : 'none';
+  }
+  const btns = document.querySelectorAll('.sched-subnav-btn[data-sched-view]');
+  for (const btn of btns) {
+    btn.classList.toggle('active', btn.getAttribute('data-sched-view') === view);
   }
   renderSchedulerPanel();
 }
@@ -114,9 +128,9 @@ export function renderSchedulerPanel() {
 
 export function setCalMode(mode) {
   calMode = mode;
-  var btns = document.querySelectorAll('.sched-mode-btn[data-cal-mode]');
-  for (var i = 0; i < btns.length; i++) {
-    btns[i].classList.toggle('active', btns[i].getAttribute('data-cal-mode') === mode);
+  const btns = document.querySelectorAll('.sched-mode-btn[data-cal-mode]');
+  for (const btn of btns) {
+    btn.classList.toggle('active', btn.getAttribute('data-cal-mode') === mode);
   }
   renderSchedulerCalendar();
 }
@@ -131,32 +145,41 @@ export function schedCalNav(dir) {
   } else if (calMode === 'day') {
     calCursor.setDate(calCursor.getDate() + dir);
   }
-  renderSchedulerCalendar();
+  // When year changes, trigger data refresh to grab events for the new year range
+  refreshSchedulerData();
+}
+
+/* ── Gantt timeline navigation ── */
+
+export function ganttNav(dir) {
+  ganttCursor.setMonth(ganttCursor.getMonth() + dir);
+  renderSchedulerGantt();
 }
 
 /* ── Calendar renderers ── */
 
-export function renderSchedulerCalendar() {
-  var title = document.getElementById('sched-cal-title');
-  var body = document.getElementById('sched-cal-body');
-  if (!body) return;
+const MONTHS_LBL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export function renderSchedulerCalendar() {
+  const title = document.getElementById('sched-cal-title');
+  const body = document.getElementById('sched-cal-body');
+  if (!body) return;
 
   if (calMode === 'year') {
     if (title) title.textContent = String(calCursor.getFullYear());
-    var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">';
-    for (var m = 0; m < 12; m++) {
+    let html = '<div class="sched-mini-month-container">';
+    for (let m = 0; m < 12; m++) {
       html += renderMiniMonth(calCursor.getFullYear(), m);
     }
     html += '</div>';
     body.innerHTML = html;
   } else if (calMode === 'month') {
-    if (title) title.textContent = months[calCursor.getMonth()] + ' ' + calCursor.getFullYear();
+    if (title) title.textContent = `${MONTHS_LBL[calCursor.getMonth()]} ${calCursor.getFullYear()}`;
     body.innerHTML = renderFullMonth(calCursor.getFullYear(), calCursor.getMonth());
   } else if (calMode === 'week') {
-    var mon = mondayOfWeek(calCursor);
-    if (title) title.textContent = 'Week of ' + formatDateStr(mon);
+    const mon = mondayOfWeek(calCursor);
+    if (title) title.textContent = `Week of ${formatDateStr(mon)}`;
     body.innerHTML = renderWeekView(mon);
   } else if (calMode === 'day') {
     if (title) title.textContent = formatDateStr(calCursor);
@@ -165,59 +188,72 @@ export function renderSchedulerCalendar() {
 }
 
 export function renderMiniMonth(year, month) {
-  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  var days = daysInMonth(year, month);
-  var firstDay = new Date(year, month, 1).getDay();
-  var offset = firstDay === 0 ? 6 : firstDay - 1; // Monday-based
+  const days = daysInMonth(year, month);
+  const firstDay = new Date(year, month, 1).getDay();
+  const offset = firstDay === 0 ? 6 : firstDay - 1; // Monday-based
 
-  var html = '<div class="panel" style="padding:8px;">';
-  html += '<div style="text-align:center;font-weight:600;font-size:12px;margin-bottom:4px;">' + months[month] + '</div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:10px;text-align:center;">';
-  var dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  for (var dl = 0; dl < 7; dl++) {
-    html += '<div style="color:var(--text-muted);font-weight:600;">' + dayLabels[dl] + '</div>';
+  let html = `<div class="panel sched-mini-month-card">
+    <div class="sched-mini-month-title">${MONTHS_SHORT[month]}</div>
+    <div class="sched-mini-month-grid">`;
+  
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  for (const label of dayLabels) {
+    html += `<div class="sched-mini-month-day-lbl">${label}</div>`;
   }
-  for (var blank = 0; blank < offset; blank++) {
+  for (let blank = 0; blank < offset; blank++) {
     html += '<div></div>';
   }
-  for (var d = 1; d <= days; d++) {
-    var dateObj = new Date(year, month, d);
-    var dateStr = formatDateStr(dateObj);
-    var dayEvents = eventsForDate(dateStr);
-    var todayStyle = isToday(dateObj) ? 'background:var(--accent);color:#fff;border-radius:50%;' : '';
-    var eventDot = dayEvents.length > 0 ? '<div style="width:4px;height:4px;border-radius:50%;background:var(--accent);margin:1px auto 0;"></div>' : '';
-    html += '<div style="padding:1px;cursor:pointer;' + todayStyle + '" onclick="setCalMode(\'day\');window._schedGoToDate&&window._schedGoToDate(\'' + dateStr + '\')" title="' + dayEvents.length + ' events">' + d + eventDot + '</div>';
+  for (let d = 1; d <= days; d++) {
+    const dateObj = new Date(year, month, d);
+    const dateStr = formatDateStr(dateObj);
+    const dayEvents = eventsForDate(dateStr);
+    const classes = ['sched-mini-month-day'];
+    if (isToday(dateObj)) classes.push('sched-mini-month-today');
+    
+    const eventDot = dayEvents.length > 0 ? '<div class="sched-mini-month-dot"></div>' : '';
+    html += `<div class="${classes.join(' ')}" onclick="setCalMode('day'); window._schedGoToDate('${dateStr}')" title="${dayEvents.length} events">${d}${eventDot}</div>`;
   }
   html += '</div></div>';
   return html;
 }
 
 export function renderFullMonth(year, month) {
-  var days = daysInMonth(year, month);
-  var firstDay = new Date(year, month, 1).getDay();
-  var offset = firstDay === 0 ? 6 : firstDay - 1;
+  const days = daysInMonth(year, month);
+  const firstDay = new Date(year, month, 1).getDay();
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
 
-  var html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;">';
-  var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  for (var dl = 0; dl < 7; dl++) {
-    html += '<div style="text-align:center;padding:4px;font-weight:600;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">' + dayLabels[dl] + '</div>';
+  let html = '<div class="sched-full-month-grid">';
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  for (const label of dayLabels) {
+    html += `<div class="sched-full-month-day-lbl">${label}</div>`;
   }
-  for (var blank = 0; blank < offset; blank++) {
-    html += '<div style="min-height:80px;padding:4px;border:1px solid rgba(148,163,184,0.06);"></div>';
+  for (let blank = 0; blank < offset; blank++) {
+    html += '<div class="sched-full-month-cell" style="opacity:0.25;"></div>';
   }
-  for (var d = 1; d <= days; d++) {
-    var dateObj = new Date(year, month, d);
-    var dateStr = formatDateStr(dateObj);
-    var dayEvents = eventsForDate(dateStr);
-    var todayBg = isToday(dateObj) ? 'background:rgba(105,210,255,0.08);' : '';
-    html += '<div style="min-height:80px;padding:4px;border:1px solid rgba(148,163,184,0.06);' + todayBg + '">';
-    html += '<div style="font-weight:600;font-size:12px;' + (isToday(dateObj) ? 'color:var(--accent);' : '') + '">' + d + '</div>';
-    for (var ei = 0; ei < Math.min(dayEvents.length, 3); ei++) {
-      var ev = dayEvents[ei];
-      html += '<div style="font-size:10px;padding:1px 4px;margin-top:2px;border-radius:3px;background:rgba(105,210,255,0.12);color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" onclick="openSchedulerModal(\'event\',\'' + escapeHtml(ev.id || ev.eventId || '') + '\')" title="' + escapeHtml(ev.title || ev.summary || '') + '">' + escapeHtml(ev.title || ev.summary || 'Event') + '</div>';
+  for (let d = 1; d <= days; d++) {
+    const dateObj = new Date(year, month, d);
+    const dateStr = formatDateStr(dateObj);
+    const dayEvents = eventsForDate(dateStr);
+    
+    const cellClasses = ['sched-full-month-cell'];
+    if (isToday(dateObj)) cellClasses.push('sched-full-month-cell-today');
+    
+    const numClasses = ['sched-full-month-day-num'];
+    if (isToday(dateObj)) numClasses.push('sched-full-month-day-num-today');
+
+    html += `<div class="${cellClasses.join(' ')}">
+      <div class="${numClasses.join(' ')}">${d}</div>`;
+    
+    const maxVisible = 3;
+    for (let ei = 0; ei < Math.min(dayEvents.length, maxVisible); ei++) {
+      const ev = dayEvents[ei];
+      const evId = ev.id || ev.eventId || '';
+      html += `<div class="sched-full-month-event-pill" onclick="openSchedulerModal('event','${escapeHtml(evId)}')" title="${escapeHtml(ev.title || ev.summary || '')}">
+        ${escapeHtml(ev.title || ev.summary || 'Event')}
+      </div>`;
     }
-    if (dayEvents.length > 3) {
-      html += '<div style="font-size:10px;color:var(--text-muted);">+' + (dayEvents.length - 3) + ' more</div>';
+    if (dayEvents.length > maxVisible) {
+      html += `<div style="font-size:10px;color:var(--muted);padding-left:4px;margin-top:2px;">+${dayEvents.length - maxVisible} more</div>`;
     }
     html += '</div>';
   }
@@ -226,25 +262,34 @@ export function renderFullMonth(year, month) {
 }
 
 export function renderWeekView(monday) {
-  var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  var html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
-  for (var i = 0; i < 7; i++) {
-    var d = new Date(monday);
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  let html = '<div class="sched-week-grid">';
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
     d.setDate(d.getDate() + i);
-    var dateStr = formatDateStr(d);
-    var dayEvents = eventsForDate(dateStr);
-    var todayBg = isToday(d) ? 'background:rgba(105,210,255,0.08);' : '';
-    html += '<div style="min-height:200px;padding:6px;border:1px solid rgba(148,163,184,0.06);border-radius:6px;' + todayBg + '">';
-    html += '<div style="font-weight:600;font-size:12px;margin-bottom:4px;' + (isToday(d) ? 'color:var(--accent);' : '') + '">' + dayLabels[i] + ' ' + d.getDate() + '</div>';
-    for (var ei = 0; ei < dayEvents.length; ei++) {
-      var ev = dayEvents[ei];
-      html += '<div class="panel" style="padding:4px 6px;margin-bottom:3px;font-size:11px;cursor:pointer;" onclick="openSchedulerModal(\'event\',\'' + escapeHtml(ev.id || ev.eventId || '') + '\')">';
-      html += '<div style="font-weight:600;">' + escapeHtml(ev.title || ev.summary || 'Event') + '</div>';
-      if (ev.startTime || ev.time) html += '<div class="muted" style="font-size:10px;">' + escapeHtml(ev.startTime || ev.time || '') + '</div>';
+    const dateStr = formatDateStr(d);
+    const dayEvents = eventsForDate(dateStr);
+    
+    const columnClasses = ['sched-week-column'];
+    if (isToday(d)) columnClasses.push('sched-week-column-today');
+
+    const lblClasses = ['sched-week-day-lbl'];
+    if (isToday(d)) lblClasses.push('sched-week-day-lbl-today');
+
+    html += `<div class="${columnClasses.join(' ')}">
+      <div class="${lblClasses.join(' ')}">${dayLabels[i]} ${d.getDate()}</div>`;
+    
+    for (const ev of dayEvents) {
+      const evId = ev.id || ev.eventId || '';
+      html += `<div class="panel sched-week-event-card" onclick="openSchedulerModal('event','${escapeHtml(evId)}')">
+        <div class="sched-week-event-title">${escapeHtml(ev.title || ev.summary || 'Event')}</div>`;
+      if (ev.startTime || ev.time) {
+        html += `<div class="muted" style="font-size:10px;">${escapeHtml(ev.startTime || ev.time || '')}</div>`;
+      }
       html += '</div>';
     }
     if (dayEvents.length === 0) {
-      html += '<span class="muted" style="font-size:10px;">No events</span>';
+      html += '<span class="muted" style="font-size:10px;display:block;text-align:center;margin-top:12px;">No events</span>';
     }
     html += '</div>';
   }
@@ -253,21 +298,27 @@ export function renderWeekView(monday) {
 }
 
 export function renderDayView(date) {
-  var dateStr = formatDateStr(date);
-  var dayEvents = eventsForDate(dateStr);
-  var html = '<div style="max-width:600px;">';
+  const dateStr = formatDateStr(date);
+  const dayEvents = eventsForDate(dateStr);
+  let html = '<div class="sched-day-view-container">';
+  
   if (dayEvents.length === 0) {
-    html += '<div class="panel" style="padding:20px;text-align:center;"><span class="muted">No events scheduled for this day.</span></div>';
+    html += '<div class="panel" style="padding:40px;text-align:center;border-style:dashed;"><span class="muted">No events scheduled for this day.</span></div>';
+  } else {
+    for (const ev of dayEvents) {
+      const evId = ev.id || ev.eventId || '';
+      html += `<div class="panel sched-day-event-card" onclick="openSchedulerModal('event','${escapeHtml(evId)}')">
+        <div class="sched-day-event-title">${escapeHtml(ev.title || ev.summary || 'Event')}</div>`;
+      if (ev.startTime || ev.time) {
+        html += `<div class="sched-day-event-time">${escapeHtml(ev.startTime || ev.time || '')}${ev.endTime ? ` – ${escapeHtml(ev.endTime)}` : ''}</div>`;
+      }
+      if (ev.description) {
+        html += `<div class="sched-day-event-desc">${escapeHtml(ev.description)}</div>`;
+      }
+      html += '</div>';
+    }
   }
-  for (var i = 0; i < dayEvents.length; i++) {
-    var ev = dayEvents[i];
-    html += '<div class="panel" style="padding:10px;margin-bottom:6px;cursor:pointer;" onclick="openSchedulerModal(\'event\',\'' + escapeHtml(ev.id || ev.eventId || '') + '\')">';
-    html += '<div style="font-weight:600;font-size:14px;">' + escapeHtml(ev.title || ev.summary || 'Event') + '</div>';
-    if (ev.startTime || ev.time) html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + escapeHtml(ev.startTime || ev.time || '') + (ev.endTime ? ' \u2013 ' + escapeHtml(ev.endTime) : '') + '</div>';
-    if (ev.description) html += '<div style="font-size:12px;margin-top:4px;">' + escapeHtml(ev.description) + '</div>';
-    html += '</div>';
-  }
-  html += '<button onclick="openSchedulerModal(\'event\')" style="margin-top:8px;padding:6px 16px;border:1px dashed var(--border);border-radius:6px;background:transparent;color:var(--accent);cursor:pointer;font-size:12px;">+ Add event for ' + escapeHtml(dateStr) + '</button>';
+  html += `<button class="sched-day-add-btn" onclick="openSchedulerModal('event')">+ Add event for ${escapeHtml(dateStr)}</button>`;
   html += '</div>';
   return html;
 }
@@ -275,27 +326,30 @@ export function renderDayView(date) {
 /* ── Projects ── */
 
 export function renderSchedulerProjects() {
-  var container = document.getElementById('sched-projects-list');
+  const container = document.getElementById('sched-projects-list');
   if (!container) return;
   if (cachedProjects.length === 0) {
-    container.innerHTML = '<div class="panel" style="padding:20px;text-align:center;"><span class="muted">No projects yet. Click + Project to create one.</span></div>';
+    container.innerHTML = '<div class="panel" style="padding:40px;text-align:center;border-style:dashed;"><span class="muted">No projects yet. Click + Project to create one.</span></div>';
     return;
   }
-  var html = '';
-  for (var i = 0; i < cachedProjects.length; i++) {
-    var p = cachedProjects[i];
-    var pid = p.id || p.projectId || '';
-    var tasks = p.tasks || [];
-    var done = tasks.filter(function (t) { return t.status === 'done'; }).length;
-    var pct = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
-    html += '<div class="panel" style="padding:12px;margin-bottom:8px;cursor:pointer;" onclick="openProjectDetail(\'' + escapeHtml(pid) + '\')">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">';
-    html += '<div style="font-weight:600;font-size:14px;">' + escapeHtml(p.name || p.title || 'Untitled') + '</div>';
-    html += '<span style="font-size:11px;color:var(--text-muted);">' + done + '/' + tasks.length + ' tasks</span>';
-    html += '</div>';
-    if (p.description) html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">' + escapeHtml(p.description.substring(0, 120)) + '</div>';
-    html += '<div style="height:4px;background:var(--surface);border-radius:2px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--accent);border-radius:2px;"></div></div>';
-    html += '</div>';
+  let html = '';
+  for (const p of cachedProjects) {
+    const pid = p.id || p.projectId || '';
+    const tasks = p.tasks || [];
+    const done = tasks.filter(t => t.status === 'done').length;
+    const pct = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
+    
+    html += `<div class="panel sched-project-card" onclick="openProjectDetail('${escapeHtml(pid)}')">
+      <div class="sched-project-header">
+        <div class="sched-project-name">${escapeHtml(p.name || p.title || 'Untitled')}</div>
+        <span class="sched-project-meta">${done}/${tasks.length} tasks</span>
+      </div>`;
+    if (p.description) {
+      html += `<div class="sched-project-desc">${escapeHtml(p.description.substring(0, 120))}</div>`;
+    }
+    html += `<div class="sched-project-progress-bar">
+      <div class="sched-project-progress-fill" style="width:${pct}%;"></div>
+    </div></div>`;
   }
   container.innerHTML = html;
 }
@@ -303,84 +357,94 @@ export function renderSchedulerProjects() {
 export async function openProjectDetail(projectId) {
   if (!projectId) return;
   try {
-    var data = await request('/api/scheduler/projects/' + encodeURIComponent(projectId));
-    var project = data.project || data;
-    var tasks = project.tasks || [];
-    var milestones = project.milestones || [];
+    const data = await request(`/api/scheduler/projects/${encodeURIComponent(projectId)}`);
+    const project = data.project || data;
+    const tasks = project.tasks || [];
+    const milestones = project.milestones || [];
 
-    var titleEl = document.getElementById('sched-modal-title');
-    var bodyEl = document.getElementById('sched-modal-body');
-    var modal = document.getElementById('sched-modal');
-    var saveBtn = document.getElementById('sched-modal-save');
+    const titleEl = document.getElementById('sched-modal-title');
+    const bodyEl = document.getElementById('sched-modal-body');
+    const modal = document.getElementById('sched-modal');
+    const saveBtn = document.getElementById('sched-modal-save');
     if (!bodyEl || !modal) return;
 
     modalType = 'project-detail';
     modalEditId = projectId;
 
-    if (titleEl) titleEl.textContent = project.name || project.title || 'Project';
+    if (titleEl) titleEl.textContent = project.name || project.title || 'Project Details';
     if (saveBtn) saveBtn.style.display = 'none';
 
-    var html = '<div>';
-    if (project.description) html += '<p style="color:var(--text-muted);font-size:12px;">' + escapeHtml(project.description) + '</p>';
+    let html = '<div class="sched-project-detail-content">';
+    if (project.description) {
+      html += `<p class="sched-detail-desc">${escapeHtml(project.description)}</p>`;
+    }
 
     // Milestones
     if (milestones.length > 0) {
-      html += '<h4 style="font-size:13px;margin:12px 0 6px;">Milestones</h4>';
-      for (var mi = 0; mi < milestones.length; mi++) {
-        var ms = milestones[mi];
-        html += '<div style="padding:4px 0;font-size:12px;">';
-        html += '<span style="color:var(--accent);">\u25C6</span> ';
-        html += '<strong>' + escapeHtml(ms.title || ms.name || '') + '</strong>';
-        if (ms.dueDate) html += ' <span class="muted">\u2014 ' + escapeHtml(ms.dueDate) + '</span>';
+      html += '<h4 class="sched-detail-section-title">Milestones</h4>';
+      for (const ms of milestones) {
+        html += `<div class="sched-detail-milestone">
+          <span class="sched-detail-milestone-marker">◆</span> 
+          <strong>${escapeHtml(ms.title || ms.name || '')}</strong>`;
+        if (ms.dueDate) html += ` <span class="muted">— ${escapeHtml(ms.dueDate)}</span>`;
         html += '</div>';
       }
     }
 
-    // Tasks
-    html += '<h4 style="font-size:13px;margin:12px 0 6px;">Tasks (' + tasks.length + ')</h4>';
+    // Tasks list inside Project Details modal with individual task delete actions
+    html += `<h4 class="sched-detail-section-title">Tasks (${tasks.length})</h4>`;
     if (tasks.length === 0) {
       html += '<span class="muted" style="font-size:12px;">No tasks yet.</span>';
+    } else {
+      for (const t of tasks) {
+        const statusColor = t.status === 'done' ? '#7ecf7e' : (t.status === 'in-progress' ? '#69d2ff' : 'var(--muted)');
+        html += `<div class="sched-detail-task" style="justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="sched-detail-task-dot" style="background:${statusColor};"></span>
+            <span>${escapeHtml(t.title || t.name || 'Task')}</span>
+            <span class="muted" style="font-size:10px;">(${escapeHtml(t.status || 'backlog')})</span>
+          </div>
+          <button class="secondary-button" style="padding:2px 8px;font-size:10px;color:var(--danger);" onclick="deleteSchedulerTask('${escapeHtml(t.id)}','${escapeHtml(projectId)}')">Delete</button>
+        </div>`;
+      }
     }
-    for (var ti = 0; ti < tasks.length; ti++) {
-      var t = tasks[ti];
-      var statusColor = t.status === 'done' ? '#7ecf7e' : (t.status === 'in-progress' ? '#69d2ff' : 'var(--text-muted)');
-      html += '<div style="padding:4px 0;font-size:12px;display:flex;align-items:center;gap:8px;">';
-      html += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + statusColor + ';"></span>';
-      html += '<span>' + escapeHtml(t.title || t.name || 'Task') + '</span>';
-      html += '<span class="muted" style="font-size:10px;">' + escapeHtml(t.status || 'backlog') + '</span>';
-      html += '</div>';
-    }
+
+    // Project delete button
+    html += `<div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;display:flex;justify-content:flex-end;">
+      <button class="danger-button" onclick="deleteSchedulerProject('${escapeHtml(projectId)}')">🗑 Delete Project</button>
+    </div>`;
 
     html += '</div>';
     bodyEl.innerHTML = html;
     modal.style.display = 'flex';
   } catch (e) {
-    dashboardLog('scheduler', 'scheduler.error', 'Failed to load project: ' + e.message);
+    dashboardLog('scheduler', 'scheduler.error', `Failed to load project: ${e.message}`);
   }
 }
 
 /* ── Board (Kanban) ── */
 
 export function renderSchedulerBoard() {
-  var lanes = ['backlog', 'todo', 'in-progress', 'review', 'done'];
-  for (var li = 0; li < lanes.length; li++) {
-    var laneEl = document.getElementById('sched-lane-' + lanes[li]);
+  const lanes = ['backlog', 'todo', 'in-progress', 'review', 'done'];
+  for (const lane of lanes) {
+    const laneEl = document.getElementById(`sched-lane-${lane}`);
     if (!laneEl) continue;
-    var laneTasks = cachedTasks.filter(function (t) { return (t.status || 'backlog') === lanes[li]; });
+    const laneTasks = cachedTasks.filter(t => (t.status || 'backlog') === lane);
     if (laneTasks.length === 0) {
-      laneEl.innerHTML = '<div class="muted" style="padding:12px;text-align:center;font-size:11px;">No tasks</div>';
+      laneEl.innerHTML = '<div class="muted" style="padding:20px;text-align:center;font-size:11px;">No tasks</div>';
       continue;
     }
-    var html = '';
-    for (var ti = 0; ti < laneTasks.length; ti++) {
-      var t = laneTasks[ti];
-      var tid = t.id || t.taskId || '';
-      html += '<div class="sched-card" draggable="true" data-task-id="' + escapeHtml(tid) + '" data-project-id="' + escapeHtml(t.projectId || '') + '" style="padding:8px;margin-bottom:4px;border-radius:6px;background:var(--surface);border:1px solid var(--border);cursor:grab;font-size:12px;">';
-      html += '<div style="font-weight:600;">' + escapeHtml(t.title || t.name || 'Task') + '</div>';
+    let html = '';
+    for (const t of laneTasks) {
+      const tid = t.id || t.taskId || '';
+      html += `<div class="sched-kanban-card" draggable="true" data-task-id="${escapeHtml(tid)}" data-project-id="${escapeHtml(t.projectId || '')}">
+        <div class="sched-kanban-card-title">${escapeHtml(t.title || t.name || 'Task')}</div>`;
       if (t.projectName || t.projectId) {
-        html += '<div class="muted" style="font-size:10px;margin-top:2px;">' + escapeHtml(t.projectName || t.projectId) + '</div>';
+        html += `<div class="sched-kanban-card-project muted">${escapeHtml(t.projectName || t.projectId)}</div>`;
       }
-      if (t.assignee) html += '<div style="font-size:10px;margin-top:2px;">\u{1F464} ' + escapeHtml(t.assignee) + '</div>';
+      if (t.assignee) {
+        html += `<div class="sched-kanban-card-assignee">👤 ${escapeHtml(t.assignee)}</div>`;
+      }
       html += '</div>';
     }
     laneEl.innerHTML = html;
@@ -389,47 +453,14 @@ export function renderSchedulerBoard() {
 }
 
 export function initBoardDragDrop() {
-  var cards = document.querySelectorAll('.sched-card[draggable]');
-  var lanes = document.querySelectorAll('.sched-lane-body');
-
-  for (var ci = 0; ci < cards.length; ci++) {
-    cards[ci].addEventListener('dragstart', function (e) {
-      e.dataTransfer.setData('text/plain', this.getAttribute('data-task-id') + '|' + this.getAttribute('data-project-id'));
+  const cards = document.querySelectorAll('.sched-kanban-card[draggable]');
+  for (const card of cards) {
+    card.addEventListener('dragstart', function (e) {
+      e.dataTransfer.setData('text/plain', `${this.getAttribute('data-task-id')}|${this.getAttribute('data-project-id')}`);
       this.style.opacity = '0.5';
     });
-    cards[ci].addEventListener('dragend', function () {
+    card.addEventListener('dragend', function () {
       this.style.opacity = '1';
-    });
-  }
-
-  for (var li = 0; li < lanes.length; li++) {
-    lanes[li].addEventListener('dragover', function (e) {
-      e.preventDefault();
-      this.style.background = 'rgba(105,210,255,0.06)';
-    });
-    lanes[li].addEventListener('dragleave', function () {
-      this.style.background = '';
-    });
-    lanes[li].addEventListener('drop', function (e) {
-      e.preventDefault();
-      this.style.background = '';
-      var payload = e.dataTransfer.getData('text/plain');
-      if (!payload) return;
-      var parts = payload.split('|');
-      var taskId = parts[0];
-      var projectId = parts[1];
-      var newStatus = this.parentElement.getAttribute('data-status');
-      if (taskId && newStatus) {
-        request('/api/scheduler/tasks/' + encodeURIComponent(taskId) + '?projectId=' + encodeURIComponent(projectId || ''), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus })
-        }).then(function () {
-          refreshSchedulerData();
-        }).catch(function (err) {
-          dashboardLog('scheduler', 'scheduler.error', 'Failed to move task: ' + err.message);
-        });
-      }
     });
   }
 }
@@ -437,133 +468,191 @@ export function initBoardDragDrop() {
 /* ── Timeline (Gantt) ── */
 
 export function renderSchedulerGantt() {
-  var headerEl = document.getElementById('sched-gantt-header');
-  var rowsEl = document.getElementById('sched-gantt-rows');
+  const rangeLabel = document.getElementById('sched-gantt-range-label');
+  const headerEl = document.getElementById('sched-gantt-header');
+  const rowsEl = document.getElementById('sched-gantt-rows');
   if (!headerEl || !rowsEl) return;
 
-  // Compute date range: current month ± 1 month
-  var now = new Date();
-  var rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  var rangeEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-  var totalDays = Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24));
+  // Compute date range: ganttCursor month ± 1 month
+  const rangeStart = new Date(ganttCursor.getFullYear(), ganttCursor.getMonth() - 1, 1);
+  const rangeEnd = new Date(ganttCursor.getFullYear(), ganttCursor.getMonth() + 2, 0);
+  let totalDays = Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24));
   if (totalDays < 1) totalDays = 30;
 
+  if (rangeLabel) {
+    rangeLabel.textContent = `${MONTHS_SHORT[rangeStart.getMonth()]} ${rangeStart.getFullYear()} – ${MONTHS_SHORT[rangeEnd.getMonth()]} ${rangeEnd.getFullYear()}`;
+  }
+
   // Header: month labels
-  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  var headerHtml = '<div style="display:flex;position:relative;height:24px;border-bottom:1px solid var(--border);">';
-  var cursor = new Date(rangeStart);
+  let headerHtml = '';
+  const cursor = new Date(rangeStart);
   while (cursor < rangeEnd) {
-    var mDays = daysInMonth(cursor.getFullYear(), cursor.getMonth());
-    var mStart = Math.max(0, Math.ceil((cursor - rangeStart) / (1000 * 60 * 60 * 24)));
-    var leftPct = (mStart / totalDays * 100).toFixed(2);
-    var widthPct = (mDays / totalDays * 100).toFixed(2);
-    headerHtml += '<div style="position:absolute;left:' + leftPct + '%;width:' + widthPct + '%;font-size:10px;font-weight:600;color:var(--text-muted);padding:4px;border-left:1px solid var(--border);white-space:nowrap;">' + months[cursor.getMonth()] + ' ' + cursor.getFullYear() + '</div>';
+    const mDays = daysInMonth(cursor.getFullYear(), cursor.getMonth());
+    const mStart = Math.max(0, Math.ceil((cursor - rangeStart) / (1000 * 60 * 60 * 24)));
+    const leftPct = ((mStart / totalDays) * 100).toFixed(2);
+    const widthPct = ((mDays / totalDays) * 100).toFixed(2);
+    headerHtml += `<div class="sched-gantt-month-label" style="left:${leftPct}%;width:${widthPct}%;">
+      ${MONTHS_SHORT[cursor.getMonth()]} ${cursor.getFullYear()}
+    </div>`;
     cursor.setMonth(cursor.getMonth() + 1);
     cursor.setDate(1);
   }
-  headerHtml += '</div>';
   headerEl.innerHTML = headerHtml;
 
   // Rows: one per project with task bars
   if (cachedProjects.length === 0) {
-    rowsEl.innerHTML = '<div class="muted" style="padding:16px;text-align:center;font-size:12px;">No projects to display on timeline.</div>';
+    rowsEl.innerHTML = '<div class="muted" style="padding:40px;text-align:center;font-size:12px;border:1px dashed var(--border);border-radius:8px;margin-top:8px;">No projects to display on timeline.</div>';
     return;
   }
 
-  var rowsHtml = '';
-  for (var pi = 0; pi < cachedProjects.length; pi++) {
-    var p = cachedProjects[pi];
-    var tasks = p.tasks || [];
-    rowsHtml += '<div style="position:relative;min-height:32px;border-bottom:1px solid rgba(148,163,184,0.06);display:flex;align-items:center;">';
-    rowsHtml += '<div style="width:120px;min-width:120px;padding:4px 8px;font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(p.name || p.title || '') + '">' + escapeHtml(p.name || p.title || 'Project') + '</div>';
-    rowsHtml += '<div style="flex:1;position:relative;height:24px;">';
-    for (var ti = 0; ti < tasks.length; ti++) {
-      var t = tasks[ti];
-      var tStart = t.startDate || t.start;
-      var tEnd = t.endDate || t.end || t.dueDate;
+  let rowsHtml = '';
+  for (const p of cachedProjects) {
+    const tasks = p.tasks || [];
+    rowsHtml += `<div class="sched-gantt-row">
+      <div class="sched-gantt-row-title" title="${escapeHtml(p.name || p.title || '')}">${escapeHtml(p.name || p.title || 'Project')}</div>
+      <div class="sched-gantt-row-track">`;
+    for (const t of tasks) {
+      const tStart = t.startDate || t.start;
+      const tEnd = t.endDate || t.end || t.dueDate;
       if (!tStart) continue;
-      var tStartDate = new Date(tStart);
-      var tEndDate = tEnd ? new Date(tEnd) : new Date(tStartDate.getTime() + 86400000);
-      var barLeft = Math.max(0, (tStartDate - rangeStart) / (1000 * 60 * 60 * 24));
-      var barWidth = Math.max(1, (tEndDate - tStartDate) / (1000 * 60 * 60 * 24));
-      var barLeftPct = (barLeft / totalDays * 100).toFixed(2);
-      var barWidthPct = (barWidth / totalDays * 100).toFixed(2);
-      var barColor = t.status === 'done' ? '#7ecf7e' : (t.status === 'in-progress' ? 'var(--accent)' : 'rgba(148,163,184,0.3)');
-      rowsHtml += '<div title="' + escapeHtml(t.title || t.name || '') + '" style="position:absolute;left:' + barLeftPct + '%;width:' + barWidthPct + '%;height:16px;top:4px;background:' + barColor + ';border-radius:3px;font-size:9px;line-height:16px;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#fff;opacity:0.85;">' + escapeHtml(t.title || t.name || '') + '</div>';
+      
+      const tStartDate = new Date(tStart);
+      const tEndDate = tEnd ? new Date(tEnd) : new Date(tStartDate.getTime() + 86400000);
+      
+      const barLeft = Math.max(0, (tStartDate - rangeStart) / (1000 * 60 * 60 * 24));
+      const barWidth = Math.max(1, (tEndDate - tStartDate) / (1000 * 60 * 60 * 24));
+      const barLeftPct = ((barLeft / totalDays) * 100).toFixed(2);
+      const barWidthPct = ((barWidth / totalDays) * 100).toFixed(2);
+      
+      let barColor = 'rgba(148, 163, 184, 0.3)';
+      if (t.status === 'done') barColor = '#7ecf7e';
+      else if (t.status === 'in-progress') barColor = 'var(--accent)';
+      
+      rowsHtml += `<div class="sched-gantt-bar" title="${escapeHtml(t.title || t.name || '')}" style="left:${barLeftPct}%;width:${barWidthPct}%;background:${barColor};">
+        ${escapeHtml(t.title || t.name || '')}
+      </div>`;
     }
     rowsHtml += '</div></div>';
   }
   rowsEl.innerHTML = rowsHtml;
 }
 
-/* ── Modal ── */
+/* ── Modal Error Handlers ── */
+
+function showModalError(msg) {
+  let errorContainer = document.getElementById('sched-modal-error');
+  if (!errorContainer) {
+    errorContainer = document.createElement('div');
+    errorContainer.id = 'sched-modal-error';
+    errorContainer.className = 'sched-error-banner';
+    const bodyEl = document.getElementById('sched-modal-body');
+    if (bodyEl) bodyEl.parentNode.insertBefore(errorContainer, bodyEl);
+  }
+  errorContainer.textContent = msg;
+}
+
+function clearModalError() {
+  const errorContainer = document.getElementById('sched-modal-error');
+  if (errorContainer) errorContainer.remove();
+}
+
+/* ── Open/Close Modals ── */
 
 export function openSchedulerModal(type, editId) {
+  clearModalError();
   modalType = type;
   modalEditId = editId || null;
-  var modal = document.getElementById('sched-modal');
-  var titleEl = document.getElementById('sched-modal-title');
-  var bodyEl = document.getElementById('sched-modal-body');
-  var saveBtn = document.getElementById('sched-modal-save');
+  const modal = document.getElementById('sched-modal');
+  const titleEl = document.getElementById('sched-modal-title');
+  const bodyEl = document.getElementById('sched-modal-body');
+  const saveBtn = document.getElementById('sched-modal-save');
   if (!modal || !bodyEl) return;
 
   if (saveBtn) saveBtn.style.display = '';
 
-  var html = '';
+  let html = '';
   if (type === 'event') {
-    if (titleEl) titleEl.textContent = editId ? 'Edit Event' : 'New Event';
-    var existing = editId ? cachedEvents.find(function (e) { return (e.id || e.eventId) === editId; }) : null;
-    html += '<label style="font-size:12px;font-weight:600;">Title</label>';
-    html += '<input id="sched-modal-event-title" type="text" placeholder="Event title" value="' + escapeHtml(existing ? (existing.title || existing.summary || '') : '') + '" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
-    html += '<div><label style="font-size:12px;font-weight:600;">Start Date</label><input id="sched-modal-event-start" type="date" value="' + (existing ? (existing.start || existing.startDate || '').substring(0, 10) : formatDateStr(calCursor)) + '" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:13px;" /></div>';
-    html += '<div><label style="font-size:12px;font-weight:600;">End Date</label><input id="sched-modal-event-end" type="date" value="' + (existing ? (existing.end || existing.endDate || '').substring(0, 10) : '') + '" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:13px;" /></div>';
-    html += '</div>';
-    html += '<label style="font-size:12px;font-weight:600;margin-top:8px;display:block;">Description</label>';
-    html += '<textarea id="sched-modal-event-desc" rows="3" placeholder="Optional description" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:12px;resize:vertical;">' + escapeHtml(existing ? (existing.description || '') : '') + '</textarea>';
-  } else if (type === 'task') {
-    if (titleEl) titleEl.textContent = 'New Task';
-    html += '<label style="font-size:12px;font-weight:600;">Task Title</label>';
-    html += '<input id="sched-modal-task-title" type="text" placeholder="Task title" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
-    html += '<label style="font-size:12px;font-weight:600;">Project</label>';
-    html += '<select id="sched-modal-task-project" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;">';
-    html += '<option value="">Select project...</option>';
-    for (var i = 0; i < cachedProjects.length; i++) {
-      var proj = cachedProjects[i];
-      html += '<option value="' + escapeHtml(proj.id || proj.projectId || '') + '">' + escapeHtml(proj.name || proj.title || 'Project') + '</option>';
+    titleEl.textContent = editId ? 'Edit Event' : 'New Event';
+    const existing = editId ? cachedEvents.find(e => (e.id || e.eventId) === editId) : null;
+    
+    html += `<label class="sched-modal-label">Title</label>
+      <input id="sched-modal-event-title" class="sched-modal-input" type="text" placeholder="Event title" value="${escapeHtml(existing ? (existing.title || existing.summary || '') : '')}" />
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <label class="sched-modal-label">Start Date</label>
+          <input id="sched-modal-event-start" class="sched-modal-input" type="date" value="${existing ? (existing.start || existing.startDate || '').substring(0, 10) : formatDateStr(calCursor)}" />
+        </div>
+        <div>
+          <label class="sched-modal-label">End Date</label>
+          <input id="sched-modal-event-end" class="sched-modal-input" type="date" value="${existing ? (existing.end || existing.endDate || '').substring(0, 10) : ''}" />
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <div>
+          <label class="sched-modal-label">Start Time</label>
+          <input id="sched-modal-event-start-time" class="sched-modal-input" type="time" value="${existing && existing.startTime ? existing.startTime : ''}" />
+        </div>
+        <div>
+          <label class="sched-modal-label">End Time</label>
+          <input id="sched-modal-event-end-time" class="sched-modal-input" type="time" value="${existing && existing.endTime ? existing.endTime : ''}" />
+        </div>
+      </div>
+      <label class="sched-modal-label" style="margin-top:8px;display:block;">Description</label>
+      <textarea id="sched-modal-event-desc" class="sched-modal-textarea" rows="3" placeholder="Optional description">${escapeHtml(existing ? (existing.description || '') : '')}</textarea>`;
+
+    if (editId) {
+      // Add event delete option
+      html += `<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:flex-end;">
+        <button class="danger-button" onclick="deleteSchedulerEvent('${escapeHtml(editId)}')">🗑 Delete Event</button>
+      </div>`;
     }
-    html += '</select>';
-    html += '<label style="font-size:12px;font-weight:600;">Status</label>';
-    html += '<select id="sched-modal-task-status" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:13px;">';
-    html += '<option value="backlog">Backlog</option><option value="todo">To Do</option><option value="in-progress">In Progress</option><option value="review">Review</option><option value="done">Done</option>';
-    html += '</select>';
+  } else if (type === 'task') {
+    titleEl.textContent = 'New Task';
+    html += `<label class="sched-modal-label">Task Title</label>
+      <input id="sched-modal-task-title" class="sched-modal-input" type="text" placeholder="Task title" />
+      <label class="sched-modal-label">Project</label>
+      <select id="sched-modal-task-project" class="sched-modal-select">
+        <option value="">Select project...</option>`;
+    for (const proj of cachedProjects) {
+      html += `<option value="${escapeHtml(proj.id || proj.projectId || '')}">${escapeHtml(proj.name || proj.title || 'Project')}</option>`;
+    }
+    html += `</select>
+      <label class="sched-modal-label">Status</label>
+      <select id="sched-modal-task-status" class="sched-modal-select">
+        <option value="backlog">Backlog</option>
+        <option value="todo">To Do</option>
+        <option value="in-progress">In Progress</option>
+        <option value="review">Review</option>
+        <option value="done">Done</option>
+      </select>`;
   } else if (type === 'project') {
-    if (titleEl) titleEl.textContent = 'New Project';
-    html += '<label style="font-size:12px;font-weight:600;">Project Name</label>';
-    html += '<input id="sched-modal-project-name" type="text" placeholder="Project name" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
-    html += '<label style="font-size:12px;font-weight:600;">Description</label>';
-    html += '<textarea id="sched-modal-project-desc" rows="3" placeholder="Project description" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:12px;resize:vertical;"></textarea>';
+    titleEl.textContent = 'New Project';
+    html += `<label class="sched-modal-label">Project Name</label>
+      <input id="sched-modal-project-name" class="sched-modal-input" type="text" placeholder="Project name" />
+      <label class="sched-modal-label">Description</label>
+      <textarea id="sched-modal-project-desc" class="sched-modal-textarea" rows="3" placeholder="Project description"></textarea>`;
   } else if (type === 'cron') {
-    if (titleEl) titleEl.textContent = 'New Cron Job';
-    html += '<label style="font-size:12px;font-weight:600;">Label</label>';
-    html += '<input id="sched-modal-cron-label" type="text" placeholder="Job label" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
-    html += '<label style="font-size:12px;font-weight:600;">Type</label>';
-    html += '<select id="sched-modal-cron-type" onchange="toggleCronFields()" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;">';
-    html += '<option value="recurring">Recurring (Cron)</option><option value="once">One-time</option>';
-    html += '</select>';
-    html += '<div id="sched-cron-recurring-fields">';
-    html += '<label style="font-size:12px;font-weight:600;">Cron Expression</label>';
-    html += '<input id="sched-modal-cron-expr" type="text" placeholder="*/5 * * * *" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;font-family:monospace;" />';
-    html += '<div class="muted" style="font-size:11px;margin-bottom:8px;">Format: minute hour dayOfMonth month dayOfWeek</div>';
-    html += '</div>';
-    html += '<div id="sched-cron-once-fields" style="display:none;">';
-    html += '<label style="font-size:12px;font-weight:600;">Run At</label>';
-    html += '<input id="sched-modal-cron-runat" type="datetime-local" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
-    html += '</div>';
-    html += '<label style="font-size:12px;font-weight:600;">Action</label>';
-    html += '<input id="sched-modal-cron-action" type="text" placeholder="action-name" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0 10px;font-size:13px;" />';
-    html += '<label style="font-size:12px;font-weight:600;">Payload (JSON, optional)</label>';
-    html += '<textarea id="sched-modal-cron-payload" rows="3" placeholder=\'{"key": "value"}\' style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);margin:4px 0;font-size:12px;resize:vertical;font-family:monospace;"></textarea>';
+    titleEl.textContent = 'New Cron Job';
+    html += `<label class="sched-modal-label">Label</label>
+      <input id="sched-modal-cron-label" class="sched-modal-input" type="text" placeholder="Job label" />
+      <label class="sched-modal-label">Type</label>
+      <select id="sched-modal-cron-type" class="sched-modal-select" onchange="toggleCronFields()">
+        <option value="recurring">Recurring (Cron)</option>
+        <option value="once">One-time</option>
+      </select>
+      <div id="sched-cron-recurring-fields">
+        <label class="sched-modal-label">Cron Expression</label>
+        <input id="sched-modal-cron-expr" class="sched-modal-input" type="text" placeholder="*/5 * * * *" style="font-family:monospace;" />
+        <div class="muted" style="font-size:11px;margin-bottom:8px;">Format: minute hour dayOfMonth month dayOfWeek</div>
+      </div>
+      <div id="sched-cron-once-fields" style="display:none;">
+        <label class="sched-modal-label">Run At</label>
+        <input id="sched-modal-cron-runat" class="sched-modal-input" type="datetime-local" />
+      </div>
+      <label class="sched-modal-label">Action</label>
+      <input id="sched-modal-cron-action" class="sched-modal-input" type="text" placeholder="action-name" />
+      <label class="sched-modal-label">Payload (JSON, optional)</label>
+      <textarea id="sched-modal-cron-payload" class="sched-modal-textarea" rows="3" placeholder='{"key": "value"}' style="font-family:monospace;"></textarea>`;
   }
 
   bodyEl.innerHTML = html;
@@ -571,133 +660,261 @@ export function openSchedulerModal(type, editId) {
 }
 
 export function closeSchedulerModal() {
-  var modal = document.getElementById('sched-modal');
+  clearModalError();
+  const modal = document.getElementById('sched-modal');
   if (modal) modal.style.display = 'none';
   modalType = null;
   modalEditId = null;
 }
 
-export async function saveSchedulerModal() {
-  if (modalType === 'event') {
-    var title = (document.getElementById('sched-modal-event-title') || {}).value || '';
-    var start = (document.getElementById('sched-modal-event-start') || {}).value || '';
-    var end = (document.getElementById('sched-modal-event-end') || {}).value || '';
-    var desc = (document.getElementById('sched-modal-event-desc') || {}).value || '';
-    if (!title || !start) {
-      dashboardLog('scheduler', 'scheduler.error', 'Event title and start date are required');
+/* ── Save handlers split into modular functions ── */
+
+async function saveEvent() {
+  const title = (document.getElementById('sched-modal-event-title') || {}).value || '';
+  const start = (document.getElementById('sched-modal-event-start') || {}).value || '';
+  const end = (document.getElementById('sched-modal-event-end') || {}).value || '';
+  const startTime = (document.getElementById('sched-modal-event-start-time') || {}).value || '';
+  const endTime = (document.getElementById('sched-modal-event-end-time') || {}).value || '';
+  const desc = (document.getElementById('sched-modal-event-desc') || {}).value || '';
+
+  if (!title || !start) {
+    showModalError('Event title and start date are required');
+    return;
+  }
+
+  const body = { title, start, description: desc, startTime, endTime };
+  if (end) body.end = end;
+
+  const endpoint = modalEditId ? `/api/scheduler/events/${encodeURIComponent(modalEditId)}` : '/api/scheduler/events';
+  const method = modalEditId ? 'PUT' : 'POST';
+
+  await request(endpoint, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  
+  dashboardLog('scheduler', 'scheduler.event-saved', title);
+}
+
+async function saveTask() {
+  const title = (document.getElementById('sched-modal-task-title') || {}).value || '';
+  const projectId = (document.getElementById('sched-modal-task-project') || {}).value || '';
+  const status = (document.getElementById('sched-modal-task-status') || {}).value || 'backlog';
+
+  if (!title) {
+    showModalError('Task title is required');
+    return;
+  }
+  if (!projectId) {
+    showModalError('Project selection is required');
+    return;
+  }
+
+  await request('/api/scheduler/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, projectId, status })
+  });
+
+  dashboardLog('scheduler', 'scheduler.task-saved', title);
+}
+
+async function saveProject() {
+  const name = (document.getElementById('sched-modal-project-name') || {}).value || '';
+  const desc = (document.getElementById('sched-modal-project-desc') || {}).value || '';
+
+  if (!name) {
+    showModalError('Project name is required');
+    return;
+  }
+
+  await request('/api/scheduler/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description: desc })
+  });
+
+  dashboardLog('scheduler', 'scheduler.project-saved', name);
+}
+
+async function saveCron() {
+  const label = (document.getElementById('sched-modal-cron-label') || {}).value || '';
+  const type = (document.getElementById('sched-modal-cron-type') || {}).value || 'recurring';
+  const expr = (document.getElementById('sched-modal-cron-expr') || {}).value || '';
+  const runAt = (document.getElementById('sched-modal-cron-runat') || {}).value || '';
+  const action = (document.getElementById('sched-modal-cron-action') || {}).value || '';
+  const payloadRaw = (document.getElementById('sched-modal-cron-payload') || {}).value || '';
+
+  if (!label || !action) {
+    showModalError('Cron job label and action are required');
+    return;
+  }
+
+  const body = { label, type, action };
+  if (type === 'recurring') {
+    if (!expr) {
+      showModalError('Cron expression is required for recurring jobs');
       return;
     }
-    var body = { title: title, start: start, description: desc };
-    if (end) body.end = end;
-    if (modalEditId) body.eventId = modalEditId;
-    try {
-      await request('/api/scheduler/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      dashboardLog('scheduler', 'scheduler.event-saved', title);
-    } catch (e) {
-      dashboardLog('scheduler', 'scheduler.error', 'Failed to save event: ' + e.message);
-    }
-  } else if (modalType === 'task') {
-    var taskTitle = (document.getElementById('sched-modal-task-title') || {}).value || '';
-    var projectId = (document.getElementById('sched-modal-task-project') || {}).value || '';
-    var status = (document.getElementById('sched-modal-task-status') || {}).value || 'backlog';
-    if (!taskTitle) {
-      dashboardLog('scheduler', 'scheduler.error', 'Task title is required');
+    body.cronExpression = expr;
+  } else {
+    if (!runAt) {
+      showModalError('Run-at datetime is required for one-time jobs');
       return;
     }
+    body.runAt = runAt;
+  }
+
+  if (payloadRaw.trim()) {
     try {
-      await request('/api/scheduler/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: taskTitle, projectId: projectId, status: status })
-      });
-      dashboardLog('scheduler', 'scheduler.task-saved', taskTitle);
-    } catch (e) {
-      dashboardLog('scheduler', 'scheduler.error', 'Failed to save task: ' + e.message);
-    }
-  } else if (modalType === 'project') {
-    var projectName = (document.getElementById('sched-modal-project-name') || {}).value || '';
-    var projectDesc = (document.getElementById('sched-modal-project-desc') || {}).value || '';
-    if (!projectName) {
-      dashboardLog('scheduler', 'scheduler.error', 'Project name is required');
+      body.payload = JSON.parse(payloadRaw);
+    } catch (_) {
+      showModalError('Payload must be valid JSON');
       return;
-    }
-    try {
-      await request('/api/scheduler/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: projectName, description: projectDesc })
-      });
-      dashboardLog('scheduler', 'scheduler.project-saved', projectName);
-    } catch (e) {
-      dashboardLog('scheduler', 'scheduler.error', 'Failed to save project: ' + e.message);
-    }
-  } else if (modalType === 'cron') {
-    var cronLabel = (document.getElementById('sched-modal-cron-label') || {}).value || '';
-    var cronType = (document.getElementById('sched-modal-cron-type') || {}).value || 'recurring';
-    var cronExpr = (document.getElementById('sched-modal-cron-expr') || {}).value || '';
-    var cronRunAt = (document.getElementById('sched-modal-cron-runat') || {}).value || '';
-    var cronAction = (document.getElementById('sched-modal-cron-action') || {}).value || '';
-    var cronPayloadRaw = (document.getElementById('sched-modal-cron-payload') || {}).value || '';
-    if (!cronLabel || !cronAction) {
-      dashboardLog('scheduler', 'scheduler.error', 'Cron job label and action are required');
-      return;
-    }
-    var cronBody = { label: cronLabel, type: cronType, action: cronAction };
-    if (cronType === 'recurring') {
-      if (!cronExpr) {
-        dashboardLog('scheduler', 'scheduler.error', 'Cron expression is required for recurring jobs');
-        return;
-      }
-      cronBody.cronExpression = cronExpr;
-    } else {
-      if (!cronRunAt) {
-        dashboardLog('scheduler', 'scheduler.error', 'Run-at datetime is required for one-time jobs');
-        return;
-      }
-      cronBody.runAt = cronRunAt;
-    }
-    if (cronPayloadRaw.trim()) {
-      try {
-        cronBody.payload = JSON.parse(cronPayloadRaw);
-      } catch (_) {
-        dashboardLog('scheduler', 'scheduler.error', 'Payload must be valid JSON');
-        return;
-      }
-    }
-    try {
-      await request('/api/scheduler/cron', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cronBody)
-      });
-      dashboardLog('scheduler', 'scheduler.cron-saved', cronLabel);
-    } catch (e) {
-      dashboardLog('scheduler', 'scheduler.error', 'Failed to save cron job: ' + e.message);
     }
   }
 
-  closeSchedulerModal();
-  await refreshSchedulerData();
+  await request('/api/scheduler/cron', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  dashboardLog('scheduler', 'scheduler.cron-saved', label);
 }
+
+export async function saveSchedulerModal() {
+  clearModalError();
+  try {
+    if (modalType === 'event') await saveEvent();
+    else if (modalType === 'task') await saveTask();
+    else if (modalType === 'project') await saveProject();
+    else if (modalType === 'cron') await saveCron();
+
+    closeSchedulerModal();
+    await refreshSchedulerData();
+  } catch (err) {
+    showModalError(err.message || 'An error occurred during save.');
+  }
+}
+
+/* ── Entity Deletion Handlers ── */
+
+export async function deleteSchedulerEvent(eventId) {
+  if (!confirm('Are you sure you want to delete this event?')) return;
+  try {
+    await request(`/api/scheduler/events/${encodeURIComponent(eventId)}`, { method: 'DELETE' });
+    dashboardLog('scheduler', 'scheduler.event-deleted', eventId);
+    closeSchedulerModal();
+    await refreshSchedulerData();
+  } catch (err) {
+    showModalError(`Failed to delete event: ${err.message}`);
+  }
+}
+
+export async function deleteSchedulerProject(projectId) {
+  if (!confirm('Are you sure you want to delete this project? All associated tasks will be removed.')) return;
+  try {
+    await request(`/api/scheduler/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+    dashboardLog('scheduler', 'scheduler.project-deleted', projectId);
+    closeSchedulerModal();
+    await refreshSchedulerData();
+  } catch (err) {
+    showModalError(`Failed to delete project: ${err.message}`);
+  }
+}
+
+export async function deleteSchedulerTask(taskId, projectId) {
+  if (!confirm('Are you sure you want to delete this task?')) return;
+  try {
+    await request(`/api/scheduler/tasks/${encodeURIComponent(taskId)}?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+    dashboardLog('scheduler', 'scheduler.task-deleted', taskId);
+    // Reload project details modal
+    await openProjectDetail(projectId);
+    await refreshSchedulerData();
+  } catch (err) {
+    showModalError(`Failed to delete task: ${err.message}`);
+  }
+}
+
+// Wire deletes to window globally so HTML onclick handlers can trigger them
+window.deleteSchedulerEvent = deleteSchedulerEvent;
+window.deleteSchedulerProject = deleteSchedulerProject;
+window.deleteSchedulerTask = deleteSchedulerTask;
 
 /* ── Initialization ── */
 
 export async function initSchedulerTab() {
   dashboardLog('scheduler', 'scheduler.init', 'Initializing scheduler tab');
+  
   // Allow day-click navigation from mini-month
   window._schedGoToDate = function (dateStr) {
     calCursor = new Date(dateStr + 'T00:00:00');
     calMode = 'day';
     renderSchedulerCalendar();
   };
+
+  // Wire utilities to window for onclick declarations
   window.toggleCronFields = toggleCronFields;
   window.cancelCronJob = cancelCronJob;
   window.previewCronJob = previewCronJob;
   window.refreshCronJobs = refreshCronJobs;
+  window.schedCalNav = schedCalNav;
+  window.setCalMode = setCalMode;
+  window.ganttNav = ganttNav;
+
+  // Single delegated drag-and-drop listener setup on Kanban board container to prevent memory leaks
+  const boardViewEl = document.getElementById('sched-view-board');
+  if (boardViewEl) {
+    const boardEl = boardViewEl.querySelector('.sched-kanban-board');
+    if (boardEl) {
+      boardEl.addEventListener('dragover', function (e) {
+        const lane = e.target.closest('.sched-lane-body');
+        if (lane) {
+          e.preventDefault();
+          lane.style.borderColor = 'var(--accent)';
+          lane.style.background = 'rgba(105, 210, 255, 0.05)';
+        }
+      });
+
+      boardEl.addEventListener('dragleave', function (e) {
+        const lane = e.target.closest('.sched-lane-body');
+        if (lane) {
+          lane.style.borderColor = '';
+          lane.style.background = '';
+        }
+      });
+
+      boardEl.addEventListener('drop', function (e) {
+        const lane = e.target.closest('.sched-lane-body');
+        if (lane) {
+          e.preventDefault();
+          lane.style.borderColor = '';
+          lane.style.background = '';
+          
+          const payload = e.dataTransfer.getData('text/plain');
+          if (!payload) return;
+          const [taskId, projectId] = payload.split('|');
+          const col = lane.closest('.sched-kanban-column');
+          const newStatus = col ? col.getAttribute('data-status') : null;
+          
+          if (taskId && newStatus) {
+            request(`/api/scheduler/tasks/${encodeURIComponent(taskId)}?projectId=${encodeURIComponent(projectId || '')}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: newStatus })
+            }).then(() => {
+              refreshSchedulerData();
+            }).catch((err) => {
+              dashboardLog('scheduler', 'scheduler.error', `Failed to move task: ${err.message}`);
+            });
+          }
+        }
+      });
+    }
+  }
+
   await refreshSchedulerData();
 }
 
@@ -705,102 +922,113 @@ export async function initSchedulerTab() {
 
 export async function refreshCronJobs() {
   try {
-    var cronData = await request('/api/scheduler/cron');
+    const cronData = await request('/api/scheduler/cron');
     cachedCronJobs = Array.isArray(cronData) ? cronData : [];
   } catch (_) {
     cachedCronJobs = [];
   }
-  var countEl = document.getElementById('sched-cron-count');
-  if (countEl) countEl.textContent = cachedCronJobs.length + ' job' + (cachedCronJobs.length !== 1 ? 's' : '');
   renderCronJobs();
 }
 
 export function renderCronJobs() {
-  var container = document.getElementById('sched-cron-list');
+  const container = document.getElementById('sched-cron-list');
   if (!container) return;
-  var countEl = document.getElementById('sched-cron-count');
-  if (countEl) countEl.textContent = cachedCronJobs.length + ' job' + (cachedCronJobs.length !== 1 ? 's' : '');
+  const countEl = document.getElementById('sched-cron-count');
+  if (countEl) countEl.textContent = `${cachedCronJobs.length} job${cachedCronJobs.length !== 1 ? 's' : ''}`;
+  
   if (!cachedCronJobs.length) {
-    container.innerHTML = '<span class="muted" style="font-size:12px;">No cron jobs scheduled. Click + Cron Job to add one.</span>';
+    container.innerHTML = '<span class="muted" style="font-size:12px;display:block;text-align:center;padding:24px;border:1px dashed var(--border);border-radius:8px;">No cron jobs scheduled. Click + Cron Job to add one.</span>';
     return;
   }
-  var html = '';
-  for (var i = 0; i < cachedCronJobs.length; i++) {
-    var job = cachedCronJobs[i];
-    var typeBadge = job.type === 'recurring'
-      ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(105,210,255,0.15);color:var(--accent);">recurring</span>'
-      : '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,180,60,0.15);color:#ffb43c;">once</span>';
-    var schedInfo = job.cronExpression
-      ? '<code style="font-size:11px;background:rgba(148,163,184,0.1);padding:2px 6px;border-radius:4px;">' + escapeHtml(job.cronExpression) + '</code>'
-      : '<span style="font-size:11px;">Run at: ' + escapeHtml(job.runAt || 'N/A') + '</span>';
-    var nextRun = job.nextRunAt ? '<span style="font-size:11px;color:var(--text-muted);">Next: ' + escapeHtml(new Date(job.nextRunAt).toLocaleString()) + '</span>' : '';
-    var lastRun = job.lastRunAt ? '<span style="font-size:11px;color:var(--text-muted);">Last: ' + escapeHtml(new Date(job.lastRunAt).toLocaleString()) + '</span>' : '';
-    html += '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface);">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
-    html += '<div style="display:flex;gap:8px;align-items:center;"><strong style="font-size:13px;">' + escapeHtml(job.label) + '</strong>' + typeBadge + '</div>';
-    html += '<div style="display:flex;gap:4px;">';
-    html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="previewCronJob(\'' + escapeHtml(job.id) + '\')">Preview</button>';
-    html += '<button class="secondary-button" style="font-size:11px;padding:2px 8px;color:#f87171;" onclick="cancelCronJob(\'' + escapeHtml(job.id) + '\')">Cancel</button>';
-    html += '</div></div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">';
-    html += schedInfo;
-    html += '<span style="font-size:11px;color:var(--text-muted);">Action: <strong>' + escapeHtml(job.action) + '</strong></span>';
-    if (nextRun) html += nextRun;
-    if (lastRun) html += lastRun;
-    html += '</div></div>';
+  let html = '';
+  for (const job of cachedCronJobs) {
+    const typeBadge = job.type === 'recurring'
+      ? '<span class="sched-cron-badge-recurring">recurring</span>'
+      : '<span class="sched-cron-badge-once">once</span>';
+    
+    const schedInfo = job.cronExpression
+      ? `<code class="sched-cron-expr-info">${escapeHtml(job.cronExpression)}</code>`
+      : `<span style="font-size:11px;color:var(--muted);">Run at: ${escapeHtml(job.runAt || 'N/A')}</span>`;
+      
+    const nextRun = job.nextRunAt ? `<span style="font-size:11px;color:var(--muted);">Next: ${new Date(job.nextRunAt).toLocaleString()}</span>` : '';
+    const lastRun = job.lastRunAt ? `<span style="font-size:11px;color:var(--muted);">Last: ${new Date(job.lastRunAt).toLocaleString()}</span>` : '';
+    
+    html += `<div class="sched-cron-card">
+      <div class="sched-cron-header">
+        <div class="sched-cron-title-wrap">
+          <strong style="font-size:13px;color:var(--fg);">${escapeHtml(job.label)}</strong>
+          ${typeBadge}
+        </div>
+        <div class="sched-cron-actions-wrap">
+          <button class="secondary-button" style="font-size:11px;padding:2px 8px;" onclick="previewCronJob('${escapeHtml(job.id)}')">Preview</button>
+          <button class="danger-button" style="font-size:11px;padding:2px 8px;" onclick="cancelCronJob('${escapeHtml(job.id)}')">Cancel</button>
+        </div>
+      </div>
+      <div class="sched-cron-details-row">
+        ${schedInfo}
+        <span style="font-size:11px;color:var(--muted);">Action: <strong style="color:var(--accent-2);">${escapeHtml(job.action)}</strong></span>
+        ${nextRun}
+        ${lastRun}
+      </div>
+    </div>`;
   }
   container.innerHTML = html;
 }
 
 export async function cancelCronJob(jobId) {
+  if (!confirm('Are you sure you want to cancel this cron job?')) return;
   try {
-    await request('/api/scheduler/cron/' + jobId, { method: 'DELETE' });
+    await request(`/api/scheduler/cron/${jobId}`, { method: 'DELETE' });
     dashboardLog('scheduler', 'scheduler.cron-cancelled', jobId);
   } catch (e) {
-    dashboardLog('scheduler', 'scheduler.error', 'Failed to cancel cron job: ' + e.message);
+    dashboardLog('scheduler', 'scheduler.error', `Failed to cancel cron job: ${e.message}`);
   }
   await refreshCronJobs();
 }
 
 export async function previewCronJob(jobId) {
-  var modal = document.getElementById('sched-modal');
-  var titleEl = document.getElementById('sched-modal-title');
-  var bodyEl = document.getElementById('sched-modal-body');
-  var saveBtn = document.getElementById('sched-modal-save');
+  const modal = document.getElementById('sched-modal');
+  const titleEl = document.getElementById('sched-modal-title');
+  const bodyEl = document.getElementById('sched-modal-body');
+  const saveBtn = document.getElementById('sched-modal-save');
   if (!modal || !bodyEl) return;
+  
   if (saveBtn) saveBtn.style.display = 'none';
   if (titleEl) titleEl.textContent = 'Cron Job Preview';
+  
   try {
-    var data = await request('/api/scheduler/cron/' + jobId + '/preview');
-    var html = '<div style="font-size:13px;">';
-    html += '<div style="margin-bottom:8px;"><strong>Label:</strong> ' + escapeHtml(data.label || '') + '</div>';
-    html += '<div style="margin-bottom:8px;"><strong>Type:</strong> ' + escapeHtml(data.type || '') + '</div>';
-    if (data.cronExpression) html += '<div style="margin-bottom:8px;"><strong>Cron:</strong> <code>' + escapeHtml(data.cronExpression) + '</code></div>';
-    if (data.runAt) html += '<div style="margin-bottom:8px;"><strong>Run At:</strong> ' + escapeHtml(data.runAt) + '</div>';
-    html += '<div style="margin-bottom:8px;"><strong>Action:</strong> ' + escapeHtml(data.action || '') + '</div>';
-    if (data.nextRunAt) html += '<div style="margin-bottom:8px;"><strong>Next Run:</strong> ' + escapeHtml(new Date(data.nextRunAt).toLocaleString()) + '</div>';
+    const data = await request(`/api/scheduler/cron/${jobId}/preview`);
+    let html = '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">';
+    html += `<div><strong>Label:</strong> ${escapeHtml(data.label || '')}</div>`;
+    html += `<div><strong>Type:</strong> ${escapeHtml(data.type || '')}</div>`;
+    if (data.cronExpression) html += `<div><strong>Cron:</strong> <code class="sched-cron-expr-info">${escapeHtml(data.cronExpression)}</code></div>`;
+    if (data.runAt) html += `<div><strong>Run At:</strong> ${escapeHtml(data.runAt)}</div>`;
+    html += `<div><strong>Action:</strong> <strong style="color:var(--accent-2);">${escapeHtml(data.action || '')}</strong></div>`;
+    if (data.nextRunAt) html += `<div><strong>Next Run:</strong> ${escapeHtml(new Date(data.nextRunAt).toLocaleString())}</div>`;
+    
     if (data.nextOccurrences && data.nextOccurrences.length) {
-      html += '<div style="margin-top:12px;"><strong>Next 10 Occurrences:</strong></div>';
-      html += '<ol style="margin:6px 0 0 18px;padding:0;font-size:12px;">';
-      for (var oi = 0; oi < data.nextOccurrences.length; oi++) {
-        html += '<li style="margin-bottom:2px;">' + escapeHtml(new Date(data.nextOccurrences[oi]).toLocaleString()) + '</li>';
+      html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:8px;">
+        <strong>Next 10 Occurrences:</strong>
+        <ol style="margin:6px 0 0 18px;padding:0;font-size:12px;color:var(--muted);line-height:1.6;">`;
+      for (const occurrence of data.nextOccurrences) {
+        html += `<li style="margin-bottom:2px;">${new Date(occurrence).toLocaleString()}</li>`;
       }
-      html += '</ol>';
+      html += '</ol></div>';
     }
     html += '</div>';
     bodyEl.innerHTML = html;
   } catch (e) {
-    bodyEl.innerHTML = '<span class="muted">Failed to load preview: ' + escapeHtml(e.message || '') + '</span>';
+    bodyEl.innerHTML = `<span class="muted">Failed to load preview: ${escapeHtml(e.message || '')}</span>`;
   }
   modal.style.display = 'flex';
 }
 
 export function toggleCronFields() {
-  var typeSelect = document.getElementById('sched-modal-cron-type');
-  var recurringFields = document.getElementById('sched-cron-recurring-fields');
-  var onceFields = document.getElementById('sched-cron-once-fields');
+  const typeSelect = document.getElementById('sched-modal-cron-type');
+  const recurringFields = document.getElementById('sched-cron-recurring-fields');
+  const onceFields = document.getElementById('sched-cron-once-fields');
   if (!typeSelect) return;
-  var isRecurring = typeSelect.value === 'recurring';
+  const isRecurring = typeSelect.value === 'recurring';
   if (recurringFields) recurringFields.style.display = isRecurring ? '' : 'none';
   if (onceFields) onceFields.style.display = isRecurring ? 'none' : '';
 }

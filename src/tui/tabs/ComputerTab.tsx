@@ -9,13 +9,7 @@ import { useApi } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, KeyValue, Loading, ErrorBox, SectionHeader } from "../components/ui.js";
 
-export function ComputerTab({
-    client,
-    focused,
-}: {
-    client: PrismClient;
-    focused: boolean;
-}): React.JSX.Element {
+export function ComputerTab({ client, focused }: { client: PrismClient; focused: boolean }): React.JSX.Element {
     const sysInfo = useApi(client, (c) => c.getSystemInfo(), 15000);
     const [shellInput, setShellInput] = useState("");
     const [shellOutput, setShellOutput] = useState<string[]>([]);
@@ -78,12 +72,12 @@ export function ComputerTab({
                             line.startsWith("$")
                                 ? colors.user
                                 : line.startsWith("[stderr]")
+                                  ? colors.error
+                                  : line.startsWith("[error]")
                                     ? colors.error
-                                    : line.startsWith("[error]")
-                                        ? colors.error
-                                        : line.startsWith("[exit:")
-                                            ? colors.muted
-                                            : colors.text
+                                    : line.startsWith("[exit:")
+                                      ? colors.muted
+                                      : colors.text
                         }
                     >
                         {line}

@@ -9,11 +9,30 @@
 import { EventEmitter } from "node:events";
 import type { PrismClient } from "../src/tui/api/prism-client.js";
 import type {
-    HealthResponse, SessionInfo, ChatMessage, ToolState, PluginState,
-    UtilityState, AgentInfo, SwarmInfo, EventRecord, LlmConfig, SystemInfo,
-    NetworkInterface, SchedulerEvent, ProjectInfo, ApprovalItem, ModelProfile,
-    AuditEntry, BrowserSessionInfo, WorkspaceFile, CharacterInfo,
-    TelemetrySummary, RetrievalCohort, AlertInfo, DiagnosticsReport,
+    HealthResponse,
+    SessionInfo,
+    ChatMessage,
+    ToolState,
+    PluginState,
+    UtilityState,
+    AgentInfo,
+    SwarmInfo,
+    EventRecord,
+    LlmConfig,
+    SystemInfo,
+    NetworkInterface,
+    SchedulerEvent,
+    ProjectInfo,
+    ApprovalItem,
+    ModelProfile,
+    AuditEntry,
+    BrowserSessionInfo,
+    WorkspaceFile,
+    CharacterInfo,
+    TelemetrySummary,
+    RetrievalCohort,
+    AlertInfo,
+    DiagnosticsReport,
 } from "../src/tui/api/prism-client.js";
 import type { PrismWsClient } from "../src/tui/api/ws-client.js";
 
@@ -42,8 +61,28 @@ export const MOCK_LLM_CONFIG: LlmConfig = {
 };
 
 export const MOCK_TOOLS: ToolState[] = [
-    { name: "readFile", category: "filesystem", description: "Read file contents", riskTier: 1, enabled: true, invocations: 42, successes: 40, failures: 2, avgLatencyMs: 12 },
-    { name: "shellExec", category: "system", description: "Execute shell command", riskTier: 3, enabled: true, invocations: 10, successes: 9, failures: 1, avgLatencyMs: 250 },
+    {
+        name: "readFile",
+        category: "filesystem",
+        description: "Read file contents",
+        riskTier: 1,
+        enabled: true,
+        invocations: 42,
+        successes: 40,
+        failures: 2,
+        avgLatencyMs: 12,
+    },
+    {
+        name: "shellExec",
+        category: "system",
+        description: "Execute shell command",
+        riskTier: 3,
+        enabled: true,
+        invocations: 10,
+        successes: 9,
+        failures: 1,
+        avgLatencyMs: 250,
+    },
 ];
 
 export const MOCK_PLUGINS: PluginState[] = [
@@ -69,7 +108,14 @@ export const MOCK_EVENTS: EventRecord[] = [
 ];
 
 export const MOCK_SYSTEM_INFO: SystemInfo = {
-    os: "win32", arch: "x64", cpus: 8, totalMemory: 17179869184, freeMemory: 8589934592, uptime: 86400, nodeVersion: "v22.0.0", platform: "win32",
+    os: "win32",
+    arch: "x64",
+    cpus: 8,
+    totalMemory: 17179869184,
+    freeMemory: 8589934592,
+    uptime: 86400,
+    nodeVersion: "v22.0.0",
+    platform: "win32",
 };
 
 export const MOCK_NETWORK_INTERFACES: NetworkInterface[] = [
@@ -78,7 +124,14 @@ export const MOCK_NETWORK_INTERFACES: NetworkInterface[] = [
 ];
 
 export const MOCK_SCHEDULER_EVENTS: SchedulerEvent[] = [
-    { id: "ev-1", title: "Daily standup", start: "2026-04-10T09:00:00Z", category: "meeting", recurring: true, cron: "0 9 * * *" },
+    {
+        id: "ev-1",
+        title: "Daily standup",
+        start: "2026-04-10T09:00:00Z",
+        category: "meeting",
+        recurring: true,
+        cron: "0 9 * * *",
+    },
 ];
 
 export const MOCK_PROJECTS: ProjectInfo[] = [
@@ -95,11 +148,18 @@ export const MOCK_MODEL_MATRIX: ModelProfile[] = [
 ];
 
 export const MOCK_AUDIT_TRAIL: AuditEntry[] = [
-    { timestamp: "2026-04-10T12:00:00Z", action: "config_change", detail: { field: "model", oldValue: "gpt-3.5", newValue: "gpt-4o" } },
+    {
+        timestamp: "2026-04-10T12:00:00Z",
+        action: "config_change",
+        detail: { field: "model", oldValue: "gpt-3.5", newValue: "gpt-4o" },
+    },
 ];
 
 export const MOCK_BROWSER_SESSION: BrowserSessionInfo = {
-    active: true, url: "https://example.com", title: "Example", headless: true,
+    active: true,
+    url: "https://example.com",
+    title: "Example",
+    headless: true,
 };
 
 export const MOCK_WORKSPACE_FILES: WorkspaceFile[] = [
@@ -113,7 +173,11 @@ export const MOCK_CHARACTERS: CharacterInfo[] = [
 ];
 
 export const MOCK_TELEMETRY_SUMMARY: TelemetrySummary = {
-    totalEvents: 500, errorCount: 3, avgLatencyMs: 25, p95LatencyMs: 48, uptimeSeconds: 86400,
+    totalEvents: 500,
+    errorCount: 3,
+    avgLatencyMs: 25,
+    p95LatencyMs: 48,
+    uptimeSeconds: 86400,
 };
 
 export const MOCK_RETRIEVAL_COHORTS: RetrievalCohort[] = [
@@ -121,7 +185,14 @@ export const MOCK_RETRIEVAL_COHORTS: RetrievalCohort[] = [
 ];
 
 export const MOCK_ALERTS: AlertInfo[] = [
-    { id: "al-1", priority: "high", metric: "errorRate", threshold: 0.05, currentValue: 0.08, triggeredAt: "2026-04-10T12:00:00Z" },
+    {
+        id: "al-1",
+        priority: "high",
+        metric: "errorRate",
+        threshold: 0.05,
+        currentValue: 0.08,
+        triggeredAt: "2026-04-10T12:00:00Z",
+    },
 ];
 
 export const MOCK_DIAGNOSTICS_REPORT: DiagnosticsReport = {
@@ -137,7 +208,9 @@ export const MOCK_DIAGNOSTICS_REPORT: DiagnosticsReport = {
  * Creates a mock PrismClient where every method returns a resolved
  * promise with canonical mock data. Override individual methods per test.
  */
-export function createMockClient(overrides?: Partial<Record<keyof PrismClient, (...args: unknown[]) => unknown>>): PrismClient {
+export function createMockClient(
+    overrides?: Partial<Record<keyof PrismClient, (...args: unknown[]) => unknown>>,
+): PrismClient {
     const base: Record<string, (...args: unknown[]) => unknown> = {
         getHealth: () => Promise.resolve(MOCK_HEALTH),
         getSessions: () => Promise.resolve(MOCK_SESSIONS),
@@ -190,7 +263,8 @@ export function createMockClient(overrides?: Partial<Record<keyof PrismClient, (
         createSchedulerEvent: () => Promise.resolve(MOCK_SCHEDULER_EVENTS[0]!),
         deleteSchedulerEvent: () => Promise.resolve(undefined),
         getProjects: () => Promise.resolve(MOCK_PROJECTS),
-        getSchedulerTasks: () => Promise.resolve([{ id: "t-1", title: "Fix bug", status: "In Progress", projectId: "p-1" }]),
+        getSchedulerTasks: () =>
+            Promise.resolve([{ id: "t-1", title: "Fix bug", status: "In Progress", projectId: "p-1" }]),
     };
 
     // Apply overrides
@@ -214,7 +288,9 @@ export function createMockClient(overrides?: Partial<Record<keyof PrismClient, (
 class MockWsClient extends EventEmitter {
     private _mockConnected = false;
 
-    get connected() { return this._mockConnected; }
+    get connected() {
+        return this._mockConnected;
+    }
 
     connect() {
         this._mockConnected = true;
@@ -235,6 +311,14 @@ class MockWsClient extends EventEmitter {
 
 export type MockWsClientType = MockWsClient;
 
-export function createMockWsClient(): PrismWsClient & { simulateMessage: (type: string, data?: Record<string, unknown>) => void; connect: () => void; disconnect: () => void } {
-    return new MockWsClient() as unknown as PrismWsClient & { simulateMessage: (type: string, data?: Record<string, unknown>) => void; connect: () => void; disconnect: () => void };
+export function createMockWsClient(): PrismWsClient & {
+    simulateMessage: (type: string, data?: Record<string, unknown>) => void;
+    connect: () => void;
+    disconnect: () => void;
+} {
+    return new MockWsClient() as unknown as PrismWsClient & {
+        simulateMessage: (type: string, data?: Record<string, unknown>) => void;
+        connect: () => void;
+        disconnect: () => void;
+    };
 }

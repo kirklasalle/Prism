@@ -66,7 +66,7 @@ export function printBanner(): void {
 
 export function printStep(stepNum: number, totalSteps: number, title: string): void {
     const progress = Array.from({ length: totalSteps }, (_, i) =>
-        i < stepNum ? color(sym.bar, ansi.cyan) : color(sym.barEmpty, ansi.gray)
+        i < stepNum ? color(sym.bar, ansi.cyan) : color(sym.barEmpty, ansi.gray),
     ).join("");
     console.log("");
     console.log(`  ${progress}  ${color(`Step ${stepNum}/${totalSteps}`, ansi.gray)}`);
@@ -177,11 +177,7 @@ export interface SelectOption {
     description?: string;
 }
 
-export async function select(
-    question: string,
-    options: SelectOption[],
-    defaultIndex = 0,
-): Promise<string> {
+export async function select(question: string, options: SelectOption[], defaultIndex = 0): Promise<string> {
     if (options.length === 0) throw new Error("select() requires at least one option.");
 
     return new Promise<string>((resolve) => {
@@ -195,9 +191,7 @@ export async function select(
             for (let i = 0; i < options.length; i++) {
                 const opt = options[i];
                 const pointer = i === selectedIdx ? color(` ${sym.arrow} `, ansi.cyan, ansi.bold) : "   ";
-                const label = i === selectedIdx
-                    ? color(opt.label, ansi.cyan, ansi.bold)
-                    : color(opt.label, ansi.white);
+                const label = i === selectedIdx ? color(opt.label, ansi.cyan, ansi.bold) : color(opt.label, ansi.white);
                 const desc = opt.description ? color(` — ${opt.description}`, ansi.gray) : "";
                 process.stdout.write(`${ansi.clearLine}${pointer}${label}${desc}\n`);
             }

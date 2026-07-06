@@ -35,7 +35,11 @@ before(() => {
 });
 
 after(() => {
-    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* Windows */ }
+    try {
+        rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+        /* Windows */
+    }
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -53,7 +57,8 @@ describe("EmailOpsTool", () => {
 
     it("summarize returns empty thread when file does not exist", async () => {
         const result = await tool.execute({
-            ...base, args: { action: "summarize", threadId: "new-thread" },
+            ...base,
+            args: { action: "summarize", threadId: "new-thread" },
         });
         assert.ok(result.ok);
         assert.equal(result.output["messageCount"], 0);
@@ -62,7 +67,8 @@ describe("EmailOpsTool", () => {
 
     it("draft_reply saves a draft to the thread file", async () => {
         const result = await tool.execute({
-            ...base, args: { action: "draft_reply", threadId: "thread-1", body: "Hello there!" },
+            ...base,
+            args: { action: "draft_reply", threadId: "thread-1", body: "Hello there!" },
         });
         assert.ok(result.ok);
         assert.equal((result.output["draft"] as { body: string }).body, "Hello there!");
@@ -77,7 +83,8 @@ describe("EmailOpsTool", () => {
 
     it("send promotes draft to sent and clears drafts", async () => {
         const sendResult = await tool.execute({
-            ...base, args: { action: "send", threadId: "thread-1" },
+            ...base,
+            args: { action: "send", threadId: "thread-1" },
         });
         assert.ok(sendResult.ok);
         assert.equal((sendResult.output["sent"] as { body: string }).body, "Hello there!");
@@ -91,7 +98,8 @@ describe("EmailOpsTool", () => {
 
     it("send fails when there are no drafts", async () => {
         const result = await tool.execute({
-            ...base, args: { action: "send", threadId: "empty-thread" },
+            ...base,
+            args: { action: "send", threadId: "empty-thread" },
         });
         assert.ok(!result.ok);
         assert.ok(result.output["error"]);
@@ -128,7 +136,8 @@ describe("CalendarPlanTool", () => {
 
     it("availability_lookup returns empty list for new calendar", async () => {
         const result = await tool.execute({
-            ...base, args: { action: "availability_lookup", calendarId: "cal-1" },
+            ...base,
+            args: { action: "availability_lookup", calendarId: "cal-1" },
         });
         assert.ok(result.ok);
         assert.equal(result.output["eventCount"], 0);
@@ -156,7 +165,8 @@ describe("CalendarPlanTool", () => {
 
     it("availability_lookup returns confirmed event after create", async () => {
         const result = await tool.execute({
-            ...base, args: { action: "availability_lookup", calendarId: "cal-1" },
+            ...base,
+            args: { action: "availability_lookup", calendarId: "cal-1" },
         });
         assert.ok(result.ok);
         assert.equal(result.output["confirmedCount"], 1);
@@ -230,7 +240,9 @@ describe("NotesExtractTool", () => {
 
     it("persist writes content to disk", async () => {
         const result = await tool.execute({
-            ...base, mutatesState: true, risk: "medium" as const,
+            ...base,
+            mutatesState: true,
+            risk: "medium" as const,
             args: { action: "persist", noteId: "note-1", content: NOTE_CONTENT },
         });
         assert.ok(result.ok);
@@ -263,7 +275,9 @@ describe("NotesExtractTool", () => {
 
     it("persist fails when content is empty", async () => {
         const result = await tool.execute({
-            ...base, mutatesState: true, args: { action: "persist", noteId: "note-1", content: "" },
+            ...base,
+            mutatesState: true,
+            args: { action: "persist", noteId: "note-1", content: "" },
         });
         assert.ok(!result.ok);
     });
@@ -321,7 +335,9 @@ describe("TasksTimelineTool", () => {
 
     it("commit marks timeline as committed", async () => {
         const result = await tool.execute({
-            ...base, mutatesState: true, risk: "high" as const,
+            ...base,
+            mutatesState: true,
+            risk: "high" as const,
             args: { action: "commit", timelineId: "tl-1" },
         });
         assert.ok(result.ok);

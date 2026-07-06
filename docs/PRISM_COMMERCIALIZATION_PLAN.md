@@ -25,7 +25,9 @@ We establish a clear boundary between the **Open Core (Apache-2.0)** and **Comme
   * System tools (filesystem, shell execution with basic safeguards).
   * Local memory systems (episodic, session summaries, semantic index).
   * TUI and standard single-session Dashboard interface.
-  * Model capability matrix, Spectrum Refraction (SR) configuration, and local provider switching.
+  * **Advanced Model Matrix**: Dynamic operator-exclusive registry of providers, models, uses, capabilities, and attributes (including local auto-discovery and sunset/deprecation lifecycle tracking).
+  * **Advanced Model Routing**: AI-assisted model selection, role-based overrides, and power profile modes (`performance`, `eco`, and hardware VRAM-aware `adaptive` routing).
+  * Spectrum Refraction (SR) configuration and local provider switching.
   * Developer-focused skills: Browser Researcher, Terminal, local Container Sandbox.
 * **Objective:** Serve as our primary top-of-funnel customer acquisition and developer advocacy tool.
 

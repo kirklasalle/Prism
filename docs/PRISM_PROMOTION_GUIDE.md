@@ -33,6 +33,7 @@ Hacker News is the premier source of developer traffic.
     *   No mock setups — real browser use, terminal virtualization, and docker sandboxes.
     *   The **10 Laws** enforced at runtime via SHA-256 boot integrity checks.
     *   **Spectrum Refraction** parallel tri-model cognitive fanning.
+    *   **Advanced Model Routing & Matrix**: Fully configurable & AI-assisted routing, local hardware auto-discovery, VRAM-aware OOM prevention, and sunset/deprecation lifecycle mapping for stable fallback execution.
 
 ### 2.2 Reddit Subreddits
 Post a text description with links to the repo on the following subreddits:
@@ -62,6 +63,7 @@ Post a text description with links to the repo on the following subreddits:
 >
 > 🔒 Cryptographically enforced 10 Laws (SHA-256 boot check)
 > 🧠 Spectrum Refraction tri-model parallel fan-out
+> 🔀 AI-assisted Model Routing & Dynamic VRAM tracking (OOM-proof)
 > 🖥️ Governed computer use (Browser, PTY, Docker)
 > 🚀 Self-hosted
 >

@@ -338,7 +338,16 @@ export class PrismClient {
     }
 
     /* ---- IAM & Authentication ---- */
-    login(email: string, password: string, tenantId?: string): Promise<{ ok: boolean; user: Record<string, unknown>; session: Record<string, unknown>; dashboardToken: string }> {
+    login(
+        email: string,
+        password: string,
+        tenantId?: string,
+    ): Promise<{
+        ok: boolean;
+        user: Record<string, unknown>;
+        session: Record<string, unknown>;
+        dashboardToken: string;
+    }> {
         return this.post("/api/iam/login", { email, password, tenantId });
     }
 
@@ -375,14 +384,29 @@ export class PrismClient {
         return this.del(`/api/chat/sessions/${encodeURIComponent(id)}`);
     }
     async getMessages(sessionId: string): Promise<ChatMessage[]> {
-        const res = await this.get<{ messages: ChatMessage[] }>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`);
+        const res = await this.get<{ messages: ChatMessage[] }>(
+            `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+        );
         return res.messages || [];
     }
-    sendChat(message: string, sessionId?: string): Promise<{ response: string; session_id: string; accepted?: boolean; denied?: boolean; tier?: number; approval_pending_ids?: string[] }> {
+    sendChat(
+        message: string,
+        sessionId?: string,
+    ): Promise<{
+        response: string;
+        session_id: string;
+        accepted?: boolean;
+        denied?: boolean;
+        tier?: number;
+        approval_pending_ids?: string[];
+    }> {
         return this.post("/api/chat", { prompt: message, message, sessionId });
     }
 
-    sendSessionMessage(sessionId: string, content: string): Promise<{ session: any; userMessage: ChatMessage; assistantMessage: ChatMessage }> {
+    sendSessionMessage(
+        sessionId: string,
+        content: string,
+    ): Promise<{ session: any; userMessage: ChatMessage; assistantMessage: ChatMessage }> {
         return this.post(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, { content });
     }
 

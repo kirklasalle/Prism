@@ -1,18 +1,19 @@
 // Dashboard App — entry point, imports all modules, wires window.*
 import { loadTabHtml, prefetchTabHtml } from './tab-loader.js';
-import { state, tabs, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, formatUptime, togglePanelCollapse, safeRenderStep, dashboardLog, renderLogsPanel, filterLogs, clearLogs, getToolState, getPluginState, getUtilityState, getReview, setItemRating, setItemApproval, saveItemNotes, toggleItemExpand, toggleItemEnabled, toCsvValue, authHeaders, wsUrl, createReconnector, trimAgenticEvent, withButtonFeedback, showAnchoredToast } from './dashboard-core.js';
-import { reconcileExpandedSessionPackages, loadSessionPackages, loadSessionPackageHistory, mutateSessionPackage, getPackagedSessionIdSet, buildSessionTimeline, exportSession, importSession, packageSessions, toggleSessionPackage, getSessionsForPackage, runPackageWorkflow, setPackageStatus, cyclePackageStatus, exportPackageTrace, unpackageSessionPackage, getLocalLlmSelection, setLocalLlmSelection, clearLocalLlmSelection, loadSessions, createSession, openNewSessionModal, loadMessages, refreshChrome, renderSessions, renderOnboarding, renderToolBlocks, renderMessages, renderOverview, renderBrandPanel, selectSession, deleteSession, renameSession, copySession, handleFileSelect, pasteFromClipboard, removeAttachment, renderAttachmentPreview, uploadAttachments, sendMessage, runAction, quickApplyLlm, refreshOllamaModels, rollbackLlmConfig, approve, deny, connectAgenticStream, showThinkingTraceModal } from './tab-chat.js';
-import { renderRoutingStrategyControls, renderLlm, onHeaderProviderChanged, onHeaderModelChanged, renderHeader, fetchReadinessAndRefresh, toggleCapabilityMatrix, setMatrixSort, setMatrixFilter, setMatrixDraftField, clearMatrixDraft, startMatrixEdit, saveMatrixEntry, deleteMatrixEntry, updateModelMatrix, renderCapabilityMatrix, guessTier, resolveMatrixEntry, sortArrow, getModelProficiencyBadges, getModelModalityBadges, fetchModelProfiles, fetchRoutingState, saveRoutingConfig, suggestOptimalRouting, setRoutingStrategy, setSessionRoutingStrategy, onModalitySelected, onModalityFilterToggle, setModalityOverride, getModelsForModalityFilter, setRoleOverride, renderModelRouting, setAgentOverride, onLlmProviderChanged, onLlmModelChanged, renderProviderCards, toggleProviderCard, toggleApiKeyVisibility, saveProviderCardSettings, saveProviderCardApiKey, removeProviderCardApiKey, testProviderConnection, discoverModels, renderLlmAudit, exportLlmAuditJson, copyLlmAuditJson, buildLlmAuditPayload, exportLlmAuditCsv, renderSettingsPanel, sec, readonlyRow, badgeRow, numberRow, selectRow, toggleSettingsSection, markSettingDirty, saveSettings, recheckReadiness, toggleReadinessCat, toggleReadinessCheck, fixReadinessCheck, resolveReadinessCheck, toggleOnboardingExpand, initSettingsTab, toggleSRPanel, onSRLeftProviderChanged, onSRRightProviderChanged, onSRModelChanged, saveSRConfig, toggleSRActivation, onSRPresetSelected, promptSaveSRPreset, cancelSaveSRPreset, confirmSaveSRPreset, deleteSRPreset, suggestSRModels, refreshOAuthStatus, oauthConnect, oauthDisconnect, refreshCacChain, exportCacAuditJson as exportCacAuditJsonHandler, toggleSshpPreference, savePowerModePreference, updatePowerTelemetry, refreshLlreTelemetry } from './tab-settings.js';
+import { state, tabs, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, formatUptime, togglePanelCollapse, applyAllPanelCollapseStates, safeRenderStep, dashboardLog, renderLogsPanel, filterLogs, clearLogs, getToolState, getPluginState, getUtilityState, getReview, setItemRating, setItemApproval, saveItemNotes, toggleItemExpand, toggleItemEnabled, toCsvValue, authHeaders, wsUrl, createReconnector, trimAgenticEvent, withButtonFeedback, showAnchoredToast, showConfirm, showPrompt, showSelect, showForm, showTransientNotice } from './dashboard-core.js';
+import { reconcileExpandedSessionPackages, loadSessionPackages, loadSessionPackageHistory, mutateSessionPackage, getPackagedSessionIdSet, buildSessionTimeline, exportSession, importSession, packageSessions, toggleSessionPackage, getSessionsForPackage, runPackageWorkflow, setPackageStatus, cyclePackageStatus, exportPackageTrace, unpackageSessionPackage, getLocalLlmSelection, setLocalLlmSelection, clearLocalLlmSelection, loadSessions, createSession, openNewSessionModal, loadMessages, refreshChrome, renderSessions, renderOnboarding, renderToolBlocks, renderMessages, renderOverview, renderBrandPanel, selectSession, deleteSession, renameSession, copySession, handleFileSelect, pasteFromClipboard, removeAttachment, renderAttachmentPreview, uploadAttachments, sendMessage, runAction, quickApplyLlm, refreshOllamaModels, rollbackLlmConfig, approve, deny, connectAgenticStream, showThinkingTraceModal, copyMessageContent, regenerateMessage } from './tab-chat.js';
+import { renderRoutingStrategyControls, renderLlm, onHeaderProviderChanged, onHeaderModelChanged, renderHeader, fetchReadinessAndRefresh, toggleCapabilityMatrix, setMatrixSort, setMatrixFilter, setMatrixDraftField, clearMatrixDraft, startMatrixEdit, saveMatrixEntry, deleteMatrixEntry, updateModelMatrix, renderCapabilityMatrix, guessTier, resolveMatrixEntry, sortArrow, getModelProficiencyBadges, getModelModalityBadges, fetchModelProfiles, fetchRoutingState, saveRoutingConfig, suggestOptimalRouting, setRoutingStrategy, setSessionRoutingStrategy, onModalitySelected, onModalityFilterToggle, setModalityOverride, getModelsForModalityFilter, setRoleOverride, renderModelRouting, setAgentOverride, onLlmProviderChanged, onLlmModelChanged, renderProviderCards, toggleProviderCard, toggleApiKeyVisibility, saveProviderCardSettings, toggleProviderUseOauth, saveProviderCardApiKey, removeProviderCardApiKey, testProviderConnection, discoverModels, renderLlmAudit, exportLlmAuditJson, copyLlmAuditJson, buildLlmAuditPayload, exportLlmAuditCsv, renderSettingsPanel, sec, readonlyRow, badgeRow, numberRow, selectRow, toggleSettingsSection, markSettingDirty, saveSettings, recheckReadiness, toggleReadinessCat, toggleReadinessCheck, fixReadinessCheck, resolveReadinessCheck, toggleOnboardingExpand, initSettingsTab, toggleSRPanel, onSRLeftProviderChanged, onSRRightProviderChanged, onSRModelChanged, saveSRConfig, toggleSRActivation, onSRPresetSelected, promptSaveSRPreset, cancelSaveSRPreset, confirmSaveSRPreset, deleteSRPreset, suggestSRModels, refreshOAuthStatus, oauthConnect, oauthDisconnect, refreshCacChain, exportCacAuditJson as exportCacAuditJsonHandler, toggleSshpPreference, toggleLlrePreference, savePowerModePreference, updatePowerTelemetry, refreshLlreTelemetry, toggleCreateOperatorForm, submitCreateOperator, changeOperatorStatus, toggleOperatorAdminRole, changeOperatorPassword, deleteOperator } from './tab-settings.js';
 import { testTool, checkPluginHealth, updateToolsFilter, renderToolsOverviewBar, renderToolsPanel, renderSkillsPanel, showRegisterToolForm, cancelRegisterTool, submitRegisterTool, renderPluginsPanel, showInstallPluginForm, cancelInstallPlugin, submitInstallPlugin, renderUtilitiesPanel, computePanelSummary, renderPanelSummaries, switchToolsSubTab, setToolsSort, setPluginsSort, setUtilitiesSort, refreshAllToolStatus, renderDiagnosticsPanel, runBrowserDiagnostics, loadDiagnosticsReport, computeDiagnosticsSummary, handleDiagnosticsWsMessage, toggleDiagnosticSuite, computeAgentDiagnosticsSummary, loadAgentDiagnosticsReport, runAgentDiagnostics, handleAgentDiagnosticsWsMessage, toggleAgentDiagnosticSuite, renderAgentDiagnosticsPanel, computeComputerDiagnosticsSummary, loadComputerDiagnosticsReport, runComputerDiagnostics, handleComputerDiagnosticsWsMessage, toggleComputerDiagnosticSuite, renderComputerDiagnosticsPanel, computeKnowledgeGraphDiagnosticsSummary, loadKnowledgeGraphDiagnosticsReport, runKnowledgeGraphDiagnostics, handleKnowledgeGraphDiagnosticsWsMessage, toggleKnowledgeGraphDiagnosticSuite, renderKnowledgeGraphDiagnosticsPanel, computeWorkspaceDiagnosticsSummary, loadWorkspaceDiagnosticsReport, runWorkspaceDiagnostics, handleWorkspaceDiagnosticsWsMessage, toggleWorkspaceDiagnosticSuite, renderWorkspaceDiagnosticsPanel, computeNetworkDiagnosticsSummary, loadNetworkDiagnosticsReport, runNetworkDiagnostics, handleNetworkDiagnosticsWsMessage, toggleNetworkDiagnosticSuite, renderNetworkDiagnosticsPanel, computeTelemetryDiagnosticsSummary, loadTelemetryDiagnosticsReport, runTelemetryDiagnostics, handleTelemetryDiagnosticsWsMessage, toggleTelemetryDiagnosticSuite, renderTelemetryDiagnosticsPanel, computeLogsDiagnosticsSummary, loadLogsDiagnosticsReport, runLogsDiagnostics, handleLogsDiagnosticsWsMessage, toggleLogsDiagnosticSuite, renderLogsDiagnosticsPanel, computeSchedulerDiagnosticsSummary, loadSchedulerDiagnosticsReport, runSchedulerDiagnostics, handleSchedulerDiagnosticsWsMessage, toggleSchedulerDiagnosticSuite, renderSchedulerDiagnosticsPanel, computeDemoDiagnosticsSummary, loadDemoDiagnosticsReport, runDemoDiagnostics, handleDemoDiagnosticsWsMessage, toggleDemoDiagnosticSuite, renderDemoDiagnosticsPanel, pollPluginHealth, startPluginHealthPolling, stopPluginHealthPolling } from './tab-tools.js';
-import { renderGuardianPanel, refreshGuardianStatus, startGuardian, stopGuardian, configureGuardian, refreshLocalModels, updateGuardianModel, onGuardianModelSelectChange, deleteLocalModel, addToRecommended, removeFromRecommended, loadCustomRecommendedModels, downloadRecommendedModels, startModelDownload, refreshGuardianTasks, runGuardianTask, toggleGuardianTask, runAllGuardianTasks, renderAgentList, renderSubAgentTree, renderSwarmTopology, renderAgentTelemetry, refreshAgentList, launchNewAgent, stopAgent, promoteAgent, demoteAgent, createSwarm, refreshSwarmStatus, initAgenticTab, autoStartGuardianIfConfigured, refreshCshHandoffs, takeCshControl, resumeCshAgent, refreshAABLedger, refreshAutonomousGoals, viewAutonomousGoalTrace } from './tab-agentic.js';
+import { renderGuardianPanel, refreshGuardianStatus, startGuardian, stopGuardian, configureGuardian, refreshLocalModels, updateGuardianModel, onGuardianModelSelectChange, deleteLocalModel, addToRecommended, removeFromRecommended, loadCustomRecommendedModels, loadRecommendedModelsCatalog, downloadRecommendedModels, startModelDownload, refreshGuardianTasks, runGuardianTask, toggleGuardianTask, runAllGuardianTasks, renderAgentList, renderSubAgentTree, renderSwarmTopology, renderAgentTelemetry, refreshAgentList, launchNewAgent, stopAgent, promoteAgent, demoteAgent, createSwarm, refreshSwarmStatus, initAgenticTab, autoStartGuardianIfConfigured, refreshCshHandoffs, takeCshControl, resumeCshAgent, refreshAABLedger, refreshAutonomousGoals, viewAutonomousGoalTrace } from './tab-agentic.js';
 import { renderLocalSystemInfo, renderUsageMetrics, drawSparkline, runLocalCommand, refreshEnvVars, renderEnvVarsList, openPolicyEditor, refreshPolicyStatus, refreshDeviceManager, renderDeviceTree, openSystemDeviceManager, toggleDeviceProperties, filterDeviceTree, generateDeviceReport, captureScreengrab, burstCapture, showCaptureDiagnostics, runFramebufferDiagnostics, refreshFramebufferViewer, clearFramebufferPreviewVideo, setFramebufferPreviewSource, setFramebufferPreviewVideoSource, detectBurstVideoMimeType, loadFramebufferImage, buildBurstVideoPreview, formatFramebufferTimestamp, formatBurstTimestamp, summarizeFramebufferSelection, previewSelectedFramebufferItem, refreshFramebufferGallery, selectFramebufferFile, openFramebufferFile, revealFramebufferFile, openFramebufferFolder, toggleFramebufferAutoRefresh, toggleBurstPlayPause, stopBurstFromUI, setBurstSpeed, initComputerTab, pollUsage, updateBurstMediaBar, stopBurstFrameAnimation, startBurstFrameAnimation, submitAutonomousGoal, pauseAutonomousGoal, resumeAutonomousGoal, terminateAutonomousGoal, pollAutonomousStatus } from './tab-computer.js';
-import { getCurrentBrowserView, launchBrowserPreview, openBrowserDevTools, refreshBrowserInfo, setBrowserView, toggleBrowserDevTools, browserRefreshStorage, setStorageSubView, renderStorageContent, browserRefreshProfiles, renderBrowserProfiles, browserRefreshLaunchProfiles, browserCreateProfile, browserDeleteProfile, browserLaunchSession, browserCloseSession, browserNavigate, browserTakeScreenshot, browserClickElement, browserTypeText, browserEvaluate, browserRefreshNetwork, browserRefreshConsole, browserRefreshDom, browserRunDiagnostics, browserSessionChanged, populateBrowserSessionDropdowns, renderBrowserSessions, browserLogAction, initBrowserTab, refreshSessionsList, submitBrowserAutopilot, stopBrowserAutopilot, resumeActiveCsh, updateSshpShieldIndicator } from './tab-browser.js';
+import { getCurrentBrowserView, launchBrowserPreview, openBrowserDevTools, refreshBrowserInfo, setBrowserView, toggleBrowserDevTools, browserRefreshStorage, setStorageSubView, renderStorageContent, browserRefreshProfiles, renderBrowserProfiles, browserRefreshLaunchProfiles, browserCreateProfile, browserDeleteProfile, browserLaunchSession, browserCloseSession, browserNavigate, browserTakeScreenshot, browserClickElement, browserTypeText, browserEvaluate, browserRefreshNetwork, browserRefreshConsole, browserRefreshDom, browserRunDiagnostics, browserSessionChanged, populateBrowserSessionDropdowns, renderBrowserSessions, browserLogAction, initBrowserTab, refreshSessionsList, submitBrowserAutopilot, stopBrowserAutopilot, resumeActiveCsh, updateSshpShieldIndicator, cleanupBrowserTab, browserGoBack, browserGoForward, browserReload, browserScrollDown } from './tab-browser.js';
 import { renderSelfReview, renderRetrievalObservability, setTelemetryWindow, renderRuntimeExcellence, renderReleaseReadiness, renderWhatChanged, deltaLabel, pct, renderPackageHistory, renderChatTelemetry, renderUsagePanel, refreshUsagePanel, setUsageSort, saveUsageCaps, clearUsageCaps, refreshSloGauges, startSloAutoRefresh, stopSloAutoRefresh } from './tab-telemetry.js';
+import { initChannelsTab, onPresenceStatusChanged, toggleAutoAway, onAutoAwayTimeoutChanged, saveSmsGatewayConfig, sendTestSms, clearChannelLogs, connectChannel, disconnectChannel, startIdleTracker, stopIdleTracker } from './tab-channels.js';
 import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, copyActivityLogs, copyUnifiedTelemetry, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket } from './tab-logs.js';
 import { initSchedulerTab, refreshSchedulerData, switchSchedulerView, renderSchedulerPanel, setCalMode, schedCalNav, daysInMonth, eventsForDate, formatDateStr, isToday, renderSchedulerCalendar, mondayOfWeek, renderMiniMonth, renderFullMonth, renderWeekView, renderDayView, renderSchedulerProjects, openProjectDetail, renderSchedulerBoard, initBoardDragDrop, renderSchedulerGantt, openSchedulerModal, closeSchedulerModal, saveSchedulerModal } from './tab-scheduler.js';
-import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWorkspaceFileTree, formatFileSize, filterWorkspaceFiles, openWorkspaceInExplorer, changeWorkspaceLocation, showImportStatus, triggerWorkspaceImport, triggerGeneralImport, triggerRegisteredImport, triggerFolderImport, readFileAsBase64, refreshImportHistory, renderImportHistory, initWorkspaceTab } from './tab-workspace.js';
+import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWorkspaceFileTree, formatFileSize, filterWorkspaceFiles, openWorkspaceInExplorer, changeWorkspaceLocation, showImportStatus, triggerWorkspaceImport, triggerGeneralImport, triggerRegisteredImport, triggerFolderImport, readFileAsBase64, refreshImportHistory, renderImportHistory, initWorkspaceTab, downloadWorkspaceFile, renameWorkspaceFile, deleteWorkspaceFile } from './tab-workspace.js';
 import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick, showCustomCharacterModal, closeCustomCharacterModal, onCustomCharProfileChange, submitCustomCharacter } from './tab-characters.js';
-import { renderNetworkToolsPanel, renderNetworkSettingsPanel, renderNetworkTelemetryPanel, renderNetworkConsolePanel, runNetworkCommand, refreshNetworkInterfaces, refreshNetworkTelemetry, renderNetworkIntelligencePanel, checkVrgcStatus, runVrgcResearch, runVrgcSecurityScan, runVrgcPerformanceTest, runVrgcFtpBrowse } from './tab-network.js';
+import { renderNetworkToolsPanel, renderNetworkSettingsPanel, renderNetworkTelemetryPanel, renderNetworkConsolePanel, runNetworkCommand, refreshNetworkInterfaces, refreshNetworkTelemetry, renderNetworkIntelligencePanel, checkVrgcStatus, runVrgcResearch, runVrgcSecurityScan, runVrgcPerformanceTest, runVrgcFtpBrowse, initNetworkTab } from './tab-network.js';
 import { initHardwareTab, refreshHardwareSwarm, loadModelToSlot, unloadModelSlot } from './tab-hardware.js';
 import { initPrismTooltips, pushGuardianTip } from './prism-tooltips.js';
 import { registerShellTooltips } from './shell-tooltips.js';
@@ -203,6 +204,12 @@ function render() {
   safeRenderStep('schedulerPanel', renderSchedulerPanel);
   safeRenderStep('events', renderEvents);
   safeRenderStep('logsPanel', renderLogsPanel);
+  if (typeof applyAllPanelCollapseStates === 'function') {
+    try { applyAllPanelCollapseStates(); } catch (_) { }
+  }
+  if (typeof renderPanelSummaries === 'function') {
+    try { renderPanelSummaries(); } catch (_) { }
+  }
   const sendButton = document.getElementById('send-button');
   if (sendButton) {
     sendButton.disabled = state.busy;
@@ -271,6 +278,9 @@ async function setActiveTab(tabId) {
     clearInterval(state.settingsPollInterval);
     state.settingsPollInterval = null;
   }
+  if (tabId !== 'browser') {
+    cleanupBrowserTab();
+  }
 
   // Load the tab HTML dynamically if not loaded
   try {
@@ -300,6 +310,7 @@ async function setActiveTab(tabId) {
     refreshChrome().then(function () { render(); });
     refreshOAuthStatus().then(function () { render(); });
     initSettingsTab();
+    refreshCacChain().catch(function () { });
 
     if (!state.settingsPollInterval) {
       state.settingsPollInterval = setInterval(function () {
@@ -390,6 +401,9 @@ async function setActiveTab(tabId) {
     refreshNetworkInterfaces();
     refreshNetworkTelemetry();
     checkVrgcStatus();
+    if (typeof initNetworkTab === 'function') {
+      initNetworkTab();
+    }
   }
   if (tabId === 'logs') {
     /* Seed log panel from server if empty */
@@ -410,6 +424,9 @@ async function setActiveTab(tabId) {
   }
   if (tabId === 'scheduler') {
     try { await initSchedulerTab(); } catch (e) { console.error('[tab] scheduler init:', e); }
+  }
+  if (tabId === 'channels') {
+    try { await initChannelsTab(); } catch (e) { console.error('[tab] channels init:', e); }
   }
   if (tabId === 'telemetry') {
     setTelemetryWindow(state.telemetryWindow);
@@ -523,24 +540,27 @@ function connectWebSocket() {
 
           browserLogAction(actionKind, logMsg);
 
-          // Update active session dropdown and live sub-view content
-          refreshSessionsList().then(() => {
-            const activeId = state.activeBrowserSessionId;
-            if (activeId) {
-              const currentView = getCurrentBrowserView();
-              if (currentView === 'viewport') {
-                browserTakeScreenshot().catch(e => { });
-              } else if (currentView === 'network') {
-                browserRefreshNetwork().catch(e => { });
-              } else if (currentView === 'console') {
-                browserRefreshConsole().catch(e => { });
-              } else if (currentView === 'dom') {
-                browserRefreshDom().catch(e => { });
-              } else if (currentView === 'storage') {
-                browserRefreshStorage().catch(e => { });
+          // Update active session dropdown and live sub-view content (debounced)
+          if (window._browserWsRefreshTimer) clearTimeout(window._browserWsRefreshTimer);
+          window._browserWsRefreshTimer = setTimeout(function () {
+            refreshSessionsList().then(() => {
+              const activeId = state.activeBrowserSessionId;
+              if (activeId) {
+                const currentView = getCurrentBrowserView();
+                if (currentView === 'viewport') {
+                  browserTakeScreenshot().catch(e => { });
+                } else if (currentView === 'network') {
+                  browserRefreshNetwork().catch(e => { });
+                } else if (currentView === 'console') {
+                  browserRefreshConsole().catch(e => { });
+                } else if (currentView === 'dom') {
+                  browserRefreshDom().catch(e => { });
+                } else if (currentView === 'storage') {
+                  browserRefreshStorage().catch(e => { });
+                }
               }
-            }
-          }).catch(e => { });
+            }).catch(e => { });
+          }, 400);
         }
 
         if (action.includes('file') || detail.includes('file') || nar.includes('file') || nar.includes('Workspace') || nar.includes('Workspace Files')) {
@@ -654,12 +674,12 @@ function connectWebSocket() {
           // push a done sentinel so renderMessages can show completion context
           state.agenticStream.push(ev);
           if (state.agenticStream.length > 500) state.agenticStream = state.agenticStream.slice(-500);
-          
+
           // Reload chat messages and refresh UI in case the goal was triggered from chat
-          loadMessages().then(function() {
+          loadMessages().then(function () {
             safeRenderStep('messages', renderMessages);
-          }).catch(function() {});
-          refreshChrome().catch(function() {});
+          }).catch(function () { });
+          refreshChrome().catch(function () { });
         } catch (e) { console.error('[ws] autonomous_goal_complete handle error', e); }
         try { refreshAutonomousGoals(); refreshAABLedger(); } catch (_) { }
       }
@@ -793,6 +813,7 @@ Object.assign(window, {
   renderLogsPanel,
   filterLogs,
   clearLogs,
+  showConfirm,
   getToolState,
   getPluginState,
   getUtilityState,
@@ -890,6 +911,7 @@ Object.assign(window, {
   toggleProviderCard,
   toggleApiKeyVisibility,
   saveProviderCardSettings,
+  toggleProviderUseOauth,
   saveProviderCardApiKey,
   removeProviderCardApiKey,
   testProviderConnection,
@@ -909,7 +931,14 @@ Object.assign(window, {
   markSettingDirty,
   saveSettings,
   toggleSshpPreference,
+  toggleLlrePreference,
   savePowerModePreference,
+  toggleCreateOperatorForm,
+  submitCreateOperator,
+  changeOperatorStatus,
+  toggleOperatorAdminRole,
+  changeOperatorPassword,
+  deleteOperator,
   updatePowerTelemetry,
   recheckReadiness,
   toggleReadinessCat,
@@ -918,6 +947,17 @@ Object.assign(window, {
   resolveReadinessCheck,
   toggleOnboardingExpand,
   initSettingsTab,
+  initChannelsTab,
+  onPresenceStatusChanged,
+  toggleAutoAway,
+  onAutoAwayTimeoutChanged,
+  saveSmsGatewayConfig,
+  sendTestSms,
+  clearChannelLogs,
+  connectChannel,
+  disconnectChannel,
+  startIdleTracker,
+  stopIdleTracker,
   refreshLlreTelemetry,
   toggleSRPanel,
   onSRLeftProviderChanged,
@@ -1111,6 +1151,11 @@ Object.assign(window, {
   stopBrowserAutopilot,
   resumeActiveCsh,
   updateSshpShieldIndicator,
+  cleanupBrowserTab,
+  browserGoBack,
+  browserGoForward,
+  browserReload,
+  browserScrollDown,
   renderSelfReview,
   renderRetrievalObservability,
   setTelemetryWindow,
@@ -1175,6 +1220,9 @@ Object.assign(window, {
   refreshImportHistory,
   renderImportHistory,
   initWorkspaceTab,
+  downloadWorkspaceFile,
+  renameWorkspaceFile,
+  deleteWorkspaceFile,
   clearCharacterPanelStatus,
   renderCharacterSummary,
   renderCharacterDefinitionPreview,
@@ -1214,6 +1262,7 @@ Object.assign(window, {
   runVrgcSecurityScan,
   runVrgcPerformanceTest,
   runVrgcFtpBrowse,
+  initNetworkTab,
   bootstrap,
   render,
   setActiveTab,
@@ -1230,6 +1279,7 @@ Object.assign(window, {
   addToRecommended,
   removeFromRecommended,
   loadCustomRecommendedModels,
+  loadRecommendedModelsCatalog,
   refreshGuardianTasks,
   runGuardianTask,
   toggleGuardianTask,
@@ -1240,6 +1290,16 @@ Object.assign(window, {
   stopBurstFrameAnimation,
   startBurstFrameAnimation,
   showThinkingTraceModal,
+  copyMessageContent,
+  regenerateMessage,
+  showForm,
+  launchNewAgent,
+  refreshAgentList,
+  stopAgent,
+  promoteAgent,
+  demoteAgent,
+  createSwarm,
+  refreshSwarmStatus,
 });
 
 // Boot marker — if this line prints, the ES module graph evaluated and window.createSession is wired.
@@ -1336,3 +1396,77 @@ window.investigateSupportTicket = investigateSupportTicket;
 window.selfHealSupportTicket = selfHealSupportTicket;
 window.resolveSupportTicketPrompt = resolveSupportTicketPrompt;
 window.deleteSupportTicket = deleteSupportTicket;
+
+// Global UI/UX Click Response and Activity Indicator wiring
+(function wireGlobalUiUxEnhancements() {
+  function init() {
+    // 1. Create a global progress bar at the top of the viewport
+    let thinkingBar = document.getElementById('prism-global-thinking-bar');
+    if (!thinkingBar) {
+      thinkingBar = document.createElement('div');
+      thinkingBar.id = 'prism-global-thinking-bar';
+      document.body.appendChild(thinkingBar);
+    }
+
+    // Keep track of active async operations (fetch calls)
+    let activeRequests = 0;
+    function updateThinkingBar() {
+      if (activeRequests > 0) {
+        thinkingBar.classList.add('active');
+      } else {
+        thinkingBar.classList.remove('active');
+      }
+    }
+
+    // 2. Intercept window.fetch to show global "thinking / working" activity
+    const originalFetch = window.fetch;
+    window.fetch = async function (...args) {
+      activeRequests++;
+      updateThinkingBar();
+      try {
+        return await originalFetch.apply(this, args);
+      } finally {
+        activeRequests--;
+        updateThinkingBar();
+      }
+    };
+
+    // 3. Listen to clicks on ALL buttons globally to provide visual click feedback
+    // and show localized 'working / thinking' indicator on clicked buttons
+    document.addEventListener('click', function (event) {
+      const button = event.target.closest('button, .tab-button, .chip, .character-chip');
+      if (!button || button.disabled) return;
+
+      // Provide micro-scale active click class
+      button.classList.add('button-clicked-state');
+      setTimeout(() => {
+        button.classList.remove('button-clicked-state');
+      }, 150);
+
+      // If the button clicked triggers a network request or async action,
+      // show "working" indicator (by marking it busy) until the request finishes.
+      // We detect if there are active network requests and set a small timer.
+      const checkInterval = setInterval(() => {
+        if (activeRequests > 0) {
+          button.setAttribute('aria-busy', 'true');
+        } else {
+          button.removeAttribute('aria-busy');
+          clearInterval(checkInterval);
+        }
+      }, 50);
+
+      // Safety timeout: clear busy state after 8 seconds no matter what
+      setTimeout(() => {
+        button.removeAttribute('aria-busy');
+        clearInterval(checkInterval);
+      }, 8000);
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
+

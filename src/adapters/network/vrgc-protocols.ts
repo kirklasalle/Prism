@@ -32,7 +32,12 @@ interface ProtocolResult {
 }
 
 async function execNetworkCmd(command: string): Promise<{ ok: boolean; output: unknown }> {
-    const req: ToolRequest = { operation: "network_exec", args: { command, timeoutMs: 15_000 }, risk: "low", mutatesState: false };
+    const req: ToolRequest = {
+        operation: "network_exec",
+        args: { command, timeoutMs: 15_000 },
+        risk: "low",
+        mutatesState: false,
+    };
     return networkTool.execute(req);
 }
 
@@ -89,10 +94,9 @@ export class NetworkTroubleshootingProtocol {
 
         steps.push(
             await timedStep("correlate", "vrgc_research_assistant", async () => {
-                const result = await fetchNetworkResearch(
-                    `${symptom}\n\nDiagnostic output:\n${diagnosticSummary}`,
-                    { depth: "comprehensive" },
-                );
+                const result = await fetchNetworkResearch(`${symptom}\n\nDiagnostic output:\n${diagnosticSummary}`, {
+                    depth: "comprehensive",
+                });
                 return result.ok ? result.data : { error: result.error };
             }),
         );

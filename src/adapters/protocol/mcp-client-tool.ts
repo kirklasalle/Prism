@@ -179,7 +179,10 @@ export class McpConnection {
         // once the handshake completes; pre-connect lines are surfaced via
         // firstStderrHint() and stderrTail() if connect() throws.
         this.proc.stderr?.on("data", (chunk: Buffer) => {
-            const lines = chunk.toString().split(/\r?\n/).filter((l) => l.length > 0);
+            const lines = chunk
+                .toString()
+                .split(/\r?\n/)
+                .filter((l) => l.length > 0);
             for (const line of lines) {
                 this.appendStderr(line);
                 if (this._isConnected) {
@@ -216,9 +219,7 @@ export class McpConnection {
         this.proc.on("exit", (code: number | null) => {
             const wasConnected = this._isConnected;
             this._isConnected = false;
-            this.rejectAll(
-                new Error(`[MCP:${this.serverName}] Process exited (code=${code ?? "null"})`),
-            );
+            this.rejectAll(new Error(`[MCP:${this.serverName}] Process exited (code=${code ?? "null"})`));
             const reason: McpExitReason = this.explicitDisconnect ? "shutdown" : "crash";
             // Surface the full stderr tail for crashes so operators see the
             // complete traceback rather than just the first 120 chars.
@@ -234,7 +235,11 @@ export class McpConnection {
             const cb = this.onExitCallback;
             this.onExitCallback = null;
             if (cb) {
-                try { cb(reason); } catch { /* never throw out of an exit handler */ }
+                try {
+                    cb(reason);
+                } catch {
+                    /* never throw out of an exit handler */
+                }
             }
         });
 
@@ -245,9 +250,7 @@ export class McpConnection {
             clientInfo: { name: "prism", version: "1.0.0" },
         });
         if (initResp.error) {
-            throw new Error(
-                `[MCP:${this.serverName}] Initialize failed: ${initResp.error.message}`,
-            );
+            throw new Error(`[MCP:${this.serverName}] Initialize failed: ${initResp.error.message}`);
         }
 
         // Step 2: send initialized notification (no response expected)
@@ -256,9 +259,7 @@ export class McpConnection {
         // Step 3: discover tools
         const toolsResp = await this.sendRequest("tools/list", {});
         if (toolsResp.error) {
-            throw new Error(
-                `[MCP:${this.serverName}] tools/list failed: ${toolsResp.error.message}`,
-            );
+            throw new Error(`[MCP:${this.serverName}] tools/list failed: ${toolsResp.error.message}`);
         }
         const result = toolsResp.result as { tools?: McpToolDescriptor[] } | undefined;
         this._tools = result?.tools ?? [];
@@ -266,9 +267,7 @@ export class McpConnection {
         this._isConnected = true;
         // Note: we intentionally retain stderrBuffer across the handshake
         // so that any pre-connect warnings remain visible in /api/mcp/servers.
-        console.log(
-            `[MCP:${this.serverName}] Connected — ${this._tools.length} tool(s) available`,
-        );
+        console.log(`[MCP:${this.serverName}] Connected — ${this._tools.length} tool(s) available`);
     }
 
     /** Return the list of tools as reported by the server. */
@@ -309,9 +308,7 @@ export class McpConnection {
      * sees a useless header with no follow-up.
      */
     firstStderrHint(): string {
-        const tracebackIdx = this.stderrBuffer.findIndex(
-            (l) => l.trimStart().toLowerCase().startsWith("traceback"),
-        );
+        const tracebackIdx = this.stderrBuffer.findIndex((l) => l.trimStart().toLowerCase().startsWith("traceback"));
         if (tracebackIdx >= 0) {
             for (let i = this.stderrBuffer.length - 1; i > tracebackIdx; i--) {
                 const line = this.stderrBuffer[i]!.trim();
@@ -326,8 +323,13 @@ export class McpConnection {
             }
         }
         const meaningfulPrefixes = [
-            "error:", "syntaxerror:", "typeerror:", "runtimeerror:",
-            "modulenotfounderror:", "importerror:", "valueerror:",
+            "error:",
+            "syntaxerror:",
+            "typeerror:",
+            "runtimeerror:",
+            "modulenotfounderror:",
+            "importerror:",
+            "valueerror:",
         ];
         for (const line of this.stderrBuffer) {
             const lower = line.trimStart().toLowerCase();
@@ -353,9 +355,7 @@ export class McpConnection {
             arguments: toolArgs,
         });
         if (resp.error) {
-            throw new Error(
-                `[MCP:${this.serverName}] Tool "${toolName}" error: ${resp.error.message}`,
-            );
+            throw new Error(`[MCP:${this.serverName}] Tool "${toolName}" error: ${resp.error.message}`);
         }
         return (resp.result ?? {}) as McpCallResult;
     }
@@ -428,11 +428,7 @@ export class McpProxyTool implements Tool {
     readonly mcpInputSchema: McpToolDescriptor["inputSchema"];
     readonly serverName: string;
 
-    constructor(
-        connection: McpConnection,
-        serverName: string,
-        descriptor: McpToolDescriptor,
-    ) {
+    constructor(connection: McpConnection, serverName: string, descriptor: McpToolDescriptor) {
         // Prefix with mcp_ and sanitize to alphanumeric + underscore
         this.name = `mcp_${descriptor.name.replace(/[^a-zA-Z0-9_]/g, "_")}`;
         this.mcpToolName = descriptor.name;
@@ -444,10 +440,7 @@ export class McpProxyTool implements Tool {
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         try {
-            const mcpResult = await this.connection.callTool(
-                this.mcpToolName,
-                request.args,
-            );
+            const mcpResult = await this.connection.callTool(this.mcpToolName, request.args);
 
             // Flatten MCP content array to a unified output
             const output = formatMcpResult(mcpResult);
@@ -566,9 +559,7 @@ export class McpClientAdapter {
                 const conn = entry.conn;
                 const stderrHint = conn?.firstStderrHint() ?? "";
                 const baseMsg = String(err);
-                const hint = stderrHint && !baseMsg.includes(stderrHint)
-                    ? ` — ${stderrHint}`
-                    : "";
+                const hint = stderrHint && !baseMsg.includes(stderrHint) ? ` — ${stderrHint}` : "";
                 const fullMsg = `${baseMsg}${hint}`;
                 entry.lastError = fullMsg;
                 entry.state = "down";
@@ -649,9 +640,7 @@ export class McpClientAdapter {
         if (entry.retryCount >= MAX_ATTEMPTS) {
             entry.state = "failed";
             entry.nextRetryAt = null;
-            console.error(
-                `[MCP:${entry.name}] Reconnect gave up after ${MAX_ATTEMPTS} attempts`,
-            );
+            console.error(`[MCP:${entry.name}] Reconnect gave up after ${MAX_ATTEMPTS} attempts`);
             return;
         }
         // 1s, 2s, 4s, 8s, 16s, 30s cap.
@@ -699,7 +688,11 @@ export class McpClientAdapter {
             return;
         }
         for (const toolName of entry.registeredToolNames) {
-            try { reg.unregister(toolName); } catch { /* ignore */ }
+            try {
+                reg.unregister(toolName);
+            } catch {
+                /* ignore */
+            }
         }
         entry.registeredToolNames = [];
     }

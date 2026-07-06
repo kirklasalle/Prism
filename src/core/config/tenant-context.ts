@@ -83,7 +83,11 @@ export function tenantSubroot(root: string): string {
  * a tenant context for the duration of the request. Only active when
  * `PRISM_MULTI_TENANT=on`. Validates id format `^[a-z0-9][a-z0-9-_]{0,63}$`.
  */
-export function tenantHttpMiddleware(): (req: { headers: Record<string, string | string[] | undefined> }, _res: unknown, next: () => void) => void {
+export function tenantHttpMiddleware(): (
+    req: { headers: Record<string, string | string[] | undefined> },
+    _res: unknown,
+    next: () => void,
+) => void {
     const idPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
     return (req, _res, next) => {
         if (!isMultiTenantEnabled()) {

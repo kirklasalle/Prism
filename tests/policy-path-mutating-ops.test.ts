@@ -238,9 +238,14 @@ async function testBrowserNavigatePaths(): Promise<void> {
 async function testApprovalTimeoutRoundtrip(): Promise<void> {
     const queue = new ApprovalQueue();
     const startedAt = Date.now();
-    const result = await queue.request("session-test", "tool.stage.timeout-test", {
-        tool_name: "policy-path-test",
-    }, 60); // 60ms — fast timeout for the test
+    const result = await queue.request(
+        "session-test",
+        "tool.stage.timeout-test",
+        {
+            tool_name: "policy-path-test",
+        },
+        60,
+    ); // 60ms — fast timeout for the test
     const elapsed = Date.now() - startedAt;
 
     assert.strictEqual(result, false, "request() should resolve false on timeout");

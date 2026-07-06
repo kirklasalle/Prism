@@ -34,7 +34,7 @@ export async function testRetrievalDashboardStore(): Promise<void> {
                 hitRate: 0.65,
                 avgCoverageScore: 0.52,
                 avgNoveltyScore: 0.33,
-                avgUtilityScore: 0.50,
+                avgUtilityScore: 0.5,
                 avgLatencyMs: 45,
                 p95LatencyMs: 95,
                 firstSeen: "2026-03-11T00:02:00.000Z",

@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector, trimAgenticEvent } from './dashboard-core.js';
+import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector, trimAgenticEvent, showConfirm, showPrompt, showForm, showTransientNotice } from './dashboard-core.js';
 import { renderToolCallLog } from './tab-logs.js';
 
 // Holds files staged for upload prior to server ACK. Ensure initialized.
@@ -184,27 +184,18 @@ export
   const packageId = 'pkg-' + Date.now();
   const createdAt = new Date().toISOString();
   const suggestedTitle = 'Session Package • ' + formatRelativeTime(createdAt);
-  const packageTitleInput = prompt('Package title:', suggestedTitle);
-  if (packageTitleInput === null) {
-    return;
-  }
-  const areaOfInterestInput = prompt('Area of interest (optional):', '');
-  if (areaOfInterestInput === null) {
-    return;
-  }
-  const objectiveInput = prompt('Package objective (optional):', '');
-  if (objectiveInput === null) {
-    return;
-  }
-  const successCriteriaInput = prompt('Success criteria (optional):', '');
-  if (successCriteriaInput === null) {
-    return;
-  }
-  const dependenciesInput = prompt('Dependencies (comma separated, optional):', '');
-  if (dependenciesInput === null) {
-    return;
-  }
-  const dependencies = dependenciesInput
+
+  const formResult = await showForm('Create Session Package', [
+    { name: 'title', label: 'Package title', defaultValue: suggestedTitle, required: true, placeholder: 'e.g. Q3 Research Sprint' },
+    { name: 'areaOfInterest', label: 'Area of interest', placeholder: 'e.g. Competitor analysis, Code refactor…', description: 'Optional — topic or domain this package covers.' },
+    { name: 'objective', label: 'Objective', type: 'textarea', placeholder: 'Describe the goal of this package…', description: 'Optional — what should be achieved.' },
+    { name: 'successCriteria', label: 'Success criteria', type: 'textarea', placeholder: 'e.g. All tasks completed, report delivered…', description: 'Optional — measurable definition of done.' },
+    { name: 'dependencies', label: 'Dependencies', placeholder: 'e.g. auth-module, data-pipeline (comma separated)', description: 'Optional — other packages or systems this depends on.' },
+  ], { confirmLabel: 'Create Package', icon: '📦' });
+
+  if (!formResult) return;
+
+  const dependencies = (formResult.dependencies || '')
     .split(',')
     .map(item => item.trim())
     .filter(Boolean);
@@ -213,10 +204,10 @@ export
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      title: (packageTitleInput || '').trim() || suggestedTitle,
-      areaOfInterest: (areaOfInterestInput || '').trim() || null,
-      objective: (objectiveInput || '').trim() || null,
-      successCriteria: (successCriteriaInput || '').trim() || null,
+      title: formResult.title || suggestedTitle,
+      areaOfInterest: formResult.areaOfInterest || null,
+      objective: formResult.objective || null,
+      successCriteria: formResult.successCriteria || null,
       dependencies,
       status: 'planned',
       sessionIds: candidates.map(session => session.sessionId)
@@ -391,7 +382,7 @@ export
     return;
   }
 
-  const confirmed = confirm('Unpackage "' + existing.title + '" and restore all chapters to top-level history?');
+  const confirmed = await showConfirm('Unpackage "' + existing.title + '" and restore all chapters to top-level history?');
   if (!confirmed) {
     return;
   }
@@ -460,6 +451,21 @@ export
   if (state.selectedSessionId && !state.sessions.some(session => session.sessionId === state.selectedSessionId)) {
     state.selectedSessionId = state.sessions[0] ? state.sessions[0].sessionId : null;
   }
+
+  // If the only session is the Initialization Certificate session, automatically start a new session.
+  const hasOnlyInitCert = state.sessions.length === 1 && state.sessions.some(s =>
+    /Initialization Certificate/i.test(s.title || '')
+  );
+  if (hasOnlyInitCert && !state.autoCreatingSession) {
+    state.autoCreatingSession = true;
+    try {
+      await createSession();
+    } catch (err) {
+      console.error('Failed to automatically start a new session after wizard', err);
+    } finally {
+      state.autoCreatingSession = false;
+    }
+  }
 }
 
 export
@@ -487,7 +493,7 @@ export
     const msg = (err && err.message) ? err.message : String(err);
     if (/no_default_character/.test(msg)) {
       if (!silent) {
-        const goWizard = confirm('PRISM: No default character is bound to this workspace.\n\nOpen the setup wizard to pick one?');
+        const goWizard = await showConfirm('PRISM: No default character is bound to this workspace.\n\nOpen the setup wizard to pick one?');
         if (goWizard) {
           window.location.href = '/setup?rerun=true&step=4';
           return;
@@ -500,7 +506,7 @@ export
     state.notice = 'Failed to create session: ' + msg;
     try { render(); } catch (_) { /* noop */ }
     if (!silent) {
-      alert('PRISM: ' + state.notice + '\n\nCheck DevTools → Network for the failing request and DevTools → Console for details.');
+      showTransientNotice('Session creation failed: ' + msg, 'error');
     }
     throw err;
   }
@@ -596,7 +602,8 @@ export
       request('/api/computer/system-info').catch(() => null),
       request('/api/tools/status').catch(() => ({ tools: {} })),
       request('/api/plugins/status').catch(() => ({ plugins: {} })),
-      request('/api/llm/modalities').catch(() => ({ modalities: [] }))
+      request('/api/llm/modalities').catch(() => ({ modalities: [] })),
+      request('/api/workspace/character-assignments').catch(() => ({ assignments: [] }))
     ];
 
     // Defer the model matrix request completely unless settings tab is active
@@ -630,6 +637,7 @@ export
     const toolsStatusPayload = results[19];
     const pluginsStatusPayload = results[20];
     const llmModalitiesPayload = results[21];
+    const characterAssignmentsPayload = results[22];
     const modelMatrixPayload = matrixPromiseIndex !== -1 ? results[matrixPromiseIndex] : null;
 
     state.agentData = agentDataPayload || null;
@@ -689,6 +697,7 @@ export
     state.packageReleaseSnapshot = packagePayload ? (packagePayload.releaseSnapshot || null) : null;
     state.sessionPackageHistory = packageHistoryPayload ? (Array.isArray(packageHistoryPayload.history) ? packageHistoryPayload.history : []) : [];
     state.runtimeSettings = settingsPayload ? (settingsPayload.settings || null) : null;
+    state.characterAssignments = characterAssignmentsPayload ? (characterAssignmentsPayload.assignments || []) : [];
     reconcileExpandedSessionPackages();
     if (state.selectedTraceId && (!traceData || !traceData.traces || !traceData.traces.some(trace => trace.correlationId === state.selectedTraceId))) {
       state.selectedTraceId = null;
@@ -707,101 +716,84 @@ export
     return;
   }
 
-  const renderSessionCard = function (session, extraClass) {
-    const preview = session.lastMessagePreview || 'Start a new conversation.';
-    const activeClass = state.selectedSessionId === session.sessionId ? ' active' : '';
-    const className = (extraClass ? ' ' + extraClass : '');
-    const onClick = extraClass === 'session-chapter'
-      ? 'event.stopPropagation(); selectSession(this.dataset.sessionId)'
-      : 'selectSession(this.dataset.sessionId)';
-    // Phase E3b: governance badge — bound character + CAC placeholder warning.
-    const charBadge = session.characterId
-      ? '<span class="session-badge" title="Bound character" style="display:inline-block;padding:1px 6px;margin-right:4px;border-radius:8px;background:var(--surface-alt,rgba(255,255,255,0.08));font-size:10px;">🎭 ' + escapeHtml(session.characterId) + '</span>'
-      : '<span class="session-badge" title="No character bound" style="display:inline-block;padding:1px 6px;margin-right:4px;border-radius:8px;background:rgba(220,53,69,0.25);color:#ffb8c0;font-size:10px;">⚠ unbound</span>';
-    const placeholderEmail = (e) => {
-      if (!e) return true;
-      const s = String(e).toLowerCase();
-      return s.endsWith('@prism.local') || s.endsWith('@placeholder');
-    };
-    const cacBadge = (placeholderEmail(session.operatorEmail) || placeholderEmail(session.assistantEmail))
-      ? '<span class="session-badge" title="CAC uses placeholder email — fix via setup wizard" style="display:inline-block;padding:1px 6px;border-radius:8px;background:rgba(255,193,7,0.25);color:#ffd86b;font-size:10px;">⚠ placeholder CAC</span>'
-      : '';
-    const governanceRow = (charBadge || cacBadge)
-      ? '<div class="session-governance" style="margin-top:4px;">' + charBadge + cacBadge + '</div>'
-      : '';
-    return '<div class="session-card' + activeClass + className + '" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="' + onClick + '">'
-      + '<div class="session-title">' + escapeHtml(session.title) + '</div>'
-      + '<div class="session-preview">' + escapeHtml(preview) + '</div>'
-      + governanceRow
-      + '<div class="session-meta"><span>' + escapeHtml(String(session.messageCount)) + ' msgs</span><span>' + escapeHtml(formatRelativeTime(session.updatedAt)) + '</span></div>'
-      + '<div class="action-buttons">'
-      + '<button class="danger-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="deleteSession(event, this.dataset.sessionId)">Delete</button>'
-      + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="renameSession(event, this.dataset.sessionId)">Rename</button>'
-      + '<button class="secondary-button" data-session-id="' + escapeHtml(session.sessionId) + '" onclick="copySession(event, this.dataset.sessionId)">Copy Session</button>'
-      + '</div>'
-      + '</div>';
+  const placeholderEmail = (e) => {
+    if (!e) return true;
+    const s = String(e).toLowerCase();
+    return s.endsWith('@prism.local') || s.endsWith('@placeholder');
+  };
+  const hasActiveAssignment = state.characterAssignments && state.characterAssignments.some(a => a.state === 'active');
+
+  const makeSessionCard = (session, isChapter) => {
+    const card = document.createElement('div');
+    card.className = 'session-card' + (state.selectedSessionId === session.sessionId ? ' active' : '') + (isChapter ? ' session-chapter' : '');
+    card.dataset.sessionId = session.sessionId;
+    const titleEl = document.createElement('div'); titleEl.className = 'session-title'; titleEl.textContent = session.title; card.appendChild(titleEl);
+    const previewEl = document.createElement('div'); previewEl.className = 'session-preview'; previewEl.textContent = session.lastMessagePreview || 'Start a new conversation.'; card.appendChild(previewEl);
+    const govRow = document.createElement('div'); govRow.className = 'session-governance'; govRow.style.marginTop = '4px';
+    const charBadge = document.createElement('span'); charBadge.className = 'session-badge'; charBadge.style.cssText = 'display:inline-block;padding:1px 6px;margin-right:4px;border-radius:8px;font-size:10px;';
+    if (session.characterId) { charBadge.title = 'Bound character'; charBadge.style.background = 'var(--surface-alt,rgba(255,255,255,0.08))'; charBadge.textContent = '🎭 ' + session.characterId; }
+    else { charBadge.title = 'No character bound'; charBadge.style.cssText += 'background:rgba(220,53,69,0.25);color:#ffb8c0;'; charBadge.textContent = '⚠ unbound'; }
+    govRow.appendChild(charBadge);
+    if (!hasActiveAssignment && (placeholderEmail(session.operatorEmail) || placeholderEmail(session.assistantEmail))) {
+      const cacBadge = document.createElement('span'); cacBadge.className = 'session-badge'; cacBadge.title = 'CAC uses placeholder email — fix via setup wizard'; cacBadge.style.cssText = 'display:inline-block;padding:1px 6px;border-radius:8px;background:rgba(255,193,7,0.25);color:#ffd86b;font-size:10px;'; cacBadge.textContent = '⚠ placeholder CAC'; govRow.appendChild(cacBadge);
+    }
+    card.appendChild(govRow);
+    const meta = document.createElement('div'); meta.className = 'session-meta';
+    const msgCount = document.createElement('span'); msgCount.textContent = String(session.messageCount) + ' msgs';
+    const timeEl = document.createElement('span'); timeEl.textContent = formatRelativeTime(session.updatedAt);
+    meta.appendChild(msgCount); meta.appendChild(timeEl); card.appendChild(meta);
+    const actions = document.createElement('div'); actions.className = 'action-buttons';
+    const delBtn = document.createElement('button'); delBtn.className = 'danger-button'; delBtn.textContent = 'Delete'; delBtn.onclick = (e) => { e.stopPropagation(); deleteSession(e, session.sessionId); };
+    const renBtn = document.createElement('button'); renBtn.className = 'secondary-button'; renBtn.textContent = 'Rename'; renBtn.onclick = (e) => { e.stopPropagation(); renameSession(e, session.sessionId); };
+    const copyBtn = document.createElement('button'); copyBtn.className = 'secondary-button'; copyBtn.textContent = 'Copy Session'; copyBtn.onclick = (e) => { e.stopPropagation(); copySession(e, session.sessionId); };
+    actions.appendChild(delBtn); actions.appendChild(renBtn); actions.appendChild(copyBtn); card.appendChild(actions);
+    card.onclick = (e) => { if (e.target.tagName === 'BUTTON') return; if (isChapter) e.stopPropagation(); selectSession(session.sessionId); };
+    return card;
   };
 
+  const fragment = document.createDocumentFragment();
   const timeline = buildSessionTimeline();
-  container.innerHTML = timeline.map(entry => {
-    if (entry.type === 'session') {
-      return renderSessionCard(entry.session);
-    }
 
-    const expanded = Boolean(state.expandedSessionPackages[entry.pkg.packageId]);
-    const childHtml = expanded
-      ? '<div class="session-package-children">'
-      + entry.sessions.map(session => renderSessionCard(session, 'session-chapter')).join('')
-      + '</div>'
-      : '';
+  timeline.forEach(entry => {
+    if (entry.type === 'session') { fragment.appendChild(makeSessionCard(entry.session, false)); return; }
+    const pkg = entry.pkg;
+    const pkgCard = document.createElement('div'); pkgCard.className = 'session-card session-package-card'; pkgCard.dataset.packageId = pkg.packageId;
+    const expanded = Boolean(state.expandedSessionPackages[pkg.packageId]);
+    const pkgStatus = pkg.status || 'planned'; const summary = pkg.summary || {};
+    const canPause = pkgStatus === 'running'; const canResume = pkgStatus === 'planned' || pkgStatus === 'blocked';
+    const head = document.createElement('div'); head.className = 'session-package-head';
+    const pkgTitleEl = document.createElement('div'); pkgTitleEl.className = 'session-title'; pkgTitleEl.textContent = pkg.title;
+    const headRight = document.createElement('div'); headRight.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const statusBadgeEl = document.createElement('button'); statusBadgeEl.className = 'pkg-status-badge ' + pkgStatus; statusBadgeEl.title = 'Click to advance status'; statusBadgeEl.textContent = pkgStatus.toUpperCase(); statusBadgeEl.onclick = (e) => cyclePackageStatus(e, pkg.packageId);
+    const expandBadge = document.createElement('div'); expandBadge.className = 'session-package-badge'; expandBadge.textContent = expanded ? 'Collapse' : 'Expand';
+    headRight.appendChild(statusBadgeEl); headRight.appendChild(expandBadge); head.appendChild(pkgTitleEl); head.appendChild(headRight); pkgCard.appendChild(head);
+    const addPreview = (text) => { const el = document.createElement('div'); el.className = 'session-preview'; el.textContent = text; pkgCard.appendChild(el); };
+    if (pkg.areaOfInterest) addPreview('Area: ' + pkg.areaOfInterest);
+    if (pkg.objective) addPreview('Objective: ' + pkg.objective);
+    if (pkg.successCriteria) addPreview('Success: ' + pkg.successCriteria);
+    if ((pkg.dependencies || []).length) addPreview('Dependencies: ' + pkg.dependencies.join(', '));
+    addPreview('Session chapters: ' + entry.sessions.length);
+    if (summary.lastActiveSessionTitle) addPreview('Last active: ' + summary.lastActiveSessionTitle + ' · ' + formatRelativeTime(summary.lastActiveAt));
+    addPreview('Progress: ' + (summary.completedChapterCount || 0) + '/' + (summary.chapterCount || entry.sessions.length) + ' chapters active (' + (summary.completionPct || 0) + '%)');
+    addPreview('Policy: ' + (summary.latestPolicyDecision || 'none') + ' · Pending approvals: ' + (summary.pendingApprovalCount || 0));
+    const pkgMeta = document.createElement('div'); pkgMeta.className = 'session-meta'; pkgMeta.innerHTML = '<span>Package</span><span>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</span>'; pkgCard.appendChild(pkgMeta);
+    const pkgActions = document.createElement('div'); pkgActions.className = 'session-package-actions';
+    const addPkgBtn = (label, onClick) => { const btn = document.createElement('button'); btn.className = 'secondary-button'; btn.textContent = label; btn.onclick = (e) => { e.stopPropagation(); onClick(e); }; pkgActions.appendChild(btn); };
+    addPkgBtn('Run Package Workflow', (e) => runPackageWorkflow(e, pkg.packageId));
+    if (canResume) addPkgBtn('Resume', (e) => setPackageStatus(e, pkg.packageId, 'running', 'Package resumed from controls.'));
+    if (canPause) addPkgBtn('Pause', (e) => setPackageStatus(e, pkg.packageId, 'planned', 'Package paused from controls.'));
+    addPkgBtn('Mark Blocked', (e) => setPackageStatus(e, pkg.packageId, 'blocked', 'Package marked blocked from controls.'));
+    addPkgBtn('Complete', (e) => setPackageStatus(e, pkg.packageId, 'complete', 'Package marked complete from controls.'));
+    addPkgBtn('Export Trace', (e) => exportPackageTrace(e, pkg.packageId));
+    addPkgBtn('Unpackage', (e) => unpackageSessionPackage(e, pkg.packageId));
+    pkgCard.appendChild(pkgActions);
+    if (expanded) { const children = document.createElement('div'); children.className = 'session-package-children'; entry.sessions.forEach(session => children.appendChild(makeSessionCard(session, true))); pkgCard.appendChild(children); }
+    pkgCard.onclick = (e) => { if (e.target.tagName === 'BUTTON') return; toggleSessionPackage(pkg.packageId); };
+    fragment.appendChild(pkgCard);
+  });
 
-    const pkgStatus = entry.pkg.status || 'planned';
-    const summary = entry.pkg.summary || {};
-    const canPause = pkgStatus === 'running';
-    const canResume = pkgStatus === 'planned' || pkgStatus === 'blocked';
-    return '<div class="session-card session-package-card" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="toggleSessionPackage(this.dataset.packageId)">'
-      + '<div class="session-package-head">'
-      + '<div class="session-title">' + escapeHtml(entry.pkg.title) + '</div>'
-      + '<div style="display:flex;align-items:center;gap:8px;">'
-      + '<button class="pkg-status-badge ' + escapeHtml(pkgStatus) + '" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="cyclePackageStatus(event, this.dataset.packageId)" title="Click to advance status">' + escapeHtml(pkgStatus.toUpperCase()) + '</button>'
-      + '<div class="session-package-badge">' + (expanded ? 'Collapse' : 'Expand') + '</div>'
-      + '</div>'
-      + '</div>'
-      + (entry.pkg.areaOfInterest
-        ? '<div class="session-preview">Area: ' + escapeHtml(entry.pkg.areaOfInterest) + '</div>'
-        : '')
-      + (entry.pkg.objective
-        ? '<div class="session-preview">Objective: ' + escapeHtml(entry.pkg.objective) + '</div>'
-        : '')
-      + (entry.pkg.successCriteria
-        ? '<div class="session-preview">Success: ' + escapeHtml(entry.pkg.successCriteria) + '</div>'
-        : '')
-      + ((entry.pkg.dependencies || []).length
-        ? '<div class="session-preview">Dependencies: ' + escapeHtml(entry.pkg.dependencies.join(', ')) + '</div>'
-        : '')
-      + '<div class="session-preview">Session chapters: ' + escapeHtml(String(entry.sessions.length)) + '</div>'
-      + (summary.lastActiveSessionTitle
-        ? '<div class="session-preview">Last active: ' + escapeHtml(summary.lastActiveSessionTitle) + ' · ' + escapeHtml(formatRelativeTime(summary.lastActiveAt)) + '</div>'
-        : '')
-      + '<div class="session-preview">Progress: ' + escapeHtml(String(summary.completedChapterCount || 0)) + '/' + escapeHtml(String(summary.chapterCount || entry.sessions.length)) + ' chapters active (' + escapeHtml(String(summary.completionPct || 0)) + '%)</div>'
-      + '<div class="session-preview">Policy: ' + escapeHtml(summary.latestPolicyDecision || 'none') + ' · Pending approvals: ' + escapeHtml(String(summary.pendingApprovalCount || 0)) + '</div>'
-      + '<div class="session-meta"><span>Package</span><span>' + escapeHtml(formatRelativeTime(entry.timestamp)) + '</span></div>'
-      + '<div class="session-package-actions">'
-      + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="runPackageWorkflow(event, this.dataset.packageId)">Run Package Workflow</button>'
-      + (canResume
-        ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;running&quot;, &quot;Package resumed from controls.&quot;)">Resume</button>'
-        : '')
-      + (canPause
-        ? '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;planned&quot;, &quot;Package paused from controls.&quot;)">Pause</button>'
-        : '')
-      + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;blocked&quot;, &quot;Package marked blocked from controls.&quot;)">Mark Blocked</button>'
-      + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="setPackageStatus(event, this.dataset.packageId, &quot;complete&quot;, &quot;Package marked complete from controls.&quot;)">Complete</button>'
-      + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="exportPackageTrace(event, this.dataset.packageId)">Export Trace</button>'
-      + '<button class="secondary-button" data-package-id="' + escapeHtml(entry.pkg.packageId) + '" onclick="unpackageSessionPackage(event, this.dataset.packageId)">Unpackage</button>'
-      + '</div>'
-      + childHtml
-      + '</div>';
-  }).join('');
+  container.innerHTML = '';
+  container.appendChild(fragment);
 }
 
 export
@@ -874,21 +866,36 @@ export
 export
   function renderToolBlocks(metadata) {
   if (!metadata || !metadata.events || !metadata.events.length) return '';
-  var toolEvents = metadata.events.filter(function (e) { return e.type === 'tool_call' || e.type === 'tool_result'; });
-  if (!toolEvents.length) return '';
+  var events = (metadata.events || []).slice();
   var blocks = [];
-  for (var i = 0; i < toolEvents.length; i += 2) {
-    var call = toolEvents[i];
-    var result = toolEvents[i + 1];
-    var name = call ? (call.tool || call.name || 'tool') : 'tool';
-    var ok = result && result.type === 'tool_result' && (result.ok !== false);
-    var statusClass = ok ? 'ok' : 'fail';
-    var statusText = ok ? '\u2713' : '\u2717';
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    if (ev.type === 'text') {
+      blocks.push(
+        '<div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:8px;padding:12px 16px;margin:8px 0;box-sizing:border-box;">'
+        + '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#a78bfa;margin-bottom:6px;">'
+        + '<span>🧠</span> <span>Neural Synthesis Feed</span>'
+        + '</div>'
+        + '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:#e2e8f0;">' + renderMarkdown(ev.text || '') + '</div>'
+        + '</div>'
+      );
+    } else if (ev.type === 'tool_call') {
+      var call = ev;
+      var result = null;
+      for (var j = i + 1; j < events.length; j++) {
+        if (events[j].type === 'tool_result' && (events[j].tool === call.tool || events[j].toolName === call.tool)) {
+          result = events[j];
+          events.splice(j, 1);
+          break;
+        }
+      }
+      var name = call.tool || 'tool';
+      var ok = result ? (result.ok !== false) : false;
+      var statusClass = ok ? 'ok' : 'fail';
+      var statusText = ok ? '\u2713' : '\u2717';
 
-    // Build command display from tool call input + result output
-    var commandHtml = '';
-    if (call) {
-      var input = (call.toolCall && call.toolCall.arguments) || call.input || call.params || call.arguments || {};
+      var commandHtml = '';
+      var input = call.arguments || {};
       if (typeof input === 'string') {
         commandHtml = '<div style="white-space:pre-wrap;word-break:break-all;">' + escapeHtml(input) + '</div>';
       } else if (typeof input === 'object' && Object.keys(input).length > 0) {
@@ -900,35 +907,34 @@ export
       } else {
         commandHtml = '<div class="muted">No arguments</div>';
       }
-    }
-    // Append result output if available
-    var resultOutput = result && result.toolResult && result.toolResult.output;
-    if (resultOutput && typeof resultOutput === 'string') {
-      var preview = resultOutput.length > 1024 ? resultOutput.substring(0, 1024) + '\u2026' : resultOutput;
-      commandHtml += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);">'
-        + '<span class="muted" style="font-size:11px;">Result:</span>'
-        + '<div class="mono" style="white-space:pre-wrap;word-break:break-all;margin-top:2px;">' + escapeHtml(preview) + '</div>'
-        + '</div>';
-    }
 
-    var viewBtn = '';
-    if (name === 'browser_control' || name === 'browser_create') {
-      viewBtn = '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'browser\'); } if(typeof setBrowserView===\'function\'){ setBrowserView(\'viewport\'); } }catch(e){console.error(e);} return false;">View in Browser Control</button>';
-    }
+      if (result && result.output) {
+        var preview = result.output.length > 1024 ? result.output.substring(0, 1024) + '\u2026' : result.output;
+        commandHtml += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);">'
+          + '<span class="muted" style="font-size:11px;">Result:</span>'
+          + '<div class="mono" style="white-space:pre-wrap;word-break:break-all;margin-top:2px;">' + escapeHtml(preview) + '</div>'
+          + '</div>';
+      }
 
-    blocks.push(
-      '<div class="tool-block" onclick="this.classList.toggle(&quot;expanded&quot;)">'
-      + '<div class="tool-block-header">'
-      + '<span class="tool-block-icon">\u{1F527}</span>'
-      + '<span class="tool-block-name">' + escapeHtml(name) + '</span>'
-      + viewBtn
-      + '<span class="tool-block-status ' + statusClass + '">' + statusText + '</span>'
-      + '</div>'
-      + '<div class="tool-block-body">'
-      + commandHtml
-      + '</div>'
-      + '</div>'
-    );
+      var viewBtn = '';
+      if (name === 'browser_control' || name === 'browser_create') {
+        viewBtn = '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'browser\'); } if(typeof setBrowserView===\'function\'){ setBrowserView(\'viewport\'); } }catch(e){console.error(e);} return false;">View in Browser Control</button>';
+      }
+
+      blocks.push(
+        '<div class="tool-block" onclick="this.classList.toggle(&quot;expanded&quot;)">'
+        + '<div class="tool-block-header">'
+        + '<span class="tool-block-icon">\u{1F527}</span>'
+        + '<span class="tool-block-name">' + escapeHtml(name) + '</span>'
+        + viewBtn
+        + '<span class="tool-block-status ' + statusClass + '">' + statusText + '</span>'
+        + '</div>'
+        + '<div class="tool-block-body">'
+        + commandHtml
+        + '</div>'
+        + '</div>'
+      );
+    }
   }
   return blocks.join('');
 }
@@ -936,18 +942,36 @@ export
 export
   function renderMessages() {
   const container = document.getElementById('messages');
-  if (!state.messages.length) {
+  if (!state.messages.length && !state.busy && !state.agenticStream.length) {
     container.innerHTML = '<div class="empty-state"><strong>How can I help you today?</strong>Ask for status, approvals, history, or trigger actions like <span class="mono">run workflow demo</span>.</div>';
     return;
   }
 
+  // ── Preserve user scroll position — only auto-scroll when near bottom ──
+  const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+
+  // ── Build the desired list of keyed message elements ──
+  const existingById = new Map();
+  for (const el of container.querySelectorAll('[data-msg-id]')) {
+    existingById.set(el.dataset.msgId, el);
+  }
+
+  const wantedKeys = [];
+  const newElements = [];
+
   const rows = state.messages.map(message => {
+    const key = message.messageId || ('opt-' + message.createdAt);
+    wantedKeys.push(key);
+
+    // Reuse existing DOM node for unchanged messages to preserve expanded states
+    const existing = existingById.get(key);
+    if (existing && !message._dirty) return { key, el: existing, reuse: true };
+
     const roleLabel = message.role === 'user' ? 'Operator' : message.role === 'assistant' ? 'PRISM' : 'System';
     let extraHtml = '';
     if (message.metadata && message.metadata.intent === 'llm_error') {
       extraHtml = '<div style="margin-top: 14px;"><button class="secondary-button" style="font-size:12px; padding:8px 12px; display:inline-flex; align-items:center; gap:6px;" onclick="setActiveTab(&quot;logs&quot;)">&#x1F50D; Open Logs</button></div>';
     }
-    // Tool execution blocks for agentic replies
     if (message.metadata && message.metadata.intent === 'llm_agentic') {
       extraHtml += renderToolBlocks(message.metadata);
       if (message.metadata.toolCallsExecuted) {
@@ -956,14 +980,18 @@ export
           + (message.metadata.iterations || '?') + ' iteration(s)</div>';
       }
     }
-
-    // Spectrum Refraction (SR) response badge and timing
+    if (message.role === 'assistant' && message.metadata && message.metadata.events && message.metadata.events.length) {
+      extraHtml += '<div style="margin-top:8px;">'
+        + '<button class="secondary-button" style="font-size:11px;padding:4px 10px;display:inline-flex;align-items:center;gap:6px;background:rgba(139,92,246,0.08);border-color:rgba(139,92,246,0.25);color:#a78bfa;cursor:pointer;" onclick="showThinkingTraceModal(\'' + (message.messageId || '') + '\')">'
+        + '🧠 View Cognitive Trace (' + message.metadata.events.length + ' events)'
+        + '</button>'
+        + '</div>';
+    }
     if (message.metadata && message.metadata.intent === 'llm_sr') {
       extraHtml += '<div style="margin-top:8px;padding:8px 12px;border-radius:6px;background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(59,130,246,0.08));border:1px solid rgba(139,92,246,0.25);">';
       extraHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
       extraHtml += '<span style="font-size:14px;">\u{1F308}</span>';
       extraHtml += '<span style="font-size:11px;font-weight:600;color:#a78bfa;">Spectrum Refraction</span>';
-      // Isolation level badge
       if (message.metadata.isolationLevel) {
         var isoLvl = message.metadata.isolationLevel;
         var isoC = isoLvl === 'full' ? '#7cf1c8' : isoLvl === 'model' ? '#4dabf7' : '#ff8787';
@@ -986,9 +1014,6 @@ export
 
     const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : renderMarkdown(escapeHtml(message.content));
 
-    // ── v0.20.3: render attachment chips on user message bubbles ──
-    // Additive — only emits markup when attachments are present, so messages
-    // without attachments render byte-identically to prior versions.
     let attachmentsHtml = '';
     if (message.attachments && message.attachments.length) {
       attachmentsHtml = '<div class="message-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">'
@@ -1006,7 +1031,6 @@ export
         }).join('')
         + '</div>';
     } else if (message._optimisticAttachments && message._optimisticAttachments.length) {
-      // Optimistic local user-message bubble — mirror pendingAttachments before server roundtrip.
       attachmentsHtml = '<div class="message-attachments" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">'
         + message._optimisticAttachments.map(function (att) {
           var isImage = att.type && att.type.indexOf('image/') === 0;
@@ -1022,49 +1046,106 @@ export
         + '</div>';
     }
 
-    return '<div class="message ' + escapeHtml(message.role) + '">'
-      + '<div class="message-label">' + escapeHtml(roleLabel) + '</div>'
+    // ── Message action buttons (items 9+10) ──
+    const msgId = message.messageId || '';
+    const isoTime = message.createdAt ? new Date(message.createdAt).toLocaleString() : '';
+    const actionBtns = message.role !== 'system' ? (
+      '<div class="msg-actions" style="display:flex;gap:4px;margin-top:6px;opacity:0;transition:opacity 0.15s;">'
+      + '<button class="msg-action-btn" title="Copy message" onclick="copyMessageContent(event, this)" data-content="' + escapeHtml(message.content) + '" style="background:none;border:1px solid rgba(148,163,184,0.2);border-radius:4px;padding:2px 7px;font-size:10px;color:#94a3b8;cursor:pointer;">Copy</button>'
+      + (message.role === 'assistant' && msgId ? '<button class="msg-action-btn" title="Regenerate this response" onclick="regenerateMessage(event, \'' + escapeHtml(msgId) + '\')" style="background:none;border:1px solid rgba(148,163,184,0.2);border-radius:4px;padding:2px 7px;font-size:10px;color:#94a3b8;cursor:pointer;">↺ Retry</button>' : '')
+      + '</div>'
+    ) : '';
+
+    const el = document.createElement('div');
+    el.className = 'message ' + escapeHtml(message.role);
+    el.dataset.msgId = key;
+    el.style.position = 'relative';
+    el.onmouseenter = () => { const a = el.querySelector('.msg-actions'); if (a) a.style.opacity = '1'; };
+    el.onmouseleave = () => { const a = el.querySelector('.msg-actions'); if (a) a.style.opacity = '0'; };
+    el.innerHTML = '<div class="message-label">' + escapeHtml(roleLabel) + '</div>'
       + '<div>' + contentHtml + '</div>'
       + attachmentsHtml
       + extraHtml
-      + '<div class="message-time">' + escapeHtml(formatRelativeTime(message.createdAt)) + '</div>'
-      + '</div>';
-  }).join('');
+      + actionBtns
+      + '<div class="message-time" title="' + escapeHtml(isoTime) + '" style="cursor:default;">' + escapeHtml(formatRelativeTime(message.createdAt)) + '</div>';
 
-  const streamBlock = state.agenticStream && state.agenticStream.length
-    ? '<div class="message assistant"><div class="message-label">PRISM</div>'
-    + state.agenticStream.map(function (ev) {
-      if (ev.type === 'text') return '<div>' + renderMarkdown(ev.text || '') + '</div>';
-      if (ev.type === 'tool_call') {
-        var tn = (ev.toolCall && ev.toolCall.name) || 'tool';
-        var iter = ev.iteration != null ? ev.iteration : '';
-        var isBrowser = tn === 'browser_control' || tn === 'browser_create';
-        var btnText = isBrowser ? 'View in Browser Control' : 'View in Agentic';
-        var btnClick = isBrowser
-          ? "try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'browser\'); } if(typeof setBrowserView===\'function\'){ setBrowserView(\'viewport\'); } }catch(e){console.error(e);} return false;"
-          : "try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'agentic\'); } if(typeof refreshAutonomousGoals===\'function\'){ refreshAutonomousGoals(); } }catch(e){console.error(e);} return false;";
-        return '<div class="tool-block" title="' + escapeHtml(tn) + (iter ? ' (iteration ' + iter + ')' : '') + '">'
-          + '<div class="tool-block-header"><span class="tool-block-icon">\u{1F527}</span>'
-          + '<span class="tool-block-name" style="margin-left:8px;font-weight:600;">' + escapeHtml(tn) + '</span>'
-          + '<span class="muted" style="margin-left:8px;font-size:11px;">' + (iter ? 'iter ' + iter : '') + '</span>'
-          + '<span class="streaming-dot" style="margin-left:8px"></span>'
-          + '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="' + btnClick + '">' + btnText + '</button>'
-          + '</div></div>';
+    return { key, el, reuse: false };
+  });
+
+  // ── Streaming block ──
+  const streamBlock = (state.agenticStream && state.agenticStream.length) ? (() => {
+    const el = document.createElement('div');
+    el.className = 'message assistant';
+    el.dataset.msgId = '__stream__';
+    el.innerHTML = '<div class="message-label">PRISM</div>'
+      + state.agenticStream.map(function (ev) {
+        if (ev.type === 'text') return '<div>' + renderMarkdown(ev.text || '') + '</div>';
+        if (ev.type === 'tool_call') {
+          var tn = (ev.toolCall && ev.toolCall.name) || 'tool';
+          var iter = ev.iteration != null ? ev.iteration : '';
+          var isBrowser = tn === 'browser_control' || tn === 'browser_create';
+          var btnText = isBrowser ? 'View in Browser Control' : 'View in Agentic';
+          var btnClick = isBrowser
+            ? "try{ if(typeof setActiveTab==='function'){ setActiveTab('browser'); } if(typeof setBrowserView==='function'){ setBrowserView('viewport'); } }catch(e){console.error(e);} return false;"
+            : "try{ if(typeof setActiveTab==='function'){ setActiveTab('agentic'); } if(typeof refreshAutonomousGoals==='function'){ refreshAutonomousGoals(); } }catch(e){console.error(e);} return false;";
+          return '<div class="tool-block" title="' + escapeHtml(tn) + (iter ? ' (iteration ' + iter + ')' : '') + '">'
+            + '<div class="tool-block-header"><span class="tool-block-icon">\u{1F527}</span>'
+            + '<span class="tool-block-name" style="margin-left:8px;font-weight:600;">' + escapeHtml(tn) + '</span>'
+            + '<span class="muted" style="margin-left:8px;font-size:11px;">' + (iter ? 'iter ' + iter : '') + '</span>'
+            + '<span class="streaming-dot" style="margin-left:8px"></span>'
+            + '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="' + btnClick + '">' + escapeHtml(btnText) + '</button>'
+            + '</div></div>';
+        }
+        if (ev.type === 'tool_result') { var rn = (ev.toolResult && ev.toolResult.name) || 'tool'; return '<div class="muted" style="font-size:11px;">\u2713 ' + escapeHtml(rn) + ' done</div>'; }
+        return '';
+      }).join('');
+    return el;
+  })() : null;
+
+  // ── Typing indicator ──
+  const typingEl = ((state.busy && !state.agenticStream.length) || (state.lastThinkingTrace && state.lastThinkingTrace.length)) ? (() => {
+    const el = document.createElement('div');
+    el.className = 'message assistant thinking-indicator';
+    el.dataset.msgId = '__typing__';
+    el.style.cursor = 'pointer';
+    el.title = 'Click to view live cognitive trace';
+    el.onclick = () => showThinkingTraceModal();
+    el.innerHTML = '<div class="message-label">PRISM <span class="thinking-badge" style="background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:2px 6px;border-radius:4px;">thinking</span></div>'
+      + '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+    return el;
+  })() : null;
+
+  // ── Reconcile DOM: reuse unchanged nodes, replace changed ones ──
+  const wantedSet = new Set(wantedKeys);
+  const toRemove = [];
+  for (const el of container.querySelectorAll('[data-msg-id]')) {
+    const id = el.dataset.msgId;
+    if (id === '__stream__' || id === '__typing__') { toRemove.push(el); continue; }
+    if (!wantedSet.has(id)) toRemove.push(el);
+  }
+  toRemove.forEach(el => el.remove());
+
+  // Insert/replace in order
+  for (let i = 0; i < rows.length; i++) {
+    const { key, el, reuse } = rows[i];
+    const existing = container.querySelector('[data-msg-id="' + CSS.escape(key) + '"]');
+    if (reuse && existing) continue;  // already in place, unchanged
+    if (existing) {
+      container.replaceChild(el, existing);
+    } else {
+      // Insert at correct position
+      const allMsgEls = Array.from(container.querySelectorAll('[data-msg-id]')).filter(e => e.dataset.msgId !== '__stream__' && e.dataset.msgId !== '__typing__');
+      if (i < allMsgEls.length) {
+        container.insertBefore(el, allMsgEls[i]);
+      } else {
+        container.appendChild(el);
       }
-      if (ev.type === 'tool_result') { var rn = (ev.toolResult && ev.toolResult.name) || 'tool'; return '<div class="muted" style="font-size:11px;">\u2713 ' + escapeHtml(rn) + ' done</div>'; }
-      return '';
-    }).join('')
-    + '</div>'
-    : '';
+    }
+  }
+  if (streamBlock) container.appendChild(streamBlock);
+  if (typingEl) container.appendChild(typingEl);
 
-  const typing = (state.busy && !state.agenticStream.length) || (state.lastThinkingTrace && state.lastThinkingTrace.length)
-    ? '<div class="message assistant thinking-indicator" onclick="showThinkingTraceModal()" style="cursor:pointer;" title="Click to view live cognitive trace">'
-    + '<div class="message-label">PRISM <span class="thinking-badge" style="background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:2px 6px;border-radius:4px;">thinking</span></div>'
-    + '<div class="thinking-dots"><span></span><span></span><span></span></div>'
-    + '</div>'
-    : '';
-  container.innerHTML = rows + streamBlock + typing;
-  container.scrollTop = container.scrollHeight;
+  if (atBottom) container.scrollTop = container.scrollHeight;
 }
 
 export
@@ -1135,7 +1216,7 @@ export
     + '<div class="brand-info-item"><span class="brand-info-label">Env</span><br><span class="brand-info-value"><span class="brand-env-dot ' + envDotClass + '"></span>' + escapeHtml(envProfile) + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Mode</span><br><span class="brand-info-value">' + escapeHtml(s.mode || 'server') + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Uptime</span><br><span class="brand-info-value">' + formatUptime(s.uptimeSeconds) + '</span></div>'
-    + '<div class="brand-info-item"><span class="brand-info-label">Version</span><br><span class="brand-info-value">v0.2.0</span></div>'
+    + '<div class="brand-info-item"><span class="brand-info-label">Version</span><br><span class="brand-info-value">' + escapeHtml('v' + (s.serviceVersion || s.version || '—')) + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Sessions</span><br><span class="brand-info-value">' + (s.chatSessionCount || 0) + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Events</span><br><span class="brand-info-value">' + (s.eventCount || 0) + '</span></div>'
     + '</div>'
@@ -1149,28 +1230,17 @@ export
     + '</div>'
     + '</div>';
 
-  // ── Preserve existing paradigm panel state before re-render ──
-  var existingBadge = document.getElementById('prism-paradigm-badge');
-  var badgeText = existingBadge ? existingBadge.innerText : 'LOADING';
-  var badgeBg = existingBadge ? (existingBadge.style.background || '#3b82f6') : '#3b82f6';
-  var badgeColor = existingBadge ? (existingBadge.style.color || '#fff') : '#fff';
-  var badgeShadow = existingBadge ? (existingBadge.style.boxShadow || '') : '';
-  var existingDesc = document.getElementById('prism-paradigm-desc');
-  var descHtml = existingDesc ? existingDesc.innerHTML : 'Querying active constraints...';
-  var existingLog = document.getElementById('prism-paradigm-log');
-  var logHtml = existingLog ? existingLog.innerHTML : '<div>[SYSTEM] Booting active paradigm...</div>';
-
-  // Preserve button highlight states
-  var btnStates = {};
-  ['prism-btn-basemode', 'prism-btn-perfmode', 'prism-btn-automode'].forEach(function (id) {
-    var btn = document.getElementById(id);
-    if (btn) {
-      btnStates[id] = { bg: btn.style.background, border: btn.style.borderColor, color: btn.style.color };
-    }
-  });
-  var baseBtnStyle = btnStates['prism-btn-basemode'] || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
-  var perfBtnStyle = btnStates['prism-btn-perfmode'] || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
-  var autoBtnStyle = btnStates['prism-btn-automode'] || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
+  // ── Preserve existing paradigm panel state from state (not DOM) ──
+  var paradigm = state.paradigm || {};
+  var badgeText = paradigm.badgeText || 'LOADING';
+  var badgeBg = paradigm.badgeBg || '#3b82f6';
+  var badgeColor = paradigm.badgeColor || '#fff';
+  var badgeShadow = paradigm.badgeShadow || '';
+  var descHtml = paradigm.descHtml || 'Querying active constraints...';
+  var logHtml = paradigm.logHtml || '<div>[SYSTEM] Booting active paradigm...</div>';
+  var baseBtnStyle = paradigm.baseBtnStyle || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
+  var perfBtnStyle = paradigm.perfBtnStyle || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
+  var autoBtnStyle = paradigm.autoBtnStyle || { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
 
   // ── PRISM Active Resource Paradigm / Mode Switcher (persisted across renders) ──
   html += '<div id="prism-paradigm-panel" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;font-size:11px;">'
@@ -1221,7 +1291,7 @@ export
   if (!existing) {
     return;
   }
-  const confirmed = confirm('Delete session "' + existing.title + '"? This will remove all messages in this session.');
+  const confirmed = await showConfirm('Delete session "' + existing.title + '"? This will remove all messages in this session.');
   if (!confirmed) {
     return;
   }
@@ -1242,7 +1312,7 @@ export
       await refreshChrome();
     }
   } catch (error) {
-    state.notice = String(error);
+    showTransientNotice('Delete failed: ' + (error.message || String(error)), 'error');
   }
 
   render();
@@ -1253,8 +1323,8 @@ export
   event.stopPropagation();
   var session = state.sessions.find(function (s) { return s.sessionId === sessionId; });
   if (!session) return;
-  var newTitle = prompt('Rename session:', session.title);
-  if (!newTitle || !newTitle.trim() || newTitle.trim() === session.title) return;
+  var newTitle = await showPrompt('Rename session:', { defaultValue: session.title, confirmLabel: 'Rename', icon: '✏️' });
+  if (!newTitle || newTitle.trim() === session.title) return;
   try {
     await request('/api/chat/sessions/' + encodeURIComponent(sessionId), {
       method: 'PATCH',
@@ -1264,11 +1334,10 @@ export
     await loadSessions();
     safeRenderStep('sessionList', renderSessionList);
     safeRenderStep('header', renderHeader);
-    state.notice = 'Session renamed.';
+    showTransientNotice('Session renamed.', 'success');
   } catch (err) {
-    state.notice = { type: 'error', message: String(err) };
+    showTransientNotice('Rename failed: ' + String(err), 'error');
   }
-  render();
 }
 
 export
@@ -1428,6 +1497,7 @@ export
       formData.append('file', att.file, att.name);
       await fetch('/api/chat/sessions/' + encodeURIComponent(sessionId) + '/messages/' + encodeURIComponent(messageId) + '/attachments', {
         method: 'POST',
+        headers: authHeaders(),
         body: formData
       });
     } catch (err) {
@@ -1562,12 +1632,61 @@ export
       await uploadAttachments(state.selectedSessionId, response.userMessage.messageId);
     }
     state.agenticStream = [];
-    await Promise.all([loadSessions(), loadMessages(), refreshChrome()]);
+    // Targeted refresh: reload messages and session list only — avoid the
+    // 28-request refreshChrome() waterfall on every send.
+    await Promise.all([loadSessions(), loadMessages()]);
+    // Deferred: refresh provider/readiness data in the background without blocking render.
+    refreshChrome().catch(() => { });
   } catch (error) {
     state.notice = String(error);
     // Reload messages even on error — partial tool results or error-as-assistant-message may be stored
     state.agenticStream = [];
     try { await loadMessages(); } catch (_e) { /* best effort */ }
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+export
+  async function copyMessageContent(event, btn) {
+  event.stopPropagation();
+  const content = btn.dataset.content || '';
+  try {
+    await navigator.clipboard.writeText(content);
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    btn.style.color = '#34d399';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000);
+  } catch (_) {
+    showTransientNotice('Clipboard write failed — use Ctrl+C to copy.', 'error');
+  }
+}
+
+export
+  async function regenerateMessage(event, messageId) {
+  event.stopPropagation();
+  if (state.busy) return;
+  const msgs = state.messages || [];
+  const assistantIdx = msgs.findIndex(m => m.messageId === messageId);
+  if (assistantIdx < 1) return;
+  const precedingUser = msgs.slice(0, assistantIdx).reverse().find(m => m.role === 'user');
+  if (!precedingUser) return;
+  const confirmed = await showConfirm('Retry this response?\n\nThe last assistant reply will be removed and PRISM will answer again.');
+  if (!confirmed) return;
+  state.busy = true;
+  state.agenticStream = [];
+  render();
+  try {
+    await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages/' + encodeURIComponent(messageId), { method: 'DELETE' }).catch(() => null);
+    await request('/api/chat/sessions/' + encodeURIComponent(state.selectedSessionId) + '/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: precedingUser.content, _regenerate: true })
+    });
+    await loadMessages();
+  } catch (err) {
+    showTransientNotice('Regenerate failed: ' + String(err), 'error');
   } finally {
     state.busy = false;
     render();
@@ -1752,8 +1871,19 @@ export
   };
 }
 
-export function showThinkingTraceModal() {
+export function showThinkingTraceModal(messageIdOrTrace) {
   if (document.getElementById('thinking-trace-overlay')) return;
+
+  var historicalEvents = null;
+  var isLive = true;
+
+  if (messageIdOrTrace && typeof messageIdOrTrace === 'string') {
+    var foundMsg = state.messages.find(function (m) { return m.messageId === messageIdOrTrace; });
+    if (foundMsg && foundMsg.metadata && foundMsg.metadata.events) {
+      historicalEvents = foundMsg.metadata.events;
+      isLive = false;
+    }
+  }
 
   if (!document.getElementById('thinking-trace-styles')) {
     const styleEl = document.createElement('style');
@@ -1787,8 +1917,8 @@ export function showThinkingTraceModal() {
   header.style.cssText = 'padding:16px 24px;border-bottom:1px solid rgba(255, 255, 255, 0.08);display:flex;align-items:center;justify-content:space-between;background:rgba(30, 27, 46, 0.5);flex-shrink:0;';
   header.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;">
-      <span style="font-size:18px;">⚡</span>
-      <span style="font-weight:600;font-size:16px;letter-spacing:0.5px;background:linear-gradient(90deg, #a78bfa, #38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">PRISM Live Cognitive & Action Trace</span>
+      <span style="font-size:18px;">🧠</span>
+      <span style="font-weight:600;font-size:16px;letter-spacing:0.5px;background:linear-gradient(90deg, #a78bfa, #38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">${isLive ? 'PRISM Live Cognitive & Action Trace' : 'PRISM Archived Cognitive Trace'}</span>
     </div>
     <button id="thinking-trace-close" style="background:transparent;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all 0.2s;">✕</button>
   `;
@@ -1804,7 +1934,7 @@ export function showThinkingTraceModal() {
   document.body.appendChild(overlay);
 
   const closeModal = () => {
-    clearInterval(updateInterval);
+    if (updateInterval) clearInterval(updateInterval);
     overlay.style.opacity = '0';
     setTimeout(() => overlay.remove(), 200);
   };
@@ -1814,15 +1944,17 @@ export function showThinkingTraceModal() {
 
   const renderContent = () => {
     let html = '';
-    const trace = (state.lastThinkingTrace && state.lastThinkingTrace.length) ? state.lastThinkingTrace : (state.agenticStream || []);
+    const trace = !isLive ? historicalEvents : ((state.lastThinkingTrace && state.lastThinkingTrace.length) ? state.lastThinkingTrace : (state.agenticStream || []));
 
     // Active Status Card
+    var statusText = isLive ? '🧠 processing...' : '✅ completed';
+    var statusStyle = isLive ? 'color:#fbbf24;animation:thinking-pulse 1.4s ease-in-out infinite;' : 'color:#34d399;font-weight:600;';
     html += `
       <div style="background:rgba(30,30,46,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:16px;font-size:13px;display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;box-sizing:border-box;flex-shrink:0;">
         <div><span style="color:#94a3b8;">Active Session:</span> <span style="font-family:monospace;color:#a78bfa;word-break:break-all;">${escapeHtml(state.selectedSessionId || 'none')}</span></div>
         <div><span style="color:#94a3b8;">Cognitive Mode:</span> <span style="color:#38bdf8;font-weight:600;">${state.settings?.srEnabled ? 'Spectrum Refraction' : 'Standard Pipeline'}</span></div>
-        <div><span style="color:#94a3b8;">Live Event Count:</span> <span style="font-family:monospace;color:#34d399;font-weight:600;">${trace.length}</span></div>
-        <div><span style="color:#94a3b8;">Status:</span> <span style="color:#fbbf24;animation:thinking-pulse 1.4s ease-in-out infinite;">🧠 processing...</span></div>
+        <div><span style="color:#94a3b8;">Event Count:</span> <span style="font-family:monospace;color:#34d399;font-weight:600;">${trace.length}</span></div>
+        <div><span style="color:#94a3b8;">Status:</span> <span style="${statusStyle}">${statusText}</span></div>
       </div>
     `;
 
@@ -1848,26 +1980,26 @@ export function showThinkingTraceModal() {
             </div>
           `;
         } else if (ev.type === 'tool_call') {
-          const args = ev.toolCall?.arguments || {};
+          const args = ev.arguments || ev.toolCall?.arguments || {};
           let argsStr = '';
           try { argsStr = JSON.stringify(args, null, 2); } catch (_) { argsStr = String(args); }
           html += `
             <div style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.15);border-radius:8px;padding:12px 16px;box-sizing:border-box;">
               <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#38bdf8;margin-bottom:6px;">
-                <span>🔧</span> <span>Invoking System Tool:</span> <span style="font-family:monospace;background:rgba(56,189,248,0.15);padding:1px 6px;border-radius:4px;">${escapeHtml(ev.toolCall?.name || '')}</span>
+                <span>🔧</span> <span>Invoking System Tool:</span> <span style="font-family:monospace;background:rgba(56,189,248,0.15);padding:1px 6px;border-radius:4px;">${escapeHtml(ev.tool || ev.toolCall?.name || '')}</span>
               </div>
               <pre style="margin:6px 0 0;padding:10px;background:rgba(0,0,0,0.3);border-radius:6px;font-family:monospace;font-size:11px;overflow-x:auto;color:#cbd5e1;border:1px solid rgba(255,255,255,0.05);box-sizing:border-box;">${escapeHtml(argsStr)}</pre>
             </div>
           `;
         } else if (ev.type === 'tool_result') {
-          const ok = ev.toolResult?.ok !== false;
+          const ok = ev.ok !== false && (!ev.toolResult || ev.toolResult.ok !== false);
           const statusColor = ok ? '#34d399' : '#f87171';
-          const out = ev.toolResult?.output || '';
+          const out = ev.output || ev.toolResult?.output || '';
           const preview = out.length > 500 ? out.substring(0, 500) + '...' : out;
           html += `
             <div style="background:rgba(52,211,153,0.04);border:1px solid ${statusColor}30;border-radius:8px;padding:12px 16px;box-sizing:border-box;">
               <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:${statusColor};margin-bottom:6px;">
-                <span>${ok ? '✅' : '❌'}</span> <span>Tool Result:</span> <span style="font-family:monospace;background:${statusColor}15;padding:1px 6px;border-radius:4px;">${escapeHtml(ev.toolResult?.name || 'tool')}</span>
+                <span>${ok ? '✅' : '❌'}</span> <span>Tool Result:</span> <span style="font-family:monospace;background:${statusColor}15;padding:1px 6px;border-radius:4px;">${escapeHtml(ev.tool || ev.toolResult?.name || 'tool')}</span>
               </div>
               <pre style="margin:6px 0 0;padding:10px;background:rgba(0,0,0,0.3);border-radius:6px;font-family:monospace;font-size:11px;overflow-x:auto;color:#cbd5e1;border:1px solid rgba(255,255,255,0.05);box-sizing:border-box;">${escapeHtml(preview)}</pre>
             </div>
@@ -1878,48 +2010,52 @@ export function showThinkingTraceModal() {
     }
     html += `</div>`;
 
-    // Live Telemetry Logs section
-    html += `
-      <div>
-        <h4 style="margin:0 0 10px;color:#f472b6;font-size:13px;letter-spacing:0.5px;text-transform:uppercase;font-weight:600;">📡 Live Telemetry & Activity Logs</h4>
-        <div style="background:rgba(10,10,16,0.85);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:11px;line-height:1.4;box-sizing:border-box;" id="thinking-trace-logs">
-    `;
+    if (isLive) {
+      // Live Telemetry Logs section
+      html += `
+        <div>
+          <h4 style="margin:0 0 10px;color:#f472b6;font-size:13px;letter-spacing:0.5px;text-transform:uppercase;font-weight:600;">📡 Live Telemetry & Activity Logs</h4>
+          <div style="background:rgba(10,10,16,0.85);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:11px;line-height:1.4;box-sizing:border-box;" id="thinking-trace-logs">
+      `;
 
-    const relevantLogs = state.logEntries.filter(e =>
-      e.source === 'chat' || e.source === 'llm' || e.source === 'tools' || e.source === 'diagnostics' || e.source === 'agent-diagnostics' || e.source === 'logs-diagnostics'
-    ).slice(-25);
+      const relevantLogs = state.logEntries.filter(e =>
+        e.source === 'chat' || e.source === 'llm' || e.source === 'tools' || e.source === 'diagnostics' || e.source === 'agent-diagnostics' || e.source === 'logs-diagnostics'
+      ).slice(-25);
 
-    if (relevantLogs.length === 0) {
-      html += `<div style="color:#64748b;font-style:italic;text-align:center;padding:12px;">Waiting for runtime logs...</div>`;
-    } else {
-      relevantLogs.forEach(e => {
-        const time = e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : '';
-        let color = '#94a3b8';
-        if (e.severity === 'error') color = '#f87171';
-        else if (e.severity === 'warn') color = '#fbbf24';
-        else if (e.source === 'llm') color = '#a78bfa';
-        else if (e.source === 'tools') color = '#38bdf8';
+      if (relevantLogs.length === 0) {
+        html += `<div style="color:#64748b;font-style:italic;text-align:center;padding:12px;">Waiting for runtime logs...</div>`;
+      } else {
+        relevantLogs.forEach(e => {
+          const time = e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : '';
+          let color = '#94a3b8';
+          if (e.severity === 'error') color = '#f87171';
+          else if (e.severity === 'warn') color = '#fbbf24';
+          else if (e.source === 'llm') color = '#a78bfa';
+          else if (e.source === 'tools') color = '#38bdf8';
 
-        html += `
-          <div style="display:flex;gap:12px;align-items:flex-start;box-sizing:border-box;">
-            <span style="color:#64748b;flex-shrink:0;">[${time}]</span>
-            <span style="color:${color};font-weight:600;flex-shrink:0;width:95px;">${escapeHtml(e.source || 'system')}</span>
-            <span style="color:#cbd5e1;word-break:break-all;">${escapeHtml(e.summary || e.operation || '')}</span>
+          html += `
+            <div style="display:flex;gap:12px;align-items:flex-start;box-sizing:border-box;">
+              <span style="color:#64748b;flex-shrink:0;">[${time}]</span>
+              <span style="color:${color};font-weight:600;flex-shrink:0;width:95px;">${escapeHtml(e.source || 'system')}</span>
+              <span style="color:#cbd5e1;word-break:break-all;">${escapeHtml(e.summary || e.operation || '')}</span>
+            </div>
+          `;
+        });
+      }
+
+      html += `
           </div>
-        `;
-      });
+        </div>
+      `;
     }
 
-    html += `
-        </div>
-      </div>
-    `;
-
     // Live refractor pulse footer
+    var footerText = isLive ? 'Spectral Triad fanning out and synthesis engine in consensus...' : 'Historical cognitive trace loaded from archived chat metadata.';
+    var footerDotStyle = isLive ? 'background:#a78bfa;box-shadow:0 0 10px #a78bfa;animation:thinking-pulse 1.4s infinite;' : 'background:#34d399;';
     html += `
       <div style="display:flex;align-items:center;justify-content:center;gap:10px;font-size:12px;color:#a78bfa;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0;box-sizing:border-box;">
-        <span style="display:inline-block;width:10px;height:10px;background:#a78bfa;border-radius:50%;box-shadow:0 0 10px #a78bfa;animation:thinking-pulse 1.4s infinite;"></span>
-        <span style="font-weight:500;letter-spacing:0.3px;">Spectral Triad fanning out and synthesis engine in consensus...</span>
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;${footerDotStyle}"></span>
+        <span style="font-weight:500;letter-spacing:0.3px;">${footerText}</span>
       </div>
     `;
 
@@ -1931,11 +2067,14 @@ export function showThinkingTraceModal() {
 
   renderContent();
 
-  const updateInterval = setInterval(() => {
-    if (document.getElementById('thinking-trace-overlay')) {
-      renderContent();
-    } else {
-      clearInterval(updateInterval);
-    }
-  }, 500);
+  var updateInterval = null;
+  if (isLive) {
+    updateInterval = setInterval(() => {
+      if (document.getElementById('thinking-trace-overlay')) {
+        renderContent();
+      } else {
+        clearInterval(updateInterval);
+      }
+    }, 500);
+  }
 }

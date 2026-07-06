@@ -9,8 +9,14 @@ import type { PrismWsClient } from "../api/ws-client.js";
 import { useApi, useListNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
-    Panel, DataTable, SubTabBar, StatusBadge,
-    Loading, ErrorBox, KeyValue, SectionHeader,
+    Panel,
+    DataTable,
+    SubTabBar,
+    StatusBadge,
+    Loading,
+    ErrorBox,
+    KeyValue,
+    SectionHeader,
 } from "../components/ui.js";
 
 export function AgenticTab({
@@ -47,14 +53,22 @@ export function AgenticTab({
             }
             if (input === "x" && agents.data?.[agentNav.selectedIndex]) {
                 const agent = agents.data[agentNav.selectedIndex]!;
-                client.stopAgent(agent.id)
-                    .then(() => { setActionMsg(`Stopped ${agent.role}`); agents.refresh(); })
+                client
+                    .stopAgent(agent.id)
+                    .then(() => {
+                        setActionMsg(`Stopped ${agent.role}`);
+                        agents.refresh();
+                    })
                     .catch((e: Error) => setActionMsg(`Error: ${e.message}`));
             }
             if (input === "p" && agents.data?.[agentNav.selectedIndex]) {
                 const agent = agents.data[agentNav.selectedIndex]!;
-                client.promoteAgent(agent.id)
-                    .then(() => { setActionMsg(`Promoted ${agent.role}`); agents.refresh(); })
+                client
+                    .promoteAgent(agent.id)
+                    .then(() => {
+                        setActionMsg(`Promoted ${agent.role}`);
+                        agents.refresh();
+                    })
                     .catch((e: Error) => setActionMsg(`Error: ${e.message}`));
             }
         }
@@ -98,7 +112,9 @@ export function AgenticTab({
 
             {actionMsg && (
                 <Box marginBottom={1}>
-                    <Text color={colors.info}>{symbols.arrow} {actionMsg}</Text>
+                    <Text color={colors.info}>
+                        {symbols.arrow} {actionMsg}
+                    </Text>
                 </Box>
             )}
 
@@ -106,9 +122,7 @@ export function AgenticTab({
             {subTab === "agents" && (
                 <Box flexDirection="column">
                     <Box marginBottom={1}>
-                        <Text color={colors.muted}>
-                            n: spawn | x: stop | p: promote | j/k: navigate
-                        </Text>
+                        <Text color={colors.muted}>n: spawn | x: stop | p: promote | j/k: navigate</Text>
                     </Box>
                     {spawnMode && (
                         <Box borderStyle="single" borderColor={colors.brand} paddingX={1} marginBottom={1}>
@@ -128,18 +142,30 @@ export function AgenticTab({
                         <DataTable
                             data={agents.data}
                             columns={[
-                                { header: "ID", accessor: ((r: Record<string, unknown>) => String(r.id ?? "").slice(0, 8)), width: 10 },
+                                {
+                                    header: "ID",
+                                    accessor: (r: Record<string, unknown>) => String(r.id ?? "").slice(0, 8),
+                                    width: 10,
+                                },
                                 { header: "Role", accessor: "role", width: 14 },
                                 { header: "Tier", accessor: "tier", width: 14 },
-                                { header: "Model", accessor: ((r: Record<string, unknown>) => String(r.model ?? "default")), width: 20 },
+                                {
+                                    header: "Model",
+                                    accessor: (r: Record<string, unknown>) => String(r.model ?? "default"),
+                                    width: 20,
+                                },
                                 {
                                     header: "Status",
                                     accessor: "status",
                                     width: 10,
-                                    color: ((r: Record<string, unknown>) => {
+                                    color: (r: Record<string, unknown>) => {
                                         const s = String(r.status ?? "");
-                                        return s === "active" ? colors.success : s === "idle" ? colors.warning : colors.muted;
-                                    }),
+                                        return s === "active"
+                                            ? colors.success
+                                            : s === "idle"
+                                              ? colors.warning
+                                              : colors.muted;
+                                    },
                                 },
                                 { header: "Dispatches", accessor: "dispatchCount", width: 12 },
                             ]}
@@ -158,20 +184,24 @@ export function AgenticTab({
                         <DataTable
                             data={swarms.data}
                             columns={[
-                                { header: "ID", accessor: ((r: Record<string, unknown>) => String(r.id ?? "").slice(0, 8)), width: 10 },
+                                {
+                                    header: "ID",
+                                    accessor: (r: Record<string, unknown>) => String(r.id ?? "").slice(0, 8),
+                                    width: 10,
+                                },
                                 { header: "Topology", accessor: "topology", width: 12 },
                                 { header: "Agents", accessor: "agentCount", width: 8 },
                                 {
                                     header: "Status",
                                     accessor: "status",
                                     width: 10,
-                                    color: ((r: Record<string, unknown>) =>
-                                        String(r.status) === "active" ? colors.success : colors.muted),
+                                    color: (r: Record<string, unknown>) =>
+                                        String(r.status) === "active" ? colors.success : colors.muted,
                                 },
                                 {
                                     header: "Created",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.createdAt ? new Date(r.createdAt as string).toLocaleTimeString() : ""),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        r.createdAt ? new Date(r.createdAt as string).toLocaleTimeString() : "",
                                     width: 14,
                                 },
                             ]}
@@ -210,8 +240,8 @@ export function AgenticTab({
                                 { header: "Max Tier", accessor: "maxRiskTier", width: 10 },
                                 {
                                     header: "Tags",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        Array.isArray(r.tags) ? (r.tags as string[]).join(", ") : ""),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        Array.isArray(r.tags) ? (r.tags as string[]).join(", ") : "",
                                     width: 30,
                                 },
                             ]}

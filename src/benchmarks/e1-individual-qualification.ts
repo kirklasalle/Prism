@@ -26,9 +26,7 @@ interface E1QualificationArtifact {
 const OUTPUT_PATH = process.env.PRISM_E1_OUTPUT_PATH ?? "prism-output/e1-individual-qualification.json";
 
 async function main(): Promise<void> {
-    const envProfile = resolveEnvironmentProfile(
-        process.env.PRISM_ENV_PROFILE ?? (process.env.CI ? "staging" : "dev"),
-    );
+    const envProfile = resolveEnvironmentProfile(process.env.PRISM_ENV_PROFILE ?? (process.env.CI ? "staging" : "dev"));
     const requestedExecutionProfile = process.env.PRISM_EXECUTION_PROFILE ?? null;
     const resolvedProfile = resolveExecutionProfileFromEnv(envProfile);
     const resolvedDescription = describeExecutionProfileResolution(resolvedProfile, envProfile);

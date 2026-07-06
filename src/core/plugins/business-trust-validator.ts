@@ -68,10 +68,10 @@ export class BusinessTrustValidator {
 
         const knownIssues = manifest.security?.known_issues ?? [];
         const unmitigatedHighIssues = knownIssues.filter(
-            (issue) => issue.severity === "high" && !issue.mitigated
+            (issue) => issue.severity === "high" && !issue.mitigated,
         ).length;
         const unmitigatedCriticalIssues = knownIssues.filter(
-            (issue) => issue.severity === "critical" && !issue.mitigated
+            (issue) => issue.severity === "critical" && !issue.mitigated,
         ).length;
 
         let signatureVerified = false;
@@ -79,7 +79,7 @@ export class BusinessTrustValidator {
         if (profile === "individual") {
             if (trustLevelWeight(effectiveTrustLevel) < trustLevelWeight(effectivePolicy.minimumTrustLevel)) {
                 warnings.push(
-                    `Trust level ${effectiveTrustLevel} is below business threshold ${effectivePolicy.minimumTrustLevel}; allowed in individual profile.`
+                    `Trust level ${effectiveTrustLevel} is below business threshold ${effectivePolicy.minimumTrustLevel}; allowed in individual profile.`,
                 );
             }
 
@@ -106,7 +106,7 @@ export class BusinessTrustValidator {
         if (trustLevelWeight(effectiveTrustLevel) < trustLevelWeight(effectivePolicy.minimumTrustLevel)) {
             reasonCodes.push(REASON.TRUST_LEVEL_BELOW_MIN);
             reasons.push(
-                `Business profile requires minimum trust level ${effectivePolicy.minimumTrustLevel}, found ${effectiveTrustLevel}.`
+                `Business profile requires minimum trust level ${effectivePolicy.minimumTrustLevel}, found ${effectiveTrustLevel}.`,
             );
         }
 
@@ -122,9 +122,7 @@ export class BusinessTrustValidator {
                 reasons.push("Business profile requires security.review_status.");
             } else if (!effectivePolicy.allowedReviewStatuses.includes(status as any)) {
                 reasonCodes.push(REASON.REVIEW_STATUS_NOT_ALLOWED);
-                reasons.push(
-                    `security.review_status=${status} is not allowed for business profile.`
-                );
+                reasons.push(`security.review_status=${status} is not allowed for business profile.`);
             }
         }
 
@@ -154,14 +152,14 @@ export class BusinessTrustValidator {
         if (unmitigatedCriticalIssues > effectivePolicy.maxUnmitigatedCriticalIssues) {
             reasonCodes.push(REASON.UNMITIGATED_CRITICAL_ISSUES);
             reasons.push(
-                `Unmitigated critical issues (${unmitigatedCriticalIssues}) exceed policy maximum (${effectivePolicy.maxUnmitigatedCriticalIssues}).`
+                `Unmitigated critical issues (${unmitigatedCriticalIssues}) exceed policy maximum (${effectivePolicy.maxUnmitigatedCriticalIssues}).`,
             );
         }
 
         if (unmitigatedHighIssues > effectivePolicy.maxUnmitigatedHighIssues) {
             reasonCodes.push(REASON.UNMITIGATED_HIGH_ISSUES);
             reasons.push(
-                `Unmitigated high issues (${unmitigatedHighIssues}) exceed policy maximum (${effectivePolicy.maxUnmitigatedHighIssues}).`
+                `Unmitigated high issues (${unmitigatedHighIssues}) exceed policy maximum (${effectivePolicy.maxUnmitigatedHighIssues}).`,
             );
         }
 
@@ -195,9 +193,7 @@ export class BusinessTrustValidator {
             allowed: !hasFailure,
             decision: hasFailure ? "deny" : "allow",
             tier: "tier3_approval",
-            reasons: hasFailure
-                ? reasons
-                : ["Business trust/provenance validation passed."],
+            reasons: hasFailure ? reasons : ["Business trust/provenance validation passed."],
             reasonCodes,
             warnings,
             evidence: {
@@ -232,7 +228,7 @@ export class BusinessTrustValidator {
                 released: manifest.metadata?.released,
             },
             null,
-            0
+            0,
         );
     }
 
@@ -258,9 +254,10 @@ export class BusinessTrustValidator {
         }
 
         const levels = manifest.adapters.map((adapter) => (adapter.trust_level ?? "untrusted") as TrustLevel);
-        return levels.reduce((lowest, next) =>
-            trustLevelWeight(next) < trustLevelWeight(lowest) ? next : lowest
-            , levels[0]);
+        return levels.reduce(
+            (lowest, next) => (trustLevelWeight(next) < trustLevelWeight(lowest) ? next : lowest),
+            levels[0],
+        );
     }
 
     private getRepositoryHost(repositoryUrl?: string): string | undefined {

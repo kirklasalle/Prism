@@ -40,45 +40,76 @@ export class IntentClassifier {
                     /\b(for sale|listing|price|under|miles|mileage)\b.*\b(ford|chevy|chevrolet|toyota|honda|nissan|dodge|jeep|ram|bmw|mercedes|audi|hyundai|kia|subaru|mazda|volkswagen|vw|lexus|acura|infiniti|cadillac|buick|gmc|lincoln)\b/,
                 ],
                 requiresBrowser: true,
-                requiresComputer: false
+                requiresComputer: false,
             },
             {
                 category: "shopping",
                 patterns: [
-                    /\bshop\b/, /\bbuy\b/, /\bpurchase\b/, /\border\b/, /\bfind.*shoes\b/,
-                    /\bsearch.*on amazon\b/, /\bcheck out.*cart\b/, /\bclothing\b/, /\bclothes\b/,
-                    /\bshoes\b/, /\bjeans\b/, /\bpants\b/, /\bshirt\b/, /\bwear\b/, /\bstore\b/
+                    /\bshop\b/,
+                    /\bbuy\b/,
+                    /\bpurchase\b/,
+                    /\border\b/,
+                    /\bfind.*shoes\b/,
+                    /\bsearch.*on amazon\b/,
+                    /\bcheck out.*cart\b/,
+                    /\bclothing\b/,
+                    /\bclothes\b/,
+                    /\bshoes\b/,
+                    /\bjeans\b/,
+                    /\bpants\b/,
+                    /\bshirt\b/,
+                    /\bwear\b/,
+                    /\bstore\b/,
                 ],
                 requiresBrowser: true,
-                requiresComputer: true
+                requiresComputer: true,
             },
             {
                 category: "email",
                 patterns: [
-                    /\bemail\b/, /\bgmail\b/, /\boutlook\b/, /\bcheck.*inbox\b/, /\bsend.*message\b/,
-                    /\bmail\b/
+                    /\bemail\b/,
+                    /\bgmail\b/,
+                    /\boutlook\b/,
+                    /\bcheck.*inbox\b/,
+                    /\bsend.*message\b/,
+                    /\bmail\b/,
                 ],
                 requiresBrowser: true,
-                requiresComputer: false
+                requiresComputer: false,
             },
             {
                 category: "browser",
                 patterns: [
-                    /\bnavigate\b/, /\bopen.*website\b/, /\bgo to\b/, /\bweb search\b/, /\bplaywright\b/,
-                    /\bsearch.*google\b/, /\bscrape\b/, /\bbrowse\b/, /\bweb\b/, /\bsearch.*web\b/
+                    /\bnavigate\b/,
+                    /\bopen.*website\b/,
+                    /\bgo to\b/,
+                    /\bweb search\b/,
+                    /\bplaywright\b/,
+                    /\bsearch.*google\b/,
+                    /\bscrape\b/,
+                    /\bbrowse\b/,
+                    /\bweb\b/,
+                    /\bsearch.*web\b/,
                 ],
                 requiresBrowser: true,
-                requiresComputer: false
+                requiresComputer: false,
             },
             {
                 category: "computer",
                 patterns: [
-                    /\bmouse\b/, /\bkeyboard\b/, /\bclick\b/, /\btype\b/, /\bscreenshot\b/,
-                    /\bdesktop\b/, /\bwindows\b/, /\bcontrol.*mouse\b/, /\brun.*command\b/
+                    /\bmouse\b/,
+                    /\bkeyboard\b/,
+                    /\bclick\b/,
+                    /\btype\b/,
+                    /\bscreenshot\b/,
+                    /\bdesktop\b/,
+                    /\bwindows\b/,
+                    /\bcontrol.*mouse\b/,
+                    /\brun.*command\b/,
                 ],
                 requiresBrowser: false,
-                requiresComputer: true
-            }
+                requiresComputer: true,
+            },
         ];
 
         for (const item of osPatterns) {
@@ -90,7 +121,7 @@ export class IntentClassifier {
                         objective: prompt,
                         requiresBrowser: item.requiresBrowser,
                         requiresComputer: item.requiresComputer,
-                        confidence: 0.9
+                        confidence: 0.9,
                     };
                 }
             }
@@ -101,43 +132,68 @@ export class IntentClassifier {
             {
                 category: "agent_management",
                 patterns: [
-                    /\blaunch.*agent\b/, /\bspawn.*agent\b/, /\bcreate.*agent\b/,
-                    /\bstop.*agent\b/, /\bpromote.*agent\b/, /\bdemote.*agent\b/,
-                    /\bactive.*agents\b/, /\blist.*agents\b/, /\bagent pool\b/
+                    /\blaunch.*agent\b/,
+                    /\bspawn.*agent\b/,
+                    /\bcreate.*agent\b/,
+                    /\bstop.*agent\b/,
+                    /\bpromote.*agent\b/,
+                    /\bdemote.*agent\b/,
+                    /\bactive.*agents\b/,
+                    /\blist.*agents\b/,
+                    /\bagent pool\b/,
                 ],
                 requiresBrowser: false,
-                requiresComputer: false
+                requiresComputer: false,
             },
             {
                 category: "swarm_coordination",
                 patterns: [
-                    /\bcreate.*swarm\b/, /\bstart.*swarm\b/, /\brun.*swarm\b/,
-                    /\bswarm topology\b/, /\bswarm coordinator\b/, /\bmesh topology\b/,
-                    /\bstar topology\b/, /\bpipeline topology\b/
+                    /\bcreate.*swarm\b/,
+                    /\bstart.*swarm\b/,
+                    /\brun.*swarm\b/,
+                    /\bswarm topology\b/,
+                    /\bswarm coordinator\b/,
+                    /\bmesh topology\b/,
+                    /\bstar topology\b/,
+                    /\bpipeline topology\b/,
                 ],
                 requiresBrowser: false,
-                requiresComputer: false
+                requiresComputer: false,
             },
             {
                 category: "settings_routing",
                 patterns: [
-                    /\bchange.*model\b/, /\bswitch.*llm\b/, /\bmodel capability matrix\b/,
-                    /\bmodel matrix\b/, /\bpower manager\b/, /\beco-mode\b/, /\beco mode\b/,
-                    /\badaptive mode\b/, /\bperformance mode\b/, /\bvalidate.*triad\b/,
-                    /\bspectrum refraction\b/, /\bprism sr\b/, /\benable sr\b/
+                    /\bchange.*model\b/,
+                    /\bswitch.*llm\b/,
+                    /\bmodel capability matrix\b/,
+                    /\bmodel matrix\b/,
+                    /\bpower manager\b/,
+                    /\beco-mode\b/,
+                    /\beco mode\b/,
+                    /\badaptive mode\b/,
+                    /\bperformance mode\b/,
+                    /\bvalidate.*triad\b/,
+                    /\bspectrum refraction\b/,
+                    /\bprism sr\b/,
+                    /\benable sr\b/,
                 ],
                 requiresBrowser: false,
-                requiresComputer: false
+                requiresComputer: false,
             },
             {
                 category: "diagnostics",
                 patterns: [
-                    /\bhealth check\b/, /\bdiagnostics\b/, /\bself-healing\b/, /\bguardian agent\b/,
-                    /\baab ledger\b/, /\brun.*diagnostics\b/, /\btelemetry\b/
+                    /\bhealth check\b/,
+                    /\bdiagnostics\b/,
+                    /\bself-healing\b/,
+                    /\bguardian agent\b/,
+                    /\baab ledger\b/,
+                    /\brun.*diagnostics\b/,
+                    /\btelemetry\b/,
                 ],
                 requiresBrowser: false,
-                requiresComputer: false
-            }
+                requiresComputer: false,
+            },
         ];
 
         for (const item of prismPatterns) {
@@ -149,7 +205,7 @@ export class IntentClassifier {
                         objective: prompt,
                         requiresBrowser: item.requiresBrowser,
                         requiresComputer: item.requiresComputer,
-                        confidence: 0.95
+                        confidence: 0.95,
                     };
                 }
             }
@@ -162,7 +218,7 @@ export class IntentClassifier {
             objective: prompt,
             requiresBrowser: false,
             requiresComputer: false,
-            confidence: 1.0
+            confidence: 1.0,
         };
     }
 }

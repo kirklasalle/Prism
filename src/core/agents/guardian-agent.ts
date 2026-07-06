@@ -1,5 +1,16 @@
 import { EventEmitter } from "node:events";
-import { existsSync, openSync, readSync, closeSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import {
+    existsSync,
+    openSync,
+    readSync,
+    closeSync,
+    readdirSync,
+    statSync,
+    unlinkSync,
+    writeFileSync,
+    readFileSync,
+    mkdirSync,
+} from "node:fs";
 import { join } from "node:path";
 import * as os from "node:os";
 import type { ActivityBus } from "../activity/bus.js";
@@ -9,6 +20,9 @@ import type { AgentLifecycleTier, AgentState } from "./agent-types.js";
 import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
 import type { AABLedgerEntry } from "../runtime/autonomous-agent-loop.js";
 import type { CovenantStatus } from "../governance/prism-covenant.js";
+import { readPreferences, workspacePath } from "../config/workspace-resolver.js";
+import { verifyMarkdownCertificate } from "../security/initialization-signature.js";
+import { DatabaseSync } from "node:sqlite";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Guardian Agent — Permanent autonomous system agent powered by llama.cpp
@@ -83,25 +97,100 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
     { id: "temp_cleanup", name: "Temp File Cleanup", category: "maintenance", intervalMs: 300000, enabled: true },
     { id: "memory_audit", name: "Memory Usage Audit", category: "maintenance", intervalMs: 300000, enabled: true },
     { id: "model_integrity", name: "Model File Integrity", category: "maintenance", intervalMs: 300000, enabled: true },
+    {
+        id: "context_prune",
+        name: "Context & Action Log Prune",
+        category: "maintenance",
+        intervalMs: 120000,
+        enabled: true,
+    },
     // Security — every 10 minutes
-    { id: "command_filter_verify", name: "Command Filter Self-Test", category: "security", intervalMs: 600000, enabled: true },
-    { id: "env_secrets_scan", name: "Environment Secrets Scan", category: "security", intervalMs: 600000, enabled: true },
-    { id: "endpoint_access_audit", name: "Endpoint Accessibility Audit", category: "security", intervalMs: 600000, enabled: true },
-    { id: "directive_integrity", name: "Directive Integrity Check", category: "security", intervalMs: 600000, enabled: true },
+    {
+        id: "command_filter_verify",
+        name: "Command Filter Self-Test",
+        category: "security",
+        intervalMs: 600000,
+        enabled: true,
+    },
+    {
+        id: "env_secrets_scan",
+        name: "Environment Secrets Scan",
+        category: "security",
+        intervalMs: 600000,
+        enabled: true,
+    },
+    {
+        id: "endpoint_access_audit",
+        name: "Endpoint Accessibility Audit",
+        category: "security",
+        intervalMs: 600000,
+        enabled: true,
+    },
+    {
+        id: "directive_integrity",
+        name: "Directive Integrity Check",
+        category: "security",
+        intervalMs: 600000,
+        enabled: true,
+    },
     // Diagnostics — every 15 minutes
-    { id: "knowledge_graph_check", name: "Knowledge Graph Health", category: "diagnostics", intervalMs: 900000, enabled: true },
-    { id: "tool_contract_audit", name: "Tool Contract Audit", category: "diagnostics", intervalMs: 900000, enabled: true },
-    { id: "agent_health_check", name: "Agent Health Check", category: "diagnostics", intervalMs: 900000, enabled: true },
+    {
+        id: "knowledge_graph_check",
+        name: "Knowledge Graph Health",
+        category: "diagnostics",
+        intervalMs: 900000,
+        enabled: true,
+    },
+    {
+        id: "tool_contract_audit",
+        name: "Tool Contract Audit",
+        category: "diagnostics",
+        intervalMs: 900000,
+        enabled: true,
+    },
+    {
+        id: "agent_health_check",
+        name: "Agent Health Check",
+        category: "diagnostics",
+        intervalMs: 900000,
+        enabled: true,
+    },
     // Monitoring — every 2 minutes
-    { id: "system_snapshot", name: "System Resource Snapshot", category: "monitoring", intervalMs: 120000, enabled: true },
+    {
+        id: "system_snapshot",
+        name: "System Resource Snapshot",
+        category: "monitoring",
+        intervalMs: 120000,
+        enabled: true,
+    },
     { id: "agent_census", name: "Agent Census", category: "monitoring", intervalMs: 120000, enabled: true },
-    { id: "log_volume_analysis", name: "Log Volume Analysis", category: "monitoring", intervalMs: 120000, enabled: true },
+    {
+        id: "log_volume_analysis",
+        name: "Log Volume Analysis",
+        category: "monitoring",
+        intervalMs: 120000,
+        enabled: true,
+    },
     // MCP self-heal — every 60s, kick stuck/down servers back up.
-    { id: "mcp_health_recovery", name: "MCP Health & Recovery", category: "monitoring", intervalMs: 60000, enabled: true },
+    {
+        id: "mcp_health_recovery",
+        name: "MCP Health & Recovery",
+        category: "monitoring",
+        intervalMs: 60000,
+        enabled: true,
+    },
     // AAB Ledger — every 30s, check for anomalous autonomous behavior.
     { id: "aab_ledger_monitor", name: "AAB Ledger Monitor", category: "monitoring", intervalMs: 30000, enabled: true },
     // Covenant integrity — every 5 minutes, audit the Sacred Covenant.
     { id: "covenant_audit", name: "Covenant Integrity Audit", category: "security", intervalMs: 300000, enabled: true },
+    // Initialization Certificate Verification — every 5 minutes
+    {
+        id: "initialization_certificate_verify",
+        name: "Initialization Certificate Verification",
+        category: "security",
+        intervalMs: 300000,
+        enabled: true,
+    },
 ];
 
 const DEFAULT_CONFIG: GuardianConfig = {
@@ -143,7 +232,12 @@ export class GuardianAgent extends EventEmitter {
     private logEntriesFn?: () => Array<{ severity: string; timestamp: string }>;
     /** Optional MCP recovery hook — supplies the live adapter at runtime. */
     private mcpAdapterFn?: () => {
-        getServerStates: () => Array<{ name: string; state: "connected" | "down" | "retrying" | "failed"; retryCount: number; lastError: string | null }>;
+        getServerStates: () => Array<{
+            name: string;
+            state: "connected" | "down" | "retrying" | "failed";
+            retryCount: number;
+            lastError: string | null;
+        }>;
         forceReconnect: (name: string) => Promise<{ ok: boolean; error?: string }>;
     } | null;
     /** Optional AAB ledger accessor — polls the autonomous loop for anomalous entries. */
@@ -164,16 +258,24 @@ export class GuardianAgent extends EventEmitter {
         super();
         this.config = { ...DEFAULT_CONFIG, ...config };
 
-        // Base Mode catalog pruning: retain only directive_integrity, mcp_health_recovery, and aab_ledger_monitor
+        // Base Mode catalog pruning: retain only directive_integrity, mcp_health_recovery, aab_ledger_monitor, context_prune, and initialization_certificate_verify
         if (process.env.PRISM_BASE_MODE === "true") {
-            const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(t =>
-                t.id === "directive_integrity" ||
-                t.id === "mcp_health_recovery" ||
-                t.id === "aab_ledger_monitor"
+            const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(
+                (t) =>
+                    t.id === "directive_integrity" ||
+                    t.id === "mcp_health_recovery" ||
+                    t.id === "aab_ledger_monitor" ||
+                    t.id === "context_prune" ||
+                    t.id === "initialization_certificate_verify",
             );
-            this.tasks = prunedCatalog.map(t => ({ ...t, lastRunAt: null, lastResult: null, lastDetail: null }));
+            this.tasks = prunedCatalog.map((t) => ({ ...t, lastRunAt: null, lastResult: null, lastDetail: null }));
         } else {
-            this.tasks = GUARDIAN_TASK_CATALOG.map(t => ({ ...t, lastRunAt: null, lastResult: null, lastDetail: null }));
+            this.tasks = GUARDIAN_TASK_CATALOG.map((t) => ({
+                ...t,
+                lastRunAt: null,
+                lastResult: null,
+                lastDetail: null,
+            }));
         }
     }
 
@@ -204,26 +306,42 @@ export class GuardianAgent extends EventEmitter {
         }
 
         if (process.env.PRISM_BASE_MODE === "true") {
-            const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(t =>
-                t.id === "directive_integrity" ||
-                t.id === "mcp_health_recovery" ||
-                t.id === "aab_ledger_monitor"
+            const prunedCatalog = GUARDIAN_TASK_CATALOG.filter(
+                (t) =>
+                    t.id === "directive_integrity" ||
+                    t.id === "mcp_health_recovery" ||
+                    t.id === "aab_ledger_monitor" ||
+                    t.id === "context_prune" ||
+                    t.id === "initialization_certificate_verify",
             );
-            this.tasks = prunedCatalog.map(t => {
-                const old = this.tasks.find(o => o.id === t.id);
-                return { ...t, lastRunAt: old ? old.lastRunAt : null, lastResult: old ? old.lastResult : null, lastDetail: old ? old.lastDetail : null };
+            this.tasks = prunedCatalog.map((t) => {
+                const old = this.tasks.find((o) => o.id === t.id);
+                return {
+                    ...t,
+                    lastRunAt: old ? old.lastRunAt : null,
+                    lastResult: old ? old.lastResult : null,
+                    lastDetail: old ? old.lastDetail : null,
+                };
             });
         } else {
-            this.tasks = GUARDIAN_TASK_CATALOG.map(t => {
-                const old = this.tasks.find(o => o.id === t.id);
-                return { ...t, lastRunAt: old ? old.lastRunAt : null, lastResult: old ? old.lastResult : null, lastDetail: old ? old.lastDetail : null };
+            this.tasks = GUARDIAN_TASK_CATALOG.map((t) => {
+                const old = this.tasks.find((o) => o.id === t.id);
+                return {
+                    ...t,
+                    lastRunAt: old ? old.lastRunAt : null,
+                    lastResult: old ? old.lastResult : null,
+                    lastDetail: old ? old.lastDetail : null,
+                };
             });
         }
 
         if (wasRunning) {
             this.startTaskRunners();
         }
-        this.emitEvent("guardian.config_updated", `Synchronized tasks for Base Mode: ${process.env.PRISM_BASE_MODE === "true"}`);
+        this.emitEvent(
+            "guardian.config_updated",
+            `Synchronized tasks for Base Mode: ${process.env.PRISM_BASE_MODE === "true"}`,
+        );
     }
 
     /** Start the Guardian Agent. Loads the model into a supervisor slot. */
@@ -244,16 +362,19 @@ export class GuardianAgent extends EventEmitter {
             let targetAlias = this.config.modelAlias;
 
             if (targetPath === "active-chat-model") {
-                const activeSlot = this.supervisor.getSnapshot().find(s => s.status === "ready");
+                const activeSlot = this.supervisor.getSnapshot().find((s) => s.status === "ready");
                 if (activeSlot) {
                     targetPath = activeSlot.modelPath || "";
                     targetAlias = activeSlot.modelAlias || "shared";
                 } else {
                     // No ready slot yet — enter waiting state and poll until one becomes available.
                     this._state = "waiting";
-                    this.emitEvent("guardian.waiting", "Waiting for a local chat model slot to become ready. Apply a local model in Provider & Settings first.");
+                    this.emitEvent(
+                        "guardian.waiting",
+                        "Waiting for a local chat model slot to become ready. Apply a local model in Provider & Settings first.",
+                    );
                     this.waitingTimer = setInterval(() => {
-                        const readySlot = this.supervisor.getSnapshot().find(s => s.status === "ready");
+                        const readySlot = this.supervisor.getSnapshot().find((s) => s.status === "ready");
                         if (readySlot && this._state === "waiting") {
                             if (this.waitingTimer) {
                                 clearInterval(this.waitingTimer);
@@ -267,20 +388,31 @@ export class GuardianAgent extends EventEmitter {
                 }
             }
 
-            await this.supervisor.loadModel(
-                targetPath,
-                targetAlias,
-                {
-                    ctxSize: this.config.contextSize,
-                    draftModelPath: this.config.draftModelPath,
-                    gpuLayers: this.config.gpuLayers,
-                    flashAttn: this.config.flashAttn,
-                },
-            );
+            await this.supervisor.loadModel(targetPath, targetAlias, {
+                ctxSize: this.config.contextSize,
+                draftModelPath: this.config.draftModelPath,
+                gpuLayers: this.config.gpuLayers,
+                flashAttn: this.config.flashAttn,
+            });
 
             this._state = "running";
             this.startedAt = Date.now();
             this.emitEvent("guardian.started", `Guardian active with model ${targetAlias}`);
+
+            // Verify directive integrity and backup if valid
+            try {
+                const padResult = verifyDirectiveIntegrity();
+                if (padResult.valid && padResult.filePath) {
+                    const backupPath = join(process.cwd(), "state", "Permanent_Active_Directives.txt.bak");
+                    const stateDir = join(process.cwd(), "state");
+                    if (!existsSync(stateDir)) {
+                        mkdirSync(stateDir, { recursive: true });
+                    }
+                    writeFileSync(backupPath, readFileSync(padResult.filePath));
+                }
+            } catch {
+                /* ignore */
+            }
 
             // Begin health monitoring loop
             this.healthCheckTimer = setInterval(() => {
@@ -289,7 +421,6 @@ export class GuardianAgent extends EventEmitter {
 
             // Begin task runner loops
             this.startTaskRunners();
-
         } catch (error) {
             this._state = "error";
             this.emitEvent("guardian.start_failed", String(error));
@@ -313,18 +444,21 @@ export class GuardianAgent extends EventEmitter {
 
     /** Get a full status snapshot. */
     public getStatus(): GuardianStatus {
-        const targetPath = this.config.modelPath === "active-chat-model"
-            ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelPath ?? "active-chat-model")
-            : this.config.modelPath;
+        const targetPath =
+            this.config.modelPath === "active-chat-model"
+                ? (this.supervisor.getSnapshot().find((s) => s.status === "ready")?.modelPath ?? "active-chat-model")
+                : this.config.modelPath;
 
-        const targetAlias = this.config.modelPath === "active-chat-model"
-            ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelAlias ?? "Shared Chat Model")
-            : this.config.modelAlias;
+        const targetAlias =
+            this.config.modelPath === "active-chat-model"
+                ? (this.supervisor.getSnapshot().find((s) => s.status === "ready")?.modelAlias ?? "Shared Chat Model")
+                : this.config.modelAlias;
 
-        const slot = this.supervisor.getSnapshot().find(s =>
-            s.modelAlias === this.config.modelAlias ||
-            (targetPath && s.modelPath === targetPath)
-        ) ?? null;
+        const slot =
+            this.supervisor
+                .getSnapshot()
+                .find((s) => s.modelAlias === this.config.modelAlias || (targetPath && s.modelPath === targetPath)) ??
+            null;
 
         return {
             state: this._state,
@@ -358,14 +492,15 @@ export class GuardianAgent extends EventEmitter {
 
         try {
             // 1. Verify the supervisor slot is still healthy
-            const targetPath = this.config.modelPath === "active-chat-model"
-                ? (this.supervisor.getSnapshot().find(s => s.status === "ready")?.modelPath ?? "active-chat-model")
-                : this.config.modelPath;
+            const targetPath =
+                this.config.modelPath === "active-chat-model"
+                    ? (this.supervisor.getSnapshot().find((s) => s.status === "ready")?.modelPath ??
+                      "active-chat-model")
+                    : this.config.modelPath;
 
-            const slot = this.supervisor.getSnapshot().find(s =>
-                s.modelAlias === this.config.modelAlias ||
-                (targetPath && s.modelPath === targetPath)
-            );
+            const slot = this.supervisor
+                .getSnapshot()
+                .find((s) => s.modelAlias === this.config.modelAlias || (targetPath && s.modelPath === targetPath));
             if (!slot || slot.status !== "ready") {
                 this.issuesDetected++;
                 this.recordAction("health_check", "failure", "Model slot not ready — attempting recovery");
@@ -375,7 +510,7 @@ export class GuardianAgent extends EventEmitter {
 
             // 2. Check all supervisor slots for any crashed processes
             const allSlots = this.supervisor.getSnapshot();
-            const errorSlots = allSlots.filter(s => s.status === "error");
+            const errorSlots = allSlots.filter((s) => s.status === "error");
             if (errorSlots.length > 0) {
                 this.issuesDetected += errorSlots.length;
                 this.recordAction("health_check", "escalated", `${errorSlots.length} slot(s) in error state`);
@@ -383,7 +518,7 @@ export class GuardianAgent extends EventEmitter {
             }
 
             // 3. Verify tool availability
-            const unavailableTools = this.tools.filter(t => {
+            const unavailableTools = this.tools.filter((t) => {
                 try {
                     // Basic contract check
                     return !t.name || !t.contract;
@@ -410,7 +545,10 @@ export class GuardianAgent extends EventEmitter {
             if (this.skillsEngine) {
                 const skill = await this.skillsEngine.routeQuery(issue);
                 if (skill) {
-                    this.emitEvent("guardian.skills_heal.starting", `Dynamic self-healing skill found: ${skill.name} (ID: ${skill.id}). Initiating recovery session...`);
+                    this.emitEvent(
+                        "guardian.skills_heal.starting",
+                        `Dynamic self-healing skill found: ${skill.name} (ID: ${skill.id}). Initiating recovery session...`,
+                    );
                     try {
                         let session = await this.skillsEngine.createSession(skill.id, "guardian-session");
                         while (session.status === "running") {
@@ -419,14 +557,24 @@ export class GuardianAgent extends EventEmitter {
                         if (session.status === "completed") {
                             this.issuesResolved++;
                             this._state = "running";
-                            this.recordAction("self_heal", "success", `Recovered via skill ${skill.name}. Josephine knows!`);
-                            this.emitEvent("guardian.healed", `[guardian:self-heal] ${skill.name} completed successfully. Josephine knows!`);
+                            this.recordAction(
+                                "self_heal",
+                                "success",
+                                `Recovered via skill ${skill.name}. Josephine knows!`,
+                            );
+                            this.emitEvent(
+                                "guardian.healed",
+                                `[guardian:self-heal] ${skill.name} completed successfully. Josephine knows!`,
+                            );
                             return;
                         } else {
                             throw new Error(`Self-healing workflow ended with state: ${session.status}`);
                         }
                     } catch (skillErr) {
-                        this.emitEvent("guardian.skills_heal.failed", `Skills-engine recovery failed: ${String(skillErr)}. Falling back to default routines...`);
+                        this.emitEvent(
+                            "guardian.skills_heal.failed",
+                            `Skills-engine recovery failed: ${String(skillErr)}. Falling back to default routines...`,
+                        );
                     }
                 }
             }
@@ -436,7 +584,7 @@ export class GuardianAgent extends EventEmitter {
                 let targetAlias = this.config.modelAlias;
 
                 if (targetPath === "active-chat-model") {
-                    const activeSlot = this.supervisor.getSnapshot().find(s => s.status === "ready");
+                    const activeSlot = this.supervisor.getSnapshot().find((s) => s.status === "ready");
                     if (activeSlot) {
                         targetPath = activeSlot.modelPath || "";
                         targetAlias = activeSlot.modelAlias || "shared";
@@ -444,16 +592,12 @@ export class GuardianAgent extends EventEmitter {
                 }
 
                 // Re-load the model
-                await this.supervisor.loadModel(
-                    targetPath,
-                    targetAlias,
-                    {
-                        ctxSize: this.config.contextSize,
-                        draftModelPath: this.config.draftModelPath,
-                        gpuLayers: this.config.gpuLayers,
-                        flashAttn: this.config.flashAttn,
-                    },
-                );
+                await this.supervisor.loadModel(targetPath, targetAlias, {
+                    ctxSize: this.config.contextSize,
+                    draftModelPath: this.config.draftModelPath,
+                    gpuLayers: this.config.gpuLayers,
+                    flashAttn: this.config.flashAttn,
+                });
                 this.issuesResolved++;
                 this._state = "running";
                 this.recordAction("self_heal", "success", `Recovered model slot: ${targetAlias}. Josephine knows!`);
@@ -476,7 +620,7 @@ export class GuardianAgent extends EventEmitter {
 
     /** Execute a tool on behalf of the Guardian (respects authority tier). */
     public async executeTool(toolName: string, args: Record<string, unknown>): Promise<ToolResult | null> {
-        const tool = this.tools.find(t => t.name === toolName);
+        const tool = this.tools.find((t) => t.name === toolName);
         if (!tool) {
             this.recordAction("tool_exec", "failure", `Tool not found: ${toolName}`);
             return null;
@@ -490,7 +634,10 @@ export class GuardianAgent extends EventEmitter {
             if (actionRule?.minimumRisk === "high") {
                 this.recordAction("tool_exec", "escalated", `High-risk action blocked: ${toolName}.${actionKey}`);
                 this.emitEvent("guardian.escalation", `Guardian blocked high-risk: ${toolName}.${actionKey}`);
-                return { ok: false, output: { error: "Guardian tier2 authority: high-risk action requires operator approval." } };
+                return {
+                    ok: false,
+                    output: { error: "Guardian tier2 authority: high-risk action requires operator approval." },
+                };
             }
         }
 
@@ -503,7 +650,11 @@ export class GuardianAgent extends EventEmitter {
 
         try {
             const result = await tool.execute(request);
-            this.recordAction("tool_exec", result.ok ? "success" : "failure", `${toolName}: ${result.ok ? "ok" : "failed"}`);
+            this.recordAction(
+                "tool_exec",
+                result.ok ? "success" : "failure",
+                `${toolName}: ${result.ok ? "ok" : "failed"}`,
+            );
             this.lastAction = `${toolName} @ ${new Date().toISOString()}`;
             return result;
         } catch (error) {
@@ -515,7 +666,9 @@ export class GuardianAgent extends EventEmitter {
     // ── Task Runner System ────────────────────────────────────────────────
 
     /** Inject agent-list resolver for agent census task. */
-    public setAgentListFn(fn: () => { agents: Array<{ id: string; state: string; role: string; lifecycle: string }> }): void {
+    public setAgentListFn(
+        fn: () => { agents: Array<{ id: string; state: string; role: string; lifecycle: string }> },
+    ): void {
         this.agentListFn = fn;
     }
 
@@ -525,10 +678,17 @@ export class GuardianAgent extends EventEmitter {
     }
 
     /** Inject MCP adapter resolver for the mcp_health_recovery task. */
-    public setMcpAdapterFn(fn: () => ({
-        getServerStates: () => Array<{ name: string; state: "connected" | "down" | "retrying" | "failed"; retryCount: number; lastError: string | null }>;
-        forceReconnect: (name: string) => Promise<{ ok: boolean; error?: string }>;
-    } | null)): void {
+    public setMcpAdapterFn(
+        fn: () => {
+            getServerStates: () => Array<{
+                name: string;
+                state: "connected" | "down" | "retrying" | "failed";
+                retryCount: number;
+                lastError: string | null;
+            }>;
+            forceReconnect: (name: string) => Promise<{ ok: boolean; error?: string }>;
+        } | null,
+    ): void {
         this.mcpAdapterFn = fn;
     }
 
@@ -549,26 +709,29 @@ export class GuardianAgent extends EventEmitter {
 
     /** Returns current task catalog with status. */
     public getTaskStatus(): GuardianTask[] {
-        return this.tasks.map(t => ({ ...t }));
+        return this.tasks.map((t) => ({ ...t }));
     }
 
     /** Toggle a task enabled/disabled by ID. */
     public toggleTask(taskId: string): GuardianTask | null {
-        const task = this.tasks.find(t => t.id === taskId);
+        const task = this.tasks.find((t) => t.id === taskId);
         if (!task) return null;
         task.enabled = !task.enabled;
         if (task.enabled && this._state === "running") {
             this.startSingleTaskRunner(task);
         } else if (!task.enabled) {
             const timer = this.taskTimers.get(taskId);
-            if (timer) { clearInterval(timer); this.taskTimers.delete(taskId); }
+            if (timer) {
+                clearInterval(timer);
+                this.taskTimers.delete(taskId);
+            }
         }
         return { ...task };
     }
 
     /** Force-run a single task by ID (regardless of interval). */
     public async runTask(taskId: string): Promise<GuardianTask | null> {
-        const task = this.tasks.find(t => t.id === taskId);
+        const task = this.tasks.find((t) => t.id === taskId);
         if (!task) return null;
         await this.executeTask(task);
         return { ...task };
@@ -585,7 +748,10 @@ export class GuardianAgent extends EventEmitter {
         for (const task of this.tasks) {
             if (task.enabled) this.startSingleTaskRunner(task);
         }
-        this.emitEvent("guardian.tasks_started", `${this.tasks.filter(t => t.enabled).length} guardian tasks scheduled`);
+        this.emitEvent(
+            "guardian.tasks_started",
+            `${this.tasks.filter((t) => t.enabled).length} guardian tasks scheduled`,
+        );
     }
 
     private startSingleTaskRunner(task: GuardianTask): void {
@@ -619,7 +785,11 @@ export class GuardianAgent extends EventEmitter {
                 task.lastRunAt = new Date().toISOString();
                 task.lastResult = result.status;
                 task.lastDetail = result.detail;
-                this.recordAction(`task.${task.id}`, result.status === "failure" ? "failure" : result.status === "warning" ? "escalated" : "success", result.detail);
+                this.recordAction(
+                    `task.${task.id}`,
+                    result.status === "failure" ? "failure" : result.status === "warning" ? "escalated" : "success",
+                    result.detail,
+                );
                 this.emitEvent(`guardian.task.${task.id}`, result.detail);
                 return;
             }
@@ -629,7 +799,11 @@ export class GuardianAgent extends EventEmitter {
             task.lastRunAt = new Date().toISOString();
             task.lastResult = result.status;
             task.lastDetail = result.detail;
-            this.recordAction(`task.${task.id}`, result.status === "failure" ? "failure" : result.status === "warning" ? "escalated" : "success", result.detail);
+            this.recordAction(
+                `task.${task.id}`,
+                result.status === "failure" ? "failure" : result.status === "warning" ? "escalated" : "success",
+                result.detail,
+            );
             this.emitEvent(`guardian.task.${task.id}`, result.detail);
         } catch (error) {
             task.lastRunAt = new Date().toISOString();
@@ -642,28 +816,98 @@ export class GuardianAgent extends EventEmitter {
 
     private async runTaskImpl(taskId: string): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
         switch (taskId) {
-            case "disk_space_check": return this.taskDiskSpaceCheck();
-            case "temp_cleanup": return this.taskTempCleanup();
-            case "memory_audit": return this.taskMemoryAudit();
-            case "model_integrity": return this.taskModelIntegrity();
-            case "command_filter_verify": return this.taskCommandFilterVerify();
-            case "env_secrets_scan": return this.taskEnvSecretsScan();
-            case "endpoint_access_audit": return this.taskEndpointAccessAudit();
-            case "directive_integrity": return this.taskDirectiveIntegrity();
-            case "knowledge_graph_check": return this.taskKnowledgeGraphCheck();
-            case "tool_contract_audit": return this.taskToolContractAudit();
-            case "agent_health_check": return this.taskAgentHealthCheck();
-            case "system_snapshot": return this.taskSystemSnapshot();
-            case "agent_census": return this.taskAgentCensus();
-            case "log_volume_analysis": return this.taskLogVolumeAnalysis();
-            case "mcp_health_recovery": return await this.taskMcpHealthRecovery();
-            case "aab_ledger_monitor": return this.taskAABLedgerMonitor();
-            case "covenant_audit": return this.taskCovenantAudit();
-            default: return { status: "failure", detail: `Unknown task: ${taskId}` };
+            case "disk_space_check":
+                return this.taskDiskSpaceCheck();
+            case "temp_cleanup":
+                return this.taskTempCleanup();
+            case "memory_audit":
+                return this.taskMemoryAudit();
+            case "model_integrity":
+                return this.taskModelIntegrity();
+            case "context_prune":
+                return this.taskContextPrune();
+            case "command_filter_verify":
+                return this.taskCommandFilterVerify();
+            case "env_secrets_scan":
+                return this.taskEnvSecretsScan();
+            case "endpoint_access_audit":
+                return this.taskEndpointAccessAudit();
+            case "directive_integrity":
+                return this.taskDirectiveIntegrity();
+            case "knowledge_graph_check":
+                return this.taskKnowledgeGraphCheck();
+            case "tool_contract_audit":
+                return this.taskToolContractAudit();
+            case "agent_health_check":
+                return this.taskAgentHealthCheck();
+            case "system_snapshot":
+                return this.taskSystemSnapshot();
+            case "agent_census":
+                return this.taskAgentCensus();
+            case "log_volume_analysis":
+                return this.taskLogVolumeAnalysis();
+            case "mcp_health_recovery":
+                return await this.taskMcpHealthRecovery();
+            case "aab_ledger_monitor":
+                return this.taskAABLedgerMonitor();
+            case "covenant_audit":
+                return this.taskCovenantAudit();
+            case "initialization_certificate_verify":
+                return this.taskInitializationCertificateVerify();
+            default:
+                return { status: "failure", detail: `Unknown task: ${taskId}` };
         }
     }
 
     // ── Maintenance Tasks ─────────────────────────────────────────────────
+
+    /**
+     * Determine capability level based on model specs, alias, and parameters.
+     */
+    public getCapabilityLevel(): "low_spec" | "mid_spec" | "high_spec" {
+        const pathLower = (this.config.modelPath || "").toLowerCase();
+        const aliasLower = (this.config.modelAlias || "").toLowerCase();
+
+        if (
+            pathLower.includes("1b") ||
+            pathLower.includes("1.5b") ||
+            pathLower.includes("tiny") ||
+            aliasLower.includes("tiny") ||
+            aliasLower.includes("1b")
+        ) {
+            return "low_spec";
+        }
+
+        if (
+            pathLower.includes("7b") ||
+            pathLower.includes("8b") ||
+            pathLower.includes("llama-3") ||
+            pathLower.includes("gemma") ||
+            aliasLower.includes("7b") ||
+            aliasLower.includes("8b")
+        ) {
+            return "mid_spec";
+        }
+
+        if (
+            pathLower.includes("70b") ||
+            pathLower.includes("large") ||
+            pathLower.includes("claude") ||
+            pathLower.includes("gpt-4") ||
+            aliasLower.includes("70b") ||
+            aliasLower.includes("large")
+        ) {
+            return "high_spec";
+        }
+
+        if (this.config.contextSize < 2048) {
+            return "low_spec";
+        }
+        if (this.config.contextSize > 8192) {
+            return "high_spec";
+        }
+        return "mid_spec";
+    }
 
     private taskDiskSpaceCheck(): { status: "success" | "warning" | "failure"; detail: string } {
         const modelsDir = join(process.cwd(), "models");
@@ -672,16 +916,33 @@ export class GuardianAgent extends EventEmitter {
             try {
                 const files = readdirSync(modelsDir);
                 for (const f of files) {
-                    try { totalSizeMb += statSync(join(modelsDir, f)).size / (1024 * 1024); } catch { /* skip */ }
+                    try {
+                        totalSizeMb += statSync(join(modelsDir, f)).size / (1024 * 1024);
+                    } catch {
+                        /* skip */
+                    }
                 }
-            } catch { /* skip */ }
+            } catch {
+                /* skip */
+            }
         }
         const freeMemMb = os.freemem() / (1024 * 1024);
         const totalStr = totalSizeMb >= 1024 ? (totalSizeMb / 1024).toFixed(1) + " GB" : totalSizeMb.toFixed(0) + " MB";
-        if (totalSizeMb > 10240) {
-            return { status: "warning", detail: `Models directory is ${totalStr} — consider cleanup. Free system memory: ${(freeMemMb / 1024).toFixed(1)} GB` };
+
+        const spec = this.getCapabilityLevel();
+        const limitMb = spec === "low_spec" ? 5120 : spec === "mid_spec" ? 15360 : 30720; // 5GB, 15GB, 30GB limits
+        const limitStr = limitMb >= 1024 ? limitMb / 1024 + " GB" : limitMb + " MB";
+
+        if (totalSizeMb > limitMb) {
+            return {
+                status: "warning",
+                detail: `Models directory is ${totalStr} (limit ${limitStr} for ${spec} spec) — consider cleanup. Free memory: ${(freeMemMb / 1024).toFixed(1)} GB`,
+            };
         }
-        return { status: "success", detail: `Models directory: ${totalStr}. Free memory: ${(freeMemMb / 1024).toFixed(1)} GB` };
+        return {
+            status: "success",
+            detail: `Models directory: ${totalStr} (limit ${limitStr} for ${spec} spec). Free memory: ${(freeMemMb / 1024).toFixed(1)} GB`,
+        };
     }
 
     private taskTempCleanup(): { status: "success" | "warning" | "failure"; detail: string } {
@@ -699,10 +960,17 @@ export class GuardianAgent extends EventEmitter {
                         unlinkSync(fpath);
                         cleaned++;
                     }
-                } catch { /* skip locked files */ }
+                } catch {
+                    /* skip locked files */
+                }
             }
-        } catch { /* skip */ }
-        return { status: "success", detail: cleaned > 0 ? `Cleaned ${cleaned} stale temp file(s)` : "No stale temp files found" };
+        } catch {
+            /* skip */
+        }
+        return {
+            status: "success",
+            detail: cleaned > 0 ? `Cleaned ${cleaned} stale temp file(s)` : "No stale temp files found",
+        };
     }
 
     private taskMemoryAudit(): { status: "success" | "warning" | "failure"; detail: string } {
@@ -710,10 +978,20 @@ export class GuardianAgent extends EventEmitter {
         const rssMb = Math.round(usage.rss / (1024 * 1024));
         const heapMb = Math.round(usage.heapUsed / (1024 * 1024));
         const heapTotalMb = Math.round(usage.heapTotal / (1024 * 1024));
-        if (rssMb > 1024) {
-            return { status: "warning", detail: `High memory: RSS=${rssMb}MB, Heap=${heapMb}/${heapTotalMb}MB — consider restart` };
+
+        const spec = this.getCapabilityLevel();
+        const limitMb = spec === "low_spec" ? 512 : spec === "mid_spec" ? 1024 : 2048; // 512MB, 1024MB, 2048MB RSS limits
+
+        if (rssMb > limitMb) {
+            return {
+                status: "warning",
+                detail: `High memory: RSS=${rssMb}MB (limit ${limitMb}MB for ${spec} spec), Heap=${heapMb}/${heapTotalMb}MB — consider restart`,
+            };
         }
-        return { status: "success", detail: `RSS=${rssMb}MB, Heap=${heapMb}/${heapTotalMb}MB` };
+        return {
+            status: "success",
+            detail: `RSS=${rssMb}MB (limit ${limitMb}MB for ${spec} spec), Heap=${heapMb}/${heapTotalMb}MB`,
+        };
     }
 
     private taskModelIntegrity(): { status: "success" | "warning" | "failure"; detail: string } {
@@ -722,7 +1000,7 @@ export class GuardianAgent extends EventEmitter {
         let checked = 0;
         let corrupt = 0;
         try {
-            const files = readdirSync(modelsDir).filter(f => f.endsWith(".gguf"));
+            const files = readdirSync(modelsDir).filter((f) => f.endsWith(".gguf"));
             for (const f of files) {
                 checked++;
                 try {
@@ -733,9 +1011,13 @@ export class GuardianAgent extends EventEmitter {
                     if (buf[0] !== 0x47 || buf[1] !== 0x47 || buf[2] !== 0x55 || buf[3] !== 0x46) {
                         corrupt++;
                     }
-                } catch { corrupt++; }
+                } catch {
+                    corrupt++;
+                }
             }
-        } catch { /* skip */ }
+        } catch {
+            /* skip */
+        }
         if (corrupt > 0) {
             return { status: "warning", detail: `${corrupt}/${checked} GGUF file(s) have invalid headers` };
         }
@@ -750,42 +1032,67 @@ export class GuardianAgent extends EventEmitter {
         const safe = ["dir", "echo hello", "whoami", "node --version"];
         let failedBlocks = 0;
         let failedAllows = 0;
-        for (const cmd of dangerous) { if (!BLOCKED_RE.test(cmd)) failedBlocks++; }
-        for (const cmd of safe) { if (BLOCKED_RE.test(cmd)) failedAllows++; }
-        if (failedBlocks > 0 || failedAllows > 0) {
-            return { status: "failure", detail: `Command filter defects: ${failedBlocks} unblocked dangerous, ${failedAllows} false positives` };
+        for (const cmd of dangerous) {
+            if (!BLOCKED_RE.test(cmd)) failedBlocks++;
         }
-        return { status: "success", detail: `Command filter verified: ${dangerous.length} dangerous blocked, ${safe.length} safe allowed` };
+        for (const cmd of safe) {
+            if (BLOCKED_RE.test(cmd)) failedAllows++;
+        }
+        if (failedBlocks > 0 || failedAllows > 0) {
+            return {
+                status: "failure",
+                detail: `Command filter defects: ${failedBlocks} unblocked dangerous, ${failedAllows} false positives`,
+            };
+        }
+        return {
+            status: "success",
+            detail: `Command filter verified: ${dangerous.length} dangerous blocked, ${safe.length} safe allowed`,
+        };
     }
 
     private taskEnvSecretsScan(): { status: "success" | "warning" | "failure"; detail: string } {
-        const secretPatterns = [/api[_-]?key/i, /secret[_-]?key/i, /access[_-]?token/i, /auth[_-]?token/i, /private[_-]?key/i];
+        const secretPatterns = [
+            /api[_-]?key/i,
+            /secret[_-]?key/i,
+            /access[_-]?token/i,
+            /auth[_-]?token/i,
+            /private[_-]?key/i,
+        ];
         const envKeys = Object.keys(process.env);
-        const prismKeys = envKeys.filter(k => k.startsWith("PRISM_"));
+        const prismKeys = envKeys.filter((k) => k.startsWith("PRISM_"));
         const suspectKeys: string[] = [];
         for (const key of envKeys) {
             const val = process.env[key] || "";
-            if (val.length > 20 && secretPatterns.some(p => p.test(key))) {
+            if (val.length > 20 && secretPatterns.some((p) => p.test(key))) {
                 suspectKeys.push(key);
             }
         }
         if (suspectKeys.length > 0) {
-            return { status: "warning", detail: `${suspectKeys.length} env var(s) may contain exposed secrets: ${suspectKeys.join(", ")}. Review and rotate if needed.` };
+            return {
+                status: "warning",
+                detail: `${suspectKeys.length} env var(s) may contain exposed secrets: ${suspectKeys.join(", ")}. Review and rotate if needed.`,
+            };
         }
-        return { status: "success", detail: `Scanned ${envKeys.length} env vars (${prismKeys.length} PRISM_*). No exposed secrets detected.` };
+        return {
+            status: "success",
+            detail: `Scanned ${envKeys.length} env vars (${prismKeys.length} PRISM_*). No exposed secrets detected.`,
+        };
     }
 
     private async taskEndpointAccessAudit(): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
         const endpoints = ["/api/guardian/status", "/api/models/gguf", "/api/agents"];
         let ok = 0;
         let fail = 0;
-        const baseUrl = this.config.dashboardBaseUrl ?? `http://localhost:${process.env.PRISM_DASHBOARD_PORT ?? "7070"}`;
+        const baseUrl =
+            this.config.dashboardBaseUrl ?? `http://localhost:${process.env.PRISM_DASHBOARD_PORT ?? "7070"}`;
         for (const ep of endpoints) {
             try {
                 const resp = await fetch(`${baseUrl}${ep}`);
                 if (resp.ok) ok++;
                 else fail++;
-            } catch { fail++; }
+            } catch {
+                fail++;
+            }
         }
         if (fail > 0) {
             return { status: "warning", detail: `${fail}/${endpoints.length} endpoint(s) unreachable` };
@@ -796,14 +1103,94 @@ export class GuardianAgent extends EventEmitter {
     private taskDirectiveIntegrity(): { status: "success" | "warning" | "failure"; detail: string } {
         const result = verifyDirectiveIntegrity();
         if (result.valid) {
-            return { status: "success", detail: `PAD integrity verified (SHA-256: ${result.currentHash.slice(0, 16)}…)` };
+            return {
+                status: "success",
+                detail: `PAD integrity verified (SHA-256: ${result.currentHash.slice(0, 16)}…)`,
+            };
         }
+
+        // Active Self-Healing: try to restore tampered PAD file from known-good backup
+        const backupPath = join(process.cwd(), "state", "Permanent_Active_Directives.txt.bak");
+        if (existsSync(backupPath)) {
+            try {
+                writeFileSync(result.filePath, readFileSync(backupPath));
+                const reVerify = verifyDirectiveIntegrity();
+                if (reVerify.valid) {
+                    this.issuesResolved++;
+                    this.emitEvent(
+                        "guardian.healed",
+                        "Restored Permanent_Active_Directives.txt from backup. Josephine knows!",
+                    );
+                    return {
+                        status: "success",
+                        detail: `PAD integrity self-healed from backup (SHA-256: ${reVerify.currentHash.slice(0, 16)}…)`,
+                    };
+                }
+            } catch (err) {
+                return { status: "failure", detail: `PAD corrupted; failed to self-heal from backup: ${String(err)}` };
+            }
+        }
+
         if (result.error) {
             return { status: "failure", detail: `PAD integrity check failed: ${result.error}` };
         }
         return {
             status: "failure",
             detail: `DIRECTIVE INTEGRITY VIOLATION — Expected: ${result.expectedHash.slice(0, 16)}…, Got: ${result.currentHash.slice(0, 16)}…`,
+        };
+    }
+
+    private taskContextPrune(): { status: "success" | "warning" | "failure"; detail: string } {
+        const originalCount = this.recentActions.length;
+        if (originalCount <= 15) {
+            return {
+                status: "success",
+                detail: `Action log size normal (${originalCount} entries) — no pruning needed`,
+            };
+        }
+
+        // Compact consecutive similar nominal health checks or success logs to reduce memory/context footprint
+        const compacted: GuardianActionEntry[] = [];
+        let consecutiveHealthSuccessCount = 0;
+        let lastHealthTimestamp = "";
+
+        for (const action of this.recentActions) {
+            if (action.action === "health_check" && action.result === "success") {
+                consecutiveHealthSuccessCount++;
+                lastHealthTimestamp = action.timestamp;
+            } else {
+                if (consecutiveHealthSuccessCount > 0) {
+                    compacted.push({
+                        timestamp: lastHealthTimestamp,
+                        action: "health_check",
+                        result: "success",
+                        detail: `Nominal checks repeated ${consecutiveHealthSuccessCount} time(s) (compacted by Guardian)`,
+                    });
+                    consecutiveHealthSuccessCount = 0;
+                }
+                compacted.push(action);
+            }
+        }
+
+        if (consecutiveHealthSuccessCount > 0) {
+            compacted.push({
+                timestamp: lastHealthTimestamp,
+                action: "health_check",
+                result: "success",
+                detail: `Nominal checks repeated ${consecutiveHealthSuccessCount} time(s) (compacted by Guardian)`,
+            });
+        }
+
+        this.recentActions = compacted;
+        const newCount = this.recentActions.length;
+        const pruned = originalCount - newCount;
+
+        return {
+            status: "success",
+            detail:
+                pruned > 0
+                    ? `Compacted recent action logs: ${originalCount} -> ${newCount} entries (pruned ${pruned} nominal items)`
+                    : `Action log pruned. Active entries: ${newCount}`,
         };
     }
 
@@ -815,7 +1202,10 @@ export class GuardianAgent extends EventEmitter {
             if (!existsSync(smPath)) {
                 return { status: "warning", detail: "semantic-memory.js not found in dist/ — build may be needed" };
             }
-            return { status: "success", detail: "Knowledge graph module accessible. Full diagnostics available via Tools & Utilities panel." };
+            return {
+                status: "success",
+                detail: "Knowledge graph module accessible. Full diagnostics available via Tools & Utilities panel.",
+            };
         } catch (error) {
             return { status: "failure", detail: `KG probe failed: ${String(error)}` };
         }
@@ -838,7 +1228,10 @@ export class GuardianAgent extends EventEmitter {
             }
         }
         if (incomplete > 0) {
-            return { status: "warning", detail: `${incomplete}/${total} tool(s) have incomplete contracts: ${missing.slice(0, 5).join(", ")}` };
+            return {
+                status: "warning",
+                detail: `${incomplete}/${total} tool(s) have incomplete contracts: ${missing.slice(0, 5).join(", ")}`,
+            };
         }
         return { status: "success", detail: `All ${total} tool contracts complete` };
     }
@@ -850,9 +1243,12 @@ export class GuardianAgent extends EventEmitter {
         try {
             const data = this.agentListFn();
             const agents = data.agents || [];
-            const errorAgents = agents.filter(a => a.state === "error" || a.state === "stopped");
+            const errorAgents = agents.filter((a) => a.state === "error" || a.state === "stopped");
             if (errorAgents.length > 0) {
-                return { status: "warning", detail: `${errorAgents.length}/${agents.length} agent(s) in error/stopped state` };
+                return {
+                    status: "warning",
+                    detail: `${errorAgents.length}/${agents.length} agent(s) in error/stopped state`,
+                };
             }
             return { status: "success", detail: `${agents.length} agent(s) healthy` };
         } catch (error) {
@@ -867,8 +1263,8 @@ export class GuardianAgent extends EventEmitter {
         const totalMem = os.totalmem();
         const freeMem = os.freemem();
         const usedPct = Math.round((1 - freeMem / totalMem) * 100);
-        const uptimeH = Math.round(os.uptime() / 3600 * 10) / 10;
-        const detail = `CPU: ${cpuCount} cores, RAM: ${usedPct}% used (${Math.round(freeMem / (1024 * 1024 * 1024) * 10) / 10}GB free), Uptime: ${uptimeH}h`;
+        const uptimeH = Math.round((os.uptime() / 3600) * 10) / 10;
+        const detail = `CPU: ${cpuCount} cores, RAM: ${usedPct}% used (${Math.round((freeMem / (1024 * 1024 * 1024)) * 10) / 10}GB free), Uptime: ${uptimeH}h`;
         if (usedPct > 90) {
             return { status: "warning", detail: `High memory pressure — ${detail}` };
         }
@@ -883,12 +1279,19 @@ export class GuardianAgent extends EventEmitter {
             const data = this.agentListFn();
             const agents = data.agents || [];
             const byState: Record<string, number> = {};
-            for (const a of agents) { byState[a.state] = (byState[a.state] || 0) + 1; }
-            const ephemeral = agents.filter(a => a.lifecycle === "ephemeral");
-            const stale = ephemeral.filter(a => a.state === "idle");
-            const summary = Object.entries(byState).map(([s, c]) => `${s}:${c}`).join(", ");
+            for (const a of agents) {
+                byState[a.state] = (byState[a.state] || 0) + 1;
+            }
+            const ephemeral = agents.filter((a) => a.lifecycle === "ephemeral");
+            const stale = ephemeral.filter((a) => a.state === "idle");
+            const summary = Object.entries(byState)
+                .map(([s, c]) => `${s}:${c}`)
+                .join(", ");
             if (stale.length > 3) {
-                return { status: "warning", detail: `${agents.length} agents (${summary}). ${stale.length} idle ephemeral agents — may need reaping` };
+                return {
+                    status: "warning",
+                    detail: `${agents.length} agents (${summary}). ${stale.length} idle ephemeral agents — may need reaping`,
+                };
             }
             return { status: "success", detail: `${agents.length} agents: ${summary}` };
         } catch (error) {
@@ -904,14 +1307,20 @@ export class GuardianAgent extends EventEmitter {
             const entries = this.logEntriesFn();
             const total = entries.length;
             const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-            const recent = entries.filter(e => e.timestamp > cutoff);
-            const errors = recent.filter(e => e.severity === "error");
-            const warnings = recent.filter(e => e.severity === "warning");
-            const errorRate = recent.length > 0 ? Math.round(errors.length / recent.length * 100) : 0;
+            const recent = entries.filter((e) => e.timestamp > cutoff);
+            const errors = recent.filter((e) => e.severity === "error");
+            const warnings = recent.filter((e) => e.severity === "warning");
+            const errorRate = recent.length > 0 ? Math.round((errors.length / recent.length) * 100) : 0;
             if (errorRate > 5) {
-                return { status: "warning", detail: `High error rate: ${errorRate}% in last 5min (${errors.length} errors, ${warnings.length} warnings, ${recent.length} total recent of ${total} total)` };
+                return {
+                    status: "warning",
+                    detail: `High error rate: ${errorRate}% in last 5min (${errors.length} errors, ${warnings.length} warnings, ${recent.length} total recent of ${total} total)`,
+                };
             }
-            return { status: "success", detail: `${recent.length} entries in last 5min (${errors.length} errors, ${warnings.length} warnings). Total stored: ${total}` };
+            return {
+                status: "success",
+                detail: `${recent.length} entries in last 5min (${errors.length} errors, ${warnings.length} warnings). Total stored: ${total}`,
+            };
         } catch (error) {
             return { status: "failure", detail: `Log analysis failed: ${String(error)}` };
         }
@@ -932,7 +1341,7 @@ export class GuardianAgent extends EventEmitter {
             if (states.length === 0) {
                 return { status: "success", detail: "No MCP servers configured" };
             }
-            const down = states.filter(s => s.state === "down" || s.state === "failed");
+            const down = states.filter((s) => s.state === "down" || s.state === "failed");
             if (down.length === 0) {
                 return { status: "success", detail: `All ${states.length} MCP server(s) healthy` };
             }
@@ -951,12 +1360,21 @@ export class GuardianAgent extends EventEmitter {
                 }
             }
             if (recovered.length > 0 && stillDown.length === 0) {
-                return { status: "success", detail: `Recovered ${recovered.length} MCP server(s): ${recovered.join(", ")}` };
+                return {
+                    status: "success",
+                    detail: `Recovered ${recovered.length} MCP server(s): ${recovered.join(", ")}`,
+                };
             }
             if (recovered.length > 0) {
-                return { status: "warning", detail: `Recovered ${recovered.join(", ")}; still down: ${stillDown.join(", ")}` };
+                return {
+                    status: "warning",
+                    detail: `Recovered ${recovered.join(", ")}; still down: ${stillDown.join(", ")}`,
+                };
             }
-            return { status: "warning", detail: `${stillDown.length} MCP server(s) still down: ${stillDown.join(", ")}` };
+            return {
+                status: "warning",
+                detail: `${stillDown.length} MCP server(s) still down: ${stillDown.join(", ")}`,
+            };
         } catch (error) {
             return { status: "failure", detail: `MCP recovery task failed: ${String(error)}` };
         }
@@ -982,13 +1400,16 @@ export class GuardianAgent extends EventEmitter {
                 return { status: "success", detail: `AAB ledger stable — ${entries.length} total entries` };
             }
 
-            const terminations = newEntries.filter(e => e.intervention === "terminate");
-            const pauses = newEntries.filter(e => e.intervention === "pause");
-            const rateLimits = newEntries.filter(e => e.intervention === "rate_limit");
+            const terminations = newEntries.filter((e) => e.intervention === "terminate");
+            const pauses = newEntries.filter((e) => e.intervention === "pause");
+            const rateLimits = newEntries.filter((e) => e.intervention === "rate_limit");
 
             if (terminations.length > 0) {
                 this.issuesDetected += terminations.length;
-                this.emitEvent("guardian.aab.critical", `${terminations.length} autonomous termination(s) detected: ${terminations.map(e => e.description).join("; ")}`);
+                this.emitEvent(
+                    "guardian.aab.critical",
+                    `${terminations.length} autonomous termination(s) detected: ${terminations.map((e) => e.description).join("; ")}`,
+                );
                 return {
                     status: "warning",
                     detail: `${newEntries.length} new AAB entries: ${terminations.length} termination(s), ${pauses.length} pause(s), ${rateLimits.length} rate limit(s)`,
@@ -1014,12 +1435,15 @@ export class GuardianAgent extends EventEmitter {
         }
         try {
             const status = this.covenantFn();
-            const criticalCount = status.violations.filter(v => v.severity === "critical").length;
-            const breachCount = status.violations.filter(v => v.severity === "breach").length;
+            const criticalCount = status.violations.filter((v) => v.severity === "critical").length;
+            const breachCount = status.violations.filter((v) => v.severity === "breach").length;
 
             if (!status.isIntact) {
                 this.issuesDetected++;
-                this.emitEvent("guardian.covenant.violated", `Covenant integrity VIOLATED — ${criticalCount} critical, ${breachCount} breach violations`);
+                this.emitEvent(
+                    "guardian.covenant.violated",
+                    `Covenant integrity VIOLATED — ${criticalCount} critical, ${breachCount} breach violations`,
+                );
                 return {
                     status: "warning",
                     detail: `Covenant NOT intact — ${criticalCount} critical, ${breachCount} breach, ${status.violations.length} total violations`,
@@ -1032,6 +1456,114 @@ export class GuardianAgent extends EventEmitter {
             };
         } catch (error) {
             return { status: "failure", detail: `Covenant audit failed: ${String(error)}` };
+        }
+    }
+
+    /**
+     * Initialization Certificate Verification — verifies the cryptographic
+     * signature of the Initialization Certificate and scans for settings drift.
+     */
+    private taskInitializationCertificateVerify(): { status: "success" | "warning" | "failure"; detail: string } {
+        const prefs = readPreferences();
+
+        if (!prefs?.setupComplete) {
+            return {
+                status: "success",
+                detail: "Setup not complete; skipping initialization certificate verification",
+            };
+        }
+
+        const dbPath = workspacePath("state", "prism-activity.db");
+        if (!existsSync(dbPath)) {
+            return { status: "failure", detail: "Database prism-activity.db not found" };
+        }
+
+        let db;
+        try {
+            db = new DatabaseSync(dbPath);
+            const stmt = db.prepare(`
+                SELECT content FROM chat_messages 
+                WHERE metadata_json LIKE '%"type":"certificate"%'
+                ORDER BY created_at DESC LIMIT 1
+            `);
+            const row = stmt.get() as { content: string } | undefined;
+            if (!row || !row.content) {
+                this.raiseCriticalDriftTicket(
+                    "Missing Initialization Certificate",
+                    "No initialization certificate found in database.",
+                );
+                return {
+                    status: "failure",
+                    detail: "CRITICAL: Initialization Certificate is missing from the database!",
+                };
+            }
+
+            const isValid = verifyMarkdownCertificate(row.content);
+            if (!isValid) {
+                this.raiseCriticalDriftTicket(
+                    "Invalid Certificate Signature",
+                    "Initialization certificate cryptographic signature verification failed.",
+                );
+                return {
+                    status: "failure",
+                    detail: "CRITICAL: Initialization Certificate signature verification failed! Possible tampering detected!",
+                };
+            }
+
+            // Check drift between recorded settings and current system preferences
+            const content = row.content;
+            let driftDetails = "";
+
+            // Validate workspaceRoot drift
+            const wsRootMatch = /- \*\*workspaceRoot:\*\* (.*)/.exec(content);
+            if (wsRootMatch) {
+                const recordedWsRoot = wsRootMatch[1].trim();
+                const currentWsRoot = prefs.workspaceRoot || "";
+                if (recordedWsRoot && currentWsRoot && recordedWsRoot !== currentWsRoot) {
+                    driftDetails += `Workspace root drift: recorded "${recordedWsRoot}", current "${currentWsRoot}". `;
+                }
+            }
+
+            if (driftDetails) {
+                this.raiseCriticalDriftTicket("System Configuration Drift Detected", driftDetails);
+                return { status: "warning", detail: `Drift detected: ${driftDetails}` };
+            }
+
+            return {
+                status: "success",
+                detail: "Initialization Certificate verified successfully. Signature and configuration integrity intact.",
+            };
+        } catch (err) {
+            return { status: "failure", detail: `Verification failed: ${String(err)}` };
+        }
+    }
+
+    private raiseCriticalDriftTicket(title: string, details: string): void {
+        this.issuesDetected++;
+        this.emitEvent("guardian.escalation", `CRITICAL: ${title} — ${details}`);
+        try {
+            const dbPath = workspacePath("state", "prism-activity.db");
+            const db = new DatabaseSync(dbPath);
+            const ticketId = "TKT-DRIFT-" + Date.now();
+            const nowStr = new Date().toISOString();
+
+            db.prepare(
+                `
+                INSERT INTO support_tickets (ticket_id, title, description, source, status, severity, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            ).run(
+                ticketId,
+                `[Guardian Security] ${title}`,
+                details,
+                "GuardianAgent",
+                "open",
+                "critical",
+                nowStr,
+                nowStr,
+            );
+        } catch (err) {
+            console.error("Failed to raise support ticket for configuration drift:", err);
         }
     }
 
@@ -1051,8 +1583,10 @@ export class GuardianAgent extends EventEmitter {
         // Mirror action immediately to observers (dashboard, activity bus)
         try {
             this.lastAction = `${entry.action} ${entry.result} @ ${entry.timestamp}`;
-            this.emitEvent('guardian.action', `${entry.action} ${entry.result}: ${entry.detail}`);
-        } catch (_) { /* best-effort mirror — don't throw on UI emit failures */ }
+            this.emitEvent("guardian.action", `${entry.action} ${entry.result}: ${entry.detail}`);
+        } catch (_) {
+            /* best-effort mirror — don't throw on UI emit failures */
+        }
     }
 
     private emitEvent(operation: string, detail: string): void {
@@ -1071,29 +1605,33 @@ export class GuardianAgent extends EventEmitter {
     /** Map Guardian task IDs to custodian skill IDs. */
     private taskToSkillId(taskId: string): string | null {
         const mapping: Record<string, string> = {
-            "disk_space_check": "skill.custodian.disk-space",
-            "temp_cleanup": "skill.custodian.disk-space",  // Reuse disk-space skill
-            "memory_audit": "skill.custodian.system-snapshot",
-            "model_integrity": "skill.custodian.pad-integrity",
-            "command_filter_verify": "skill.custodian.command-filter",
-            "env_secrets_scan": "skill.custodian.secrets-scan",
-            "endpoint_access_audit": "skill.custodian.aab-ledger",
-            "directive_integrity": "skill.custodian.covenant-audit",
-            "knowledge_graph_check": "skill.custodian.agent-health",
-            "tool_contract_audit": "skill.custodian.agent-health",
-            "agent_health_check": "skill.custodian.agent-health",
-            "system_snapshot": "skill.custodian.system-snapshot",
-            "agent_census": "skill.custodian.agent-health",
-            "log_volume_analysis": "skill.custodian.agent-health",
-            "mcp_health_recovery": "skill.custodian.mcp-health",
-            "aab_ledger_monitor": "skill.custodian.aab-ledger",
-            "covenant_audit": "skill.custodian.covenant-audit",
+            disk_space_check: "skill.custodian.disk-space",
+            temp_cleanup: "skill.custodian.disk-space", // Reuse disk-space skill
+            memory_audit: "skill.custodian.system-snapshot",
+            model_integrity: "skill.custodian.pad-integrity",
+            context_prune: "skill.custodian.system-snapshot",
+            command_filter_verify: "skill.custodian.command-filter",
+            env_secrets_scan: "skill.custodian.secrets-scan",
+            endpoint_access_audit: "skill.custodian.aab-ledger",
+            directive_integrity: "skill.custodian.covenant-audit",
+            knowledge_graph_check: "skill.custodian.agent-health",
+            tool_contract_audit: "skill.custodian.agent-health",
+            agent_health_check: "skill.custodian.agent-health",
+            system_snapshot: "skill.custodian.system-snapshot",
+            agent_census: "skill.custodian.agent-health",
+            log_volume_analysis: "skill.custodian.log-analysis",
+            mcp_health_recovery: "skill.custodian.mcp-health",
+            aab_ledger_monitor: "skill.custodian.aab-ledger",
+            covenant_audit: "skill.custodian.covenant-audit",
         };
         return mapping[taskId] || null;
     }
 
     /** Execute a custodian skill via SkillsEngine. */
-    private async executeCustodianSkill(skillId: string, task: GuardianTask): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
+    private async executeCustodianSkill(
+        skillId: string,
+        task: GuardianTask,
+    ): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
         if (!this.skillsEngine) {
             return { status: "failure", detail: "SkillsEngine not configured — cannot execute custodian skill" };
         }
@@ -1104,7 +1642,10 @@ export class GuardianAgent extends EventEmitter {
                 return { status: "failure", detail: `Custodian skill not found: ${skillId}` };
             }
 
-            this.emitEvent("guardian.custodian_skill.starting", `Executing custodian skill: ${skill.name} (ID: ${skill.id})`);
+            this.emitEvent(
+                "guardian.custodian_skill.starting",
+                `Executing custodian skill: ${skill.name} (ID: ${skill.id})`,
+            );
 
             const session = await this.skillsEngine.createSession({
                 skillId: skill.id,

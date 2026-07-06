@@ -68,7 +68,10 @@ async function testListProfiles(): Promise<void> {
 
     const profiles = mgr.listProfiles();
     assert.strictEqual(profiles.length, 2, "Should list 2 profiles");
-    assert.ok(profiles.every(p => p.hasStorageState === false), "No storage state yet");
+    assert.ok(
+        profiles.every((p) => p.hasStorageState === false),
+        "No storage state yet",
+    );
     console.log("  ✓ listProfiles returns all created profiles");
 }
 

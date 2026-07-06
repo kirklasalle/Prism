@@ -57,7 +57,9 @@ export function resolveLoggerConfig(env: NodeJS.ProcessEnv = process.env): Logge
     return {
         format: readEnvFormat(env),
         minLevel: readEnvLevel(env),
-        sink: (line) => { process.stdout.write(line + "\n"); },
+        sink: (line) => {
+            process.stdout.write(line + "\n");
+        },
     };
 }
 
@@ -68,7 +70,11 @@ function escapeTextValue(v: unknown): string {
         return /[\s="]/.test(v) ? JSON.stringify(v) : v;
     }
     if (typeof v === "number" || typeof v === "boolean") return String(v);
-    try { return JSON.stringify(v); } catch { return String(v); }
+    try {
+        return JSON.stringify(v);
+    } catch {
+        return String(v);
+    }
 }
 
 export function formatRecord(record: LogRecord, format: LogFormat): string {
@@ -117,15 +123,27 @@ export class Logger {
         this.cfg.sink(formatRecord(record, this.cfg.format));
     }
 
-    debug(msg: string, ctx?: LogContext): void { this.emit("debug", msg, ctx); }
-    info(msg: string, ctx?: LogContext): void { this.emit("info", msg, ctx); }
-    warn(msg: string, ctx?: LogContext): void { this.emit("warn", msg, ctx); }
-    error(msg: string, ctx?: LogContext): void { this.emit("error", msg, ctx); }
+    debug(msg: string, ctx?: LogContext): void {
+        this.emit("debug", msg, ctx);
+    }
+    info(msg: string, ctx?: LogContext): void {
+        this.emit("info", msg, ctx);
+    }
+    warn(msg: string, ctx?: LogContext): void {
+        this.emit("warn", msg, ctx);
+    }
+    error(msg: string, ctx?: LogContext): void {
+        this.emit("error", msg, ctx);
+    }
 
     /** Test/inspection hook — current effective format. */
-    getFormat(): LogFormat { return this.cfg.format; }
+    getFormat(): LogFormat {
+        return this.cfg.format;
+    }
     /** Test/inspection hook — current effective minimum level. */
-    getMinLevel(): LogLevel { return this.cfg.minLevel; }
+    getMinLevel(): LogLevel {
+        return this.cfg.minLevel;
+    }
 }
 
 /** Process-wide default logger. */

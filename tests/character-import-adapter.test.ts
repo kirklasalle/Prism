@@ -37,11 +37,14 @@ describe("character-import-adapter — shape detection", () => {
         assert.equal(detectShape(readFixture("openai-prompt.json")), "openai-prompt");
     });
     it("detects prism canonical", () => {
-        assert.equal(detectShape({
-            name: "x",
-            systemPrompt: "y",
-            toolPermissions: { allow: [], deny: [] },
-        }), "prism");
+        assert.equal(
+            detectShape({
+                name: "x",
+                systemPrompt: "y",
+                toolPermissions: { allow: [], deny: [] },
+            }),
+            "prism",
+        );
     });
     it("returns unknown for malformed input", () => {
         assert.equal(detectShape(readFixture("malformed.json")), "unknown");

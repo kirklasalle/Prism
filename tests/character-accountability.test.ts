@@ -159,9 +159,7 @@ export async function testCharacterAccountability(): Promise<void> {
             clientId: "browser-client-expired",
             sessionId: "session-scope-2",
         });
-        manager.setPermissionScopes(expiredAssignment.assignmentId, [
-            { scope: "tool:execute", expiresAt: pastExpiry },
-        ]);
+        manager.setPermissionScopes(expiredAssignment.assignmentId, [{ scope: "tool:execute", expiresAt: pastExpiry }]);
         const revoked1 = manager.revokeExpiredScopes();
         assert.strictEqual(revoked1.length, 1, "One assignment should be revoked due to expired scope");
         assert.strictEqual(revoked1[0].assignmentId, expiredAssignment.assignmentId);
@@ -182,18 +180,22 @@ export async function testCharacterAccountability(): Promise<void> {
             { email: "lead@workstation.local", reason: "subdomain of .local" },
         ];
         for (const { email, reason } of placeholderCases) {
-            assert.throws(() => {
-                placeholderManager.assign({
-                    characterId: "analyst",
-                    prismUserId: "prism-system-user",
-                    prismUserEmail: email,
-                    operatorId: "operator-kirk",
-                    operatorEmail: email,
-                    clientId: "browser-client-placeholder",
-                    sessionId: "session-placeholder",
-                    executionProfile: "business",
-                });
-            }, /placeholder|non-production|Invalid/, `Should reject ${reason}: ${email}`);
+            assert.throws(
+                () => {
+                    placeholderManager.assign({
+                        characterId: "analyst",
+                        prismUserId: "prism-system-user",
+                        prismUserEmail: email,
+                        operatorId: "operator-kirk",
+                        operatorEmail: email,
+                        clientId: "browser-client-placeholder",
+                        sessionId: "session-placeholder",
+                        executionProfile: "business",
+                    });
+                },
+                /placeholder|non-production|Invalid/,
+                `Should reject ${reason}: ${email}`,
+            );
         }
 
         // Same placeholder emails MUST be accepted on Individual profile —

@@ -50,12 +50,15 @@ export class DualLensArbiter {
         });
         const cauMatches = this.causalLens.score(text, k * 2);
 
-        const fused = fuseLenses({
-            semantic: semMatches,
-            causal: cauMatches,
-            weights: this.weights,
-            consequenceLookup: (op) => this.causalLens.consequenceFor(op),
-        }, k);
+        const fused = fuseLenses(
+            {
+                semantic: semMatches,
+                causal: cauMatches,
+                weights: this.weights,
+                consequenceLookup: (op) => this.causalLens.consequenceFor(op),
+            },
+            k,
+        );
 
         const result: ArbiterQueryResult = {
             queryId,

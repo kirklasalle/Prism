@@ -53,9 +53,7 @@ function extractFromContent(noteId: string, content: string): NoteExtraction {
     const actionItems = lines
         .filter((l) => /^[-*]\s+\[[ x]\]/.test(l) || /^TODO:/i.test(l.trim()))
         .map((l) => l.trim());
-    const headings = lines
-        .filter((l) => /^#{1,3} /.test(l))
-        .map((l) => l.trim());
+    const headings = lines.filter((l) => /^#{1,3} /.test(l)).map((l) => l.trim());
     const wordCount = content.split(/\s+/).filter(Boolean).length;
     return {
         noteId,
@@ -73,7 +71,7 @@ function extractFromContent(noteId: string, content: string): NoteExtraction {
 export class NotesExtractTool implements Tool {
     readonly name = "notes_extract";
 
-    constructor(private readonly _dataDir?: string) { }
+    constructor(private readonly _dataDir?: string) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {

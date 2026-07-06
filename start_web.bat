@@ -158,8 +158,8 @@ echo [PM2] PRISM launched via PM2. Use 'pm2 logs prism' or 'npm run pm2:monit' t
 goto :wait_loop
 
 :start_direct
-echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will stay open to inspect.
-start "PRISM Server" cmd /k npm start
+echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will close upon exit.
+start "PRISM Server" cmd /c npm start
 
 echo [WAIT] Waiting for PRISM server to be ready on port %PRISM_DASHBOARD_PORT%...
 :wait_loop
@@ -197,7 +197,13 @@ if defined PRISM_AUTH_TOKEN (
   start "" "http://localhost:%PRISM_DASHBOARD_PORT%"
 )
 
-pause
+echo [MONITOR] PRISM is running. Monitoring for shutdown...
+:monitor_loop
+timeout /t 2 /nobreak >nul
+netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
+if %errorlevel% equ 0 goto :monitor_loop
+
+echo [SHUTDOWN] PRISM server has shut down. Exiting launcher.
 goto :eof
 
 :fail

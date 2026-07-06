@@ -82,22 +82,14 @@ describe("ChatSessionStore", () => {
 
     it("saveSRConfig and getSRConfig roundtrip all D4c fields", () => {
         const session = store.createSession("SR Full");
-        store.saveSRConfig(
-            session.sessionId,
-            true,
-            "openai",
-            "gpt-4o",
-            "anthropic",
-            "claude-3-5-sonnet-20241022",
-            {
-                leftSlot: "slot-left",
-                rightSlot: "slot-right",
-                leftTimeoutMs: 15000,
-                rightTimeoutMs: 12000,
-                circuitBreakerEnabled: true,
-                showHemispheres: true,
-            },
-        );
+        store.saveSRConfig(session.sessionId, true, "openai", "gpt-4o", "anthropic", "claude-3-5-sonnet-20241022", {
+            leftSlot: "slot-left",
+            rightSlot: "slot-right",
+            leftTimeoutMs: 15000,
+            rightTimeoutMs: 12000,
+            circuitBreakerEnabled: true,
+            showHemispheres: true,
+        });
         const cfg = store.getSRConfig(session.sessionId);
         assert.ok(cfg, "config should not be null");
         assert.equal(cfg.enabled, true);
@@ -191,7 +183,7 @@ describe("ChatSessionStore", () => {
         const okResolve = store.updateSupportTicket(
             ticket.ticketId,
             "resolved",
-            "Configured multi-write retry buffer to resolve locks."
+            "Configured multi-write retry buffer to resolve locks.",
         );
         assert.ok(okResolve, "resolves ticket successfully");
         const list3 = store.listSupportTickets();

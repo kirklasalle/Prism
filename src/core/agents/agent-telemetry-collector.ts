@@ -73,7 +73,13 @@ export class AgentTelemetryCollector {
     }
 
     /** Return global counters. */
-    getGlobalStats(): { activeAgents: number; tasksCompleted: number; tasksFailed: number; avgResponseMs: number; totalDispatches: number } {
+    getGlobalStats(): {
+        activeAgents: number;
+        tasksCompleted: number;
+        tasksFailed: number;
+        avgResponseMs: number;
+        totalDispatches: number;
+    } {
         let totalDuration = 0;
         let totalCount = 0;
         for (const recs of this.records.values()) {

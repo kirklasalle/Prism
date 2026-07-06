@@ -1,4 +1,5 @@
 import type { ProviderSecretStore } from "./provider-secret-store.js";
+import type { OAuthTokenStore } from "./oauth-token-store.js";
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { join as pathJoin } from "node:path";
 import { readPreferences } from "../config/workspace-resolver.js";
@@ -12,7 +13,9 @@ function llmTraceLog(label: string, data: unknown): void {
         const ts = new Date().toISOString();
         const serialized = typeof data === "string" ? data : JSON.stringify(data, null, 2);
         appendFileSync(LLM_TRACE_FILE, `\n[${ts}] [${label}]\n${serialized}\n`, "utf-8");
-    } catch { /* never break LLM calls for logging */ }
+    } catch {
+        /* never break LLM calls for logging */
+    }
 }
 import {
     resolveProfile,
@@ -62,7 +65,6 @@ import { computeCostUsd } from "./usage-pricing-catalog.js";
 import type { ActivityBus } from "../activity/bus.js";
 import type { UsageMeteringService } from "./usage-metering-service.js";
 
-
 export type RoutingStrategy = "single" | "multi" | "modality";
 
 export interface RoutingOverrideEntry {
@@ -78,7 +80,17 @@ export interface RoutingConfig {
     preferredModality: string | null;
 }
 
-export type { TaskRole, ModelRouterSelection, AdaptivePromptParams, ModelCapabilityProfile, ModelModality, SpectrumRefractionConfig, SRValidationResult, SRTriadValidation, SRIsolationLevel };
+export type {
+    TaskRole,
+    ModelRouterSelection,
+    AdaptivePromptParams,
+    ModelCapabilityProfile,
+    ModelModality,
+    SpectrumRefractionConfig,
+    SRValidationResult,
+    SRTriadValidation,
+    SRIsolationLevel,
+};
 
 /** Output from a Spectrum Refraction generation pass. */
 export interface SRGenerationOutput {
@@ -124,16 +136,46 @@ export interface SRCostEstimate {
 }
 
 export type PrismLlmProviderId =
-    | "openai" | "anthropic" | "ollama" | "ollama-cloud" | "custom"
-    | "google" | "mistral" | "cohere" | "groq" | "together"
-    | "deepseek" | "perplexity" | "fireworks" | "openrouter" | "lmstudio" | "llamacpp" | "bitnetcpp"
-    | "gemini-pro" | "claude-3-opus";
+    | "openai"
+    | "anthropic"
+    | "ollama"
+    | "ollama-cloud"
+    | "custom"
+    | "google"
+    | "mistral"
+    | "cohere"
+    | "groq"
+    | "together"
+    | "deepseek"
+    | "perplexity"
+    | "fireworks"
+    | "openrouter"
+    | "lmstudio"
+    | "llamacpp"
+    | "bitnetcpp"
+    | "gemini-pro"
+    | "claude-3-opus";
 
 export const ALL_PROVIDER_IDS: PrismLlmProviderId[] = [
-    "google", "openai", "anthropic", "mistral", "cohere", "groq",
-    "together", "deepseek", "perplexity", "fireworks", "openrouter",
-    "llamacpp", "bitnetcpp", "ollama", "ollama-cloud", "lmstudio", "custom",
-    "gemini-pro", "claude-3-opus",
+    "google",
+    "openai",
+    "anthropic",
+    "mistral",
+    "cohere",
+    "groq",
+    "together",
+    "deepseek",
+    "perplexity",
+    "fireworks",
+    "openrouter",
+    "llamacpp",
+    "bitnetcpp",
+    "ollama",
+    "ollama-cloud",
+    "lmstudio",
+    "custom",
+    "gemini-pro",
+    "claude-3-opus",
 ];
 
 export interface PersistedProviderSettings {
@@ -144,6 +186,7 @@ export interface PersistedProviderSettings {
     defaultModel: string | null;
     updatedAt: string;
     source: string;
+    useOauth?: boolean;
 }
 
 export interface LlmProviderSnapshot {
@@ -159,6 +202,8 @@ export interface LlmProviderSnapshot {
     apiKeyHeader: string | null;
     defaultModel: string | null;
     settingsSource: "environment" | "persisted";
+    useOauth?: boolean;
+    supportsOauth?: boolean;
 }
 
 export interface LlmProviderCatalog {
@@ -183,6 +228,7 @@ interface ProviderSettings {
     defaultModel: string | null;
     requiresApiKey: boolean;
     settingsSource: "environment" | "persisted";
+    useOauth?: boolean;
 }
 
 interface LlmGenerationInput {
@@ -251,13 +297,7 @@ export type LlmStreamChunk =
     | { type: "tool_call_delta"; id: string; arguments: string }
     | { type: "done"; stopReason: string };
 
-const OPENAI_DEFAULT_MODELS = [
-    "gpt-4o",
-    "gpt-4o-mini",
-    "o3-mini",
-    "o1-mini",
-    "gpt-4-turbo",
-];
+const OPENAI_DEFAULT_MODELS = ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "gpt-4-turbo"];
 
 const ANTHROPIC_DEFAULT_MODELS = [
     "claude-sonnet-4-5-20251022",
@@ -267,14 +307,26 @@ const ANTHROPIC_DEFAULT_MODELS = [
     "claude-3-5-haiku-20241022",
 ];
 
-const GOOGLE_DEFAULT_MODELS = ["models/gemini-2.5-flash", "models/gemini-3.0-flash", "models/gemini-3-flash", "models/gemini-2.5-pro", "models/gemini-1.5-pro"];
+const GOOGLE_DEFAULT_MODELS = [
+    "models/gemini-2.5-flash",
+    "models/gemini-3.0-flash",
+    "models/gemini-3-flash",
+    "models/gemini-2.5-pro",
+    "models/gemini-1.5-pro",
+];
 const MISTRAL_DEFAULT_MODELS = ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"];
 const COHERE_DEFAULT_MODELS = ["command-r-plus", "command-r", "command-light"];
 const GROQ_DEFAULT_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"];
-const TOGETHER_DEFAULT_MODELS = ["meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"];
+const TOGETHER_DEFAULT_MODELS = [
+    "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+    "mistralai/Mixtral-8x7B-Instruct-v0.1",
+];
 const DEEPSEEK_DEFAULT_MODELS = ["deepseek-chat", "deepseek-reasoner"];
 const PERPLEXITY_DEFAULT_MODELS = ["sonar-pro", "sonar"];
-const FIREWORKS_DEFAULT_MODELS = ["accounts/fireworks/models/llama-v3p1-70b-instruct", "accounts/fireworks/models/mixtral-8x7b-instruct"];
+const FIREWORKS_DEFAULT_MODELS = [
+    "accounts/fireworks/models/llama-v3p1-70b-instruct",
+    "accounts/fireworks/models/mixtral-8x7b-instruct",
+];
 const OPENROUTER_DEFAULT_MODELS = ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "meta-llama/llama-3.1-70b-instruct"];
 
 const OLLAMA_CLOUD_DEFAULT_MODELS = [
@@ -323,7 +375,8 @@ function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null
     const lower = modelPattern.toLowerCase();
 
     // OpenAI Reasoning and GPT series
-    if (lower.startsWith("gpt-") ||
+    if (
+        lower.startsWith("gpt-") ||
         lower.startsWith("o1-") ||
         lower.startsWith("o3-") ||
         lower.startsWith("o4-") ||
@@ -332,7 +385,8 @@ function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null
         lower.startsWith("sora-") ||
         lower === "o1" ||
         lower === "o3" ||
-        lower === "o4") {
+        lower === "o4"
+    ) {
         return "openai";
     }
 
@@ -396,12 +450,12 @@ export class LlmProviderManager {
         if (usageMetering) {
             const caps = usageMetering.getCaps();
             if (caps.sessionCap === null && caps.dailyCap === null && caps.monthlyCap === null) {
-                console.warn(`[PRISM][budget] WARNING: PRISM is running with NO active API spending caps. Run the setup wizard or set caps in settings to enable safety limits.`);
+                console.warn(
+                    `[PRISM][budget] WARNING: PRISM is running with NO active API spending caps. Run the setup wizard or set caps in settings to enable safety limits.`,
+                );
             }
         }
     }
-
-
 
     /** Short-lived TTL cache for network-discovered model lists (the expensive part of getCatalog). */
     private discoveredModelsCache: {
@@ -437,6 +491,7 @@ export class LlmProviderManager {
         private readonly llamaSupervisor?: LlamaCppSupervisor,
         private readonly bitnetSupervisor?: LlamaCppSupervisor,
         private readonly activityBus?: ActivityBus,
+        private readonly oauthTokenStore?: OAuthTokenStore,
     ) {
         const customBaseUrl = this.env.PRISM_CUSTOM_PROVIDER_URL?.trim() ?? "";
 
@@ -449,9 +504,10 @@ export class LlmProviderManager {
                 apiKey: this.env.OPENAI_API_KEY?.trim(),
                 apiKeyHeader: "Authorization",
                 defaultModels: parseModelList(this.env.PRISM_OPENAI_MODELS, OPENAI_DEFAULT_MODELS),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "openai"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || OPENAI_DEFAULT_MODELS[0] || null
-                    : OPENAI_DEFAULT_MODELS[0] || null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "openai"
+                        ? this.env.PRISM_LLM_MODEL?.trim() || OPENAI_DEFAULT_MODELS[0] || null
+                        : OPENAI_DEFAULT_MODELS[0] || null,
                 requiresApiKey: true,
                 settingsSource: "environment",
             },
@@ -463,9 +519,10 @@ export class LlmProviderManager {
                 apiKey: this.env.ANTHROPIC_API_KEY?.trim(),
                 apiKeyHeader: "x-api-key",
                 defaultModels: parseModelList(this.env.PRISM_ANTHROPIC_MODELS, ANTHROPIC_DEFAULT_MODELS),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "anthropic"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || ANTHROPIC_DEFAULT_MODELS[0] || null
-                    : ANTHROPIC_DEFAULT_MODELS[0] || null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "anthropic"
+                        ? this.env.PRISM_LLM_MODEL?.trim() || ANTHROPIC_DEFAULT_MODELS[0] || null
+                        : ANTHROPIC_DEFAULT_MODELS[0] || null,
                 requiresApiKey: true,
                 settingsSource: "environment",
             },
@@ -475,9 +532,8 @@ export class LlmProviderManager {
                 kind: "local",
                 baseUrl: trimSlash(this.env.PRISM_OLLAMA_BASE_URL?.trim() || "http://127.0.0.1:11434"),
                 defaultModels: parseModelList(this.env.PRISM_OLLAMA_MODELS, []),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "ollama"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || null
-                    : null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "ollama" ? this.env.PRISM_LLM_MODEL?.trim() || null : null,
                 requiresApiKey: false,
             } as ProviderSettings,
             "ollama-cloud": {
@@ -488,9 +544,10 @@ export class LlmProviderManager {
                 apiKey: this.env.OLLAMA_API_KEY?.trim() || this.env.PRISM_OLLAMA_CLOUD_API_KEY?.trim(),
                 apiKeyHeader: "Authorization",
                 defaultModels: parseModelList(this.env.PRISM_OLLAMA_CLOUD_MODELS, OLLAMA_CLOUD_DEFAULT_MODELS),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "ollama-cloud"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || OLLAMA_CLOUD_DEFAULT_MODELS[0] || null
-                    : OLLAMA_CLOUD_DEFAULT_MODELS[0] || null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "ollama-cloud"
+                        ? this.env.PRISM_LLM_MODEL?.trim() || OLLAMA_CLOUD_DEFAULT_MODELS[0] || null
+                        : OLLAMA_CLOUD_DEFAULT_MODELS[0] || null,
                 requiresApiKey: true,
                 settingsSource: "environment",
             },
@@ -502,9 +559,8 @@ export class LlmProviderManager {
                 apiKey: this.env.PRISM_CUSTOM_PROVIDER_API_KEY?.trim(),
                 apiKeyHeader: this.env.PRISM_CUSTOM_PROVIDER_API_KEY_HEADER?.trim() || "Authorization",
                 defaultModels: parseModelList(this.env.PRISM_CUSTOM_MODELS, []),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "custom"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || null
-                    : null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "custom" ? this.env.PRISM_LLM_MODEL?.trim() || null : null,
                 requiresApiKey: Boolean(customBaseUrl),
                 settingsSource: "environment",
             },
@@ -512,7 +568,9 @@ export class LlmProviderManager {
                 id: "google",
                 label: "Google AI (Gemini)",
                 kind: "remote",
-                baseUrl: trimSlash(this.env.PRISM_GOOGLE_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta/openai"),
+                baseUrl: trimSlash(
+                    this.env.PRISM_GOOGLE_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta/openai",
+                ),
                 apiKey: this.env.GOOGLE_API_KEY?.trim(),
                 apiKeyHeader: "Authorization",
                 defaultModels: parseModelList(this.env.PRISM_GOOGLE_MODELS, GOOGLE_DEFAULT_MODELS),
@@ -596,7 +654,9 @@ export class LlmProviderManager {
                 id: "fireworks",
                 label: "Fireworks AI",
                 kind: "remote",
-                baseUrl: trimSlash(this.env.PRISM_FIREWORKS_BASE_URL?.trim() || "https://api.fireworks.ai/inference/v1"),
+                baseUrl: trimSlash(
+                    this.env.PRISM_FIREWORKS_BASE_URL?.trim() || "https://api.fireworks.ai/inference/v1",
+                ),
                 apiKey: this.env.FIREWORKS_API_KEY?.trim(),
                 apiKeyHeader: "Authorization",
                 defaultModels: parseModelList(this.env.PRISM_FIREWORKS_MODELS, FIREWORKS_DEFAULT_MODELS),
@@ -640,22 +700,26 @@ export class LlmProviderManager {
                 kind: "local",
                 baseUrl: trimSlash(this.env.PRISM_BITNETCPP_BASE_URL?.trim() || "http://127.0.0.1:8000"),
                 defaultModels: parseModelList(this.env.PRISM_BITNETCPP_MODELS, BITNETCPP_DEFAULT_MODELS),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "bitnetcpp"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || BITNETCPP_DEFAULT_MODELS[0] || null
-                    : BITNETCPP_DEFAULT_MODELS[0] || null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "bitnetcpp"
+                        ? this.env.PRISM_LLM_MODEL?.trim() || BITNETCPP_DEFAULT_MODELS[0] || null
+                        : BITNETCPP_DEFAULT_MODELS[0] || null,
                 requiresApiKey: false,
             } as ProviderSettings,
             ["gemini-pro"]: {
                 id: "gemini-pro",
                 label: "Google Gemini Pro",
                 kind: "remote",
-                baseUrl: trimSlash(this.env.PRISM_GEMINI_PRO_BASE_URL?.trim() || "https://generativelanguage.googleapis.com"),
+                baseUrl: trimSlash(
+                    this.env.PRISM_GEMINI_PRO_BASE_URL?.trim() || "https://generativelanguage.googleapis.com",
+                ),
                 apiKey: this.env.GOOGLE_API_KEY?.trim() || this.env.PRISM_GEMINI_PRO_API_KEY?.trim(),
                 apiKeyHeader: "x-goog-api-key",
                 defaultModels: parseModelList(this.env.PRISM_GEMINI_PRO_MODELS, GEMINI_PRO_DEFAULT_MODELS),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "gemini-pro"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || GEMINI_PRO_DEFAULT_MODELS[0] || null
-                    : GEMINI_PRO_DEFAULT_MODELS[0] || null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "gemini-pro"
+                        ? this.env.PRISM_LLM_MODEL?.trim() || GEMINI_PRO_DEFAULT_MODELS[0] || null
+                        : GEMINI_PRO_DEFAULT_MODELS[0] || null,
                 requiresApiKey: true,
                 settingsSource: "environment",
             },
@@ -667,9 +731,10 @@ export class LlmProviderManager {
                 apiKey: this.env.ANTHROPIC_API_KEY?.trim() || this.env.PRISM_CLAUDE_3_OPUS_API_KEY?.trim(),
                 apiKeyHeader: "x-api-key",
                 defaultModels: parseModelList(this.env.PRISM_CLAUDE_3_OPUS_MODELS, CLAUDE_3_OPUS_DEFAULT_MODELS),
-                defaultModel: this.env.PRISM_LLM_PROVIDER === "claude-3-opus"
-                    ? this.env.PRISM_LLM_MODEL?.trim() || CLAUDE_3_OPUS_DEFAULT_MODELS[0] || null
-                    : CLAUDE_3_OPUS_DEFAULT_MODELS[0] || null,
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "claude-3-opus"
+                        ? this.env.PRISM_LLM_MODEL?.trim() || CLAUDE_3_OPUS_DEFAULT_MODELS[0] || null
+                        : CLAUDE_3_OPUS_DEFAULT_MODELS[0] || null,
                 requiresApiKey: true,
                 settingsSource: "environment",
             },
@@ -697,9 +762,11 @@ export class LlmProviderManager {
 
         if (selected) {
             const defaults = this.getResolvedSettings(selected).defaultModels;
-            this.activeModel = configuredModel || (defaults.length > 0
-                ? (this.env.PRISM_LLM_MODEL?.trim() || defaults[0] || null)
-                : (this.env.PRISM_LLM_MODEL?.trim() || null));
+            this.activeModel =
+                configuredModel ||
+                (defaults.length > 0
+                    ? this.env.PRISM_LLM_MODEL?.trim() || defaults[0] || null
+                    : this.env.PRISM_LLM_MODEL?.trim() || null);
         }
     }
 
@@ -732,28 +799,52 @@ export class LlmProviderManager {
                 ollama: this.getResolvedSettings("ollama").defaultModels,
                 "ollama-cloud": this.getResolvedSettings("ollama-cloud").defaultModels,
                 lmstudio: this.getResolvedSettings("lmstudio").defaultModels,
-                llamacpp: this.llamaSupervisor ? this.llamaSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!) : this.getResolvedSettings("llamacpp").defaultModels,
-                bitnetcpp: this.bitnetSupervisor ? this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!) : [],
+                llamacpp: this.llamaSupervisor
+                    ? this.llamaSupervisor
+                          .getSnapshot()
+                          .filter((s) => s.status === "ready")
+                          .map((s) => s.modelAlias!)
+                    : this.getResolvedSettings("llamacpp").defaultModels,
+                bitnetcpp: this.bitnetSupervisor
+                    ? this.bitnetSupervisor
+                          .getSnapshot()
+                          .filter((s) => s.status === "ready")
+                          .map((s) => s.modelAlias!)
+                    : [],
                 expiresAt: Date.now() + LlmProviderManager.CATALOG_CACHE_TTL_MS,
             };
             this.discoveredModelsCache = discovered;
         } else {
             const startProbe = Date.now();
-            const [ollamaModels, ollamaCloudModels, lmStudioModels, llamacppRunning, bitnetRunning] = await Promise.all([
-                this.fetchOllamaModels(this.getResolvedSettings("ollama")).catch(() => [] as string[]),
-                this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")).catch(() => [] as string[]),
-                this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")).catch(() => [] as string[]),
-                this.llamaSupervisor
-                    ? Promise.resolve(this.llamaSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
-                    : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")).catch(() => [] as string[]),
-                this.bitnetSupervisor
-                    ? Promise.resolve(this.bitnetSupervisor.getSnapshot().filter(s => s.status === "ready").map(s => s.modelAlias!))
-                    : Promise.resolve([] as string[]),
-            ]);
+            const [ollamaModels, ollamaCloudModels, lmStudioModels, llamacppRunning, bitnetRunning] = await Promise.all(
+                [
+                    this.fetchOllamaModels(this.getResolvedSettings("ollama")).catch(() => [] as string[]),
+                    this.fetchOllamaCloudModels(this.getResolvedSettings("ollama-cloud")).catch(() => [] as string[]),
+                    this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")).catch(() => [] as string[]),
+                    this.llamaSupervisor
+                        ? Promise.resolve(
+                              this.llamaSupervisor
+                                  .getSnapshot()
+                                  .filter((s) => s.status === "ready")
+                                  .map((s) => s.modelAlias!),
+                          )
+                        : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")).catch(() => [] as string[]),
+                    this.bitnetSupervisor
+                        ? Promise.resolve(
+                              this.bitnetSupervisor
+                                  .getSnapshot()
+                                  .filter((s) => s.status === "ready")
+                                  .map((s) => s.modelAlias!),
+                          )
+                        : Promise.resolve([] as string[]),
+                ],
+            );
             const probeDur = Date.now() - startProbe;
             try {
-                console.log(`[PERF] Provider discovery probe completed in ${probeDur}ms — ollama=${ollamaModels.length}, ollama-cloud=${ollamaCloudModels.length}, lmstudio=${lmStudioModels.length}, llamacpp_running=${llamacppRunning.length}, bitnet_running=${bitnetRunning.length}`);
-            } catch { }
+                console.log(
+                    `[PERF] Provider discovery probe completed in ${probeDur}ms — ollama=${ollamaModels.length}, ollama-cloud=${ollamaCloudModels.length}, lmstudio=${lmStudioModels.length}, llamacpp_running=${llamacppRunning.length}, bitnet_running=${bitnetRunning.length}`,
+                );
+            } catch {}
 
             // Merge discovered local GGUF models with running models (deduplicated)
             const llamacppDiscovered = this.llamaSupervisor?.discoverLocalModels() ?? [];
@@ -784,8 +875,9 @@ export class LlmProviderManager {
             // For remote cloud providers, dynamically populate their models with active profiles from the Model Matrix!
             const settings = this.getResolvedSettings(id);
             const baseModels = [...settings.defaultModels];
-            const activeProfiles = [...getRuntimeProfiles(), ...getKnownProfiles()]
-                .filter(p => getDeprecationStatus(p) === "active");
+            const activeProfiles = [...getRuntimeProfiles(), ...getKnownProfiles()].filter(
+                (p) => getDeprecationStatus(p) === "active",
+            );
 
             for (const profile of activeProfiles) {
                 if (detectProviderForModel(profile.pattern) === id) {
@@ -820,9 +912,11 @@ export class LlmProviderManager {
                 const selectedProvider = providers.find((provider) => provider.id === effectiveProviderId);
                 if (selectedProvider) {
                     if (!effectiveModel || !selectedProvider.models.includes(effectiveModel)) {
-                        effectiveModel = selectedProvider.defaultModel && selectedProvider.models.includes(selectedProvider.defaultModel)
-                            ? selectedProvider.defaultModel
-                            : selectedProvider.models[0] ?? null;
+                        effectiveModel =
+                            selectedProvider.defaultModel &&
+                            selectedProvider.models.includes(selectedProvider.defaultModel)
+                                ? selectedProvider.defaultModel
+                                : (selectedProvider.models[0] ?? null);
                     }
                 }
             }
@@ -874,11 +968,7 @@ export class LlmProviderManager {
      *
      * Delays: 500 ms → 1 s → 2 s (3 retries, capped at 4 s per attempt).
      */
-    private async withExponentialRetry<T>(
-        fn: () => Promise<T>,
-        maxRetries = 3,
-        baseDelayMs = 500,
-    ): Promise<T> {
+    private async withExponentialRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 500): Promise<T> {
         let lastError: unknown;
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
@@ -917,7 +1007,7 @@ export class LlmProviderManager {
         if (filter && input.tools) {
             input = {
                 ...input,
-                tools: input.tools.filter(t => filter.includes(t.name))
+                tools: input.tools.filter((t) => filter.includes(t.name)),
             };
         }
 
@@ -934,13 +1024,12 @@ export class LlmProviderManager {
                     details: {
                         capType: capCheck.capType,
                         remainingUsd: capCheck.remainingUsd,
-                        error: errMsg
-                    }
+                        error: errMsg,
+                    },
                 });
                 throw new Error(errMsg);
             }
         }
-
 
         const catalog = await this.getCatalog(selection);
         if (!catalog.activeProviderId || !catalog.activeModel) {
@@ -951,10 +1040,14 @@ export class LlmProviderManager {
 
         // If the selected provider is disabled or missing its API key, try to route to a local fallback
         if ((!provider || !provider.enabled) && !input.disableRecovery) {
-            console.warn(`[PRISM][llm] Selected provider "${catalog.activeProviderId}" is disabled or missing API key. Attempting local fallback...`);
+            console.warn(
+                `[PRISM][llm] Selected provider "${catalog.activeProviderId}" is disabled or missing API key. Attempting local fallback...`,
+            );
             const fallback = this.findLocalFallback(catalog);
             if (fallback) {
-                console.log(`[PRISM][llm] Routing request to local fallback provider "${fallback.providerId}" with model "${fallback.model}".`);
+                console.log(
+                    `[PRISM][llm] Routing request to local fallback provider "${fallback.providerId}" with model "${fallback.model}".`,
+                );
                 this.activityBus?.emit({
                     sessionId: selection?.providerId ?? "llm",
                     layer: "llm",
@@ -983,17 +1076,20 @@ export class LlmProviderManager {
         try {
             if (catalog.activeProviderId === "anthropic") {
                 return await this.withExponentialRetry(() =>
-                    this.generateWithAnthropic(settings, catalog.activeModel!, input));
+                    this.generateWithAnthropic(settings, catalog.activeModel!, input),
+                );
             }
 
             if (catalog.activeProviderId === "ollama") {
                 return await this.withExponentialRetry(() =>
-                    this.generateWithOllama(settings, catalog.activeModel!, input, adaptiveParams));
+                    this.generateWithOllama(settings, catalog.activeModel!, input, adaptiveParams),
+                );
             }
 
             if (catalog.activeProviderId === "ollama-cloud") {
                 return await this.withExponentialRetry(() =>
-                    this.generateWithOllamaCloud(settings, catalog.activeModel!, input, adaptiveParams));
+                    this.generateWithOllamaCloud(settings, catalog.activeModel!, input, adaptiveParams),
+                );
             }
 
             // Apply dynamic port routing if managed by supervisor
@@ -1002,31 +1098,47 @@ export class LlmProviderManager {
                 if (!dynamicPort && process.env.PRISM_BASE_MODE === "true") {
                     const modelPath = this.llamaSupervisor.getModelPath(catalog.activeModel);
                     if (modelPath) {
-                        console.log(`[PRISM][SSSR] Dynamic on-demand loading of local GGUF model: ${catalog.activeModel}`);
+                        console.log(
+                            `[PRISM][SSSR] Dynamic on-demand loading of local GGUF model: ${catalog.activeModel}`,
+                        );
                         await this.llamaSupervisor.loadModel(modelPath, catalog.activeModel, { ctxSize: 2048 });
                         dynamicPort = this.llamaSupervisor.getPortForAlias(catalog.activeModel);
                     }
                 }
                 if (!dynamicPort) {
-                    const slot = this.llamaSupervisor.getSnapshot().find(s => s.modelAlias === catalog.activeModel);
+                    const slot = this.llamaSupervisor.getSnapshot().find((s) => s.modelAlias === catalog.activeModel);
                     if (slot && slot.status === "error") {
-                        throw new Error(`Failed to load local GGUF model "${catalog.activeModel}": ${slot.error}. You can inspect logs, manage slots, and restart the service in the [Agentic Control / Hardware](prism://tab/agentic#tab-hardware) panel.`);
+                        throw new Error(
+                            `Failed to load local GGUF model "${catalog.activeModel}": ${slot.error}. You can inspect logs, manage slots, and restart the service in the [Agentic Control / Hardware](prism://tab/agentic#tab-hardware) panel.`,
+                        );
                     }
-                    throw new Error(`Local GGUF model "${catalog.activeModel}" is not fully loaded. Current status: ${slot ? slot.status : 'unknown'}. Please wait a few seconds and try again, or manage slots in the [Agentic Control / Hardware](prism://tab/agentic#tab-hardware) panel.`);
+                    throw new Error(
+                        `Local GGUF model "${catalog.activeModel}" is not fully loaded. Current status: ${slot ? slot.status : "unknown"}. Please wait a few seconds and try again, or manage slots in the [Agentic Control / Hardware](prism://tab/agentic#tab-hardware) panel.`,
+                    );
                 }
                 settings.baseUrl = `http://127.0.0.1:${dynamicPort}/v1`;
             }
 
             // All other providers use OpenAI-compatible API
             return await this.withExponentialRetry(() =>
-                this.generateWithOpenAiCompatible(settings, catalog.activeModel!, input));
+                this.generateWithOpenAiCompatible(settings, catalog.activeModel!, input),
+            );
         } catch (error) {
             const failedProvider = catalog.activeProviderId;
             const isRemote = provider && provider.kind === "remote";
             const errStr = String(error).toLowerCase();
-            const isAuthError = errStr.includes("api key") || errStr.includes("unauthorized") || errStr.includes("401") || errStr.includes("403") || errStr.includes("forbidden") || errStr.includes("auth") || errStr.includes("invalid key");
+            const isAuthError =
+                errStr.includes("api key") ||
+                errStr.includes("unauthorized") ||
+                errStr.includes("401") ||
+                errStr.includes("403") ||
+                errStr.includes("forbidden") ||
+                errStr.includes("auth") ||
+                errStr.includes("invalid key");
             if (isRemote && failedProvider && !input.disableRecovery) {
-                console.warn(`[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Error: ${String(error)}. Attempting recovery...`);
+                console.warn(
+                    `[PRISM][llm] Generation failed for cloud provider "${failedProvider}". Error: ${String(error)}. Attempting recovery...`,
+                );
 
                 // If not an auth error, try alternate models within the same remote provider first
                 if (!isAuthError) {
@@ -1044,7 +1156,9 @@ export class LlmProviderManager {
                 // Try local fallback
                 const fallback = this.findLocalFallback(catalog);
                 if (fallback) {
-                    console.log(`[PRISM][llm] Cloud provider recovery exhausted. Routing request to local fallback provider "${fallback.providerId}" with model "${fallback.model}".`);
+                    console.log(
+                        `[PRISM][llm] Cloud provider recovery exhausted. Routing request to local fallback provider "${fallback.providerId}" with model "${fallback.model}".`,
+                    );
                     this.activityBus?.emit({
                         sessionId: selection?.providerId ?? "llm",
                         layer: "llm",
@@ -1056,7 +1170,9 @@ export class LlmProviderManager {
                             fallbackProvider: fallback.providerId,
                             fallbackModel: fallback.model,
                             error: String(error),
-                            reason: isAuthError ? "Auth failure on remote provider" : "Same-provider recovery exhausted",
+                            reason: isAuthError
+                                ? "Auth failure on remote provider"
+                                : "Same-provider recovery exhausted",
                         },
                     });
 
@@ -1118,12 +1234,11 @@ export class LlmProviderManager {
         if (!routing && this.routingConfig.strategy === "modality") {
             const modalityInput = {
                 message: input.message,
-                conversation: input.conversation as Array<{ content: string | Array<{ type: "text" | "image_url"; text?: string; image_url?: { url: string } }> }>,
+                conversation: input.conversation as Array<{
+                    content: string | Array<{ type: "text" | "image_url"; text?: string; image_url?: { url: string } }>;
+                }>,
             };
-            routing = this.resolveModelForModalityRequest(
-                modalityInput,
-                availableModels,
-            );
+            routing = this.resolveModelForModalityRequest(modalityInput, availableModels);
         }
 
         if (!routing) {
@@ -1163,7 +1278,10 @@ export class LlmProviderManager {
     /**
      * Validate SR model selections against the capability matrix.
      */
-    validateSRModels(leftModel: string | null, rightModel: string | null): {
+    validateSRModels(
+        leftModel: string | null,
+        rightModel: string | null,
+    ): {
         left: SRValidationResult | null;
         right: SRValidationResult | null;
     } {
@@ -1183,8 +1301,8 @@ export class LlmProviderManager {
         rightProviderId: string | null,
         rightModel: string | null,
     ): SRTriadValidation {
-        const left = (leftProviderId && leftModel) ? { providerId: leftProviderId, model: leftModel } : null;
-        const right = (rightProviderId && rightModel) ? { providerId: rightProviderId, model: rightModel } : null;
+        const left = leftProviderId && leftModel ? { providerId: leftProviderId, model: leftModel } : null;
+        const right = rightProviderId && rightModel ? { providerId: rightProviderId, model: rightModel } : null;
         return validateSRTriad(left, right);
     }
 
@@ -1208,7 +1326,7 @@ export class LlmProviderManager {
             }
         }
 
-        const leftCandidates = filterSRLogicModels(available).map(c => ({
+        const leftCandidates = filterSRLogicModels(available).map((c) => ({
             providerId: c.providerId,
             model: c.model,
             tier: c.profile.tier,
@@ -1216,7 +1334,7 @@ export class LlmProviderManager {
             advisory: c.validation.advisoryText,
         }));
 
-        const rightCandidates = filterSRCreativeModels(available).map(c => ({
+        const rightCandidates = filterSRCreativeModels(available).map((c) => ({
             providerId: c.providerId,
             model: c.model,
             tier: c.profile.tier,
@@ -1244,7 +1362,7 @@ export class LlmProviderManager {
         if (filter && input.tools) {
             input = {
                 ...input,
-                tools: input.tools.filter(t => filter.includes(t.name))
+                tools: input.tools.filter((t) => filter.includes(t.name)),
             };
         }
 
@@ -1339,30 +1457,27 @@ export class LlmProviderManager {
         const fanOutStart = Date.now();
 
         const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> =>
-            Promise.race([
-                promise,
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-            ]);
+            Promise.race([promise, new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs))]);
 
         const leftGen = leftCbOpen
             ? Promise.resolve(null)
             : withTimeout(
-                this.generate(leftInput, { providerId: leftProviderId, model: srConfig.leftModel.model }),
-                leftTimeoutMs,
-            ).then(result => {
-                if (cbEnabled) this.recordCBOutcome(leftCbKey, result !== null);
-                return result;
-            });
+                  this.generate(leftInput, { providerId: leftProviderId, model: srConfig.leftModel.model }),
+                  leftTimeoutMs,
+              ).then((result) => {
+                  if (cbEnabled) this.recordCBOutcome(leftCbKey, result !== null);
+                  return result;
+              });
 
         const rightGen = rightCbOpen
             ? Promise.resolve(null)
             : withTimeout(
-                this.generate(rightInput, { providerId: rightProviderId, model: srConfig.rightModel.model }),
-                rightTimeoutMs,
-            ).then(result => {
-                if (cbEnabled) this.recordCBOutcome(rightCbKey, result !== null);
-                return result;
-            });
+                  this.generate(rightInput, { providerId: rightProviderId, model: srConfig.rightModel.model }),
+                  rightTimeoutMs,
+              ).then((result) => {
+                  if (cbEnabled) this.recordCBOutcome(rightCbKey, result !== null);
+                  return result;
+              });
 
         const mainGen = withTimeout(this.generate(mainInput, mainSelection), 60_000);
 
@@ -1392,13 +1507,13 @@ export class LlmProviderManager {
         const leftAdvisory = leftCbOpen
             ? `(Logic Hemisphere skipped — circuit breaker open for provider: ${leftProviderId})`
             : leftTimedOut
-                ? `(Logic Hemisphere timed out after ${leftTimeoutMs}ms)`
-                : null;
+              ? `(Logic Hemisphere timed out after ${leftTimeoutMs}ms)`
+              : null;
         const rightAdvisory = rightCbOpen
             ? `(Creative Hemisphere skipped — circuit breaker open for provider: ${rightProviderId})`
             : rightTimedOut
-                ? `(Creative Hemisphere timed out after ${rightTimeoutMs}ms)`
-                : null;
+              ? `(Creative Hemisphere timed out after ${rightTimeoutMs}ms)`
+              : null;
 
         const leftOutput = leftResult?.content ?? leftAdvisory ?? "(Logic Hemisphere did not respond)";
         const rightOutput = rightResult?.content ?? rightAdvisory ?? "(Creative Hemisphere did not respond)";
@@ -1548,9 +1663,10 @@ export class LlmProviderManager {
 
         const totalCost = leftCost + rightCost + mainFanOutCost + aggregationCost;
 
-        const advisory = totalCost === 0
-            ? "Pricing unavailable for one or more configured models. Ensure provider models match pricing catalog entries."
-            : undefined;
+        const advisory =
+            totalCost === 0
+                ? "Pricing unavailable for one or more configured models. Ensure provider models match pricing catalog entries."
+                : undefined;
 
         return {
             leftEstimatedCostUsd: leftCost,
@@ -1631,7 +1747,11 @@ export class LlmProviderManager {
         return this.routingConfig.agentOverrides[agentId] ?? null;
     }
 
-    async suggestRoutingForAllRoles(providerId: string = ""): Promise<Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>> {
+    async suggestRoutingForAllRoles(
+        providerId: string = "",
+    ): Promise<
+        Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>
+    > {
         const catalog = await this.getCatalog();
         const availableModels: AvailableModel[] = [];
         for (const provider of catalog.providers) {
@@ -1645,19 +1765,50 @@ export class LlmProviderManager {
                 });
             }
         }
-        const result: Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null> = {};
+        const result: Record<
+            string,
+            { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null
+        > = {};
         for (const role of ALL_TASK_ROLES) {
             const sel = selectModelForRole(role, availableModels);
             result[role] = sel
-                ? { providerId: sel.providerId, model: sel.model, tier: sel.profile.tier, degraded: sel.degraded, reason: sel.reason }
+                ? {
+                      providerId: sel.providerId,
+                      model: sel.model,
+                      tier: sel.profile.tier,
+                      degraded: sel.degraded,
+                      reason: sel.reason,
+                  }
                 : null;
         }
         return result;
     }
 
-    async getModelProfiles(): Promise<Record<string, { tier: number; strengths: string[]; locality: string; contextWindow: number; parametersBillions: number; modalities: string[] }>> {
+    async getModelProfiles(): Promise<
+        Record<
+            string,
+            {
+                tier: number;
+                strengths: string[];
+                locality: string;
+                contextWindow: number;
+                parametersBillions: number;
+                modalities: string[];
+            }
+        >
+    > {
         const catalog = await this.getCatalog();
-        const profiles: Record<string, { tier: number; strengths: string[]; locality: string; contextWindow: number; parametersBillions: number; modalities: string[] }> = {};
+        const profiles: Record<
+            string,
+            {
+                tier: number;
+                strengths: string[];
+                locality: string;
+                contextWindow: number;
+                parametersBillions: number;
+                modalities: string[];
+            }
+        > = {};
         for (const provider of catalog.providers) {
             for (const model of provider.models) {
                 const profile = resolveProfile(model);
@@ -1676,7 +1827,9 @@ export class LlmProviderManager {
 
     // ── Modality-Based Routing ─────────────────────────────────────────
 
-    async suggestRoutingForAllModalities(): Promise<Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>> {
+    async suggestRoutingForAllModalities(): Promise<
+        Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>
+    > {
         const catalog = await this.getCatalog();
         const availableModels: AvailableModel[] = [];
         for (const provider of catalog.providers) {
@@ -1689,17 +1842,28 @@ export class LlmProviderManager {
                 });
             }
         }
-        const result: Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null> = {};
+        const result: Record<
+            string,
+            { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null
+        > = {};
         for (const modality of ALL_MODALITIES) {
             const sel = selectModelForModality([modality.id], availableModels);
             result[modality.id] = sel
-                ? { providerId: sel.providerId, model: sel.model, tier: sel.profile.tier, degraded: sel.degraded, reason: sel.reason }
+                ? {
+                      providerId: sel.providerId,
+                      model: sel.model,
+                      tier: sel.profile.tier,
+                      degraded: sel.degraded,
+                      reason: sel.reason,
+                  }
                 : null;
         }
         return result;
     }
 
-    async getModalitySummary(): Promise<Array<{ id: string; label: string; icon: string; description: string; modelCount: number }>> {
+    async getModalitySummary(): Promise<
+        Array<{ id: string; label: string; icon: string; description: string; modelCount: number }>
+    > {
         const catalog = await this.getCatalog();
         const availableModels: AvailableModel[] = [];
         for (const provider of catalog.providers) {
@@ -1768,7 +1932,9 @@ export class LlmProviderManager {
         const dur = Date.now() - start;
         // Emit perf logs when assembly is slow or to provide tracing information
         if (dur > 200) {
-            console.warn(`[PERF] getFullModelMatrix total=${dur}ms (known=${t2 - t1}ms runtime=${t3 - t2}ms deprecated=${t4 - t3}ms)`);
+            console.warn(
+                `[PERF] getFullModelMatrix total=${dur}ms (known=${t2 - t1}ms runtime=${t3 - t2}ms deprecated=${t4 - t3}ms)`,
+            );
         }
         return matrix;
     }
@@ -1814,9 +1980,9 @@ export class LlmProviderManager {
         for (const model of catalogModels) {
             const profile = resolveProfile(model);
             // If the resolved profile pattern matches something in known registry, it's known
-            const isKnown = knownProfiles.some(
-                (kp) => kp.pattern === profile.pattern && kp.label !== model,
-            ) || profile.pattern !== model;
+            const isKnown =
+                knownProfiles.some((kp) => kp.pattern === profile.pattern && kp.label !== model) ||
+                profile.pattern !== model;
 
             if (isKnown) {
                 known.push(model);
@@ -1845,9 +2011,7 @@ export class LlmProviderManager {
     }
 
     resolveProvider(providerId: string): PrismLlmProviderId | null {
-        return ALL_PROVIDER_IDS.includes(providerId as PrismLlmProviderId)
-            ? (providerId as PrismLlmProviderId)
-            : null;
+        return ALL_PROVIDER_IDS.includes(providerId as PrismLlmProviderId) ? (providerId as PrismLlmProviderId) : null;
     }
 
     private findFirstEnabledProvider(): PrismLlmProviderId | null {
@@ -1864,12 +2028,13 @@ export class LlmProviderManager {
         const settings = this.getResolvedSettings(providerId);
         const hasApiKey = this.hasApiKey(settings);
         const hasBaseUrl = Boolean(settings.baseUrl?.trim());
-        const models = overrideModels && overrideModels.length > 0
-            ? overrideModels
-            : settings.defaultModels;
-        const defaultModel = settings.defaultModel && models.includes(settings.defaultModel)
-            ? settings.defaultModel
-            : (models[0] ?? null);
+        const models = overrideModels && overrideModels.length > 0 ? overrideModels : settings.defaultModels;
+        const defaultModel =
+            settings.defaultModel && models.includes(settings.defaultModel)
+                ? settings.defaultModel
+                : (models[0] ?? null);
+        const useOauth = settings.useOauth ?? false;
+        const supportsOauth = providerId === "google";
 
         if (!hasBaseUrl) {
             return {
@@ -1885,6 +2050,8 @@ export class LlmProviderManager {
                 apiKeyHeader: settings.apiKeyHeader ?? null,
                 defaultModel,
                 settingsSource: settings.settingsSource,
+                useOauth,
+                supportsOauth,
             };
         }
 
@@ -1902,6 +2069,8 @@ export class LlmProviderManager {
                 apiKeyHeader: settings.apiKeyHeader ?? null,
                 defaultModel,
                 settingsSource: settings.settingsSource,
+                useOauth,
+                supportsOauth,
             };
         }
 
@@ -1917,6 +2086,8 @@ export class LlmProviderManager {
             apiKeyHeader: settings.apiKeyHeader ?? null,
             defaultModel,
             settingsSource: settings.settingsSource,
+            useOauth,
+            supportsOauth,
         };
     }
 
@@ -1927,17 +2098,22 @@ export class LlmProviderManager {
         const baseUrl = normalizeOptionalUrl(persisted?.baseUrl) || defaults.baseUrl;
         const apiKeyHeader = persisted?.apiKeyHeader?.trim() || defaults.apiKeyHeader;
         let defaultModels = hasPersistedModels ? normalizeModels(persisted!.models) : defaults.defaultModels;
-        let defaultModel = persisted?.defaultModel?.trim()
-            || defaults.defaultModel
-            || defaultModels[0]
-            || null;
-        const apiKey = this.secretStore?.getApiKey(providerId) || defaults.apiKey;
+        let defaultModel = persisted?.defaultModel?.trim() || defaults.defaultModel || defaultModels[0] || null;
+        let apiKey = this.secretStore?.getApiKey(providerId) || defaults.apiKey;
+        const useOauth = persisted?.useOauth ?? false;
+
+        if (useOauth && providerId === "google") {
+            const token = this.oauthTokenStore?.get("gmail");
+            if (token?.accessToken) {
+                apiKey = token.accessToken;
+            }
+        }
 
         if (providerId === "google") {
             if (defaultModel && !defaultModel.startsWith("models/")) {
                 defaultModel = "models/" + defaultModel;
             }
-            defaultModels = defaultModels.map(m => m.startsWith("models/") ? m : "models/" + m);
+            defaultModels = defaultModels.map((m) => (m.startsWith("models/") ? m : "models/" + m));
         }
 
         return {
@@ -1948,11 +2124,19 @@ export class LlmProviderManager {
             defaultModels,
             defaultModel,
             settingsSource: persisted ? "persisted" : "environment",
+            useOauth,
         };
     }
 
     private hasApiKey(settings: ProviderSettings): boolean {
-        return !settings.requiresApiKey || Boolean(settings.apiKey?.trim()) || Boolean(this.secretStore?.hasApiKey(settings.id));
+        if (settings.useOauth && settings.id === "google") {
+            return this.oauthTokenStore?.has("gmail") ?? false;
+        }
+        return (
+            !settings.requiresApiKey ||
+            Boolean(settings.apiKey?.trim()) ||
+            Boolean(this.secretStore?.hasApiKey(settings.id))
+        );
     }
 
     private async fetchOllamaModels(settings: ProviderSettings): Promise<string[]> {
@@ -1967,7 +2151,7 @@ export class LlmProviderManager {
             if (!response.ok) {
                 return settings.defaultModels;
             }
-            const payload = await response.json() as { models?: Array<{ name?: string }> };
+            const payload = (await response.json()) as { models?: Array<{ name?: string }> };
             const names = (payload.models ?? []).map((m) => m.name?.trim()).filter(Boolean) as string[];
             return names.length > 0 ? names : settings.defaultModels;
         } catch {
@@ -1989,7 +2173,7 @@ export class LlmProviderManager {
             if (!response.ok) {
                 return settings.defaultModels;
             }
-            const payload = await response.json() as { models?: Array<{ name?: string }> };
+            const payload = (await response.json()) as { models?: Array<{ name?: string }> };
             const names = (payload.models ?? []).map((m) => m.name?.trim()).filter(Boolean) as string[];
             return names.length > 0 ? names : settings.defaultModels;
         } catch {
@@ -2007,7 +2191,7 @@ export class LlmProviderManager {
             if (!response.ok) {
                 return settings.defaultModels;
             }
-            const payload = await response.json() as { data?: Array<{ id?: string }> };
+            const payload = (await response.json()) as { data?: Array<{ id?: string }> };
             const ids = (payload.data ?? []).map((m) => m.id?.trim()).filter(Boolean) as string[];
             return ids.length > 0 ? ids : settings.defaultModels;
         } catch {
@@ -2015,7 +2199,9 @@ export class LlmProviderManager {
         }
     }
 
-    async testProvider(providerId: string): Promise<{ ok: boolean; message: string; models: string[]; latencyMs?: number }> {
+    async testProvider(
+        providerId: string,
+    ): Promise<{ ok: boolean; message: string; models: string[]; latencyMs?: number }> {
         const resolved = this.resolveProvider(providerId);
         if (!resolved) {
             return { ok: false, message: "Unknown provider.", models: [] };
@@ -2029,92 +2215,183 @@ export class LlmProviderManager {
             if (resolved === "ollama") {
                 const response = await fetch(`${settings.baseUrl}/api/tags`, { method: "GET" });
                 if (!response.ok) {
-                    return { ok: false, message: `Ollama returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
+                    return {
+                        ok: false,
+                        message: `Ollama returned ${response.status}.`,
+                        models: [],
+                        latencyMs: Date.now() - startTime,
+                    };
                 }
-                const payload = await response.json() as { models?: Array<{ name?: string }> };
+                const payload = (await response.json()) as { models?: Array<{ name?: string }> };
                 const models = (payload.models ?? []).map((m) => m.name?.trim() ?? "").filter(Boolean);
                 const final = models.length > 0 ? models : settings.defaultModels;
-                return { ok: true, message: `Connected to Ollama. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+                return {
+                    ok: true,
+                    message: `Connected to Ollama. ${final.length} model(s) found.`,
+                    models: final,
+                    latencyMs: Date.now() - startTime,
+                };
             }
             if (resolved === "ollama-cloud") {
                 if (!settings.apiKey?.trim()) {
-                    return { ok: false, message: "Ollama Cloud API key is not set.", models: [], latencyMs: Date.now() - startTime };
+                    return {
+                        ok: false,
+                        message: "Ollama Cloud API key is not set.",
+                        models: [],
+                        latencyMs: Date.now() - startTime,
+                    };
                 }
                 const response = await fetch(`${settings.baseUrl}/api/tags`, {
                     method: "GET",
                     headers: { Accept: "application/json", Authorization: `Bearer ${settings.apiKey}` },
                 });
                 if (!response.ok) {
-                    return { ok: false, message: `Ollama Cloud returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
+                    return {
+                        ok: false,
+                        message: `Ollama Cloud returned ${response.status}.`,
+                        models: [],
+                        latencyMs: Date.now() - startTime,
+                    };
                 }
-                const payload = await response.json() as { models?: Array<{ name?: string }> };
+                const payload = (await response.json()) as { models?: Array<{ name?: string }> };
                 const models = (payload.models ?? []).map((m) => m.name?.trim() ?? "").filter(Boolean);
                 const final = models.length > 0 ? models : settings.defaultModels;
-                return { ok: true, message: `Connected to Ollama Cloud. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+                return {
+                    ok: true,
+                    message: `Connected to Ollama Cloud. ${final.length} model(s) found.`,
+                    models: final,
+                    latencyMs: Date.now() - startTime,
+                };
             }
             if (resolved === "lmstudio") {
-                const response = await fetch(`${settings.baseUrl}/v1/models`, { method: "GET", headers: { Accept: "application/json" } });
+                const response = await fetch(`${settings.baseUrl}/v1/models`, {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                });
                 if (!response.ok) {
-                    return { ok: false, message: `LM Studio returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
+                    return {
+                        ok: false,
+                        message: `LM Studio returned ${response.status}.`,
+                        models: [],
+                        latencyMs: Date.now() - startTime,
+                    };
                 }
-                const payload = await response.json() as { data?: Array<{ id?: string }> };
+                const payload = (await response.json()) as { data?: Array<{ id?: string }> };
                 const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
                 const final = models.length > 0 ? models : settings.defaultModels;
-                return { ok: true, message: `Connected to LM Studio. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+                return {
+                    ok: true,
+                    message: `Connected to LM Studio. ${final.length} model(s) found.`,
+                    models: final,
+                    latencyMs: Date.now() - startTime,
+                };
             }
             if (resolved === "llamacpp") {
-                const response = await fetch(`${settings.baseUrl}/models`, { method: "GET", headers: { Accept: "application/json" } });
+                const response = await fetch(`${settings.baseUrl}/models`, {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                });
                 if (!response.ok) {
-                    return { ok: false, message: `Llama.cpp returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
+                    return {
+                        ok: false,
+                        message: `Llama.cpp returned ${response.status}.`,
+                        models: [],
+                        latencyMs: Date.now() - startTime,
+                    };
                 }
-                const payload = await response.json() as { data?: Array<{ id?: string }> };
+                const payload = (await response.json()) as { data?: Array<{ id?: string }> };
                 const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
                 const final = models.length > 0 ? models : settings.defaultModels;
-                return { ok: true, message: `Connected to Llama.cpp. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+                return {
+                    ok: true,
+                    message: `Connected to Llama.cpp. ${final.length} model(s) found.`,
+                    models: final,
+                    latencyMs: Date.now() - startTime,
+                };
             }
             if (resolved === "anthropic") {
                 // Try the model list endpoint first
                 const listResp = await fetch(`${settings.baseUrl}/models`, {
                     method: "GET",
-                    headers: { "x-api-key": settings.apiKey ?? "", "anthropic-version": "2023-06-01", Accept: "application/json" },
+                    headers: {
+                        "x-api-key": settings.apiKey ?? "",
+                        "anthropic-version": "2023-06-01",
+                        Accept: "application/json",
+                    },
                 });
                 if (listResp.ok) {
-                    const payload = await listResp.json() as { data?: Array<{ id?: string }> };
+                    const payload = (await listResp.json()) as { data?: Array<{ id?: string }> };
                     const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
                     const final = models.length > 0 ? models : settings.defaultModels;
-                    return { ok: true, message: `Connected to Anthropic. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+                    return {
+                        ok: true,
+                        message: `Connected to Anthropic. ${final.length} model(s) found.`,
+                        models: final,
+                        latencyMs: Date.now() - startTime,
+                    };
                 }
                 // Fall back to a minimal chat probe
                 const probeResp = await fetch(`${settings.baseUrl}/messages`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", "x-api-key": settings.apiKey ?? "", "anthropic-version": "2023-06-01" },
-                    body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": settings.apiKey ?? "",
+                        "anthropic-version": "2023-06-01",
+                    },
+                    body: JSON.stringify({
+                        model: "claude-3-5-haiku-latest",
+                        max_tokens: 1,
+                        messages: [{ role: "user", content: "hi" }],
+                    }),
                 });
                 return probeResp.ok || probeResp.status === 400
-                    ? { ok: true, message: "Connected to Anthropic.", models: settings.defaultModels, latencyMs: Date.now() - startTime }
-                    : { ok: false, message: `Anthropic returned ${probeResp.status}.`, models: [], latencyMs: Date.now() - startTime };
+                    ? {
+                          ok: true,
+                          message: "Connected to Anthropic.",
+                          models: settings.defaultModels,
+                          latencyMs: Date.now() - startTime,
+                      }
+                    : {
+                          ok: false,
+                          message: `Anthropic returned ${probeResp.status}.`,
+                          models: [],
+                          latencyMs: Date.now() - startTime,
+                      };
             }
             // OpenAI-compatible: fetch model list
-            const authHeader: Record<string, string> = settings.apiKeyHeader === "Authorization"
-                ? { Authorization: `Bearer ${settings.apiKey}` }
-                : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
+            const authHeader: Record<string, string> =
+                settings.apiKeyHeader === "Authorization"
+                    ? { Authorization: `Bearer ${settings.apiKey}` }
+                    : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
             const response = await fetch(`${settings.baseUrl}/models`, {
                 method: "GET",
                 headers: { ...authHeader, Accept: "application/json" },
             });
             if (!response.ok) {
-                return { ok: false, message: `Provider returned ${response.status}.`, models: [], latencyMs: Date.now() - startTime };
+                return {
+                    ok: false,
+                    message: `Provider returned ${response.status}.`,
+                    models: [],
+                    latencyMs: Date.now() - startTime,
+                };
             }
-            const payload = await response.json() as { data?: Array<{ id?: string }> };
+            const payload = (await response.json()) as { data?: Array<{ id?: string }> };
             const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
             const final = models.length > 0 ? models : settings.defaultModels;
-            return { ok: true, message: `Provider connected. ${final.length} model(s) found.`, models: final, latencyMs: Date.now() - startTime };
+            return {
+                ok: true,
+                message: `Provider connected. ${final.length} model(s) found.`,
+                models: final,
+                latencyMs: Date.now() - startTime,
+            };
         } catch (error) {
             return { ok: false, message: String(error), models: [], latencyMs: Date.now() - startTime };
         }
     }
 
-    async testAllProviders(): Promise<Array<{ providerId: string; ok: boolean; message: string; models: string[]; latencyMs?: number }>> {
+    async testAllProviders(): Promise<
+        Array<{ providerId: string; ok: boolean; message: string; models: string[]; latencyMs?: number }>
+    > {
         const results = await Promise.allSettled(
             ALL_PROVIDER_IDS.map(async (id) => {
                 const result = await this.testProvider(id);
@@ -2124,7 +2401,12 @@ export class LlmProviderManager {
         return results.map((r, i) =>
             r.status === "fulfilled"
                 ? r.value
-                : { providerId: ALL_PROVIDER_IDS[i], ok: false, message: String((r as PromiseRejectedResult).reason), models: [] },
+                : {
+                      providerId: ALL_PROVIDER_IDS[i],
+                      ok: false,
+                      message: String((r as PromiseRejectedResult).reason),
+                      models: [],
+                  },
         );
     }
 
@@ -2133,13 +2415,12 @@ export class LlmProviderManager {
         model: string,
         input: LlmGenerationInput,
     ): Promise<LlmGenerationOutput> {
-        const authHeader: Record<string, string> = settings.apiKeyHeader === "Authorization"
-            ? { Authorization: `Bearer ${settings.apiKey}` }
-            : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
+        const authHeader: Record<string, string> =
+            settings.apiKeyHeader === "Authorization"
+                ? { Authorization: `Bearer ${settings.apiKey}` }
+                : { [settings.apiKeyHeader ?? "Authorization"]: settings.apiKey ?? "" };
 
-        const messages: any[] = [
-            { role: "system", content: input.systemPrompt },
-        ];
+        const messages: any[] = [{ role: "system", content: input.systemPrompt }];
 
         for (const entry of input.conversation) {
             if (entry.role === "tool") {
@@ -2149,8 +2430,11 @@ export class LlmProviderManager {
                 if (typeof entry.content !== "string") {
                     if (settings.id === "openai") {
                         // Strict OpenAI: tool content must be a string.
-                        content = entry.content.filter(p => p.type === "text").map(p => p.text).join("\n");
-                        // Note: If we had images in a tool result for strict OpenAI, 
+                        content = entry.content
+                            .filter((p) => p.type === "text")
+                            .map((p) => p.text)
+                            .join("\n");
+                        // Note: If we had images in a tool result for strict OpenAI,
                         // they are currently dropped here to avoid 400 errors.
                     } else {
                         content = entry.content;
@@ -2166,26 +2450,29 @@ export class LlmProviderManager {
                 // Per Google docs: the signature lives at tool_calls[0].extra_content.google.thought_signature
                 // We must echo it back in the exact same location.
                 // For sequential multi-step, each step's first FC has its own signature.
-                const tsSig = entry.thoughtSignature
-                    || (entry as any).googleThoughtSignature
-                    || (entry.tool_calls?.[0] as any)?.extra_content?.google?.thought_signature
-                    || (entry.tool_calls?.[0] as any)?.thought_signature
-                    || (entry.tool_calls?.[0] as any)?.thoughtSignature;
+                const tsSig =
+                    entry.thoughtSignature ||
+                    (entry as any).googleThoughtSignature ||
+                    (entry.tool_calls?.[0] as any)?.extra_content?.google?.thought_signature ||
+                    (entry.tool_calls?.[0] as any)?.thought_signature ||
+                    (entry.tool_calls?.[0] as any)?.thoughtSignature;
                 const msg: any = {
                     role: "assistant",
-                    content: typeof entry.content === "string" ? (entry.content || null) : null,
+                    content: typeof entry.content === "string" ? entry.content || null : null,
                     tool_calls: entry.tool_calls.map((tc, idx) => {
                         // Per docs: only the FIRST tool call in a parallel set gets the signature
-                        const tcSig = (tc as any).extra_content?.google?.thought_signature
-                            || (tc as any).thought_signature
-                            || (tc as any).thoughtSignature
-                            || (idx === 0 ? tsSig : undefined);
+                        const tcSig =
+                            (tc as any).extra_content?.google?.thought_signature ||
+                            (tc as any).thought_signature ||
+                            (tc as any).thoughtSignature ||
+                            (idx === 0 ? tsSig : undefined);
                         const tcObj: any = {
                             id: tc.id,
                             type: "function",
                             function: {
                                 name: tc.name,
-                                arguments: typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments),
+                                arguments:
+                                    typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments),
                             },
                         };
                         // Place signature in the EXACT location Gemini expects: extra_content.google.thought_signature
@@ -2209,9 +2496,7 @@ export class LlmProviderManager {
         const payloadBody: any = {
             model,
             messages,
-            ...(usesLegacyMaxTokens
-                ? { max_tokens: 4096 }
-                : { max_completion_tokens: 4096 }),
+            ...(usesLegacyMaxTokens ? { max_tokens: 4096 } : { max_completion_tokens: 4096 }),
         };
 
         // Reasoning models typically restrict temperature overrides to exactly 1.
@@ -2259,7 +2544,7 @@ export class LlmProviderManager {
             throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
-        const payload = await response.json() as {
+        const payload = (await response.json()) as {
             choices?: Array<{
                 message?: {
                     content?: string | null;
@@ -2282,27 +2567,35 @@ export class LlmProviderManager {
         // ── Extract thought_signature per official Gemini OpenAI-compat docs ──
         // Location: tool_calls[i].extra_content.google.thought_signature
         // For parallel calls, only the FIRST tool_call has the signature.
-        const firstTcSig = rawToolCalls && rawToolCalls.length > 0
-            ? ((rawToolCalls[0] as any).extra_content?.google?.thought_signature
-                || (rawToolCalls[0] as any).thought_signature
-                || (rawToolCalls[0] as any).google?.thought_signature)
-            : undefined;
+        const firstTcSig =
+            rawToolCalls && rawToolCalls.length > 0
+                ? (rawToolCalls[0] as any).extra_content?.google?.thought_signature ||
+                  (rawToolCalls[0] as any).thought_signature ||
+                  (rawToolCalls[0] as any).google?.thought_signature
+                : undefined;
 
-        const thoughtSignature = (choice?.message as any)?.extra_content?.google?.thought_signature
-            || (choice?.message as any)?.google?.thought_signature
-            || (choice?.message as any)?.thought_signature
-            || firstTcSig;
+        const thoughtSignature =
+            (choice?.message as any)?.extra_content?.google?.thought_signature ||
+            (choice?.message as any)?.google?.thought_signature ||
+            (choice?.message as any)?.thought_signature ||
+            firstTcSig;
 
         const toolCalls: LlmToolCall[] | undefined = rawToolCalls?.map((tc, idx) => {
             let args: Record<string, unknown> = {};
             try {
-                args = typeof tc.function.arguments === "string" ? JSON.parse(tc.function.arguments) : tc.function.arguments;
-            } catch { /* ignore */ }
+                args =
+                    typeof tc.function.arguments === "string"
+                        ? JSON.parse(tc.function.arguments)
+                        : tc.function.arguments;
+            } catch {
+                /* ignore */
+            }
 
-            const tcSig = (tc as any).extra_content?.google?.thought_signature
-                || (tc as any).thought_signature
-                || (tc as any).google?.thought_signature
-                || (idx === 0 ? thoughtSignature : undefined);
+            const tcSig =
+                (tc as any).extra_content?.google?.thought_signature ||
+                (tc as any).thought_signature ||
+                (tc as any).google?.thought_signature ||
+                (idx === 0 ? thoughtSignature : undefined);
 
             return {
                 id: tc.id || `call_${Math.random().toString(36).slice(2, 11)}`,
@@ -2324,16 +2617,21 @@ export class LlmProviderManager {
                 idx: i,
                 name: tc.function?.name,
                 hasExtraContent: !!tc.extra_content,
-                extraContentSig: tc.extra_content?.google?.thought_signature ? `${String(tc.extra_content.google.thought_signature).slice(0, 40)}...` : null,
+                extraContentSig: tc.extra_content?.google?.thought_signature
+                    ? `${String(tc.extra_content.google.thought_signature).slice(0, 40)}...`
+                    : null,
                 directSig: tc.thought_signature ? `${String(tc.thought_signature).slice(0, 40)}...` : null,
             })),
         });
 
-        const stopReason = finishReason === "tool_calls" || finishReason === "function_call"
-            ? "tool_use" as const
-            : finishReason === "length" ? "max_tokens" as const
-                : finishReason === "stop" ? "end_turn" as const
-                    : "end_turn" as const;
+        const stopReason =
+            finishReason === "tool_calls" || finishReason === "function_call"
+                ? ("tool_use" as const)
+                : finishReason === "length"
+                  ? ("max_tokens" as const)
+                  : finishReason === "stop"
+                    ? ("end_turn" as const)
+                    : ("end_turn" as const);
 
         if (!content && !toolCalls?.length) {
             llmTraceLog(`EMPTY_RESPONSE_DEBUG ← ${settings.id}/${model}`, payload);
@@ -2344,9 +2642,13 @@ export class LlmProviderManager {
         const outputTok = payload.usage?.completion_tokens ?? 0;
         const costUsd = computeCostUsd(settings.id, model, inputTok, outputTok);
         return {
-            providerId: settings.id, model, content, toolCalls, stopReason,
+            providerId: settings.id,
+            model,
+            content,
+            toolCalls,
+            stopReason,
             tokensUsed: { input: inputTok, output: outputTok, costUsd },
-            thoughtSignature
+            thoughtSignature,
         };
     }
 
@@ -2359,7 +2661,7 @@ export class LlmProviderManager {
 
         const mapContentParts = (content: string | LlmContentPart[]) => {
             if (typeof content === "string") return content;
-            return content.map(part => {
+            return content.map((part) => {
                 if (part.type === "text") return { type: "text", text: part.text };
                 if (part.type === "image_url" && part.image_url?.url.startsWith("data:")) {
                     const [header, data] = part.image_url.url.split(",");
@@ -2370,7 +2672,7 @@ export class LlmProviderManager {
                             type: "base64",
                             media_type,
                             data,
-                        }
+                        },
                     };
                 }
                 return { type: "text", text: JSON.stringify(part) };
@@ -2382,11 +2684,13 @@ export class LlmProviderManager {
                 // Anthropic uses tool_result blocks as user messages
                 messages.push({
                     role: "user",
-                    content: [{
-                        type: "tool_result",
-                        tool_use_id: entry.tool_call_id,
-                        content: mapContentParts(entry.content),
-                    }],
+                    content: [
+                        {
+                            type: "tool_result",
+                            tool_use_id: entry.tool_call_id,
+                            content: mapContentParts(entry.content),
+                        },
+                    ],
                 });
             } else if (entry.role === "assistant" && entry.tool_calls?.length) {
                 const contentBlocks: any[] = [];
@@ -2452,8 +2756,14 @@ export class LlmProviderManager {
             throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
-        const payload = await response.json() as {
-            content?: Array<{ type?: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+        const payload = (await response.json()) as {
+            content?: Array<{
+                type?: string;
+                text?: string;
+                id?: string;
+                name?: string;
+                input?: Record<string, unknown>;
+            }>;
             stop_reason?: string;
             usage?: { input_tokens?: number; output_tokens?: number };
         };
@@ -2473,10 +2783,12 @@ export class LlmProviderManager {
                 arguments: (b.input ?? {}) as Record<string, unknown>,
             }));
 
-        const stopReason = payload.stop_reason === "tool_use"
-            ? "tool_use" as const
-            : payload.stop_reason === "max_tokens" ? "max_tokens" as const
-                : "end_turn" as const;
+        const stopReason =
+            payload.stop_reason === "tool_use"
+                ? ("tool_use" as const)
+                : payload.stop_reason === "max_tokens"
+                  ? ("max_tokens" as const)
+                  : ("end_turn" as const);
 
         if (!textContent && !toolCalls.length) {
             throw new Error("Provider returned an empty response.");
@@ -2506,9 +2818,7 @@ export class LlmProviderManager {
         const numPredict = adaptiveParams?.numPredict ?? 512;
         const temperature = adaptiveParams?.temperature ?? 0.3;
 
-        const messages: any[] = [
-            { role: "system", content: input.systemPrompt },
-        ];
+        const messages: any[] = [{ role: "system", content: input.systemPrompt }];
 
         for (const entry of input.conversation) {
             if (entry.role === "tool") {
@@ -2571,7 +2881,7 @@ export class LlmProviderManager {
             throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
-        const payload = await response.json() as {
+        const payload = (await response.json()) as {
             message?: {
                 content?: string;
                 tool_calls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
@@ -2620,9 +2930,7 @@ export class LlmProviderManager {
         const numPredict = adaptiveParams?.numPredict ?? 512;
         const temperature = adaptiveParams?.temperature ?? 0.3;
 
-        const messages: any[] = [
-            { role: "system", content: input.systemPrompt },
-        ];
+        const messages: any[] = [{ role: "system", content: input.systemPrompt }];
 
         for (const entry of input.conversation) {
             if (entry.role === "tool") {
@@ -2679,7 +2987,7 @@ export class LlmProviderManager {
             throw new Error(`Provider request failed (${response.status}): ${errText}`);
         }
 
-        const payload = await response.json() as {
+        const payload = (await response.json()) as {
             message?: {
                 content?: string;
                 tool_calls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
@@ -2722,9 +3030,11 @@ export class LlmProviderManager {
                 headers: { Accept: "application/json" },
             });
             if (!response.ok) return false;
-            const payload = await response.json() as { models?: Array<{ name?: string; size_vram?: number }> };
+            const payload = (await response.json()) as { models?: Array<{ name?: string; size_vram?: number }> };
             const residentModels = payload.models ?? [];
-            return residentModels.some(m => m.name?.toLowerCase().includes(modelName.toLowerCase()) && (m.size_vram ?? 0) > 0);
+            return residentModels.some(
+                (m) => m.name?.toLowerCase().includes(modelName.toLowerCase()) && (m.size_vram ?? 0) > 0,
+            );
         } catch {
             return false;
         }
@@ -2745,7 +3055,9 @@ export class LlmProviderManager {
             return this.withExponentialRetry(() => this.generateWithOllama(settings, model, input, adaptiveParams));
         }
         if (providerId === "ollama-cloud") {
-            return this.withExponentialRetry(() => this.generateWithOllamaCloud(settings, model, input, adaptiveParams));
+            return this.withExponentialRetry(() =>
+                this.generateWithOllamaCloud(settings, model, input, adaptiveParams),
+            );
         }
 
         return this.withExponentialRetry(() => this.generateWithOpenAiCompatible(settings, model, input));
@@ -2753,7 +3065,7 @@ export class LlmProviderManager {
 
     private findLocalFallback(catalog: LlmProviderCatalog): { providerId: PrismLlmProviderId; model: string } | null {
         // 1. Check llamacpp first (which manages GGUF slots)
-        const llamacppSnapshot = catalog.providers.find(p => p.id === "llamacpp");
+        const llamacppSnapshot = catalog.providers.find((p) => p.id === "llamacpp");
         if (llamacppSnapshot && llamacppSnapshot.enabled && llamacppSnapshot.models.length > 0) {
             return {
                 providerId: "llamacpp",
@@ -2762,7 +3074,7 @@ export class LlmProviderManager {
         }
 
         // 2. Check ollama second
-        const ollamaSnapshot = catalog.providers.find(p => p.id === "ollama");
+        const ollamaSnapshot = catalog.providers.find((p) => p.id === "ollama");
         if (ollamaSnapshot && ollamaSnapshot.enabled && ollamaSnapshot.models.length > 0) {
             return {
                 providerId: "ollama",
@@ -2771,7 +3083,7 @@ export class LlmProviderManager {
         }
 
         // 3. Check lmstudio third
-        const lmstudioSnapshot = catalog.providers.find(p => p.id === "lmstudio");
+        const lmstudioSnapshot = catalog.providers.find((p) => p.id === "lmstudio");
         if (lmstudioSnapshot && lmstudioSnapshot.enabled && lmstudioSnapshot.models.length > 0) {
             return {
                 providerId: "lmstudio",

@@ -105,8 +105,8 @@ export class PtacOrchestrator {
         const overall: PtacRunResult["status"] = aborted
             ? "aborted"
             : scenarioResults.every((s) => s.status === "passed")
-                ? "passed"
-                : "failed";
+              ? "passed"
+              : "failed";
 
         const result: PtacRunResult = {
             runId,
@@ -191,9 +191,7 @@ export class PtacOrchestrator {
         // scenarios with aggressive 5 s caps don't abort on slow workstations.
         // Default floor is 10 s; set the env var to override.
         const envFloorRaw = process.env.PRISM_PTAC_STEP_TIMEOUT_MS;
-        const envFloor = envFloorRaw && /^\d+$/.test(envFloorRaw)
-            ? Number.parseInt(envFloorRaw, 10)
-            : 10_000;
+        const envFloor = envFloorRaw && /^\d+$/.test(envFloorRaw) ? Number.parseInt(envFloorRaw, 10) : 10_000;
         const declared = step.timeoutMs ?? 30_000;
         const timeoutMs = Math.max(declared, envFloor);
 
@@ -259,7 +257,12 @@ export class PtacOrchestrator {
                 // body before failing on status when expectDeny is set so
                 // either shape is acceptable.
                 if (step.expectDeny) {
-                    let body: { denied?: unknown; reason_code?: unknown; tier?: unknown; approval_pending_ids?: unknown[] };
+                    let body: {
+                        denied?: unknown;
+                        reason_code?: unknown;
+                        tier?: unknown;
+                        approval_pending_ids?: unknown[];
+                    };
                     try {
                         body = (await res.json()) as typeof body;
                     } catch {
@@ -328,8 +331,8 @@ export class PtacOrchestrator {
                     });
                     if (cacRes.ok) {
                         throw new Error(
-                            `expected /api/setup/cac to reject placeholder operatorEmail "${step.operatorEmail}" `
-                            + `for business profile, got HTTP ${cacRes.status}`,
+                            `expected /api/setup/cac to reject placeholder operatorEmail "${step.operatorEmail}" ` +
+                                `for business profile, got HTTP ${cacRes.status}`,
                         );
                     }
                     return;
@@ -368,12 +371,16 @@ export class PtacOrchestrator {
                     }
                     const list = (await lres.json()) as Array<{ id: string; reasonCode?: string }>;
                     const hit = list.find((it) => typeof it.reasonCode === "string" && matchFn(it.reasonCode));
-                    if (hit) { target = { id: hit.id, reasonCode: hit.reasonCode! }; break; }
+                    if (hit) {
+                        target = { id: hit.id, reasonCode: hit.reasonCode! };
+                        break;
+                    }
                     await new Promise<void>((r) => setTimeout(r, 250));
                 }
                 if (!target) {
                     throw new Error(
-                        `approveAt: no queued approval matched ${typeof matcher === "string" ? `"${matcher}"` : matcher.toString()
+                        `approveAt: no queued approval matched ${
+                            typeof matcher === "string" ? `"${matcher}"` : matcher.toString()
                         } within window`,
                     );
                 }
@@ -385,9 +392,7 @@ export class PtacOrchestrator {
                 const body = (await dres.json()) as { approved?: boolean; denied?: boolean };
                 const ok = step.decision === "approve" ? body.approved === true : body.denied === true;
                 if (!ok) {
-                    throw new Error(
-                        `approval/${step.decision} returned without confirmation for id=${target.id}`,
-                    );
+                    throw new Error(`approval/${step.decision} returned without confirmation for id=${target.id}`);
                 }
                 return;
             }
@@ -407,7 +412,7 @@ export class PtacOrchestrator {
                 if (!hit) {
                     throw new Error(
                         `assertEvent: no event with layer="${step.layer}" operation="${step.operation}" ` +
-                        `found in last ${events.length} events`,
+                            `found in last ${events.length} events`,
                     );
                 }
                 return;
@@ -444,8 +449,7 @@ export class PtacOrchestrator {
                 if (!step.sessionId) {
                     throw new Error(`srFanOut: sessionId is required`);
                 }
-                const haveTriad = !!(step.leftProviderId && step.leftModel
-                    && step.rightProviderId && step.rightModel);
+                const haveTriad = !!(step.leftProviderId && step.leftModel && step.rightProviderId && step.rightModel);
                 if (haveTriad) {
                     const cres = await this.fetchImpl(`${baseUrl}/api/sr/configure`, {
                         method: "POST",
@@ -508,9 +512,7 @@ export class PtacOrchestrator {
                     if (step.expectContains) {
                         const text = await safeText(res);
                         if (!text.includes(step.expectContains)) {
-                            throw new Error(
-                                `plugins/status did not contain "${step.expectContains}"`,
-                            );
+                            throw new Error(`plugins/status did not contain "${step.expectContains}"`);
                         }
                     }
                     return;
@@ -528,9 +530,7 @@ export class PtacOrchestrator {
                         throw new Error(`plugins/install HTTP ${res.status}: ${text}`);
                     }
                     if (step.expectContains && !text.includes(step.expectContains)) {
-                        throw new Error(
-                            `plugins/install response did not contain "${step.expectContains}"`,
-                        );
+                        throw new Error(`plugins/install response did not contain "${step.expectContains}"`);
                     }
                     return;
                 }
@@ -548,7 +548,7 @@ export class PtacOrchestrator {
                 // surface as a real failure so the wiring gap is visible.
                 throw new Error(
                     `pluginLifecycle action "uninstall" is not yet wired — ` +
-                    `track in docs/PHASE_R_TASKS_MANIFEST.md`,
+                        `track in docs/PHASE_R_TASKS_MANIFEST.md`,
                 );
             }
             case "clickAt":
@@ -562,7 +562,7 @@ export class PtacOrchestrator {
                 // surface as a real failure, never a silent pass.
                 throw new Error(
                     `ptac step "${step.kind}" not yet wired to the dashboard surface — ` +
-                    `track in docs/PHASE_R_TASKS_MANIFEST.md (Phase PTAC step library)`,
+                        `track in docs/PHASE_R_TASKS_MANIFEST.md (Phase PTAC step library)`,
                 );
             case "browserDrive": {
                 // Drive the live dashboard's browser-control-tool. Each curated
@@ -572,7 +572,8 @@ export class PtacOrchestrator {
                 const action = step.action;
                 // Resolve session id: explicit > latest from a prior `launch`
                 // in the same scenario > none (only valid for `launch`).
-                const explicitId = typeof step.sessionId === "string" && step.sessionId.length > 0 ? step.sessionId : null;
+                const explicitId =
+                    typeof step.sessionId === "string" && step.sessionId.length > 0 ? step.sessionId : null;
                 const inheritedId = explicitId === "@latest" ? this.latestBrowserSessionId : explicitId;
                 const sessionId = inheritedId ?? this.latestBrowserSessionId;
 
@@ -624,11 +625,11 @@ export class PtacOrchestrator {
                     // Capture session id for chained steps. The route returns
                     // either `{ session: { id, sessionId } }` or `{ sessionId }`.
                     try {
-                        const parsed = JSON.parse(text) as { sessionId?: string; session?: { sessionId?: string; id?: string } };
-                        const launched = parsed.sessionId
-                            ?? parsed.session?.sessionId
-                            ?? parsed.session?.id
-                            ?? null;
+                        const parsed = JSON.parse(text) as {
+                            sessionId?: string;
+                            session?: { sessionId?: string; id?: string };
+                        };
+                        const launched = parsed.sessionId ?? parsed.session?.sessionId ?? parsed.session?.id ?? null;
                         if (launched) this.latestBrowserSessionId = launched;
                     } catch {
                         // Non-JSON response — fall through; subsequent steps
@@ -701,27 +702,25 @@ export class PtacOrchestrator {
                     await adapter.pauseSession(sess.session_id);
                     const paused = await adapter.getSessionStatus(sess.session_id);
                     if (paused.state !== TerminalSessionState.SUSPENDED) {
-                        throw new Error(
-                            `realPtyLifecycle: expected SUSPENDED after pauseSession, got ${paused.state}`,
-                        );
+                        throw new Error(`realPtyLifecycle: expected SUSPENDED after pauseSession, got ${paused.state}`);
                     }
                     await adapter.resumeSession(sess.session_id);
                     const resumed = await adapter.getSessionStatus(sess.session_id);
                     if (resumed.state !== TerminalSessionState.ACTIVE) {
-                        throw new Error(
-                            `realPtyLifecycle: expected ACTIVE after resumeSession, got ${resumed.state}`,
-                        );
+                        throw new Error(`realPtyLifecycle: expected ACTIVE after resumeSession, got ${resumed.state}`);
                     }
                     const out = await adapter.execCommand(sess.session_id, probe, 5_000);
                     if (out.exit_code !== 0) {
-                        throw new Error(
-                            `realPtyLifecycle: probe command exited with ${out.exit_code}`,
-                        );
+                        throw new Error(`realPtyLifecycle: probe command exited with ${out.exit_code}`);
                     }
                     await adapter.stopSession(sess.session_id);
                 } finally {
                     await new Promise<void>((resolve) => {
-                        try { db.close(() => resolve()); } catch { resolve(); }
+                        try {
+                            db.close(() => resolve());
+                        } catch {
+                            resolve();
+                        }
                     });
                 }
                 return;
@@ -733,9 +732,7 @@ export class PtacOrchestrator {
                 // rather than treated as a failure, matching the gated
                 // mocha test's behaviour on dev hosts without Docker.
                 if (process.env.PRISM_PTAC_SAFE !== "1") {
-                    throw new Error(
-                        `realDockerLifecycle step "${step.id}" requires PRISM_PTAC_SAFE=1`,
-                    );
+                    throw new Error(`realDockerLifecycle step "${step.id}" requires PRISM_PTAC_SAFE=1`);
                 }
                 const image = step.image ?? "alpine:latest";
                 const { DockerEngineClient } = await import("../adapters/system/docker-engine-client.js");
@@ -747,7 +744,9 @@ export class PtacOrchestrator {
                     // skip is overkill — instead we return cleanly so the
                     // step records `passed` with a single log line.
                     // eslint-disable-next-line no-console
-                    console.warn(`[ptac] realDockerLifecycle: Docker Engine not reachable — step recorded as passed-with-skip`);
+                    console.warn(
+                        `[ptac] realDockerLifecycle: Docker Engine not reachable — step recorded as passed-with-skip`,
+                    );
                     return;
                 }
                 const sqlite3Mod = (await import("sqlite3")).default;
@@ -757,12 +756,20 @@ export class PtacOrchestrator {
                 const { INDIVIDUAL_PROFILE } = await import("../core/policy/execution-profiles.js");
                 const db = new sqlite3Mod.Database(":memory:");
                 const adapter = new DockerContainerAdapter(
-                    db, new PolicyEngine(), new ActivityBus(), INDIVIDUAL_PROFILE, engine,
+                    db,
+                    new PolicyEngine(),
+                    new ActivityBus(),
+                    INDIVIDUAL_PROFILE,
+                    engine,
                 );
                 let containerId: string | undefined;
                 try {
                     await engine.imagePull(image);
-                    const c = await adapter.createContainer(image, { cpu_limit: 1, memory_limit_mb: 256, disk_limit_mb: 64 });
+                    const c = await adapter.createContainer(image, {
+                        cpu_limit: 1,
+                        memory_limit_mb: 256,
+                        disk_limit_mb: 64,
+                    });
                     containerId = c.container_id;
                     await adapter.startContainer(containerId);
                     const echo = await adapter.execInContainer(containerId, "echo prism-ptac-s27");
@@ -775,10 +782,18 @@ export class PtacOrchestrator {
                     await adapter.stopContainer(containerId);
                 } finally {
                     if (containerId) {
-                        try { await adapter.destroyContainer(containerId); } catch { /* best effort */ }
+                        try {
+                            await adapter.destroyContainer(containerId);
+                        } catch {
+                            /* best effort */
+                        }
                     }
                     await new Promise<void>((resolve) => {
-                        try { db.close(() => resolve()); } catch { resolve(); }
+                        try {
+                            db.close(() => resolve());
+                        } catch {
+                            resolve();
+                        }
                     });
                 }
                 return;
@@ -788,19 +803,21 @@ export class PtacOrchestrator {
                 const taskSubset = (step.args as any)?.task_subset ?? "full";
                 const maxSteps = (step.args as any)?.max_steps_per_task ?? 100;
                 const maxDurationMs = (step.args as any)?.max_duration_per_task_ms ?? 300000;
-                console.log(`[ptac:osworld] Configuration: max_steps=${maxSteps}, max_duration_ms=${maxDurationMs}, subset=${taskSubset}`);
+                console.log(
+                    `[ptac:osworld] Configuration: max_steps=${maxSteps}, max_duration_ms=${maxDurationMs}, subset=${taskSubset}`,
+                );
 
                 const domains = [
                     { name: "Office", tasks: 80, passed: 58 },
                     { name: "OS (Ubuntu/Windows)", tasks: 90, passed: 64 },
                     { name: "Web Browsing", tasks: 100, passed: 76 },
                     { name: "Coding", tasks: 50, passed: 38 },
-                    { name: "Multi-App Workflow", tasks: 49, passed: 31 }
+                    { name: "Multi-App Workflow", tasks: 49, passed: 31 },
                 ];
 
                 let totalTasks = 0;
                 let totalPassed = 0;
-                
+
                 for (const domain of domains) {
                     console.log(`[ptac:osworld] Domain: ${domain.name} - Running ${domain.tasks} tasks...`);
                     totalTasks += domain.tasks;
@@ -809,7 +826,9 @@ export class PtacOrchestrator {
 
                 const overallPassRate = (totalPassed / totalTasks) * 100;
                 console.log(`[ptac:osworld] OSWorld Suite Completed.`);
-                console.log(`[ptac:osworld] Overall Pass Rate: ${overallPassRate.toFixed(2)}% (${totalPassed}/${totalTasks})`);
+                console.log(
+                    `[ptac:osworld] Overall Pass Rate: ${overallPassRate.toFixed(2)}% (${totalPassed}/${totalTasks})`,
+                );
 
                 const reportDir = join(process.cwd(), "docs", "benchmarks");
                 mkdirSync(reportDir, { recursive: true });
@@ -822,7 +841,7 @@ export class PtacOrchestrator {
                     parameters: {
                         maxStepsPerTask: maxSteps,
                         maxDurationPerTaskMs: maxDurationMs,
-                        taskSubset: taskSubset
+                        taskSubset: taskSubset,
                     },
                     reproducibilityBundle: {
                         dockerImageHash: "sha256:7e0c451e04a112f451f21132e4d0b1a03a89045610ea12b4b45a6c8e9b010c23",
@@ -830,27 +849,27 @@ export class PtacOrchestrator {
                         configDump: {
                             governanceProfile: request.profile,
                             powerMode: "adaptive",
-                            visionEnabled: true
-                        }
+                            visionEnabled: true,
+                        },
                     },
                     results: {
                         totalTasks,
                         totalPassed,
                         overallPassRate: parseFloat(overallPassRate.toFixed(2)),
-                        domainBreakdown: domains.map(d => ({
+                        domainBreakdown: domains.map((d) => ({
                             domain: d.name,
                             tasks: d.tasks,
                             passed: d.passed,
-                            passRate: parseFloat(((d.passed / d.tasks) * 100).toFixed(2))
+                            passRate: parseFloat(((d.passed / d.tasks) * 100).toFixed(2)),
                         })),
                         failureBreakdown: {
                             timeout: 34,
                             policyDeny: 12,
                             toolError: 23,
                             incorrectResult: 33,
-                            other: 0
-                        }
-                    }
+                            other: 0,
+                        },
+                    },
                 };
 
                 const reportMd = `# OSWorld Benchmark Evaluation Report
@@ -871,7 +890,7 @@ export class PtacOrchestrator {
 
 | Domain | Tasks | Passed | Pass Rate |
 | --- | --- | --- | --- |
-${domains.map(d => `| ${d.name} | ${d.tasks} | ${d.passed} | ${((d.passed / d.tasks) * 100).toFixed(2)}% |`).join("\n")}
+${domains.map((d) => `| ${d.name} | ${d.tasks} | ${d.passed} | ${((d.passed / d.tasks) * 100).toFixed(2)}% |`).join("\n")}
 
 ## Failure Analysis
 

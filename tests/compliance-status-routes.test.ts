@@ -28,10 +28,15 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });

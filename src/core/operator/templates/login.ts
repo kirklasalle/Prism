@@ -1,5 +1,5 @@
 export function loginHtml(port: number): string {
-  return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -138,8 +138,12 @@ export function loginHtml(port: number): string {
       filter: brightness(1.1);
       box-shadow: 0 15px 25px -10px var(--accent-cyan);
     }
-    button[type="submit"]:active {
-      transform: translateY(0);
+    button[type="submit"]:active,
+    .badge-btn:active,
+    .small-button:active {
+      transform: scale(0.95) !important;
+      filter: brightness(0.9) !important;
+      transition: transform 0.08s ease-out, filter 0.08s ease-out;
     }
     .quick-fill {
       margin-top: 2rem;
@@ -598,4 +602,3 @@ export function loginHtml(port: number): string {
 </body>
 </html>`;
 }
-

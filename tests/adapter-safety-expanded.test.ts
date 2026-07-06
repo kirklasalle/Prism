@@ -74,13 +74,9 @@ async function testShellHostileInputs(): Promise<void> {
 
     // Hostile pattern embedded with surrounding noise — current implementation
     // uses substring match, so "echo hi && rm -rf /" must also be blocked.
-    const embedded = await shell.execute(makeRequest(
-        "shell_exec",
-        { command: "echo hi && rm -rf /" },
-        true,
-        "high",
-        "n/a",
-    ));
+    const embedded = await shell.execute(
+        makeRequest("shell_exec", { command: "echo hi && rm -rf /" }, true, "high", "n/a"),
+    );
     assert.strictEqual(embedded.ok, false, "embedded blocked-pattern must be denied");
 
     // Whitespace-only command is treated as missing.
@@ -89,12 +85,14 @@ async function testShellHostileInputs(): Promise<void> {
     assert.match(String((ws.output as { error?: string }).error ?? ""), /No command supplied/i);
 
     // Non-existent cwd must surface a non-blocked error (i.e., ok=false but not "blocked").
-    const badCwd = await shell.execute(makeRequest(
-        "shell_exec",
-        { command: "echo ok", cwd: path.join(os.tmpdir(), "prism-no-such-dir-" + Date.now()) },
-        false,
-        "low",
-    ));
+    const badCwd = await shell.execute(
+        makeRequest(
+            "shell_exec",
+            { command: "echo ok", cwd: path.join(os.tmpdir(), "prism-no-such-dir-" + Date.now()) },
+            false,
+            "low",
+        ),
+    );
     assert.strictEqual(badCwd.ok, false);
     assert.doesNotMatch(String((badCwd.output as { error?: string }).error ?? ""), /blocked/i);
 }
@@ -122,25 +120,17 @@ async function testFileToolEdgeCases(): Promise<void> {
 
         // Delete of non-existent path with recursive=false must fail (not silently succeed).
         const ghost = path.join(testDir, "does-not-exist.txt");
-        const ghostDel = await deleter.execute(makeRequest(
-            "file_delete",
-            { path: ghost, recursive: false },
-            true,
-            "medium",
-            "n/a",
-        ));
+        const ghostDel = await deleter.execute(
+            makeRequest("file_delete", { path: ghost, recursive: false }, true, "medium", "n/a"),
+        );
         assert.strictEqual(ghostDel.ok, false, "deleting a non-existent path must fail when recursive=false");
 
         // Large-content roundtrip (1 MiB) — must preserve byte-for-byte.
         const big = path.join(testDir, "big.bin");
         const payload = "x".repeat(1024 * 1024);
-        const wrote = await writer.execute(makeRequest(
-            "file_write",
-            { path: big, content: payload },
-            true,
-            "medium",
-            "delete file",
-        ));
+        const wrote = await writer.execute(
+            makeRequest("file_write", { path: big, content: payload }, true, "medium", "delete file"),
+        );
         assert.strictEqual(wrote.ok, true);
         assert.strictEqual((wrote.output as { bytesWritten?: number }).bytesWritten, payload.length);
 
@@ -149,18 +139,19 @@ async function testFileToolEdgeCases(): Promise<void> {
         assert.strictEqual((readBig.output as { content?: string }).content?.length, payload.length);
 
         // file_list on a non-existent dir must fail without crashing.
-        const listGhost = await lister.execute(makeRequest(
-            "file_list",
-            { path: path.join(testDir, "no-such-subdir") },
-            false,
-            "low",
-        ));
+        const listGhost = await lister.execute(
+            makeRequest("file_list", { path: path.join(testDir, "no-such-subdir") }, false, "low"),
+        );
         assert.strictEqual(listGhost.ok, false);
 
         // Append-mode roundtrip preserves prior content.
         const appendFile = path.join(testDir, "append.txt");
-        await writer.execute(makeRequest("file_write", { path: appendFile, content: "head" }, true, "medium", "delete file"));
-        await writer.execute(makeRequest("file_write", { path: appendFile, content: "-tail", append: true }, true, "medium", "restore"));
+        await writer.execute(
+            makeRequest("file_write", { path: appendFile, content: "head" }, true, "medium", "delete file"),
+        );
+        await writer.execute(
+            makeRequest("file_write", { path: appendFile, content: "-tail", append: true }, true, "medium", "restore"),
+        );
         const appendRead = await reader.execute(makeRequest("file_read", { path: appendFile }, false, "low"));
         assert.strictEqual(appendRead.ok, true);
         assert.strictEqual((appendRead.output as { content?: string }).content, "head-tail");
@@ -194,7 +185,9 @@ async function testHttpToolEdgeCases(): Promise<void> {
         if (req.url === "/headers") {
             res.statusCode = 200;
             res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ ua: req.headers["user-agent"] ?? null, custom: req.headers["x-prism-test"] ?? null }));
+            res.end(
+                JSON.stringify({ ua: req.headers["user-agent"] ?? null, custom: req.headers["x-prism-test"] ?? null }),
+            );
             return;
         }
         if (req.url === "/slow") {
@@ -221,43 +214,27 @@ async function testHttpToolEdgeCases(): Promise<void> {
 
     try {
         // Non-2xx must surface ok=false but preserve the status code in output.
-        const err = await http.execute(makeRequest(
-            "http_request",
-            { url: `${baseUrl}/server-error` },
-            false,
-            "low",
-        ));
+        const err = await http.execute(makeRequest("http_request", { url: `${baseUrl}/server-error` }, false, "low"));
         assert.strictEqual(err.ok, false, "5xx response must mark ToolResult.ok=false");
         assert.strictEqual((err.output as { status?: number }).status, 503);
         assert.deepStrictEqual((err.output as { body?: unknown }).body, { err: "unavailable" });
 
         // Custom headers are propagated to the request.
-        const hdr = await http.execute(makeRequest(
-            "http_request",
-            { url: `${baseUrl}/headers`, headers: { "x-prism-test": "ok" } },
-            false,
-            "low",
-        ));
+        const hdr = await http.execute(
+            makeRequest("http_request", { url: `${baseUrl}/headers`, headers: { "x-prism-test": "ok" } }, false, "low"),
+        );
         assert.strictEqual(hdr.ok, true);
         assert.strictEqual((hdr.output as { body?: { custom?: string } }).body?.custom, "ok");
 
         // timeoutMs aborts the request before the server replies.
-        const slow = await http.execute(makeRequest(
-            "http_request",
-            { url: `${baseUrl}/slow`, timeoutMs: 50 },
-            false,
-            "low",
-        ));
+        const slow = await http.execute(
+            makeRequest("http_request", { url: `${baseUrl}/slow`, timeoutMs: 50 }, false, "low"),
+        );
         assert.strictEqual(slow.ok, false);
         assert.match(String((slow.output as { error?: string }).error ?? ""), /abort|timeout/i);
 
         // Non-JSON body is preserved as a raw string in `body`.
-        const txt = await http.execute(makeRequest(
-            "http_request",
-            { url: `${baseUrl}/non-json` },
-            false,
-            "low",
-        ));
+        const txt = await http.execute(makeRequest("http_request", { url: `${baseUrl}/non-json` }, false, "low"));
         assert.strictEqual(txt.ok, true);
         assert.strictEqual(typeof (txt.output as { body?: unknown }).body, "string");
         assert.match(String((txt.output as { body?: unknown }).body), /not json/);

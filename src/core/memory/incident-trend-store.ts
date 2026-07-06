@@ -78,7 +78,11 @@ export class IncidentTrendStore {
      */
     close(): void {
         if (this.unsubscribe) {
-            try { this.unsubscribe(); } catch { /* ignore */ }
+            try {
+                this.unsubscribe();
+            } catch {
+                /* ignore */
+            }
             this.unsubscribe = null;
         }
     }
@@ -100,8 +104,12 @@ export class IncidentTrendStore {
         let bucket = this.buckets.get(key);
         if (!bucket) {
             bucket = {
-                day, profile,
-                policyDenies: 0, approvalTimeouts: 0, retrievalAlerts: 0, incidents: 0,
+                day,
+                profile,
+                policyDenies: 0,
+                approvalTimeouts: 0,
+                retrievalAlerts: 0,
+                incidents: 0,
             };
             this.buckets.set(key, bucket);
         }

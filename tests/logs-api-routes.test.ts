@@ -36,10 +36,15 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });
@@ -47,20 +52,28 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
 
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? {} : { "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -95,16 +108,21 @@ describe("Logs & Debug API Routes", function () {
             },
             chatStore,
             [
-                { name: "test-action", label: "Test Action", description: "A test action", run: async () => ({ message: "done" }) },
+                {
+                    name: "test-action",
+                    label: "Test Action",
+                    description: "A test action",
+                    run: async () => ({ message: "done" }),
+                },
             ],
-            0,                                           // port = ephemeral
-            undefined,                                   // metricsCollector
-            undefined,                                   // retrievalDashboardStore
-            new InMemoryProviderSecretStore(),            // providerSecretStore
-            undefined,                                   // activityStore
-            join(tmpDir, "session-packages.json"),        // sessionPackageStorePath
-            join(tmpDir, "exports"),                      // sessionPackageExportDir
-            registry,                                    // toolRegistry
+            0, // port = ephemeral
+            undefined, // metricsCollector
+            undefined, // retrievalDashboardStore
+            new InMemoryProviderSecretStore(), // providerSecretStore
+            undefined, // activityStore
+            join(tmpDir, "session-packages.json"), // sessionPackageStorePath
+            join(tmpDir, "exports"), // sessionPackageExportDir
+            registry, // toolRegistry
         );
 
         service.start();
@@ -212,16 +230,14 @@ describe("Logs & Debug API Routes", function () {
         it("returns 404 for nonexistent approval ID", async () => {
             const { status } = await requestJson("POST", "/api/approve/nonexistent-id");
             // Should be 404 or 400 — the approval doesn't exist
-            assert.ok(status === 404 || status === 400 || status === 200,
-                `Expected 200/400/404, got ${status}`);
+            assert.ok(status === 404 || status === 400 || status === 200, `Expected 200/400/404, got ${status}`);
         });
     });
 
     describe("POST /api/deny/:id", () => {
         it("returns 404 for nonexistent denial ID", async () => {
             const { status } = await requestJson("POST", "/api/deny/nonexistent-id");
-            assert.ok(status === 404 || status === 400 || status === 200,
-                `Expected 200/400/404, got ${status}`);
+            assert.ok(status === 404 || status === 400 || status === 200, `Expected 200/400/404, got ${status}`);
         });
     });
 
@@ -330,7 +346,7 @@ describe("Logs & Debug API Routes", function () {
             const { status, body } = await requestJson(
                 "POST",
                 `/api/support/tickets/${encodeURIComponent(ticketId)}/update`,
-                payload
+                payload,
             );
             assert.strictEqual(status, 200);
             assert.ok(body.ok);
@@ -340,16 +356,13 @@ describe("Logs & Debug API Routes", function () {
             const updated = list.find((t: any) => t.ticketId === ticketId);
             assert.ok(updated);
             assert.strictEqual(updated.status, "resolved");
-            assert.strictEqual(
-                updated.resolutionLog,
-                "Optimized infinite scroll container and added virtualization."
-            );
+            assert.strictEqual(updated.resolutionLog, "Optimized infinite scroll container and added virtualization.");
         });
 
         it("POST /api/support/tickets/:ticketId/delete - removes the ticket", async () => {
             const { status, body } = await requestJson(
                 "POST",
-                `/api/support/tickets/${encodeURIComponent(ticketId)}/delete`
+                `/api/support/tickets/${encodeURIComponent(ticketId)}/delete`,
             );
             assert.strictEqual(status, 200);
             assert.ok(body.ok);

@@ -1,6 +1,6 @@
 /**
  * PTAC Scenario: Secure Operator Demo
- * 
+ *
  * Demonstrates PRISM's secure operator capabilities including:
  * - CAC (Character Accountability Chain) authentication
  * - Computer control with full audit trails
@@ -35,13 +35,14 @@ export class SecureOperatorDemoScenario implements PtacScenario {
     readonly id = "secure-operator-demo";
     readonly title = "Secure Operator Full Capabilities Demo";
     readonly name = "Secure Operator Full Capabilities Demo";
-    readonly description = "Comprehensive demo of secure operator authentication, computer control, browser control, and audit trails";
+    readonly description =
+        "Comprehensive demo of secure operator authentication, computer control, browser control, and audit trails";
     readonly duration = 180; // 3 minutes
     readonly category = "security";
     readonly suites = [];
     readonly steps = [];
 
-    constructor(private readonly config: SecureOperatorDemoConfig) { }
+    constructor(private readonly config: SecureOperatorDemoConfig) {}
 
     async execute(): Promise<void> {
         console.log("🔐 Starting Secure Operator Demo...");
@@ -81,8 +82,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             metadata: {
                 demoMode: true,
                 demoScenario: "secure-operator-full-demo",
-                demoOperator: this.config.demoOperatorEmail
-            }
+                demoOperator: this.config.demoOperatorEmail,
+            },
         };
 
         console.log("🔍 Initiating CAC authentication...");
@@ -96,7 +97,7 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             securityLevel: authRequest.securityLevel,
             operatorPrivilege: authRequest.operatorPrivilege,
             characterId: authRequest.characterId,
-            metadata: authRequest.metadata
+            metadata: authRequest.metadata,
         });
 
         console.log("✅ CAC Authentication successful!");
@@ -122,8 +123,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             mutatesState: false,
             args: {
                 operatorSessionId: sessionId,
-                action: "screenshot"
-            }
+                action: "screenshot",
+            },
         });
 
         if (screenshotResult.ok) {
@@ -140,8 +141,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             args: {
                 operatorSessionId: sessionId,
                 action: "mouse_move",
-                coordinate: [500, 300]
-            }
+                coordinate: [500, 300],
+            },
         });
 
         if (mouseResult.ok) {
@@ -158,8 +159,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             args: {
                 operatorSessionId: sessionId,
                 action: "type",
-                text: "PRISM Secure Operator Demo - Computer Control Active"
-            }
+                text: "PRISM Secure Operator Demo - Computer Control Active",
+            },
         });
 
         if (typeResult.ok) {
@@ -192,8 +193,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             args: {
                 operatorSessionId: sessionId,
                 action: "navigate",
-                url: demoUrl
-            }
+                url: demoUrl,
+            },
         });
 
         if (navResult.ok) {
@@ -210,8 +211,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             mutatesState: false,
             args: {
                 operatorSessionId: sessionId,
-                action: "screenshot"
-            }
+                action: "screenshot",
+            },
         });
 
         if (screenshotResult.ok) {
@@ -225,8 +226,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             mutatesState: false,
             args: {
                 operatorSessionId: sessionId,
-                action: "get_page_info"
-            }
+                action: "get_page_info",
+            },
         });
 
         if (infoResult.ok) {
@@ -242,8 +243,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
             mutatesState: false,
             args: {
                 operatorSessionId: sessionId,
-                action: "diagnostics"
-            }
+                action: "diagnostics",
+            },
         });
         if (sessionInfoResult.ok) {
             console.log(`   Session diagnostics collected securely`);
@@ -357,10 +358,7 @@ export class SecureOperatorDemoScenario implements PtacScenario {
         const activeSessions = this.config.sessionManager.listSessions();
         for (const session of activeSessions) {
             if (session.auditMetadata.demoMode) {
-                await this.config.sessionManager.terminateSession(
-                    session.sessionId,
-                    "Demo cleanup"
-                );
+                await this.config.sessionManager.terminateSession(session.sessionId, "Demo cleanup");
             }
         }
 
@@ -377,7 +375,7 @@ export class SecureOperatorDemoScenario implements PtacScenario {
                 "Comprehensive Audit Trails",
                 "Character Accountability Chain",
                 "Session Lifecycle Management",
-                "Emergency Controls"
+                "Emergency Controls",
             ],
             securityLevels: ["confidential", "secret", "top_secret"],
             operatorPrivileges: ["standard", "administrator", "emergency"],
@@ -387,8 +385,8 @@ export class SecureOperatorDemoScenario implements PtacScenario {
                 "Network traffic logging",
                 "Console message monitoring",
                 "Real-time audit trail generation",
-                "Certificate-based identity verification"
-            ]
+                "Certificate-based identity verification",
+            ],
         };
     }
 }

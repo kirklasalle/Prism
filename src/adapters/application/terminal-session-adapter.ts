@@ -1,12 +1,12 @@
 /**
  * Terminal Session Adapter
- * 
+ *
  * Manages isolated terminal sessions with lifecycle control, timeout handling,
- * and policy-tier integration. All operations are persistence-backed and 
+ * and policy-tier integration. All operations are persistence-backed and
  * support deterministic replay validation.
- * 
+ *
  * See: TERMINAL_VIRTUALIZATION_DESIGN.md for full specification
- * 
+ *
  * @module adapters/application/terminal-session-adapter
  */
 
@@ -27,7 +27,7 @@ export enum TerminalSessionState {
     SUSPENDED = "suspended",
     TIMEOUT = "timeout",
     REVOKED = "revoked",
-    TERMINATED = "terminated"
+    TERMINATED = "terminated",
 }
 
 /**
@@ -69,17 +69,76 @@ export interface RevokeSessionResponse {
 }
 
 // Tier 1: Read-only operations
-const TIER1_KEYWORDS = ["ls", "cat", "grep", "pwd", "echo", "cd", "head", "tail", "wc", "find", "locate", "stat", "file", "ipconfig", "ifconfig", "ping", "nslookup", "dig", "tracert", "traceroute", "netstat", "arp", "hostname", "nbtstat", "pathping", "getmac", "ss", "curl", "wget"];
+const TIER1_KEYWORDS = [
+    "ls",
+    "cat",
+    "grep",
+    "pwd",
+    "echo",
+    "cd",
+    "head",
+    "tail",
+    "wc",
+    "find",
+    "locate",
+    "stat",
+    "file",
+    "ipconfig",
+    "ifconfig",
+    "ping",
+    "nslookup",
+    "dig",
+    "tracert",
+    "traceroute",
+    "netstat",
+    "arp",
+    "hostname",
+    "nbtstat",
+    "pathping",
+    "getmac",
+    "ss",
+    "curl",
+    "wget",
+];
 
 // Tier 2: Mutating operations
-const TIER2_KEYWORDS = ["mkdir", "touch", "cp", "mv", "chmod", "chgrp", "ln", "tar", "zip", "gzip", "sed", "awk", "netsh", "route"];
+const TIER2_KEYWORDS = [
+    "mkdir",
+    "touch",
+    "cp",
+    "mv",
+    "chmod",
+    "chgrp",
+    "ln",
+    "tar",
+    "zip",
+    "gzip",
+    "sed",
+    "awk",
+    "netsh",
+    "route",
+];
 
 // Tier 3: High-risk operations
-const TIER3_KEYWORDS = ["rm", "sudo", "reboot", "dd", "mkfs", "halt", "shutdown", "kill", "chown", "fdisk", "format", "umount", "fsck"];
+const TIER3_KEYWORDS = [
+    "rm",
+    "sudo",
+    "reboot",
+    "dd",
+    "mkfs",
+    "halt",
+    "shutdown",
+    "kill",
+    "chown",
+    "fdisk",
+    "format",
+    "umount",
+    "fsck",
+];
 
 /**
  * Terminal Session Adapter
- * 
+ *
  * Handles isolated terminal session lifecycle with policy routing,
  * timeout enforcement, and deterministic replay validation.
  */
@@ -95,7 +154,12 @@ export class TerminalSessionAdapter {
     private ptyInitPromise: Promise<void>;
     private ptyInitError: string | null = null;
 
-    constructor(db: sqlite3.Database, policyEngine: PolicyEngine, activityBus: ActivityBus, executionProfile?: ExecutionProfile) {
+    constructor(
+        db: sqlite3.Database,
+        policyEngine: PolicyEngine,
+        activityBus: ActivityBus,
+        executionProfile?: ExecutionProfile,
+    ) {
         this.db = db;
         this.policyEngine = policyEngine;
         this.activityBus = activityBus;
@@ -156,7 +220,8 @@ export class TerminalSessionAdapter {
     private initializeDatabase(): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                this.db.run(`
+                this.db.run(
+                    `
                     CREATE TABLE IF NOT EXISTS terminal_sessions (
                         session_id TEXT PRIMARY KEY,
                         shell TEXT NOT NULL,
@@ -169,13 +234,15 @@ export class TerminalSessionAdapter {
                         environment JSON NOT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                `, (sessionErr) => {
-                    if (sessionErr) {
-                        reject(sessionErr);
-                        return;
-                    }
+                `,
+                    (sessionErr) => {
+                        if (sessionErr) {
+                            reject(sessionErr);
+                            return;
+                        }
 
-                    this.db.run(`
+                        this.db.run(
+                            `
                         CREATE TABLE IF NOT EXISTS terminal_command_history (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             session_id TEXT NOT NULL,
@@ -189,13 +256,15 @@ export class TerminalSessionAdapter {
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY(session_id) REFERENCES terminal_sessions(session_id)
                         )
-                    `, (historyErr) => {
-                        if (historyErr) {
-                            reject(historyErr);
-                            return;
-                        }
+                    `,
+                            (historyErr) => {
+                                if (historyErr) {
+                                    reject(historyErr);
+                                    return;
+                                }
 
-                        this.db.run(`
+                                this.db.run(
+                                    `
                             CREATE TABLE IF NOT EXISTS terminal_signal_log (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 session_id TEXT NOT NULL,
@@ -205,32 +274,32 @@ export class TerminalSessionAdapter {
                                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                 FOREIGN KEY(session_id) REFERENCES terminal_sessions(session_id)
                             )
-                        `, (signalErr) => {
-                            if (signalErr) {
-                                reject(signalErr);
-                            } else {
-                                resolve();
-                            }
-                        });
-                    });
-                });
+                        `,
+                                    (signalErr) => {
+                                        if (signalErr) {
+                                            reject(signalErr);
+                                        } else {
+                                            resolve();
+                                        }
+                                    },
+                                );
+                            },
+                        );
+                    },
+                );
             });
         });
     }
 
     /**
      * Start a new terminal session
-     * 
+     *
      * @param shell - Shell to use (e.g., /bin/bash)
      * @param working_directory - Working directory for session
      * @param user - User running the session
      * @returns Created session metadata
      */
-    async startSession(
-        shell: string,
-        working_directory: string,
-        user: string
-    ): Promise<TerminalSession> {
+    async startSession(shell: string, working_directory: string, user: string): Promise<TerminalSession> {
         await this.initializationPromise;
         const session_id = uuidv4();
         const start_time = new Date().toISOString();
@@ -247,12 +316,12 @@ export class TerminalSessionAdapter {
             start_time,
             last_activity: start_time,
             process_id: undefined,
-            environment: { ...process.env } as Record<string, string>
+            environment: { ...process.env } as Record<string, string>,
         };
 
         let sessionEntry!: { ptyProcess: any; session: TerminalSession };
         const backendErrors: string[] = [];
-        for (const useConpty of (process.platform === "win32" ? [true, false] : [undefined])) {
+        for (const useConpty of process.platform === "win32" ? [true, false] : [undefined]) {
             try {
                 const spawnOpts: Record<string, unknown> = {
                     name: "xterm-256color",
@@ -267,9 +336,11 @@ export class TerminalSessionAdapter {
 
                 // Verify backend stability before exposing session.
                 let earlyExit = false;
-                const exitHandler = () => { earlyExit = true; };
+                const exitHandler = () => {
+                    earlyExit = true;
+                };
                 ptyProc.once("exit", exitHandler);
-                await new Promise(resolve => setTimeout(resolve, 400));
+                await new Promise((resolve) => setTimeout(resolve, 400));
                 ptyProc.removeListener("exit", exitHandler);
 
                 if (!earlyExit) {
@@ -280,7 +351,9 @@ export class TerminalSessionAdapter {
 
                 backendErrors.push(`PTY backend exited early (useConpty=${String(useConpty)})`);
             } catch (error) {
-                backendErrors.push(`PTY spawn failed (useConpty=${String(useConpty)}): ${error instanceof Error ? error.message : String(error)}`);
+                backendErrors.push(
+                    `PTY spawn failed (useConpty=${String(useConpty)}): ${error instanceof Error ? error.message : String(error)}`,
+                );
             }
         }
 
@@ -302,7 +375,7 @@ export class TerminalSessionAdapter {
             status: "succeeded",
             details: { shell, working_directory, user },
             authorityTier: "tier1_autonomous",
-            policyDecision: "allow"
+            policyDecision: "allow",
         });
 
         return session;
@@ -310,17 +383,13 @@ export class TerminalSessionAdapter {
 
     /**
      * Execute a command in a session
-     * 
+     *
      * @param session_id - Session identifier
      * @param command - Command to execute
      * @param timeout_ms - Execution timeout in milliseconds
      * @returns Execution response
      */
-    async execCommand(
-        session_id: string,
-        command: string,
-        timeout_ms: number = 30000
-    ): Promise<ExecCommandResponse> {
+    async execCommand(session_id: string, command: string, timeout_ms: number = 30000): Promise<ExecCommandResponse> {
         await this.initializationPromise;
         const start = Date.now();
 
@@ -380,7 +449,7 @@ export class TerminalSessionAdapter {
                         stdout,
                         stderr,
                         execution_time_ms,
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
                     };
                     session.state = TerminalSessionState.ACTIVE;
                     session.last_activity = new Date().toISOString();
@@ -438,11 +507,17 @@ export class TerminalSessionAdapter {
             try {
                 process.kill(pid, "SIGSTOP");
             } catch (error) {
-                throw new Error(`SIGSTOP delivery failed for pid=${pid}: ${error instanceof Error ? error.message : String(error)}`);
+                throw new Error(
+                    `SIGSTOP delivery failed for pid=${pid}: ${error instanceof Error ? error.message : String(error)}`,
+                );
             }
         }
 
-        await this.logSignal(session_id, process.platform === "win32" ? "NtSuspendProcess" : "SIGSTOP", "pause_session");
+        await this.logSignal(
+            session_id,
+            process.platform === "win32" ? "NtSuspendProcess" : "SIGSTOP",
+            "pause_session",
+        );
 
         session.state = TerminalSessionState.SUSPENDED;
         session.last_activity = new Date().toISOString();
@@ -455,7 +530,7 @@ export class TerminalSessionAdapter {
             status: "succeeded",
             details: { pid, platform: process.platform },
             authorityTier: "tier1_autonomous",
-            policyDecision: "allow"
+            policyDecision: "allow",
         });
     }
 
@@ -487,11 +562,17 @@ export class TerminalSessionAdapter {
             try {
                 process.kill(pid, "SIGCONT");
             } catch (error) {
-                throw new Error(`SIGCONT delivery failed for pid=${pid}: ${error instanceof Error ? error.message : String(error)}`);
+                throw new Error(
+                    `SIGCONT delivery failed for pid=${pid}: ${error instanceof Error ? error.message : String(error)}`,
+                );
             }
         }
 
-        await this.logSignal(session_id, process.platform === "win32" ? "NtResumeProcess" : "SIGCONT", "resume_session");
+        await this.logSignal(
+            session_id,
+            process.platform === "win32" ? "NtResumeProcess" : "SIGCONT",
+            "resume_session",
+        );
 
         session.state = TerminalSessionState.ACTIVE;
         session.last_activity = new Date().toISOString();
@@ -504,7 +585,7 @@ export class TerminalSessionAdapter {
             status: "succeeded",
             details: { pid, platform: process.platform },
             authorityTier: "tier1_autonomous",
-            policyDecision: "allow"
+            policyDecision: "allow",
         });
     }
 
@@ -535,9 +616,13 @@ if ($rc -ne 0) { Write-Error "${fn} returned status 0x$($rc.ToString('X')) for p
 exit 0;
 `;
         await new Promise<void>((resolve, reject) => {
-            const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { windowsHide: true });
+            const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], {
+                windowsHide: true,
+            });
             let stderr = "";
-            child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+            child.stderr.on("data", (chunk: Buffer) => {
+                stderr += chunk.toString();
+            });
             child.once("error", reject);
             child.once("exit", (code: number | null) => {
                 if (code === 0) resolve();
@@ -548,7 +633,7 @@ exit 0;
 
     /**
      * Stop a session gracefully
-     * 
+     *
      * @param session_id - Session identifier
      */
     async stopSession(session_id: string): Promise<void> {
@@ -578,13 +663,13 @@ exit 0;
             status: "succeeded",
             details: { reason: "user_stop" },
             authorityTier: "tier1_autonomous",
-            policyDecision: "allow"
+            policyDecision: "allow",
         });
     }
 
     /**
      * Revoke a session (approval-gated destruction)
-     * 
+     *
      * @param session_id - Session identifier
      * @param reason - Reason for revocation
      * @returns Revocation response
@@ -620,20 +705,20 @@ exit 0;
             status: "succeeded",
             details: { reason },
             authorityTier: "tier3_approval",
-            policyDecision: "allow"
+            policyDecision: "allow",
         });
 
         return {
             session_id,
             revocation_time,
             forced_termination: true,
-            cleanup_status: "completed"
+            cleanup_status: "completed",
         };
     }
 
     /**
      * Get current session status
-     * 
+     *
      * @param session_id - Session identifier
      * @returns Current session metadata
      */
@@ -654,15 +739,12 @@ exit 0;
 
     /**
      * Get session command history
-     * 
+     *
      * @param session_id - Session identifier
      * @param limit - Number of recent commands to retrieve
      * @returns Command execution history
      */
-    async getSessionHistory(
-        session_id: string,
-        limit: number = 100
-    ): Promise<ExecCommandResponse[]> {
+    async getSessionHistory(session_id: string, limit: number = 100): Promise<ExecCommandResponse[]> {
         await this.initializationPromise;
         return new Promise((resolve, reject) => {
             this.db.all(
@@ -676,28 +758,30 @@ exit 0;
                     if (err) {
                         reject(err);
                     } else {
-                        resolve(rows.map(r => ({
-                            session_id: r.session_id,
-                            command: r.command,
-                            exit_code: r.exit_code,
-                            stdout: r.stdout,
-                            stderr: r.stderr,
-                            execution_time_ms: r.execution_time_ms,
-                            timestamp: r.timestamp
-                        })));
+                        resolve(
+                            rows.map((r) => ({
+                                session_id: r.session_id,
+                                command: r.command,
+                                exit_code: r.exit_code,
+                                stdout: r.stdout,
+                                stderr: r.stderr,
+                                execution_time_ms: r.execution_time_ms,
+                                timestamp: r.timestamp,
+                            })),
+                        );
                     }
-                }
+                },
             );
         });
     }
 
     /**
      * Classify command tier for policy routing
-     * 
+     *
      * Tier 1: Read-only operations (ls, cat, grep, pwd, echo)
      * Tier 2: Mutating operations (mkdir, touch, cp, mv, chmod)
      * Tier 3: High-risk operations (rm, sudo, reboot, dd, mkfs, halt, shutdown, kill, chown)
-     * 
+     *
      * @private
      * @param command - Command to classify
      * @returns Policy tier
@@ -719,7 +803,7 @@ exit 0;
 
     /**
      * Route command execution through policy engine
-     * 
+     *
      * @private
      * @param session_id - Session identifier
      * @param tier - Policy tier for command
@@ -729,7 +813,7 @@ exit 0;
     private async routeThroughPolicy(
         session_id: string,
         tier: "tier1" | "tier2" | "tier3",
-        command: string
+        command: string,
     ): Promise<"allow" | "deny" | "request_approval"> {
         // Tier 1: Allow if profile permits autonomous operations
         if (tier === "tier1") {
@@ -746,7 +830,7 @@ exit 0;
                     status: "succeeded",
                     details: { command, segment: this.executionProfile.segment, reason: "audit_all_operations" },
                     authorityTier: "tier2_conditional",
-                    policyDecision: "allow"
+                    policyDecision: "allow",
                 });
             }
             if (this.executionProfile.rollbackPlanRequired) {
@@ -757,7 +841,7 @@ exit 0;
                     status: "succeeded",
                     details: { command, segment: this.executionProfile.segment, reason: "rollback_plan_required" },
                     authorityTier: "tier2_conditional",
-                    policyDecision: "allow"
+                    policyDecision: "allow",
                 });
             }
             return "allow";
@@ -772,7 +856,7 @@ exit 0;
                 status: "started",
                 details: { command, segment: this.executionProfile.segment },
                 authorityTier: "tier3_approval",
-                policyDecision: "require_approval"
+                policyDecision: "require_approval",
             });
             return "request_approval";
         }
@@ -782,7 +866,7 @@ exit 0;
 
     /**
      * Handle command timeout
-     * 
+     *
      * @private
      * @param session_id - Session identifier
      * @param timeout_ms - Timeout duration
@@ -798,17 +882,17 @@ exit 0;
         this.db.run(
             "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
             [session_id, "SIGTERM", "timeout_handler", new Date().toISOString()],
-            () => { }
+            () => {},
         );
 
         ptyProcess.kill();
         session.state = TerminalSessionState.TIMEOUT;
-        this.persistSession(session).catch(() => { });
+        this.persistSession(session).catch(() => {});
     }
 
     /**
      * Persist session metadata to database
-     * 
+     *
      * @private
      * @param session - Session to persist
      */
@@ -827,12 +911,12 @@ exit 0;
                     session.start_time,
                     session.last_activity,
                     session.process_id,
-                    JSON.stringify(session.environment)
+                    JSON.stringify(session.environment),
                 ],
                 (err: any) => {
                     if (err) reject(err);
                     else resolve();
-                }
+                },
             );
         });
     }
@@ -846,22 +930,19 @@ exit 0;
             this.db.run(
                 "INSERT INTO terminal_signal_log (session_id, signal, reason, timestamp) VALUES (?, ?, ?, ?)",
                 [session_id, signal, reason, new Date().toISOString()],
-                (err) => err ? reject(err) : resolve()
+                (err) => (err ? reject(err) : resolve()),
             );
         });
     }
 
     /**
      * Persist command execution result to database
-     * 
+     *
      * @private
      * @param response - Execution response to persist
      * @param reason_code - Reason code for audit trail
      */
-    private async persistCommandExecution(
-        response: ExecCommandResponse,
-        reason_code: string
-    ): Promise<void> {
+    private async persistCommandExecution(response: ExecCommandResponse, reason_code: string): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.run(
                 `INSERT INTO terminal_command_history 
@@ -875,12 +956,12 @@ exit 0;
                     response.stderr,
                     response.execution_time_ms,
                     reason_code,
-                    response.timestamp
+                    response.timestamp,
                 ],
                 (err: any) => {
                     if (err) reject(err);
                     else resolve();
-                }
+                },
             );
         });
     }

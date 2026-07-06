@@ -94,11 +94,7 @@ function walkDir(dir: string, root: string, ignore: Set<string>): string[] {
 function hashFile(fullPath: string, root: string): FileFingerprint {
     const relPath = relative(root, fullPath).split("\\").join("/");
     const content = readFileSync(fullPath);
-    const hash = createHash("sha256")
-        .update(relPath)
-        .update("\0")
-        .update(content)
-        .digest("hex");
+    const hash = createHash("sha256").update(relPath).update("\0").update(content).digest("hex");
     return { path: relPath, hash, size: content.length };
 }
 
@@ -113,9 +109,7 @@ export function computeWorkspaceFingerprint(
     ignore = new Set([".git", "node_modules", ".venv", "__pycache__", ".DS_Store", "Thumbs.db"]),
 ): WorkspaceFingerprint {
     const files = walkDir(root, root, ignore);
-    const tree: FileFingerprint[] = files
-        .map((f) => hashFile(f, root))
-        .sort((a, b) => a.path.localeCompare(b.path));
+    const tree: FileFingerprint[] = files.map((f) => hashFile(f, root)).sort((a, b) => a.path.localeCompare(b.path));
 
     const rootHashInput = tree.map((f) => f.hash).join("");
     const hash = createHash("sha256").update(rootHashInput).digest("hex");
@@ -132,10 +126,7 @@ export function computeWorkspaceFingerprint(
 /**
  * Diff two fingerprints to detect added, removed, and modified files.
  */
-export function diffFingerprints(
-    before: WorkspaceFingerprint,
-    after: WorkspaceFingerprint,
-): FingerprintDiff {
+export function diffFingerprints(before: WorkspaceFingerprint, after: WorkspaceFingerprint): FingerprintDiff {
     const beforeMap = new Map(before.tree.map((f) => [f.path, f.hash]));
     const afterMap = new Map(after.tree.map((f) => [f.path, f.hash]));
 

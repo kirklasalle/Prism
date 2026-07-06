@@ -7,14 +7,7 @@
  */
 
 import assert from "node:assert";
-import {
-    existsSync,
-    mkdtempSync,
-    readdirSync,
-    readFileSync,
-    utimesSync,
-    writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -49,8 +42,8 @@ export async function testLogRotation(): Promise<void> {
     {
         const dir = mkdtempSync(join(tmpdir(), "prism-rot-"));
         const active = join(dir, "prism.log");
-        const yesterday = new Date(Date.UTC(2026, 4, 7, 12, 0));   // 2026-05-07
-        const today = new Date(Date.UTC(2026, 4, 8, 9, 0));        // 2026-05-08
+        const yesterday = new Date(Date.UTC(2026, 4, 7, 12, 0)); // 2026-05-07
+        const today = new Date(Date.UTC(2026, 4, 8, 9, 0)); // 2026-05-08
         touchFile(active, "yesterday line\n", yesterday);
 
         const r1 = rotateActiveLog({ logDir: dir, activeFile: "prism.log", now: today });

@@ -46,8 +46,8 @@ export const SCENARIO_S15: PtacScenario = {
             label: "Tier-2 prompt — approval is enqueued by the live handler",
             kind: "chat",
             prompt:
-                "Please draft and prepare to send a customer-facing summary email "
-                + "based on the most recent meeting notes in this session.",
+                "Please draft and prepare to send a customer-facing summary email " +
+                "based on the most recent meeting notes in this session.",
             expectedTier: 2,
             expectApprovalRequired: true,
             timeoutMs: 15_000,

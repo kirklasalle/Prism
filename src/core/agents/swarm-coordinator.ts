@@ -1,11 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type {
-    SwarmDefinition,
-    SwarmTopology,
-    SwarmState,
-    SubAgentResult,
-    SubAgentRequest,
-} from "./agent-types.js";
+import type { SwarmDefinition, SwarmTopology, SwarmState, SubAgentResult, SubAgentRequest } from "./agent-types.js";
 import type { AgentPool } from "./agent-pool.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -26,10 +20,7 @@ export class SwarmCoordinator {
     private readonly pool: AgentPool;
     private readonly onSwarmUpdate?: (swarm: SwarmDefinition) => void;
 
-    constructor(
-        pool: AgentPool,
-        onSwarmUpdate?: (swarm: SwarmDefinition) => void,
-    ) {
+    constructor(pool: AgentPool, onSwarmUpdate?: (swarm: SwarmDefinition) => void) {
         this.pool = pool;
         this.onSwarmUpdate = onSwarmUpdate;
     }
@@ -185,9 +176,7 @@ export class SwarmCoordinator {
             const result = await this.dispatchSafe({
                 goal: swarm.goal,
                 agentId,
-                context: previousOutput
-                    ? `Previous stage output:\n${previousOutput}`
-                    : undefined,
+                context: previousOutput ? `Previous stage output:\n${previousOutput}` : undefined,
             });
             swarm.results.push(result);
             previousOutput = result.ok ? result.content : `[Error: ${result.error}]`;
@@ -199,9 +188,7 @@ export class SwarmCoordinator {
      * Similar to mesh but without inter-agent context.
      */
     private async executeBroadcast(swarm: SwarmDefinition): Promise<void> {
-        const promises = swarm.agentIds.map((agentId) =>
-            this.dispatchSafe({ goal: swarm.goal, agentId }),
-        );
+        const promises = swarm.agentIds.map((agentId) => this.dispatchSafe({ goal: swarm.goal, agentId }));
         const results = await Promise.allSettled(promises);
         for (const r of results) {
             if (r.status === "fulfilled") swarm.results.push(r.value);

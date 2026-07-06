@@ -28,7 +28,11 @@ describe("Release Packet Generator (scripts/generate-release-packet.cjs)", funct
     });
 
     after(() => {
-        try { rmSync(outDir, { recursive: true, force: true }); } catch { /* noop */ }
+        try {
+            rmSync(outDir, { recursive: true, force: true });
+        } catch {
+            /* noop */
+        }
     });
 
     const expected = [

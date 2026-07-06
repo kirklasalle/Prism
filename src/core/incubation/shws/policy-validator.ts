@@ -21,7 +21,7 @@ export interface ValidationResult {
 }
 
 export class PolicyValidator {
-    constructor(private readonly compiler: CausalCompiler) { }
+    constructor(private readonly compiler: CausalCompiler) {}
 
     validate(inputs: ValidatorInputs): ValidationResult {
         const dag = {
@@ -35,9 +35,7 @@ export class PolicyValidator {
             constitution: inputs.constitution,
         });
         if (!plan.enforceable) {
-            const denials = plan.steps
-                .filter((s) => s.projectedDecision.decision === "deny")
-                .map((s) => s.stepId);
+            const denials = plan.steps.filter((s) => s.projectedDecision.decision === "deny").map((s) => s.stepId);
             const violations = plan.unsatisfiableSteps.map((v) => `${v.stepId}:${v.principleId}`);
             return {
                 plan,

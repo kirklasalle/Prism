@@ -210,7 +210,7 @@ function getLocalCharacters(profile: string) {
         if (!existsSync(dir)) {
             return getFallbackCharacters(profile);
         }
-        const files = readdirSync(dir).filter(f => f.toLowerCase().endsWith(".json"));
+        const files = readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".json"));
         const list = [];
         for (const file of files) {
             try {
@@ -267,7 +267,8 @@ function buildCertificate(state: WizardState): Record<string, unknown> {
         },
         guardian: {
             model: state.guardianModel || "not configured",
-            authorityTier: state.guardianTier || (state.profile === "business" ? "tier2_conditional" : "tier1_autonomous"),
+            authorityTier:
+                state.guardianTier || (state.profile === "business" ? "tier2_conditional" : "tier1_autonomous"),
             autoStart: state.guardianAutoStart,
         },
         agents: {
@@ -286,7 +287,10 @@ function buildCertificate(state: WizardState): Record<string, unknown> {
             profileId: "pending",
         },
         scheduler: {
-            enabledTasks: state.profile === "business" ? "daily-review, daily-backup, weekly-compliance, weekly-telemetry" : "daily-review",
+            enabledTasks:
+                state.profile === "business"
+                    ? "daily-review, daily-backup, weekly-compliance, weekly-telemetry"
+                    : "daily-review",
         },
         readiness: {
             timestamp: new Date().toISOString(),
@@ -452,7 +456,9 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
         },
     ];
     const defaultProfileIdx = state.profile === "business" ? 1 : 0;
-    state.profile = (await select("Select execution profile:", profileOptions, defaultProfileIdx)) as "individual" | "business";
+    state.profile = (await select("Select execution profile:", profileOptions, defaultProfileIdx)) as
+        | "individual"
+        | "business";
 
     if (client) {
         try {
@@ -513,7 +519,9 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
                     setWorkspaceRoot(state.workspace);
                     ensureWorkspaceStructure(state.profile === "business" ? "prod" : "dev");
                 } catch (err: unknown) {
-                    printError(`Failed to create workspace structure: ${err instanceof Error ? err.message : String(err)}`);
+                    printError(
+                        `Failed to create workspace structure: ${err instanceof Error ? err.message : String(err)}`,
+                    );
                     passed = false;
                 }
             }
@@ -539,7 +547,9 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
         const spin = spinner("Loading workspace characters...");
         try {
             const data = await client.getWorkspaceCharacters();
-            characters = (data.characters || []).filter(c => !c.executionProfile || c.executionProfile === state.profile);
+            characters = (data.characters || []).filter(
+                (c) => !c.executionProfile || c.executionProfile === state.profile,
+            );
             spin.stop(color(`${sym.check} Loaded ${characters.length} character(s)`, ansi.green));
         } catch {
             spin.stop(color(`${sym.cross} Failed to load characters from server`, ansi.yellow));
@@ -574,8 +584,11 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
     console.log("");
 
     while (true) {
-        const opEmail = await prompt("Operator email (human accountable for decisions)", state.operatorEmail || "operator@yourcompany.com");
-        
+        const opEmail = await prompt(
+            "Operator email (human accountable for decisions)",
+            state.operatorEmail || "operator@yourcompany.com",
+        );
+
         // Block placeholder email domains
         const isPlaceholder = /@(prism\.local|example\.(com|org|net))$/i.test(opEmail);
         if (isPlaceholder) {
@@ -594,7 +607,10 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
         }
 
         const defaultAssistantEmail = `${state.characterId}@yourcompany.com`;
-        const asEmail = await prompt("Assistant email (character identity)", state.assistantEmail || defaultAssistantEmail);
+        const asEmail = await prompt(
+            "Assistant email (character identity)",
+            state.assistantEmail || defaultAssistantEmail,
+        );
 
         if (client) {
             const spin = spinner("Initializing Character Accountability Chain (CAC)...");
@@ -634,7 +650,10 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
         value: p.id,
         description: `${p.description}${p.needsKey ? "" : " (no API key needed)"}`,
     }));
-    const defaultProviderIdx = Math.max(0, PROVIDERS.findIndex((p) => p.id === state.provider));
+    const defaultProviderIdx = Math.max(
+        0,
+        PROVIDERS.findIndex((p) => p.id === state.provider),
+    );
     state.provider = await select("Select provider:", providerOptions, defaultProviderIdx);
 
     const selectedProvider = PROVIDERS.find((p) => p.id === state.provider)!;
@@ -738,7 +757,9 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
         try {
             await client.postInitializationSession(certificate);
         } catch (err: unknown) {
-            printWarning(`Could not submit initialization certificate: ${err instanceof Error ? err.message : String(err)}`);
+            printWarning(
+                `Could not submit initialization certificate: ${err instanceof Error ? err.message : String(err)}`,
+            );
         }
     }
 

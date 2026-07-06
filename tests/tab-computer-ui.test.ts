@@ -123,23 +123,31 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
         (global as any).setInterval = dom.window.setInterval.bind(dom.window);
         (global as any).clearInterval = dom.window.clearInterval.bind(dom.window);
-        (global as any).alert = () => { };
+        (global as any).alert = () => {};
 
         // Stub canvas getContext for jsdom (no native canvas)
         const origGetContext = dom.window.HTMLCanvasElement.prototype.getContext;
         dom.window.HTMLCanvasElement.prototype.getContext = function (type: string) {
             if (type === "2d") {
                 return {
-                    clearRect() { }, beginPath() { }, moveTo() { }, lineTo() { },
-                    stroke() { }, closePath() { }, fill() { },
-                    strokeStyle: "", lineWidth: 0, lineJoin: "", fillStyle: "",
+                    clearRect() {},
+                    beginPath() {},
+                    moveTo() {},
+                    lineTo() {},
+                    stroke() {},
+                    closePath() {},
+                    fill() {},
+                    strokeStyle: "",
+                    lineWidth: 0,
+                    lineJoin: "",
+                    fillStyle: "",
                 } as any;
             }
             return origGetContext.call(this, type);
         };
 
         const moduleUrl = pathToFileURL(join(tmpDir, "tab-computer.js")).href;
-        mod = await import(moduleUrl) as TabComputerModule;
+        mod = (await import(moduleUrl)) as TabComputerModule;
 
         const coreUrl = pathToFileURL(join(tmpDir, "dashboard-core.js")).href;
         const core = await import(coreUrl);
@@ -279,7 +287,10 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
 
         it("renders PRISM variables section", () => {
             mockState.computerEnvVars = {
-                prismVars: [{ key: "PRISM_ENV", value: "test" }, { key: "PRISM_PORT", value: "3000" }],
+                prismVars: [
+                    { key: "PRISM_ENV", value: "test" },
+                    { key: "PRISM_PORT", value: "3000" },
+                ],
                 systemVars: [{ key: "PATH", value: "/usr/bin" }],
             };
             mod.renderEnvVarsList();
@@ -292,7 +303,10 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         it("renders system variables section", () => {
             mockState.computerEnvVars = {
                 prismVars: [],
-                systemVars: [{ key: "PATH", value: "/usr/bin" }, { key: "HOME", value: "/home/user" }],
+                systemVars: [
+                    { key: "PATH", value: "/usr/bin" },
+                    { key: "HOME", value: "/home/user" },
+                ],
             };
             mod.renderEnvVarsList();
             const html = dom.window.document.getElementById("env-vars-list")!.innerHTML;
@@ -325,8 +339,11 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         it("renders device categories", () => {
             mockState.computerDevices = {
                 devices: {
-                    "Processors": [{ name: "Intel Core i9-14900K", status: "OK" }],
-                    "Memory": [{ name: "16 GB DDR5", status: "OK" }, { name: "16 GB DDR5", status: "OK" }],
+                    Processors: [{ name: "Intel Core i9-14900K", status: "OK" }],
+                    Memory: [
+                        { name: "16 GB DDR5", status: "OK" },
+                        { name: "16 GB DDR5", status: "OK" },
+                    ],
                 },
             };
             mod.renderDeviceTree();
@@ -339,7 +356,7 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
 
         it("shows WMI fallback notice when present", () => {
             mockState.computerDevices = {
-                devices: { "Processors": [{ name: "CPU", status: "OK" }] },
+                devices: { Processors: [{ name: "CPU", status: "OK" }] },
                 fallback: true,
             };
             mod.renderDeviceTree();
@@ -350,8 +367,8 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         it("updates total badge", () => {
             mockState.computerDevices = {
                 devices: {
-                    "Processors": [{ name: "CPU", status: "OK" }],
-                    "Memory": [{ name: "RAM", status: "OK" }],
+                    Processors: [{ name: "CPU", status: "OK" }],
+                    Memory: [{ name: "RAM", status: "OK" }],
                 },
             };
             mod.renderDeviceTree();
@@ -366,7 +383,7 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         it("filters devices by search query", () => {
             mockState.computerDevices = {
                 devices: {
-                    "Processors": [{ name: "Intel Core i9", status: "OK" }],
+                    Processors: [{ name: "Intel Core i9", status: "OK" }],
                     "Display Adapters": [{ name: "NVIDIA RTX 4090", status: "OK" }],
                 },
             };

@@ -35,12 +35,11 @@ function echoRegistry(): ToolRegistry {
 describe("AgenticChatExecutor", () => {
     it("returns direct text response without tool calls", async () => {
         const executor = new AgenticChatExecutor(echoRegistry());
-        const result = await executor.execute(
-            "Say hello",
-            [],
-            "You are helpful.",
-            async (_) => ({ content: "Hello from the model.", toolCalls: undefined, stopReason: "end_turn" as const }),
-        );
+        const result = await executor.execute("Say hello", [], "You are helpful.", async (_) => ({
+            content: "Hello from the model.",
+            toolCalls: undefined,
+            stopReason: "end_turn" as const,
+        }));
         assert.equal(result.finalContent, "Hello from the model.");
         assert.equal(result.toolCallsExecuted, 0);
         assert.equal(result.iterations, 1);
@@ -49,22 +48,17 @@ describe("AgenticChatExecutor", () => {
     it("executes a single tool call and returns final content", async () => {
         const executor = new AgenticChatExecutor(echoRegistry());
         let calls = 0;
-        const result = await executor.execute(
-            "Echo ping",
-            [],
-            "You are helpful.",
-            async (_) => {
-                calls++;
-                if (calls === 1) {
-                    return {
-                        content: "",
-                        toolCalls: [{ id: "tc-1", name: "echo", arguments: { message: "ping" } }],
-                        stopReason: "tool_use" as const,
-                    };
-                }
-                return { content: "Tool result received.", toolCalls: undefined, stopReason: "end_turn" as const };
-            },
-        );
+        const result = await executor.execute("Echo ping", [], "You are helpful.", async (_) => {
+            calls++;
+            if (calls === 1) {
+                return {
+                    content: "",
+                    toolCalls: [{ id: "tc-1", name: "echo", arguments: { message: "ping" } }],
+                    stopReason: "tool_use" as const,
+                };
+            }
+            return { content: "Tool result received.", toolCalls: undefined, stopReason: "end_turn" as const };
+        });
         assert.equal(result.toolCallsExecuted, 1);
         assert.equal(result.finalContent, "Tool result received.");
     });
@@ -107,12 +101,9 @@ describe("AgenticChatExecutor", () => {
 
     it("propagates LLM throw as an error event without crashing", async () => {
         const executor = new AgenticChatExecutor(echoRegistry());
-        const result = await executor.execute(
-            "hi",
-            [],
-            "sys",
-            async (_): Promise<never> => { throw new Error("Simulated provider failure"); },
-        );
+        const result = await executor.execute("hi", [], "sys", async (_): Promise<never> => {
+            throw new Error("Simulated provider failure");
+        });
         const errorEvent = result.events.find((e) => e.type === "error");
         assert.ok(errorEvent, "error event emitted on provider throw");
         assert.ok(errorEvent?.error?.includes("Simulated provider failure"), "error message propagated");
@@ -120,16 +111,11 @@ describe("AgenticChatExecutor", () => {
 
     it("stops at maxIterations and emits an error event", async () => {
         const executor = new AgenticChatExecutor(echoRegistry(), { maxIterations: 3 });
-        const result = await executor.execute(
-            "loop",
-            [],
-            "sys",
-            async (_) => ({
-                content: "",
-                toolCalls: [{ id: "tc-inf", name: "echo", arguments: { message: "loop" } }],
-                stopReason: "tool_use" as const,
-            }),
-        );
+        const result = await executor.execute("loop", [], "sys", async (_) => ({
+            content: "",
+            toolCalls: [{ id: "tc-inf", name: "echo", arguments: { message: "loop" } }],
+            stopReason: "tool_use" as const,
+        }));
         assert.equal(result.iterations, 3);
         const errorEvent = result.events.find((e) => e.type === "error");
         assert.ok(errorEvent?.error?.includes("maximum"), "max-iterations error emitted");
@@ -138,22 +124,17 @@ describe("AgenticChatExecutor", () => {
     it("rejects tool call to unknown tool and emits tool_result with ok:false", async () => {
         const executor = new AgenticChatExecutor(echoRegistry());
         let callCount = 0;
-        const result = await executor.execute(
-            "call unknown",
-            [],
-            "sys",
-            async (_) => {
-                callCount++;
-                if (callCount === 1) {
-                    return {
-                        content: "",
-                        toolCalls: [{ id: "tc-unk", name: "nonexistent_tool", arguments: {} }],
-                        stopReason: "tool_use" as const,
-                    };
-                }
-                return { content: "Done.", toolCalls: undefined, stopReason: "end_turn" as const };
-            },
-        );
+        const result = await executor.execute("call unknown", [], "sys", async (_) => {
+            callCount++;
+            if (callCount === 1) {
+                return {
+                    content: "",
+                    toolCalls: [{ id: "tc-unk", name: "nonexistent_tool", arguments: {} }],
+                    stopReason: "tool_use" as const,
+                };
+            }
+            return { content: "Done.", toolCalls: undefined, stopReason: "end_turn" as const };
+        });
         const toolResult = result.events.find((e) => e.type === "tool_result");
         assert.ok(toolResult, "tool_result event emitted");
         assert.equal(toolResult?.toolResult?.ok, false, "unknown tool returns ok:false");
@@ -177,34 +158,28 @@ describe("AgenticChatExecutor", () => {
 
         const executor = new AgenticChatExecutor(registry, { workspaceSandbox: true });
         let callCount = 0;
-        const result = await executor.execute(
-            "write outside workspace",
-            [],
-            "sys",
-            async (_) => {
-                callCount++;
-                if (callCount === 1) {
-                    return {
-                        content: "",
-                        toolCalls: [{
+        const result = await executor.execute("write outside workspace", [], "sys", async (_) => {
+            callCount++;
+            if (callCount === 1) {
+                return {
+                    content: "",
+                    toolCalls: [
+                        {
                             id: "tc-sandbox",
                             name: "file_write",
                             arguments: { path: "/etc/passwd", content: "hacked" },
-                        }],
-                        stopReason: "tool_use" as const,
-                    };
-                }
-                return { content: "Done.", toolCalls: undefined, stopReason: "end_turn" as const };
-            },
-        );
+                        },
+                    ],
+                    stopReason: "tool_use" as const,
+                };
+            }
+            return { content: "Done.", toolCalls: undefined, stopReason: "end_turn" as const };
+        });
 
         const toolResult = result.events.find((e) => e.type === "tool_result");
         assert.ok(toolResult, "tool_result event present");
         assert.equal(toolResult?.toolResult?.ok, false, "sandbox violation rejected");
-        assert.ok(
-            toolResult?.toolResult?.output?.includes("outside workspace"),
-            "sandbox error message present",
-        );
+        assert.ok(toolResult?.toolResult?.output?.includes("outside workspace"), "sandbox error message present");
     });
 
     it("getToolDefinitions returns registered tool schemas", () => {

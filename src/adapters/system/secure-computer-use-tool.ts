@@ -1,7 +1,7 @@
 /**
  * Secure Computer Use Tool - Enhanced version with operator session integration
- * 
- * This wrapper extends the base ComputerUseTool with secure operator session 
+ *
+ * This wrapper extends the base ComputerUseTool with secure operator session
  * management, providing:
  * - Session-based authorization for computer control operations
  * - Comprehensive audit trails for all system interactions
@@ -16,7 +16,7 @@ import { ComputerUseTool } from "./computer-use-tool.js";
 import type {
     SecureOperatorSessionManager,
     SecureOperatorSession,
-    SecureOperatorActivity
+    SecureOperatorActivity,
 } from "../../core/operator/secure-operator-session-manager.js";
 import type { ActivityBus } from "../../core/activity/bus.js";
 
@@ -33,11 +33,11 @@ export interface SecureComputerUseOptions {
     elevatedOperations?: string[];
 }
 
-export interface SecureComputerUseRequest extends ToolRequest { }
+export interface SecureComputerUseRequest extends ToolRequest {}
 
 /**
  * Secure Computer Use Tool with operator session integration
- * 
+ *
  * Wraps the base ComputerUseTool with comprehensive security features
  * including session-based authorization, audit trails, and compliance logging.
  */
@@ -56,9 +56,9 @@ export class SecureComputerUseTool implements Tool {
         this.activityBus = options.activityBus;
         this.computerUseTool = options.computerUseTool || new ComputerUseTool();
         this.captureScreenshots = options.captureScreenshots ?? true;
-        this.elevatedOperations = new Set(options.elevatedOperations || [
-            "key", "type", "mouse_move", "left_click", "right_click", "double_click"
-        ]);
+        this.elevatedOperations = new Set(
+            options.elevatedOperations || ["key", "type", "mouse_move", "left_click", "right_click", "double_click"],
+        );
 
         // Extend the base contract with operator session requirements
         this.contract = {
@@ -67,9 +67,9 @@ export class SecureComputerUseTool implements Tool {
                 ...this.computerUseTool.contract.args,
                 operatorSessionId: {
                     type: "string",
-                    required: true
-                }
-            }
+                    required: true,
+                },
+            },
         };
     }
 
@@ -88,8 +88,8 @@ export class SecureComputerUseTool implements Tool {
                     ok: false,
                     output: {
                         error: "Invalid or expired operator session",
-                        code: "session_invalid"
-                    }
+                        code: "session_invalid",
+                    },
                 };
             }
 
@@ -101,8 +101,8 @@ export class SecureComputerUseTool implements Tool {
                     ok: false,
                     output: {
                         error: `Operation '${action}' not authorized for current session`,
-                        code: "operation_unauthorized"
-                    }
+                        code: "operation_unauthorized",
+                    },
                 };
             }
 
@@ -119,7 +119,7 @@ export class SecureComputerUseTool implements Tool {
             const startTime = Date.now();
             const result = await this.computerUseTool.execute({
                 ...request,
-                args: this.sanitizeArgsForBaseTool(request.args)
+                args: this.sanitizeArgsForBaseTool(request.args),
             });
             const executionTime = Date.now() - startTime;
 
@@ -137,11 +137,10 @@ export class SecureComputerUseTool implements Tool {
                 result,
                 executionTime,
                 preScreenshot,
-                postScreenshot
+                postScreenshot,
             );
 
             return result;
-
         } catch (error) {
             console.error("Secure computer operation failed:", error);
 
@@ -157,8 +156,8 @@ export class SecureComputerUseTool implements Tool {
                 ok: false,
                 output: {
                     error: error instanceof Error ? error.message : "Operation failed",
-                    code: "execution_failed"
-                }
+                    code: "execution_failed",
+                },
             };
         }
     }
@@ -205,7 +204,7 @@ export class SecureComputerUseTool implements Tool {
             middle_click: "computer_click",
             type: "computer_type",
             key: "computer_key",
-            cursor_position: "computer_screenshot"
+            cursor_position: "computer_screenshot",
         };
 
         const requiredPermission = operationMap[operation];
@@ -222,7 +221,7 @@ export class SecureComputerUseTool implements Tool {
     private async recordOperationStart(
         session: SecureOperatorSession,
         operation: string,
-        args: Record<string, unknown>
+        args: Record<string, unknown>,
     ): Promise<string> {
         const activityId = this.generateActivityId();
 
@@ -237,9 +236,9 @@ export class SecureComputerUseTool implements Tool {
                 args: this.sanitizeArgsForLogging(args),
                 operatorEmail: session.cacSession.certificateInfo.email,
                 securityLevel: session.securityConstraints.level,
-                privilegeLevel: session.securityConstraints.privilege
+                privilegeLevel: session.securityConstraints.privilege,
             },
-            impactLevel: this.getOperationImpactLevel(operation)
+            impactLevel: this.getOperationImpactLevel(operation),
         };
 
         await this.sessionManager.recordActivity(session.sessionId, activity);
@@ -254,8 +253,8 @@ export class SecureComputerUseTool implements Tool {
                 activityId,
                 sessionId: session.sessionId,
                 operation,
-                operatorEmail: session.cacSession.certificateInfo.email
-            }
+                operatorEmail: session.cacSession.certificateInfo.email,
+            },
         });
 
         return activityId;
@@ -271,7 +270,7 @@ export class SecureComputerUseTool implements Tool {
         result: ToolResult,
         executionTime: number,
         preScreenshot?: string,
-        postScreenshot?: string
+        postScreenshot?: string,
     ): Promise<void> {
         const activity: SecureOperatorActivity = {
             activityId: `${activityId}_complete`,
@@ -285,11 +284,11 @@ export class SecureComputerUseTool implements Tool {
                 success: result.ok,
                 executionTimeMs: executionTime,
                 result: result.output,
-                operatorEmail: session.cacSession.certificateInfo.email
+                operatorEmail: session.cacSession.certificateInfo.email,
             },
             impactLevel: this.getOperationImpactLevel(operation),
             screenshotRef: postScreenshot,
-            artifacts: [preScreenshot, postScreenshot].filter(Boolean) as string[]
+            artifacts: [preScreenshot, postScreenshot].filter(Boolean) as string[],
         };
 
         await this.sessionManager.recordActivity(session.sessionId, activity);
@@ -305,8 +304,8 @@ export class SecureComputerUseTool implements Tool {
                 sessionId: session.sessionId,
                 operation,
                 executionTime,
-                operatorEmail: session.cacSession.certificateInfo.email
-            }
+                operatorEmail: session.cacSession.certificateInfo.email,
+            },
         });
     }
 
@@ -316,7 +315,7 @@ export class SecureComputerUseTool implements Tool {
     private async recordUnauthorizedAttempt(
         session: SecureOperatorSession,
         operation: string,
-        args: Record<string, unknown>
+        args: Record<string, unknown>,
     ): Promise<void> {
         const activity: SecureOperatorActivity = {
             activityId: this.generateActivityId(),
@@ -330,9 +329,9 @@ export class SecureComputerUseTool implements Tool {
                 operatorEmail: session.cacSession.certificateInfo.email,
                 securityLevel: session.securityConstraints.level,
                 privilegeLevel: session.securityConstraints.privilege,
-                reason: "Insufficient privileges"
+                reason: "Insufficient privileges",
             },
-            impactLevel: "high"
+            impactLevel: "high",
         };
 
         await this.sessionManager.recordActivity(session.sessionId, activity);
@@ -347,8 +346,8 @@ export class SecureComputerUseTool implements Tool {
                 sessionId: session.sessionId,
                 operation,
                 operatorEmail: session.cacSession.certificateInfo.email,
-                timestamp: new Date().toISOString()
-            }
+                timestamp: new Date().toISOString(),
+            },
         });
     }
 
@@ -359,7 +358,7 @@ export class SecureComputerUseTool implements Tool {
         session: SecureOperatorSession,
         operation: string,
         error: unknown,
-        args: Record<string, unknown>
+        args: Record<string, unknown>,
     ): Promise<void> {
         const activity: SecureOperatorActivity = {
             activityId: this.generateActivityId(),
@@ -371,9 +370,9 @@ export class SecureComputerUseTool implements Tool {
                 action: operation,
                 args: this.sanitizeArgsForLogging(args),
                 error: error instanceof Error ? error.message : String(error),
-                operatorEmail: session.cacSession.certificateInfo.email
+                operatorEmail: session.cacSession.certificateInfo.email,
             },
-            impactLevel: "medium"
+            impactLevel: "medium",
         };
 
         await this.sessionManager.recordActivity(session.sessionId, activity);
@@ -409,7 +408,7 @@ export class SecureComputerUseTool implements Tool {
                 operation: "screenshot",
                 risk: "low",
                 mutatesState: false,
-                args: { action: "screenshot" }
+                args: { action: "screenshot" },
             });
 
             if (screenshotResult.ok && screenshotResult.output && typeof screenshotResult.output === "object") {

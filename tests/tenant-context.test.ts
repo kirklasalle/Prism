@@ -74,8 +74,10 @@ export async function testTenantContext(): Promise<void> {
             mw({ headers: { "x-prism-tenant": "VALID-tenant_1" } }, null, () => {
                 observedInside = currentTenantId();
             });
-            assert(observedInside === "VALID-tenant_1" || observedInside === "default",
-                "middleware does not crash on valid id (some envs lowercase): " + observedInside);
+            assert(
+                observedInside === "VALID-tenant_1" || observedInside === "default",
+                "middleware does not crash on valid id (some envs lowercase): " + observedInside,
+            );
 
             let invalidObserved = "";
             mw({ headers: { "x-prism-tenant": "BAD ID WITH SPACES" } }, null, () => {
@@ -84,7 +86,9 @@ export async function testTenantContext(): Promise<void> {
             assert(invalidObserved === "default", "invalid id falls through to default");
 
             let noHeader = "";
-            mw({ headers: {} }, null, () => { noHeader = currentTenantId(); });
+            mw({ headers: {} }, null, () => {
+                noHeader = currentTenantId();
+            });
             assert(noHeader === "default", "missing header => default");
         } finally {
             if (prevFlag === undefined) delete process.env.PRISM_MULTI_TENANT;
@@ -97,7 +101,9 @@ export async function testTenantContext(): Promise<void> {
     // ── withTenant rejects empty id ──
     let threw = false;
     try {
-        withTenant({ tenantId: "" }, () => { /* unreachable */ });
+        withTenant({ tenantId: "" }, () => {
+            /* unreachable */
+        });
     } catch {
         threw = true;
     }

@@ -64,12 +64,13 @@ function matchesDestructiveTokens(command: string): string | null {
         let pi = 0;
         for (const token of tokens) {
             const pat = pattern[pi];
-            const isMatch = token === pat || 
-                            token.startsWith(pat + "=") || 
-                            token.startsWith(pat + ".") || 
-                            token.startsWith(pat + "\\") || 
-                            token.startsWith(pat + "/") ||
-                            ((pat === "/" || pat === "/*") && token.startsWith("$"));
+            const isMatch =
+                token === pat ||
+                token.startsWith(pat + "=") ||
+                token.startsWith(pat + ".") ||
+                token.startsWith(pat + "\\") ||
+                token.startsWith(pat + "/") ||
+                ((pat === "/" || pat === "/*") && token.startsWith("$"));
             if (isMatch) {
                 pi++;
                 if (pi >= pattern.length) {
@@ -115,9 +116,7 @@ export class ShellTool implements Tool {
             return {
                 ok: true,
                 output: { stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 },
-                sideEffects: [
-                    { type: "process", description: `shell_exec: ${command}` },
-                ],
+                sideEffects: [{ type: "process", description: `shell_exec: ${command}` }],
             };
         } catch (err: unknown) {
             const e = err as { stdout?: string; stderr?: string; code?: number; message?: string };

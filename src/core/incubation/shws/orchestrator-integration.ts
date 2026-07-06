@@ -37,7 +37,7 @@ export class ShwsHistoryRecorder implements ActivitySubscriber {
             this.inProgress.set(workflowId, {
                 workflowId,
                 failedStepId,
-                failureCode: (event.details?.reasonCode as string | undefined),
+                failureCode: event.details?.reasonCode as string | undefined,
                 repairSteps: [],
                 startedAt: event.timestamp,
             });
@@ -47,7 +47,7 @@ export class ShwsHistoryRecorder implements ActivitySubscriber {
         if (event.operation === "workflow.fallback.step" && event.status === "succeeded") {
             const repair = this.inProgress.get(workflowId);
             if (!repair) return;
-            const step = (event.details?.step as WorkflowStep | undefined);
+            const step = event.details?.step as WorkflowStep | undefined;
             if (step && repair.repairSteps.length < 3) {
                 repair.repairSteps.push(step);
             }

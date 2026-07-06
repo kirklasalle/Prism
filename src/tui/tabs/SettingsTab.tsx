@@ -9,13 +9,7 @@ import { useApi } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, KeyValue, Loading, ErrorBox, DataTable, SectionHeader, SubTabBar } from "../components/ui.js";
 
-export function SettingsTab({
-    client,
-    focused,
-}: {
-    client: PrismClient;
-    focused: boolean;
-}): React.JSX.Element {
+export function SettingsTab({ client, focused }: { client: PrismClient; focused: boolean }): React.JSX.Element {
     const [subTab, setSubTab] = useState("llm");
     const llmConfig = useApi(client, (c) => c.getLlmConfig(), 10000);
     const modelMatrix = useApi(client, (c) => c.getModelMatrix(), 15000);
@@ -75,17 +69,16 @@ export function SettingsTab({
                                 { header: "Tier", accessor: "tier", width: 6 },
                                 {
                                     header: "Modalities",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        Array.isArray(r.modalities) ? (r.modalities as string[]).join(", ") : ""),
+                                    accessor: (r: Record<string, unknown>) =>
+                                        Array.isArray(r.modalities) ? (r.modalities as string[]).join(", ") : "",
                                     width: 24,
                                 },
                                 {
                                     header: "Status",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.deprecated ? "deprecated" : "active"),
+                                    accessor: (r: Record<string, unknown>) => (r.deprecated ? "deprecated" : "active"),
                                     width: 12,
-                                    color: ((r: Record<string, unknown>) =>
-                                        r.deprecated ? colors.warning : colors.success),
+                                    color: (r: Record<string, unknown>) =>
+                                        r.deprecated ? colors.warning : colors.success,
                                 },
                             ]}
                         />
@@ -102,15 +95,10 @@ export function SettingsTab({
                     )}
                     {auditTrail.data?.slice(-30).map((entry, i) => (
                         <Box key={i}>
-                            <Text color={colors.muted}>
-                                {new Date(entry.timestamp).toLocaleTimeString()}
-                            </Text>
+                            <Text color={colors.muted}>{new Date(entry.timestamp).toLocaleTimeString()}</Text>
                             <Text> </Text>
                             <Text color={colors.info}>{entry.action}</Text>
-                            <Text color={colors.textDim}>
-                                {" "}
-                                {JSON.stringify(entry.detail).slice(0, 60)}
-                            </Text>
+                            <Text color={colors.textDim}> {JSON.stringify(entry.detail).slice(0, 60)}</Text>
                         </Box>
                     ))}
                 </Box>

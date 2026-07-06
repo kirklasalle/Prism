@@ -15,8 +15,11 @@ import {
 } from "../core/tools/contract-snapshot.js";
 import type { Tool } from "../core/tools/types.js";
 
-const SNAPSHOT_OUTPUT_PATH = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-snapshot.json");
-const DIFF_OUTPUT_PATH = process.env.PRISM_CONTRACT_DIFF_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-diff.json");
+const SNAPSHOT_OUTPUT_PATH =
+    process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ??
+    workspacePath("artifacts", "contracts", "tool-contract-snapshot.json");
+const DIFF_OUTPUT_PATH =
+    process.env.PRISM_CONTRACT_DIFF_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-diff.json");
 const BASELINE_PATH = process.env.PRISM_CONTRACT_BASELINE_PATH;
 
 async function main(): Promise<void> {

@@ -54,12 +54,17 @@ function fetchJson(method: string, path: string, body?: unknown): Promise<{ stat
             },
             (res) => {
                 let payload = "";
-                res.on("data", (chunk: Buffer) => { payload += chunk; });
-                res.on("end", () => {
-                    try { resolve({ status: res.statusCode!, body: JSON.parse(payload) }); }
-                    catch { resolve({ status: res.statusCode!, body: payload }); }
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
                 });
-            }
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload) });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
         );
         req.on("error", reject);
         if (bodyStr != null) req.write(bodyStr);
@@ -80,9 +85,7 @@ describe("Live Plugin Toggle (E3d)", function () {
         _setWorkspaceRootForTest(tmpDir);
 
         const realPrefsPath = preferencesPath();
-        originalPrefs = existsSync(realPrefsPath)
-            ? readFileSync(realPrefsPath, "utf-8")
-            : null;
+        originalPrefs = existsSync(realPrefsPath) ? readFileSync(realPrefsPath, "utf-8") : null;
         writeFileSync(realPrefsPath, JSON.stringify({ setupComplete: true }, null, 2) + "\n", "utf-8");
 
         const bus = new ActivityBus();
@@ -128,7 +131,11 @@ describe("Live Plugin Toggle (E3d)", function () {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 100));
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows EPERM: non-fatal */ }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            /* Windows EPERM: non-fatal */
+        }
     });
 
     /* ── POST /api/v1/plugins/{name}/toggle ─────────────────────────── */

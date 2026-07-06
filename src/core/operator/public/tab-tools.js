@@ -1,13 +1,23 @@
-import { state, request, escapeHtml, healthDot, timeAgo, renderStars, approvalBadge, getToolState, getPluginState, getUtilityState, getReview, setItemRating, setItemApproval, saveItemNotes, toggleItemExpand, toggleItemEnabled, dashboardLog, formatUptime, safeRenderStep } from './dashboard-core.js';
+import { state, request, escapeHtml, healthDot, timeAgo, renderStars, approvalBadge, getToolState, getPluginState, getUtilityState, getReview, setItemRating, setItemApproval, saveItemNotes, toggleItemExpand, toggleItemEnabled, dashboardLog, formatUptime, safeRenderStep, showTransientNotice, authHeaders, showForm } from './dashboard-core.js';
+
+var _filterDebounceTimer = null;
 
 export async function testTool(name) {
-  var resultEl = document.getElementById('test-result-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
-  if (resultEl) resultEl.innerHTML = '<span class="muted">Testing...</span>';
+  if (!state._toolTestResults) state._toolTestResults = {};
+  var safeId = name.replace(/[^a-zA-Z0-9]/g, '_');
+  var resultEl = document.getElementById('test-result-' + safeId);
+  var pending = '<span class="muted">Testing\u2026</span>';
+  if (resultEl) resultEl.innerHTML = pending;
+  state._toolTestResults[name] = pending;
   try {
     var res = await request('/api/tools/' + encodeURIComponent(name) + '/test', { method: 'POST' });
-    if (resultEl) resultEl.innerHTML = '<span style="color:#7ecf7e;">\u2713 ' + escapeHtml(res.message || 'OK') + '</span>';
+    var ok = '<span style="color:#7ecf7e;">\u2713 ' + escapeHtml(res.message || 'OK') + '</span>';
+    if (resultEl) resultEl.innerHTML = ok;
+    state._toolTestResults[name] = ok;
   } catch (e) {
-    if (resultEl) resultEl.innerHTML = '<span style="color:#ffc1c1;">\u2717 ' + escapeHtml(e.message) + '</span>';
+    var fail = '<span style="color:#ffc1c1;">\u2717 ' + escapeHtml(e.message) + '</span>';
+    if (resultEl) resultEl.innerHTML = fail;
+    state._toolTestResults[name] = fail;
   }
 }
 
@@ -28,10 +38,17 @@ export async function checkPluginHealth(name) {
 
 export function updateToolsFilter(val) {
   state.toolsFilterText = val.toLowerCase();
-  render();
+  // Debounce: wait 250 ms before re-rendering so rapid keystrokes don't rebuild
+  // the DOM on every character and don't steal the input's focus.
+  clearTimeout(_filterDebounceTimer);
+  _filterDebounceTimer = setTimeout(function () {
+    safeRenderStep('toolsPanel', renderToolsPanel);
+    safeRenderStep('pluginsPanel', renderPluginsPanel);
+    safeRenderStep('utilitiesPanel', renderUtilitiesPanel);
+  }, 250);
 }
 
-/* ═══ Panel Summary Computation ═══ */
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â Panel Summary Computation ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 var _toolsFallback = null; // cached later by renderToolsPanel
 var _pluginsFallback = null;
 var _utilitiesFallback = null;
@@ -266,7 +283,7 @@ export function renderPanelSummaries() {
   }
 }
 
-/* ═══ Sub-Tab Navigation ═══ */
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â Sub-Tab Navigation ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 export function switchToolsSubTab(tab) {
   state.toolsSubTab = tab;
   var subTabs = document.querySelectorAll('.tp-sub-tab');
@@ -310,10 +327,10 @@ function renderSubTabCounts() {
   }
 }
 
-/* ═══ Sort Helpers ═══ */
-export function setToolsSort(val) { state.toolsSortBy = val; render(); }
-export function setPluginsSort(val) { state.pluginsSortBy = val; render(); }
-export function setUtilitiesSort(val) { state.utilitiesSortBy = val; render(); }
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â Sort Helpers ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
+export function setToolsSort(val) { state.toolsSortBy = val; safeRenderStep('toolsPanel', renderToolsPanel); }
+export function setPluginsSort(val) { state.pluginsSortBy = val; safeRenderStep('pluginsPanel', renderPluginsPanel); }
+export function setUtilitiesSort(val) { state.utilitiesSortBy = val; safeRenderStep('utilitiesPanel', renderUtilitiesPanel); }
 
 function sortTools(tools) {
   var key = state.toolsSortBy || 'name';
@@ -418,7 +435,7 @@ function utilityCardStateBadge(us) {
   return '';
 }
 
-/* ═══ Refresh All ═══ */
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â Refresh All ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 export async function refreshAllToolStatus() {
   var btn = document.getElementById('tp-refresh-all');
   if (btn) { btn.classList.add('refreshing'); btn.disabled = true; }
@@ -433,6 +450,9 @@ export async function refreshAllToolStatus() {
       if (results[0].catalog) state.toolCatalog = results[0].catalog;
     }
     if (results[1] && results[1].plugins) state.pluginStates = results[1].plugins;
+    // Item 4: capture server plugin catalog if available so renderPluginsPanel
+    // uses live data rather than the hardcoded PLUGIN_CATALOG_FALLBACK.
+    if (results[1] && Array.isArray(results[1].catalog)) state.pluginCatalog = results[1].catalog;
     if (results[2] && results[2].utilities) state.utilityStates = results[2].utilities;
     var barEl = document.getElementById('tools-overview-bar');
     if (barEl) { var inner = barEl.querySelector('.tp-overview-bar'); if (inner) inner.classList.add('tp-pulse'); setTimeout(function () { if (inner) inner.classList.remove('tp-pulse'); }, 600); }
@@ -453,7 +473,7 @@ document.addEventListener('panel-collapse-toggle', function (e) {
 });
 
 export
-  /* ═══ Overview Bar ═══ */
+  /* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â Overview Bar ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
   function renderToolsOverviewBar() {
   var bar = document.getElementById('tools-overview-bar');
   if (!bar) return;
@@ -571,6 +591,7 @@ export
 
   // Apply sort
   var sortedTools = sortTools(tools);
+  if (!state._toolTestResults) state._toolTestResults = {};
 
   for (var c = 0; c < categories.length; c++) {
     var cat = categories[c];
@@ -583,11 +604,12 @@ export
       var rv = getReview(state.toolReviews, t.name);
       var isExpanded = state.expandedToolId === t.name;
       var safeId = t.name.replace(/[^a-zA-Z0-9]/g, '_');
+      var savedTestResult = state._toolTestResults[t.name] || '';
 
-      html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + toolCardStateClass(ts) + '">';
+      html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + toolCardStateClass(ts) + '" data-item-kind="tool" data-item-name="' + escapeHtml(t.name) + '">';
 
-      /* ── collapsed header ── */
-      html += '<div class="tp-card-head" onclick="toggleItemExpand(\'tool\', \'' + escapeHtml(t.name) + '\')" data-tooltip="Category: ' + escapeHtml(t.cat) + ' | Risk: ' + escapeHtml(t.risk) + ' | ' + (t.mut ? 'Mutating' : 'Read-only') + '\\n' + escapeHtml(t.desc) + '">';
+      /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ collapsed header ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â uses data-* for safe delegation ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+      html += '<div class="tp-card-head tp-card-toggle" data-item-kind="tool" data-item-name="' + escapeHtml(t.name) + '" data-tooltip="Category: ' + escapeHtml(t.cat) + ' | Risk: ' + escapeHtml(t.risk) + ' | ' + (t.mut ? 'Mutating' : 'Read-only') + '\n' + escapeHtml(t.desc) + '">';
       html += '<div style="flex:1;min-width:0;">';
       html += '<div style="display:flex;align-items:center;gap:8px;">';
       html += '<span class="tp-card-name">' + escapeHtml(t.name) + '</span>';
@@ -606,16 +628,17 @@ export
       html += approvalBadge(rv.approval);
       html += '</div></div>';
 
-      /* ── expanded body ── */
+      /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ expanded body ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
       html += '<div class="tp-card-body">';
 
       /* Controls */
       html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Controls</div>';
       html += '<div class="tp-controls">';
-      html += '<label class="tp-toggle"><input type="checkbox" ' + (ts.enabled ? 'checked' : '') + ' onchange="toggleItemEnabled(\'tool\', \'' + escapeHtml(t.name) + '\')"><span class="tp-toggle-track"></span>' + (ts.enabled ? 'Enabled' : 'Disabled') + '</label>';
-      html += '<button class="secondary-button" style="font-size:11px;padding:4px 12px;" onclick="testTool(\'' + escapeHtml(t.name) + '\')">\u{1F9EA} Test Tool</button>';
+      html += '<label class="tp-toggle"><input type="checkbox" ' + (ts.enabled ? 'checked' : '') + ' data-toggle-kind="tool" data-toggle-name="' + escapeHtml(t.name) + '"><span class="tp-toggle-track"></span>' + (ts.enabled ? 'Enabled' : 'Disabled') + '</label>';
+      html += '<button class="secondary-button tp-test-btn" style="font-size:11px;padding:4px 12px;" data-tool-name="' + escapeHtml(t.name) + '">\u{1F9EA} Test Tool</button>';
       html += '</div>';
-      html += '<div id="test-result-' + safeId + '" style="margin-top:6px;font-size:12px;"></div>';
+      /* Restore last test result from state so it survives re-renders */
+      html += '<div id="test-result-' + safeId + '" style="margin-top:6px;font-size:12px;">' + savedTestResult + '</div>';
       html += '</div>';
 
       /* Telemetry */
@@ -643,7 +666,7 @@ export
       html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
       html += renderStars(state.toolReviews, t.name, 'tool');
       html += approvalBadge(rv.approval);
-      html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\'tool\', \'' + escapeHtml(t.name) + '\', this.value)">';
+      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" data-approval-kind="tool" data-approval-name="' + escapeHtml(t.name) + '">';
       var approvals = ['review', 'approved', 'flagged', 'blocked'];
       for (var a = 0; a < approvals.length; a++) {
         html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
@@ -651,86 +674,113 @@ export
       html += '</select>';
       if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
       html += '</div>';
-      html += '<div style="margin-top:8px;"><textarea id="review-notes-tool-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\'tool\', \'' + escapeHtml(t.name) + '\')">' + escapeHtml(rv.notes) + '</textarea></div>';
+      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-tool-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="tool" data-notes-name="' + escapeHtml(t.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
       html += '</div>';
 
       html += '</div></div>';
     }
   }
   html += '<div style="margin-top:16px;text-align:center;">';
-  html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showRegisterToolForm()">➕ Register Custom Tool</button>';
+  html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showRegisterToolForm()">ÃƒÂ¢Ã…Â¾Ã¢â‚¬Â¢ Register Custom Tool</button>';
   html += '</div>';
   container.innerHTML = html;
+
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Event delegation for tool cards (no onclick injection) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  container.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.tp-card-toggle');
+    if (toggle) { toggleItemExpand('tool', toggle.dataset.itemName); return; }
+    var testBtn = e.target.closest('.tp-test-btn');
+    if (testBtn) { testTool(testBtn.dataset.toolName); return; }
+  });
+  container.addEventListener('change', function (e) {
+    var chk = e.target.closest('input[data-toggle-kind]');
+    if (chk) { toggleItemEnabled(chk.dataset.toggleKind, chk.dataset.toggleName); return; }
+    var sel = e.target.closest('.tp-approval-select');
+    if (sel) { setItemApproval(sel.dataset.approvalKind, sel.dataset.approvalName, sel.value); return; }
+  });
+  container.addEventListener('blur', function (e) {
+    var ta = e.target.closest('.tp-review-notes');
+    if (ta) { saveItemNotes(ta.dataset.notesKind, ta.dataset.notesName); }
+  }, true);
 }
 
-export
-  function showRegisterToolForm() {
-  var existing = document.getElementById('register-tool-form');
-  if (existing) { existing.remove(); return; }
-  var container = document.getElementById('tools-panel');
-  if (!container) return;
-  var form = document.createElement('div');
-  form.id = 'register-tool-form';
-  form.style.cssText = 'margin-top:12px;padding:14px;border:1px solid var(--accent);border-radius:12px;background:rgba(0,0,0,0.2);';
-  form.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">➕ Register Custom Tool</div>'
-    + '<div class="ps-field"><label>Name</label><input id="reg-tool-name" placeholder="my_custom_tool"></div>'
-    + '<div class="ps-field"><label>Description</label><input id="reg-tool-desc" placeholder="What does this tool do?"></div>'
-    + '<div class="ps-field"><label>Category</label><select id="reg-tool-cat" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>System</option><option>Application</option><option>Knowledge</option><option>Integration</option></select></div>'
-    + '<div class="ps-field"><label>Risk Level</label><select id="reg-tool-risk" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>low</option><option>medium</option><option>high</option></select></div>'
-    + '<div class="ps-field"><label>Endpoint / Command</label><input id="reg-tool-endpoint" placeholder="http://localhost:9000/tool or /usr/bin/mytool"></div>'
-    + '<div style="display:flex;gap:8px;margin-top:12px;">'
-    + '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="submitRegisterTool()">Register</button>'
-    + '<button class="secondary-button" style="font-size:12px;padding:6px 16px;" onclick="cancelRegisterTool()">Cancel</button>'
-    + '</div>';
-  container.appendChild(form);
+// ── Item 9: Register Tool — premium modal (no DOM append) ──────────────────
+export async function showRegisterToolForm() {
+  var result = await showForm('Register Custom Tool', [
+    { name: 'name', label: 'Tool name', placeholder: 'my_custom_tool', required: true, description: 'Snake_case identifier used in prompts and routing.' },
+    { name: 'desc', label: 'Description', placeholder: 'What does this tool do?' },
+    { name: 'cat', label: 'Category', type: 'text', placeholder: 'System / Application / Knowledge / Integration', defaultValue: 'System' },
+    { name: 'risk', label: 'Risk level', placeholder: 'low / medium / high', defaultValue: 'medium' },
+    { name: 'endpoint', label: 'Endpoint / Command', placeholder: 'http://localhost:9000/tool or /usr/bin/mytool' }
+  ], { confirmLabel: 'Register', icon: '🛠️' });
+  if (!result) return;
+  await submitRegisterTool(result);
 }
 
-export function cancelRegisterTool() {
-  var form = document.getElementById('register-tool-form');
-  if (form) form.remove();
+export function cancelRegisterTool() { /* no-op — modal handles its own cancel */ }
+
+export async function submitRegisterTool(result) {
+  // Accepts either a showForm result object or falls back to reading form fields
+  // (legacy path kept for compatibility with any direct callers).
+  var name = result && result.name ? result.name.trim() : (document.getElementById('reg-tool-name') || {}).value || '';
+  var desc = result && result.desc ? result.desc : '';
+  var cat = result && result.cat ? result.cat : 'System';
+  var risk = result && result.risk ? result.risk : 'medium';
+  var ep = result && result.endpoint ? result.endpoint : '';
+  if (!name) { showTransientNotice('Tool name is required.', 'error'); return; }
+  try {
+    await request('/api/tools/register', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name, description: desc, category: cat, risk, endpoint: ep })
+    });
+    showTransientNotice('Tool "' + name + '" registered.', 'success');
+    await refreshAllToolStatus();
+  } catch (e) {
+    showTransientNotice('Registration failed: ' + (e.message || String(e)), 'error');
+  }
 }
 
-export function submitRegisterTool() {
-  var name = document.getElementById('reg-tool-name');
-  var desc = document.getElementById('reg-tool-desc');
-  var cat = document.getElementById('reg-tool-cat');
-  var risk = document.getElementById('reg-tool-risk');
-  var endpoint = document.getElementById('reg-tool-endpoint');
-  if (!name || !name.value.trim()) { alert('Tool name is required'); return; }
-  fetch('/api/tools/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name.value.trim(), description: desc ? desc.value : '', category: cat ? cat.value : 'System', risk: risk ? risk.value : 'medium', endpoint: endpoint ? endpoint.value : '' })
-  }).then(function () {
-    var form = document.getElementById('register-tool-form');
-    if (form) form.remove();
-  }).catch(function (e) { alert('Registration failed: ' + e.message); });
-}
+// ── Item 4 & 9: Plugin catalog from server + modal install form ───────────
 
-export
-  function renderPluginsPanel() {
+/** FALLBACK catalog shown when /api/plugins/catalog is unavailable. */
+var PLUGIN_CATALOG_FALLBACK = [
+  { name: 'ids-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'IDS identity services \u2014 authentication, token lifecycle, and credential management', status: 'Active', trust: 'high', port: 8100 },
+  { name: 'impressioncore-eds', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Enterprise Data Services \u2014 structured data ingestion, transformation, and schema enforcement', status: 'Active', trust: 'high', port: 8200 },
+  { name: 'impressioncore-ipa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Intelligent Process Automation \u2014 task queuing, workflow dispatch, and RPA bridge', status: 'Active', trust: 'high', port: 8201 },
+  { name: 'impressioncore-goliath', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Large-scale data pipeline orchestration \u2014 batch ETL, partitioned processing, and backpressure control', status: 'Active', trust: 'high', port: 8202 },
+  { name: 'impressioncore-vrgc', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Visual Rendering & Graphics Compute \u2014 image generation, chart rendering, and GPU-accelerated transforms', status: 'Active', trust: 'high', port: 8203 },
+  { name: 'impressioncore-dpa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Document Processing & Analytics \u2014 PDF extraction, OCR, and document classification', status: 'Active', trust: 'high', port: 8204 },
+  { name: 'web-search-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'Web search provider \u2014 query routing, result aggregation, and safe content filtering', status: 'Active', trust: 'medium', port: 8300 },
+  { name: 'loc-mcp-server', group: 'In-Repo', type: 'Python MCP Server', desc: 'Library of Congress research engine \u2014 digital catalog, Chronicling America newspapers, and legislative tracker', status: 'Active', trust: 'high', port: 8301 }
+];
+
+export function renderPluginsPanel() {
   var container = document.getElementById('plugins-panel');
   if (!container) return;
 
-  var plugins = [
-    { name: 'ids-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'IDS identity services \u2014 authentication, token lifecycle, and credential management', status: 'Active', trust: 'high', port: 8100 },
-    { name: 'impressioncore-eds', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Enterprise Data Services \u2014 structured data ingestion, transformation, and schema enforcement', status: 'Active', trust: 'high', port: 8200 },
-    { name: 'impressioncore-ipa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Intelligent Process Automation \u2014 task queuing, workflow dispatch, and RPA bridge', status: 'Active', trust: 'high', port: 8201 },
-    { name: 'impressioncore-goliath', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Large-scale data pipeline orchestration \u2014 batch ETL, partitioned processing, and backpressure control', status: 'Active', trust: 'high', port: 8202 },
-    { name: 'impressioncore-vrgc', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Visual Rendering & Graphics Compute \u2014 image generation, chart rendering, and GPU-accelerated transforms', status: 'Active', trust: 'high', port: 8203 },
-    { name: 'impressioncore-dpa', group: 'ImpressionCore Suite', type: 'Python MCP Server', desc: 'Document Processing & Analytics \u2014 PDF extraction, OCR, and document classification', status: 'Active', trust: 'high', port: 8204 },
-    { name: 'web-search-mcp', group: 'In-Repo', type: 'Python MCP Server', desc: 'Web search provider \u2014 query routing, result aggregation, and safe content filtering', status: 'Active', trust: 'medium', port: 8300 },
-    { name: 'loc-mcp-server', group: 'In-Repo', type: 'Python MCP Server', desc: 'Library of Congress research engine \u2014 digital catalog, Chronicling America newspapers, and legislative tracker', status: 'Active', trust: 'high', port: 8301 }
-  ];
+  // ── Item 4: use server-driven catalog; fall back to PLUGIN_CATALOG_FALLBACK ──
+  // state.pluginCatalog is populated by refreshAllToolStatus() → /api/plugins/status.
+  // When a server catalog exists we merge its entries on top of the fallback so
+  // locally-configured plugins always appear even if they aren't in the bundled list.
+  var serverPlugins = Array.isArray(state.pluginCatalog) ? state.pluginCatalog : [];
+  var knownNames = {};
+  serverPlugins.forEach(function (p) { knownNames[p.name] = true; });
+  var fallbackOnly = PLUGIN_CATALOG_FALLBACK.filter(function (p) { return !knownNames[p.name]; });
+  var plugins = serverPlugins.concat(fallbackOnly);
+  if (!plugins.length) plugins = PLUGIN_CATALOG_FALLBACK.slice();
 
   var groupIcon = { 'In-Repo': '\uD83D\uDCC1', 'ImpressionCore Suite': '\uD83E\uDDE9' };
-  var groups = ['In-Repo', 'ImpressionCore Suite'];
+  var allGroups = [];
+  var seenGroups = {};
+  plugins.forEach(function (p) { var g = p.group || 'Other'; if (!seenGroups[g]) { seenGroups[g] = true; allGroups.push(g); } });
+  var groups = allGroups;
   var trustColor = { high: '#7ecf7e', medium: '#ffd17a', low: '#ffc1c1' };
   var filter = state.toolsFilterText || '';
   _pluginsFallback = plugins; // cache for computePanelSummary
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">';
-  html += '<span class="muted">' + plugins.length + ' MCP plugins registered across ' + groups.length + ' sources.</span>';
+  html += '<span class="muted">' + plugins.length + ' MCP plugins registered across ' + groups.length + ' source' + (groups.length !== 1 ? 's' : '') + '.' + (serverPlugins.length > 0 ? '' : ' <span style="color:#ffd17a;font-size:10px;">(catalog from fallback \u2014 server not yet responding)</span>') + '</span>';
   html += '<div class="tp-sort-controls"><label>Sort:</label><select class="tp-sort-select" onchange="setPluginsSort(this.value)">';
   var pSortOpts = [['name', 'Name'], ['health', 'Health'], ['requests', 'Requests'], ['trust', 'Trust']];
   for (var pso = 0; pso < pSortOpts.length; pso++) {
@@ -752,10 +802,10 @@ export
       var isExpanded = state.expandedPluginId === p.name;
       var safeId = p.name.replace(/[^a-zA-Z0-9]/g, '_');
 
-      html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + pluginCardStateClass(ps) + '">';
+      html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + pluginCardStateClass(ps) + '" data-item-kind="plugin" data-item-name="' + escapeHtml(p.name) + '">';
 
-      /* ── collapsed header ── */
-      html += '<div class="tp-card-head" onclick="toggleItemExpand(\'plugin\', \'' + escapeHtml(p.name) + '\')" data-tooltip="Group: ' + escapeHtml(p.group) + ' | Type: ' + escapeHtml(p.type) + '\\nStatus: ' + escapeHtml(p.status) + ' | Trust: ' + escapeHtml(p.trust) + '\\nPort: ' + p.port + '">';
+      /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ collapsed header ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+      html += '<div class="tp-card-head tp-card-toggle" data-item-kind="plugin" data-item-name="' + escapeHtml(p.name) + '" data-tooltip="Group: ' + escapeHtml(p.group) + ' | Type: ' + escapeHtml(p.type) + '\nStatus: ' + escapeHtml(p.status) + ' | Trust: ' + escapeHtml(p.trust) + '\nPort: ' + p.port + '">';
       html += '<div style="flex:1;min-width:0;">';
       html += '<div style="display:flex;align-items:center;gap:8px;">';
       html += '<span class="tp-card-name">' + escapeHtml(p.name) + '</span>';
@@ -774,7 +824,7 @@ export
       html += approvalBadge(rv.approval);
       html += '</div></div>';
 
-      /* ── expanded body ── */
+      /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ expanded body ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
       html += '<div class="tp-card-body">';
 
       /* Connection Info */
@@ -789,8 +839,8 @@ export
       /* Controls */
       html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Controls</div>';
       html += '<div class="tp-controls">';
-      html += '<label class="tp-toggle"><input type="checkbox" ' + (ps.enabled ? 'checked' : '') + ' onchange="toggleItemEnabled(\'plugin\', \'' + escapeHtml(p.name) + '\')"><span class="tp-toggle-track"></span>' + (ps.enabled ? 'Enabled' : 'Disabled') + '</label>';
-      html += '<button class="secondary-button" style="font-size:11px;padding:4px 12px;" onclick="checkPluginHealth(\'' + escapeHtml(p.name) + '\')">\uD83C\uDFE5 Check Health</button>';
+      html += '<label class="tp-toggle"><input type="checkbox" ' + (ps.enabled ? 'checked' : '') + ' data-toggle-kind="plugin" data-toggle-name="' + escapeHtml(p.name) + '"><span class="tp-toggle-track"></span>' + (ps.enabled ? 'Enabled' : 'Disabled') + '</label>';
+      html += '<button class="secondary-button tp-health-btn" style="font-size:11px;padding:4px 12px;" data-plugin-name="' + escapeHtml(p.name) + '">\uD83C\uDFE5 Check Health</button>';
       html += '</div>';
       html += '<div id="health-result-' + safeId + '" style="margin-top:6px;font-size:12px;"></div>';
       html += '</div>';
@@ -810,7 +860,7 @@ export
       html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
       html += renderStars(state.pluginReviews, p.name, 'plugin');
       html += approvalBadge(rv.approval);
-      html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\'plugin\', \'' + escapeHtml(p.name) + '\', this.value)">';
+      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" data-approval-kind="plugin" data-approval-name="' + escapeHtml(p.name) + '">';
       var approvals = ['review', 'approved', 'flagged', 'blocked'];
       for (var a = 0; a < approvals.length; a++) {
         html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
@@ -818,60 +868,69 @@ export
       html += '</select>';
       if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
       html += '</div>';
-      html += '<div style="margin-top:8px;"><textarea id="review-notes-plugin-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\'plugin\', \'' + escapeHtml(p.name) + '\')">' + escapeHtml(rv.notes) + '</textarea></div>';
+      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-plugin-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="plugin" data-notes-name="' + escapeHtml(p.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
       html += '</div>';
 
       html += '</div></div>';
     }
   }
   html += '<div style="margin-top:16px;text-align:center;">';
-  html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showInstallPluginForm()">➕ Install Plugin</button>';
+  html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showInstallPluginForm()">ÃƒÂ¢Ã…Â¾Ã¢â‚¬Â¢ Install Plugin</button>';
   html += '</div>';
   container.innerHTML = html;
+
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Event delegation for plugin cards ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  container.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.tp-card-toggle');
+    if (toggle) { toggleItemExpand('plugin', toggle.dataset.itemName); return; }
+    var healthBtn = e.target.closest('.tp-health-btn');
+    if (healthBtn) { checkPluginHealth(healthBtn.dataset.pluginName); return; }
+  });
+  container.addEventListener('change', function (e) {
+    var chk = e.target.closest('input[data-toggle-kind]');
+    if (chk) { toggleItemEnabled(chk.dataset.toggleKind, chk.dataset.toggleName); return; }
+    var sel = e.target.closest('.tp-approval-select');
+    if (sel) { setItemApproval(sel.dataset.approvalKind, sel.dataset.approvalName, sel.value); return; }
+  });
+  container.addEventListener('blur', function (e) {
+    var ta = e.target.closest('.tp-review-notes');
+    if (ta) { saveItemNotes(ta.dataset.notesKind, ta.dataset.notesName); }
+  }, true);
 }
 
-export
-  function showInstallPluginForm() {
-  var existing = document.getElementById('install-plugin-form');
-  if (existing) { existing.remove(); return; }
-  var container = document.getElementById('plugins-panel');
-  if (!container) return;
-  var form = document.createElement('div');
-  form.id = 'install-plugin-form';
-  form.style.cssText = 'margin-top:12px;padding:14px;border:1px solid var(--accent);border-radius:12px;background:rgba(0,0,0,0.2);';
-  form.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">➕ Install Plugin</div>'
-    + '<div class="ps-field"><label>Plugin Name</label><input id="reg-plugin-name" placeholder="my-plugin-mcp"></div>'
-    + '<div class="ps-field"><label>Type</label><select id="reg-plugin-type" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:12px;"><option>Python MCP Server</option><option>Node.js MCP Server</option><option>REST Adapter</option></select></div>'
-    + '<div class="ps-field"><label>Server URL / Path</label><input id="reg-plugin-url" placeholder="http://localhost:8400 or ./plugins/my-plugin"></div>'
-    + '<div class="ps-field"><label>Port</label><input id="reg-plugin-port" type="number" placeholder="8400"></div>'
-    + '<div class="ps-field"><label>Description</label><textarea id="reg-plugin-desc" rows="2" placeholder="What does this plugin provide?" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea></div>'
-    + '<div style="display:flex;gap:8px;margin-top:12px;">'
-    + '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="submitInstallPlugin()">Install</button>'
-    + '<button class="secondary-button" style="font-size:12px;padding:6px 16px;" onclick="cancelInstallPlugin()">Cancel</button>'
-    + '</div>';
-  container.appendChild(form);
+export function cancelInstallPlugin() { /* no-op — modal handles its own cancel */ }
+
+// ── Item 9: Install Plugin — premium modal (no DOM append) ──────────────────
+export async function showInstallPluginForm() {
+  var result = await showForm('Install Plugin', [
+    { name: 'name', label: 'Plugin name', placeholder: 'my-plugin-mcp', required: true, description: 'Kebab-case identifier used by the MCP router.' },
+    { name: 'type', label: 'Type', placeholder: 'Python MCP Server / Node.js MCP Server / REST Adapter', defaultValue: 'Python MCP Server' },
+    { name: 'url', label: 'Server URL / Path', placeholder: 'http://localhost:8400 or ./plugins/my-plugin' },
+    { name: 'port', label: 'Port', placeholder: '8400' },
+    { name: 'desc', label: 'Description', type: 'textarea', placeholder: 'What does this plugin provide?' }
+  ], { confirmLabel: 'Install', icon: '\uD83E\uDDE9' });
+  if (!result) return;
+  await submitInstallPlugin(result);
 }
 
-export function cancelInstallPlugin() {
-  var form = document.getElementById('install-plugin-form');
-  if (form) form.remove();
-}
-
-export function submitInstallPlugin() {
-  var name = document.getElementById('reg-plugin-name');
-  var type = document.getElementById('reg-plugin-type');
-  var url = document.getElementById('reg-plugin-url');
-  var port = document.getElementById('reg-plugin-port');
-  var desc = document.getElementById('reg-plugin-desc');
-  if (!name || !name.value.trim()) { alert('Plugin name is required'); return; }
-  fetch('/api/plugins/install', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name.value.trim(), type: type ? type.value : 'Python MCP Server', url: url ? url.value : '', port: port ? parseInt(port.value) || 0 : 0, description: desc ? desc.value : '' })
-  }).then(function () {
-    var form = document.getElementById('install-plugin-form');
-    if (form) form.remove();
-  }).catch(function (e) { alert('Installation failed: ' + e.message); });
+export async function submitInstallPlugin(result) {
+  var name = result && result.name ? result.name.trim() : (document.getElementById('reg-plugin-name') || {}).value || '';
+  var type = result && result.type ? result.type : 'Python MCP Server';
+  var url = result && result.url ? result.url : '';
+  var port = result && result.port ? parseInt(result.port) || 0 : 0;
+  var desc = result && result.desc ? result.desc : '';
+  if (!name) { showTransientNotice('Plugin name is required.', 'error'); return; }
+  try {
+    await request('/api/plugins/install', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name, type, url, port, description: desc })
+    });
+    showTransientNotice('Plugin "' + name + '" installed.', 'success');
+    await refreshAllToolStatus();
+  } catch (e) {
+    showTransientNotice('Installation failed: ' + (e.message || String(e)), 'error');
+  }
 }
 
 export
@@ -952,10 +1011,10 @@ export
       var isExpanded = state.expandedUtilityId === u.name;
       var safeId = u.name.replace(/[^a-zA-Z0-9]/g, '_');
 
-      html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + utilityCardStateClass(us) + '">';
+      html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + utilityCardStateClass(us) + '" data-item-kind="utility" data-item-name="' + escapeHtml(u.name) + '">';
 
-      /* ── collapsed header ── */
-      html += '<div class="tp-card-head" onclick="toggleItemExpand(\'utility\', \'' + escapeHtml(u.name) + '\')" data-tooltip="Category: ' + escapeHtml(u.cat) + '\\n' + escapeHtml(u.desc) + (us.lastRun ? '\\nLast run: ' + timeAgo(us.lastRun) : '') + '">';
+      /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ collapsed header ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+      html += '<div class="tp-card-head tp-card-toggle" data-item-kind="utility" data-item-name="' + escapeHtml(u.name) + '" data-tooltip="Category: ' + escapeHtml(u.cat) + '\n' + escapeHtml(u.desc) + (us.lastRun ? '\nLast run: ' + timeAgo(us.lastRun) : '') + '">';
       html += '<div style="flex:1;min-width:0;">';
       html += '<div style="display:flex;align-items:center;gap:8px;">';
       html += '<span class="tp-card-name">' + escapeHtml(u.name) + '</span>';
@@ -972,7 +1031,7 @@ export
       html += approvalBadge(rv.approval);
       html += '</div></div>';
 
-      /* ── expanded body ── */
+      /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ expanded body ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
       html += '<div class="tp-card-body">';
 
       /* Telemetry */
@@ -989,7 +1048,7 @@ export
       html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
       html += renderStars(state.utilityReviews, u.name, 'utility');
       html += approvalBadge(rv.approval);
-      html += '<select style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" onchange="setItemApproval(\'utility\', \'' + escapeHtml(u.name) + '\', this.value)">';
+      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" data-approval-kind="utility" data-approval-name="' + escapeHtml(u.name) + '">';
       var approvals = ['review', 'approved', 'flagged', 'blocked'];
       for (var a = 0; a < approvals.length; a++) {
         html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
@@ -997,42 +1056,169 @@ export
       html += '</select>';
       if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
       html += '</div>';
-      html += '<div style="margin-top:8px;"><textarea id="review-notes-utility-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" onblur="saveItemNotes(\'utility\', \'' + escapeHtml(u.name) + '\')">' + escapeHtml(rv.notes) + '</textarea></div>';
+      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-utility-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="utility" data-notes-name="' + escapeHtml(u.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
       html += '</div>';
 
       html += '</div></div>';
     }
   }
   container.innerHTML = html;
+
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Event delegation for utility cards ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  container.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.tp-card-toggle');
+    if (toggle) { toggleItemExpand('utility', toggle.dataset.itemName); return; }
+  });
+  container.addEventListener('change', function (e) {
+    var sel = e.target.closest('.tp-approval-select');
+    if (sel) { setItemApproval(sel.dataset.approvalKind, sel.dataset.approvalName, sel.value); return; }
+  });
+  container.addEventListener('blur', function (e) {
+    var ta = e.target.closest('.tp-review-notes');
+    if (ta) { saveItemNotes(ta.dataset.notesKind, ta.dataset.notesName); }
+  }, true);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   DIAGNOSTICS PANEL
-   ═══════════════════════════════════════════════════════════════════════ */
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
+   DIAGNOSTICS PANEL ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â shared factory
+   All 8 diagnostic panels (Browser, Agent, Computer, Knowledge Graph,
+   Workspace, Network, Telemetry, Logs, Scheduler) share the same rendering
+   logic. Each just passes a config object describing its nouns and state keys.
+   ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
+
+/**
+ * @param {string}  containerId   DOM id of the panel container element
+ * @param {object}  cfg
+ *   reportKey        state key for the report object
+ *   runningKey       state key for the boolean running flag
+ *   progressKey      state key for the progress array
+ *   lastRunAtKey     state key for the last-run ISO timestamp
+ *   expandedSuiteKey state key for the currently expanded suite name
+ *   runFn            function to call when Run button clicked
+ *   progressType     WS message type string for progress events (e.g. 'diagnostics_progress')
+ *   icon             emoji shown in the suite-list heading
+ *   label            human label for the panel (e.g. 'Browser')
+ */
+function _renderDiagPanel(containerId, cfg) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+
+  var report = state[cfg.reportKey];
+  var running = state[cfg.runningKey];
+  var progress = state[cfg.progressKey] || [];
+  var html = '';
+
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Controls bar ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
+  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" data-diag-run="' + escapeHtml(cfg.label) + '"' + (running ? ' disabled' : '') + '>';
+  html += running ? '\u23F3 Running\u2026' : cfg.icon + ' Run ' + escapeHtml(cfg.label) + ' Diagnostics';
+  html += '</button>';
+  if (state[cfg.lastRunAtKey]) html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state[cfg.lastRunAtKey]) + '</span>';
+  if (report && report.summary) {
+    var gt = report.summary.grandTotal;
+    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
+    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
+    html += '</span>';
+  }
+  html += '</div>';
+
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Live progress ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+  if (running && progress.length > 0) {
+    html += '<div style="margin-bottom:12px;">';
+    for (var p = 0; p < progress.length; p++) {
+      var pr = progress[p];
+      if (pr.type !== cfg.progressType) continue;
+      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
+      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
+      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">' + pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed</div>';
+    }
+    html += '</div>';
+  }
+
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ No report ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+  if (!report || !report.suites) {
+    if (!running) html += '<div class="muted" style="text-align:center;padding:24px;">No ' + escapeHtml(cfg.label.toLowerCase()) + ' diagnostics results yet. Click <strong>Run ' + escapeHtml(cfg.label) + ' Diagnostics</strong> to begin.</div>';
+    container.innerHTML = html;
+    _attachDiagRunButton(container, cfg);
+    return;
+  }
+
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Suite cards ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
+  var suites = report.suites || [];
+  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">' + cfg.icon + ' ' + escapeHtml(cfg.label) + ' Test Suites <span class="muted">(' + suites.length + ')</span></div>';
+  for (var i = 0; i < suites.length; i++) {
+    var s = suites[i];
+    var isExpanded = state[cfg.expandedSuiteKey] === s.suite;
+    var totalTests = s.tests || 0;
+    var passed = s.passes || 0;
+    var failed = s.failures || 0;
+    var isPassing = failed === 0 && s.status !== 'ERROR';
+    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
+    var statusIcon = isPassing ? '\u2713' : '\u2717';
+    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
+    html += '<div class="tp-card-head tp-diag-suite-toggle" data-diag-suite="' + escapeHtml(s.suite) + '" data-suite-key="' + escapeHtml(cfg.expandedSuiteKey) + '">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;"><span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
+    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
+    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + escapeHtml(s.status || 'UNKNOWN') + '</span>';
+    if (s.runner) html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
+    html += '</div>';
+    if (s.description) html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
+    html += '<div class="tp-card-meta"><span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
+    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
+    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
+    html += '</div></div></div>';
+    html += '<div class="tp-card-body">';
+    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Results</div>';
+    html += '<div class="tp-stat-row">';
+    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
+    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
+    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
+    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
+    html += '</div></div>';
+    if (s.failedTests && s.failedTests.length > 0) {
+      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
+      for (var f = 0; f < s.failedTests.length; f++) html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
+      html += '</div>';
+    }
+    if (s.error) {
+      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
+      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre></div>';
+    }
+    html += '</div></div>';
+  }
+  if (report.generatedAt) html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
+
+  container.innerHTML = html;
+  _attachDiagRunButton(container, cfg);
+
+  // Delegated toggle for suite expand/collapse
+  container.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.tp-diag-suite-toggle');
+    if (!toggle) return;
+    var suiteKey = toggle.dataset.suiteKey;
+    var suiteName = toggle.dataset.diagSuite;
+    if (state[suiteKey] === suiteName) { state[suiteKey] = null; } else { state[suiteKey] = suiteName; }
+    _renderDiagPanel(containerId, cfg);
+  });
+}
+
+function _attachDiagRunButton(container, cfg) {
+  var btn = container.querySelector('[data-diag-run]');
+  if (btn) btn.addEventListener('click', function () { cfg.runFn(); });
+}
 
 export function computeDiagnosticsSummary() {
   var report = state.diagnosticsReport;
-  if (!report || !report.summary) {
-    return { passes: 0, failures: 0, running: state.diagnosticsRunning };
-  }
-  return {
-    passes: report.summary.grandTotal.passes,
-    failures: report.summary.grandTotal.failures,
-    running: state.diagnosticsRunning,
-  };
+  if (!report || !report.summary) return { passes: 0, failures: 0, running: state.diagnosticsRunning };
+  return { passes: report.summary.grandTotal.passes, failures: report.summary.grandTotal.failures, running: state.diagnosticsRunning };
 }
 
 export async function loadDiagnosticsReport() {
   try {
     var data = await request('/api/diagnostics/browser/report');
-    if (data && data.summary) {
-      state.diagnosticsReport = data;
-    } else {
-      state.diagnosticsReport = null;
-    }
-  } catch (e) {
-    dashboardLog('tools', 'diagnostics.load.error', 'Failed to load diagnostics report: ' + e.message);
-  }
+    if (data && data.summary) { state.diagnosticsReport = data; } else { state.diagnosticsReport = null; }
+  } catch (e) { dashboardLog('tools', 'diagnostics.load.error', 'Failed to load diagnostics report: ' + e.message); }
   try {
     var statusData = await request('/api/diagnostics/browser/status');
     state.diagnosticsRunning = statusData.running || false;
@@ -1116,7 +1302,7 @@ export
   var running = state.diagnosticsRunning;
   var progress = state.diagnosticsProgress || [];
 
-  /* ── Controls bar ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Controls bar ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
   html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runBrowserDiagnostics()"' + (running ? ' disabled' : '') + '>';
   html += running ? '\u23F3 Running\u2026' : '\u{1F9EA} Run Browser Diagnostics';
@@ -1132,7 +1318,7 @@ export
   }
   html += '</div>';
 
-  /* ── Live progress during run ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Live progress during run ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (running && progress.length > 0) {
     html += '<div style="margin-bottom:12px;">';
     for (var p = 0; p < progress.length; p++) {
@@ -1147,7 +1333,7 @@ export
     html += '</div>';
   }
 
-  /* ── No report yet ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ No report yet ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (!report || !report.suites) {
     if (!running) {
       html += '<div class="muted" style="text-align:center;padding:24px;">No diagnostics results yet. Click <strong>Run Browser Diagnostics</strong> to execute the full browser test suite.</div>';
@@ -1156,7 +1342,7 @@ export
     return;
   }
 
-  /* ── Suite cards ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Suite cards ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   var suites = report.suites || [];
   html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\uD83C\uDF10 Browser Test Suites <span class="muted">(' + suites.length + ')</span></div>';
 
@@ -1226,7 +1412,7 @@ export
     html += '</div></div>';
   }
 
-  /* ── Report metadata ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Report metadata ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (report.generatedAt) {
     html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
   }
@@ -1234,9 +1420,9 @@ export
   container.innerHTML = html;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
    AGENT DIAGNOSTICS PANEL
-   ═══════════════════════════════════════════════════════════════════════ */
+   ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 
 export function computeAgentDiagnosticsSummary() {
   var report = state.agentDiagnosticsReport;
@@ -1335,135 +1521,8 @@ export function toggleAgentDiagnosticSuite(suiteName) {
 }
 
 export function renderAgentDiagnosticsPanel() {
-  var container = document.getElementById('agent-diagnostics-panel');
-  if (!container) return;
-
-  var html = '';
-  var report = state.agentDiagnosticsReport;
-  var running = state.agentDiagnosticsRunning;
-  var progress = state.agentDiagnosticsProgress || [];
-
-  /* ── Controls bar ── */
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
-  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runAgentDiagnostics()"' + (running ? ' disabled' : '') + '>';
-  html += running ? '\u23F3 Running\u2026' : '\u{1F916} Run Agent Diagnostics';
-  html += '</button>';
-  if (state.agentDiagnosticsLastRunAt) {
-    html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state.agentDiagnosticsLastRunAt) + '</span>';
-  }
-  if (report && report.summary) {
-    var gt = report.summary.grandTotal;
-    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
-    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
-    html += '</span>';
-  }
-  html += '</div>';
-
-  /* ── Live progress during run ── */
-  if (running && progress.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var p = 0; p < progress.length; p++) {
-      var pr = progress[p];
-      if (pr.type !== 'agent_diagnostics_progress') continue;
-      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
-      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
-      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">';
-      html += pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  /* ── No report yet ── */
-  if (!report || !report.suites) {
-    if (!running) {
-      html += '<div class="muted" style="text-align:center;padding:24px;">No agent diagnostics results yet. Click <strong>Run Agent Diagnostics</strong> to execute the agent test suite.</div>';
-    }
-    container.innerHTML = html;
-    return;
-  }
-
-  /* ── Suite cards ── */
-  var suites = report.suites || [];
-  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\u{1F916} Agent Test Suites <span class="muted">(' + suites.length + ')</span></div>';
-
-  for (var i = 0; i < suites.length; i++) {
-    var s = suites[i];
-    var isExpanded = state.expandedAgentDiagnosticSuiteId === s.suite;
-    var totalTests = s.tests || 0;
-    var passed = s.passes || 0;
-    var failed = s.failures || 0;
-    var isPassing = failed === 0 && s.status !== 'ERROR';
-    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
-    var statusIcon = isPassing ? '\u2713' : '\u2717';
-    var statusText = s.status || 'UNKNOWN';
-
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
-
-    /* Card header */
-    html += '<div class="tp-card-head" onclick="toggleAgentDiagnosticSuite(\'' + escapeHtml(s.suite) + '\')">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
-    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
-    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + statusText + '</span>';
-    if (s.runner) {
-      html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
-    }
-    html += '</div>';
-    if (s.description) {
-      html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
-    }
-    html += '<div class="tp-card-meta">';
-    html += '<span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
-    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
-    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
-    html += '</div>';
-    html += '</div>';
-    html += '</div>';
-
-    /* Expanded body */
-    html += '<div class="tp-card-body">';
-
-    /* Stats row */
-    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Results</div>';
-    html += '<div class="tp-stat-row">';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
-    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
-    html += '</div></div>';
-
-    /* Failed test names */
-    if (s.failedTests && s.failedTests.length > 0) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
-      for (var f = 0; f < s.failedTests.length; f++) {
-        html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    /* Error info */
-    if (s.error) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
-      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre>';
-      html += '</div>';
-    }
-
-    html += '</div></div>';
-  }
-
-  /* ── Report metadata ── */
-  if (report.generatedAt) {
-    html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
-  }
-
-  container.innerHTML = html;
+  _renderDiagPanel('agent-diagnostics-panel', { reportKey: 'agentDiagnosticsReport', runningKey: 'agentDiagnosticsRunning', progressKey: 'agentDiagnosticsProgress', lastRunAtKey: 'agentDiagnosticsLastRunAt', expandedSuiteKey: 'expandedAgentDiagnosticSuiteId', runFn: runAgentDiagnostics, progressType: 'agent_diagnostics_progress', icon: 'u{1F916}', label: 'Agent' });
 }
-
-/* ═══════════════════════════════════════════════════════════════════════
-   COMPUTER DIAGNOSTICS PANEL
-   ═══════════════════════════════════════════════════════════════════════ */
 
 export function computeComputerDiagnosticsSummary() {
   var report = state.computerDiagnosticsReport;
@@ -1562,135 +1621,8 @@ export function toggleComputerDiagnosticSuite(suiteName) {
 }
 
 export function renderComputerDiagnosticsPanel() {
-  var container = document.getElementById('computer-diagnostics-panel');
-  if (!container) return;
-
-  var html = '';
-  var report = state.computerDiagnosticsReport;
-  var running = state.computerDiagnosticsRunning;
-  var progress = state.computerDiagnosticsProgress || [];
-
-  /* ── Controls bar ── */
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
-  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runComputerDiagnostics()"' + (running ? ' disabled' : '') + '>';
-  html += running ? '\u23F3 Running\u2026' : '\u{1F5A5}\uFE0F Run Computer Diagnostics';
-  html += '</button>';
-  if (state.computerDiagnosticsLastRunAt) {
-    html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state.computerDiagnosticsLastRunAt) + '</span>';
-  }
-  if (report && report.summary) {
-    var gt = report.summary.grandTotal;
-    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
-    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
-    html += '</span>';
-  }
-  html += '</div>';
-
-  /* ── Live progress during run ── */
-  if (running && progress.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var p = 0; p < progress.length; p++) {
-      var pr = progress[p];
-      if (pr.type !== 'computer_diagnostics_progress') continue;
-      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
-      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
-      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">';
-      html += pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  /* ── No report yet ── */
-  if (!report || !report.suites) {
-    if (!running) {
-      html += '<div class="muted" style="text-align:center;padding:24px;">No computer diagnostics results yet. Click <strong>Run Computer Diagnostics</strong> to execute the computer control test suite.</div>';
-    }
-    container.innerHTML = html;
-    return;
-  }
-
-  /* ── Suite cards ── */
-  var suites = report.suites || [];
-  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\u{1F5A5}\uFE0F Computer Test Suites <span class="muted">(' + suites.length + ')</span></div>';
-
-  for (var i = 0; i < suites.length; i++) {
-    var s = suites[i];
-    var isExpanded = state.expandedComputerDiagnosticSuiteId === s.suite;
-    var totalTests = s.tests || 0;
-    var passed = s.passes || 0;
-    var failed = s.failures || 0;
-    var isPassing = failed === 0 && s.status !== 'ERROR';
-    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
-    var statusIcon = isPassing ? '\u2713' : '\u2717';
-    var statusText = s.status || 'UNKNOWN';
-
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
-
-    /* Card header */
-    html += '<div class="tp-card-head" onclick="toggleComputerDiagnosticSuite(\'' + escapeHtml(s.suite) + '\')">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
-    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
-    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + statusText + '</span>';
-    if (s.runner) {
-      html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
-    }
-    html += '</div>';
-    if (s.description) {
-      html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
-    }
-    html += '<div class="tp-card-meta">';
-    html += '<span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
-    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
-    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
-    html += '</div>';
-    html += '</div>';
-    html += '</div>';
-
-    /* Expanded body */
-    html += '<div class="tp-card-body">';
-
-    /* Stats row */
-    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Results</div>';
-    html += '<div class="tp-stat-row">';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
-    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
-    html += '</div></div>';
-
-    /* Failed test names */
-    if (s.failedTests && s.failedTests.length > 0) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
-      for (var f = 0; f < s.failedTests.length; f++) {
-        html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    /* Error info */
-    if (s.error) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
-      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre>';
-      html += '</div>';
-    }
-
-    html += '</div></div>';
-  }
-
-  /* ── Report metadata ── */
-  if (report.generatedAt) {
-    html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
-  }
-
-  container.innerHTML = html;
+  _renderDiagPanel('computer-diagnostics-panel', { reportKey: 'computerDiagnosticsReport', runningKey: 'computerDiagnosticsRunning', progressKey: 'computerDiagnosticsProgress', lastRunAtKey: 'computerDiagnosticsLastRunAt', expandedSuiteKey: 'expandedComputerDiagnosticSuiteId', runFn: runComputerDiagnostics, progressType: 'computer_diagnostics_progress', icon: 'u{1F5A5}', label: 'Computer' });
 }
-
-/* ═══════════════════════════════════════════════════════════════════════
-   KNOWLEDGE GRAPH DIAGNOSTICS PANEL
-   ═══════════════════════════════════════════════════════════════════════ */
 
 export function computeKnowledgeGraphDiagnosticsSummary() {
   var report = state.knowledgeGraphDiagnosticsReport;
@@ -1789,135 +1721,8 @@ export function toggleKnowledgeGraphDiagnosticSuite(suiteName) {
 }
 
 export function renderKnowledgeGraphDiagnosticsPanel() {
-  var container = document.getElementById('knowledge-graph-diagnostics-panel');
-  if (!container) return;
-
-  var html = '';
-  var report = state.knowledgeGraphDiagnosticsReport;
-  var running = state.knowledgeGraphDiagnosticsRunning;
-  var progress = state.knowledgeGraphDiagnosticsProgress || [];
-
-  /* ── Controls bar ── */
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
-  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runKnowledgeGraphDiagnostics()"' + (running ? ' disabled' : '') + '>';
-  html += running ? '\u23F3 Running\u2026' : '\uD83E\uDDE0 Run Knowledge Graph Diagnostics';
-  html += '</button>';
-  if (state.knowledgeGraphDiagnosticsLastRunAt) {
-    html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state.knowledgeGraphDiagnosticsLastRunAt) + '</span>';
-  }
-  if (report && report.summary) {
-    var gt = report.summary.grandTotal;
-    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
-    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
-    html += '</span>';
-  }
-  html += '</div>';
-
-  /* ── Live progress during run ── */
-  if (running && progress.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var p = 0; p < progress.length; p++) {
-      var pr = progress[p];
-      if (pr.type !== 'knowledge_graph_diagnostics_progress') continue;
-      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
-      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
-      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">';
-      html += pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  /* ── No report yet ── */
-  if (!report || !report.suites) {
-    if (!running) {
-      html += '<div class="muted" style="text-align:center;padding:24px;">No knowledge graph diagnostics results yet. Click <strong>Run Knowledge Graph Diagnostics</strong> to execute the UKS knowledge graph test suite.</div>';
-    }
-    container.innerHTML = html;
-    return;
-  }
-
-  /* ── Suite cards ── */
-  var suites = report.suites || [];
-  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\uD83E\uDDE0 Knowledge Graph Test Suites <span class="muted">(' + suites.length + ')</span></div>';
-
-  for (var i = 0; i < suites.length; i++) {
-    var s = suites[i];
-    var isExpanded = state.expandedKnowledgeGraphDiagnosticSuiteId === s.suite;
-    var totalTests = s.tests || 0;
-    var passed = s.passes || 0;
-    var failed = s.failures || 0;
-    var isPassing = failed === 0 && s.status !== 'ERROR';
-    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
-    var statusIcon = isPassing ? '\u2713' : '\u2717';
-    var statusText = s.status || 'UNKNOWN';
-
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
-
-    /* Card header */
-    html += '<div class="tp-card-head" onclick="toggleKnowledgeGraphDiagnosticSuite(\'' + escapeHtml(s.suite) + '\')">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
-    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
-    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + statusText + '</span>';
-    if (s.runner) {
-      html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
-    }
-    html += '</div>';
-    if (s.description) {
-      html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
-    }
-    html += '<div class="tp-card-meta">';
-    html += '<span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
-    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
-    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
-    html += '</div>';
-    html += '</div>';
-    html += '</div>';
-
-    /* Expanded body */
-    html += '<div class="tp-card-body">';
-
-    /* Stats row */
-    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Results</div>';
-    html += '<div class="tp-stat-row">';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
-    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
-    html += '</div></div>';
-
-    /* Failed test names */
-    if (s.failedTests && s.failedTests.length > 0) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
-      for (var f = 0; f < s.failedTests.length; f++) {
-        html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    /* Error info */
-    if (s.error) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
-      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre>';
-      html += '</div>';
-    }
-
-    html += '</div></div>';
-  }
-
-  /* ── Report metadata ── */
-  if (report.generatedAt) {
-    html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
-  }
-
-  container.innerHTML = html;
+  _renderDiagPanel('knowledge-graph-diagnostics-panel', { reportKey: 'knowledgeGraphDiagnosticsReport', runningKey: 'knowledgeGraphDiagnosticsRunning', progressKey: 'knowledgeGraphDiagnosticsProgress', lastRunAtKey: 'knowledgeGraphDiagnosticsLastRunAt', expandedSuiteKey: 'expandedKnowledgeGraphDiagnosticSuiteId', runFn: runKnowledgeGraphDiagnostics, progressType: 'knowledge_graph_diagnostics_progress', icon: 'u{1F9E0}', label: 'Knowledge Graph' });
 }
-
-/* ═══════════════════════════════════════════════════════════════════════
-   WORKSPACE DIAGNOSTICS PANEL
-   ═══════════════════════════════════════════════════════════════════════ */
 
 export function computeWorkspaceDiagnosticsSummary() {
   var report = state.workspaceDiagnosticsReport;
@@ -2016,135 +1821,8 @@ export function toggleWorkspaceDiagnosticSuite(suiteName) {
 }
 
 export function renderWorkspaceDiagnosticsPanel() {
-  var container = document.getElementById('workspace-diagnostics-panel');
-  if (!container) return;
-
-  var html = '';
-  var report = state.workspaceDiagnosticsReport;
-  var running = state.workspaceDiagnosticsRunning;
-  var progress = state.workspaceDiagnosticsProgress || [];
-
-  /* ── Controls bar ── */
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
-  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runWorkspaceDiagnostics()"' + (running ? ' disabled' : '') + '>';
-  html += running ? '\u23F3 Running\u2026' : '\uD83D\uDCC2 Run Workspace Diagnostics';
-  html += '</button>';
-  if (state.workspaceDiagnosticsLastRunAt) {
-    html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state.workspaceDiagnosticsLastRunAt) + '</span>';
-  }
-  if (report && report.summary) {
-    var gt = report.summary.grandTotal;
-    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
-    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
-    html += '</span>';
-  }
-  html += '</div>';
-
-  /* ── Live progress during run (workspace) ── */
-  if (running && progress.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var p = 0; p < progress.length; p++) {
-      var pr = progress[p];
-      if (pr.type !== 'workspace_diagnostics_progress') continue;
-      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
-      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
-      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">';
-      html += pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  /* ── No report yet ── */
-  if (!report || !report.suites) {
-    if (!running) {
-      html += '<div class="muted" style="text-align:center;padding:24px;">No workspace diagnostics results yet. Click <strong>Run Workspace Diagnostics</strong> to execute the full workspace test suite.</div>';
-    }
-    container.innerHTML = html;
-    return;
-  }
-
-  /* ── Suite cards ── */
-  var suites = report.suites || [];
-  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\uD83D\uDCC2 Workspace Test Suites <span class="muted">(' + suites.length + ')</span></div>';
-
-  for (var i = 0; i < suites.length; i++) {
-    var s = suites[i];
-    var isExpanded = state.expandedWorkspaceDiagnosticSuiteId === s.suite;
-    var totalTests = s.tests || 0;
-    var passed = s.passes || 0;
-    var failed = s.failures || 0;
-    var isPassing = failed === 0 && s.status !== 'ERROR';
-    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
-    var statusIcon = isPassing ? '\u2713' : '\u2717';
-    var statusText = s.status || 'UNKNOWN';
-
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
-
-    /* Card header */
-    html += '<div class="tp-card-head" onclick="toggleWorkspaceDiagnosticSuite(\'' + escapeHtml(s.suite) + '\')">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
-    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
-    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + statusText + '</span>';
-    if (s.runner) {
-      html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
-    }
-    html += '</div>';
-    if (s.description) {
-      html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
-    }
-    html += '<div class="tp-card-meta">';
-    html += '<span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
-    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
-    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
-    html += '</div>';
-    html += '</div>';
-    html += '</div>';
-
-    /* Expanded body */
-    html += '<div class="tp-card-body">';
-
-    /* Stats row */
-    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Results</div>';
-    html += '<div class="tp-stat-row">';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
-    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
-    html += '</div></div>';
-
-    /* Failed test names */
-    if (s.failedTests && s.failedTests.length > 0) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
-      for (var f = 0; f < s.failedTests.length; f++) {
-        html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    /* Error info */
-    if (s.error) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
-      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre>';
-      html += '</div>';
-    }
-
-    html += '</div></div>';
-  }
-
-  /* ── Report metadata ── */
-  if (report.generatedAt) {
-    html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
-  }
-
-  container.innerHTML = html;
+  _renderDiagPanel('workspace-diagnostics-panel', { reportKey: 'workspaceDiagnosticsReport', runningKey: 'workspaceDiagnosticsRunning', progressKey: 'workspaceDiagnosticsProgress', lastRunAtKey: 'workspaceDiagnosticsLastRunAt', expandedSuiteKey: 'expandedWorkspaceDiagnosticSuiteId', runFn: runWorkspaceDiagnostics, progressType: 'workspace_diagnostics_progress', icon: 'u{1F4C2}', label: 'Workspace' });
 }
-
-/* -----------------------------------------------------------------------
-   --- Network Diagnostics Panel ---------------------------------------
-   ----------------------------------------------------------------------- */
 
 export function computeNetworkDiagnosticsSummary() {
   var report = state.networkDiagnosticsReport;
@@ -2243,119 +1921,8 @@ export function toggleNetworkDiagnosticSuite(suiteName) {
 }
 
 export function renderNetworkDiagnosticsPanel() {
-  var container = document.getElementById('network-diagnostics-panel');
-  if (!container) return;
-
-  var html = '';
-  var report = state.networkDiagnosticsReport;
-  var running = state.networkDiagnosticsRunning;
-  var progress = state.networkDiagnosticsProgress || [];
-
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
-  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runNetworkDiagnostics()"' + (running ? ' disabled' : '') + '>';
-  html += running ? '\u23F3 Running\u2026' : '\uD83D\uDD0C Run Network Diagnostics';
-  html += '</button>';
-  if (state.networkDiagnosticsLastRunAt) {
-    html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state.networkDiagnosticsLastRunAt) + '</span>';
-  }
-  if (report && report.summary) {
-    var gt = report.summary.grandTotal;
-    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
-    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
-    html += '</span>';
-  }
-  html += '</div>';
-
-  if (running && progress.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var p = 0; p < progress.length; p++) {
-      var pr = progress[p];
-      if (pr.type !== 'network_diagnostics_progress') continue;
-      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
-      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
-      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">';
-      html += pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  if (!report || !report.suites) {
-    if (!running) {
-      html += '<div class="muted" style="text-align:center;padding:24px;">No network diagnostics results yet. Click <strong>Run Network Diagnostics</strong> to execute the full network test suite.</div>';
-    }
-    container.innerHTML = html;
-    return;
-  }
-
-  var suites = report.suites || [];
-  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\uD83D\uDD0C Network Test Suites <span class="muted">(' + suites.length + ')</span></div>';
-
-  for (var i = 0; i < suites.length; i++) {
-    var s = suites[i];
-    var isExpanded = state.expandedNetworkDiagnosticSuiteId === s.suite;
-    var totalTests = s.tests || 0;
-    var passed = s.passes || 0;
-    var failed = s.failures || 0;
-    var isPassing = failed === 0 && s.status !== 'ERROR';
-    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
-    var statusIcon = isPassing ? '\u2713' : '\u2717';
-    var statusText = s.status || 'UNKNOWN';
-
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
-    html += '<div class="tp-card-head" onclick="toggleNetworkDiagnosticSuite(\'' + escapeHtml(s.suite) + '\')">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
-    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
-    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + statusText + '</span>';
-    if (s.runner) {
-      html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
-    }
-    html += '</div>';
-    if (s.description) {
-      html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
-    }
-    html += '<div class="tp-card-meta">';
-    html += '<span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
-    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
-    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
-    html += '</div></div></div>';
-
-    html += '<div class="tp-card-body">';
-    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Results</div>';
-    html += '<div class="tp-stat-row">';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
-    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
-    html += '</div></div>';
-
-    if (s.failedTests && s.failedTests.length > 0) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
-      for (var f = 0; f < s.failedTests.length; f++) {
-        html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    if (s.error) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
-      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre>';
-      html += '</div>';
-    }
-
-    html += '</div></div>';
-  }
-
-  if (report.generatedAt) {
-    html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
-  }
-
-  container.innerHTML = html;
+  _renderDiagPanel('network-diagnostics-panel', { reportKey: 'networkDiagnosticsReport', runningKey: 'networkDiagnosticsRunning', progressKey: 'networkDiagnosticsProgress', lastRunAtKey: 'networkDiagnosticsLastRunAt', expandedSuiteKey: 'expandedNetworkDiagnosticSuiteId', runFn: runNetworkDiagnostics, progressType: 'network_diagnostics_progress', icon: 'u{1F310}', label: 'Network' });
 }
-
-// ── Telemetry Diagnostics ──────────────────────────────────────────────
 
 export function computeTelemetryDiagnosticsSummary() {
   var report = state.telemetryDiagnosticsReport;
@@ -2454,119 +2021,8 @@ export function toggleTelemetryDiagnosticSuite(suiteName) {
 }
 
 export function renderTelemetryDiagnosticsPanel() {
-  var container = document.getElementById('telemetry-diagnostics-panel');
-  if (!container) return;
-
-  var html = '';
-  var report = state.telemetryDiagnosticsReport;
-  var running = state.telemetryDiagnosticsRunning;
-  var progress = state.telemetryDiagnosticsProgress || [];
-
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
-  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runTelemetryDiagnostics()"' + (running ? ' disabled' : '') + '>';
-  html += running ? '\u23F3 Running\u2026' : '\uD83D\uDCCA Run Telemetry Diagnostics';
-  html += '</button>';
-  if (state.telemetryDiagnosticsLastRunAt) {
-    html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state.telemetryDiagnosticsLastRunAt) + '</span>';
-  }
-  if (report && report.summary) {
-    var gt = report.summary.grandTotal;
-    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
-    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
-    html += '</span>';
-  }
-  html += '</div>';
-
-  if (running && progress.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var p = 0; p < progress.length; p++) {
-      var pr = progress[p];
-      if (pr.type !== 'telemetry_diagnostics_progress') continue;
-      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
-      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
-      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">';
-      html += pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  if (!report || !report.suites) {
-    if (!running) {
-      html += '<div class="muted" style="text-align:center;padding:24px;">No telemetry diagnostics results yet. Click <strong>Run Telemetry Diagnostics</strong> to execute the full telemetry test suite.</div>';
-    }
-    container.innerHTML = html;
-    return;
-  }
-
-  var suites = report.suites || [];
-  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\uD83D\uDCCA Telemetry Test Suites <span class="muted">(' + suites.length + ')</span></div>';
-
-  for (var i = 0; i < suites.length; i++) {
-    var s = suites[i];
-    var isExpanded = state.expandedTelemetryDiagnosticSuiteId === s.suite;
-    var totalTests = s.tests || 0;
-    var passed = s.passes || 0;
-    var failed = s.failures || 0;
-    var isPassing = failed === 0 && s.status !== 'ERROR';
-    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
-    var statusIcon = isPassing ? '\u2713' : '\u2717';
-    var statusText = s.status || 'UNKNOWN';
-
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
-    html += '<div class="tp-card-head" onclick="toggleTelemetryDiagnosticSuite(\'' + escapeHtml(s.suite) + '\')">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
-    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
-    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + statusText + '</span>';
-    if (s.runner) {
-      html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
-    }
-    html += '</div>';
-    if (s.description) {
-      html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
-    }
-    html += '<div class="tp-card-meta">';
-    html += '<span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
-    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
-    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
-    html += '</div></div></div>';
-
-    html += '<div class="tp-card-body">';
-    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDCCA Results</div>';
-    html += '<div class="tp-stat-row">';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
-    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
-    html += '</div></div>';
-
-    if (s.failedTests && s.failedTests.length > 0) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
-      for (var f = 0; f < s.failedTests.length; f++) {
-        html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    if (s.error) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
-      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre>';
-      html += '</div>';
-    }
-
-    html += '</div></div>';
-  }
-
-  if (report.generatedAt) {
-    html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
-  }
-
-  container.innerHTML = html;
+  _renderDiagPanel('telemetry-diagnostics-panel', { reportKey: 'telemetryDiagnosticsReport', runningKey: 'telemetryDiagnosticsRunning', progressKey: 'telemetryDiagnosticsProgress', lastRunAtKey: 'telemetryDiagnosticsLastRunAt', expandedSuiteKey: 'expandedTelemetryDiagnosticSuiteId', runFn: runTelemetryDiagnostics, progressType: 'telemetry_diagnostics_progress', icon: 'u{1F4CA}', label: 'Telemetry' });
 }
-
-// ── Logs & Debug Diagnostics ──────────────────────────────────────────────
 
 export function computeLogsDiagnosticsSummary() {
   var report = state.logsDiagnosticsReport;
@@ -2665,121 +2121,8 @@ export function toggleLogsDiagnosticSuite(suiteName) {
 }
 
 export function renderLogsDiagnosticsPanel() {
-  var container = document.getElementById('logs-diagnostics-panel');
-  if (!container) return;
-
-  var html = '';
-  var report = state.logsDiagnosticsReport;
-  var running = state.logsDiagnosticsRunning;
-  var progress = state.logsDiagnosticsProgress || [];
-
-  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
-  html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runLogsDiagnostics()"' + (running ? ' disabled' : '') + '>';
-  html += running ? '\u23F3 Running\u2026' : '\uD83D\uDD0D Run Logs Diagnostics';
-  html += '</button>';
-  if (state.logsDiagnosticsLastRunAt) {
-    html += '<span class="muted" style="font-size:11px;">Last run: ' + timeAgo(state.logsDiagnosticsLastRunAt) + '</span>';
-  }
-  if (report && report.summary) {
-    var gt = report.summary.grandTotal;
-    html += '<span style="font-size:12px;font-weight:600;color:' + (gt.failures === 0 ? '#7ecf7e' : '#ffc1c1') + ';">';
-    html += gt.passes + ' passed' + (gt.failures > 0 ? ' / ' + gt.failures + ' failed' : '');
-    html += '</span>';
-  }
-  html += '</div>';
-
-  if (running && progress.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var p = 0; p < progress.length; p++) {
-      var pr = progress[p];
-      if (pr.type !== 'logs_diagnostics_progress') continue;
-      var pIcon = pr.status === 'PASS' ? '\u2713' : pr.status === 'FAIL' ? '\u2717' : '\u26A0';
-      var pColor = pr.status === 'PASS' ? '#7ecf7e' : '#ffc1c1';
-      html += '<div style="font-size:11px;padding:2px 0;color:' + pColor + ';">';
-      html += pIcon + ' ' + escapeHtml(pr.suite) + ' \u2014 ' + pr.passes + '/' + (pr.passes + pr.failures) + ' passed';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  if (!report || !report.suites) {
-    if (!running) {
-      html += '<div class="muted" style="text-align:center;padding:24px;">No logs diagnostics results yet. Click <strong>Run Logs Diagnostics</strong> to execute the full logs & debug test suite.</div>';
-    }
-    container.innerHTML = html;
-    return;
-  }
-
-  var suites = report.suites || [];
-  html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\uD83D\uDD0D Logs & Debug Test Suites <span class="muted">(' + suites.length + ')</span></div>';
-
-  for (var i = 0; i < suites.length; i++) {
-    var s = suites[i];
-    var isExpanded = state.expandedLogsDiagnosticSuiteId === s.suite;
-    var totalTests = s.tests || 0;
-    var passed = s.passes || 0;
-    var failed = s.failures || 0;
-    var isPassing = failed === 0 && s.status !== 'ERROR';
-    var statusColor = isPassing ? '#7ecf7e' : '#ffc1c1';
-    var statusIcon = isPassing ? '\u2713' : '\u2717';
-    var statusText = s.status || 'UNKNOWN';
-
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + (isPassing ? ' tp-healthy' : ' tp-error') + '" style="margin-bottom:6px;">';
-    html += '<div class="tp-card-head" onclick="toggleLogsDiagnosticSuite(\'' + escapeHtml(s.suite) + '\')">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">' + escapeHtml(s.suite) + '</span>';
-    html += '<span class="tp-status-dot ' + (isPassing ? 'green' : 'red') + '"></span>';
-    html += '<span style="font-size:11px;font-weight:600;color:' + statusColor + ';">' + statusIcon + ' ' + statusText + '</span>';
-    if (s.runner) {
-      html += '<span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(s.runner) + '</span>';
-    }
-    html += '</div>';
-    if (s.description) {
-      html += '<div class="tp-card-desc">' + escapeHtml(s.description) + '</div>';
-    }
-    html += '<div class="tp-card-meta">';
-    html += '<span class="tp-meta-tag" style="color:' + statusColor + ';">' + passed + '/' + totalTests + ' passed</span>';
-    if (s.duration > 0) html += '<span class="tp-meta-tag">\u23F1 ' + (s.duration / 1000).toFixed(1) + 's</span>';
-    if (s.pending > 0) html += '<span class="tp-meta-tag">\u23F8 ' + s.pending + ' pending</span>';
-    html += '</div></div></div>';
-
-    html += '<div class="tp-card-body">';
-    html += '<div class="tp-section"><div class="tp-section-title">\uD83D\uDD0D Results</div>';
-    html += '<div class="tp-stat-row">';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Total</span><span class="tp-stat-value">' + totalTests + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Passed</span><span class="tp-stat-value" style="color:#7ecf7e;">' + passed + '</span></div>';
-    html += '<div class="tp-stat"><span class="tp-stat-label">Failed</span><span class="tp-stat-value" style="color:#ffc1c1;">' + failed + '</span></div>';
-    if (s.duration > 0) html += '<div class="tp-stat"><span class="tp-stat-label">Duration</span><span class="tp-stat-value">' + (s.duration / 1000).toFixed(1) + 's</span></div>';
-    html += '</div></div>';
-
-    if (s.failedTests && s.failedTests.length > 0) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u2717 Failed Tests</div>';
-      for (var f = 0; f < s.failedTests.length; f++) {
-        html += '<div style="font-size:11px;padding:2px 0;color:#ffc1c1;">\u2192 ' + escapeHtml(s.failedTests[f]) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    if (s.error) {
-      html += '<div class="tp-section"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0 Error</div>';
-      html += '<pre style="font-size:10px;color:#ffc1c1;white-space:pre-wrap;max-height:120px;overflow:auto;">' + escapeHtml(s.error) + '</pre>';
-      html += '</div>';
-    }
-
-    html += '</div></div>';
-  }
-
-  if (report.generatedAt) {
-    html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
-  }
-
-  container.innerHTML = html;
+  _renderDiagPanel('logs-diagnostics-panel', { reportKey: 'logsDiagnosticsReport', runningKey: 'logsDiagnosticsRunning', progressKey: 'logsDiagnosticsProgress', lastRunAtKey: 'logsDiagnosticsLastRunAt', expandedSuiteKey: 'expandedLogsDiagnosticSuiteId', runFn: runLogsDiagnostics, progressType: 'logs_diagnostics_progress', icon: 'u{1F4DD}', label: 'Logs' });
 }
-
-/* ═══════════════════════════════════════════════════════════════════════
-   SCHEDULER DIAGNOSTICS PANEL
-   ═══════════════════════════════════════════════════════════════════════ */
 
 export function computeSchedulerDiagnosticsSummary() {
   var report = state.schedulerDiagnosticsReport;
@@ -2886,7 +2229,7 @@ export function renderSchedulerDiagnosticsPanel() {
   var running = state.schedulerDiagnosticsRunning;
   var progress = state.schedulerDiagnosticsProgress || [];
 
-  /* ── Controls bar ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Controls bar ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
   html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runSchedulerDiagnostics()"' + (running ? ' disabled' : '') + '>';
   html += running ? '\u23F3 Running\u2026' : '\u{1F4C5} Run Scheduler Diagnostics';
@@ -2902,7 +2245,7 @@ export function renderSchedulerDiagnosticsPanel() {
   }
   html += '</div>';
 
-  /* ── Live progress during run ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Live progress during run ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (running && progress.length > 0) {
     html += '<div style="margin-bottom:12px;">';
     for (var p = 0; p < progress.length; p++) {
@@ -2917,7 +2260,7 @@ export function renderSchedulerDiagnosticsPanel() {
     html += '</div>';
   }
 
-  /* ── No report yet ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ No report yet ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (!report || !report.suites) {
     if (!running) {
       html += '<div class="muted" style="text-align:center;padding:24px;">No scheduler diagnostics results yet. Click <strong>Run Scheduler Diagnostics</strong> to execute the scheduler test suite.</div>';
@@ -2926,7 +2269,7 @@ export function renderSchedulerDiagnosticsPanel() {
     return;
   }
 
-  /* ── Suite cards ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Suite cards ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   var suites = report.suites || [];
   html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\u{1F4C5} Scheduler Test Suites <span class="muted">(' + suites.length + ')</span></div>';
 
@@ -2996,7 +2339,7 @@ export function renderSchedulerDiagnosticsPanel() {
     html += '</div></div>';
   }
 
-  /* ── Report metadata ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Report metadata ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (report.generatedAt) {
     html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
   }
@@ -3004,9 +2347,9 @@ export function renderSchedulerDiagnosticsPanel() {
   container.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 // Demo Scenarios Diagnostics
-// ═══════════════════════════════════════════════════════════════════════
+// ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 
 export function computeDemoDiagnosticsSummary() {
   var report = state.demoDiagnosticsReport;
@@ -3107,7 +2450,7 @@ export function renderDemoDiagnosticsPanel() {
   var running = state.demoDiagnosticsRunning;
   var progress = state.demoDiagnosticsProgress || [];
 
-  /* ── Controls bar ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Controls bar ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
   html += '<button class="primary-button" style="font-size:12px;padding:6px 16px;" onclick="runDemoDiagnostics()"' + (running ? ' disabled' : '') + '>';
   html += running ? '\u23F3 Running\u2026' : '\u{1F3AC} Run Demo Scenarios';
@@ -3126,7 +2469,7 @@ export function renderDemoDiagnosticsPanel() {
   }
   html += '</div>';
 
-  /* ── Live progress during run ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Live progress during run ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (running && progress.length > 0) {
     html += '<div style="margin-bottom:12px;">';
     for (var p = 0; p < progress.length; p++) {
@@ -3141,7 +2484,7 @@ export function renderDemoDiagnosticsPanel() {
     html += '</div>';
   }
 
-  /* ── No report yet ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ No report yet ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (!report || !report.scenarios) {
     if (!running) {
       html += '<div class="muted" style="text-align:center;padding:24px;">No demo scenario results yet. Click <strong>Run Demo Scenarios</strong> to execute the full demo suite.</div>';
@@ -3150,12 +2493,12 @@ export function renderDemoDiagnosticsPanel() {
     return;
   }
 
-  /* ── Profile & category info ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Profile & category info ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--fg);">\u{1F3AC} Demo Scenarios <span class="muted">(' + report.scenarios.length + ')</span>';
   if (report.profileSegment) html += ' <span class="ps-badge" style="background:rgba(148,163,184,0.1);color:var(--muted);font-size:10px;">' + escapeHtml(report.profileSegment) + '</span>';
   html += '</div>';
 
-  /* ── Scenario cards ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Scenario cards ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   var scenarios = report.scenarios || [];
   for (var i = 0; i < scenarios.length; i++) {
     var s = scenarios[i];
@@ -3221,7 +2564,7 @@ export function renderDemoDiagnosticsPanel() {
     html += '</div></div>';
   }
 
-  /* ── Report metadata ── */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Report metadata ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   if (report.generatedAt) {
     html += '<div class="muted" style="font-size:10px;text-align:right;margin-top:8px;">Report generated: ' + escapeHtml(report.generatedAt) + '</div>';
   }
@@ -3233,7 +2576,7 @@ export function renderDemoDiagnosticsPanel() {
 
 var _pluginHealthPollTimer = null;
 
-/** Plugin names to poll automatically � matches the static plugin list in renderPluginsPanel(). */
+/** Plugin names to poll automatically ÃƒÂ¯Ã‚Â¿Ã‚Â½ matches the static plugin list in renderPluginsPanel(). */
 var _KNOWN_PLUGINS = ['ids-mcp', 'impressioncore-eds', 'impressioncore-ipa', 'impressioncore-goliath', 'impressioncore-vrgc', 'impressioncore-dpa', 'web-search-mcp', 'loc-mcp-server'];
 
 /** Poll health for all known plugins via POST /api/v1/plugins/{name}/health. */
@@ -3313,13 +2656,13 @@ export function renderSkillsPanel() {
     var isExpanded = state.expandedSkillId === sk.name;
     var safeId = sk.name.replace(/[^a-zA-Z0-9]/g, '_');
 
-    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + ' tp-healthy" style="margin-bottom:6px;">';
-    
+    html += '<div class="tp-card' + (isExpanded ? ' tp-expanded' : '') + ' tp-healthy" style="margin-bottom:6px;" data-item-kind="skill" data-item-name="' + escapeHtml(sk.name) + '">';
+
     /* Header */
-    html += '<div class="tp-card-head" onclick="toggleItemExpand(\'skill\', \'' + escapeHtml(sk.name) + '\')">';
+    html += '<div class="tp-card-head tp-card-toggle" data-item-kind="skill" data-item-name="' + escapeHtml(sk.name) + '">';
     html += '<div style="flex:1;min-width:0;">';
     html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span class="tp-card-name">⚡ ' + escapeHtml(sk.name) + '</span>';
+    html += '<span class="tp-card-name">\u26A1 ' + escapeHtml(sk.name) + '</span>';
     html += '<span class="tp-status-dot green"></span>';
     html += '<span class="ps-badge" style="background:rgba(163,113,247,0.12);color:#a371f7;font-size:10px;">' + escapeHtml(sk.group) + '</span>';
     html += '</div>';
@@ -3340,7 +2683,7 @@ export function renderSkillsPanel() {
     html += '<strong>State Store:</strong> SQLite tables in `prism-activity.db`<br>';
     html += '<strong>Required Authority:</strong> <span class="ps-badge" style="background:rgba(235,166,90,0.12);color:#eba65a;font-size:10px;">' + escapeHtml(sk.tier || 'tier2_conditional') + '</span><br>';
     if (sk.tags && sk.tags.length > 0) {
-      html += '<strong>Tags:</strong> ' + sk.tags.map(function(t) { return '<span class="ps-badge" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);font-size:10px;margin-right:4px;">' + escapeHtml(t) + '</span>'; }).join('') + '<br>';
+      html += '<strong>Tags:</strong> ' + sk.tags.map(function (t) { return '<span class="ps-badge" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);font-size:10px;margin-right:4px;">' + escapeHtml(t) + '</span>'; }).join('') + '<br>';
     }
     html += '</div></div>';
 
@@ -3364,6 +2707,12 @@ export function renderSkillsPanel() {
   }
 
   container.innerHTML = html;
+
+  // Delegated toggle for skill cards
+  container.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.tp-card-toggle');
+    if (toggle) { toggleItemExpand('skill', toggle.dataset.itemName); }
+  });
 }
 
 

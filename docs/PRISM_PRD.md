@@ -260,6 +260,37 @@ Acceptance criteria:
 - `enterprise` and `corporate` inputs resolve to `business` segment in all code paths,
 - query APIs support filtering by characterId, operatorEmail, prismUserEmail, and executionProfileSegment.
 
+### 8.4B Advanced Model Routing and Model Matrix
+
+The platform must implement a fully configurable, operator-controlled routing plane coupled with a dynamic model matrix registry. These features are exclusive to the PRISM platform and its operators.
+
+#### 8.4B.1 Advanced Model Routing
+- **Multi-Strategy Routing**: The routing engine must support `Single Provider`, `Multi-Provider`, and `Modality-Based` routing topologies.
+- **AI-Assisted Allocation**: The orchestrator must support AI-assisted model allocation, suggesting optimal model-to-role configurations during setup or task planning.
+- **Role-Based Overrides**: Operators must be able to assign specific model/provider overrides to individual task roles (`chat`, `code-generation`, `summarization`, `research`, `memory-indexing`, etc.), subject to minimum capability tier validation.
+- **Power-Aware Routing Modes**: The system must enforce routing priorities based on the operator's active power profile:
+  - `eco`: Prioritizes local models over cloud API routes to eliminate external charges.
+  - `performance`: Routes to the highest available capability tier for each role.
+  - `adaptive`: Discovers free hardware VRAM and dynamically routes high-VRAM models to cloud fallbacks if local capacity is exceeded, eliminating Out-Of-Memory (OOM) failures.
+
+#### 8.4B.2 Advanced Model Matrix (Exclusive Core)
+- **Dynamic Runtime Profile Management**: The matrix must support runtime APIs to register, update, and remove model capability profiles (`registerModelProfile`, `updateModelProfile`, `removeModelProfile`).
+- **Local Model Auto-Discovery**: The system must actively query the local environment (e.g., Ollama `/api/ps` endpoint) to discover running instances, calculating estimated VRAM footprints, context limits, and parameter sizes.
+- **Deprecation and Sunset Lifecycles**: The matrix must track deprecation metadata fields, including:
+  - `deprecated` (boolean flag)
+  - `deprecatedAt` (ISO date when deprecation began)
+  - `sunsetDate` (ISO date when full sunset occurs)
+  - `successor` (recommended successor model pattern)
+  - `deprecationReason` (reason description)
+- **Legacy Retention & Warnings**: Deprecated and sunset models must be retained in the matrix registry for historic telemetry aggregation and backward-compatibility execution. The router must de-prioritize these models in selection hierarchies and emit warning events to the ActivityBus when a deprecated model is selected.
+
+Acceptance criteria:
+- router successfully resolves model mappings for all 20+ defined task roles,
+- routing preferences dynamically adapt when powerMode transitions between `performance`, `eco`, and `adaptive`,
+- local hardware VRAM status is queried and utilized in routing decisions,
+- runtime profiles can be added and immediately resolved by `resolveProfile()`,
+- deprecation metadata is evaluated, causing sunset models to be flagged and de-prioritized, and warning traces logged on execution.
+
 ### 8.5 Individual-native MVP capabilities (Phase 1)
 
 The first productization track implements native individual productivity capabilities over existing governance/runtime foundations.

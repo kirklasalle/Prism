@@ -38,13 +38,9 @@ export interface WorkflowExecution {
 }
 
 export class WorkflowExecutor {
-    constructor() { }
+    constructor() {}
 
-    createDAG(
-        name: string,
-        steps: WorkflowStep[],
-        fallbacks: WorkflowFallback[] = [],
-    ): WorkflowDAG {
+    createDAG(name: string, steps: WorkflowStep[], fallbacks: WorkflowFallback[] = []): WorkflowDAG {
         return {
             id: generateId(),
             name,
@@ -78,11 +74,7 @@ export class WorkflowExecutor {
         return { valid: errors.length === 0, errors };
     }
 
-    getNextStep(
-        dag: WorkflowDAG,
-        currentStepId: string,
-        outcome: WorkflowStepOutcome,
-    ): WorkflowStep | null {
+    getNextStep(dag: WorkflowDAG, currentStepId: string, outcome: WorkflowStepOutcome): WorkflowStep | null {
         const fallbacks = dag.fallbacks.filter((f) => {
             if (f.stepId !== currentStepId) {
                 return false;
@@ -112,11 +104,7 @@ export class WorkflowExecutor {
         return null;
     }
 
-    hasFallbackForOutcome(
-        dag: WorkflowDAG,
-        stepId: string,
-        outcome: WorkflowStepOutcome,
-    ): boolean {
+    hasFallbackForOutcome(dag: WorkflowDAG, stepId: string, outcome: WorkflowStepOutcome): boolean {
         return this.getNextStep(dag, stepId, outcome) !== null;
     }
 }

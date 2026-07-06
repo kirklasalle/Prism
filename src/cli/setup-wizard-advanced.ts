@@ -66,8 +66,14 @@ const PROVIDERS: ProviderDef[] = [
 ];
 
 const ROUTING_ROLES = [
-    "chat", "code-generation", "reasoning", "tool-selection",
-    "summarization", "classification", "memory-indexing", "vision",
+    "chat",
+    "code-generation",
+    "reasoning",
+    "tool-selection",
+    "summarization",
+    "classification",
+    "memory-indexing",
+    "vision",
 ];
 
 interface SchedulerSuggestion {
@@ -81,16 +87,58 @@ interface SchedulerSuggestion {
 function getSchedulerSuggestions(profile: string): SchedulerSuggestion[] {
     if (profile === "business") {
         return [
-            { id: "daily-review", label: "Daily self-review", cron: "0 9 * * *", description: "Daily agent performance review at 9AM", defaultEnabled: true },
-            { id: "daily-backup", label: "Daily workspace backup", cron: "0 2 * * *", description: "Nightly workspace backup at 2AM", defaultEnabled: true },
-            { id: "weekly-compliance", label: "Weekly compliance audit", cron: "0 6 * * 1", description: "Monday 6AM compliance scan", defaultEnabled: true },
-            { id: "weekly-telemetry", label: "Weekly telemetry sync", cron: "0 0 * * 1", description: "Monday midnight telemetry export", defaultEnabled: true },
-            { id: "monthly-cert", label: "Monthly certificate renewal check", cron: "0 8 1 * *", description: "First of month cert check", defaultEnabled: false },
+            {
+                id: "daily-review",
+                label: "Daily self-review",
+                cron: "0 9 * * *",
+                description: "Daily agent performance review at 9AM",
+                defaultEnabled: true,
+            },
+            {
+                id: "daily-backup",
+                label: "Daily workspace backup",
+                cron: "0 2 * * *",
+                description: "Nightly workspace backup at 2AM",
+                defaultEnabled: true,
+            },
+            {
+                id: "weekly-compliance",
+                label: "Weekly compliance audit",
+                cron: "0 6 * * 1",
+                description: "Monday 6AM compliance scan",
+                defaultEnabled: true,
+            },
+            {
+                id: "weekly-telemetry",
+                label: "Weekly telemetry sync",
+                cron: "0 0 * * 1",
+                description: "Monday midnight telemetry export",
+                defaultEnabled: true,
+            },
+            {
+                id: "monthly-cert",
+                label: "Monthly certificate renewal check",
+                cron: "0 8 1 * *",
+                description: "First of month cert check",
+                defaultEnabled: false,
+            },
         ];
     }
     return [
-        { id: "daily-review", label: "Daily self-review", cron: "0 9 * * *", description: "Daily agent performance review at 9AM", defaultEnabled: true },
-        { id: "weekly-telemetry", label: "Weekly telemetry sync", cron: "0 0 * * 1", description: "Monday midnight telemetry export", defaultEnabled: false },
+        {
+            id: "daily-review",
+            label: "Daily self-review",
+            cron: "0 9 * * *",
+            description: "Daily agent performance review at 9AM",
+            defaultEnabled: true,
+        },
+        {
+            id: "weekly-telemetry",
+            label: "Weekly telemetry sync",
+            cron: "0 0 * * 1",
+            description: "Monday midnight telemetry export",
+            defaultEnabled: false,
+        },
     ];
 }
 
@@ -152,10 +200,7 @@ interface AdvancedCliArgs {
 // Advanced Interactive Wizard (8 Steps)
 // ──────────────────────────────────────────────────────────────────────────────
 
-export async function runAdvancedInteractive(
-    args: AdvancedCliArgs,
-    client: SetupApiClient | null,
-): Promise<void> {
+export async function runAdvancedInteractive(args: AdvancedCliArgs, client: SetupApiClient | null): Promise<void> {
     printBanner();
     console.log(color("  Advanced Configuration (8 Steps)", ansi.magenta, ansi.bold));
     console.log("");
@@ -230,7 +275,9 @@ export async function runAdvancedInteractive(
         },
     ];
     const defaultProfileIdx = state.profile === "business" ? 1 : 0;
-    state.profile = (await select("Select execution profile:", profileOptions, defaultProfileIdx)) as "individual" | "business";
+    state.profile = (await select("Select execution profile:", profileOptions, defaultProfileIdx)) as
+        | "individual"
+        | "business";
 
     // Apply profile-aware defaults
     if (state.profile === "business") {
@@ -244,7 +291,11 @@ export async function runAdvancedInteractive(
     }
 
     if (client) {
-        try { await client.postSetupProfile(state.profile); } catch { /* best-effort */ }
+        try {
+            await client.postSetupProfile(state.profile);
+        } catch {
+            /* best-effort */
+        }
     }
     printSuccess(`Profile set to ${color(state.profile, ansi.bold)}`);
 
@@ -298,7 +349,9 @@ export async function runAdvancedInteractive(
             for (const check of prereqs.checks) {
                 printCheck(check.label, check.passed, check.detail);
             }
-        } catch { /* local checks already shown */ }
+        } catch {
+            /* local checks already shown */
+        }
     }
     console.log("");
     printSuccess(`Workspace: ${color(state.workspace, ansi.bold)}`);
@@ -315,7 +368,10 @@ export async function runAdvancedInteractive(
         value: p.id,
         description: `${p.description}${p.needsKey ? "" : " (no API key needed)"}`,
     }));
-    const defaultProviderIdx = Math.max(0, PROVIDERS.findIndex((p) => p.id === state.provider));
+    const defaultProviderIdx = Math.max(
+        0,
+        PROVIDERS.findIndex((p) => p.id === state.provider),
+    );
     state.provider = await select("Select provider:", providerOptions, defaultProviderIdx);
 
     const selectedProvider = PROVIDERS.find((p) => p.id === state.provider)!;
@@ -370,7 +426,10 @@ export async function runAdvancedInteractive(
         { label: "Multi-Model", value: "multi", description: "Assign different models to different roles" },
         { label: "Modality-Aware", value: "modality", description: "Route by content type (text, vision, code)" },
     ];
-    state.routingStrategy = (await select("Select routing strategy:", strategyOptions, 0)) as "single" | "multi" | "modality";
+    state.routingStrategy = (await select("Select routing strategy:", strategyOptions, 0)) as
+        | "single"
+        | "multi"
+        | "modality";
 
     if (state.routingStrategy !== "single") {
         // Fetch AI-suggested routing if available
@@ -379,7 +438,9 @@ export async function runAdvancedInteractive(
             try {
                 const data = await client.getRoutingSuggestions();
                 suggestions = data.suggestions || {};
-            } catch { /* no suggestions available */ }
+            } catch {
+                /* no suggestions available */
+            }
         }
 
         console.log("");
@@ -418,7 +479,9 @@ export async function runAdvancedInteractive(
     }
 
     const overrideCount = Object.keys(state.roleOverrides).length;
-    printSuccess(`Routing: ${color(state.routingStrategy, ansi.bold)}${overrideCount > 0 ? ` (${overrideCount} role override(s))` : ""}`);
+    printSuccess(
+        `Routing: ${color(state.routingStrategy, ansi.bold)}${overrideCount > 0 ? ` (${overrideCount} role override(s))` : ""}`,
+    );
 
     // ── Step 5: Guardian Agent & Swarm ───────────────────────────────────────
 
@@ -459,11 +522,24 @@ export async function runAdvancedInteractive(
         // Authority tier
         console.log("");
         const tierOptions: SelectOption[] = [
-            { label: "Tier 1 — Autonomous", value: "tier1_autonomous", description: "Agent acts independently, minimal oversight" },
-            { label: "Tier 2 — Conditional", value: "tier2_conditional", description: "Requires approval for sensitive operations" },
-            { label: "Tier 3 — Supervised", value: "tier3_supervised", description: "All operations require explicit approval" },
+            {
+                label: "Tier 1 — Autonomous",
+                value: "tier1_autonomous",
+                description: "Agent acts independently, minimal oversight",
+            },
+            {
+                label: "Tier 2 — Conditional",
+                value: "tier2_conditional",
+                description: "Requires approval for sensitive operations",
+            },
+            {
+                label: "Tier 3 — Supervised",
+                value: "tier3_supervised",
+                description: "All operations require explicit approval",
+            },
         ];
-        const defaultTierIdx = state.guardianTier === "tier2_conditional" ? 1 : state.guardianTier === "tier3_supervised" ? 2 : 0;
+        const defaultTierIdx =
+            state.guardianTier === "tier2_conditional" ? 1 : state.guardianTier === "tier3_supervised" ? 2 : 0;
         state.guardianTier = await select("Select authority tier:", tierOptions, defaultTierIdx);
 
         // Auto-start
@@ -507,12 +583,20 @@ export async function runAdvancedInteractive(
     console.log("");
 
     // Load available characters
-    let availableCharacters: Array<{ id?: string; characterId?: string; name?: string; displayName?: string; executionProfile?: string }> = [];
+    let availableCharacters: Array<{
+        id?: string;
+        characterId?: string;
+        name?: string;
+        displayName?: string;
+        executionProfile?: string;
+    }> = [];
     if (client) {
         try {
             const data = await client.getWorkspaceCharacters();
             availableCharacters = data.characters || [];
-        } catch { /* no characters available */ }
+        } catch {
+            /* no characters available */
+        }
     }
 
     const filteredCharacters = availableCharacters.filter((c) => {
@@ -525,9 +609,13 @@ export async function runAdvancedInteractive(
             { label: "Skip (configure later)", value: "", description: "No character assignment now" },
             ...filteredCharacters.map((c) => {
                 const cid = c.id || c.characterId || "";
-                const icon = cid.startsWith("aria") ? "\u{1F916}"
-                    : cid.startsWith("phoenix") ? "\u{1F985}"
-                        : cid.startsWith("sentinel") ? "\u{1F6E1}" : "\u{1F464}";
+                const icon = cid.startsWith("aria")
+                    ? "\u{1F916}"
+                    : cid.startsWith("phoenix")
+                      ? "\u{1F985}"
+                      : cid.startsWith("sentinel")
+                        ? "\u{1F6E1}"
+                        : "\u{1F464}";
                 return {
                     label: `${icon} ${c.displayName || c.name || cid || "Unknown"}`,
                     value: cid,
@@ -696,7 +784,9 @@ export async function runAdvancedInteractive(
                 try {
                     await client.postSchedulerCron(s.label, s.cron, s.id);
                     createdCount++;
-                } catch { /* best-effort */ }
+                } catch {
+                    /* best-effort */
+                }
             }
         }
         if (createdCount > 0) {
@@ -741,7 +831,9 @@ export async function runAdvancedInteractive(
     if (client) {
         try {
             readiness = await client.postReadinessRecheck("setup_wizard_advanced_cli");
-        } catch { /* best-effort */ }
+        } catch {
+            /* best-effort */
+        }
     }
 
     // Build and display the initialization certificate
@@ -752,7 +844,9 @@ export async function runAdvancedInteractive(
         try {
             const certResult = await client.postInitializationSession(certificate);
             state.certificateResult = certResult;
-        } catch { /* best-effort */ }
+        } catch {
+            /* best-effort */
+        }
     }
 
     // Display full summary
@@ -764,14 +858,22 @@ export async function runAdvancedInteractive(
     console.log(color("  ║    Initialization Certificate        ║", ansi.magenta, ansi.bold));
     console.log(color("  ╚══════════════════════════════════════╝", ansi.magenta, ansi.bold));
     console.log("");
-    printCheck("Profile", true, `${state.profile} (${state.profile === "business" ? "strict governance" : "minimal governance"})`);
+    printCheck(
+        "Profile",
+        true,
+        `${state.profile} (${state.profile === "business" ? "strict governance" : "minimal governance"})`,
+    );
     printCheck("Workspace", true, state.workspace);
     printCheck("Provider", true, `${selectedProvider.label}${state.apiKey ? " (key configured)" : ""}`);
     printCheck("Routing", true, `${state.routingStrategy}${overrideCount > 0 ? ` — ${overrideCount} overrides` : ""}`);
     printCheck("Guardian", !!state.guardianModel, guardianLabel);
     printCheck("Swarm", true, state.swarmTopology);
     printCheck("CAC", !!state.cacAssignmentId, cacLabel);
-    printCheck("Browser", !!state.browserProfileId, state.browserEmail ? `${state.browserEmail} (${state.browserSegment})` : "Not configured");
+    printCheck(
+        "Browser",
+        !!state.browserProfileId,
+        state.browserEmail ? `${state.browserEmail} (${state.browserSegment})` : "Not configured",
+    );
     printCheck("Scheduler", true, `${enabledTasks} task(s)`);
     printCheck("Timestamp", true, new Date().toISOString());
 
@@ -795,10 +897,7 @@ export async function runAdvancedInteractive(
 // Non-Interactive Advanced Mode
 // ──────────────────────────────────────────────────────────────────────────────
 
-export async function runAdvancedNonInteractive(
-    args: AdvancedCliArgs,
-    client: SetupApiClient | null,
-): Promise<void> {
+export async function runAdvancedNonInteractive(args: AdvancedCliArgs, client: SetupApiClient | null): Promise<void> {
     const profile = args.profile?.toLowerCase();
     if (profile !== "individual" && profile !== "business") {
         printError("--profile is required in non-interactive mode (individual or business).");
@@ -867,10 +966,7 @@ export async function runAdvancedNonInteractive(
 // Certificate Builder
 // ──────────────────────────────────────────────────────────────────────────────
 
-function buildCertificate(
-    state: AdvancedWizardState,
-    readiness: ReadinessSnapshot | null,
-): Record<string, unknown> {
+function buildCertificate(state: AdvancedWizardState, readiness: ReadinessSnapshot | null): Record<string, unknown> {
     return {
         profile: {
             segment: state.profile,
@@ -908,10 +1004,11 @@ function buildCertificate(
             profileId: state.browserProfileId || "pending",
         },
         scheduler: {
-            enabledTasks: Object.entries(state.schedulerSelections)
-                .filter(([, v]) => v)
-                .map(([k]) => k)
-                .join(", ") || "none",
+            enabledTasks:
+                Object.entries(state.schedulerSelections)
+                    .filter(([, v]) => v)
+                    .map(([k]) => k)
+                    .join(", ") || "none",
         },
         readiness: {
             timestamp: new Date().toISOString(),
@@ -926,10 +1023,7 @@ function buildCertificate(
 // Summary Display
 // ──────────────────────────────────────────────────────────────────────────────
 
-function printAdvancedSummary(
-    state: AdvancedWizardState,
-    readiness: ReadinessSnapshot | null,
-): void {
+function printAdvancedSummary(state: AdvancedWizardState, readiness: ReadinessSnapshot | null): void {
     console.log("");
     console.log(color("  ╔══════════════════════════════════════╗", ansi.cyan));
     console.log(color("  ║      Advanced Configuration Summary  ║", ansi.cyan));
@@ -946,9 +1040,11 @@ function printAdvancedSummary(
     if (Object.keys(state.roleOverrides).length > 0) {
         printCheck("Role Overrides", true, `${Object.keys(state.roleOverrides).length} configured`);
     }
-    printCheck("Guardian Agent", !!state.guardianModel, state.guardianModel
-        ? `${state.guardianTier} — ${state.guardianModel.split(/[/\\]/).pop()}`
-        : "Not configured");
+    printCheck(
+        "Guardian Agent",
+        !!state.guardianModel,
+        state.guardianModel ? `${state.guardianTier} — ${state.guardianModel.split(/[/\\]/).pop()}` : "Not configured",
+    );
     printCheck("Auto-Start", state.guardianAutoStart, state.guardianAutoStart ? "enabled" : "disabled");
     printCheck("Swarm Topology", true, state.swarmTopology);
     printCheck("CAC Character", !!state.cacCharacter, state.cacCharacter || "Not assigned");
@@ -958,9 +1054,11 @@ function printAdvancedSummary(
     if (state.cacAssignmentId) {
         printCheck("Assignment ID", true, state.cacAssignmentId);
     }
-    printCheck("Browser Profile", !!state.browserProfileId, state.browserEmail
-        ? `${state.browserEmail} (${state.browserSegment})`
-        : "Not configured");
+    printCheck(
+        "Browser Profile",
+        !!state.browserProfileId,
+        state.browserEmail ? `${state.browserEmail} (${state.browserSegment})` : "Not configured",
+    );
 
     const enabledCount = Object.values(state.schedulerSelections).filter(Boolean).length;
     printCheck("Scheduled Tasks", enabledCount > 0, `${enabledCount} enabled`);

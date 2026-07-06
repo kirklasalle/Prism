@@ -1,4 +1,4 @@
-﻿# PRISM Developer Guide
+# PRISM Developer Guide
 
 Date: 2026-03-11
 
@@ -1045,6 +1045,51 @@ The Browser Control tab has 5 sub-navigation views:
 4. **Console**: Live console log stream color-coded by level, JS evaluate input
 5. **DOM**: Full DOM snapshot viewer
 
+### 7G. Model Capability Matrix & Advanced Routing Architecture
+
+The model capability matrix and routing plane manage model matching, dynamic registry updates, hardware VRAM constraints, and fallback routing strategy execution.
+
+#### 7G.1 Key Modules
+- `src/core/operator/model-capability-matrix.ts`: Core data structures, built-in profiles, dynamic runtime profile registries, hardware snapshot cache, prompt strategies, and routing resolution logic.
+- `src/core/operator/llm-provider-manager.ts`: Manages provider configurations, credentials, connection verification, session overrides, and the execution of single/multi-model/SR calls.
+
+#### 7G.2 Dynamic Registry Architecture
+The registry integrates static and dynamic capabilities:
+- **Built-in Registry (`KNOWN_PROFILES`)**: Hardcoded capability specifications for known frontier cloud models (OpenAI, Anthropic, Gemini, OpenRouter) and common local models.
+- **Runtime Registry (`runtimeProfiles`)**: In-memory registry for user-defined or discovered models. Operations:
+  - `registerModelProfile(profile)`: Adds or replaces a model profile.
+  - `updateModelProfile(pattern, patch)`: Merges partial fields into an existing runtime profile.
+  - `removeModelProfile(pattern)`: evicts a runtime profile (cannot evict built-in KNOWN_PROFILES).
+  - `getKnownProfiles()`: Merges runtime and built-in profiles into a unified list.
+
+#### 7G.3 Local Model Auto-Discovery & VRAM Awareness
+Local coprocessing requires hardware capacity checks:
+- `fetchHardwareSnapshot(ollamaBaseUrl, totalVramMb)`: Queries Ollama's active model endpoints (`/api/ps`) to discover loaded models and calculate active VRAM usage.
+- `updateCachedHardwareSnapshot(snapshot)`: Caches hardware state globally for routing decisions.
+- **OOM Prevention**: In `adaptive` power mode, the router identifies local models whose estimated VRAM footprint exceeds available free VRAM, pushing them to the bottom of the candidate list to prevent system lockups.
+
+#### 7G.4 Deprecation and Sunset Lifecycle
+The system tracks model aging via structured fields:
+- **Metadata fields**: `deprecated`, `deprecatedAt` (date of deprecation), `sunsetDate` (date of removal), `successor` (pattern of replacement model), and `deprecationReason`.
+- **Status Evaluation**: `getDeprecationStatus(profile, now)` maps profiles to `"active" | "deprecated" | "sunset"`.
+- **Router De-prioritization**: `selectModelForRole()` automatically sorts deprecated/sunset models to the bottom of the candidate list.
+- **Telemetry Warnings**: If a deprecated model is selected, `getDeprecationWarning()` generates warning traces pushed to the ActivityBus.
+
+#### 7G.5 Routing Strategy Engine (`selectModelForRole`)
+The router resolves models for task execution based on:
+1. **Modality Filtering**: Maps `TaskRole` to target modality (e.g., `speech-recognition` → `stt`, `chat` → `text`) via `getRoleRequiredModality(role)`.
+2. **Scoring & Sorting**: Candidates are sorted by:
+   - Active status (non-deprecated models first)
+   - VRAM constraints (OOM-risk models pushed last in `adaptive` mode)
+   - Locality (local models preferred over cloud in `eco` mode or when tiers match)
+   - Tier capability (higher tier first)
+3. **Multi-Tier Resolution**: Evaluates roles against target requirements:
+   - Ideal Local candidate -> Ideal Cloud candidate -> Minimum Local candidate -> Minimum Cloud candidate -> Best available fallback.
+4. **Power Mode Scaling**:
+   - `eco`: Decrements ideal/minimum tier requirements by 1 and forces local models first.
+   - `performance`: Uses standard role-based tier requirements.
+   - `adaptive`: Applies hardware VRAM validation.
+
 ### 8.1 Tier definitions
 
 - Tier 1: low-risk autonomous
@@ -1261,6 +1306,64 @@ Any PR that modifies `Permanent_Active_Directives.txt` without updating the hash
 - `docs/PAD_WHITEPAPER.md` — Purpose, philosophy, and market impact analysis
 - `docs/CI_GATING_POLICY.md` — Gate 9 specification
 
+## 18. Channels & Presence Architecture
+
+The Operator Channels and Presence subsystem enables remote out-of-band task notification and two-way interaction (e.g. approving tier-3 actions via SMS reply).
+
+### 18.1 Architecture Layout
+
+```
+                        ┌────────────────────────┐
+                        │      Dashboard UI      │
+                        │  (tab-channels.html/js)│
+                        └───────────┬────────────┘
+                                    │
+                       HTTP POST    │ WebSocket status
+                      /api/presence │ updates
+                                    ▼
+                        ┌────────────────────────┐
+                        │    PresenceHandler     │
+                        │  (presence-handler.ts) │
+                        └───────────┬────────────┘
+                                    │
+                                    ▼
+       ┌────────────────────────────────────────────────────────┐
+       │                    DashboardService                    │
+       │                   (dashboard-service)                  │
+       └───────┬────────────────────────────────────────┬───────┘
+               │                                        │
+               ▼                                        ▼
+┌──────────────────────────────┐        ┌──────────────────────────────┐
+│     InboundChannelPoller     │        │     SmsCommunicationTool     │
+│ (inbound-channel-poller.ts)  │        │       (sms-adapter.ts)       │
+└──────────────┬───────────────┘        └──────────────┬───────────────┘
+               │                                        │
+               ▼                                        ▼
+    Gmail / Outlook Clients                 SMTP Carrier Gateways
+     (inbound mail polling)                 (outbound SMS-via-Email)
+```
+
+### 18.2 Module Inventory
+
+- **`src/adapters/application/sms-adapter.ts`:**
+  - Implements `SmsCommunicationTool` registered as a system-wide tool.
+  - Formats phone numbers to carrier-specific gateway domains (`att`, `verizon`, `tmobile`, `sprint`).
+  - Limits messages to a maximum of 150 characters and injects tracking correlation tags `[PRISM-TASK:<id>]` into subject headers.
+- **`src/core/operator/services/inbound-channel-poller.ts`:**
+  - Background process that polls the active mailbox (Gmail or Outlook) every 30 seconds.
+  - Filters emails from the operator's configured gateway address.
+  - Extracts correlation tokens and executes `ApprovalQueue.approve()` or `ApprovalQueue.deny()` upon parsing `APPROVE` or `DENY` commands.
+  - Relays freeform text replies directly into the active chat session context.
+- **`src/core/operator/routes/presence-handler.ts`:**
+  - Maps REST endpoints for presence changes, auto-away toggles, carrier configurations, logs, and manual test broadcasts.
+
+### 18.3 Test Design
+
+Unit test coverage in `tests/operator-presence-channels.test.ts` validates:
+- Domain serialization helpers (`getSmsEmailAddress`) across carrier configurations.
+- `SmsCommunicationTool` fallback mechanics using mock OAuth adapters.
+- Two-way inbound mail parsing: processing a simulated email containing a task correlation token and confirming it resolves the approval promise.
+
 ## 17. References
 
 1. <https://www.anthropic.com/engineering/building-effective-agents>
@@ -1269,3 +1372,4 @@ Any PR that modifies `Permanent_Active_Directives.txt` without updating the hash
 4. <https://arxiv.org/abs/2303.17580>
 5. <https://modelcontextprotocol.io/introduction>
 6. <https://www.nist.gov/itl/ai-risk-management-framework>
+

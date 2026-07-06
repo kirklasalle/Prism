@@ -35,10 +35,15 @@ function fetchJson(urlPath: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path: urlPath }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });
@@ -49,7 +54,9 @@ function fetchRaw(urlPath: string): Promise<{ status: number; headers: http.Inco
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path: urlPath }, (res) => {
             const chunks: Buffer[] = [];
-            res.on("data", (chunk: Buffer) => { chunks.push(chunk); });
+            res.on("data", (chunk: Buffer) => {
+                chunks.push(chunk);
+            });
             res.on("end", () => {
                 resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks) });
             });
@@ -60,20 +67,28 @@ function fetchRaw(urlPath: string): Promise<{ status: number; headers: http.Inco
 /** JSON POST/DELETE/PUT helper */
 function requestJson(method: string, urlPath: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path: urlPath,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path: urlPath,
+                method,
+                headers: body == null ? {} : { "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -103,15 +118,15 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
                 executionProfileSegment: "individual",
             },
             chatStore,
-            [],                                          // actions
-            0,                                           // port = ephemeral
-            undefined,                                   // metricsCollector
-            undefined,                                   // retrievalDashboardStore
-            new InMemoryProviderSecretStore(),            // providerSecretStore
-            undefined,                                   // activityStore
-            join(tmpDir, "session-packages.json"),        // sessionPackageStorePath
-            join(tmpDir, "exports"),                      // sessionPackageExportDir
-            registry,                                    // toolRegistry
+            [], // actions
+            0, // port = ephemeral
+            undefined, // metricsCollector
+            undefined, // retrievalDashboardStore
+            new InMemoryProviderSecretStore(), // providerSecretStore
+            undefined, // activityStore
+            join(tmpDir, "session-packages.json"), // sessionPackageStorePath
+            join(tmpDir, "exports"), // sessionPackageExportDir
+            registry, // toolRegistry
         );
 
         service.start();
@@ -135,14 +150,20 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
             const { status, body } = await fetchJson("/api/computer/system-info");
             assert.strictEqual(status, 200);
             assert.ok(typeof body.os === "string" && body.os.length > 0, "os must be a non-empty string");
-            assert.ok(typeof body.hostname === "string" && body.hostname.length > 0, "hostname must be a non-empty string");
+            assert.ok(
+                typeof body.hostname === "string" && body.hostname.length > 0,
+                "hostname must be a non-empty string",
+            );
             assert.ok(typeof body.platform === "string", "platform must be a string");
             assert.ok(typeof body.uptime === "number" && body.uptime >= 0, "uptime must be non-negative number");
             assert.ok(typeof body.cpus === "number" && body.cpus >= 1, "cpus must be >= 1");
             assert.ok(typeof body.totalMemory === "number" && body.totalMemory > 0, "totalMemory must be positive");
             assert.ok(typeof body.freeMemory === "number" && body.freeMemory >= 0, "freeMemory must be non-negative");
             assert.ok(body.freeMemory <= body.totalMemory, "freeMemory must not exceed totalMemory");
-            assert.ok(typeof body.homeDir === "string" && body.homeDir.length > 0, "homeDir must be a non-empty string");
+            assert.ok(
+                typeof body.homeDir === "string" && body.homeDir.length > 0,
+                "homeDir must be a non-empty string",
+            );
         });
 
         it("gpu field is null or has expected shape", async () => {
@@ -237,7 +258,10 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
         it("systemVars entries do not start with PRISM_", async () => {
             const { body } = await fetchJson("/api/computer/env-vars");
             for (const entry of body.systemVars) {
-                assert.ok(!entry.key.startsWith("PRISM_"), `systemVars entry should not start with PRISM_: ${entry.key}`);
+                assert.ok(
+                    !entry.key.startsWith("PRISM_"),
+                    `systemVars entry should not start with PRISM_: ${entry.key}`,
+                );
             }
         });
 
@@ -272,7 +296,10 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
         it("gallery items have correct shape", async () => {
             const { body } = await fetchJson("/api/computer/screengrab/list");
             for (const item of body.galleryItems) {
-                assert.ok(item.kind === "single" || item.kind === "burst", `kind must be 'single' or 'burst': ${item.kind}`);
+                assert.ok(
+                    item.kind === "single" || item.kind === "burst",
+                    `kind must be 'single' or 'burst': ${item.kind}`,
+                );
                 assert.ok(typeof item.name === "string", "name must be a string");
                 assert.ok(typeof item.previewName === "string", "previewName must be a string");
                 assert.ok(typeof item.frameCount === "number", "frameCount must be a number");
@@ -364,8 +391,10 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
                 filename: "../../../etc/passwd",
             });
             // Should either reject (400/403) or sanitize the path
-            assert.ok(status === 200 || status === 400 || status === 403 || status === 500,
-                "should handle path traversal attempt");
+            assert.ok(
+                status === 200 || status === 400 || status === 403 || status === 500,
+                "should handle path traversal attempt",
+            );
         });
     });
 });

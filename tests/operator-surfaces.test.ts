@@ -43,9 +43,7 @@ function seedStore(): SqliteActivityStore {
             policyDecision: "require_approval",
             confidence: 0.7,
             durationMs: 80,
-            sideEffects: [
-                { type: "file", description: "wrote test.txt", mutating: true, reversible: true },
-            ],
+            sideEffects: [{ type: "file", description: "wrote test.txt", mutating: true, reversible: true }],
             hash: "h2",
         }),
         makeEvent({
@@ -59,9 +57,7 @@ function seedStore(): SqliteActivityStore {
             confidence: 0.4,
             durationMs: 120,
             details: { reason: "policy_violation", code: "ERR_DENY" },
-            sideEffects: [
-                { type: "network", description: "external call", mutating: true, reversible: false },
-            ],
+            sideEffects: [{ type: "network", description: "external call", mutating: true, reversible: false }],
             hash: "h3",
             rollbackPlan: "revert network state",
         }),

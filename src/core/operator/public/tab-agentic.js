@@ -1,6 +1,6 @@
-import { state, request, escapeHtml, dashboardLog, formatUptime, showTransientNotice, withButtonFeedback, trimAgenticEvent, showAnchoredToast } from './dashboard-core.js';
+import { state, request, escapeHtml, dashboardLog, formatUptime, showTransientNotice, withButtonFeedback, trimAgenticEvent, showAnchoredToast, showConfirm, showForm, showPrompt, safeRenderStep } from './dashboard-core.js';
 
-// ── Guardian Agent Panel ────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Guardian Agent Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 export
   function renderGuardianPanel() {
@@ -57,7 +57,7 @@ export
   html += '<select id="guardian-model-select" style="flex:1;padding:6px;border-radius:4px;background:rgba(0,0,0,0.2);color:var(--text);border:1px solid var(--border);font-size:12px;" onchange="onGuardianModelSelectChange(this.value)">';
   html += '<option value="">-- Select or download a model for Guardian --</option>';
   var activeChatSharedSelected = g.modelPath === 'active-chat-model' ? ' selected' : '';
-  html += '<option value="active-chat-model"' + activeChatSharedSelected + '>🔗 -- Share Active Chat Model --</option>';
+  html += '<option value="active-chat-model"' + activeChatSharedSelected + '>Ã°Å¸â€â€” -- Share Active Chat Model --</option>';
 
   var models = state.localGgufModels || [];
   if (models.length > 0) {
@@ -199,18 +199,18 @@ export
     html += '</div>';
   }
 
-  // ── Guardian Tasks Panel ──────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Guardian Tasks Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   var tasks = state.guardianTasks || [];
   html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
-  html += '<span style="font-weight:600;font-size:13px;">🛡️ Guardian Tasks</span>';
-  html += '<button class="primary-button" onclick="runAllGuardianTasks()" style="font-size:11px;padding:3px 10px;" ' + (g.state !== 'running' ? 'disabled' : '') + '>▶ Run All</button>';
+  html += '<span style="font-weight:600;font-size:13px;">Ã°Å¸â€ºÂ¡Ã¯Â¸Â Guardian Tasks</span>';
+  html += '<button class="primary-button" onclick="runAllGuardianTasks()" style="font-size:11px;padding:3px 10px;" ' + (g.state !== 'running' ? 'disabled' : '') + '>Ã¢â€“Â¶ Run All</button>';
   html += '</div>';
   if (tasks.length === 0) {
     html += '<div class="muted" style="font-size:11px;padding:8px;">No tasks loaded. Start Guardian to activate task runners.</div>';
   } else {
     var categories = ['monitoring', 'maintenance', 'security', 'diagnostics'];
-    var catLabels = { monitoring: '📊 Monitoring', maintenance: '🔧 Maintenance', security: '🔒 Security', diagnostics: '🔍 Diagnostics' };
+    var catLabels = { monitoring: 'Ã°Å¸â€œÅ  Monitoring', maintenance: 'Ã°Å¸â€Â§ Maintenance', security: 'Ã°Å¸â€â€™ Security', diagnostics: 'Ã°Å¸â€Â Diagnostics' };
     var catColors = { monitoring: '#7ec8e3', maintenance: '#b8d4a3', security: '#ffb347', diagnostics: '#c4a3d4' };
     for (var ci = 0; ci < categories.length; ci++) {
       var cat = categories[ci];
@@ -220,17 +220,19 @@ export
       html += '<div style="font-size:11px;font-weight:600;color:' + catColors[cat] + ';margin-bottom:4px;">' + catLabels[cat] + '</div>';
       for (var ti = 0; ti < catTasks.length; ti++) {
         var task = catTasks[ti];
-        var statusIcon = !task.lastResult ? '⏳' : task.lastResult === 'success' ? '✅' : task.lastResult === 'warning' ? '⚠️' : '❌';
+        var statusIcon = !task.lastResult ? 'Ã¢ÂÂ³' : task.lastResult === 'success' ? 'Ã¢Å“â€¦' : task.lastResult === 'warning' ? 'Ã¢Å¡Â Ã¯Â¸Â' : 'Ã¢ÂÅ’';
         var statusColor = !task.lastResult ? '#888' : task.lastResult === 'success' ? '#7ecf7e' : task.lastResult === 'warning' ? '#ffd17a' : '#ff8d8d';
         var lastRun = task.lastRunAt ? new Date(task.lastRunAt).toLocaleTimeString() : 'never';
+        var safeTaskId = escapeHtml(task.id);
         html += '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:2px;background:rgba(255,255,255,0.02);border-radius:4px;font-size:11px;">';
         html += '<label style="cursor:pointer;display:flex;align-items:center;gap:4px;min-width:16px;">';
-        html += '<input type="checkbox" ' + (task.enabled ? 'checked' : '') + ' onchange="toggleGuardianTask(\'' + task.id + '\')" style="cursor:pointer;" ' + (g.state !== 'running' ? 'disabled' : '') + '>';
+        // Item 3: data-* instead of onchange injection Ã¢â‚¬â€ task.id is now safe even with special chars
+        html += '<input type="checkbox" ' + (task.enabled ? 'checked' : '') + ' data-task-action="toggle" data-task-id="' + safeTaskId + '" style="cursor:pointer;" ' + (g.state !== 'running' ? 'disabled' : '') + '>';
         html += '</label>';
         html += '<span style="flex:1;">' + escapeHtml(task.name) + '</span>';
         html += '<span style="color:' + statusColor + ';min-width:20px;text-align:center;" title="' + escapeHtml(task.lastDetail || 'No result yet') + '">' + statusIcon + '</span>';
         html += '<span class="muted" style="min-width:60px;font-size:10px;text-align:right;" title="Last run">' + lastRun + '</span>';
-        html += '<button onclick="runGuardianTask(\'' + task.id + '\')" style="font-size:10px;padding:1px 6px;cursor:pointer;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:3px;color:#ccc;" ' + (g.state !== 'running' ? 'disabled' : '') + '>Run</button>';
+        html += '<button data-task-action="run" data-task-id="' + safeTaskId + '" style="font-size:10px;padding:1px 6px;cursor:pointer;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:3px;color:#ccc;" ' + (g.state !== 'running' ? 'disabled' : '') + '>Run</button>';
         html += '</div>';
         if (task.lastDetail) {
           html += '<div class="muted" style="font-size:10px;padding:0 8px 2px 28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(task.lastDetail) + '">' + escapeHtml(task.lastDetail) + '</div>';
@@ -241,7 +243,25 @@ export
   }
   html += '</div>';
 
+  // Item 9: skip DOM rebuild while the model <select> is focused to prevent
+  // wiping the user's selection mid-interaction (same guard used in provider cards).
+  var _active = document.activeElement;
+  if (_active && c.contains(_active) &&
+    (_active.tagName === 'SELECT' || _active.tagName === 'INPUT' || _active.tagName === 'TEXTAREA')) {
+    return;
+  }
+
   c.innerHTML = html;
+
+  // Item 3: delegated listener for Guardian task buttons/checkboxes (no onclick injection)
+  c.addEventListener('change', function (e) {
+    var el = e.target.closest('[data-task-action="toggle"]');
+    if (el) { toggleGuardianTask(el.dataset.taskId); }
+  });
+  c.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-task-action="run"]');
+    if (el) { runGuardianTask(el.dataset.taskId); }
+  });
 }
 
 
@@ -264,7 +284,7 @@ export
   } catch (e) { console.error('[guardian] start failed', e); showTransientNotice('Guardian start failed: ' + (e && e.message ? e.message : e), 'error', 6000); }
 }
 
-// v0.20.5 — Auto-start the Guardian Agent on client load when a local model is
+// v0.20.5 Ã¢â‚¬â€ Auto-start the Guardian Agent on client load when a local model is
 // configured. Operators expect Guardian to be running by default (per user
 // preference: start_web.bat is the single reliable entrypoint). Idempotent and
 // guarded by `state.guardianAutoStartAttempted` so it runs at most once per
@@ -283,7 +303,7 @@ export
   try {
     if (!state.guardianStatus) {
       try { state.guardianStatus = await request('/api/guardian/status'); }
-      catch (_) { /* leave status null — panel handles unavailable case */ }
+      catch (_) { /* leave status null Ã¢â‚¬â€ panel handles unavailable case */ }
     }
     var g = state.guardianStatus;
     if (!g) return;
@@ -334,10 +354,10 @@ export
       dashboardLog('agentic', 'guardian.autostart.deferred', 'No local model selected or available; skipping auto-start');
       return;
     }
-    // In shared mode, defer to the server-side polling — don't force a start that
+    // In shared mode, defer to the server-side polling Ã¢â‚¬â€ don't force a start that
     // will immediately fail because no chat slot is ready yet.
     if (g.modelPath === 'active-chat-model') {
-      dashboardLog('agentic', 'guardian.autostart.deferred', 'Shared mode — Guardian will auto-start once a chat model slot is ready');
+      dashboardLog('agentic', 'guardian.autostart.deferred', 'Shared mode Ã¢â‚¬â€ Guardian will auto-start once a chat model slot is ready');
       return;
     }
     if (g.state === 'running' || g.state === 'starting' || g.state === 'healing' || g.state === 'waiting') {
@@ -378,165 +398,43 @@ export
   }
 }
 
-const RECOMMENDED_MODELS = [
-  {
-    name: "Qwen3-VL:4b (High Quality)",
-    fileName: "Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
-    size: "3.3 GB",
-    url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
-    mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-    mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-    ollamaTag: "qwen2.5-vl:3b-q8_0"
-  },
-  {
-    name: "Qwen3-VL:2b-thinking (Efficient)",
-    fileName: "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
-    size: "1.9 GB",
-    url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
-    mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-    mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-    ollamaTag: "qwen2.5-vl:3b-q4_K_M"
-  },
-  {
-    name: "Gemma 3 1B (Low VRAM 4GB)",
-    fileName: "google_gemma-3-1b-it-Q4_K_M.gguf",
-    size: "0.8 GB",
-    url: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "gemma3:1b"
-  },
-  {
-    name: "Gemma 3 4B (Balanced)",
-    fileName: "google_gemma-3-4b-it-Q4_K_M.gguf",
-    size: "2.8 GB",
-    url: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "gemma3:4b"
-  },
-  {
-    name: "Gemma 4 E2B (~2B Agentic)",
-    fileName: "gemma-2-2b-it-Q4_K_M.gguf",
-    size: "1.6 GB",
-    url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "gemma2:2b"
-  },
-  {
-    name: "Gemma 4 E4B (4B Mobile Agent)",
-    fileName: "gemma-2-2b-it-Q8_0.gguf",
-    size: "2.9 GB",
-    url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "gemma2:2b-instruct-q8_0"
-  },
-  {
-    name: "Phi-4 Mini (3.8B Reasoning)",
-    fileName: "Phi-3.5-mini-instruct-Q4_K_M.gguf",
-    size: "2.4 GB",
-    url: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "phi4:mini"
-  },
-  {
-    name: "Llama 3.2 (3B Parameters)",
-    fileName: "llama-3.2-3b-instruct-q4_k_m.gguf",
-    size: "2.2 GB",
-    url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "llama3.2:3b"
-  },
-  {
-    name: "Gemma 2 (2B Parameters)",
-    fileName: "gemma-2-2b-it-Q4_K_M.gguf",
-    size: "1.6 GB",
-    url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "gemma2:2b"
-  },
-  {
-    name: "Qwen3-1.7B (Quantized Agent)",
-    fileName: "qwen-2.5-1.5b-instruct-q4_k_m.gguf",
-    size: "1.1 GB",
-    url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "qwen2.5:1.5b"
-  },
-  {
-    name: "Qwen3.5-2B (Highly Recommended)",
-    fileName: "qwen-2.5-3b-instruct-q4_k_m.gguf",
-    size: "1.9 GB",
-    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "qwen2.5:3b"
-  },
-  {
-    name: "Qwen3.5-4B (Strong Performance)",
-    fileName: "qwen-2.5-3b-instruct-q8_0.gguf",
-    size: "3.4 GB",
-    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q8_0.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "qwen2.5:3b-instruct-q8_0"
-  },
-  {
-    name: "Ministral-3-3B-Instruct-2512",
-    fileName: "mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
-    size: "2.1 GB",
-    url: "https://huggingface.co/bartowski/mistralai_Ministral-3-3B-Instruct-2512-GGUF/resolve/main/mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "ministral:3b"
-  },
-  {
-    name: "Granite4:3b (128k Context)",
-    fileName: "granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
-    size: "2.0 GB",
-    url: "https://huggingface.co/bartowski/granite-3.1-3b-a800m-instruct-GGUF/resolve/main/granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "granite3.1-dense:3b"
-  },
-  {
-    name: "Hammer2.1-3b (Function Calling)",
-    fileName: "hammer-2.1-3b-q4_k_m.gguf",
-    size: "2.1 GB",
-    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "hammer:3b"
-  },
-  {
-    name: "LocoTrainer-4B (MS-SWIFT Agent)",
-    fileName: "loco-trainer-4b-q4_k_m.gguf",
-    size: "2.8 GB",
-    url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q8_0.gguf",
-    mmprojUrl: "",
-    mmprojName: "",
-    ollamaTag: "locotrainer:4b"
-  }
+// Item 8: Canonical catalog now lives in the backend (model-handler.ts).
+// This fallback is used only when the server is unreachable at startup.
+// Correct model names/versions are maintained server-side; update there.
+const RECOMMENDED_MODELS_FALLBACK = [
+  { name: "Qwen2.5-VL 3B Q8 (Vision)", fileName: "Qwen2.5-VL-3B-Instruct-Q8_0.gguf", size: "3.3 GB", url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q8_0.gguf", mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf", mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf", ollamaTag: "qwen2.5-vl:3b-q8_0" },
+  { name: "Qwen2.5 3B Q4 (Highly Recommended)", fileName: "qwen-2.5-3b-instruct-q4_k_m.gguf", size: "1.9 GB", url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf", mmprojUrl: "", mmprojName: "", ollamaTag: "qwen2.5:3b" },
+  { name: "Gemma 3 1B (Low VRAM)", fileName: "google_gemma-3-1b-it-Q4_K_M.gguf", size: "0.8 GB", url: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf", mmprojUrl: "", mmprojName: "", ollamaTag: "gemma3:1b" },
+  { name: "Gemma 3 4B (Balanced)", fileName: "google_gemma-3-4b-it-Q4_K_M.gguf", size: "2.8 GB", url: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf", mmprojUrl: "", mmprojName: "", ollamaTag: "gemma3:4b" },
+  { name: "Phi-3.5 Mini 3.8B Q4 (Reasoning)", fileName: "Phi-3.5-mini-instruct-Q4_K_M.gguf", size: "2.4 GB", url: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf", mmprojUrl: "", mmprojName: "", ollamaTag: "phi4:mini" },
+  { name: "Llama 3.2 3B Q4", fileName: "llama-3.2-3b-instruct-q4_k_m.gguf", size: "2.2 GB", url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf", mmprojUrl: "", mmprojName: "", ollamaTag: "llama3.2:3b" }
 ];
 
 let activeDownloads = [];
 
 function getAllRecommended() {
-  var all = RECOMMENDED_MODELS.slice();
+  // Use the server-loaded catalog if available, otherwise the compact fallback.
+  var base = Array.isArray(state.recommendedModelsCatalog) && state.recommendedModelsCatalog.length > 0
+    ? state.recommendedModelsCatalog.slice()
+    : RECOMMENDED_MODELS_FALLBACK.slice();
   var customModels = state.customRecommendedModels || [];
   for (var ci = 0; ci < customModels.length; ci++) {
     var cm = customModels[ci];
-    if (!all.some(function (r) { return r.fileName === cm.fileName; })) {
-      all.push({ name: cm.name, fileName: cm.fileName, size: cm.size, url: '', mmprojUrl: '', mmprojName: '', ollamaTag: '', custom: true, path: cm.path, source: cm.source });
+    if (!base.some(function (r) { return r.fileName === cm.fileName; })) {
+      base.push({ name: cm.name, fileName: cm.fileName, size: cm.size, url: '', mmprojUrl: '', mmprojName: '', ollamaTag: '', custom: true, path: cm.path, source: cm.source });
     }
   }
-  return all;
+  return base;
+}
+
+// Item 8: fetch the authoritative catalog from the backend on tab init
+export async function loadRecommendedModelsCatalog() {
+  try {
+    var data = await request('/api/models/recommended/catalog');
+    if (Array.isArray(data.catalog)) {
+      state.recommendedModelsCatalog = data.catalog;
+    }
+  } catch (e) { /* fall through to RECOMMENDED_MODELS_FALLBACK */ }
 }
 
 export async function downloadRecommendedModels() {
@@ -586,48 +484,46 @@ export async function startModelDownload(index) {
     await request('/api/models/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: model.url,
-        name: model.fileName,
-        mmprojUrl: model.mmprojUrl,
-        mmprojName: model.mmprojName
-      })
+      body: JSON.stringify({ url: model.url, name: model.fileName, mmprojUrl: model.mmprojUrl, mmprojName: model.mmprojName })
     });
-    dashboardLog('agentic', 'download.start', `Download initiated for ${model.name}`);
+    dashboardLog('agentic', 'download.start', 'Download initiated for ' + model.name);
     pollDownloadStatus();
   } catch (err) {
-    dashboardLog('agentic', 'download.hf-failed', `HuggingFace download failed for ${model.name}: ${err.message}. Trying Ollama pull fallback...`);
+    dashboardLog('agentic', 'download.hf-failed', 'HuggingFace download failed for ' + model.name + ': ' + err.message + '. Trying Ollama pull fallback...');
     if (model.ollamaTag) {
       try {
-        await request('/api/models/pull', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tag: model.ollamaTag })
-        });
-        dashboardLog('agentic', 'download.ollama-fallback', `Ollama pull initiated for ${model.ollamaTag}`);
+        await request('/api/models/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: model.ollamaTag }) });
+        dashboardLog('agentic', 'download.ollama-fallback', 'Ollama pull initiated for ' + model.ollamaTag);
         pollDownloadStatus();
       } catch (ollamaErr) {
-        dashboardLog('agentic', 'download.failed', `Both HuggingFace and Ollama pull failed for ${model.name}`);
-        alert(`Download failed. HuggingFace: ${err.message}. Ollama fallback: ${ollamaErr.message}`);
+        showTransientNotice('Download failed. HuggingFace: ' + err.message + '. Ollama fallback: ' + ollamaErr.message, 'error');
       }
     } else {
-      alert(`Download failed: ${err.message}`);
+      showTransientNotice('Download failed: ' + err.message, 'error');
     }
   }
 }
 
+// Item 7: module-level guard prevents multiple simultaneous poll chains
+var _downloadPollActive = false;
+
 async function pollDownloadStatus() {
+  if (_downloadPollActive) return;
+  _downloadPollActive = true;
   try {
     const data = await request('/api/models/download/status');
     activeDownloads = data.downloads || [];
     renderGuardianPanel();
     if (activeDownloads.some(d => d.status === 'downloading' || d.status === 'pending')) {
+      _downloadPollActive = false;
       setTimeout(pollDownloadStatus, 2000);
-    } else if (activeDownloads.some(d => d.status === 'completed')) {
-      refreshLocalModels();
+    } else {
+      _downloadPollActive = false;
+      if (activeDownloads.some(d => d.status === 'completed')) refreshLocalModels();
     }
   } catch (err) {
-    console.error("Failed to poll download status", err);
+    _downloadPollActive = false;
+    console.error('Failed to poll download status', err);
   }
 }
 
@@ -675,7 +571,7 @@ export
 }
 
 export async function deleteLocalModel(path, source) {
-  if (!confirm(`Are you sure you want to delete the model file at:\n${path}\n\nThis action cannot be undone.`)) return;
+  if (!await showConfirm(`Are you sure you want to delete the model file at:\n${path}\n\nThis action cannot be undone.`)) return;
   try {
     await request('/api/models/delete', {
       method: 'DELETE',
@@ -685,11 +581,19 @@ export async function deleteLocalModel(path, source) {
     dashboardLog('agentic', 'models.delete', `Deleted model ${path}`);
     var g = state.guardianStatus || {};
     if (g.modelPath === path) {
-      await updateGuardianModel('');
+      // Item 6: actually clear the model on the backend instead of silent no-op
+      try {
+        state.guardianStatus = await request('/api/guardian/configure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelPath: null, modelAlias: null, modelSource: null })
+        });
+      } catch (_) { /* best-effort */ }
     }
     refreshLocalModels();
   } catch (err) {
-    alert(`Failed to delete model: ${err.message || err}`);
+    // Item 2: showTransientNotice instead of alert()
+    showTransientNotice('Failed to delete model: ' + (err.message || err), 'error');
     dashboardLog('agentic', 'models.delete.error', `Failed to delete model ${path}: ${err.message || err}`);
   }
 }
@@ -786,7 +690,7 @@ export
 }
 
 export
-  // ── Agentic Control Tab Renderers ──────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Agentic Control Tab Renderers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
   function renderAgentList() {
   var container = document.getElementById('agent-list-container');
@@ -806,12 +710,24 @@ export
     html += ' <span class="muted" style="font-size:11px;">' + escapeHtml(a.role || 'general') + '</span></div>';
     html += '<div style="display:flex;gap:6px;align-items:center;">';
     html += '<span class="muted" style="font-size:11px;">' + (a.tasksCompleted || 0) + ' tasks</span>';
-    html += '<button class="primary-button" style="font-size:11px;padding:3px 10px;" onclick="stopAgent(\'' + escapeHtml(a.id) + '\')">\u23F9 Stop</button>';
-    html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="promoteAgent(\'' + escapeHtml(a.id) + '\')">\u2B06 Promote</button>';
-    html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="demoteAgent(\'' + escapeHtml(a.id) + '\')">\u2B07 Demote</button>';
+    // Item 4: data-* attributes Ã¢â‚¬â€ no onclick injection
+    html += '<button class="primary-button agent-action-btn" style="font-size:11px;padding:3px 10px;" data-agent-id="' + escapeHtml(a.id) + '" data-agent-action="stop">\u23F9 Stop</button>';
+    html += '<button class="secondary-button agent-action-btn" style="font-size:11px;padding:3px 10px;" data-agent-id="' + escapeHtml(a.id) + '" data-agent-action="promote">\u2B06 Promote</button>';
+    html += '<button class="secondary-button agent-action-btn" style="font-size:11px;padding:3px 10px;" data-agent-id="' + escapeHtml(a.id) + '" data-agent-action="demote">\u2B07 Demote</button>';
     html += '</div></div>';
   }
   container.innerHTML = html;
+
+  // Item 4: delegated handler Ã¢â‚¬â€ no agent ID in onclick string
+  container.addEventListener('click', function (e) {
+    var btn = e.target.closest('.agent-action-btn');
+    if (!btn) return;
+    var id = btn.dataset.agentId;
+    var action = btn.dataset.agentAction;
+    if (action === 'stop') stopAgent(id);
+    else if (action === 'promote') promoteAgent(id);
+    else if (action === 'demote') demoteAgent(id);
+  });
 }
 
 export
@@ -884,18 +800,26 @@ export
   async function refreshAgentList() {
   try {
     state.agentData = await request('/api/agents');
-    render();
+    // Item 5: targeted renders instead of full dashboard rebuild
+    safeRenderStep('agentList', renderAgentList);
+    safeRenderStep('subAgentTree', renderSubAgentTree);
+    safeRenderStep('swarmTopology', renderSwarmTopology);
+    safeRenderStep('agentTelemetry', renderAgentTelemetry);
   } catch (e) { console.error('[agentic] refresh failed', e); }
 }
 
 export
   async function launchNewAgent() {
-  var name = prompt('Agent name (optional):');
-  var role = prompt('Agent role (e.g. general, researcher, coder):');
+  // Item 1: showForm instead of sequential prompt() dialogs
+  var result = await showForm('Launch New Agent', [
+    { name: 'name', label: 'Agent name', placeholder: 'e.g. ResearchBot (optional)' },
+    { name: 'role', label: 'Agent role', placeholder: 'general / researcher / coder Ã¢â‚¬Â¦', defaultValue: 'general' }
+  ], { confirmLabel: 'Launch', icon: '\uD83E\uDD16' });
+  if (!result) return;
   try {
-    await request('/api/agents/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || undefined, role: role || undefined }) });
+    await request('/api/agents/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: result.name || undefined, role: result.role || undefined }) });
     await refreshAgentList();
-  } catch (e) { console.error('[agentic] launch failed', e); }
+  } catch (e) { console.error('[agentic] launch failed', e); showTransientNotice('Launch failed: ' + (e.message || e), 'error'); }
 }
 
 export
@@ -926,13 +850,18 @@ export
 
 export
   async function createSwarm() {
-  var name = prompt('Swarm name (optional):');
-  var topology = prompt('Topology (mesh / star / pipeline):') || 'mesh';
-  var count = parseInt(prompt('Number of agents:') || '3', 10);
+  // Item 1: showForm instead of three sequential prompt() dialogs
+  var result = await showForm('Create Swarm', [
+    { name: 'name', label: 'Swarm name', placeholder: 'e.g. ResearchSwarm (optional)' },
+    { name: 'topology', label: 'Topology', placeholder: 'mesh / star / pipeline', defaultValue: 'mesh' },
+    { name: 'count', label: 'Number of agents', placeholder: '3', defaultValue: '3' }
+  ], { confirmLabel: 'Create', icon: '\uD83D\uDD78\uFE0F' });
+  if (!result) return;
+  var count = parseInt(result.count || '3', 10);
   try {
-    await request('/api/swarms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || undefined, topology: topology, agentCount: count }) });
+    await request('/api/swarms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: result.name || undefined, topology: result.topology || 'mesh', agentCount: isNaN(count) ? 3 : count }) });
     await refreshAgentList();
-  } catch (e) { console.error('[agentic] swarm create failed', e); }
+  } catch (e) { console.error('[agentic] swarm create failed', e); showTransientNotice('Swarm creation failed: ' + (e.message || e), 'error'); }
 }
 
 export
@@ -947,6 +876,8 @@ export
   if (!state.localGgufModels) await refreshLocalModels();
   if (!state.customRecommendedModels) await loadCustomRecommendedModels();
   if (!state.guardianTasks) await refreshGuardianTasks();
+  // Item 8: load authoritative model catalog from backend on first visit
+  if (!state.recommendedModelsCatalog) loadRecommendedModelsCatalog().catch(() => { });
   // Initialize new autonomous panels
   refreshAABLedger();
   refreshAutonomousGoals();
@@ -956,7 +887,7 @@ export
   autoStartGuardianIfConfigured();
 }
 
-/* ── AAB Ledger Panel ──────────────────────────────────────────────── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ AAB Ledger Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 
 export async function refreshAABLedger() {
   try {
@@ -989,7 +920,7 @@ export async function refreshAABLedger() {
   }
 }
 
-/* ── Autonomous Goals Panel ────────────────────────────────────────── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ Autonomous Goals Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 
 export async function submitAutonomousGoal() {
   var objectiveEl = document.getElementById('autonomous-goal-objective');
@@ -1048,7 +979,7 @@ export async function refreshAutonomousGoals() {
     var active = goals.find(function (g) { return g.status === 'executing' || g.status === 'planning'; });
     if (badge) {
       badge.textContent = active
-        ? '🟢 Active: ' + (active.objective || '').substring(0, 30)
+        ? 'Ã°Å¸Å¸Â¢ Active: ' + (active.objective || '').substring(0, 30)
         : goals.length > 0 ? goals.length + ' goals' : 'No active goal';
     }
 
@@ -1063,7 +994,7 @@ export async function refreshAutonomousGoals() {
     for (var i = 0; i < Math.min(goals.length, 20); i++) {
       var g = goals[i];
       var statusColor = g.status === 'completed' ? '#7ecf7e' : g.status === 'executing' || g.status === 'planning' ? '#7ec8e3' : g.status === 'failed' || g.status === 'terminated' ? '#ff8d8d' : g.status === 'paused' ? '#ffd17a' : '#888';
-      var statusIcon = g.status === 'completed' ? '✅' : g.status === 'executing' ? '🔄' : g.status === 'planning' ? '🧠' : g.status === 'failed' ? '❌' : g.status === 'terminated' ? '⛔' : g.status === 'paused' ? '⏸' : '⏳';
+      var statusIcon = g.status === 'completed' ? 'Ã¢Å“â€¦' : g.status === 'executing' ? 'Ã°Å¸â€â€ž' : g.status === 'planning' ? 'Ã°Å¸Â§Â ' : g.status === 'failed' ? 'Ã¢ÂÅ’' : g.status === 'terminated' ? 'Ã¢â€ºâ€' : g.status === 'paused' ? 'Ã¢ÂÂ¸' : 'Ã¢ÂÂ³';
 
       // Make goal panel clickable to view its trace
       html += '<div class="panel" style="padding:10px;margin-bottom:6px;border-left:3px solid ' + statusColor + ';" onclick="viewAutonomousGoalTrace(\'' + escapeHtml(g.goalId || '') + '\')">';
@@ -1075,12 +1006,18 @@ export async function refreshAutonomousGoals() {
       html += '<div style="display:flex;gap:4px;align-items:center;">';
       html += '<span style="color:' + statusColor + ';font-size:11px;font-weight:600;">' + escapeHtml(g.status) + '</span>';
       if (g.status === 'executing' || g.status === 'planning') {
-        html += '<button class="secondary-button" style="font-size:10px;padding:1px 6px;" onclick="abortAutonomousGoal(\'' + escapeHtml(g.goalId) + '\')">⏹ Abort</button>';
+        html += '<button class="secondary-button" style="font-size:10px;padding:1px 6px;" onclick="abortAutonomousGoal(\'' + escapeHtml(g.goalId) + '\')">Ã¢ÂÂ¹ Abort</button>';
+        // Item 10: Pause button wired to pauseAutonomousGoal (from tab-computer.js via window)
+        html += '<button class="secondary-button" style="font-size:10px;padding:1px 6px;" onclick="if(typeof pauseAutonomousGoal===\'function\')pauseAutonomousGoal(\'' + escapeHtml(g.goalId) + '\')">Ã¢ÂÂ¸ Pause</button>';
+      } else if (g.status === 'paused') {
+        // Item 10: Resume button shown when paused
+        html += '<button class="secondary-button" style="font-size:10px;padding:1px 6px;" onclick="if(typeof resumeAutonomousGoal===\'function\')resumeAutonomousGoal(\'' + escapeHtml(g.goalId) + '\')">Ã¢â€“Â¶ Resume</button>';
+        html += '<button class="secondary-button" style="font-size:10px;padding:1px 6px;" onclick="abortAutonomousGoal(\'' + escapeHtml(g.goalId) + '\')">Ã¢ÂÂ¹ Abort</button>';
       }
       html += '</div></div>';
       html += '<div style="font-size:11px;color:var(--muted);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">';
       html += '<span>ID: ' + escapeHtml((g.goalId || '').substring(0, 8)) + '</span>';
-      html += '<span style="cursor:pointer;text-decoration:underline;color:var(--accent);" onclick="(function(e){e.stopPropagation(); viewAutonomousGoalTrace(\'' + escapeHtml(g.goalId || '') + '\');})(event)">Actions: ' + (g.totalActions || 0) + '/' + (g.constraints?.maxActions || '—') + '</span>';
+      html += '<span style="cursor:pointer;text-decoration:underline;color:var(--accent);" onclick="(function(e){e.stopPropagation(); viewAutonomousGoalTrace(\'' + escapeHtml(g.goalId || '') + '\');})(event)">Actions: ' + (g.totalActions || 0) + '/' + (g.constraints?.maxActions || 'Ã¢â‚¬â€') + '</span>';
       // Browser/Computer use badges
       if (g.constraints && g.constraints.allowBrowserUse) {
         html += '<span style="background:rgba(56,189,248,0.08);color:#38bdf8;padding:2px 6px;border-radius:6px;font-size:11px;">Browser</span>';
@@ -1137,7 +1074,7 @@ export async function viewAutonomousGoalTrace(goalId) {
   }
 }
 
-/* ── Cognitive Session Handoff (CSH) "Baton Pass" Panel ──────────────── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ Cognitive Session Handoff (CSH) "Baton Pass" Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 
 export async function refreshCshHandoffs() {
   try {
@@ -1161,8 +1098,8 @@ export async function refreshCshHandoffs() {
       html += ' <span style="background:rgba(255,80,80,0.18);color:#ff8d8d;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:8px;">' + escapeHtml(h.reason) + '</span>';
       html += '</div>';
       html += '<div style="display:flex;gap:6px;">';
-      html += '<button class="primary-button" style="background:#8b5cf6;border:none;font-size:11px;padding:3px 10px;color:#fff;" onclick="takeCshControl(\'' + escapeHtml(h.handoffId) + '\', \'' + escapeHtml(h.sessionId) + '\')">🎮 Take Browser Control</button>';
-      html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="resumeCshAgent(\'' + escapeHtml(h.handoffId) + '\', \'' + escapeHtml(h.sessionId) + '\')">➡️ Resume Agent</button>';
+      html += '<button class="primary-button" style="background:#8b5cf6;border:none;font-size:11px;padding:3px 10px;color:#fff;" onclick="takeCshControl(\'' + escapeHtml(h.handoffId) + '\', \'' + escapeHtml(h.sessionId) + '\')">Ã°Å¸Å½Â® Take Browser Control</button>';
+      html += '<button class="secondary-button" style="font-size:11px;padding:3px 10px;" onclick="resumeCshAgent(\'' + escapeHtml(h.handoffId) + '\', \'' + escapeHtml(h.sessionId) + '\')">Ã¢Å¾Â¡Ã¯Â¸Â Resume Agent</button>';
       html += '</div></div>';
       html += '<div class="muted" style="font-size:11px;margin-bottom:4px;">';
       html += '<span>Session: <strong style="font-family:monospace;color:var(--accent);">' + escapeHtml(h.sessionId) + '</strong></span> \u00B7 ';

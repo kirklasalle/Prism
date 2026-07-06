@@ -58,10 +58,10 @@ export function detectShape(obj: unknown): ImportShape {
 
     // PRISM canonical: has toolPermissions object + name + systemPrompt.
     if (
-        typeof o.name === "string"
-        && typeof o.systemPrompt === "string"
-        && typeof o.toolPermissions === "object"
-        && o.toolPermissions !== null
+        typeof o.name === "string" &&
+        typeof o.systemPrompt === "string" &&
+        typeof o.toolPermissions === "object" &&
+        o.toolPermissions !== null
     ) {
         return "prism";
     }
@@ -96,7 +96,11 @@ export function detectShape(obj: unknown): ImportShape {
 }
 
 function sanitizeName(raw: string, fallback: string): string {
-    const cleaned = raw.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    const cleaned = raw
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "");
     return cleaned || fallback;
 }
 
@@ -152,11 +156,7 @@ export function adaptToPrism(
         case "crewai": {
             name = String(obj.name ?? obj.role ?? "crewai-agent");
             displayName = String(obj.role ?? name);
-            systemPrompt = [
-                `Role: ${obj.role}`,
-                `Goal: ${obj.goal}`,
-                `Backstory: ${obj.backstory}`,
-            ].join("\n\n");
+            systemPrompt = [`Role: ${obj.role}`, `Goal: ${obj.goal}`, `Backstory: ${obj.backstory}`].join("\n\n");
             persona = String(obj.role ?? "");
             allow = toStringArray(obj.tools);
             tags = ["imported", "crewai"];
@@ -240,21 +240,15 @@ export function validatePrismCharacter(
     }
 
     if (targetProfile === "business") {
-        const missing = BUSINESS_DENYLIST_REQUIRED.filter(
-            (tool) => !character.toolPermissions.deny.includes(tool),
-        );
+        const missing = BUSINESS_DENYLIST_REQUIRED.filter((tool) => !character.toolPermissions.deny.includes(tool));
         if (missing.length > 0) {
             // This path is only reachable if a caller bypassed adaptToPrism; keep as a
             // safety net so validation alone can guard the gate.
-            warnings.push(
-                `Business profile auto-hardened denylist for: ${missing.join(", ")}.`,
-            );
+            warnings.push(`Business profile auto-hardened denylist for: ${missing.join(", ")}.`);
             for (const tool of missing) character.toolPermissions.deny.push(tool);
         }
         if (character.maxRiskTier > 1) {
-            warnings.push(
-                `Business profile caps maxRiskTier at 1 (was ${character.maxRiskTier}).`,
-            );
+            warnings.push(`Business profile caps maxRiskTier at 1 (was ${character.maxRiskTier}).`);
             character.maxRiskTier = 1;
         }
     }
@@ -283,7 +277,9 @@ export function importCharacter(
             },
             shape,
             warnings: [],
-            errors: ["Unrecognized character manifest shape. Supported: prism, openclaw, crewai, autogen, openai-prompt."],
+            errors: [
+                "Unrecognized character manifest shape. Supported: prism, openclaw, crewai, autogen, openai-prompt.",
+            ],
         };
     }
 
@@ -294,9 +290,7 @@ export function importCharacter(
     const character = adaptToPrism(raw as Record<string, unknown>, shape, targetProfile);
 
     if (targetProfile === "business" && character.toolPermissions.deny.length > originalDenyCount) {
-        warnings.push(
-            `Business profile auto-hardened denylist (added: ${BUSINESS_DENYLIST_REQUIRED.join(", ")}).`,
-        );
+        warnings.push(`Business profile auto-hardened denylist (added: ${BUSINESS_DENYLIST_REQUIRED.join(", ")}).`);
     }
 
     const { warnings: moreWarnings, errors } = validatePrismCharacter(character, targetProfile);

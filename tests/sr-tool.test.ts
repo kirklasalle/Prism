@@ -25,7 +25,11 @@ class FakeProviderManager {
         return { totalEstimatedCostUsd: this.estimatedCost };
     }
 
-    async generateSR(): Promise<{ content: string; isolationLevel: "full" | "model" | "insufficient"; timing: { fanOutMs: number; aggregationMs: number; totalMs: number } } | null> {
+    async generateSR(): Promise<{
+        content: string;
+        isolationLevel: "full" | "model" | "insufficient";
+        timing: { fanOutMs: number; aggregationMs: number; totalMs: number };
+    } | null> {
         if (this.failGenerate) return null;
         return {
             content: "synthesized response",
@@ -42,14 +46,17 @@ export async function testSrTool(): Promise<void> {
         leftModel: { providerId: "openai", model: "gpt-4o" },
         rightModel: { providerId: "anthropic", model: "claude-3.5-sonnet" },
     };
-    const tool = new SpectrumRefractionTool({ providerManager: fake as unknown as LlmProviderManager, defaultConfig: cfg });
+    const tool = new SpectrumRefractionTool({
+        providerManager: fake as unknown as LlmProviderManager,
+        defaultConfig: cfg,
+    });
 
     // ── Empty message rejected ──
     const r1 = await tool.execute(makeRequest({ message: "" }));
     assert(!r1.ok && r1.output.error === "message is required", "empty message rejected");
 
     // ── Cost gate triggers when cost exceeds default $0.10 ──
-    fake.estimatedCost = 0.50;
+    fake.estimatedCost = 0.5;
     const r2 = await tool.execute(makeRequest({ message: "long task" }));
     assert(!r2.ok && r2.output.error === "cost_gate_exceeded", "cost gate triggers");
     assert(typeof r2.output.gateUsd === "number", "gate value reported");
@@ -70,13 +77,15 @@ export async function testSrTool(): Promise<void> {
     assert(!r5.ok && r5.output.error === "no_active_sr_config", "no config error");
 
     // ── hemispheres[] in args overrides defaultConfig ──
-    const r6 = await tool.execute(makeRequest({
-        message: "task",
-        hemispheres: [
-            { id: "h1", providerId: "openai", model: "gpt-4o", role: "logic" },
-            { id: "h2", providerId: "anthropic", model: "claude-3.5-sonnet", role: "creative" },
-        ],
-    }));
+    const r6 = await tool.execute(
+        makeRequest({
+            message: "task",
+            hemispheres: [
+                { id: "h1", providerId: "openai", model: "gpt-4o", role: "logic" },
+                { id: "h2", providerId: "anthropic", model: "claude-3.5-sonnet", role: "creative" },
+            ],
+        }),
+    );
     assert(r6.ok, "hemispheres[] arg works: " + JSON.stringify(r6.output));
     assert(fake.lastConfig?.hemispheres?.length === 2, "hemispheres[] threaded through");
 

@@ -47,12 +47,7 @@ const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
  * via bearer token only. Adding to this list is a security decision —
  * each entry must be defensible.
  */
-const CSRF_EXEMPT_ROUTES = new Set([
-    "/health",
-    "/api/health",
-    "/metrics",
-    "/.well-known/agent.json",
-]);
+const CSRF_EXEMPT_ROUTES = new Set(["/health", "/api/health", "/metrics", "/.well-known/agent.json"]);
 
 /**
  * Routes that bypass the Origin/Referer CSRF check via prefix match.
@@ -108,7 +103,9 @@ export function resolveAllowedOrigins(port: number, env: NodeJS.ProcessEnv = pro
             // Reject obvious wildcards — `*` is never acceptable in the
             // allowlist because the dashboard exposes authenticated state.
             if (v === "*") {
-                throw new Error("[security] PRISM_CORS_ORIGINS=\"*\" is not permitted — allowlist must be specific origins");
+                throw new Error(
+                    '[security] PRISM_CORS_ORIGINS="*" is not permitted — allowlist must be specific origins',
+                );
             }
             // Strip trailing slash for tolerance — operators copy-paste
             // origins with and without a trailing slash.
@@ -158,11 +155,7 @@ function isExemptFromCsrf(url: string): boolean {
  * Idempotent and side-effect free except for response header / status
  * writes. Safe to call exactly once per request, before auth.
  */
-export function applyCorsAndCsrf(
-    req: IncomingMessage,
-    res: ServerResponse,
-    config: CorsCsrfConfig,
-): CorsCsrfResult {
+export function applyCorsAndCsrf(req: IncomingMessage, res: ServerResponse, config: CorsCsrfConfig): CorsCsrfResult {
     const allowed = config.allowedOrigins;
     const url = req.url ?? "/";
     const method = (req.method ?? "GET").toUpperCase();

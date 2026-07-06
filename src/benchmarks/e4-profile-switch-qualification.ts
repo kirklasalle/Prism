@@ -35,10 +35,7 @@ const OUTPUT_PATH = process.env.PRISM_E4_OUTPUT_PATH ?? "prism-output/e4-profile
 
 function countToolExecutions(events: readonly ActivityEvent[], operation: string): number {
     return events.filter(
-        (event) =>
-            event.layer === "tool_execution" &&
-            event.operation === operation &&
-            event.status === "succeeded",
+        (event) => event.layer === "tool_execution" && event.operation === operation && event.status === "succeeded",
     ).length;
 }
 
@@ -68,13 +65,9 @@ async function main(): Promise<void> {
         },
     });
 
-    const orchestrator = new Orchestrator(
-        "e4-profile-switch-session",
-        activityBus,
-        policyEngine,
-        toolRegistry,
-        { executionProfile: INDIVIDUAL_PROFILE },
-    );
+    const orchestrator = new Orchestrator("e4-profile-switch-session", activityBus, policyEngine, toolRegistry, {
+        executionProfile: INDIVIDUAL_PROFILE,
+    });
 
     const mediumMutationNoRollback: ToolRequest = {
         operation: "profile_switch_probe",

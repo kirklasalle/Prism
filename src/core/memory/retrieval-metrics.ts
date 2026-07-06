@@ -1,8 +1,5 @@
 import type { SemanticMatch } from "../memory/semantic-memory.js";
-import {
-    type RetrievalAlertPolicy,
-    withRetrievalAlertPolicy,
-} from "./retrieval-alert-policy.js";
+import { type RetrievalAlertPolicy, withRetrievalAlertPolicy } from "./retrieval-alert-policy.js";
 
 export interface RetrievalMetric {
     queryId: string;
@@ -102,7 +99,7 @@ export class RetrievalMetricsCollector {
         const coverageScore = topScores[0] ?? 0;
         const noveltyScore = this.calculateNoveltyScore(matchIds);
         const utilityScore = hasHit
-            ? clamp01((coverageScore * 0.5) + (noveltyScore * 0.3) + (Math.min(1, matches.length / 3) * 0.2))
+            ? clamp01(coverageScore * 0.5 + noveltyScore * 0.3 + Math.min(1, matches.length / 3) * 0.2)
             : 0;
 
         this.metrics.push({
@@ -154,13 +151,12 @@ export class RetrievalMetricsCollector {
             totalQueries: this.metrics.length,
             hitRate: sample.reduce((sum, m) => sum + (m.hasHit ? 1 : 0), 0) / sample.length,
             avgMatchCount: sample.reduce((sum, m) => sum + m.matchCount, 0) / sample.length,
-            avgTopScore:
-                sample.reduce((sum, m) => sum + (m.topScores[0] ?? 0), 0) / sample.length,
+            avgTopScore: sample.reduce((sum, m) => sum + (m.topScores[0] ?? 0), 0) / sample.length,
             avgCoverageScore: sample.reduce((sum, m) => sum + m.coverageScore, 0) / sample.length,
             avgNoveltyScore: sample.reduce((sum, m) => sum + m.noveltyScore, 0) / sample.length,
             avgUtilityScore: sample.reduce((sum, m) => sum + m.utilityScore, 0) / sample.length,
             avgLatencyMs: sample.reduce((sum, m) => sum + m.latencyMs, 0) / sample.length,
-            p50LatencyMs: percentile(latencies, 0.50),
+            p50LatencyMs: percentile(latencies, 0.5),
             p95LatencyMs: percentile(latencies, 0.95),
             p99LatencyMs: percentile(latencies, 0.99),
         };
@@ -338,10 +334,7 @@ export class RetrievalMetricsCollector {
     }
 }
 
-function buildCohortAlerts(
-    cohorts: RetrievalCohortSummary[],
-    alertPolicy: RetrievalAlertPolicy,
-): string[] {
+function buildCohortAlerts(cohorts: RetrievalCohortSummary[], alertPolicy: RetrievalAlertPolicy): string[] {
     const alerts: string[] = [];
     for (const cohort of cohorts) {
         if (cohort.hitRate < alertPolicy.cohortMinHitRate) {
@@ -411,10 +404,7 @@ function ratioDelta(oldValue: number, newValue: number): number {
     return (newValue - oldValue) / Math.max(Math.abs(oldValue), 0.0001);
 }
 
-function classifyTrend(
-    deltaRatio: number,
-    threshold: number,
-): "up" | "down" | "stable" {
+function classifyTrend(deltaRatio: number, threshold: number): "up" | "down" | "stable" {
     if (deltaRatio > threshold) {
         return "up";
     }

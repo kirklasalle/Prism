@@ -9,13 +9,7 @@ import { useApi, useListNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, DataTable, SubTabBar, Loading, ErrorBox, KeyValue, SectionHeader } from "../components/ui.js";
 
-export function NetworkTab({
-    client,
-    focused,
-}: {
-    client: PrismClient;
-    focused: boolean;
-}): React.JSX.Element {
+export function NetworkTab({ client, focused }: { client: PrismClient; focused: boolean }): React.JSX.Element {
     const [subTab, setSubTab] = useState("interfaces");
     const interfaces = useApi(client, (c) => c.getNetworkInterfaces(), 15000);
     const commands = useApi(client, (c) => c.getNetworkCommands(), 30000);
@@ -74,11 +68,9 @@ export function NetworkTab({
                                 { header: "MAC", accessor: "mac", width: 20 },
                                 {
                                     header: "Type",
-                                    accessor: ((r: Record<string, unknown>) =>
-                                        r.internal ? "internal" : "external"),
+                                    accessor: (r: Record<string, unknown>) => (r.internal ? "internal" : "external"),
                                     width: 10,
-                                    color: ((r: Record<string, unknown>) =>
-                                        r.internal ? colors.muted : colors.success),
+                                    color: (r: Record<string, unknown>) => (r.internal ? colors.muted : colors.success),
                                 },
                             ]}
                         />
@@ -110,7 +102,11 @@ export function NetworkTab({
                         <Text
                             key={i}
                             color={
-                                line.startsWith(">") ? colors.user : line.startsWith("[error]") ? colors.error : colors.text
+                                line.startsWith(">")
+                                    ? colors.user
+                                    : line.startsWith("[error]")
+                                      ? colors.error
+                                      : colors.text
                             }
                         >
                             {line}

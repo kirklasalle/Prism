@@ -43,7 +43,11 @@ function createBaseManifest(): PluginPackManifest {
     };
 }
 
-function signManifest(manifest: PluginPackManifest, trustValidator: BusinessTrustValidator, privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"]): void {
+function signManifest(
+    manifest: PluginPackManifest,
+    trustValidator: BusinessTrustValidator,
+    privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"],
+): void {
     const signer = createSign("RSA-SHA256");
     signer.update(trustValidator.buildSignablePayload(manifest));
     signer.end();
@@ -62,11 +66,11 @@ function run(): void {
         expectedAccepted: boolean;
         result?: ReturnType<typeof loadPluginPack>;
     }> = [
-            { name: "signed_manifest_business", profile: "business", signed: true, expectedAccepted: true },
-            { name: "unsigned_manifest_business", profile: "business", signed: false, expectedAccepted: false },
-            { name: "signed_manifest_individual", profile: "individual", signed: true, expectedAccepted: true },
-            { name: "unsigned_manifest_individual", profile: "individual", signed: false, expectedAccepted: true },
-        ];
+        { name: "signed_manifest_business", profile: "business", signed: true, expectedAccepted: true },
+        { name: "unsigned_manifest_business", profile: "business", signed: false, expectedAccepted: false },
+        { name: "signed_manifest_individual", profile: "individual", signed: true, expectedAccepted: true },
+        { name: "unsigned_manifest_individual", profile: "individual", signed: false, expectedAccepted: true },
+    ];
 
     const allEvents: any[] = [];
     let passCount = 0;
@@ -89,10 +93,12 @@ function run(): void {
         if (matched) passCount++;
         else failCount++;
 
-        allEvents.push(...bus.listEvents().map(e => ({
-            scenario: scenario.name,
-            ...e,
-        })));
+        allEvents.push(
+            ...bus.listEvents().map((e) => ({
+                scenario: scenario.name,
+                ...e,
+            })),
+        );
     }
 
     // ── Direct trust validator boundary checks ────────────
@@ -151,7 +157,7 @@ function run(): void {
             eventsCaptured: allEvents.length,
             verdict: failCount === 0 ? "PASS" : "FAIL",
         },
-        scenarios: scenarios.map(s => ({
+        scenarios: scenarios.map((s) => ({
             name: s.name,
             profile: s.profile,
             signed: s.signed,
@@ -159,11 +165,13 @@ function run(): void {
             actualAccepted: s.result!.accepted,
             matched: s.result!.accepted === s.expectedAccepted,
             summary: s.result!.summary,
-            trustValidation: s.result!.trustValidation ? {
-                allowed: s.result!.trustValidation.allowed,
-                reasonCodes: s.result!.trustValidation.reasonCodes,
-                reasons: s.result!.trustValidation.reasons,
-            } : null,
+            trustValidation: s.result!.trustValidation
+                ? {
+                      allowed: s.result!.trustValidation.allowed,
+                      reasonCodes: s.result!.trustValidation.reasonCodes,
+                      reasons: s.result!.trustValidation.reasons,
+                  }
+                : null,
         })),
         boundaryChecks,
         activityEvents: allEvents,

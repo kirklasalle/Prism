@@ -34,10 +34,15 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });
@@ -48,7 +53,9 @@ function fetchRaw(path: string): Promise<{ status: number; headers: http.Incomin
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             const chunks: Buffer[] = [];
-            res.on("data", (chunk: Buffer) => { chunks.push(chunk); });
+            res.on("data", (chunk: Buffer) => {
+                chunks.push(chunk);
+            });
             res.on("end", () => {
                 resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks) });
             });
@@ -59,20 +66,28 @@ function fetchRaw(path: string): Promise<{ status: number; headers: http.Incomin
 /** JSON POST/DELETE/PUT helper */
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? {} : { "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -85,7 +100,9 @@ let playwrightAvailable = false;
 try {
     await import("playwright");
     playwrightAvailable = true;
-} catch { /* Playwright not installed — skip live browser tests */ }
+} catch {
+    /* Playwright not installed — skip live browser tests */
+}
 
 const describeOrSkip = playwrightAvailable ? describe : describe.skip;
 
@@ -115,15 +132,15 @@ describeOrSkip("Browser API Routes (/api/browser/*)", function () {
                 executionProfileSegment: "individual",
             },
             chatStore,
-            [],                                          // actions
-            0,                                           // port = ephemeral
-            undefined,                                   // metricsCollector
-            undefined,                                   // retrievalDashboardStore
-            new InMemoryProviderSecretStore(),            // providerSecretStore
-            undefined,                                   // activityStore
-            join(tmpDir, "session-packages.json"),        // sessionPackageStorePath
-            join(tmpDir, "exports"),                      // sessionPackageExportDir
-            registry,                                    // toolRegistry
+            [], // actions
+            0, // port = ephemeral
+            undefined, // metricsCollector
+            undefined, // retrievalDashboardStore
+            new InMemoryProviderSecretStore(), // providerSecretStore
+            undefined, // activityStore
+            join(tmpDir, "session-packages.json"), // sessionPackageStorePath
+            join(tmpDir, "exports"), // sessionPackageExportDir
+            registry, // toolRegistry
         );
 
         service.start();
@@ -295,7 +312,7 @@ describeOrSkip("Browser API Routes (/api/browser/*)", function () {
         // PNG magic bytes: 0x89 0x50 0x4E 0x47
         assert.strictEqual(body[0], 0x89);
         assert.strictEqual(body[1], 0x50);
-        assert.strictEqual(body[2], 0x4E);
+        assert.strictEqual(body[2], 0x4e);
         assert.strictEqual(body[3], 0x47);
     });
 
@@ -376,7 +393,9 @@ describeOrSkip("Browser API Routes (/api/browser/*)", function () {
             bareService.start();
             await new Promise((resolve) => setTimeout(resolve, 50));
 
-            const addr = (bareService as unknown as { server: { address(): { port: number } | null } }).server.address();
+            const addr = (
+                bareService as unknown as { server: { address(): { port: number } | null } }
+            ).server.address();
             barePort = addr ? addr.port : 0;
         });
 
@@ -390,10 +409,15 @@ describeOrSkip("Browser API Routes (/api/browser/*)", function () {
             return new Promise((resolve, reject) => {
                 http.get({ hostname: "127.0.0.1", port: barePort, path }, (res) => {
                     let data = "";
-                    res.on("data", (chunk: Buffer) => { data += chunk; });
+                    res.on("data", (chunk: Buffer) => {
+                        data += chunk;
+                    });
                     res.on("end", () => {
-                        try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                        catch { resolve({ status: res.statusCode!, body: data }); }
+                        try {
+                            resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                        } catch {
+                            resolve({ status: res.statusCode!, body: data });
+                        }
                     });
                 }).on("error", reject);
             });
@@ -401,20 +425,28 @@ describeOrSkip("Browser API Routes (/api/browser/*)", function () {
 
         function bareRequestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
             return new Promise((resolve, reject) => {
-                const req = http.request({
-                    hostname: "127.0.0.1",
-                    port: barePort,
-                    path,
-                    method,
-                    headers: body == null ? {} : { "Content-Type": "application/json" },
-                }, (res) => {
-                    let payload = "";
-                    res.on("data", (chunk: Buffer) => { payload += chunk; });
-                    res.on("end", () => {
-                        try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                        catch { resolve({ status: res.statusCode!, body: payload }); }
-                    });
-                });
+                const req = http.request(
+                    {
+                        hostname: "127.0.0.1",
+                        port: barePort,
+                        path,
+                        method,
+                        headers: body == null ? {} : { "Content-Type": "application/json" },
+                    },
+                    (res) => {
+                        let payload = "";
+                        res.on("data", (chunk: Buffer) => {
+                            payload += chunk;
+                        });
+                        res.on("end", () => {
+                            try {
+                                resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                            } catch {
+                                resolve({ status: res.statusCode!, body: payload });
+                            }
+                        });
+                    },
+                );
                 req.on("error", reject);
                 if (body != null) req.write(JSON.stringify(body));
                 req.end();

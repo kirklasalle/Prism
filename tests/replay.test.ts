@@ -11,7 +11,7 @@ class MockTool implements Tool {
     constructor(
         readonly name: string,
         private readonly handler: (request: ToolRequest) => Promise<ToolResult>,
-    ) { }
+    ) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         return this.handler(request);

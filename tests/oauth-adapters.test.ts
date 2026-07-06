@@ -13,16 +13,16 @@ export async function testOAuthAdapters(): Promise<void> {
         refreshToken: "test_refresh",
         expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
         scopes: ["test_scope"],
-        provider: "gmail"
+        provider: "gmail",
     });
 
     assert.strictEqual(store.has("gmail"), true);
     const retrieved = store.get("gmail");
     assert.strictEqual(retrieved?.accessToken, "test_access");
-    
+
     const providers = store.listProviders();
     assert.deepStrictEqual(providers, ["gmail"]);
-    
+
     store.clear("gmail");
     assert.strictEqual(store.has("gmail"), false);
 
@@ -33,7 +33,7 @@ export async function testOAuthAdapters(): Promise<void> {
     delete process.env.PRISM_GMAIL_CLIENT_SECRET;
 
     const gmailAdapter = new GmailOAuthAdapter(store);
-    await new Promise(r => setTimeout(r, 50)); // Wait for tryInit
+    await new Promise((r) => setTimeout(r, 50)); // Wait for tryInit
 
     const gmailStatus = await gmailAdapter.getStatus();
     assert.strictEqual(gmailStatus.available, false, "Gmail should be unavailable without credentials");
@@ -42,7 +42,7 @@ export async function testOAuthAdapters(): Promise<void> {
     await assert.rejects(
         gmailAdapter.getAuthorizationUrl(),
         /not available/i,
-        "Should throw when generating auth URL without credentials"
+        "Should throw when generating auth URL without credentials",
     );
 
     if (oldGmailId) process.env.PRISM_GMAIL_CLIENT_ID = oldGmailId;
@@ -53,7 +53,7 @@ export async function testOAuthAdapters(): Promise<void> {
     delete process.env.PRISM_OUTLOOK_CLIENT_ID;
 
     const outlookAdapter = new OutlookOAuthAdapter(store);
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     const outlookStatus = await outlookAdapter.getStatus();
     assert.strictEqual(outlookStatus.available, false, "Outlook should be unavailable without credentials");
@@ -62,7 +62,7 @@ export async function testOAuthAdapters(): Promise<void> {
     await assert.rejects(
         outlookAdapter.getAuthorizationUrl(),
         /not available/i,
-        "Should throw when generating auth URL without credentials"
+        "Should throw when generating auth URL without credentials",
     );
 
     if (oldOutlookId) process.env.PRISM_OUTLOOK_CLIENT_ID = oldOutlookId;

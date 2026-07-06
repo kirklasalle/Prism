@@ -42,8 +42,12 @@ class FakeRes extends EventEmitter {
     headers: Record<string, string | string[]> = {};
     body = "";
     ended = false;
-    setHeader(k: string, v: string | string[]): void { this.headers[k.toLowerCase()] = v; }
-    getHeader(k: string): string | string[] | undefined { return this.headers[k.toLowerCase()]; }
+    setHeader(k: string, v: string | string[]): void {
+        this.headers[k.toLowerCase()] = v;
+    }
+    getHeader(k: string): string | string[] | undefined {
+        return this.headers[k.toLowerCase()];
+    }
     writeHead(status: number, headers?: Record<string, string>): this {
         this.statusCode = status;
         if (headers) {
@@ -51,15 +55,24 @@ class FakeRes extends EventEmitter {
         }
         return this;
     }
-    write(chunk: string): boolean { this.body += chunk; return true; }
-    end(chunk?: string): this { if (chunk) this.body += chunk; this.ended = true; return this; }
+    write(chunk: string): boolean {
+        this.body += chunk;
+        return true;
+    }
+    end(chunk?: string): this {
+        if (chunk) this.body += chunk;
+        this.ended = true;
+        return this;
+    }
 }
 
 function asRes(fake: FakeRes): ServerResponse {
     return fake as unknown as ServerResponse;
 }
 
-function base64url(buf: Buffer): string { return buf.toString("base64url"); }
+function base64url(buf: Buffer): string {
+    return buf.toString("base64url");
+}
 
 interface SignedJwt {
     token: string;
@@ -88,7 +101,7 @@ interface MockEndpoints {
 
 function makeFetcher(endpoints: MockEndpoints): typeof fetch {
     return (async (input: RequestInfo | URL, _init?: RequestInit) => {
-        const url = typeof input === "string" ? input : (input instanceof URL ? input.href : input.url);
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         let body: unknown;
         if (url.endsWith("/.well-known/openid-configuration") && endpoints.discovery) body = endpoints.discovery();
         else if (url.endsWith("/jwks") && endpoints.jwks) body = endpoints.jwks();
@@ -214,20 +227,32 @@ export async function testIamSsoOidc(): Promise<void> {
     sigBytes[0] ^= 0xff;
     const tampered = `${parts[0]}.${parts[1]}.${sigBytes.toString("base64url")}`;
     let thrown: unknown = null;
-    try { await provider.verifyIdToken(tampered, { expectedNonce: "n123" }); } catch (e) { thrown = e; }
+    try {
+        await provider.verifyIdToken(tampered, { expectedNonce: "n123" });
+    } catch (e) {
+        thrown = e;
+    }
     assert.ok(thrown instanceof OidcError);
     assert.equal((thrown as OidcError).code, "invalid_signature");
 
     // Expired token rejected.
     const expired = signRs256Jwt({
-        iss: issuer, aud: audience, sub: "x", iat: 1, exp: 2, nonce: "n123",
+        iss: issuer,
+        aud: audience,
+        sub: "x",
+        iat: 1,
+        exp: 2,
+        nonce: "n123",
     });
     issuedToken = expired.token;
     // Need to also feed the matching pubkey: since we cached jwks, refresh it
     // via a fresh provider keyed to the new key.
     const fetcher2 = makeFetcher({
         discovery: () => ({
-            issuer, authorization_endpoint: `${issuer}/a`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks`,
+            issuer,
+            authorization_endpoint: `${issuer}/a`,
+            token_endpoint: `${issuer}/token`,
+            jwks_uri: `${issuer}/jwks`,
         }),
         jwks: () => ({ keys: [expired.publicJwk] }),
         token: () => ({ id_token: expired.token }),
@@ -239,18 +264,29 @@ export async function testIamSsoOidc(): Promise<void> {
         fetcher: fetcher2,
     });
     let expiredErr: unknown = null;
-    try { await provider2.verifyIdToken(expired.token, { expectedNonce: "n123" }); } catch (e) { expiredErr = e; }
+    try {
+        await provider2.verifyIdToken(expired.token, { expectedNonce: "n123" });
+    } catch (e) {
+        expiredErr = e;
+    }
     assert.ok(expiredErr instanceof OidcError);
     assert.equal((expiredErr as OidcError).code, "expired");
 
     // Nonce mismatch rejected.
     const nonceMismatch = signRs256Jwt({
-        iss: issuer, aud: audience, sub: "x", nonce: "actual",
-        iat: Math.floor(Date.now() / 1000) - 5, exp: Math.floor(Date.now() / 1000) + 600,
+        iss: issuer,
+        aud: audience,
+        sub: "x",
+        nonce: "actual",
+        iat: Math.floor(Date.now() / 1000) - 5,
+        exp: Math.floor(Date.now() / 1000) + 600,
     });
     const fetcher3 = makeFetcher({
         discovery: () => ({
-            issuer, authorization_endpoint: `${issuer}/a`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks`,
+            issuer,
+            authorization_endpoint: `${issuer}/a`,
+            token_endpoint: `${issuer}/token`,
+            jwks_uri: `${issuer}/jwks`,
         }),
         jwks: () => ({ keys: [nonceMismatch.publicJwk] }),
     });
@@ -261,7 +297,11 @@ export async function testIamSsoOidc(): Promise<void> {
         fetcher: fetcher3,
     });
     let nonceErr: unknown = null;
-    try { await provider3.verifyIdToken(nonceMismatch.token, { expectedNonce: "expected" }); } catch (e) { nonceErr = e; }
+    try {
+        await provider3.verifyIdToken(nonceMismatch.token, { expectedNonce: "expected" });
+    } catch (e) {
+        nonceErr = e;
+    }
     assert.ok(nonceErr instanceof OidcError);
     assert.equal((nonceErr as OidcError).code, "nonce_mismatch");
 }
@@ -281,11 +321,15 @@ export async function testIamSsoSaml(): Promise<void> {
     const decoded = Buffer.from(samlReq!, "base64").toString("utf-8");
     assert.ok(decoded.includes("AuthnRequest"));
     assert.ok(decoded.includes("urn:prism:sp"));
-    assert.ok(decoded.includes("ID=\"_test-id-1\""));
+    assert.ok(decoded.includes('ID="_test-id-1"'));
     assert.equal(state.requestId, "_test-id-1");
 
     let thrown: unknown = null;
-    try { provider.completeAuth({ samlResponse: "irrelevant", state }); } catch (e) { thrown = e; }
+    try {
+        provider.completeAuth({ samlResponse: "irrelevant", state });
+    } catch (e) {
+        thrown = e;
+    }
     assert.ok(thrown instanceof SamlError);
     assert.equal((thrown as SamlError).code, "not_implemented");
 }
@@ -299,9 +343,14 @@ export async function testIamRoutesEndToEnd(): Promise<void> {
         const issuer = "https://idp.example.com";
         const audience = "test-client";
         const valid = signRs256Jwt({
-            iss: issuer, aud: audience, sub: "bob-sub", email: "bob@example.com", name: "Bob",
+            iss: issuer,
+            aud: audience,
+            sub: "bob-sub",
+            email: "bob@example.com",
+            name: "Bob",
             nonce: "PLACEHOLDER",
-            iat: Math.floor(Date.now() / 1000) - 5, exp: Math.floor(Date.now() / 1000) + 600,
+            iat: Math.floor(Date.now() / 1000) - 5,
+            exp: Math.floor(Date.now() / 1000) + 600,
         });
         // We re-sign the token after we know the nonce the provider generates,
         // since the route handler uses the provider's beginAuth() to choose nonce.
@@ -340,11 +389,19 @@ export async function testIamRoutesEndToEnd(): Promise<void> {
             const r = await realBegin();
             lastNonce = r.state.nonce;
             lastState = r.state.state;
-            const fresh = signRs256Jwt({
-                iss: issuer, aud: audience, sub: "bob-sub", email: "bob@example.com", name: "Bob",
-                nonce: lastNonce,
-                iat: Math.floor(Date.now() / 1000) - 5, exp: Math.floor(Date.now() / 1000) + 600,
-            }, valid.publicJwk.kid);
+            const fresh = signRs256Jwt(
+                {
+                    iss: issuer,
+                    aud: audience,
+                    sub: "bob-sub",
+                    email: "bob@example.com",
+                    name: "Bob",
+                    nonce: lastNonce,
+                    iat: Math.floor(Date.now() / 1000) - 5,
+                    exp: Math.floor(Date.now() / 1000) + 600,
+                },
+                valid.publicJwk.kid,
+            );
             nextIdToken = fresh.token;
             // Re-feed jwks with this fresh key (sign uses a fresh keypair each call).
             // Replace the fetcher's jwks closure mid-flight by mutating the IIFE.
@@ -353,14 +410,17 @@ export async function testIamRoutesEndToEnd(): Promise<void> {
         };
         // Updated fetcher that reads __jwks after mutation.
         const dynFetcher: typeof fetch = (async (input: RequestInfo | URL) => {
-            const url = typeof input === "string" ? input : (input instanceof URL ? input.href : input.url);
+            const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
             if (url.endsWith("/.well-known/openid-configuration")) {
-                return new Response(JSON.stringify({
-                    issuer,
-                    authorization_endpoint: `${issuer}/authorize`,
-                    token_endpoint: `${issuer}/token`,
-                    jwks_uri: `${issuer}/jwks`,
-                }), { status: 200 });
+                return new Response(
+                    JSON.stringify({
+                        issuer,
+                        authorization_endpoint: `${issuer}/authorize`,
+                        token_endpoint: `${issuer}/token`,
+                        jwks_uri: `${issuer}/jwks`,
+                    }),
+                    { status: 200 },
+                );
             }
             if (url.endsWith("/jwks")) {
                 const jwk = (fetcher as unknown as { __jwks?: JsonWebKey }).__jwks ?? valid.publicJwk;
@@ -407,11 +467,9 @@ export async function testIamRoutesEndToEnd(): Promise<void> {
         // 3. /api/iam/sso/oidc/callback?code=...&state=... → 302 / + sets prism_sso cookie
         let sessionCookie = "";
         {
-            const req = makeReq(
-                "GET",
-                `/api/iam/sso/oidc/callback?code=fake&state=${lastState}&config_id=${cfg.id}`,
-                { cookie: `prism_sso_flow=${flowCookie}` },
-            );
+            const req = makeReq("GET", `/api/iam/sso/oidc/callback?code=fake&state=${lastState}&config_id=${cfg.id}`, {
+                cookie: `prism_sso_flow=${flowCookie}`,
+            });
             const res = new FakeRes();
             await handler.handle(req, asRes(res), {} as never);
             assert.equal(res.statusCode, 302, `body: ${res.body}`);
@@ -469,4 +527,5 @@ export async function testIamRoutesEndToEnd(): Promise<void> {
 }
 
 // Suppress "unused" when fixtures are imported only for type-side effects.
-void Socket; void createPrivateKey;
+void Socket;
+void createPrivateKey;

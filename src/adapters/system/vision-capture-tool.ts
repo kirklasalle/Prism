@@ -45,7 +45,12 @@ export class VisionCaptureTool implements Tool {
                         base64: buf.toString("base64"),
                     },
                     sideEffects: [
-                        { type: "file", description: `Screen captured: ${result.filename}`, mutating: false, reversible: true },
+                        {
+                            type: "file",
+                            description: `Screen captured: ${result.filename}`,
+                            mutating: false,
+                            reversible: true,
+                        },
                     ],
                 };
             } catch (err: unknown) {
@@ -65,7 +70,12 @@ export class VisionCaptureTool implements Tool {
                         files: result.files,
                     },
                     sideEffects: [
-                        { type: "file", description: `Burst capture: ${result.frames} frames`, mutating: false, reversible: true },
+                        {
+                            type: "file",
+                            description: `Burst capture: ${result.frames} frames`,
+                            mutating: false,
+                            reversible: true,
+                        },
                     ],
                 };
             } catch (err: unknown) {
@@ -73,6 +83,9 @@ export class VisionCaptureTool implements Tool {
             }
         }
 
-        return { ok: false, output: { error: `Unknown action: "${action}". Expected "capture_screen" or "burst_capture".` } };
+        return {
+            ok: false,
+            output: { error: `Unknown action: "${action}". Expected "capture_screen" or "burst_capture".` },
+        };
     }
 }

@@ -120,7 +120,9 @@ export class CharacterAccountabilityStore {
     }
 
     save(assignment: CharacterAssignment): void {
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             INSERT OR REPLACE INTO character_assignments (
                 assignment_id, character_id, prism_user_id, prism_user_email,
                 operator_id, operator_email, client_id, session_id, execution_profile_segment, workspace_hub, state,
@@ -134,34 +136,40 @@ export class CharacterAccountabilityStore {
                 :assignedAt, :updatedAt, :lastActiveAt, :permissionScopes,
                 :emailVerifiedAt, :emailVerifiedProvider
             )
-        `).run({
-            assignmentId: assignment.assignmentId,
-            characterId: assignment.characterId,
-            prismUserId: assignment.prismUserId,
-            prismUserEmail: assignment.prismUserEmail,
-            operatorId: assignment.operatorId,
-            operatorEmail: assignment.operatorEmail,
-            clientId: assignment.clientId,
-            sessionId: assignment.sessionId,
-            executionProfileSegment: assignment.executionProfileSegment,
-            workspaceHub: assignment.workspaceHub ?? "",
-            state: assignment.state,
-            suspendReason: assignment.suspendReason ?? null,
-            revocationReason: assignment.revocationReason ?? null,
-            dispatchCount: assignment.dispatchCount,
-            assignedAt: assignment.assignedAt,
-            updatedAt: assignment.updatedAt,
-            lastActiveAt: assignment.lastActiveAt,
-            permissionScopes: JSON.stringify(assignment.permissionScopes ?? []),
-            emailVerifiedAt: assignment.emailVerifiedAt ?? null,
-            emailVerifiedProvider: assignment.emailVerifiedProvider ?? null,
-        });
+        `,
+            )
+            .run({
+                assignmentId: assignment.assignmentId,
+                characterId: assignment.characterId,
+                prismUserId: assignment.prismUserId,
+                prismUserEmail: assignment.prismUserEmail,
+                operatorId: assignment.operatorId,
+                operatorEmail: assignment.operatorEmail,
+                clientId: assignment.clientId,
+                sessionId: assignment.sessionId,
+                executionProfileSegment: assignment.executionProfileSegment,
+                workspaceHub: assignment.workspaceHub ?? "",
+                state: assignment.state,
+                suspendReason: assignment.suspendReason ?? null,
+                revocationReason: assignment.revocationReason ?? null,
+                dispatchCount: assignment.dispatchCount,
+                assignedAt: assignment.assignedAt,
+                updatedAt: assignment.updatedAt,
+                lastActiveAt: assignment.lastActiveAt,
+                permissionScopes: JSON.stringify(assignment.permissionScopes ?? []),
+                emailVerifiedAt: assignment.emailVerifiedAt ?? null,
+                emailVerifiedProvider: assignment.emailVerifiedProvider ?? null,
+            });
     }
 
     get(assignmentId: string): CharacterAssignment | null {
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(
+                `
             SELECT * FROM character_assignments WHERE assignment_id = :assignmentId
-        `).get({ assignmentId }) as Record<string, unknown> | undefined;
+        `,
+            )
+            .get({ assignmentId }) as Record<string, unknown> | undefined;
 
         if (!row) {
             return null;
@@ -171,9 +179,13 @@ export class CharacterAccountabilityStore {
     }
 
     delete(assignmentId: string): void {
-        this.db.prepare(`
+        this.db
+            .prepare(
+                `
             DELETE FROM character_assignments WHERE assignment_id = :assignmentId
-        `).run({ assignmentId });
+        `,
+            )
+            .run({ assignmentId });
     }
 
     list(filter: CharacterAssignmentFilter = {}): CharacterAssignment[] {
@@ -218,11 +230,15 @@ export class CharacterAccountabilityStore {
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(
+                `
             SELECT * FROM character_assignments
             ${where}
             ORDER BY updated_at DESC, assignment_id ASC
-        `).all(params) as Record<string, unknown>[];
+        `,
+            )
+            .all(params) as Record<string, unknown>[];
 
         return rows.map((row) => this.toAssignment(row));
     }
@@ -260,9 +276,10 @@ export class CharacterAccountabilityStore {
             lastActiveAt: String(row.last_active_at),
             permissionScopes,
             emailVerifiedAt: row.email_verified_at != null ? String(row.email_verified_at) : null,
-            emailVerifiedProvider: row.email_verified_provider != null
-                ? (String(row.email_verified_provider) as "gmail" | "outlook" | "mock_oauth")
-                : null,
+            emailVerifiedProvider:
+                row.email_verified_provider != null
+                    ? (String(row.email_verified_provider) as "gmail" | "outlook" | "mock_oauth")
+                    : null,
         };
     }
 }

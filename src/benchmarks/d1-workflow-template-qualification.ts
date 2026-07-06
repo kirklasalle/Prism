@@ -17,11 +17,9 @@ function run(): void {
         {
             name: "Email template includes triage workflow",
             passed:
+                templates.email.steps.some((step) => step.id === "email_scan" && step.args.action === "triage_inbox") &&
                 templates.email.steps.some(
-                    (step) => step.id === "email_scan" && step.args.action === "triage_inbox"
-                ) &&
-                templates.email.steps.some(
-                    (step) => step.id === "email_draft_fallback" && step.args.action === "draft_reply"
+                    (step) => step.id === "email_draft_fallback" && step.args.action === "draft_reply",
                 ),
             details: "Expected email_scan=triage_inbox and fallback draft_reply",
         },
@@ -29,17 +27,17 @@ function run(): void {
             name: "Calendar template includes conflict detection and day planning",
             passed:
                 templates.calendar.steps.some(
-                    (step) => step.id === "calendar_fetch" && step.args.action === "detect_conflicts"
+                    (step) => step.id === "calendar_fetch" && step.args.action === "detect_conflicts",
                 ) &&
                 templates.calendar.steps.some(
-                    (step) => step.id === "calendar_commit" && step.args.action === "commit_day_plan"
+                    (step) => step.id === "calendar_commit" && step.args.action === "commit_day_plan",
                 ),
             details: "Expected detect_conflicts + commit_day_plan actions",
         },
         {
             name: "Notes template includes action/deadline extraction",
             passed: templates.notes.steps.some(
-                (step) => step.id === "notes_persist" && step.args.action === "extract_actions_deadlines"
+                (step) => step.id === "notes_persist" && step.args.action === "extract_actions_deadlines",
             ),
             details: "Expected notes_persist action extract_actions_deadlines",
         },
@@ -47,12 +45,10 @@ function run(): void {
             name: "Tasks template includes chronological timeline planning",
             passed:
                 templates.tasks.steps.some(
-                    (step) =>
-                        step.id === "tasks_analyze" && step.args.action === "build_chronological_plan"
+                    (step) => step.id === "tasks_analyze" && step.args.action === "build_chronological_plan",
                 ) &&
                 templates.tasks.steps.some(
-                    (step) =>
-                        step.id === "tasks_commit" && step.args.action === "commit_chronological_timeline"
+                    (step) => step.id === "tasks_commit" && step.args.action === "commit_chronological_timeline",
                 ),
             details: "Expected chronological plan + commit actions",
         },

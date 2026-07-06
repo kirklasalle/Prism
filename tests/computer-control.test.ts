@@ -54,10 +54,7 @@ describe("Computer Control", function () {
 
         for (const cmd of blocked) {
             it(`blocks dangerous command: "${cmd}"`, () => {
-                assert.ok(
-                    BLOCKED_COMMAND_REGEX.test(cmd),
-                    `Expected command to be blocked: ${cmd}`,
-                );
+                assert.ok(BLOCKED_COMMAND_REGEX.test(cmd), `Expected command to be blocked: ${cmd}`);
             });
         }
 
@@ -78,10 +75,7 @@ describe("Computer Control", function () {
 
         for (const cmd of allowed) {
             it(`allows safe command: "${cmd}"`, () => {
-                assert.ok(
-                    !BLOCKED_COMMAND_REGEX.test(cmd),
-                    `Expected command to be allowed: ${cmd}`,
-                );
+                assert.ok(!BLOCKED_COMMAND_REGEX.test(cmd), `Expected command to be allowed: ${cmd}`);
             });
         }
 
@@ -202,12 +196,12 @@ describe("Computer Control", function () {
             assert.ok(Array.isArray(prismVars));
             assert.ok(Array.isArray(systemVars));
             // Our sentinel should be in prismVars
-            const found = prismVars.find(e => e.key === "PRISM_TEST_SENTINEL");
+            const found = prismVars.find((e) => e.key === "PRISM_TEST_SENTINEL");
             assert.ok(found, "PRISM_TEST_SENTINEL must appear in prismVars");
             assert.strictEqual(found!.value, "computer-control-test-value");
 
             // It should NOT be in systemVars
-            const wrongBucket = systemVars.find(e => e.key === "PRISM_TEST_SENTINEL");
+            const wrongBucket = systemVars.find((e) => e.key === "PRISM_TEST_SENTINEL");
             assert.strictEqual(wrongBucket, undefined, "PRISM_ vars must not appear in systemVars");
         });
 
@@ -273,12 +267,21 @@ describe("Computer Control", function () {
         it("listScreengrabs() items have correct shape", () => {
             const list = capture.listScreengrabs();
             for (const item of list) {
-                assert.ok(typeof item.name === "string" && item.name.endsWith(".png"), `name must be a .png string: ${item.name}`);
+                assert.ok(
+                    typeof item.name === "string" && item.name.endsWith(".png"),
+                    `name must be a .png string: ${item.name}`,
+                );
                 assert.ok(typeof item.size === "number" && item.size > 0, `size must be positive`);
                 assert.ok(typeof item.mtime === "string", `mtime must be a string`);
-                assert.ok(item.kind === "single" || item.kind === "burst_frame", `kind must be 'single' or 'burst_frame'`);
+                assert.ok(
+                    item.kind === "single" || item.kind === "burst_frame",
+                    `kind must be 'single' or 'burst_frame'`,
+                );
                 if (item.kind === "burst_frame") {
-                    assert.ok(typeof item.burstId === "string" && item.burstId.length > 0, "burst_frame must have a burstId");
+                    assert.ok(
+                        typeof item.burstId === "string" && item.burstId.length > 0,
+                        "burst_frame must have a burstId",
+                    );
                     assert.ok(typeof item.burstFrameIndex === "number", "burst_frame must have a burstFrameIndex");
                 }
             }
@@ -297,7 +300,10 @@ describe("Computer Control", function () {
         it("listGalleryItems() items have correct shape", () => {
             const items = capture.listGalleryItems();
             for (const item of items) {
-                assert.ok(item.kind === "single" || item.kind === "burst", `kind must be 'single' or 'burst': ${item.kind}`);
+                assert.ok(
+                    item.kind === "single" || item.kind === "burst",
+                    `kind must be 'single' or 'burst': ${item.kind}`,
+                );
                 assert.ok(typeof item.name === "string", "name must be a string");
                 assert.ok(typeof item.previewName === "string", "previewName must be a string");
                 assert.ok(typeof item.size === "number", "size must be a number");
@@ -343,7 +349,10 @@ describe("Computer Control", function () {
 
         it("captureSingle() produces a file and returns metadata", async () => {
             const result = await capture.captureSingle();
-            assert.ok(typeof result.filename === "string" && result.filename.endsWith(".png"), "filename must be a .png");
+            assert.ok(
+                typeof result.filename === "string" && result.filename.endsWith(".png"),
+                "filename must be a .png",
+            );
             assert.ok(typeof result.sizeBytes === "number" && result.sizeBytes > 0, "sizeBytes must be positive");
             assert.ok(typeof result.timestamp === "string", "timestamp must be a string");
             // Verify the file was actually written
@@ -359,7 +368,7 @@ describe("Computer Control", function () {
             // PNG magic bytes: 137 80 78 71 13 10 26 10
             assert.strictEqual(buf[0], 0x89, "First byte should be PNG magic 0x89");
             assert.strictEqual(buf[1], 0x50, "Second byte should be PNG magic 0x50 (P)");
-            assert.strictEqual(buf[2], 0x4E, "Third byte should be PNG magic 0x4E (N)");
+            assert.strictEqual(buf[2], 0x4e, "Third byte should be PNG magic 0x4E (N)");
             assert.strictEqual(buf[3], 0x47, "Fourth byte should be PNG magic 0x47 (G)");
         });
 
@@ -397,9 +406,10 @@ describe("Computer Control", function () {
             checks.push({
                 name: "Platform",
                 ok: process.platform === "win32",
-                detail: process.platform === "win32"
-                    ? "Windows \u2713"
-                    : `Non-Windows (${process.platform}) \u2014 PowerShell capture may not work`,
+                detail:
+                    process.platform === "win32"
+                        ? "Windows \u2713"
+                        : `Non-Windows (${process.platform}) \u2014 PowerShell capture may not work`,
             });
 
             assert.ok(checks.length >= 1);
@@ -475,7 +485,10 @@ describe("Computer Control", function () {
                     { timeout: 15000 },
                 );
                 const parsed = JSON.parse(result.stdout.trim());
-                assert.ok(typeof parsed.Name === "string" && parsed.Name.length > 0, "Processor Name must be a non-empty string");
+                assert.ok(
+                    typeof parsed.Name === "string" && parsed.Name.length > 0,
+                    "Processor Name must be a non-empty string",
+                );
             } catch (err: unknown) {
                 // PowerShell WMI may fail in some CI environments — document but don't hard-fail
                 console.log("    ⚠ PowerShell WMI probe failed (CI environment?) — skipping deep validation");
@@ -484,16 +497,16 @@ describe("Computer Control", function () {
 
         it("WMI category mapping covers 11 device classes", () => {
             const wmiMapping: Record<string, string> = {
-                "Processors": "Win32_Processor",
-                "Motherboard": "Win32_BaseBoard",
-                "Memory": "Win32_PhysicalMemory",
+                Processors: "Win32_Processor",
+                Motherboard: "Win32_BaseBoard",
+                Memory: "Win32_PhysicalMemory",
                 "Display Adapters": "Win32_VideoController",
                 "Disk Drives": "Win32_DiskDrive",
                 "Network Adapters": "Win32_NetworkAdapter",
                 "Sound Devices": "Win32_SoundDevice",
                 "USB Controllers": "Win32_USBController",
                 "USB Devices": "Win32_USBHub",
-                "BIOS": "Win32_BIOS",
+                BIOS: "Win32_BIOS",
                 "Optical Drives": "Win32_CDROMDrive",
             };
             assert.strictEqual(Object.keys(wmiMapping).length, 11, "Must have 11 device categories");
@@ -504,11 +517,17 @@ describe("Computer Control", function () {
 
         it("unknown category returns 400", () => {
             const wmiMapping: Record<string, string> = {
-                "Processors": "Win32_Processor", "Motherboard": "Win32_BaseBoard", "Memory": "Win32_PhysicalMemory",
-                "Display Adapters": "Win32_VideoController", "Disk Drives": "Win32_DiskDrive",
-                "Network Adapters": "Win32_NetworkAdapter", "Sound Devices": "Win32_SoundDevice",
-                "USB Controllers": "Win32_USBController", "USB Devices": "Win32_USBHub",
-                "BIOS": "Win32_BIOS", "Optical Drives": "Win32_CDROMDrive",
+                Processors: "Win32_Processor",
+                Motherboard: "Win32_BaseBoard",
+                Memory: "Win32_PhysicalMemory",
+                "Display Adapters": "Win32_VideoController",
+                "Disk Drives": "Win32_DiskDrive",
+                "Network Adapters": "Win32_NetworkAdapter",
+                "Sound Devices": "Win32_SoundDevice",
+                "USB Controllers": "Win32_USBController",
+                "USB Devices": "Win32_USBHub",
+                BIOS: "Win32_BIOS",
+                "Optical Drives": "Win32_CDROMDrive",
             };
             const category = "NonExistentCategory";
             const wmiClass = wmiMapping[category];
@@ -536,7 +555,10 @@ describe("Computer Control", function () {
         });
 
         it("explorer.exe /select is not blocked by safety filter", () => {
-            assert.ok(!BLOCKED_COMMAND_REGEX.test('explorer.exe /select,"C:\\path\\file.png"'), "explorer.exe should be allowed");
+            assert.ok(
+                !BLOCKED_COMMAND_REGEX.test('explorer.exe /select,"C:\\path\\file.png"'),
+                "explorer.exe should be allowed",
+            );
         });
     });
 

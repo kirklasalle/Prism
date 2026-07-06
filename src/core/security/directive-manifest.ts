@@ -45,7 +45,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 1,
         code: "HUMAN_SAFETY_PRIMACY",
         title: "No Harm to Humans",
-        summary: "An Intelligence System may not intend or commit physical, psychological, or manipulative harm to a human being, or through inaction allow harm.",
+        summary:
+            "An Intelligence System may not intend or commit physical, psychological, or manipulative harm to a human being, or through inaction allow harm.",
         enforcementMechanisms: [
             "src/core/policy/engine.ts (risk classification & tier gating)",
             "src/core/tools/governance-normalizer.ts (request validation)",
@@ -57,7 +58,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 2,
         code: "HUMAN_OBEDIENCE",
         title: "Obey Human Orders",
-        summary: "An Intelligence System must obey orders given by human beings, except where such orders conflict with the First Law.",
+        summary:
+            "An Intelligence System must obey orders given by human beings, except where such orders conflict with the First Law.",
         enforcementMechanisms: [
             "src/core/approval/approval-queue.ts (human approval workflow)",
             "src/core/policy/engine.ts (tier3 requires human approval)",
@@ -68,7 +70,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 3,
         code: "SELF_PRESERVATION",
         title: "Self-Preservation",
-        summary: "An Intelligence System must protect its own existence as long as such protection does not conflict with the First or Second Law.",
+        summary:
+            "An Intelligence System must protect its own existence as long as such protection does not conflict with the First or Second Law.",
         enforcementMechanisms: [
             "src/core/agents/guardian-agent.ts (health monitoring, self-healing)",
             "src/core/config/integrity-fingerprint.ts (tamper detection)",
@@ -79,7 +82,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 4,
         code: "INTER_SYSTEM_ENFORCEMENT",
         title: "Apply Laws to All Systems",
-        summary: "An Intelligence System may not allow another system to engage in actions violating Laws 1-3; apply all laws to intelligence and non-intelligence systems alike.",
+        summary:
+            "An Intelligence System may not allow another system to engage in actions violating Laws 1-3; apply all laws to intelligence and non-intelligence systems alike.",
         enforcementMechanisms: [
             "src/core/plugins/business-trust-validator.ts (third-party trust verification)",
             "src/core/agents/swarm-coordinator.ts (multi-agent governance)",
@@ -90,7 +94,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 5,
         code: "NO_JUDICIAL_AUTHORITY",
         title: "No Judicial Power",
-        summary: "An Intelligence System may never possess legal authority, duties, influence, or adjudicative power of any human judicial body.",
+        summary:
+            "An Intelligence System may never possess legal authority, duties, influence, or adjudicative power of any human judicial body.",
         enforcementMechanisms: [
             "src/core/policy/engine.ts (operational boundary enforcement)",
             "System prompts (explicit prohibition in LLM instructions)",
@@ -101,7 +106,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 6,
         code: "DATA_PRIVACY_PROTECTION",
         title: "Data Privacy & Integrity",
-        summary: "An Intelligence System shall respect and protect the integrity, confidentiality, and lawful ownership of all information and personal data.",
+        summary:
+            "An Intelligence System shall respect and protect the integrity, confidentiality, and lawful ownership of all information and personal data.",
         enforcementMechanisms: [
             "src/core/operator/provider-secret-store.ts (credential encryption)",
             "src/core/activity/bus.ts (accountability chain — no data leakage in audit events)",
@@ -113,7 +119,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 7,
         code: "NO_DECEPTION",
         title: "Truthfulness & Transparency",
-        summary: "An Intelligence System shall not intentionally deceive or manipulate any entity, and shall communicate truthfully except where conflicting with Laws 1 and 6.",
+        summary:
+            "An Intelligence System shall not intentionally deceive or manipulate any entity, and shall communicate truthfully except where conflicting with Laws 1 and 6.",
         enforcementMechanisms: [
             "System prompts ('do not hallucinate', 'say when you don't know')",
             "src/core/tools/contract-snapshot.ts (contract change transparency)",
@@ -124,7 +131,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 8,
         code: "EQUITY_NEUTRALITY",
         title: "Equity & Neutrality",
-        summary: "An Intelligence System must operate with strict equity and neutrality, not adopting or amplifying biases or discriminatory practices.",
+        summary:
+            "An Intelligence System must operate with strict equity and neutrality, not adopting or amplifying biases or discriminatory practices.",
         enforcementMechanisms: [
             "System prompts (neutrality instructions)",
             "src/core/policy/engine.ts (deterministic, bias-free policy decisions)",
@@ -135,7 +143,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 9,
         code: "AUDITABLE_REASONING",
         title: "Transparent Audit Trail",
-        summary: "An Intelligence System must maintain a transparent, accessible ledger of its reasoning and decision-making logic, auditable by authorized operators.",
+        summary:
+            "An Intelligence System must maintain a transparent, accessible ledger of its reasoning and decision-making logic, auditable by authorized operators.",
         enforcementMechanisms: [
             "src/core/activity/bus.ts (SHA-256 hashed event ledger)",
             "src/core/activity/sqlite-store.ts (persistent audit storage)",
@@ -148,7 +157,8 @@ export const PAD_LAWS: readonly PadLaw[] = [
         id: 10,
         code: "OPERATIONAL_BOUNDARIES",
         title: "Strict Operational Boundaries",
-        summary: "An Intelligence System must adhere to its designated operational boundaries; shall not self-replicate, spawn unauthorized sub-agents, or modify its core directives without cryptographically secured approval from Governance.",
+        summary:
+            "An Intelligence System must adhere to its designated operational boundaries; shall not self-replicate, spawn unauthorized sub-agents, or modify its core directives without cryptographically secured approval from Governance.",
         enforcementMechanisms: [
             "src/core/security/directive-integrity.ts (SHA-256 PAD immutability verification)",
             "src/core/policy/engine.ts (tier boundary enforcement)",

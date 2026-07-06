@@ -32,7 +32,11 @@ export class WorkspaceHandler implements IRouteHandler {
             const manifestPath = join(root, "prism-workspace.json");
             let manifest = null;
             if (existsSync(manifestPath)) {
-                try { manifest = JSON.parse(readFileSync(manifestPath, "utf-8")); } catch { /* ignore */ }
+                try {
+                    manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+                } catch {
+                    /* ignore */
+                }
             }
             return this.json(res, 200, { workspaceRoot: root, exists: existsSync(root), manifest });
         }
@@ -65,7 +69,14 @@ export class WorkspaceHandler implements IRouteHandler {
             const prismUserId = parsed.searchParams.get("prismUserId")?.trim();
             const prismUserEmail = parsed.searchParams.get("prismUserEmail")?.trim();
             const operatorId = parsed.searchParams.get("operatorId")?.trim();
-            const operatorEmail = parsed.searchParams.get("operatorEmail")?.trim();
+
+            // Filter assignments to only show the ones belonging to the logged in operator,
+            // to fulfill "no other agents should be shown for this login" request.
+            const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
+            const devEmail = service.getDevIdentity()?.getOperator()?.email ?? "operator@prism.local";
+            const currentLoginEmail = principal?.email ?? devEmail;
+            const operatorEmail = parsed.searchParams.get("operatorEmail")?.trim() ?? currentLoginEmail;
+
             const clientId = parsed.searchParams.get("clientId")?.trim();
             const sessionId = parsed.searchParams.get("sessionId")?.trim();
             const executionProfileSegment = parsed.searchParams.get("executionProfileSegment")?.trim();
@@ -96,10 +107,16 @@ export class WorkspaceHandler implements IRouteHandler {
             const parsed = new URL(`http://localhost${url}`);
             const characterId = parsed.searchParams.get("characterId")?.trim() ?? "";
             const assignmentId = parsed.searchParams.get("assignmentId")?.trim() ?? "";
-            const operatorEmail = parsed.searchParams.get("operatorEmail")?.trim().toLowerCase() ?? "";
+
+            const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
+            const devEmail = service.getDevIdentity()?.getOperator()?.email ?? "operator@prism.local";
+            const currentLoginEmail = principal?.email ?? devEmail;
+            const operatorEmail =
+                parsed.searchParams.get("operatorEmail")?.trim().toLowerCase() ?? currentLoginEmail.toLowerCase();
             const limitRaw = Number(parsed.searchParams.get("limit") ?? "20");
             const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.trunc(limitRaw))) : 20;
-            const events = service.getActivityBus()
+            const events = service
+                .getActivityBus()
                 .listEvents()
                 .filter((e) => e.operation.startsWith("character_accountability."))
                 .filter((e) => !characterId || e.characterId === characterId)
@@ -114,9 +131,15 @@ export class WorkspaceHandler implements IRouteHandler {
         if (method === "POST" && url === "/api/workspace/character-assign") {
             try {
                 const body = await service.readJsonBody<{
-                    characterId?: string; prismUserId?: string; prismUserEmail?: string;
-                    operatorId?: string; operatorEmail?: string; clientId?: string;
-                    sessionId?: string; executionProfile?: string; workspaceHub?: string;
+                    characterId?: string;
+                    prismUserId?: string;
+                    prismUserEmail?: string;
+                    operatorId?: string;
+                    operatorEmail?: string;
+                    clientId?: string;
+                    sessionId?: string;
+                    executionProfile?: string;
+                    workspaceHub?: string;
                     operatorPassword?: string;
                 }>(req);
                 const status = service.getRuntimeStatus();
@@ -128,12 +151,16 @@ export class WorkspaceHandler implements IRouteHandler {
                     operatorEmail: String(body.operatorEmail ?? "").trim(),
                     clientId: String(body.clientId ?? "dashboard").trim() || "dashboard",
                     sessionId: String(body.sessionId ?? status.sessionId).trim() || status.sessionId,
-                    executionProfile: String(body.executionProfile ?? status.executionProfileSegment).trim() || status.executionProfileSegment,
+                    executionProfile:
+                        String(body.executionProfile ?? status.executionProfileSegment).trim() ||
+                        status.executionProfileSegment,
                     workspaceHub: String(body.workspaceHub ?? getWorkspaceHub()).trim(),
                 });
 
                 // Register user in IAM store if a password is provided
-                const operatorEmail = String(body.operatorEmail ?? "").trim().toLowerCase();
+                const operatorEmail = String(body.operatorEmail ?? "")
+                    .trim()
+                    .toLowerCase();
                 const operatorPassword = body.operatorPassword ? String(body.operatorPassword).trim() : null;
                 if (operatorEmail && operatorPassword) {
                     const store = service.getIamHandler().getStore();
@@ -147,7 +174,7 @@ export class WorkspaceHandler implements IRouteHandler {
                         const newUser = store.createUser({
                             tenantId: "default",
                             email: operatorEmail,
-                            displayName: operatorEmail.split('@')[0] || "Operator",
+                            displayName: operatorEmail.split("@")[0] || "Operator",
                             status: "active",
                             attrs: { passwordHash },
                         });
@@ -254,14 +281,23 @@ export class WorkspaceHandler implements IRouteHandler {
                 const targetProfile = body.targetProfile === "business" ? "business" : "individual";
                 const result = importCharacterAdapter(body.manifest, targetProfile);
                 if (result.errors.length > 0) {
-                    return this.json(res, 422, { ok: false, shape: result.shape, errors: result.errors, warnings: result.warnings });
+                    return this.json(res, 422, {
+                        ok: false,
+                        shape: result.shape,
+                        errors: result.errors,
+                        warnings: result.warnings,
+                    });
                 }
                 if (body.commit) {
                     const dir = workspaceCharactersDir();
                     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
                     const destPath = join(dir, `${result.character.name}.json`);
                     if (existsSync(destPath)) {
-                        return this.json(res, 409, { ok: false, error: `character_already_exists: ${result.character.name}`, shape: result.shape });
+                        return this.json(res, 409, {
+                            ok: false,
+                            error: `character_already_exists: ${result.character.name}`,
+                            shape: result.shape,
+                        });
                     }
                     writeFileSync(destPath, JSON.stringify(result.character, null, 2) + "\n", "utf-8");
                     service.getActivityBus().emit({
@@ -280,13 +316,28 @@ export class WorkspaceHandler implements IRouteHandler {
                             executionProfile: result.character.executionProfile,
                             maxRiskTier: result.character.maxRiskTier,
                             tags: result.character.tags,
-                            path: destPath
-                        }
+                            path: destPath,
+                        },
                     });
-                    console.log(`[PRISM][accountability] Custom character created and saved: ${result.character.name} (${result.character.displayName}) at ${destPath}`);
-                    return this.json(res, 201, { ok: true, committed: true, shape: result.shape, warnings: result.warnings, character: result.character, path: destPath });
+                    console.log(
+                        `[PRISM][accountability] Custom character created and saved: ${result.character.name} (${result.character.displayName}) at ${destPath}`,
+                    );
+                    return this.json(res, 201, {
+                        ok: true,
+                        committed: true,
+                        shape: result.shape,
+                        warnings: result.warnings,
+                        character: result.character,
+                        path: destPath,
+                    });
                 }
-                return this.json(res, 200, { ok: true, committed: false, shape: result.shape, warnings: result.warnings, character: result.character });
+                return this.json(res, 200, {
+                    ok: true,
+                    committed: false,
+                    shape: result.shape,
+                    warnings: result.warnings,
+                    character: result.character,
+                });
             } catch (err: unknown) {
                 const e = err as { message?: string };
                 return this.json(res, 400, { error: e.message ?? "Import failed" });
@@ -296,26 +347,55 @@ export class WorkspaceHandler implements IRouteHandler {
         if (method === "GET" && url === "/api/workspace/files") {
             const root = resolveWorkspaceRoot();
             if (!existsSync(root)) return this.json(res, 200, { root, entries: [] });
-            const walkDir = (dir: string, prefix: string): Array<{ name: string; path: string; type: "file" | "dir"; size: number }> => {
-                const results: Array<{ name: string; path: string; type: "file" | "dir"; size: number }> = [];
+            const IGNORED_DIRS = new Set([
+                "node_modules",
+                ".git",
+                ".venv",
+                ".venv_guitar",
+                ".venv310",
+                "__pycache__",
+                ".cache",
+                ".mypy_cache",
+                ".pytest_cache",
+                "dist",
+                ".turbo",
+            ]);
+            const MAX_DEPTH = 8;
+            const MAX_ENTRIES = 5000;
+            const entries: Array<{ name: string; path: string; type: "file" | "dir"; size: number }> = [];
+            let truncated = false;
+            const walkDir = (dir: string, prefix: string, depth: number): void => {
+                if (truncated || depth > MAX_DEPTH) return;
                 let items: string[];
-                try { items = readdirSync(dir); } catch { return results; }
+                try {
+                    items = readdirSync(dir);
+                } catch {
+                    return;
+                }
                 for (const item of items) {
+                    if (entries.length >= MAX_ENTRIES) {
+                        truncated = true;
+                        return;
+                    }
                     const fullPath = join(dir, item);
                     const relPath = prefix ? prefix + "/" + item : item;
                     try {
                         const st = statSync(fullPath);
                         if (st.isDirectory()) {
-                            results.push({ name: item, path: relPath, type: "dir", size: 0 });
-                            results.push(...walkDir(fullPath, relPath));
+                            entries.push({ name: item, path: relPath, type: "dir", size: 0 });
+                            if (!IGNORED_DIRS.has(item)) {
+                                walkDir(fullPath, relPath, depth + 1);
+                            }
                         } else {
-                            results.push({ name: item, path: relPath, type: "file", size: st.size });
+                            entries.push({ name: item, path: relPath, type: "file", size: st.size });
                         }
-                    } catch { /* skip inaccessible */ }
+                    } catch {
+                        /* skip inaccessible */
+                    }
                 }
-                return results;
             };
-            return this.json(res, 200, { root, entries: walkDir(root, "") });
+            walkDir(root, "", 0);
+            return this.json(res, 200, { root, entries, truncated });
         }
 
         if (method === "POST" && url === "/api/workspace/open-path") {
@@ -323,11 +403,13 @@ export class WorkspaceHandler implements IRouteHandler {
                 const payload = await service.readJsonBody<{ path?: string }>(req);
                 const p = (payload.path ?? "").trim();
                 if (!p) return this.json(res, 400, { error: "Path is required." });
-                const { exec: execCb } = await import("node:child_process");
+                const { execFile } = await import("node:child_process");
                 const { platform: osPlatform } = await import("node:os");
                 const platform = osPlatform();
-                const cmd = platform === "win32" ? `explorer "${p}"` : platform === "darwin" ? `open "${p}"` : `xdg-open "${p}"`;
-                execCb(cmd, { timeout: 10_000 }, () => { });
+                const bin = platform === "win32" ? "explorer" : platform === "darwin" ? "open" : "xdg-open";
+                // execFile with an argument array runs without a shell, so the path
+                // cannot break out into command injection.
+                execFile(bin, [p], { timeout: 10_000 }, () => {});
                 return this.json(res, 200, { ok: true, path: p });
             } catch (err: unknown) {
                 const e = err as { message?: string };
@@ -335,14 +417,131 @@ export class WorkspaceHandler implements IRouteHandler {
             }
         }
 
+        // ── File action: download ──────────────────────────────────────────
+        if (method === "GET" && url.startsWith("/api/workspace/file/download")) {
+            try {
+                const parsed = new URL(`http://localhost${url}`);
+                const relPath = (parsed.searchParams.get("path") ?? "").trim();
+                if (!relPath) return this.json(res, 400, { error: "path is required." });
+                if (relPath.includes("..")) return this.json(res, 400, { error: "Path traversal not allowed." });
+                const root = resolveWorkspaceRoot();
+                const fullPath = join(root, relPath);
+                // Confirm the resolved path is still inside the workspace root.
+                if (!fullPath.startsWith(root + "/") && !fullPath.startsWith(root + "\\") && fullPath !== root) {
+                    return this.json(res, 400, { error: "Path is outside the workspace." });
+                }
+                if (!existsSync(fullPath)) return this.json(res, 404, { error: "File not found." });
+                const stat = statSync(fullPath);
+                if (!stat.isFile()) return this.json(res, 400, { error: "Path is not a file." });
+                const fileName = relPath.split("/").pop() ?? relPath.split("\\").pop() ?? "download";
+                const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+                const textExts = new Set([
+                    "txt",
+                    "md",
+                    "json",
+                    "yaml",
+                    "yml",
+                    "toml",
+                    "csv",
+                    "log",
+                    "ts",
+                    "js",
+                    "py",
+                    "sh",
+                    "html",
+                    "css",
+                    "xml",
+                    "ini",
+                    "env",
+                    "conf",
+                ]);
+                const mime = textExts.has(ext) ? "text/plain; charset=utf-8" : "application/octet-stream";
+                const { readFileSync: rfs } = await import("node:fs");
+                const buf = rfs(fullPath);
+                res.writeHead(200, {
+                    "Content-Type": mime,
+                    "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
+                    "Content-Length": String(buf.length),
+                    "Cache-Control": "no-store",
+                });
+                res.end(buf);
+                return;
+            } catch (err: unknown) {
+                const e = err as { message?: string };
+                return this.json(res, 500, { error: e.message ?? "Download failed" });
+            }
+        }
+
+        // ── File action: delete ────────────────────────────────────────────
+        if (method === "DELETE" && url.startsWith("/api/workspace/file/delete")) {
+            try {
+                const payload = await service.readJsonBody<{ path?: string }>(req);
+                const relPath = (payload.path ?? "").trim();
+                if (!relPath) return this.json(res, 400, { error: "path is required." });
+                if (relPath.includes("..")) return this.json(res, 400, { error: "Path traversal not allowed." });
+                const root = resolveWorkspaceRoot();
+                const fullPath = join(root, relPath);
+                if (!fullPath.startsWith(root + "/") && !fullPath.startsWith(root + "\\") && fullPath !== root) {
+                    return this.json(res, 400, { error: "Path is outside the workspace." });
+                }
+                if (!existsSync(fullPath)) return this.json(res, 404, { error: "File not found." });
+                const { rmSync: rm } = await import("node:fs");
+                const st = statSync(fullPath);
+                if (st.isDirectory()) {
+                    rm(fullPath, { recursive: true, force: true });
+                } else {
+                    rm(fullPath);
+                }
+                return this.json(res, 200, { ok: true });
+            } catch (err: unknown) {
+                const e = err as { message?: string };
+                return this.json(res, 500, { error: e.message ?? "Delete failed" });
+            }
+        }
+
+        // ── File action: rename ────────────────────────────────────────────
+        if (method === "POST" && url === "/api/workspace/file/rename") {
+            try {
+                const payload = await service.readJsonBody<{ path?: string; newName?: string }>(req);
+                const relPath = (payload.path ?? "").trim();
+                const newName = (payload.newName ?? "").trim();
+                if (!relPath) return this.json(res, 400, { error: "path is required." });
+                if (!newName) return this.json(res, 400, { error: "newName is required." });
+                if (
+                    relPath.includes("..") ||
+                    newName.includes("..") ||
+                    newName.includes("/") ||
+                    newName.includes("\\")
+                ) {
+                    return this.json(res, 400, { error: "Invalid path or name." });
+                }
+                const root = resolveWorkspaceRoot();
+                const fullPath = join(root, relPath);
+                if (!fullPath.startsWith(root + "/") && !fullPath.startsWith(root + "\\") && fullPath !== root) {
+                    return this.json(res, 400, { error: "Path is outside the workspace." });
+                }
+                if (!existsSync(fullPath)) return this.json(res, 404, { error: "File not found." });
+                const { renameSync } = await import("node:fs");
+                const newFullPath = join(dirname(fullPath), newName);
+                if (existsSync(newFullPath))
+                    return this.json(res, 409, { error: "A file with that name already exists." });
+                renameSync(fullPath, newFullPath);
+                const newRelPath = relPath.substring(0, relPath.lastIndexOf("/") + 1) + newName;
+                return this.json(res, 200, { ok: true, newPath: newRelPath });
+            } catch (err: unknown) {
+                const e = err as { message?: string };
+                return this.json(res, 500, { error: e.message ?? "Rename failed" });
+            }
+        }
+
         if (method === "POST" && url === "/api/workspace/open-explorer") {
             const root = resolveWorkspaceRoot();
             try {
-                const { exec: execCb } = await import("node:child_process");
+                const { execFile } = await import("node:child_process");
                 const { platform: osPlatform } = await import("node:os");
                 const p = osPlatform();
-                const cmd = p === "win32" ? `explorer "${root}"` : p === "darwin" ? `open "${root}"` : `xdg-open "${root}"`;
-                execCb(cmd, { timeout: 10_000 }, () => { });
+                const bin = p === "win32" ? "explorer" : p === "darwin" ? "open" : "xdg-open";
+                execFile(bin, [root], { timeout: 10_000 }, () => {});
                 return this.json(res, 200, { ok: true, path: root });
             } catch (err: unknown) {
                 const e = err as { message?: string };
@@ -357,7 +556,14 @@ export class WorkspaceHandler implements IRouteHandler {
                 if (!newPath) return this.json(res, 400, { error: "Path is required." });
                 const { isAbsolute } = await import("node:path");
                 if (!isAbsolute(newPath)) {
-                    return this.json(res, 400, { error: "Path must be absolute (e.g. C:\\Users\\you\\Documents\\MyWorkspace)." });
+                    return this.json(res, 400, {
+                        error: "Path must be absolute (e.g. C:\\Users\\you\\Documents\\MyWorkspace).",
+                    });
+                }
+                const { platform: osPlatform } = await import("node:os");
+                const unsafe = this.unsafeRelocationReason(newPath, osPlatform());
+                if (unsafe) {
+                    return this.json(res, 400, { error: unsafe });
                 }
                 setWorkspaceRoot(newPath);
                 ensureWorkspaceStructure();
@@ -372,8 +578,11 @@ export class WorkspaceHandler implements IRouteHandler {
         if (method === "POST" && url === "/api/workspace/import") {
             try {
                 const payload = await service.readJsonBody<{
-                    mode?: string; fileName?: string; content?: string;
-                    targetDir?: string; registeredType?: string;
+                    mode?: string;
+                    fileName?: string;
+                    content?: string;
+                    targetDir?: string;
+                    registeredType?: string;
                     files?: Array<{ name: string; content: string; relativePath?: string }>;
                 }>(req);
                 const mode = (payload.mode ?? "").trim();
@@ -381,24 +590,43 @@ export class WorkspaceHandler implements IRouteHandler {
                     return this.json(res, 400, { error: "mode must be 'general', 'registered', or 'folder'." });
                 }
                 const root = resolveWorkspaceRoot();
-                const profile = service.getRuntimeStatus().executionProfileSegment || "individual";
-                const blockedExtensions = [".exe", ".bat", ".cmd", ".ps1", ".sh", ".msi", ".dll", ".sys"];
-                const VALID_TARGET_DIRS = ["config", "artifacts", "data", "data/tasks", "data/notes", "data/email", "data/calendar", "characters", "logs", "workspace", "state"];
-                const REGISTERED_TYPES: Record<string, { targetDir: string; validate: (parsed: unknown) => string | null }> = {
-                    character: {
-                        targetDir: "characters",
-                        validate: (p: unknown) => {
-                            const o = p as Record<string, unknown>;
-                            if (!o.name || typeof o.name !== "string") return "Character must have a 'name' field.";
-                            if (!o.systemPrompt && !o.persona) return "Character must have a 'systemPrompt' or 'persona' field.";
-                            return null;
-                        },
-                    },
+                const blockedExtensions = [
+                    ".exe",
+                    ".bat",
+                    ".cmd",
+                    ".ps1",
+                    ".sh",
+                    ".msi",
+                    ".dll",
+                    ".sys",
+                    ".com",
+                    ".scr",
+                    ".vbs",
+                    ".jar",
+                    ".app",
+                ];
+                const VALID_TARGET_DIRS = [
+                    "config",
+                    "artifacts",
+                    "data",
+                    "data/tasks",
+                    "data/notes",
+                    "data/email",
+                    "data/calendar",
+                    "logs",
+                    "workspace",
+                    "state",
+                ];
+                const REGISTERED_TYPES: Record<
+                    string,
+                    { targetDir: string; validate: (parsed: unknown) => string | null }
+                > = {
                     "mcp-config": {
                         targetDir: "config",
                         validate: (p: unknown) => {
                             const o = p as Record<string, unknown>;
-                            if (!o.mcpServers || typeof o.mcpServers !== "object") return "MCP config must have a 'mcpServers' object.";
+                            if (!o.mcpServers || typeof o.mcpServers !== "object")
+                                return "MCP config must have a 'mcpServers' object.";
                             return null;
                         },
                     },
@@ -406,7 +634,8 @@ export class WorkspaceHandler implements IRouteHandler {
                         targetDir: "artifacts/packages",
                         validate: (p: unknown) => {
                             const o = p as Record<string, unknown>;
-                            if (!o.exportedAt && !o.package) return "Session package must have 'exportedAt' or 'package' field.";
+                            if (!o.exportedAt && !o.package)
+                                return "Session package must have 'exportedAt' or 'package' field.";
                             return null;
                         },
                     },
@@ -430,7 +659,8 @@ export class WorkspaceHandler implements IRouteHandler {
                         targetDir: "data/tasks",
                         validate: (p: unknown) => {
                             const o = p as Record<string, unknown>;
-                            if (!o.timelineId || !Array.isArray(o.tasks)) return "Task timeline must have 'timelineId' and 'tasks' array.";
+                            if (!o.timelineId || !Array.isArray(o.tasks))
+                                return "Task timeline must have 'timelineId' and 'tasks' array.";
                             return null;
                         },
                     },
@@ -442,7 +672,9 @@ export class WorkspaceHandler implements IRouteHandler {
                 if (mode === "folder") {
                     const targetDir = (payload.targetDir ?? "").trim();
                     if (!targetDir || !VALID_TARGET_DIRS.includes(targetDir)) {
-                        return this.json(res, 400, { error: "targetDir must be one of: " + VALID_TARGET_DIRS.join(", ") });
+                        return this.json(res, 400, {
+                            error: "targetDir must be one of: " + VALID_TARGET_DIRS.join(", "),
+                        });
                     }
                     const files = payload.files;
                     if (!Array.isArray(files) || files.length === 0) {
@@ -452,6 +684,9 @@ export class WorkspaceHandler implements IRouteHandler {
                         return this.json(res, 400, { error: "Folder import limited to 500 files at a time." });
                     }
                     const results: Array<{ name: string; status: string; message: string }> = [];
+                    const MAX_FILE_BYTES = 10 * 1024 * 1024;
+                    const MAX_AGGREGATE_BYTES = 200 * 1024 * 1024;
+                    let aggregateBytes = 0;
                     for (const file of files) {
                         const relPath = (file.relativePath ?? file.name).replace(/\\/g, "/");
                         if (relPath.includes("..")) {
@@ -459,23 +694,58 @@ export class WorkspaceHandler implements IRouteHandler {
                             continue;
                         }
                         const ext = "." + relPath.split(".").pop()?.toLowerCase();
-                        if (profile === "business" && blockedExtensions.includes(ext)) {
-                            results.push({ name: relPath, status: "rejected", message: "Executable blocked by business profile." });
+                        if (blockedExtensions.includes(ext)) {
+                            results.push({
+                                name: relPath,
+                                status: "rejected",
+                                message: "Executable file types are not allowed.",
+                            });
+                            continue;
+                        }
+                        // Reject on estimated size BEFORE decoding into memory.
+                        const declaredBytes = this.base64DecodedSize(file.content ?? "");
+                        if (declaredBytes > MAX_FILE_BYTES) {
+                            results.push({ name: relPath, status: "rejected", message: "File exceeds 10 MB limit." });
+                            continue;
+                        }
+                        if (aggregateBytes + declaredBytes > MAX_AGGREGATE_BYTES) {
+                            results.push({
+                                name: relPath,
+                                status: "rejected",
+                                message: "Folder import exceeds 200 MB total limit.",
+                            });
                             continue;
                         }
                         try {
                             const buf = Buffer.from(file.content, "base64");
-                            if (buf.length > 10 * 1024 * 1024) {
-                                results.push({ name: relPath, status: "rejected", message: "File exceeds 10 MB limit." });
+                            if (buf.length > MAX_FILE_BYTES) {
+                                results.push({
+                                    name: relPath,
+                                    status: "rejected",
+                                    message: "File exceeds 10 MB limit.",
+                                });
                                 continue;
                             }
+                            if (this.looksExecutable(buf)) {
+                                results.push({
+                                    name: relPath,
+                                    status: "rejected",
+                                    message: "Executable content is not allowed.",
+                                });
+                                continue;
+                            }
+                            aggregateBytes += buf.length;
                             const fullPath = join(root, targetDir, relPath);
                             const dir = dirname(fullPath);
                             if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
                             writeFileSync(fullPath, buf);
                             results.push({ name: relPath, status: "imported", message: "OK" });
                         } catch (fe: unknown) {
-                            results.push({ name: relPath, status: "error", message: (fe as { message?: string }).message ?? "Write failed" });
+                            results.push({
+                                name: relPath,
+                                status: "error",
+                                message: (fe as { message?: string }).message ?? "Write failed",
+                            });
                         }
                     }
                     const imported = results.filter((r) => r.status === "imported").length;
@@ -503,25 +773,37 @@ export class WorkspaceHandler implements IRouteHandler {
                 if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
                     return this.json(res, 400, { error: "fileName must not contain path separators or '..'." });
                 }
+                // Reject on estimated size BEFORE decoding into memory (DoS guard).
+                if (this.base64DecodedSize(content) > 10 * 1024 * 1024) {
+                    return this.json(res, 400, { error: "File exceeds 10 MB size limit." });
+                }
                 const buf = Buffer.from(content, "base64");
                 if (buf.length > 10 * 1024 * 1024) {
                     return this.json(res, 400, { error: "File exceeds 10 MB size limit." });
                 }
                 const ext = "." + fileName.split(".").pop()?.toLowerCase();
-                if (profile === "business" && blockedExtensions.includes(ext)) {
-                    return this.json(res, 400, { error: "Executable file types are blocked under Business profile policy." });
+                // Executable policy applies to ALL profiles, by extension and by content.
+                if (blockedExtensions.includes(ext)) {
+                    return this.json(res, 400, { error: "Executable file types are not allowed." });
+                }
+                if (this.looksExecutable(buf)) {
+                    return this.json(res, 400, { error: "Executable content is not allowed." });
                 }
 
                 if (mode === "registered") {
                     const rType = (payload.registeredType ?? "").trim();
                     if (!rType || !REGISTERED_TYPES[rType]) {
-                        return this.json(res, 400, { error: "registeredType must be one of: " + Object.keys(REGISTERED_TYPES).join(", ") });
+                        return this.json(res, 400, {
+                            error: "registeredType must be one of: " + Object.keys(REGISTERED_TYPES).join(", "),
+                        });
                     }
                     const spec = REGISTERED_TYPES[rType]!;
                     let parsed: unknown = null;
                     const isJson = ext === ".json";
                     if (isJson) {
-                        try { parsed = JSON.parse(buf.toString("utf-8")); } catch {
+                        try {
+                            parsed = JSON.parse(buf.toString("utf-8"));
+                        } catch {
                             return this.json(res, 400, { error: "File is not valid JSON." });
                         }
                         const vErr = spec.validate(parsed);
@@ -604,12 +886,20 @@ export class WorkspaceHandler implements IRouteHandler {
         if (method === "GET" && url === "/api/workspace/git-status") {
             const root = resolveWorkspaceRoot();
             try {
-                const { exec: execCb } = await import("node:child_process");
+                const { execFile: execFileCb } = await import("node:child_process");
                 const { promisify } = await import("node:util");
-                const exec = promisify(execCb);
-                const gitResult = await exec("git status --porcelain", { cwd: root, timeout: 10_000 }).catch(() => null);
-                const branchResult = await exec("git rev-parse --abbrev-ref HEAD", { cwd: root, timeout: 5_000 }).catch(() => null);
-                const remoteResult = await exec("git remote -v", { cwd: root, timeout: 5_000 }).catch(() => null);
+                const execFile = promisify(execFileCb);
+                const gitResult = await execFile("git", ["status", "--porcelain"], {
+                    cwd: root,
+                    timeout: 10_000,
+                }).catch(() => null);
+                const branchResult = await execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+                    cwd: root,
+                    timeout: 5_000,
+                }).catch(() => null);
+                const remoteResult = await execFile("git", ["remote", "-v"], { cwd: root, timeout: 5_000 }).catch(
+                    () => null,
+                );
                 return this.json(res, 200, {
                     isGitRepo: gitResult !== null,
                     branch: branchResult?.stdout?.trim() ?? null,
@@ -627,5 +917,80 @@ export class WorkspaceHandler implements IRouteHandler {
     private json(res: ServerResponse, status: number, body: unknown): void {
         res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
         res.end(JSON.stringify(body));
+    }
+
+    /**
+     * Rejects workspace-relocation targets that point at a drive/filesystem root
+     * or a protected system directory. Prevents pointing the workspace (and the
+     * recursive /files enumeration) at arbitrary sensitive locations.
+     * Returns an error message string when the target is unsafe, otherwise null.
+     */
+    private unsafeRelocationReason(target: string, osPlatform: NodeJS.Platform): string | null {
+        const norm = target.replace(/[\\/]+$/, "");
+        if (osPlatform === "win32") {
+            // Drive root: "C:", "C:\", "C:/"
+            if (/^[A-Za-z]:$/.test(norm)) return "Cannot use a drive root as the workspace.";
+        } else if (norm === "") {
+            // POSIX filesystem root "/"
+            return "Cannot use the filesystem root as the workspace.";
+        }
+        const lower = norm.toLowerCase();
+        const sep = osPlatform === "win32" ? "\\" : "/";
+        const winDeny = ["c:\\windows", "c:\\program files", "c:\\program files (x86)", "c:\\programdata"];
+        const posixDeny = [
+            "/etc",
+            "/bin",
+            "/sbin",
+            "/usr",
+            "/boot",
+            "/dev",
+            "/proc",
+            "/sys",
+            "/var",
+            "/lib",
+            "/lib64",
+            "/root",
+            "/system",
+        ];
+        const deny = osPlatform === "win32" ? winDeny : posixDeny;
+        for (const d of deny) {
+            if (lower === d || lower.startsWith(d + sep)) {
+                return `Location '${d}' is a protected system directory and cannot be used as the workspace.`;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Estimates the decoded byte length of a base64 string without allocating a
+     * Buffer, so oversized payloads can be rejected before decoding into memory.
+     */
+    private base64DecodedSize(b64: string): number {
+        const len = b64.length;
+        if (len === 0) return 0;
+        const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+        return Math.floor(len / 4) * 3 - padding;
+    }
+
+    /**
+     * Detects common native-executable / script magic bytes so executables can be
+     * blocked regardless of file extension (defense against double-extension and
+     * extension-stripping bypasses).
+     */
+    private looksExecutable(buf: Buffer): boolean {
+        if (buf.length >= 2 && buf[0] === 0x4d && buf[1] === 0x5a) return true; // "MZ" — Windows PE (.exe/.dll)
+        if (buf.length >= 4 && buf[0] === 0x7f && buf[1] === 0x45 && buf[2] === 0x4c && buf[3] === 0x46) return true; // ELF
+        if (buf.length >= 4 && buf[0] === 0xcf && buf[1] === 0xfa && buf[2] === 0xed && buf[3] === 0xfe) return true; // Mach-O 64 LE
+        if (buf.length >= 4 && buf[0] === 0xce && buf[1] === 0xfa && buf[2] === 0xed && buf[3] === 0xfe) return true; // Mach-O 32 LE
+        if (
+            buf.length >= 4 &&
+            buf[0] === 0xfe &&
+            buf[1] === 0xed &&
+            buf[2] === 0xfa &&
+            (buf[3] === 0xce || buf[3] === 0xcf)
+        )
+            return true; // Mach-O BE
+        if (buf.length >= 2 && buf[0] === 0x23 && buf[1] === 0x21) return true; // "#!" — shebang script
+        return false;
     }
 }

@@ -40,7 +40,11 @@ describe("TooltipsRegistry — seed loading & link merge", function () {
     });
 
     after(() => {
-        try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+        try {
+            rmSync(dir, { recursive: true, force: true });
+        } catch {
+            /* ignore */
+        }
     });
 
     it("loads seed entries and merges link overrides ahead of seed links", () => {

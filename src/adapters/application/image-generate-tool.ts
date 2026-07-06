@@ -29,7 +29,10 @@ import { workspacePath } from "../../core/config/workspace-resolver.js";
 const IMAGE_GEN_MODALITY = "image-generation";
 
 // Allow tests to inject a mock fetch without monkey-patching globalThis.
-type FetchLike = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{
+type FetchLike = (
+    input: string,
+    init?: { method?: string; headers?: Record<string, string>; body?: string },
+) => Promise<{
     ok: boolean;
     status: number;
     text: () => Promise<string>;
@@ -71,7 +74,7 @@ export class ImageGenerateTool implements Tool {
         this.providerManager = deps.providerManager;
         this.secretStore = deps.secretStore;
         // Use globalThis.fetch as default (Node 18+ / browsers).
-        this.fetchImpl = deps.fetchImpl ?? ((globalThis as unknown as { fetch: FetchLike }).fetch);
+        this.fetchImpl = deps.fetchImpl ?? (globalThis as unknown as { fetch: FetchLike }).fetch;
         this.workspaceRootOverride = deps.workspaceRootOverride;
     }
 
@@ -106,7 +109,8 @@ export class ImageGenerateTool implements Tool {
                 ok: false,
                 output: {
                     reason: "no_image_capable_model",
-                    advisory: "No image-generation provider is configured. Add an OpenAI (gpt-image-1), OpenRouter, or Gemini Imagen API key in Settings → Providers, then retry.",
+                    advisory:
+                        "No image-generation provider is configured. Add an OpenAI (gpt-image-1), OpenRouter, or Gemini Imagen API key in Settings → Providers, then retry.",
                 },
             };
         }
@@ -187,9 +191,7 @@ export class ImageGenerateTool implements Tool {
     }
 
     private normalizeSize(raw: string): string {
-        const allowed = new Set([
-            "256x256", "512x512", "1024x1024", "1024x1792", "1792x1024",
-        ]);
+        const allowed = new Set(["256x256", "512x512", "1024x1024", "1024x1792", "1792x1024"]);
         return allowed.has(raw) ? raw : "1024x1024";
     }
 

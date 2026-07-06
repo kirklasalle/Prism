@@ -167,10 +167,7 @@ describe("SwarmCoordinator", () => {
     // ── error handling ──────────────────────────────────────────────────
 
     it("execute throws for unknown swarm id", async () => {
-        await assert.rejects(
-            () => coordinator.execute("nonexistent"),
-            { message: "Swarm not found: nonexistent" },
-        );
+        await assert.rejects(() => coordinator.execute("nonexistent"), { message: "Swarm not found: nonexistent" });
     });
 
     it("execute throws for already-running swarm", async () => {

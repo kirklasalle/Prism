@@ -96,8 +96,7 @@ export class OutlookOAuthAdapter {
     get isAvailable(): boolean {
         const isMock = process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id";
         if (isMock) return true;
-        return this.msalModule !== null
-            && !!process.env.PRISM_OUTLOOK_CLIENT_ID;
+        return this.msalModule !== null && !!process.env.PRISM_OUTLOOK_CLIENT_ID;
     }
 
     get isConnected(): boolean {
@@ -113,7 +112,9 @@ export class OutlookOAuthAdapter {
     async getAuthorizationUrl(): Promise<string> {
         await this.initPromise;
         if (!this.isAvailable) {
-            throw new Error("Outlook OAuth not available: @azure/msal-node not installed or credentials not configured.");
+            throw new Error(
+                "Outlook OAuth not available: @azure/msal-node not installed or credentials not configured.",
+            );
         }
         if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
             return `http://localhost:7070/api/auth/outlook/callback?code=mock_outlook_code`;
@@ -126,8 +127,7 @@ export class OutlookOAuthAdapter {
 
         const clientId = process.env.PRISM_OUTLOOK_CLIENT_ID!;
         const tenantId = process.env.PRISM_OUTLOOK_TENANT_ID ?? "common";
-        const redirectUri = process.env.PRISM_OUTLOOK_REDIRECT_URI
-            ?? "http://localhost:7070/api/auth/outlook/callback";
+        const redirectUri = process.env.PRISM_OUTLOOK_REDIRECT_URI ?? "http://localhost:7070/api/auth/outlook/callback";
 
         const params = new URLSearchParams({
             client_id: clientId,
@@ -148,7 +148,13 @@ export class OutlookOAuthAdapter {
     async exchangeCode(code: string): Promise<OutlookAdapterStatus> {
         await this.initPromise;
         if (!this.isAvailable) {
-            return { available: false, connected: false, email: null, displayName: null, error: "@azure/msal-node not available" };
+            return {
+                available: false,
+                connected: false,
+                email: null,
+                displayName: null,
+                error: "@azure/msal-node not available",
+            };
         }
         if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
             const oauthToken: OAuthToken = {
@@ -159,13 +165,17 @@ export class OutlookOAuthAdapter {
                 provider: PROVIDER_KEY,
             };
             this.tokenStore.set(PROVIDER_KEY, oauthToken);
-            return { available: true, connected: true, email: "mock.user@outlook.com", displayName: "Mock Outlook User" };
+            return {
+                available: true,
+                connected: true,
+                email: "mock.user@outlook.com",
+                displayName: "Mock Outlook User",
+            };
         }
 
         const clientId = process.env.PRISM_OUTLOOK_CLIENT_ID!;
         const tenantId = process.env.PRISM_OUTLOOK_TENANT_ID ?? "common";
-        const redirectUri = process.env.PRISM_OUTLOOK_REDIRECT_URI
-            ?? "http://localhost:7070/api/auth/outlook/callback";
+        const redirectUri = process.env.PRISM_OUTLOOK_REDIRECT_URI ?? "http://localhost:7070/api/auth/outlook/callback";
 
         try {
             const body = new URLSearchParams({
@@ -181,21 +191,18 @@ export class OutlookOAuthAdapter {
                 body.set("client_secret", process.env.PRISM_OUTLOOK_CLIENT_SECRET);
             }
 
-            const resp = await fetch(
-                `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                    body: body.toString(),
-                }
-            );
+            const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: body.toString(),
+            });
 
             if (!resp.ok) {
                 const err = await resp.text();
                 throw new Error(`Token exchange failed: ${err}`);
             }
 
-            const data = await resp.json() as {
+            const data = (await resp.json()) as {
                 access_token: string;
                 refresh_token?: string;
                 expires_in?: number;
@@ -203,9 +210,7 @@ export class OutlookOAuthAdapter {
 
             this.pkceVerifier = null;
 
-            const expiresAt = data.expires_in
-                ? new Date(Date.now() + data.expires_in * 1000).toISOString()
-                : null;
+            const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000).toISOString() : null;
 
             const oauthToken: OAuthToken = {
                 accessToken: data.access_token,
@@ -246,7 +251,12 @@ export class OutlookOAuthAdapter {
             return { available: true, connected: false, email: null, displayName: null };
         }
         if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
-            return { available: true, connected: true, email: "mock.user@outlook.com", displayName: "Mock Outlook User" };
+            return {
+                available: true,
+                connected: true,
+                email: "mock.user@outlook.com",
+                displayName: "Mock Outlook User",
+            };
         }
         try {
             const token = await this.getValidAccessToken();
@@ -319,12 +329,7 @@ export class OutlookOAuthAdapter {
     /**
      * Send an email.
      */
-    async sendEmail(
-        to: string[],
-        subject: string,
-        body: string,
-        isHtml = false
-    ): Promise<OutlookSendResult> {
+    async sendEmail(to: string[], subject: string, body: string, isHtml = false): Promise<OutlookSendResult> {
         if (process.env.PRISM_OUTLOOK_CLIENT_ID === "mock_outlook_client_id") {
             return {
                 messageId: "outlook-msg-sent-" + Date.now(),
@@ -512,18 +517,15 @@ export class OutlookOAuthAdapter {
             body.set("client_secret", process.env.PRISM_OUTLOOK_CLIENT_SECRET);
         }
 
-        const resp = await fetch(
-            `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: body.toString(),
-            }
-        );
+        const resp = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+        });
 
         if (!resp.ok) throw new Error(`Token refresh failed: ${await resp.text()}`);
 
-        const data = await resp.json() as {
+        const data = (await resp.json()) as {
             access_token: string;
             refresh_token?: string;
             expires_in?: number;
@@ -544,7 +546,10 @@ export class OutlookOAuthAdapter {
 
     private async getProfile(accessToken: string): Promise<{ email: string | null; displayName: string | null }> {
         try {
-            const data = await this.graphGet(`${GRAPH_BASE}/me?$select=mail,displayName,userPrincipalName`, accessToken);
+            const data = await this.graphGet(
+                `${GRAPH_BASE}/me?$select=mail,displayName,userPrincipalName`,
+                accessToken,
+            );
             return {
                 email: data.mail ?? data.userPrincipalName ?? null,
                 displayName: data.displayName ?? null,

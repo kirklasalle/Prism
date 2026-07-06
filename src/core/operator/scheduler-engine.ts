@@ -6,6 +6,7 @@
  * Integrates with ActivityBus for audit trail on every scheduled action.
  */
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { ActivityBus } from "../activity/bus.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ function expandCronField(field: string, min: number, max: number): number[] {
             results.add(parseInt(part, 10));
         }
     }
-    return [...results].filter((n) => n >= min && n <= max).sort((a, b) => a - b);
+    return [...results].filter((n) => n >= min && n <= max && !Number.isNaN(n)).sort((a, b) => a - b);
 }
 
 export function parseCronExpression(expression: string): CronFields {
@@ -55,32 +56,102 @@ export function parseCronExpression(expression: string): CronFields {
     if (parts.length !== 5) {
         throw new Error(`Invalid cron expression: expected 5 fields, got ${parts.length}`);
     }
-    return {
+    const fields = {
         minutes: expandCronField(parts[0], 0, 59),
         hours: expandCronField(parts[1], 0, 23),
         daysOfMonth: expandCronField(parts[2], 1, 31),
         months: expandCronField(parts[3], 1, 12),
         daysOfWeek: expandCronField(parts[4], 0, 6),
     };
+    if (
+        fields.minutes.length === 0 ||
+        fields.hours.length === 0 ||
+        fields.daysOfMonth.length === 0 ||
+        fields.months.length === 0 ||
+        fields.daysOfWeek.length === 0
+    ) {
+        throw new Error("Invalid cron expression: one or more fields expanded to empty sets");
+    }
+    return fields;
 }
 
 export function getNextCronOccurrence(fields: CronFields, after: Date = new Date()): Date {
+    if (
+        fields.minutes.length === 0 ||
+        fields.hours.length === 0 ||
+        fields.daysOfMonth.length === 0 ||
+        fields.months.length === 0 ||
+        fields.daysOfWeek.length === 0
+    ) {
+        throw new Error("Cannot find next cron occurrence: one or more fields are empty");
+    }
+
     const d = new Date(after.getTime() + 60_000);
     d.setSeconds(0, 0);
-    // Brute-force search forward up to ~2 years
-    const limit = 365 * 2 * 24 * 60;
-    for (let i = 0; i < limit; i++) {
-        if (
-            fields.months.includes(d.getMonth() + 1) &&
-            fields.daysOfMonth.includes(d.getDate()) &&
-            fields.daysOfWeek.includes(d.getDay()) &&
-            fields.hours.includes(d.getHours()) &&
-            fields.minutes.includes(d.getMinutes())
-        ) {
-            return d;
+    d.setMilliseconds(0);
+
+    // Limit search to 2 years
+    const limitDate = new Date(after.getTime() + 365 * 2 * 24 * 60 * 60 * 1000);
+
+    while (d <= limitDate) {
+        // 1. Check month
+        const currentMonth = d.getMonth() + 1; // 1-12
+        if (!fields.months.includes(currentMonth)) {
+            // Advance to next valid month (first day of that month)
+            const nextMonth = fields.months.find((m) => m > currentMonth);
+            if (nextMonth === undefined) {
+                // Wrap to next year
+                d.setFullYear(d.getFullYear() + 1);
+                d.setMonth(fields.months[0]! - 1, 1);
+            } else {
+                d.setMonth(nextMonth - 1, 1);
+            }
+            d.setHours(0, 0, 0, 0);
+            continue;
         }
-        d.setTime(d.getTime() + 60_000);
+
+        // 2. Check day of month and day of week
+        const currentDay = d.getDate();
+        const currentDayOfWeek = d.getDay(); // 0-6
+        if (!fields.daysOfMonth.includes(currentDay) || !fields.daysOfWeek.includes(currentDayOfWeek)) {
+            // Advance by 1 day
+            d.setDate(d.getDate() + 1);
+            d.setHours(0, 0, 0, 0);
+            continue;
+        }
+
+        // 3. Check hour
+        const currentHour = d.getHours();
+        if (!fields.hours.includes(currentHour)) {
+            const nextHour = fields.hours.find((h) => h > currentHour);
+            if (nextHour === undefined) {
+                // Advance to next day, first hour
+                d.setDate(d.getDate() + 1);
+                d.setHours(fields.hours[0]!, fields.minutes[0]!, 0, 0);
+            } else {
+                d.setHours(nextHour, fields.minutes[0]!, 0, 0);
+            }
+            continue;
+        }
+
+        // 4. Check minute
+        const currentMin = d.getMinutes();
+        if (!fields.minutes.includes(currentMin)) {
+            const nextMin = fields.minutes.find((m) => m > currentMin);
+            if (nextMin === undefined) {
+                // Advance to next hour, first minute
+                d.setHours(d.getHours() + 1);
+                d.setMinutes(fields.minutes[0]!, 0, 0);
+            } else {
+                d.setMinutes(nextMin, 0, 0);
+            }
+            continue;
+        }
+
+        // If we reach here, all fields matched!
+        return d;
     }
+
     throw new Error("Could not find next cron occurrence within 2-year window");
 }
 
@@ -123,6 +194,8 @@ export interface SchedulerEngineOptions {
     sessionId: string;
     /** Called when a scheduled action fires */
     onAction?: (entry: ScheduleEntry) => void | Promise<void>;
+    /** Optional file path to persist schedules */
+    persistencePath?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -135,14 +208,22 @@ export class SchedulerEngine {
     private readonly activityBus: ActivityBus;
     private readonly sessionId: string;
     private readonly onAction?: (entry: ScheduleEntry) => void | Promise<void>;
+    private readonly persistencePath?: string;
 
     constructor(options: SchedulerEngineOptions) {
         this.activityBus = options.activityBus;
         this.sessionId = options.sessionId;
         this.onAction = options.onAction;
+        this.persistencePath = options.persistencePath;
+        this.loadSchedules();
     }
 
-    scheduleOnce(label: string, runAt: string | Date, action: string, payload?: Record<string, unknown>): ScheduleEntry {
+    scheduleOnce(
+        label: string,
+        runAt: string | Date,
+        action: string,
+        payload?: Record<string, unknown>,
+    ): ScheduleEntry {
         const id = randomUUID();
         const runDate = typeof runAt === "string" ? new Date(runAt) : runAt;
         const entry: ScheduleEntry = {
@@ -159,10 +240,16 @@ export class SchedulerEngine {
         this.schedules.set(id, entry);
         this.armOnce(entry, runDate);
         this.emitAudit("scheduler.schedule_created", entry);
+        this.saveSchedules();
         return entry;
     }
 
-    scheduleRecurring(label: string, cronExpression: string, action: string, payload?: Record<string, unknown>): ScheduleEntry {
+    scheduleRecurring(
+        label: string,
+        cronExpression: string,
+        action: string,
+        payload?: Record<string, unknown>,
+    ): ScheduleEntry {
         const fields = parseCronExpression(cronExpression);
         const nextRun = getNextCronOccurrence(fields);
         const id = randomUUID();
@@ -180,6 +267,7 @@ export class SchedulerEngine {
         this.schedules.set(id, entry);
         this.armRecurring(entry);
         this.emitAudit("scheduler.schedule_created", entry);
+        this.saveSchedules();
         return entry;
     }
 
@@ -194,7 +282,9 @@ export class SchedulerEngine {
             entry.enabled = false;
             this.emitAudit("scheduler.schedule_cancelled", entry);
         }
-        return this.schedules.delete(id);
+        const deleted = this.schedules.delete(id);
+        this.saveSchedules();
+        return deleted;
     }
 
     list(): ScheduleEntry[] {
@@ -220,6 +310,45 @@ export class SchedulerEngine {
 
     // ── Private ──────────────────────────────────────────────────────────────
 
+    private loadSchedules(): void {
+        if (!this.persistencePath || !existsSync(this.persistencePath)) return;
+        try {
+            const raw = readFileSync(this.persistencePath, "utf-8");
+            const parsed = JSON.parse(raw) as ScheduleEntry[];
+            if (Array.isArray(parsed)) {
+                for (const entry of parsed) {
+                    this.schedules.set(entry.id, entry);
+                    if (entry.enabled) {
+                        if (entry.type === "once") {
+                            const runDate = new Date(entry.runAt!);
+                            if (runDate.getTime() > Date.now()) {
+                                this.armOnce(entry, runDate);
+                            } else {
+                                // Supposed to run in past while offline: run immediately
+                                this.fire(entry);
+                                this.schedules.delete(entry.id);
+                            }
+                        } else if (entry.type === "recurring") {
+                            this.armRecurring(entry);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("[SchedulerEngine] Failed to load persisted schedules:", err);
+        }
+    }
+
+    private saveSchedules(): void {
+        if (!this.persistencePath) return;
+        try {
+            const list = this.list();
+            writeFileSync(this.persistencePath, JSON.stringify(list, null, 2), "utf-8");
+        } catch (err) {
+            console.error("[SchedulerEngine] Failed to save schedules:", err);
+        }
+    }
+
     private armOnce(entry: ScheduleEntry, runDate: Date): void {
         const delayMs = Math.max(0, runDate.getTime() - Date.now());
         // Node.js setTimeout max is ~24.8 days; clamp and re-arm if needed
@@ -232,6 +361,7 @@ export class SchedulerEngine {
                 this.fire(entry);
                 this.schedules.delete(entry.id);
                 this.timers.delete(entry.id);
+                this.saveSchedules();
             }
         }, safeDelay);
         timer.unref();

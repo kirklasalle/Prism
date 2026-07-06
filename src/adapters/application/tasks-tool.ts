@@ -98,7 +98,7 @@ function sortTasks(tasks: Task[]): Task[] {
 export class TasksTimelineTool implements Tool {
     readonly name = "tasks_timeline";
 
-    constructor(private readonly _dataDir?: string) { }
+    constructor(private readonly _dataDir?: string) {}
 
     async execute(request: ToolRequest): Promise<ToolResult> {
         const args = request.args as {
@@ -109,7 +109,20 @@ export class TasksTimelineTool implements Tool {
             assignee?: string;
             progress?: number;
             /** For plan/replan: optional list of tasks to add to the timeline */
-            tasks?: Array<{ title: string; due?: string; priority?: TaskPriority; status?: TaskStatus; assignee?: string; labels?: string[]; startDate?: string; endDate?: string; estimatedHours?: number; milestoneId?: string; projectId?: string; dependencies?: string[] }>;
+            tasks?: Array<{
+                title: string;
+                due?: string;
+                priority?: TaskPriority;
+                status?: TaskStatus;
+                assignee?: string;
+                labels?: string[];
+                startDate?: string;
+                endDate?: string;
+                estimatedHours?: number;
+                milestoneId?: string;
+                projectId?: string;
+                dependencies?: string[];
+            }>;
         };
 
         const action = args.action ?? "";
@@ -170,7 +183,9 @@ export class TasksTimelineTool implements Tool {
                         committedAt: tl.committedAt,
                         taskCount: tl.tasks.length,
                     },
-                    sideEffects: [{ type: "file", description: `timeline committed: ${timelinePath(dir, timelineId)}` }],
+                    sideEffects: [
+                        { type: "file", description: `timeline committed: ${timelinePath(dir, timelineId)}` },
+                    ],
                 };
             }
 
@@ -211,7 +226,9 @@ export class TasksTimelineTool implements Tool {
                         taskCount: tl.tasks.length,
                         tasks: tl.tasks,
                     },
-                    sideEffects: [{ type: "file", description: `timeline replanned: ${timelinePath(dir, timelineId)}` }],
+                    sideEffects: [
+                        { type: "file", description: `timeline replanned: ${timelinePath(dir, timelineId)}` },
+                    ],
                 };
             }
 
@@ -221,7 +238,10 @@ export class TasksTimelineTool implements Tool {
                 if (!taskId) return { ok: false, output: { error: "taskId required" } };
                 const task = tl.tasks.find((t) => t.id === taskId);
                 if (!task) return { ok: false, output: { error: `Task not found: ${taskId}` } };
-                if (args.status) { task.status = args.status; task.completed = args.status === "done"; }
+                if (args.status) {
+                    task.status = args.status;
+                    task.completed = args.status === "done";
+                }
                 if (args.assignee !== undefined) task.assignee = args.assignee;
                 if (args.progress !== undefined) task.progress = Math.max(0, Math.min(100, args.progress));
                 saveTimeline(dir, tl);

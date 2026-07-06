@@ -14,12 +14,9 @@
 
 import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 import type { LlmProviderManager } from "../../core/operator/llm-provider-manager.js";
-import type {
-    SpectrumRefractionConfig,
-    HemisphereSpec,
-} from "../../core/operator/model-capability-matrix.js";
+import type { SpectrumRefractionConfig, HemisphereSpec } from "../../core/operator/model-capability-matrix.js";
 
-const DEFAULT_COST_GATE_USD = 0.10;
+const DEFAULT_COST_GATE_USD = 0.1;
 
 function readCostGate(): number {
     const raw = process.env.PRISM_SR_TOOL_COST_GATE_USD;
@@ -67,14 +64,18 @@ export class SpectrumRefractionTool implements Tool {
         const hemispheresArg = request.args.hemispheres as HemisphereSpec[] | undefined;
 
         // Build effective config.
-        const cfg: SpectrumRefractionConfig | undefined = hemispheresArg && Array.isArray(hemispheresArg)
-            ? { enabled: true, leftModel: null, rightModel: null, hemispheres: hemispheresArg }
-            : this.defaultConfig;
+        const cfg: SpectrumRefractionConfig | undefined =
+            hemispheresArg && Array.isArray(hemispheresArg)
+                ? { enabled: true, leftModel: null, rightModel: null, hemispheres: hemispheresArg }
+                : this.defaultConfig;
 
         if (!cfg || !cfg.enabled) {
             return {
                 ok: false,
-                output: { error: "no_active_sr_config", advisory: "Provide hemispheres[] in args or configure a default SR config." },
+                output: {
+                    error: "no_active_sr_config",
+                    advisory: "Provide hemispheres[] in args or configure a default SR config.",
+                },
             };
         }
 
@@ -97,7 +98,13 @@ export class SpectrumRefractionTool implements Tool {
 
         const result = await this.providerManager.generateSR({ message, conversation: [], systemPrompt: "" }, cfg);
         if (!result) {
-            return { ok: false, output: { error: "sr_generation_failed", advisory: "SR pre-flight rejected the configuration or all hemispheres failed." } };
+            return {
+                ok: false,
+                output: {
+                    error: "sr_generation_failed",
+                    advisory: "SR pre-flight rejected the configuration or all hemispheres failed.",
+                },
+            };
         }
 
         return {

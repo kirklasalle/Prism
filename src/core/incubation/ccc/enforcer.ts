@@ -17,7 +17,7 @@ export class RuntimePlanEnforcer {
     constructor(
         private readonly bus: ActivityBus,
         private readonly sessionId: string = "incubation",
-    ) { }
+    ) {}
 
     authorizeStep(plan: RuntimePlan, stepId: string): EnforcementDecision {
         const step = plan.steps.find((s) => s.stepId === stepId);

@@ -164,7 +164,11 @@ export class Orchestrator {
             const approved = await this.approvalQueue.request(
                 this.sessionId,
                 request.operation,
-                { args: normalizedRequest.args, risk: normalizedRequest.risk, rollbackPlan: normalizedRequest.rollbackPlan },
+                {
+                    args: normalizedRequest.args,
+                    risk: normalizedRequest.risk,
+                    rollbackPlan: normalizedRequest.rollbackPlan,
+                },
                 this.approvalTimeoutMs,
             );
 
@@ -401,10 +405,7 @@ export class Orchestrator {
                     return s.value;
                 }
                 // Rejected or null result — synthesize a failure record
-                const errMsg =
-                    s.status === "rejected"
-                        ? String(s.reason)
-                        : "runSubAgent returned null (no AgentPool)";
+                const errMsg = s.status === "rejected" ? String(s.reason) : "runSubAgent returned null (no AgentPool)";
                 allOk = false;
                 return {
                     ok: false,

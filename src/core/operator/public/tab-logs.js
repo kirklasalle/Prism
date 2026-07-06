@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, formatRelativeTime, safeIso, dashboardLog, statusBadge, safeRenderStep, renderLogsPanel } from './dashboard-core.js';
+import { state, request, escapeHtml, formatRelativeTime, safeIso, dashboardLog, statusBadge, safeRenderStep, renderLogsPanel, showConfirm, showTransientNotice, showPrompt, authHeaders } from './dashboard-core.js';
 
 export
   function renderEvents() {
@@ -31,7 +31,7 @@ export
   let html = '<table class="events-table"><thead><tr><th>Trace</th><th>Events</th><th>Status</th><th>Last Seen</th></tr></thead><tbody>'
     + traces.map(trace => '<tr>'
       + '<td>'
-      + '<button class="secondary-button" style="padding:4px 8px;" onclick="loadTrace(&quot;' + escapeHtml(trace.correlationId) + '&quot;)">'
+      + '<button class="secondary-button trace-view-btn" style="padding:4px 8px;" data-correlation-id="' + escapeHtml(trace.correlationId) + '">'
       + (state.selectedTraceId === trace.correlationId ? 'Viewing' : 'View')
       + '</button>'
       + '<div class="mono" style="margin-top:6px;font-size:10px;word-break:break-all;">' + escapeHtml(trace.correlationId) + '</div>'
@@ -94,7 +94,7 @@ export
     + '<div class="muted">' + escapeHtml(action.description) + '</div>'
     + (action.lastMessage ? '<div class="muted" style="margin-top:8px;">Last result: ' + escapeHtml(action.lastMessage) + '</div>' : '')
     + (action.lastError ? '<div style="margin-top:8px;color:#ffc1c1;">Last error: ' + escapeHtml(action.lastError) + '</div>' : '')
-    + '<div class="action-buttons"><button class="secondary-button" ' + (action.status === 'running' ? 'disabled' : '') + ' data-action="' + escapeHtml(action.name) + '" onclick="runAction(this.dataset.action)">Run</button></div>'
+    + '<div class="action-buttons"><button class="secondary-button quick-action-btn" ' + (action.status === 'running' ? 'disabled' : '') + ' data-action="' + escapeHtml(action.name) + '">Run</button></div>'
     + '</div>'
   ).join('');
   container.innerHTML = html;
@@ -112,7 +112,7 @@ export
     '<div class="approval-card">'
     + '<div><strong>' + escapeHtml(item.operation) + '</strong></div>'
     + '<div class="muted mono" style="margin-top:6px;">' + escapeHtml(item.id) + '</div>'
-    + '<div class="action-buttons"><button class="secondary-button" data-approval-id="' + escapeHtml(item.id) + '" onclick="approve(this.dataset.approvalId)">Approve</button><button class="danger-button" data-approval-id="' + escapeHtml(item.id) + '" onclick="deny(this.dataset.approvalId)">Deny</button></div>'
+    + '<div class="action-buttons"><button class="secondary-button approval-btn" data-approval-id="' + escapeHtml(item.id) + '" data-approval-action="approve">Approve</button><button class="danger-button approval-btn" data-approval-id="' + escapeHtml(item.id) + '" data-approval-action="deny">Deny</button></div>'
     + '</div>'
   ).join('');
 }
@@ -158,7 +158,11 @@ export
 
 export async function captureIncidentBundle() {
   try {
-    var resp = await fetch('/api/incidents/bundle', { method: 'POST' });
+    var resp = await fetch('/api/v1/incidents/bundle', {
+      method: 'POST',
+      headers: authHeaders(),
+      credentials: 'same-origin'
+    });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     var data = await resp.blob();
     var url = URL.createObjectURL(data);
@@ -170,8 +174,10 @@ export async function captureIncidentBundle() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     dashboardLog('logs', 'incident.bundle.captured', 'Evidence bundle downloaded');
+    showTransientNotice('Evidence bundle downloaded successfully', 'success');
   } catch (e) {
     dashboardLog('logs', 'incident.bundle.error', 'Bundle capture failed: ' + e.message);
+    showTransientNotice('Bundle capture failed: ' + e.message, 'error');
   }
 }
 
@@ -547,7 +553,7 @@ export function renderSupportCatalog(filteredItems) {
       '</div>' : '';
 
     return '<div class="panel" style="padding:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);border-radius:6px;transition:all 0.2s ease;">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleSupportItem(\'' + escapeHtml(item.id) + '\')">' +
+      '<div class="support-catalog-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" data-support-id="' + escapeHtml(item.id) + '">' +
       '<div style="display:flex;align-items:center;gap:6px;">' +
       '<span style="color:#888;font-size:9px;">' + icon + '</span>' +
       '<strong style="font-size:11px;color:#eee;">' + escapeHtml(item.title) + '</strong>' +
@@ -638,21 +644,7 @@ const CLIENT_CAP = 5000;
 const consoleBuffer = []; // {ts, stream, line}
 let consolePaused = false;
 
-function getAuthToken() {
-  const meta = document.querySelector('meta[name="prism-auth-token"]');
-  return meta ? meta.getAttribute('content') || '' : '';
-}
-
-function authedFetch(url, options = {}) {
-  const token = getAuthToken();
-  const headers = options.headers ? Object.assign({}, options.headers) : {};
-  if (token) headers['Authorization'] = 'Bearer ' + token;
-  let targetUrl = url;
-  if (url.startsWith('/api/') && !url.startsWith('/api/v1/')) {
-    targetUrl = '/api/v1' + url.substring(4);
-  }
-  return fetch(targetUrl, Object.assign({}, options, { headers, credentials: 'same-origin' }));
-}
+// Auth token and fetch methods unified in dashboard-core.js request()
 
 const STATE_COLORS = {
   connected: '#3ec46d',
@@ -704,8 +696,8 @@ function renderServers(payload) {
       + lastErr
       + tailHtml
       + '<div style="margin-top:6px;">'
-      + '<button class="secondary-button" style="font-size:11px;padding:2px 8px;" '
-      + 'onclick="window.reconnectMcpServer && window.reconnectMcpServer(' + escapeHtml(JSON.stringify(s.name)) + ')">Reconnect</button>'
+      + '<button class="secondary-button reconnect-mcp-btn" style="font-size:11px;padding:2px 8px;" '
+      + 'data-mcp-name="' + escapeHtml(s.name) + '">Reconnect</button>'
       + '</div>'
       + '</div>';
   }).join('');
@@ -718,9 +710,7 @@ export async function refreshMcpServers() {
   const grid = document.getElementById('mcp-servers-grid');
   if (!grid) return;
   try {
-    const r = await authedFetch('/api/mcp/servers', { credentials: 'same-origin' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const payload = await r.json();
+    const payload = await request('/api/mcp/servers');
     renderServers(payload);
   } catch (err) {
     grid.innerHTML = '<div class="muted" style="font-size:12px;color:#ff9a85;">Error: ' + escapeHtml(String(err)) + '</div>';
@@ -729,14 +719,14 @@ export async function refreshMcpServers() {
 
 export async function reconnectMcpServer(name) {
   try {
-    const r = await authedFetch('/api/mcp/servers/' + encodeURIComponent(name) + '/reconnect',
-      { method: 'POST', credentials: 'same-origin' });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok || !data.ok) {
-      alert('Reconnect failed: ' + (data.error || ('HTTP ' + r.status)));
+    const data = await request('/api/mcp/servers/' + encodeURIComponent(name) + '/reconnect', { method: 'POST' });
+    if (!data.ok) {
+      showTransientNotice('Reconnect failed: ' + (data.error || 'Unknown error'), 'error');
+    } else {
+      showTransientNotice('Successfully reconnected MCP server: ' + name, 'success');
     }
   } catch (err) {
-    alert('Reconnect error: ' + String(err));
+    showTransientNotice('Reconnect error: ' + String(err), 'error');
   } finally {
     refreshMcpServers();
   }
@@ -803,9 +793,9 @@ export function clearLiveConsole() {
 export function copyLiveConsole() {
   const text = consoleBuffer.map(e => `[${e.ts || ''}] [${(e.stream || '').toUpperCase()}] ${e.line || ''}`).join('\n');
   navigator.clipboard.writeText(text).then(() => {
-    alert('Console logs copied to clipboard!');
+    showTransientNotice('Console logs copied to clipboard!', 'success');
   }).catch(err => {
-    alert('Failed to copy logs: ' + err);
+    showTransientNotice('Failed to copy logs: ' + err, 'error');
   });
 }
 
@@ -813,9 +803,9 @@ export function copyActivityLogs() {
   const logs = state.logEntries || [];
   const text = logs.map(e => `[${e.timestamp || ''}] [${(e.severity || 'info').toUpperCase()}] [${e.source || ''}] ${e.operation || ''} - ${e.summary || ''}`).join('\n');
   navigator.clipboard.writeText(text).then(() => {
-    alert('Activity logs copied to clipboard!');
+    showTransientNotice('Activity logs copied to clipboard!', 'success');
   }).catch(err => {
-    alert('Failed to copy logs: ' + err);
+    showTransientNotice('Failed to copy logs: ' + err, 'error');
   });
 }
 
@@ -823,9 +813,9 @@ export function copyUnifiedTelemetry() {
   const visible = utBuffer.filter(utShouldShow);
   const text = visible.map(e => `[${e.timestamp || ''}] [${(e.severity || 'info').toUpperCase()}] [${e.source || ''}] ${e.operation || ''} - ${e.summary || ''}${e.aiContext && e.aiContext.suggestedAction ? ' (AI Suggested: ' + e.aiContext.suggestedAction + ')' : ''}`).join('\n');
   navigator.clipboard.writeText(text).then(() => {
-    alert('Unified telemetry logs copied to clipboard!');
+    showTransientNotice('Unified telemetry logs copied to clipboard!', 'success');
   }).catch(err => {
-    alert('Failed to copy logs: ' + err);
+    showTransientNotice('Failed to copy logs: ' + err, 'error');
   });
 }
 
@@ -848,7 +838,7 @@ export async function submitSupportTicket() {
   const severity = sevEl.value;
 
   if (!title || !description) {
-    alert('Please fill out both Title and Description.');
+    showTransientNotice('Please fill out both Title and Description.', 'error');
     return;
   }
 
@@ -878,7 +868,7 @@ export async function submitSupportTicket() {
     // Refresh tickets
     await loadSupportTickets();
   } catch (err) {
-    alert('Failed to create ticket: ' + err);
+    showTransientNotice('Failed to create ticket: ' + err, 'error');
   }
 }
 
@@ -933,9 +923,9 @@ export function renderSupportTickets() {
 
       const actions = t.status !== 'resolved'
         ? '<div style="display:flex;gap:6px;margin-top:10px;">' +
-        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(249,115,22,0.3);color:#fb923c;" onclick="window.investigateSupportTicket(\'' + t.ticketId + '\')">🔎 Investigate</button>' +
-        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(167,139,250,0.3);color:#c084fc;" onclick="window.selfHealSupportTicket(\'' + t.ticketId + '\')">⚡ Self-Heal</button>' +
-        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(34,197,94,0.3);color:#4ade80;" onclick="window.resolveSupportTicketPrompt(\'' + t.ticketId + '\')">✅ Resolve</button>' +
+        '<button class="secondary-button mini ticket-action-btn" style="font-size:10px;padding:3px 8px;border-color:rgba(249,115,22,0.3);color:#fb923c;" data-ticket-action="investigate" data-ticket-id="' + t.ticketId + '">🔎 Investigate</button>' +
+        '<button class="secondary-button mini ticket-action-btn" style="font-size:10px;padding:3px 8px;border-color:rgba(167,139,250,0.3);color:#c084fc;" data-ticket-action="self-heal" data-ticket-id="' + t.ticketId + '">⚡ Self-Heal</button>' +
+        '<button class="secondary-button mini ticket-action-btn" style="font-size:10px;padding:3px 8px;border-color:rgba(34,197,94,0.3);color:#4ade80;" data-ticket-action="resolve" data-ticket-id="' + t.ticketId + '">✅ Resolve</button>' +
         '</div>'
         : '';
 
@@ -949,13 +939,13 @@ export function renderSupportTickets() {
         '</div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">' +
         actions +
-        '<button class="secondary-button mini" style="font-size:10px;padding:3px 8px;border-color:rgba(239,68,68,0.25);color:#f87171;margin-left:auto;" onclick="window.deleteSupportTicket(\'' + t.ticketId + '\')">🗑️ Delete</button>' +
+        '<button class="secondary-button mini ticket-action-btn" style="font-size:10px;padding:3px 8px;border-color:rgba(239,68,68,0.25);color:#f87171;margin-left:auto;" data-ticket-action="delete" data-ticket-id="' + t.ticketId + '">🗑️ Delete</button>' +
         '</div>' +
         '</div>';
     }
 
     return '<div class="panel" style="padding:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);border-radius:6px;transition:all 0.2s ease;">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="window.toggleSupportItem(\'' + t.ticketId + '\')">' +
+      '<div class="support-ticket-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" data-ticket-id="' + t.ticketId + '">' +
       '<div style="display:flex;align-items:center;gap:6px;">' +
       '<span style="color:#888;font-size:9px;">' + icon + '</span>' +
       '<span class="mono" style="font-size:10px;color:#888;">[' + t.ticketId + ']</span>' +
@@ -980,7 +970,7 @@ export async function investigateSupportTicket(ticketId) {
     dashboardLog('logs', 'support.ticket.investigate', '🔎 Investigating incident ' + ticketId);
     await loadSupportTickets();
   } catch (err) {
-    alert('Failed to update ticket: ' + err);
+    showTransientNotice('Failed to update ticket: ' + err, 'error');
   }
 }
 
@@ -1012,16 +1002,16 @@ export async function selfHealSupportTicket(ticketId) {
     }, 1800);
 
   } catch (err) {
-    alert('Self-healing failed: ' + err);
+    showTransientNotice('Self-healing failed: ' + err, 'error');
   }
 }
 
 export async function resolveSupportTicketPrompt(ticketId) {
-  const log = prompt("Enter a description of the resolution to document in the long-term SQLite database:");
+  const log = await showPrompt("Enter a description of the resolution to document in the long-term SQLite database:");
   if (log === null) return; // cancelled
   const cleanLog = log.trim();
   if (!cleanLog) {
-    alert("Resolution description is required to document this ticket lifecycle.");
+    showTransientNotice("Resolution description is required to document this ticket lifecycle.", "error");
     return;
   }
 
@@ -1036,12 +1026,12 @@ export async function resolveSupportTicketPrompt(ticketId) {
     dashboardLog('logs', 'support.ticket.resolved', '✅ Manual resolution documented for ' + ticketId);
     await loadSupportTickets();
   } catch (err) {
-    alert('Failed to resolve ticket: ' + err);
+    showTransientNotice('Failed to resolve ticket: ' + err, 'error');
   }
 }
 
 export async function deleteSupportTicket(ticketId) {
-  if (!confirm("Are you sure you want to delete this incident from database storage?")) return;
+  if (!await showConfirm("Are you sure you want to delete this incident from database storage?")) return;
   try {
     await request('/api/support/tickets/' + encodeURIComponent(ticketId) + '/delete', {
       method: 'POST'
@@ -1049,7 +1039,7 @@ export async function deleteSupportTicket(ticketId) {
     dashboardLog('logs', 'support.ticket.deleted', '🗑️ Deleted incident ' + ticketId);
     await loadSupportTickets();
   } catch (err) {
-    alert('Failed to delete ticket: ' + err);
+    showTransientNotice('Failed to delete ticket: ' + err, 'error');
   }
 }
 
@@ -1067,6 +1057,95 @@ export function initLogsTab() {
     sourceFilter.addEventListener('change', renderLiveConsole);
   }
 
+  // Register P0 Delegated Event Listeners (No inline onclick/XSS injection vectors)
+  
+  // 1. Trace View Container
+  const traceContainer = document.getElementById('trace-view');
+  if (traceContainer) {
+    traceContainer.addEventListener('click', function (e) {
+      const btn = e.target.closest('.trace-view-btn');
+      if (btn) {
+        loadTrace(btn.dataset.correlationId);
+      }
+    });
+  }
+
+  // 2. Actions Container
+  const actionsContainer = document.getElementById('actions');
+  if (actionsContainer) {
+    actionsContainer.addEventListener('click', function (e) {
+      const btn = e.target.closest('.quick-action-btn');
+      if (btn) {
+        if (typeof window.runAction === 'function') window.runAction(btn.dataset.action);
+      }
+    });
+  }
+
+  // 3. Pending Approvals Container
+  const pendingContainer = document.getElementById('pending');
+  if (pendingContainer) {
+    pendingContainer.addEventListener('click', function (e) {
+      const btn = e.target.closest('.approval-btn');
+      if (btn) {
+        const id = btn.dataset.approvalId;
+        const action = btn.dataset.approvalAction;
+        if (action === 'approve') {
+          if (typeof window.approve === 'function') window.approve(id);
+        } else if (action === 'deny') {
+          if (typeof window.deny === 'function') window.deny(id);
+        }
+      }
+    });
+  }
+
+  // 4. Support Catalog Container
+  const catalogContainer = document.getElementById('support-catalog-container');
+  if (catalogContainer) {
+    catalogContainer.addEventListener('click', function (e) {
+      const header = e.target.closest('.support-catalog-header');
+      if (header) {
+        toggleSupportItem(header.dataset.supportId);
+      }
+    });
+  }
+
+  // 5. MCP Servers Container
+  const mcpContainer = document.getElementById('mcp-servers-grid');
+  if (mcpContainer) {
+    mcpContainer.addEventListener('click', function (e) {
+      const btn = e.target.closest('.reconnect-mcp-btn');
+      if (btn) {
+        reconnectMcpServer(btn.dataset.mcpName);
+      }
+    });
+  }
+
+  // 6. Support Tickets Container
+  const ticketsContainer = document.getElementById('support-tickets-container');
+  if (ticketsContainer) {
+    ticketsContainer.addEventListener('click', function (e) {
+      const header = e.target.closest('.support-ticket-header');
+      if (header) {
+        toggleSupportItem(header.dataset.ticketId);
+        return;
+      }
+      const btn = e.target.closest('.ticket-action-btn');
+      if (btn) {
+        const id = btn.dataset.ticketId;
+        const action = btn.dataset.ticketAction;
+        if (action === 'investigate') {
+          investigateSupportTicket(id);
+        } else if (action === 'self-heal') {
+          selfHealSupportTicket(id);
+        } else if (action === 'resolve') {
+          resolveSupportTicketPrompt(id);
+        } else if (action === 'delete') {
+          deleteSupportTicket(id);
+        }
+      }
+    });
+  }
+
   // Refresh MCP Servers immediately, and set interval
   refreshMcpServers();
   if (_mcpInterval) clearInterval(_mcpInterval);
@@ -1080,9 +1159,7 @@ export function initLogsTab() {
   const consoleBody = document.getElementById('live-console-body');
   (async () => {
     try {
-      const r = await authedFetch('/api/debug/console?limit=500', { credentials: 'same-origin' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
+      const data = await request('/api/debug/console?limit=500');
       if (!data.attached) {
         if (consoleStatus) consoleStatus.textContent = 'console interceptor not attached';
         if (consoleBody) consoleBody.innerHTML = '<div class="muted" style="font-size:12px;">Console interceptor not attached.</div>';
@@ -1117,11 +1194,14 @@ export function initLogsTab() {
   let attempts = 0;
   const tryAttach = () => {
     attempts++;
+    if (typeof window === 'undefined') return;
     const candidate = window.dashboardWs || window.__prismWs || window.ws;
     if (attachWs(candidate)) return;
     if (attempts > 20) {
       try {
-        const token = getAuthToken();
+        if (typeof window === 'undefined' || typeof location === 'undefined') return;
+        const headers = authHeaders();
+        const token = headers['Authorization'] ? headers['Authorization'].replace('Bearer ', '') : '';
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
         let wsUrlStr = proto + '://' + location.host + '/ws';
         if (token) wsUrlStr += '?token=' + encodeURIComponent(token);
@@ -1133,6 +1213,14 @@ export function initLogsTab() {
     setTimeout(tryAttach, 250);
   };
   tryAttach();
+}
+
+export function resetLogsWired() {
+  _logsWired = false;
+  if (_mcpInterval) {
+    clearInterval(_mcpInterval);
+    _mcpInterval = null;
+  }
 }
 
 

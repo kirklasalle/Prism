@@ -71,7 +71,7 @@ export class OtelExporter {
     constructor(
         private readonly activityBus: ActivityBus,
         metricsStore: MetricsStore,
-        config: OtelExporterConfig = {}
+        config: OtelExporterConfig = {},
     ) {
         this.metricsStore = metricsStore;
         this.config = {
@@ -113,29 +113,32 @@ export class OtelExporter {
         m.registerCounter("prism_governance_hooks_total", "Total governance hook evaluations");
         m.registerCounter("prism_tool_executions_total", "Total tool execution attempts");
         m.registerCounter("prism_agent_lifecycle_total", "Total agent lifecycle transitions");
-        m.registerCounter("prism_auto_run_approved_tier2_total", "Total auto-run executions triggered after Tier-2 approval");
+        m.registerCounter(
+            "prism_auto_run_approved_tier2_total",
+            "Total auto-run executions triggered after Tier-2 approval",
+        );
 
         // Histograms (latency in ms)
         m.registerHistogram(
             "prism_operation_duration_ms",
             "Duration of PRISM operations in milliseconds",
-            [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
+            [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000],
         );
         m.registerHistogram(
             "prism_policy_latency_ms",
             "Policy evaluation latency in milliseconds",
-            [1, 2, 5, 10, 25, 50, 100, 250, 500]
+            [1, 2, 5, 10, 25, 50, 100, 250, 500],
         );
         // Auto-run duration: time between approval-resolved and agentic completion
         m.registerHistogram(
             "prism_auto_run_duration_ms",
             "Duration of auto-run executions triggered after Tier-2 approval (ms)",
-            [50, 100, 250, 500, 1000, 2500, 5000, 10000]
+            [50, 100, 250, 500, 1000, 2500, 5000, 10000],
         );
         m.registerHistogram(
             "prism_llm_latency_ms",
             "LLM generation latency in milliseconds",
-            [100, 250, 500, 1000, 2500, 5000, 10000, 30000]
+            [100, 250, 500, 1000, 2500, 5000, 10000, 30000],
         );
 
         // Gauges (note: these are set on each event, not on-demand)
@@ -229,9 +232,7 @@ export class OtelExporter {
 
     private eventToSpan(event: ActivityEvent): OtlpSpan {
         const startNs = BigInt(new Date(event.timestamp).getTime()) * BigInt(1_000_000);
-        const durationNs = event.durationMs
-            ? BigInt(Math.round(event.durationMs * 1_000_000))
-            : BigInt(0);
+        const durationNs = event.durationMs ? BigInt(Math.round(event.durationMs * 1_000_000)) : BigInt(0);
         const endNs = startNs + durationNs;
 
         const attributes: OtlpSpan["attributes"] = [
@@ -269,32 +270,40 @@ export class OtelExporter {
         return new Promise<void>((resolve) => {
             try {
                 const payload = JSON.stringify({
-                    resourceSpans: [{
-                        resource: {
-                            attributes: [
-                                { key: "service.name", value: { stringValue: this.config.serviceName } },
-                                { key: "service.version", value: { stringValue: this.config.serviceVersion } },
-                            ]
+                    resourceSpans: [
+                        {
+                            resource: {
+                                attributes: [
+                                    { key: "service.name", value: { stringValue: this.config.serviceName } },
+                                    { key: "service.version", value: { stringValue: this.config.serviceVersion } },
+                                ],
+                            },
+                            scopeSpans: [{ spans: [span] }],
                         },
-                        scopeSpans: [{ spans: [span] }]
-                    }]
+                    ],
                 });
 
                 const url = new URL(this.config.endpoint);
                 const transport = url.protocol === "https:" ? https : http;
-                const req = transport.request({
-                    hostname: url.hostname,
-                    port: url.port,
-                    path: url.pathname,
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Content-Length": Buffer.byteLength(payload),
+                const req = transport.request(
+                    {
+                        hostname: url.hostname,
+                        port: url.port,
+                        path: url.pathname,
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Content-Length": Buffer.byteLength(payload),
+                        },
                     },
-                }, () => resolve());
+                    () => resolve(),
+                );
 
                 req.on("error", () => resolve()); // silent failure — observability must not break the platform
-                req.setTimeout(3000, () => { req.destroy(); resolve(); });
+                req.setTimeout(3000, () => {
+                    req.destroy();
+                    resolve();
+                });
                 req.write(payload);
                 req.end();
             } catch {

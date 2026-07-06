@@ -66,7 +66,7 @@ export function ChatTab({
 
             // 1. Run prompt through governance
             const resp = await client.sendChat(text, currentSessId);
-            
+
             const sessId = resp.session_id || currentSessId;
             if (sessId && sessId !== currentSessId) {
                 currentSessId = sessId;
@@ -77,9 +77,18 @@ export function ChatTab({
             // 2. Handle governance results
             const pendingIds = resp.approval_pending_ids;
             if (resp.denied) {
-                setMessages((prev) => [...prev, { role: "assistant", content: `❌ Denied: ${resp.response || "Request blocked by governance."}` }]);
+                setMessages((prev) => [
+                    ...prev,
+                    { role: "assistant", content: `❌ Denied: ${resp.response || "Request blocked by governance."}` },
+                ]);
             } else if (pendingIds && pendingIds.length > 0) {
-                setMessages((prev) => [...prev, { role: "assistant", content: `⏳ Pending Approval: Request requires authorization. (IDs: ${pendingIds.join(", ")})` }]);
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        role: "assistant",
+                        content: `⏳ Pending Approval: Request requires authorization. (IDs: ${pendingIds.join(", ")})`,
+                    },
+                ]);
             } else {
                 // Tier 1 accepted - post to sessions/:id/messages to actually get the assistant's response!
                 if (currentSessId) {
@@ -109,34 +118,34 @@ export function ChatTab({
     }, [client, sessionsResult]);
 
     // Keyboard: Escape toggles sessions view, Enter sends
-    useInput(
-        (input, key) => {
-            if (!focused) return;
-            if (key.escape) {
-                setMode((m) => (m === "chat" ? "sessions" : "chat"));
-                return;
+    useInput((input, key) => {
+        if (!focused) return;
+        if (key.escape) {
+            setMode((m) => (m === "chat" ? "sessions" : "chat"));
+            return;
+        }
+        if (mode === "sessions") {
+            if (input === "j" || key.downArrow) {
+                setSessionIdx((i) => Math.min(i + 1, (sessionsResult.data?.length ?? 1) - 1));
+            } else if (input === "k" || key.upArrow) {
+                setSessionIdx((i) => Math.max(i - 1, 0));
+            } else if (key.return && sessionsResult.data?.[sessionIdx]) {
+                setActiveSession(sessionsResult.data[sessionIdx]!.id);
+                setMode("chat");
+            } else if (input === "n") {
+                createSession();
             }
-            if (mode === "sessions") {
-                if (input === "j" || key.downArrow) {
-                    setSessionIdx((i) => Math.min(i + 1, (sessionsResult.data?.length ?? 1) - 1));
-                } else if (input === "k" || key.upArrow) {
-                    setSessionIdx((i) => Math.max(i - 1, 0));
-                } else if (key.return && sessionsResult.data?.[sessionIdx]) {
-                    setActiveSession(sessionsResult.data[sessionIdx]!.id);
-                    setMode("chat");
-                } else if (input === "n") {
-                    createSession();
-                }
-            }
-        },
-    );
+        }
+    });
 
     /* ---- Sessions list view ---- */
     if (mode === "sessions") {
         return (
             <Box flexDirection="column">
                 <Box marginBottom={1}>
-                    <Text bold color={colors.brand}>Sessions</Text>
+                    <Text bold color={colors.brand}>
+                        Sessions
+                    </Text>
                     <Text color={colors.muted}> (j/k navigate, Enter select, n new, Esc back)</Text>
                 </Box>
                 {sessionsResult.loading && <Loading label="Loading sessions..." />}

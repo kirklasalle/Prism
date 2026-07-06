@@ -63,9 +63,22 @@ describe("AgentPool", () => {
         assert.equal(agents.length, 16);
         const ids = agents.map((a) => a.agentId);
         for (const expected of [
-            "chat", "planner", "coder", "summarizer", "classifier", "indexer",
-            "speaker", "listener", "realtime", "image-analyst", "illustrator",
-            "video-analyst", "video-creator", "audio-producer", "writer", "researcher",
+            "chat",
+            "planner",
+            "coder",
+            "summarizer",
+            "classifier",
+            "indexer",
+            "speaker",
+            "listener",
+            "realtime",
+            "image-analyst",
+            "illustrator",
+            "video-analyst",
+            "video-creator",
+            "audio-producer",
+            "writer",
+            "researcher",
         ]) {
             assert.ok(ids.includes(expected), `missing default agent: ${expected}`);
         }

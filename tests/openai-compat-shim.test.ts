@@ -33,8 +33,8 @@ function makeDeps(executor?: ChatExecutor): ShimHandlerDeps {
         store: new OpenAiCompatStore(),
         defaultModel: "prism-default",
         chatExecutor:
-            executor
-            ?? (async (input: ChatExecutorInput): Promise<ChatExecutorResult> => {
+            executor ??
+            (async (input: ChatExecutorInput): Promise<ChatExecutorResult> => {
                 const last = input.messages[input.messages.length - 1];
                 return {
                     content: `echo: ${last?.content ?? ""}`,
@@ -73,10 +73,7 @@ export async function testOpenAiCompatShim(): Promise<void> {
     // ── chat.completions: model fallback to default when executor returns empty
     {
         const deps = makeDeps(async () => ({ content: "x", model: "" }));
-        const out = await handleChatCompletions(
-            { messages: [{ role: "user", content: "q" }] },
-            deps,
-        );
+        const out = await handleChatCompletions({ messages: [{ role: "user", content: "q" }] }, deps);
         assert(out.model === "prism-default", "falls back to defaultModel");
     }
 
@@ -100,10 +97,7 @@ export async function testOpenAiCompatShim(): Promise<void> {
         const deps = makeDeps();
         let caught: ShimError | null = null;
         try {
-            await handleChatCompletions(
-                { messages: [{ role: "user", content: "q" }], stream: true },
-                deps,
-            );
+            await handleChatCompletions({ messages: [{ role: "user", content: "q" }], stream: true }, deps);
         } catch (err) {
             caught = err as ShimError;
         }
@@ -278,10 +272,7 @@ export async function testOpenAiCompatShim(): Promise<void> {
     // ── prism_metadata is on every response shape
     {
         const deps = makeDeps();
-        const cmpl = await handleChatCompletions(
-            { messages: [{ role: "user", content: "ping" }] },
-            deps,
-        );
+        const cmpl = await handleChatCompletions({ messages: [{ role: "user", content: "ping" }] }, deps);
         const t = handleCreateThread(undefined, deps);
         handleCreateMessage(t.id, { role: "user", content: "ping" }, deps);
         const run = await handleCreateRun(t.id, { assistant_id: "asst" }, deps);

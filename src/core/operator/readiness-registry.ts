@@ -11,12 +11,12 @@
 export type ReadinessSeverity = "critical" | "warning" | "info";
 
 export interface ReadinessCheck {
-    id: string;              // e.g. "core.activity-bus"
-    category: string;        // e.g. "core", "llm", "tools"
-    label: string;           // human-readable
+    id: string; // e.g. "core.activity-bus"
+    category: string; // e.g. "core", "llm", "tools"
+    label: string; // human-readable
     severity: ReadinessSeverity;
-    deprecated?: boolean;    // soft-delete: kept for audit, skipped in runAll
-    version?: string;        // optional evolution tracker
+    deprecated?: boolean; // soft-delete: kept for audit, skipped in runAll
+    version?: string; // optional evolution tracker
     check(): Promise<{ passed: boolean; detail: string }>;
 }
 
@@ -40,7 +40,7 @@ export interface CategoryResult {
 
 export interface FullReadinessSnapshot {
     checkedAt: string;
-    ready: boolean;                          // all critical checks pass
+    ready: boolean; // all critical checks pass
     totalChecks: number;
     passedChecks: number;
     categories: CategoryResult[];
@@ -62,9 +62,7 @@ export interface FullReadinessSnapshot {
 const HISTORY_RING_SIZE = 10;
 
 // Canonical category ordering for deterministic display
-const CATEGORY_ORDER = [
-    "core", "llm", "tools", "mcp", "agents", "workspace", "memory", "network",
-];
+const CATEGORY_ORDER = ["core", "llm", "tools", "mcp", "agents", "workspace", "memory", "network"];
 
 /* ── Registry ── */
 
@@ -187,9 +185,7 @@ export class ReadinessRegistry {
         }
 
         const allResults = categories.flatMap((c) => c.checks);
-        const criticalPassed = allResults
-            .filter((r) => r.severity === "critical")
-            .every((r) => r.passed);
+        const criticalPassed = allResults.filter((r) => r.severity === "critical").every((r) => r.passed);
 
         const recommendations: string[] = [];
         for (const r of allResults) {

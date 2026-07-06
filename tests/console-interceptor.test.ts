@@ -75,10 +75,7 @@ describe("ConsoleInterceptor", () => {
             tail.some((e) => e.line === "partial-complete"),
             "expected merged partial line",
         );
-        assert.ok(
-            !tail.some((e) => e.line === "partial-"),
-            "partial fragment should not appear standalone",
-        );
+        assert.ok(!tail.some((e) => e.line === "partial-"), "partial fragment should not appear standalone");
     });
 
     it("getTail respects the limit argument", () => {

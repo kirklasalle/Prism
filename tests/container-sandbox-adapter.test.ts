@@ -18,7 +18,7 @@ import sqlite3 from "sqlite3";
 import {
     ContainerSandboxAdapter,
     ContainerState,
-    ResourceQuota
+    ResourceQuota,
 } from "../src/adapters/application/container-sandbox-adapter.js";
 import { PolicyEngine } from "../src/core/policy/engine.js";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -48,7 +48,7 @@ function closeDb(db: sqlite3.Database): Promise<void> {
 const DEFAULT_QUOTA: ResourceQuota = {
     cpu_limit: 1,
     memory_limit_mb: 256,
-    disk_limit_mb: 1024
+    disk_limit_mb: 1024,
 };
 
 // ── Test Functions ──────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ async function testDockerDetection(): Promise<void> {
     const { adapter, db } = createTestAdapter();
     try {
         // Wait for init to settle
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
 
         // Docker is no longer required — built-in Prism runtime is always used
         const dockerEnabled = adapter.isDockerEnabled();
@@ -150,11 +150,7 @@ async function testSnapshotAndRevert(): Promise<void> {
         await adapter.startContainer(container.container_id);
 
         // Take snapshot 1
-        const snap1 = await adapter.snapshotContainer(
-            container.container_id,
-            "baseline",
-            "Initial state"
-        );
+        const snap1 = await adapter.snapshotContainer(container.container_id, "baseline", "Initial state");
         assert.ok(snap1.snapshot_id.length > 10);
         assert.strictEqual(snap1.snapshot_name, "baseline");
 
@@ -180,14 +176,14 @@ async function testErrorHandling(): Promise<void> {
         await assert.rejects(
             async () => adapter.getContainerStatus("unknown"),
             /not found/,
-            "Should throw on unknown container"
+            "Should throw on unknown container",
         );
 
         // Start uncreated container
         await assert.rejects(
             async () => adapter.startContainer("unknown"),
             /not found/,
-            "Should throw on starting unknown"
+            "Should throw on starting unknown",
         );
 
         // Exec on stopped container
@@ -195,7 +191,7 @@ async function testErrorHandling(): Promise<void> {
         await assert.rejects(
             async () => adapter.execInContainer(c.container_id, "echo nope"),
             /not found or not running/,
-            "Should throw if container not started"
+            "Should throw if container not started",
         );
 
         await adapter.destroyContainer(c.container_id, "cleanup");
@@ -216,7 +212,7 @@ async function testActivityBusAndPersistence(): Promise<void> {
             db.get(
                 "SELECT COUNT(*) AS count FROM containers WHERE container_id = ?",
                 [c.container_id],
-                (err, row: any) => err ? reject(err) : resolve(row.count)
+                (err, row: any) => (err ? reject(err) : resolve(row.count)),
             );
         });
         assert.ok(rowCount === 1, "Container should be in DB");
@@ -224,16 +220,15 @@ async function testActivityBusAndPersistence(): Promise<void> {
         // Verify activity bus events
         const events = bus.listEvents();
 
-        const createEv = events.find(e => e.operation === "container_create");
+        const createEv = events.find((e) => e.operation === "container_create");
         assert.ok(createEv, "Should emit container_create");
         assert.strictEqual(createEv?.sessionId, c.container_id);
 
-        const startEv = events.find(e => e.operation === "container_start");
+        const startEv = events.find((e) => e.operation === "container_start");
         assert.ok(startEv, "Should emit container_start");
 
-        const destroyEv = events.find(e => e.operation === "container_destroy");
+        const destroyEv = events.find((e) => e.operation === "container_destroy");
         assert.ok(destroyEv, "Should emit container_destroy");
-
     } finally {
         await closeDb(db);
     }

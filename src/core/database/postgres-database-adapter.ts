@@ -19,12 +19,7 @@
  * @module core/database/postgres-database-adapter
  */
 
-import type {
-    IDatabaseAdapter,
-    IPreparedStatement,
-    Row,
-    DatabaseAdapterConfig,
-} from "./database-adapter.js";
+import type { IDatabaseAdapter, IPreparedStatement, Row, DatabaseAdapterConfig } from "./database-adapter.js";
 
 // ── Parameter translation ─────────────────────────────────────────────────────
 
@@ -84,10 +79,7 @@ export function translateNamedParams(sql: string): { sql: string; order: string[
     return { sql: out, order };
 }
 
-function buildPositionalArgs(
-    order: string[],
-    params: Record<string, unknown> | unknown[] | undefined,
-): unknown[] {
+function buildPositionalArgs(order: string[], params: Record<string, unknown> | unknown[] | undefined): unknown[] {
     if (!params) return [];
     if (Array.isArray(params)) return params.slice(0, order.length);
     return order.map((name) => (params as Record<string, unknown>)[name]);
@@ -161,8 +153,8 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
         if (this._status !== "ready") {
             throw new Error(
                 `PostgresDatabaseAdapter not ready (${this._status}): ${this._statusReason}. ` +
-                "Postgres support requires the optional 'pg' package; ensure it is installed and " +
-                "PRISM_DATABASE_URL is set, then call connect() before issuing queries.",
+                    "Postgres support requires the optional 'pg' package; ensure it is installed and " +
+                    "PRISM_DATABASE_URL is set, then call connect() before issuing queries.",
             );
         }
     }
@@ -171,7 +163,7 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
         this.requireReady();
         throw new Error(
             "PostgresDatabaseAdapter.exec(): synchronous exec not yet supported on the async pg client. " +
-            "Use the sqlite backend, or the upcoming async DAL surface.",
+                "Use the sqlite backend, or the upcoming async DAL surface.",
         );
     }
 
@@ -179,7 +171,7 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
         this.requireReady();
         throw new Error(
             "PostgresDatabaseAdapter.prepare(): synchronous prepare not yet supported. " +
-            "Translate :named -> $N via translateNamedParams() and use queryAll/queryOne via the async surface.",
+                "Translate :named -> $N via translateNamedParams() and use queryAll/queryOne via the async surface.",
         );
     }
 
@@ -204,10 +196,7 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     }
 
     /** Async query helper for early Postgres integration tests. */
-    async queryAllAsync(
-        sql: string,
-        params?: Record<string, unknown> | unknown[],
-    ): Promise<Row[]> {
+    async queryAllAsync(sql: string, params?: Record<string, unknown> | unknown[]): Promise<Row[]> {
         this.requireReady();
         const { sql: translated, order } = translateNamedParams(sql);
         const values = buildPositionalArgs(order, params);

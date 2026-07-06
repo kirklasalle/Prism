@@ -17,11 +17,7 @@ import { tmpdir } from "node:os";
 import { SetupApiClient } from "../src/cli/api-client.js";
 
 // We test workspace-resolver functions that the standalone wizard uses
-import {
-    readPreferences,
-    writePreferences,
-    _resetWorkspaceRootCache,
-} from "../src/core/config/workspace-resolver.js";
+import { readPreferences, writePreferences, _resetWorkspaceRootCache } from "../src/core/config/workspace-resolver.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Provider list parity check (hardcoded in each wizard surface)
@@ -29,14 +25,31 @@ import {
 
 /** CLI wizard provider IDs — must match web wizard + TUI wizard */
 const CLI_PROVIDERS = [
-    "ollama", "openai", "anthropic", "google", "mistral", "groq",
-    "together", "deepseek", "openrouter", "perplexity", "fireworks", "cohere",
+    "ollama",
+    "openai",
+    "anthropic",
+    "google",
+    "mistral",
+    "groq",
+    "together",
+    "deepseek",
+    "openrouter",
+    "perplexity",
+    "fireworks",
+    "cohere",
 ];
 
 /** TUI wizard provider IDs (from SetupWizardTab.tsx) */
 const TUI_PROVIDERS = [
-    "ollama", "openai", "anthropic", "google", "mistral", "groq",
-    "together", "deepseek", "openrouter",
+    "ollama",
+    "openai",
+    "anthropic",
+    "google",
+    "mistral",
+    "groq",
+    "together",
+    "deepseek",
+    "openrouter",
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -66,7 +79,7 @@ describe("CLI Setup Wizard — API Client", () => {
         await assert.rejects(
             () => client.getSetupStatus(),
             /fetch|ECONNREFUSED|network|timeout/i,
-            "Should throw on unreachable server"
+            "Should throw on unreachable server",
         );
     });
 });
@@ -76,7 +89,7 @@ describe("CLI Setup Wizard — Provider List", () => {
         for (const tuiProvider of TUI_PROVIDERS) {
             assert.ok(
                 CLI_PROVIDERS.includes(tuiProvider),
-                `TUI provider '${tuiProvider}' must also exist in CLI provider list`
+                `TUI provider '${tuiProvider}' must also exist in CLI provider list`,
             );
         }
     });

@@ -2,6 +2,26 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.21.2 — 2026-07-06 — Browser Control Tab Fixes and Viewport Improvements
+
+Remediates the critical and operational issues identified during the Browser Control tab audit. Silently broken sub-panels (Network and DOM) are resolved, and the viewport interface now exposes direct manual controls for standard browsing actions.
+
+### Fixed
+
+- **Network timing & response keys mismatch**: Aligned backend response fields in `/api/browser/network-log/:id` to match frontend expectations, and converted network durations to actual millisecond integers instead of returning empty fallback labels.
+- **DOM snapshot renderer mismatch**: Aligned response properties in `/api/browser/dom-snapshot/:id` so DOM node structures populate cleanly.
+- **Memory leaks**: Added explicit cleanup for dynamically generated screenshot Object URLs, revoking old ones upon new captures and when navigating away from the Browser tab.
+- **Profile segment validation mismatch**: Replaced custom/redundant profile segments with canonical `individual` and `business` profiles matching tax code guidelines.
+- **Autopilot polling**: Fixed leaked setInterval timers by stopping autopilot updates on tab switches.
+- **Playwright close session timeout**: Wrapped `browser.close()` in a 5000ms timeout race to prevent blocked/hanging headless processes from timing out API responses.
+- **SSHP sensitive selector deduplication**: Unified hardcoded selector patterns by extracting them into a shared constants module (`sshp-constants.ts`).
+
+### Added
+
+- **Interactive Viewport Controls**: Appended action buttons for Back (◀), Forward (▶), Reload (🔄), and Scroll (⬇) to the live screenshot viewport.
+- **Interactive Button Loading States**: Wrapped actions in `withButtonFeedback` which disables clicks and displays an `aria-busy` indicator during pending operations.
+- **ARIA/Sub-tab accessibility**: Introduced proper role and state attributes (`role="tab"`, `role="tabpanel"`, `aria-selected`, `aria-controls`) to sub-tab navigation containers.
+
 ## Phase R — Audit Remediation (2026-06-18)
 
 Comprehensive codebase audit remediation: 34 issues resolved across 8 categories, raising the maturity rating from 7.5 → 9.5/10.
@@ -92,24 +112,24 @@ Completes the media-modality tool coverage promised by the model-capability matr
 ### New (additive only)
 
 - **`video_generate`** ([src/adapters/application/media-tools.ts](src/adapters/application/media-tools.ts)) — text→video. Modality: `video-generation`.
-  - `openai` / `openrouter` → POST `/videos/generations` (Sora shape). Accepts inline b64, downloadable URL, or async job id (returns `{ pending: true, job_id, status }` for jobs).
-  - `gemini` → `:generateContent` with `responseModalities: ["VIDEO"]` (Veo shape).
-  - Output written to `${workspace}/videos/prism-video-<UTC>.<ext>`.
-  - Structured failure: `{ ok:false, reason:"no_video_capable_model", advisory }`.
+    - `openai` / `openrouter` → POST `/videos/generations` (Sora shape). Accepts inline b64, downloadable URL, or async job id (returns `{ pending: true, job_id, status }` for jobs).
+    - `gemini` → `:generateContent` with `responseModalities: ["VIDEO"]` (Veo shape).
+    - Output written to `${workspace}/videos/prism-video-<UTC>.<ext>`.
+    - Structured failure: `{ ok:false, reason:"no_video_capable_model", advisory }`.
 
 - **`audio_generate`** — text→audio with `kind: "speech" | "music" | "sfx"`.
-  - **Speech (default).** Modality chain: `tts → voice-output`. OpenAI `/audio/speech` returns binary mp3/wav/etc.; Gemini returns inline-data audio.
-  - **Music.** Modality chain: `music-generation → sound-effects → voice-output`. Covers full compositions, single-instrument loops, riffs.
-  - **SFX.** Modality chain: `sound-effects → music-generation → voice-output`. Non-speech sound effects (e.g. thunder, footsteps).
-  - Two new modality types added to the matrix: `music-generation` and `sound-effects` (additive — no existing model declarations changed). Once a Suno / Udio / MusicGen / Stable Audio / ElevenLabs SFX provider is configured, the same tool routes to it automatically.
-  - Output written to `${workspace}/audio/prism-{audio,music,sfx}-<UTC>.<ext>`.
-  - Structured failures: `no_tts_capable_model`, `no_music_capable_model`, `no_sfx_capable_model`, each with a precise advisory pointing at Settings → Providers.
+    - **Speech (default).** Modality chain: `tts → voice-output`. OpenAI `/audio/speech` returns binary mp3/wav/etc.; Gemini returns inline-data audio.
+    - **Music.** Modality chain: `music-generation → sound-effects → voice-output`. Covers full compositions, single-instrument loops, riffs.
+    - **SFX.** Modality chain: `sound-effects → music-generation → voice-output`. Non-speech sound effects (e.g. thunder, footsteps).
+    - Two new modality types added to the matrix: `music-generation` and `sound-effects` (additive — no existing model declarations changed). Once a Suno / Udio / MusicGen / Stable Audio / ElevenLabs SFX provider is configured, the same tool routes to it automatically.
+    - Output written to `${workspace}/audio/prism-{audio,music,sfx}-<UTC>.<ext>`.
+    - Structured failures: `no_tts_capable_model`, `no_music_capable_model`, `no_sfx_capable_model`, each with a precise advisory pointing at Settings → Providers.
 
 - **`audio_transcribe`** — speech→text. Modality chain: `stt → voice-input`.
-  - `openai` / `openrouter` → POST `/audio/transcriptions` with manually-encoded multipart body (Whisper shape). Returns `{ text }`.
-  - `gemini` → `:generateContent` with audio `inlineData` part.
-  - Reads input audio from disk (path-traversal-safe — must reside inside the workspace root).
-  - Structured failures: `no_stt_capable_model`, `read_failed`, `invalid_args`.
+    - `openai` / `openrouter` → POST `/audio/transcriptions` with manually-encoded multipart body (Whisper shape). Returns `{ text }`.
+    - `gemini` → `:generateContent` with audio `inlineData` part.
+    - Reads input audio from disk (path-traversal-safe — must reside inside the workspace root).
+    - Structured failures: `no_stt_capable_model`, `read_failed`, `invalid_args`.
 
 - All three tools wired in [dashboard-service.ts](src/core/operator/dashboard-service.ts) immediately after `ImageGenerateTool` so they receive the runtime `LlmProviderManager` and `ProviderSecretStore`.
 
@@ -145,10 +165,10 @@ Closes two operator-facing bugs reported during v0.20.2 dogfooding: chat attachm
 ### New (additive only)
 
 - **Image generation as a default capability.** New `image_generate` Tier-2 built-in tool ([src/adapters/application/image-generate-tool.ts](src/adapters/application/image-generate-tool.ts)) routes through `LlmProviderManager.suggestRoutingForAllModalities()` to pick an `image-generation`-capable model from the matrix and dispatches to the matching provider's image API:
-  - `openai` and `openrouter` → POST `/images/generations` with `response_format: "b64_json"` (OpenAI Images shape).
-  - `gemini` → `:generateContent` with `responseModalities: ["IMAGE"]` (Imagen shape).
-  - When no image-capable provider is configured, the tool returns a structured `{ ok:false, reason:"no_image_capable_model", advisory:"..." }` so the orchestrator surfaces a precise advisory pointing the operator at Settings → Providers.
-  - Decoded bytes are written to `${workspace}/images/prism-image-<UTC>.png`. Optional `savePath` is path-traversal-safe (rejected if it escapes the workspace).
+    - `openai` and `openrouter` → POST `/images/generations` with `response_format: "b64_json"` (OpenAI Images shape).
+    - `gemini` → `:generateContent` with `responseModalities: ["IMAGE"]` (Imagen shape).
+    - When no image-capable provider is configured, the tool returns a structured `{ ok:false, reason:"no_image_capable_model", advisory:"..." }` so the orchestrator surfaces a precise advisory pointing the operator at Settings → Providers.
+    - Decoded bytes are written to `${workspace}/images/prism-image-<UTC>.png`. Optional `savePath` is path-traversal-safe (rejected if it escapes the workspace).
 - Tool is registered in [dashboard-service.ts](src/core/operator/dashboard-service.ts) (alongside `ComputerUseTool`) so it can receive the runtime `LlmProviderManager` + `ProviderSecretStore`.
 - **Chat attachment chips on user message bubbles.** `GET /api/chat/sessions/:sid/messages` now enriches each message with its persisted `attachments[]` array. Client-side [tab-chat.js](src/core/operator/public/tab-chat.js) `renderMessages()` renders an additive `.message-attachments` strip on user bubbles when attachments are present (image thumbnails for `image/*`, document chip otherwise), wired to the existing `GET /api/attachments/:aid` byte route. Optimistic local user-message bubble also mirrors `pendingAttachments` so the operator sees their attachments before the upload roundtrip completes.
 - **Paste-from-clipboard text fallback.** `pasteFromClipboard()` now falls back to `navigator.clipboard.readText()` when the clipboard contains no image, inserting text at the composer caret position. When the browser blocks clipboard access entirely, a precise notice is shown ("Use Ctrl+V to paste directly").
@@ -182,9 +202,9 @@ Closes the remaining Phase R Readiness Runbook items needed for a strict-ready 1
 ### New (additive only)
 
 - **R5-1 — Backup / restore scripts.** Cross-platform helpers under [scripts/](scripts/):
-  - [scripts/backup.ps1](scripts/backup.ps1) / [scripts/backup.sh](scripts/backup.sh) — archive `$PRISM_WORKSPACE_ROOT` (or `~/Prism_Refraction`) to `prism-backup-<UTC>.zip` / `.tgz`.
-  - [scripts/restore.ps1](scripts/restore.ps1) / [scripts/restore.sh](scripts/restore.sh) — restore an archive into an empty workspace; refuses to overwrite a non-empty workspace unless `-Force` / `--force` is passed.
-  - Designed to be invoked directly without needing the Node toolchain present (paired with the existing `npm run backup` / `npm run restore` thin Node wrappers).
+    - [scripts/backup.ps1](scripts/backup.ps1) / [scripts/backup.sh](scripts/backup.sh) — archive `$PRISM_WORKSPACE_ROOT` (or `~/Prism_Refraction`) to `prism-backup-<UTC>.zip` / `.tgz`.
+    - [scripts/restore.ps1](scripts/restore.ps1) / [scripts/restore.sh](scripts/restore.sh) — restore an archive into an empty workspace; refuses to overwrite a non-empty workspace unless `-Force` / `--force` is passed.
+    - Designed to be invoked directly without needing the Node toolchain present (paired with the existing `npm run backup` / `npm run restore` thin Node wrappers).
 
 - **R5-3 — Log rotation.** New zero-dep rotator at [src/core/observability/log-rotator.ts](src/core/observability/log-rotator.ts). Exports: `dateStamp`, `rotateActiveLog`, `pruneOldArchives`, `resolveRetentionDays`, `rotateAndPrune`, `DEFAULT_LOG_RETENTION_DAYS=30`. Idempotent — duplicate archive returns `{ skipped: true }` without touching the active file. Retention clamped to 1..365 days via `PRISM_LOG_RETENTION_DAYS`.
 
@@ -236,7 +256,7 @@ Promotes the v0.20 demo recording feature from an unwired API contract to a comp
 
 **Tests.**
 
-- **[tests/ptac-recorder-video.test.ts](tests/ptac-recorder-video.test.ts)** *(new)* — three cases: (1) `recordVideo: true` emits `video-manifest.json` + `video.html` with correct `runId`/`fps`/`frameCount`/`durationSec` and the `INTERVAL_MS = round(1000/fps)` constant embedded in the slideshow; (2) `recordVideo: false` (default) emits neither artefact; (3) FPS clamps to 1..8 with default 2.
+- **[tests/ptac-recorder-video.test.ts](tests/ptac-recorder-video.test.ts)** _(new)_ — three cases: (1) `recordVideo: true` emits `video-manifest.json` + `video.html` with correct `runId`/`fps`/`frameCount`/`durationSec` and the `INTERVAL_MS = round(1000/fps)` constant embedded in the slideshow; (2) `recordVideo: false` (default) emits neither artefact; (3) FPS clamps to 1..8 with default 2.
 - Wired into [tests/index.ts](tests/index.ts) as `PtacRecorderVideo`.
 
 **Bug fix.**
@@ -266,8 +286,8 @@ Fourth slice of Phase R+. PTAC (the self-drive scenario harness) gains two new s
 **Demo video slideshow.**
 
 1. **[src/ptac/recorder.ts](src/ptac/recorder.ts)** — `PtacRecorder` constructor now accepts `recordVideo` and `recordVideoFps` (clamped 1..8, default 2). When enabled, every screenshot recorded during the run is appended to a video-frame log; on `finalize()` the recorder writes:
-   - `video-manifest.json` — `{ runId, fps, frameCount, durationSec, frames[] }`.
-   - `video.html` — a self-contained, zero-runtime-dependency HTML slideshow that loads the screenshots relative to its own folder and plays them at the configured FPS with play/pause/prev/next/restart controls. Frames are inlined as JSON so the run folder is fully portable as one demo asset. **Not** an MP4: encoding video would require pulling in ffmpeg or a wasm encoder, which violates the zero-new-runtime-deps invariant. Any screen recorder pointed at the page will produce a true MP4 if needed downstream.
+    - `video-manifest.json` — `{ runId, fps, frameCount, durationSec, frames[] }`.
+    - `video.html` — a self-contained, zero-runtime-dependency HTML slideshow that loads the screenshots relative to its own folder and plays them at the configured FPS with play/pause/prev/next/restart controls. Frames are inlined as JSON so the run folder is fully portable as one demo asset. **Not** an MP4: encoding video would require pulling in ffmpeg or a wasm encoder, which violates the zero-new-runtime-deps invariant. Any screen recorder pointed at the page will produce a true MP4 if needed downstream.
 
 **CLI.**
 
@@ -332,10 +352,10 @@ Second slice of Phase R+. Adds a **real-Docker** container backend that talks to
 **Tests.**
 
 - New gated suite [tests/docker-container-adapter.test.ts](tests/docker-container-adapter.test.ts). Probes the Docker socket at startup; **skips with a clear log line** when unreachable, and runs a full alpine round-trip when present:
-  - `engine.ping()` → image pull → create + start
-  - `echo` round-trip with stdout assertion
-  - filesystem mutation → snapshot → second mutation → `revertSnapshot` → state restored to v1
-  - `stopContainer` + `destroyContainer` with snapshot-image pruning.
+    - `engine.ping()` → image pull → create + start
+    - `echo` round-trip with stdout assertion
+    - filesystem mutation → snapshot → second mutation → `revertSnapshot` → state restored to v1
+    - `stopContainer` + `destroyContainer` with snapshot-image pruning.
 - Registered in both [tests/index.ts](tests/index.ts) (`DockerContainerAdapter` suite) and the mocha CLI in [package.json](package.json).
 
 **Verification.** `npm run build` clean. `node dist/tests/index.js` reports `Tests: 76 | Passed: 76 | Failed: 0` (existing `ContainerSandboxAdapter` suite untouched). New Docker suite logs `⤳ Docker container adapter tests skipped: Docker Engine API not reachable at \\.\pipe\docker_engine` on the Windows dev host (no Docker Desktop installed) and is set to run the full alpine round-trip on Linux CI runners with `docker.sock` present. Pure-additive: zero edits to existing adapters, dashboard, or UI; Frontend Protection Guarantee preserved.
@@ -349,10 +369,10 @@ First slice of Phase R+ (Reality Adapters). The `TerminalSessionAdapter` was alr
 **New.**
 
 1. **`TerminalSessionAdapter.pauseSession(session_id)` and `.resumeSession(session_id)`** — [src/adapters/application/terminal-session-adapter.ts](src/adapters/application/terminal-session-adapter.ts). Real OS-level suspension of the PTY child process.
-   - **POSIX**: `process.kill(pid, "SIGSTOP")` / `"SIGCONT"`.
-   - **Win32**: `NtSuspendProcess` / `NtResumeProcess` invoked through PowerShell P/Invoke against `ntdll.dll`. Mirrors the existing `SendInput` P/Invoke pattern shipped in [src/adapters/system/computer-use-tool.ts](src/adapters/system/computer-use-tool.ts) — no new native dependencies.
-   - Both methods persist signal-log entries (`SIGSTOP` / `SIGCONT` / `NtSuspendProcess` / `NtResumeProcess`), update session state to `SUSPENDED` / `ACTIVE`, and emit `terminal_session_pause` / `terminal_session_resume` activity-bus events at `tier1_autonomous`.
-   - Idempotent: calling `pauseSession` on an already-suspended session re-issues the call and refreshes the audit log.
+    - **POSIX**: `process.kill(pid, "SIGSTOP")` / `"SIGCONT"`.
+    - **Win32**: `NtSuspendProcess` / `NtResumeProcess` invoked through PowerShell P/Invoke against `ntdll.dll`. Mirrors the existing `SendInput` P/Invoke pattern shipped in [src/adapters/system/computer-use-tool.ts](src/adapters/system/computer-use-tool.ts) — no new native dependencies.
+    - Both methods persist signal-log entries (`SIGSTOP` / `SIGCONT` / `NtSuspendProcess` / `NtResumeProcess`), update session state to `SUSPENDED` / `ACTIVE`, and emit `terminal_session_pause` / `terminal_session_resume` activity-bus events at `tier1_autonomous`.
+    - Idempotent: calling `pauseSession` on an already-suspended session re-issues the call and refreshes the audit log.
 
 **Tests.**
 
@@ -371,9 +391,9 @@ Patch release on top of `v0.16.1`. The Playwright fix in `v0.15.1` finally let t
 1. **Reason-Code Taxonomy** — [src/core/policy/reason-code-taxonomy.ts](src/core/policy/reason-code-taxonomy.ts). The `CAC_PLACEHOLDER_IDENTITY_DENY` and `CAC_EMAIL_VERIFICATION_REQUIRED` policy reason codes (added in Phases E3b and E5 respectively) had never been registered in `REASON_CODE_TAXONOMY`. Both now have `identity` / `deny` entries with full descriptions. Restores `taxonomy size equals POLICY_REASON_CODES + TAXONOMY_CODES` (was 90, now 92) and the `all POLICY_REASON_CODES are present in the taxonomy` invariant.
 
 2. **OpenAPI spec drift** — [src/core/operator/openapi-generator.ts](src/core/operator/openapi-generator.ts).
-   - Path keys now match OpenAPI 3.0 convention: bare paths (e.g. `/telemetry/slo-summary`, `/plugins/{name}/toggle`), with the `/api/v1` prefix carried in `servers[].url`. Was previously double-keyed under `/api/v1/...`.
-   - Renamed plugin path parameter from `{pluginName}` to `{name}` to match the live route handler.
-   - Added two endpoints that existed in the runtime but were missing from the spec: `GET /telemetry/slo-summary` and `GET /plugins/{name}/health`.
+    - Path keys now match OpenAPI 3.0 convention: bare paths (e.g. `/telemetry/slo-summary`, `/plugins/{name}/toggle`), with the `/api/v1` prefix carried in `servers[].url`. Was previously double-keyed under `/api/v1/...`.
+    - Renamed plugin path parameter from `{pluginName}` to `{name}` to match the live route handler.
+    - Added two endpoints that existed in the runtime but were missing from the spec: `GET /telemetry/slo-summary` and `GET /plugins/{name}/health`.
 
 3. **Backward-compat 301 redirect** — [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts). Re-introduced the unmatched-`/api/<path>` → `301 /api/v1/<path>` redirect that was removed under E2 due to a redirect-loop hazard. The hazard came from a since-deleted reverse `/api/v1/* → /api/*` redirect that no longer exists; the client-side `request()` helper rewrites in the forward direction only, so re-adding the forward 301 is now safe and restores E3e wire compatibility for unversioned external clients.
 
@@ -393,7 +413,7 @@ Patch release on top of `v0.16.0`. After `v0.16.0` shipped, the QG run on commit
 assert.ok(thrown instanceof OidcError)
 ```
 
-**Root cause.** Both the OIDC ID-token tamper (`valid.token.slice(0, -2) + "AA"`) and the session-cookie tamper (`cookie.slice(0, -2) + "AA"`) only flipped the trailing 12 bits of a base64url-encoded signature. Because the last 4–6 bits of the encoding are padding/garbage, on roughly 1-in-256 runs the *decoded* signature byte was unchanged, the signature still verified, no error was thrown, and `assert.ok(thrown instanceof OidcError)` failed. The test had been silently flaky since H-2 landed.
+**Root cause.** Both the OIDC ID-token tamper (`valid.token.slice(0, -2) + "AA"`) and the session-cookie tamper (`cookie.slice(0, -2) + "AA"`) only flipped the trailing 12 bits of a base64url-encoded signature. Because the last 4–6 bits of the encoding are padding/garbage, on roughly 1-in-256 runs the _decoded_ signature byte was unchanged, the signature still verified, no error was thrown, and `assert.ok(thrown instanceof OidcError)` failed. The test had been silently flaky since H-2 landed.
 
 **Fix.** [tests/iam-sso.test.ts](tests/iam-sso.test.ts) — both tamper sites now decode the base64url signature, XOR the first byte with `0xff`, and re-encode. The mutation is byte-deterministic regardless of the original signature contents.
 
@@ -408,9 +428,9 @@ Minor release on top of `v0.15.1`. Adds a strictly-additive read-only operator s
 1. [`Soc2EvidenceExporter.getStatus()`](src/core/compliance/soc2-exporter.ts) returns `{enabled, mode, running, webhookFlavor?, outputDir?, lastEventAt, totalEvents, droppedEvents}`. The exporter now also tracks `totalEvents` / `droppedEvents` / `lastEventAt` internally; the values are zeroed when the exporter is off and have no effect on its hot path.
 2. [`ActivityRetentionPolicy.getStatus()` and `getLastSweep()`](src/core/activity/retention-policy.ts) cache the most recent `ActivityRetentionSweepResult` and the wall-clock `lastSweepAt` ISO timestamp. `getStatus()` returns `{enabled:true, retentionDays, sweepIntervalMs, dbPath, running, lastSweepAt, lastSweep}`.
 3. Two new read-only HTTP endpoints in [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts):
-   - `GET /api/compliance/soc2/status`
-   - `GET /api/activity/retention/status`
-   Both return `{enabled:false}` cleanly when their env gate is unset.
+    - `GET /api/compliance/soc2/status`
+    - `GET /api/activity/retention/status`
+      Both return `{enabled:false}` cleanly when their env gate is unset.
 
 **New — frontend (additive only).**
 
@@ -434,13 +454,13 @@ Patch release on top of `v0.15.0`. Closes the two pre-existing CI gates that hav
 **Fixes.**
 
 1. **PRISM Quality Gates: Playwright Chromium installation** in [.github/workflows/quality-gates.yml](.github/workflows/quality-gates.yml).
-   - The QG runner ran `npm test`, which transitively launches a real Chromium via Playwright for the browser-session test set, but never installed the browser binaries on the runner. 51 mocha tests timed out trying to launch a missing executable.
-   - Added `actions/cache@v4` keyed on `package-lock.json` against `~/.cache/ms-playwright`, plus a conditional `npx playwright install --with-deps chromium` on cache miss / `npx playwright install-deps chromium` on cache hit (system libs aren't cached).
-   - First run after this change repopulates the cache (~2 minutes); subsequent runs are warm.
+    - The QG runner ran `npm test`, which transitively launches a real Chromium via Playwright for the browser-session test set, but never installed the browser binaries on the runner. 51 mocha tests timed out trying to launch a missing executable.
+    - Added `actions/cache@v4` keyed on `package-lock.json` against `~/.cache/ms-playwright`, plus a conditional `npx playwright install --with-deps chromium` on cache miss / `npx playwright install-deps chromium` on cache hit (system libs aren't cached).
+    - First run after this change repopulates the cache (~2 minutes); subsequent runs are warm.
 
 2. **PRISM CodeQL: tolerate disabled code scanning** in [.github/workflows/codeql.yml](.github/workflows/codeql.yml).
-   - Code scanning on private repos requires GitHub Advanced Security (a paid add-on). With GHAS off, the analysis step succeeds but the SARIF upload to the Security tab fails with HTTP 403, marking the workflow run as failed and (with branch-protection wired) blocking PRs on a billing decision rather than a code defect.
-   - Added `continue-on-error: true` at the `analyze` job level. The analysis still runs on every push / PR / weekly cron, so the moment GHAS is enabled it becomes a real gate with no workflow change needed.
+    - Code scanning on private repos requires GitHub Advanced Security (a paid add-on). With GHAS off, the analysis step succeeds but the SARIF upload to the Security tab fails with HTTP 403, marking the workflow run as failed and (with branch-protection wired) blocking PRs on a billing decision rather than a code defect.
+    - Added `continue-on-error: true` at the `analyze` job level. The analysis still runs on every push / PR / weekly cron, so the moment GHAS is enabled it becomes a real gate with no workflow change needed.
 
 **Still tracked.** When GHAS is enabled, drop `continue-on-error: true` from `codeql.yml` and CodeQL becomes a hard gate again. Until then the run is informational.
 
@@ -453,9 +473,9 @@ Minor release on top of `v0.14.3`. Begins W6 (post-W5 closeout) with a default-o
 **New.**
 
 1. New module `src/core/activity/retention-policy.ts` exporting `ActivityRetentionPolicy`, `ActivityRetentionConfig`, `ActivityRetentionSweepResult`, and `resolveRetentionConfigFromEnv`.
-   - Periodic sweep deletes rows from `activity_events` whose `timestamp` is older than `now - retentionDays`, then emits an `activity.retention.swept` governance event onto the ActivityBus carrying `{deleted, cutoffIso, durationMs, retentionDays}` and a `database` side-effect record (`mutating: true, reversible: false`).
-   - Config injection + a `now` clock for deterministic testing.
-   - `start()` is idempotent; the timer is `unref()`-ed so it never keeps the process alive on its own.
+    - Periodic sweep deletes rows from `activity_events` whose `timestamp` is older than `now - retentionDays`, then emits an `activity.retention.swept` governance event onto the ActivityBus carrying `{deleted, cutoffIso, durationMs, retentionDays}` and a `database` side-effect record (`mutating: true, reversible: false`).
+    - Config injection + a `now` clock for deterministic testing.
+    - `start()` is idempotent; the timer is `unref()`-ed so it never keeps the process alive on its own.
 
 2. Wired into `DashboardService` constructor immediately after the SOC 2 evidence exporter, gated by `resolveRetentionConfigFromEnv(activityStore.dbPath)`. When the env-gate is unset, the field is `null` and no sweeps run.
 
@@ -476,12 +496,12 @@ Patch release on top of `v0.14.2`. After v0.14.2 cleared the Linux runtime crash
 **Fixes.**
 
 1. `buildSignaturePayload` shape mismatch in [src/core/plugins/plugin-pack-validator.ts](src/core/plugins/plugin-pack-validator.ts).
-   - When a fresh manifest is signed *before* its `security.signature` is attached, the sign-side payload has no `security` field at all. The verify-side payload, after `delete copy.security.signature` + `delete copy.security.signature_algorithm`, was left with an empty `"security":{}` object. The two payloads serialized to different JSON, so signatures by an "official" tier key never verified.
-   - Drop the `security` key entirely after deletion if it has become empty. Restores the `resolvePluginTrustTier: valid official signature returns official tier` assertion under Mocha on Linux CI.
+    - When a fresh manifest is signed _before_ its `security.signature` is attached, the sign-side payload has no `security` field at all. The verify-side payload, after `delete copy.security.signature` + `delete copy.security.signature_algorithm`, was left with an empty `"security":{}` object. The two payloads serialized to different JSON, so signatures by an "official" tier key never verified.
+    - Drop the `security` key entirely after deletion if it has become empty. Restores the `resolvePluginTrustTier: valid official signature returns official tier` assertion under Mocha on Linux CI.
 
 2. E2E smoke "GET / returns the PRISM dashboard HTML shell" + "renders the dashboard in a real Chromium browser" in [tests/e2e/playwright-smoke.test.ts](tests/e2e/playwright-smoke.test.ts).
-   - The dashboard handler 302-redirects `/` to `/setup` until `setupComplete` is true in the preferences file. CI's fresh checkout has no preferences file, so both smoke assertions saw `302` instead of `200` and "PRISM — Setup Wizard" instead of "PRISM Frontier Console".
-   - The smoke contract is "the dashboard shell is reachable", not "first-run wizard works". The `before()` hook now writes a minimal preferences JSON (`setupComplete: true`, `uiMode: "advanced"`) into the per-test temp dir and points `PRISM_PREFERENCES_PATH` at it, so the redirect does not fire and the test's intent is preserved.
+    - The dashboard handler 302-redirects `/` to `/setup` until `setupComplete` is true in the preferences file. CI's fresh checkout has no preferences file, so both smoke assertions saw `302` instead of `200` and "PRISM — Setup Wizard" instead of "PRISM Frontier Console".
+    - The smoke contract is "the dashboard shell is reachable", not "first-run wizard works". The `before()` hook now writes a minimal preferences JSON (`setupComplete: true`, `uiMode: "advanced"`) into the per-test temp dir and points `PRISM_PREFERENCES_PATH` at it, so the redirect does not fire and the test's intent is preserved.
 
 **Verification.** `npm run build` clean; `node dist/tests/index.js` reports `Tests: 75 | Passed: 75 | Failed: 0`; `node dist/tests/plugin-pack-validator.test.js` reports `Passed: 36, Failed: 0`.
 
@@ -519,13 +539,13 @@ Patch release on top of `v0.14.0` to fix the multi-arch Docker image build that 
 
 Rolls up Workstreams 1–5. `package.json` bumped from `0.5.0` → `0.14.0`. All work is **strictly additive** with the Frontend Protection Guarantee preserved end-to-end. **No new external runtime dependencies** introduced across any workstream. **75/75 unit tests pass.**
 
-| # | Workstream | Sub-tag | Headline deliverable |
-| - | ---------- | ------- | -------------------- |
-| W1 | OpenAI compat shim wired | `v0.10.1-openai-compat-wired` | OpenAI SDK clients reach PRISM by changing only `base_url`. |
-| W2 | Phase R Readiness polish  | `v0.11.0-readiness-polish`    | SECURITY.md + CodeQL + nightly + release workflows + .env audit. |
-| W3 | Enterprise IAM (H-1+H-2+H-3) | `v0.12.0-enterprise-iam`      | IAM data model + RBAC, OIDC SSO + session cookies, SCIM 2.0 + admin REST + admin UI. Default-off via `PRISM_ENTERPRISE_IAM`. |
-| W4 | Hosted Cloud trial scaffold  | `v0.13.0-cloud-trial`         | Helm chart + Terraform `prism-aws` module + GHCR docker/helm publish workflows. |
-| W5 | SOC 2 evidence exporter      | `v0.14.0-soc2-exporter`       | Default-off `Soc2EvidenceExporter` with file + webhook (Vanta/Drata/generic) transports + DLQ + backfill CLI. |
+| #   | Workstream                   | Sub-tag                       | Headline deliverable                                                                                                         |
+| --- | ---------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| W1  | OpenAI compat shim wired     | `v0.10.1-openai-compat-wired` | OpenAI SDK clients reach PRISM by changing only `base_url`.                                                                  |
+| W2  | Phase R Readiness polish     | `v0.11.0-readiness-polish`    | SECURITY.md + CodeQL + nightly + release workflows + .env audit.                                                             |
+| W3  | Enterprise IAM (H-1+H-2+H-3) | `v0.12.0-enterprise-iam`      | IAM data model + RBAC, OIDC SSO + session cookies, SCIM 2.0 + admin REST + admin UI. Default-off via `PRISM_ENTERPRISE_IAM`. |
+| W4  | Hosted Cloud trial scaffold  | `v0.13.0-cloud-trial`         | Helm chart + Terraform `prism-aws` module + GHCR docker/helm publish workflows.                                              |
+| W5  | SOC 2 evidence exporter      | `v0.14.0-soc2-exporter`       | Default-off `Soc2EvidenceExporter` with file + webhook (Vanta/Drata/generic) transports + DLQ + backfill CLI.                |
 
 ### Loose-end fixes bundled with this release
 
@@ -557,9 +577,9 @@ Closes the original 5-workstream plan. Adds a default-off `Soc2EvidenceExporter`
 ### Added — Exporter
 
 - **[`src/core/compliance/soc2-exporter.ts`](src/core/compliance/soc2-exporter.ts)** — `Soc2EvidenceExporter` with the same start/stop/onEvent shape as `OtelExporter`. Public surface:
-  - `classifyEventForSoc2(event)` — pure predicate returning the list of Trust Services Criteria controls an `ActivityEvent` maps to (CC6.1 logical access, CC6.6 boundary protection, CC7.2 anomaly detection, CC8.1 change management) or `null` to drop the event.
-  - `mapEventToSoc2(event, controls)` — pure mapper to a stable `Soc2EvidenceRecord` (schemaVersion 1) carrying the source event's sha256 hash for chain-of-custody and pruning non-mutating side-effects from the CC8.1 surface.
-  - `backfillFromEvents(events, { since?, until? })` — pure helper used by the backfill CLI.
+    - `classifyEventForSoc2(event)` — pure predicate returning the list of Trust Services Criteria controls an `ActivityEvent` maps to (CC6.1 logical access, CC6.6 boundary protection, CC7.2 anomaly detection, CC8.1 change management) or `null` to drop the event.
+    - `mapEventToSoc2(event, controls)` — pure mapper to a stable `Soc2EvidenceRecord` (schemaVersion 1) carrying the source event's sha256 hash for chain-of-custody and pruning non-mutating side-effects from the CC8.1 surface.
+    - `backfillFromEvents(events, { since?, until? })` — pure helper used by the backfill CLI.
 - **FileTransport**: appends one JSONL record per event to `prism-output/soc2/YYYY-MM-DD.jsonl`. Daily rotation is driven by an injectable `now()` clock so tests can pin the date deterministically.
 - **WebhookTransport**: in-memory batching (default `batchSize=32`, `flushIntervalMs=60000`). Flushes on close. Vendor envelopes — `generic` (`{records:[…]}`), `vanta` (`{source:"prism", evidence:[…]}`), `drata` (`{vendor:"prism", records:[…]}`) — selectable via `PRISM_SOC2_WEBHOOK_FLAVOR`. On HTTP failure, the unflushed batch is appended to `prism-output/soc2/_dlq.jsonl` so evidence is never silently lost.
 - Errors inside the exporter are swallowed defensively — the host PRISM process is never crashed by an evidence-pipeline failure.
@@ -583,12 +603,12 @@ Closes the original 5-workstream plan. Adds a default-off `Soc2EvidenceExporter`
 
 ### Trust Services Criteria coverage
 
-| Control | Source predicate                                                                |
-| ------- | ------------------------------------------------------------------------------- |
-| CC6.1   | `operation` starts with `auth.` / `iam.` / `rbac.` / `sso.`                     |
-| CC6.6   | `layer === "governance"` OR `policyDecision` is set                             |
-| CC7.2   | `status === "failed"` OR `policyDecision` is `deny` / `require_approval`        |
-| CC8.1   | Any side-effect with `mutating: true`                                           |
+| Control | Source predicate                                                         |
+| ------- | ------------------------------------------------------------------------ |
+| CC6.1   | `operation` starts with `auth.` / `iam.` / `rbac.` / `sso.`              |
+| CC6.6   | `layer === "governance"` OR `policyDecision` is set                      |
+| CC7.2   | `status === "failed"` OR `policyDecision` is `deny` / `require_approval` |
+| CC8.1   | Any side-effect with `mutating: true`                                    |
 
 ### Operational notes
 
@@ -638,21 +658,21 @@ Final Phase H sub-phase. Lands the SCIM 2.0 provisioning surface under `/scim/v2
 ### Added — SCIM 2.0 provisioning
 
 - **[`src/core/operator/routes/scim-handler.ts`](src/core/operator/routes/scim-handler.ts)** — `ScimRouteHandler` implementing the spec-compliant subset needed for Okta / Entra ID / OneLogin / JumpCloud:
-  - **Discovery**: `GET /scim/v2/ServiceProviderConfig`, `GET /scim/v2/Schemas`, `GET /scim/v2/ResourceTypes`.
-  - **Users**: `GET` (list with `userName eq "x"` filter, `startIndex` + `count` pagination), `POST` (create + auto-grant `viewer`), `GET /:id`, `PUT /:id` (active toggle), `PATCH /:id` (handles both `{op:"replace", path:"active", value:false}` and the path-less `{op:"replace", value:{active:false}}` shape that Okta sends), `DELETE /:id` (deprovisions — never hard-deletes so audit references remain intact).
-  - **Groups**: read-only `GET` and `GET /:id` listing the four canonical roles.
-  - **Auth**: bearer-only. SCIM tokens are verified via `IamStore.verifyScimToken`; the legacy admin token can also be passed via an injectable `adminTokenVerifier` so an operator can call SCIM without first provisioning a SCIM token.
-  - **Errors**: typed SCIM-spec error envelope (`schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"]`, `status`, `detail`, `scimType` for `uniqueness` collisions).
-  - Out of scope (tracked as **H-3.1**): complex filter expressions beyond `userName eq`, bulk operations, group-write operations.
+    - **Discovery**: `GET /scim/v2/ServiceProviderConfig`, `GET /scim/v2/Schemas`, `GET /scim/v2/ResourceTypes`.
+    - **Users**: `GET` (list with `userName eq "x"` filter, `startIndex` + `count` pagination), `POST` (create + auto-grant `viewer`), `GET /:id`, `PUT /:id` (active toggle), `PATCH /:id` (handles both `{op:"replace", path:"active", value:false}` and the path-less `{op:"replace", value:{active:false}}` shape that Okta sends), `DELETE /:id` (deprovisions — never hard-deletes so audit references remain intact).
+    - **Groups**: read-only `GET` and `GET /:id` listing the four canonical roles.
+    - **Auth**: bearer-only. SCIM tokens are verified via `IamStore.verifyScimToken`; the legacy admin token can also be passed via an injectable `adminTokenVerifier` so an operator can call SCIM without first provisioning a SCIM token.
+    - **Errors**: typed SCIM-spec error envelope (`schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"]`, `status`, `detail`, `scimType` for `uniqueness` collisions).
+    - Out of scope (tracked as **H-3.1**): complex filter expressions beyond `userName eq`, bulk operations, group-write operations.
 
 ### Added — IAM admin REST API
 
 - **[`src/core/operator/routes/iam-admin-handler.ts`](src/core/operator/routes/iam-admin-handler.ts)** — `IamAdminRouteHandler` mounted at `/api/iam/admin/*`. Endpoints:
-  - `GET /users` (with role names attached), `POST /users/:id/status` (`active`/`suspended`/`deprovisioned`), `POST /users/:id/roles` (`{ role }`), `DELETE /users/:id/roles/:roleName`.
-  - `GET /roles`.
-  - `GET /scim-tokens`, `POST /scim-tokens` (returns plaintext token ONCE), `DELETE /scim-tokens/:id`.
-  - **Auth**: every endpoint requires the principal to hold at least the `admin` role. Resolution chain: session cookie → API-key bearer → legacy admin bearer (synthetic `root` principal). Viewer cookies receive `403 forbidden`; missing credentials receive `401 unauthenticated`.
-  - The handler MUST register before `IamRouteHandler` in the route table so `/api/iam/admin/*` doesn't get swallowed by the broader `/api/iam/` matcher.
+    - `GET /users` (with role names attached), `POST /users/:id/status` (`active`/`suspended`/`deprovisioned`), `POST /users/:id/roles` (`{ role }`), `DELETE /users/:id/roles/:roleName`.
+    - `GET /roles`.
+    - `GET /scim-tokens`, `POST /scim-tokens` (returns plaintext token ONCE), `DELETE /scim-tokens/:id`.
+    - **Auth**: every endpoint requires the principal to hold at least the `admin` role. Resolution chain: session cookie → API-key bearer → legacy admin bearer (synthetic `root` principal). Viewer cookies receive `403 forbidden`; missing credentials receive `401 unauthenticated`.
+    - The handler MUST register before `IamRouteHandler` in the route table so `/api/iam/admin/*` doesn't get swallowed by the broader `/api/iam/` matcher.
 
 ### Added — admin UI (additive standalone page)
 
@@ -666,8 +686,8 @@ Final Phase H sub-phase. Lands the SCIM 2.0 provisioning surface under `/scim/v2
 ### Added — tests
 
 - **[`tests/iam-scim-admin.test.ts`](tests/iam-scim-admin.test.ts)** — two exported entry points:
-  - `testScimRoutes`: discovery 401-without-bearer + 200-with-bearer, `POST /Users` (201 + auto-grant `viewer`), uniqueness conflict (`409` + `scimType: "uniqueness"`), filter (`GET /Users?filter=userName eq "..."`), `PATCH` (both spec-form and Okta-form active-toggles), `DELETE` (204 + status=deprovisioned), `GET /Groups` listing the four roles, unsupported filter (`400 invalidFilter`), legacy-admin-bearer fallback via `adminTokenVerifier`.
-  - `testIamAdminRoutes`: anonymous → 401, viewer-cookie → 403, legacy-admin-bearer → 200 user list, role grant promotes a viewer to admin, status toggle, full SCIM-token CRUD (create / list / revoke), roles list returns all four canonical roles.
+    - `testScimRoutes`: discovery 401-without-bearer + 200-with-bearer, `POST /Users` (201 + auto-grant `viewer`), uniqueness conflict (`409` + `scimType: "uniqueness"`), filter (`GET /Users?filter=userName eq "..."`), `PATCH` (both spec-form and Okta-form active-toggles), `DELETE` (204 + status=deprovisioned), `GET /Groups` listing the four roles, unsupported filter (`400 invalidFilter`), legacy-admin-bearer fallback via `adminTokenVerifier`.
+    - `testIamAdminRoutes`: anonymous → 401, viewer-cookie → 403, legacy-admin-bearer → 200 user list, role grant promotes a viewer to admin, status toggle, full SCIM-token CRUD (create / list / revoke), roles list returns all four canonical roles.
 - **[`tests/index.ts`](tests/index.ts)** — registers both as `ScimRoutes` and `IamAdminRoutes`.
 
 ### Documentation
@@ -764,8 +784,8 @@ Closes the readiness-floor items identified in the Workstream 1–5 plan: top-le
 ### Changed — env surface documentation
 
 - **[`.env.example`](.env.example)** — new sections appended (no existing keys modified):
-  - **Phase E — Multi-tenant scoping (opt-in)**: documents `PRISM_MULTI_TENANT` and the `X-Prism-Tenant` request-header contract (`^[a-z0-9][a-z0-9_-]{0,63}$`).
-  - **Phase F/G — Compatibility surfaces (informative)**: documents the OpenAI client shape (`base_url = http://<host>:${PRISM_DASHBOARD_PORT}/v1`, bearer token = PRISM admin token) and the Python SDK client envs (`PRISM_BASE_URL`, `PRISM_TOKEN`).
+    - **Phase E — Multi-tenant scoping (opt-in)**: documents `PRISM_MULTI_TENANT` and the `X-Prism-Tenant` request-header contract (`^[a-z0-9][a-z0-9_-]{0,63}$`).
+    - **Phase F/G — Compatibility surfaces (informative)**: documents the OpenAI client shape (`base_url = http://<host>:${PRISM_DASHBOARD_PORT}/v1`, bearer token = PRISM admin token) and the Python SDK client envs (`PRISM_BASE_URL`, `PRISM_TOKEN`).
 
 ### Decisions / scope notes
 
@@ -781,15 +801,16 @@ Closes the loop on the previous shim entry: the `/v1/*` surface is now actually 
 ### Added — OpenAI compat router wiring
 
 - **[`src/core/operator/routes/openai-compat-handler.ts`](src/core/operator/routes/openai-compat-handler.ts)** — `OpenAiCompatHandler implements IRouteHandler`. Mounts:
-  - `POST /v1/chat/completions`
-  - `POST /v1/threads`
-  - `GET  /v1/threads/:thread_id`
-  - `POST /v1/threads/:thread_id/messages`
-  - `GET  /v1/threads/:thread_id/messages`
-  - `POST /v1/threads/:thread_id/runs`
-  - `GET  /v1/threads/:thread_id/runs/:run_id`
+    - `POST /v1/chat/completions`
+    - `POST /v1/threads`
+    - `GET  /v1/threads/:thread_id`
+    - `POST /v1/threads/:thread_id/messages`
+    - `GET  /v1/threads/:thread_id/messages`
+    - `POST /v1/threads/:thread_id/runs`
+    - `GET  /v1/threads/:thread_id/runs/:run_id`
 
-  Holds a single `OpenAiCompatStore` per process. The `ChatExecutor` is built lazily per request via `buildLlmProviderChatExecutor(service)` which (a) splits the OpenAI message array into the `(systemPrompt, conversation, lastUser)` shape `LlmProviderManager.generate()` expects, (b) maps `tokensUsed` → `usage`, and (c) returns a deterministic stub when no provider is configured (so the OpenAI client still receives a valid response shape rather than a transport-layer failure).
+    Holds a single `OpenAiCompatStore` per process. The `ChatExecutor` is built lazily per request via `buildLlmProviderChatExecutor(service)` which (a) splits the OpenAI message array into the `(systemPrompt, conversation, lastUser)` shape `LlmProviderManager.generate()` expects, (b) maps `tokensUsed` → `usage`, and (c) returns a deterministic stub when no provider is configured (so the OpenAI client still receives a valid response shape rather than a transport-layer failure).
+
 - **[`src/core/operator/routes/index.ts`](src/core/operator/routes/index.ts)** — `OpenAiCompatHandler` registered after `ApiHandler`. One-line import + one-line array push; existing handlers untouched.
 - **[`tests/openai-compat-routes.test.ts`](tests/openai-compat-routes.test.ts)** — HTTP-level test driven by synthetic `IncomingMessage`/`ServerResponse` and a stub `DashboardService`. Covers: `chat.completions` round-trip with executor invocation; streaming-rejected envelope; thread create with body, with no body, get round-trip, 404 on missing thread; messages append + list; full run lifecycle (create → poll → assistant message appended); unknown `/v1/*` 404; non-`/v1` URLs do **not** match; **executor exception in a run produces a `failed` run record at HTTP 200, not a 5xx** (matches OpenAI semantics).
 
@@ -803,7 +824,7 @@ Closes the loop on the previous shim entry: the `/v1/*` surface is now actually 
 
 ## Unreleased — 2026-05-06 — Phase G follow-up: OpenAI API compatibility shim (v0.10.0-openai-compat)
 
-Closes the *OpenAI Assistants API compatibility shim* item flagged as a high-conversion lever in the [2026 Q2 audit](docs/PRISM_FULL_AUDIT_2026_Q2.md) and the Phase G manifest. Existing `openai` Python/Node clients can now talk to PRISM with only a `base_url` change once the shim is mounted. World-class scaffold landed as a pure additive module; not yet wired into [`src/dashboard/dashboard-service.ts`](src/dashboard/dashboard-service.ts) — wiring is a future ~10-line follow-up. **64/64 tests pass** (63 prior + 1 new `OpenAiCompatShim`). Frontend Protection Guarantee preserved — no UI surfaces touched.
+Closes the _OpenAI Assistants API compatibility shim_ item flagged as a high-conversion lever in the [2026 Q2 audit](docs/PRISM_FULL_AUDIT_2026_Q2.md) and the Phase G manifest. Existing `openai` Python/Node clients can now talk to PRISM with only a `base_url` change once the shim is mounted. World-class scaffold landed as a pure additive module; not yet wired into [`src/dashboard/dashboard-service.ts`](src/dashboard/dashboard-service.ts) — wiring is a future ~10-line follow-up. **64/64 tests pass** (63 prior + 1 new `OpenAiCompatShim`). Frontend Protection Guarantee preserved — no UI surfaces touched.
 
 ### Added — OpenAI compatibility shim
 
@@ -820,7 +841,7 @@ Closes the *OpenAI Assistants API compatibility shim* item flagged as a high-con
 
 ## Unreleased — 2026-05-06 — Phase F follow-up: Python SDK scaffold (v0.9.0-python-sdk)
 
-Closes the largest single gap identified in the [2026 Q2 audit](docs/PRISM_FULL_AUDIT_2026_Q2.md) and the [AaaS competitive map](docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md) §4 — *language reach*. PRISM is now consumable from Python without any external dependency. World-class scaffold with stable surface for the most-used dashboard routes; SSE streaming included. All work additive per the Frontend Protection Guarantee — no UI, runtime, or existing source files modified. **11/11 SDK tests pass** alongside the existing **62/62 Node tests**.
+Closes the largest single gap identified in the [2026 Q2 audit](docs/PRISM_FULL_AUDIT_2026_Q2.md) and the [AaaS competitive map](docs/PRISM_COMPETITIVE_AaaS_MAP_2026.md) §4 — _language reach_. PRISM is now consumable from Python without any external dependency. World-class scaffold with stable surface for the most-used dashboard routes; SSE streaming included. All work additive per the Frontend Protection Guarantee — no UI, runtime, or existing source files modified. **11/11 SDK tests pass** alongside the existing **62/62 Node tests**.
 
 ### Added — Python SDK (`sdk/python/prism-client`)
 
@@ -839,7 +860,7 @@ Closes the largest single gap identified in the [2026 Q2 audit](docs/PRISM_FULL_
 
 ## Unreleased — 2026-05-05 — Phase G: Public Launch scaffolds (v0.8.0-public-launch)
 
-Implements 6 of 9 open **Phase G** items from [`docs/TODO.md`](docs/TODO.md). The remaining 3 — *Discord/GitHub Discussions hub*, *license model ratification + filing*, and *enterprise design partner recruitment* — are operational handoffs (community ops / legal / BD), not source-tree work. World-class scaffolds with integration seams; no new external dependencies. All work additive per the Frontend Protection Guarantee. **62/62 tests pass** (59 prior + 3 new).
+Implements 6 of 9 open **Phase G** items from [`docs/TODO.md`](docs/TODO.md). The remaining 3 — _Discord/GitHub Discussions hub_, _license model ratification + filing_, and _enterprise design partner recruitment_ — are operational handoffs (community ops / legal / BD), not source-tree work. World-class scaffolds with integration seams; no new external dependencies. All work additive per the Frontend Protection Guarantee. **62/62 tests pass** (59 prior + 3 new).
 
 ### Added — Phase G-A: Plugin SDK authoring guide + scaffolder
 
@@ -885,7 +906,7 @@ Implements 6 of 9 open **Phase G** items from [`docs/TODO.md`](docs/TODO.md). Th
 
 ## Unreleased — 2026-05-05 — Phase H: Novel Systems Incubation reconciliation
 
-Phase H of [`docs/TODO.md`](docs/TODO.md) was a forward-declared restatement of work already delivered upstream under *Aspirational / Wishlist → Novel Systems Incubation* and *SR Future Vision*. The Phase H section is now reconciled with cross-links to the canonical implementations and tests:
+Phase H of [`docs/TODO.md`](docs/TODO.md) was a forward-declared restatement of work already delivered upstream under _Aspirational / Wishlist → Novel Systems Incubation_ and _SR Future Vision_. The Phase H section is now reconciled with cross-links to the canonical implementations and tests:
 
 - **Constitutional Causal Compiler (CCC)** — [`src/core/incubation/ccc/`](src/core/incubation/ccc/) — `testCccCompiler`
 - **Dual-Lens Memory Arbitration (DLMA)** — [`src/core/incubation/dlma/`](src/core/incubation/dlma/) — `testDlmaArbiter`
@@ -897,7 +918,7 @@ No source changes; documentation-only reconciliation. Tests remain at **59/59 pa
 
 ## Unreleased — 2026-05-05 — Phase F: Production Qualification scaffolds (v0.7.0-production-qualification)
 
-Implements 8 of 9 open **Phase F** items from [`docs/TODO.md`](docs/TODO.md). The remaining item — *private beta recruitment* — is operational, not source-tree work, and is tracked outside of engineering. World-class scaffolds with integration seams; no new external dependencies (Postgres support uses optional dynamic import of `pg`). All work additive per the Frontend Protection Guarantee. **59/59 tests pass** (51 prior + 8 new).
+Implements 8 of 9 open **Phase F** items from [`docs/TODO.md`](docs/TODO.md). The remaining item — _private beta recruitment_ — is operational, not source-tree work, and is tracked outside of engineering. World-class scaffolds with integration seams; no new external dependencies (Postgres support uses optional dynamic import of `pg`). All work additive per the Frontend Protection Guarantee. **59/59 tests pass** (51 prior + 8 new).
 
 ### Added — Phase F-A: Persistence Interfaces
 
@@ -944,9 +965,9 @@ Implements 8 of 9 open **Phase F** items from [`docs/TODO.md`](docs/TODO.md). Th
 
 ### Decisions / scope notes
 
-- **Postgres adapter is a *seam***. Synchronous `IDatabaseAdapter` semantics (driven by `node:sqlite`) prevent direct query routing; `queryAllAsync` is provided for incremental adoption. Full async DAL bridging is the next pass.
+- **Postgres adapter is a _seam_**. Synchronous `IDatabaseAdapter` semantics (driven by `node:sqlite`) prevent direct query routing; `queryAllAsync` is provided for incremental adoption. Full async DAL bridging is the next pass.
 - **No new npm dependencies**. `pg` enters as an optional peer (dynamic import); OWASP scanning is in-house; semgrep deferred.
-- **Soak/stress harnesses are scripts, not registered runtime tests** — full runs would dominate CI time. Harness *math* is unit-tested.
+- **Soak/stress harnesses are scripts, not registered runtime tests** — full runs would dominate CI time. Harness _math_ is unit-tested.
 - **Private beta recruitment** retained as an open TODO with an operational note — intentionally not source-tree work.
 - **Frontend Protection Guarantee preserved** — no UI surfaces touched.
 
@@ -967,7 +988,7 @@ Implements all five **SR Future Vision** items and all four **Platform Evolution
 ### Added — Platform Evolution
 
 - **Multi-Tenant TenantContext** ([`src/core/config/tenant-context.ts`](src/core/config/tenant-context.ts)) — `AsyncLocalStorage`-based `withTenant`/`currentTenantContext`/`tenantSubroot`/`tenantHttpMiddleware`. Default tenant `"default"` preserves zero-behavior-change for single-tenant deployments. Multi-tenant scoping gated by `PRISM_MULTI_TENANT=on`. `X-Prism-Tenant` header validated by `^[a-z0-9][a-z0-9_-]{0,63}$`. Tenant subroots at `{root}/.tenants/{id}/`.
-- **Sync Adapter scaffold** ([`src/core/sync/`](src/core/sync/)) — `SyncAdapter` interface (`init`/`push`/`pull`/`status`); `NoopSyncAdapter` (default); `FilesystemSyncAdapter` (JSONL outbound under `outbound/{instance}-{ts}.jsonl`, idempotent inbound cursor at `inbound/{instance}/cursor.json`, replay safety via `_replayedFrom` tag); `SyncEngine` with layer allowlist (`audit`/`memory`/`preferences`/`marketplace`); selected via `PRISM_SYNC_ADAPTER=noop|filesystem`. HTTP/cloud transports deferred — the adapter abstraction *is* the seam.
+- **Sync Adapter scaffold** ([`src/core/sync/`](src/core/sync/)) — `SyncAdapter` interface (`init`/`push`/`pull`/`status`); `NoopSyncAdapter` (default); `FilesystemSyncAdapter` (JSONL outbound under `outbound/{instance}-{ts}.jsonl`, idempotent inbound cursor at `inbound/{instance}/cursor.json`, replay safety via `_replayedFrom` tag); `SyncEngine` with layer allowlist (`audit`/`memory`/`preferences`/`marketplace`); selected via `PRISM_SYNC_ADAPTER=noop|filesystem`. HTTP/cloud transports deferred — the adapter abstraction _is_ the seam.
 - **Plugin Marketplace** ([`src/core/plugins/plugin-marketplace.ts`](src/core/plugins/plugin-marketplace.ts)) — reads `{workspace}/marketplace/catalog.json`; `installFromCatalog(id)` copies `file://` packs into `{workspace}/plugins/installed/`; `http(s)://` returns `installation_unsupported_transport` (deferred to security review); business profile rejects `unsigned` entries; `uninstall()` archives non-destructively to `marketplace/.archive/`. Sample seed: [`examples/marketplace/catalog.json`](examples/marketplace/catalog.json). Gated `PRISM_MARKETPLACE=on`.
 - **PWA mobile/tablet companion** — [`public/manifest.json`](public/manifest.json) (standalone display, theme color, shortcuts), [`public/service-worker.js`](public/service-worker.js) (cache-first static, network-first GET API with cache fallback, never cache mutating verbs, network-only HTML navigations, versioned `CACHE_NAME`), [`public/phase-i-mobile-polish.css`](public/phase-i-mobile-polish.css) (`@media (hover: none) and (pointer: coarse)` 44×44 tap targets per WCAG 2.5.5 AAA, 16px form fields to defeat iOS auto-zoom, `@media (display-mode: standalone)` polish).
 
@@ -996,7 +1017,7 @@ Implements the three "Novel Systems Incubation" items in [`docs/TODO.md`](docs/T
 
 - **`src/core/incubation/ccc/types.ts`** — `Constitution`, `ConstitutionPrinciple`, `MemoryInvariant`, `CompiledStep`, `RuntimePlan` (content-addressed via sha256 of canonicalized skeleton).
 - **`src/core/incubation/ccc/constitution.ts`** — Dependency-free `validateConstitution()` + `loadConstitution(path)` with structured `ConstitutionValidationError`.
-- **`src/core/incubation/ccc/compiler.ts`** — `CausalCompiler.compile(dag, {profile, constitution, cac?, emailBoundOperations?})` projects each step against the live `PolicyEngine` *and* every applicable constitution principle. Produces deterministic `compilationHash` + `enforceable` bit + per-step `appliedPrincipleIds` + `unsatisfiableSteps[]`.
+- **`src/core/incubation/ccc/compiler.ts`** — `CausalCompiler.compile(dag, {profile, constitution, cac?, emailBoundOperations?})` projects each step against the live `PolicyEngine` _and_ every applicable constitution principle. Produces deterministic `compilationHash` + `enforceable` bit + per-step `appliedPrincipleIds` + `unsatisfiableSteps[]`.
 - **`src/core/incubation/ccc/enforcer.ts`** — `RuntimePlanEnforcer.authorizeStep(plan, stepId)` refuses any step flagged unsatisfiable or with a denied policy projection; emits `incubation.ccc.{step_authorized,step_blocked,step_unknown}` ActivityBus events.
 - **`examples/constitutions/business-default.json`** — Sample constitution with three principles (`no-mutation-without-rollback`, `no-placeholder-cac`, `bounded-step-timeout`) + memory invariant `retrieval-coverage-floor`.
 
@@ -1024,9 +1045,9 @@ Implements the three "Novel Systems Incubation" items in [`docs/TODO.md`](docs/T
 
 ### Tests
 
-- **`tests/ccc-compiler.test.ts`** *(new — `testCccCompiler`)* — constitution validation, all-allow path, business missing-rollback denial, hash determinism, enforcer block + authorize.
-- **`tests/dlma-arbiter.test.ts`** *(new — `testDlmaArbiter`)* — fusion math, EMA weight update + normalization, consequence filtering (policyDecision deny → trust drop), unknown-feedback no-op, empty-memory fallback.
-- **`tests/shws-synthesizer.test.ts`** *(new — `testShwsSynthesizer`)* — no-history null path, propose-from-history happy path, ApprovalQueue tier-3 routing, already-active guard, depth-cap, policy-invalid rejection.
+- **`tests/ccc-compiler.test.ts`** _(new — `testCccCompiler`)_ — constitution validation, all-allow path, business missing-rollback denial, hash determinism, enforcer block + authorize.
+- **`tests/dlma-arbiter.test.ts`** _(new — `testDlmaArbiter`)_ — fusion math, EMA weight update + normalization, consequence filtering (policyDecision deny → trust drop), unknown-feedback no-op, empty-memory fallback.
+- **`tests/shws-synthesizer.test.ts`** _(new — `testShwsSynthesizer`)_ — no-history null path, propose-from-history happy path, ApprovalQueue tier-3 routing, already-active guard, depth-cap, policy-invalid rejection.
 - Registered in [`tests/index.ts`](tests/index.ts). All 44 tests pass; build clean.
 
 ### Research lineage (informs the design — no code copied)
@@ -1039,12 +1060,12 @@ Closes the open Phase E3 / E5 follow-on items in [`docs/TODO.md`](docs/TODO.md):
 
 ### Added — Operator surfaces
 
-- **`src/core/operator/utility-registry.ts`** *(new)* — `UtilityRegistry` + `registerBuiltInUtilities()` + run-history ring buffer (cap 50). Built-ins: `regenerate-release-packet`, `run-contract-diff-gate`, `export-policy-audit`, `export-session-trace`, `run-perf-qualify`, `run-perf-trend-report`, `run-retrieval-trends`. Emits `utility.{id}.{started|succeeded|failed}` ActivityBus events.
-- **`src/core/operator/risk-override-store.ts`** *(new)* — `RiskOverrideStore` persists operator-managed tool risk overrides to JSON (`prism-output/state/risk-overrides.json`). Validates reason + future expiry; sweeps expired overrides on read; emits `risk.override.{set|cleared|expired}` events. Resolves effective tier per tool by combining classifier tier with active overrides.
-- **`src/core/memory/incident-trend-store.ts`** *(new)* — Subscribes to ActivityBus and aggregates `policy.deny`, `approval.timeout`, `retrieval.alert.*`, and `incident.*` events into per-day-per-profile buckets (cap 60 days). `getReport(profile, windowDays)` → window totals + daily averages.
-- **`src/core/memory/retrieval-alert-policy.ts`** *(extended)* — Adds `tuneFromIncidentTrends(base, signals)` which derives a tightened (never relaxed) `RetrievalAlertPolicy` from incident-trend signals: ≥5 denials/day raises `recentMinUtility`, ≥3 timeouts/day lowers latency tolerances, ≥4 alerts/day tightens drift threshold, ≥1 incident/day raises cohort hit-rate floor. Returns `{ base, tuned, rationale[] }`.
-- **`src/core/accountability/character-accountability-manager.ts`** *(extended)* — `getAssignmentChain(assignmentId)` returns the full `AccountabilityChain` plus active/expired scope counts and email-verification freshness; `markEmailVerified(assignmentId, email, provider)` records a verified OAuth roundtrip and emits `character_accountability.email_verified`; `isEmailVerificationFresh(id, maxAgeMs=30d)`; `exportAudit(filter)` materializes a JSON-serializable audit dump for dashboard download.
-- **`src/core/accountability/character-accountability-store.ts`** *(extended)* — Adds `email_verified_at` and `email_verified_provider` columns (idempotent migration via `ensureColumn`).
+- **`src/core/operator/utility-registry.ts`** _(new)_ — `UtilityRegistry` + `registerBuiltInUtilities()` + run-history ring buffer (cap 50). Built-ins: `regenerate-release-packet`, `run-contract-diff-gate`, `export-policy-audit`, `export-session-trace`, `run-perf-qualify`, `run-perf-trend-report`, `run-retrieval-trends`. Emits `utility.{id}.{started|succeeded|failed}` ActivityBus events.
+- **`src/core/operator/risk-override-store.ts`** _(new)_ — `RiskOverrideStore` persists operator-managed tool risk overrides to JSON (`prism-output/state/risk-overrides.json`). Validates reason + future expiry; sweeps expired overrides on read; emits `risk.override.{set|cleared|expired}` events. Resolves effective tier per tool by combining classifier tier with active overrides.
+- **`src/core/memory/incident-trend-store.ts`** _(new)_ — Subscribes to ActivityBus and aggregates `policy.deny`, `approval.timeout`, `retrieval.alert.*`, and `incident.*` events into per-day-per-profile buckets (cap 60 days). `getReport(profile, windowDays)` → window totals + daily averages.
+- **`src/core/memory/retrieval-alert-policy.ts`** _(extended)_ — Adds `tuneFromIncidentTrends(base, signals)` which derives a tightened (never relaxed) `RetrievalAlertPolicy` from incident-trend signals: ≥5 denials/day raises `recentMinUtility`, ≥3 timeouts/day lowers latency tolerances, ≥4 alerts/day tightens drift threshold, ≥1 incident/day raises cohort hit-rate floor. Returns `{ base, tuned, rationale[] }`.
+- **`src/core/accountability/character-accountability-manager.ts`** _(extended)_ — `getAssignmentChain(assignmentId)` returns the full `AccountabilityChain` plus active/expired scope counts and email-verification freshness; `markEmailVerified(assignmentId, email, provider)` records a verified OAuth roundtrip and emits `character_accountability.email_verified`; `isEmailVerificationFresh(id, maxAgeMs=30d)`; `exportAudit(filter)` materializes a JSON-serializable audit dump for dashboard download.
+- **`src/core/accountability/character-accountability-store.ts`** _(extended)_ — Adds `email_verified_at` and `email_verified_provider` columns (idempotent migration via `ensureColumn`).
 - **`src/core/policy/engine.ts`**, **`types.ts`**, **`reason-codes.ts`** — New gate: Business segment + tier-2+ + email-bound tools require fresh OAuth email verification within 30 days; emits `CAC_EMAIL_VERIFICATION_REQUIRED`. Adds `PolicyContext.emailBound` + `CacContext.emailVerifiedAt`.
 
 ### Added — Dashboard routes (operator API)
@@ -1056,15 +1077,15 @@ Closes the open Phase E3 / E5 follow-on items in [`docs/TODO.md`](docs/TODO.md):
 
 ### Added — CI: profile-differentiated perf trend history
 
-- **`scripts/perf-trend-report.cjs`** *(new)* — Maintains rolling per-profile p50/p95 history (`prism-output/profile-trends/{profile}-history.json`, cap 30), writes `profile-trends-summary.md`, and appends the summary to `$GITHUB_STEP_SUMMARY`. Soft-warn at +15% p95 drift, hard-fail at +30% only when `PRISM_PERF_GATE=strict`. Accepts per-profile JSON or falls back to `benchmarks.approvalContention`.
+- **`scripts/perf-trend-report.cjs`** _(new)_ — Maintains rolling per-profile p50/p95 history (`prism-output/profile-trends/{profile}-history.json`, cap 30), writes `profile-trends-summary.md`, and appends the summary to `$GITHUB_STEP_SUMMARY`. Soft-warn at +15% p95 drift, hard-fail at +30% only when `PRISM_PERF_GATE=strict`. Accepts per-profile JSON or falls back to `benchmarks.approvalContention`.
 - **`package.json`** — `perf:trend-report`, `perf:trend-gate` scripts.
 - **`.github/workflows/quality-gates.yml`** — Generates the report after `perf:qualify` and uploads `profile-trends/**` as the `profile-trends` artifact.
 
 ### Tests
 
-- **`tests/operator-surfaces-phase-e3.test.ts`** *(new)* — `testUtilityRegistry`, `testRiskOverrideStore`, `testIncidentTrendStore`, `testRetrievalAlertTuning`.
-- **`tests/perf-trend-report.test.ts`** *(new)* — `testPerfTrendReport`: `summarizeDrift` thresholds + Markdown rendering.
-- **`tests/character-accountability.test.ts`** *(extended)* — `testCharacterAccountabilityPhaseE3`: chain inspector + email-verification helpers + audit export.
+- **`tests/operator-surfaces-phase-e3.test.ts`** _(new)_ — `testUtilityRegistry`, `testRiskOverrideStore`, `testIncidentTrendStore`, `testRetrievalAlertTuning`.
+- **`tests/perf-trend-report.test.ts`** _(new)_ — `testPerfTrendReport`: `summarizeDrift` thresholds + Markdown rendering.
+- **`tests/character-accountability.test.ts`** _(extended)_ — `testCharacterAccountabilityPhaseE3`: chain inspector + email-verification helpers + audit export.
 - All 41 tests in the unit suite pass.
 
 ## Unreleased — 2026-05-04 (PTAC self-drive expansion + live `POST /api/chat`)
@@ -1073,22 +1094,22 @@ Closes the "Prism Testing & Active Control" headline ask: PTAC now drives Prism 
 
 ### Added — Live chat tier classifier
 
-- **`src/core/operator/chat-tier-classifier.ts`** *(new)* — pure pattern-based classifier. 12 Tier-3 patterns (`rm -rf`, `del /f /s /q`, `format <drive>:`, `mkfs`, `dd if=`, `drop database/schema/table`, `truncate table`, fork bombs, `Remove-Item -Recurse`, `shutdown /flag`, etc.) → `HIGH_RISK_APPROVAL_REQUIRED` deny. 13 Tier-2 patterns (send email, write/install/deploy/publish/push/commit, run command, modify config, schedule, post to social, http request) → `MEDIUM_RISK_ALLOW_CONDITIONAL` approval-gated. Default Tier-1 → `LOW_RISK_ALLOW_AUTONOMOUS` autonomous. Conservative — errs toward higher friction on ambiguity.
+- **`src/core/operator/chat-tier-classifier.ts`** _(new)_ — pure pattern-based classifier. 12 Tier-3 patterns (`rm -rf`, `del /f /s /q`, `format <drive>:`, `mkfs`, `dd if=`, `drop database/schema/table`, `truncate table`, fork bombs, `Remove-Item -Recurse`, `shutdown /flag`, etc.) → `HIGH_RISK_APPROVAL_REQUIRED` deny. 13 Tier-2 patterns (send email, write/install/deploy/publish/push/commit, run command, modify config, schedule, post to social, http request) → `MEDIUM_RISK_ALLOW_CONDITIONAL` approval-gated. Default Tier-1 → `LOW_RISK_ALLOW_AUTONOMOUS` autonomous. Conservative — errs toward higher friction on ambiguity.
 - **`src/core/operator/dashboard-service.ts`** — new `POST /api/chat` handler (next to the existing `GET /api/chat/stream`; coexists with `/api/chat/sessions/:id/messages` which is the full LLM round-trip). Three response shapes:
-  - **Tier 1** → `200 { tier:1, accepted:true, reason_code, response, session_id }`.
-  - **Tier 2** → `202 { tier:2, approval_pending_ids:[id], reason_code, matched_pattern, session_id }`. Uses a before/after `ApprovalQueue.list()` set diff to recover the freshly-allocated id from a fire-and-forget `queue.request(...)` (preserves the existing ApprovalQueue API surface).
-  - **Tier 3** → `200 { tier:3, denied:true, reason_code, matched_pattern, session_id }`.
-  - Validates `prompt` non-empty (`400 missing_prompt`); assigns `sessionId = body.sessionId ?? "ptac-${randomUUID().slice(0,8)}"`; emits `governance/chat.tier_classified` activity-bus events.
+    - **Tier 1** → `200 { tier:1, accepted:true, reason_code, response, session_id }`.
+    - **Tier 2** → `202 { tier:2, approval_pending_ids:[id], reason_code, matched_pattern, session_id }`. Uses a before/after `ApprovalQueue.list()` set diff to recover the freshly-allocated id from a fire-and-forget `queue.request(...)` (preserves the existing ApprovalQueue API surface).
+    - **Tier 3** → `200 { tier:3, denied:true, reason_code, matched_pattern, session_id }`.
+    - Validates `prompt` non-empty (`400 missing_prompt`); assigns `sessionId = body.sessionId ?? "ptac-${randomUUID().slice(0,8)}"`; emits `governance/chat.tier_classified` activity-bus events.
 
 ### Added — PTAC self-drive step kinds
 
 - **`src/ptac/types.ts`** — two new step kinds added to the `PtacStep` union:
-  - `BrowserDriveStep` — `kind:"browserDrive"`, sub-actions `launch | close | navigate | click | type | screenshot | assertText | assertSelector | waitForSelector`. Drives the dashboard's `/api/browser/*` browser-control surface (Playwright). Headless and CI-safe.
-  - `ComputerUseStep` — `kind:"computerUse"`, sub-actions `screenshot | mouse_move | mouse_click | type | key`. Drives `/api/computer/*` (Win32 SendInput / mouse_event / framebuffer capture). HOST-ONLY, dual-gated behind `--profile=host` AND `PRISM_PTAC_SAFE=1`.
+    - `BrowserDriveStep` — `kind:"browserDrive"`, sub-actions `launch | close | navigate | click | type | screenshot | assertText | assertSelector | waitForSelector`. Drives the dashboard's `/api/browser/*` browser-control surface (Playwright). Headless and CI-safe.
+    - `ComputerUseStep` — `kind:"computerUse"`, sub-actions `screenshot | mouse_move | mouse_click | type | key`. Drives `/api/computer/*` (Win32 SendInput / mouse_event / framebuffer capture). HOST-ONLY, dual-gated behind `--profile=host` AND `PRISM_PTAC_SAFE=1`.
 - **`src/ptac/orchestrator.ts`** —
-  - New per-scenario `latestBrowserSessionId` field; reset at start of each `runScenario` for cross-scenario isolation. Captures the session id from `browserDrive: launch` responses, supports the `"@latest"` sentinel and implicit inheritance for chained steps.
-  - `case "browserDrive"` — special-cases `screenshot` (GET `/api/browser/screenshot/:id`) and `close` (DELETE `/api/browser/sessions/:id`); routes all other actions as POST `/api/browser/<action>`. New `@dashboard` URL substitution token in `args.url` so scenario files stay portable.
-  - `case "computerUse"` — refuses to dispatch unless both safety gates are satisfied; clear advisory error otherwise.
+    - New per-scenario `latestBrowserSessionId` field; reset at start of each `runScenario` for cross-scenario isolation. Captures the session id from `browserDrive: launch` responses, supports the `"@latest"` sentinel and implicit inheritance for chained steps.
+    - `case "browserDrive"` — special-cases `screenshot` (GET `/api/browser/screenshot/:id`) and `close` (DELETE `/api/browser/sessions/:id`); routes all other actions as POST `/api/browser/<action>`. New `@dashboard` URL substitution token in `args.url` so scenario files stay portable.
+    - `case "computerUse"` — refuses to dispatch unless both safety gates are satisfied; clear advisory error otherwise.
 
 ### Added — Eight self-drive scenarios (s07–s14)
 
@@ -1098,19 +1119,19 @@ Closes the "Prism Testing & Active Control" headline ask: PTAC now drives Prism 
 - **`s10-self-drive-browser-shell`** — Headless Playwright launches → navigates to dashboard root → asserts `#app` mounts (suites: full/demo).
 - **`s11-self-drive-wizard-render`** — Browser navigates to the Setup Wizard route and asserts the shell renders (suite: full).
 - **`s12-self-drive-tab-smoke`** — Browser cycles through `/`, `/#/dashboard`, `/#/wizard`, `/#/logs`, `/#/governance` and asserts every route mounts (suite: full).
-- **`s13-self-drive-desktop-screenshot`** *(host-only)* — Computer-Use captures the operator's real desktop. Gated behind `--profile=host` + `PRISM_PTAC_SAFE=1` (suite: full).
+- **`s13-self-drive-desktop-screenshot`** _(host-only)_ — Computer-Use captures the operator's real desktop. Gated behind `--profile=host` + `PRISM_PTAC_SAFE=1` (suite: full).
 - **`s14-self-drive-kill-switch-ui`** — Tier-3 deny fires through `/api/chat`, then a real browser navigates to the governance route to capture evidence the deny propagates to the UI (suite: full).
 - **`src/ptac/index.ts`** — eight new side-effect imports register the scenarios in the registry.
 
 ### Added — Tests
 
 - **`tests/ptac-scenario-registry.test.ts`** — five new cases:
-  - All eight self-drive scenarios are registered.
-  - `s13` sets `requiresHost=true` and contains a `computerUse` step.
-  - Every browser-drive scenario's first `browserDrive` action is `launch` (catches accidental ordering bugs).
-  - `s08` records `expectedTier=2` + `expectApprovalRequired=true`.
-  - `s09` records `expectedTier=3` + `expectDeny=true`.
-  - `HOST_ONLY_KINDS` set extended to include `computerUse`.
+    - All eight self-drive scenarios are registered.
+    - `s13` sets `requiresHost=true` and contains a `computerUse` step.
+    - Every browser-drive scenario's first `browserDrive` action is `launch` (catches accidental ordering bugs).
+    - `s08` records `expectedTier=2` + `expectApprovalRequired=true`.
+    - `s09` records `expectedTier=3` + `expectDeny=true`.
+    - `HOST_ONLY_KINDS` set extended to include `computerUse`.
 - Test count: **21 passing** (up from 16) in the PTAC scenario-registry suite.
 
 ### Validated
@@ -1143,7 +1164,7 @@ Closes out the MCP-resilience effort by repairing the three remaining third-part
 
 ### Scope
 
-Fixes only the three third-party MCP server bugs that were blocking 7/7. Does not modify Prism core, the resilience layer, or any release-validation gates. Frontend Protection Guarantee preserved (no UI files touched). The previous session's deliberate non-goal — *"No upstream Python fixes — third-party MCP servers […] are not patched here"* — is now superseded for these three specific servers, since 7/7 was a hard user requirement.
+Fixes only the three third-party MCP server bugs that were blocking 7/7. Does not modify Prism core, the resilience layer, or any release-validation gates. Frontend Protection Guarantee preserved (no UI files touched). The previous session's deliberate non-goal — _"No upstream Python fixes — third-party MCP servers […] are not patched here"_ — is now superseded for these three specific servers, since 7/7 was a hard user requirement.
 
 ---
 
@@ -1168,9 +1189,9 @@ Adds operator-grade visibility into MCP server health and process console output
 - **`src/core/logging/console-interceptor.ts`** — new `ConsoleInterceptor` class. Wraps `process.stdout.write` and `process.stderr.write` with re-entrancy-safe partial-line buffering. 5000-line bounded ring buffer. Redacts admin-token printouts and any `*_SECRET` / `*_TOKEN` / `*_KEY` / `*_PASSWORD` / `*_PASSPHRASE` env values captured at install time. Public API: `install()`, `uninstall()` (idempotent, restores exact original write functions), `onLine(cb)`, `getTail(limit)`, `push()`, `clear()`. Exposes a process-wide singleton via `getConsoleInterceptor()`.
 - **`src/index.ts`** — installs the console interceptor as the very first action of `main()`, before any startup logging, so the dashboard's Live Console panel captures every line including the earliest `[PRISM][startup]` JWT/auth warnings.
 - **`src/core/operator/dashboard-service.ts`** — new `setMcpAdapter()` and `setConsoleInterceptor()` setters. Setting the console interceptor wires a listener that broadcasts every captured line as `{type:"console", ts, stream, line}` over the existing `wsClients` WebSocket fan-out (no new socket required). New REST endpoints (auth-gated):
-  - `GET /api/mcp/servers` — returns `{ attached, servers: [{ name, state, toolCount, retryCount, nextRetryAt, lastError, stderrTail }] }`.
-  - `POST /api/mcp/servers/:name/reconnect` — force-reconnect one server.
-  - `GET /api/debug/console?limit=N` — returns up to 5000 redacted ring-buffer lines (default 500).
+    - `GET /api/mcp/servers` — returns `{ attached, servers: [{ name, state, toolCount, retryCount, nextRetryAt, lastError, stderrTail }] }`.
+    - `POST /api/mcp/servers/:name/reconnect` — force-reconnect one server.
+    - `GET /api/debug/console?limit=N` — returns up to 5000 redacted ring-buffer lines (default 500).
 
 ### Added — Live Console UI
 
@@ -1450,12 +1471,12 @@ Date: 2026-04-25
 - **Static asset path containment**: Hardened the `/public/*` static route in `dashboard-service.ts` with a resolved-path containment check (`path.resolve` + `startsWith(publicDir)`) as defence-in-depth on top of the existing `..` strip, closing residual path-traversal surface (OWASP A01).
 
 - **Spectrum Refraction D4c advanced features** (20/20 tests passing):
-  - Multi-key model slot assignment (`leftSlot`, `rightSlot`) — route SR to any named LLM key slot
-  - Per-hemisphere timeout configuration (`leftTimeoutMs`, `rightTimeoutMs`)
-  - Circuit breaker — disables SR after successive hemisphere failures, auto-resets
-  - Audit trail — every SR generation emits signed activity events with isolation level, model assignments, and outcome
-  - Cost estimation — pre-flight token estimation before fan-out
-  - Show-hemispheres mode — exposes raw Left/Right responses to the operator UI alongside the fused synthesis
+    - Multi-key model slot assignment (`leftSlot`, `rightSlot`) — route SR to any named LLM key slot
+    - Per-hemisphere timeout configuration (`leftTimeoutMs`, `rightTimeoutMs`)
+    - Circuit breaker — disables SR after successive hemisphere failures, auto-resets
+    - Audit trail — every SR generation emits signed activity events with isolation level, model assignments, and outcome
+    - Cost estimation — pre-flight token estimation before fan-out
+    - Show-hemispheres mode — exposes raw Left/Right responses to the operator UI alongside the fused synthesis
 - **Approval endpoint path alignment** — TUI client calls (`/api/approval/pending`, `/api/approval/:id/approve`, `/api/approval/:id/deny`) now match server routes; previous mismatch caused all TUI approval flows to 404.
 - **REST-canonical approval routes** — Added `/api/approval/:id/approve` and `/api/approval/:id/deny` alongside legacy routes.
 - **`POST /api/tools/stage` approval routing** — Tier 3 contracts are now enqueued into the approval queue when `approval_routing: true` is set; response includes `approval_pending_ids`.
@@ -1521,9 +1542,9 @@ Date: 2026-04-12
 
 - **Spectrum Refraction (SR) tri-model orchestration system** — Compounding parallel fan-out across Left (Logic), Right (Creative), and Main (Coordination) hemispheres with structured aggregation.
 - **Instance isolation enforcement** — Mandatory uniqueness validation at every gate:
-  - `/api/sr/configure` rejects identical Left/Right model+provider
-  - `/api/sr/activate` re-validates before enabling
-  - `generateSR()` pre-flight guard before fan-out
+    - `/api/sr/configure` rejects identical Left/Right model+provider
+    - `/api/sr/activate` re-validates before enabling
+    - `generateSR()` pre-flight guard before fan-out
 - **SRIsolationLevel classification** — Three-tier isolation quality: `full` (different providers), `model` (same provider, different models), `insufficient` (rejected).
 - **SR API endpoints** — Four new routes: `/api/sr/status`, `/api/sr/configure`, `/api/sr/activate`, `/api/sr/deactivate`.
 - **SR model capability validation** — `validateSRLeftModel()`, `validateSRRightModel()`, `filterSRLogicModels()`, `filterSRCreativeModels()` for role-qualified model filtering.

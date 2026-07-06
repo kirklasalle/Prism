@@ -95,10 +95,7 @@ export async function testNetworkAdapterSafety(): Promise<void> {
     if (isWindows) {
         // Sub-command "set zzz" makes netsh exit non-zero quickly; we only
         // care that classification recognised it (output carries `tier`).
-        const r = await tool.execute(makeRequest(
-            { command: "netsh interface set zzz", timeoutMs: 5_000 },
-            "high",
-        ));
+        const r = await tool.execute(makeRequest({ command: "netsh interface set zzz", timeoutMs: 5_000 }, "high"));
         // ok may be true or false depending on netsh exit; what matters is
         // that the response is not the "not recognized" branch.
         assert.doesNotMatch(errorOf(r.output), /not recognized/i, "longest-prefix classification must succeed");

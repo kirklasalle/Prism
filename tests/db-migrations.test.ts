@@ -22,7 +22,11 @@ describe("MigrationRunner", () => {
     });
 
     afterEach(() => {
-        try { db.close(); } catch { /* already closed */ }
+        try {
+            db.close();
+        } catch {
+            /* already closed */
+        }
         if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
     });
 
@@ -48,9 +52,7 @@ describe("MigrationRunner", () => {
     });
 
     it("is idempotent — second run applies nothing", () => {
-        const migrations: Migration[] = [
-            { version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY);" },
-        ];
+        const migrations: Migration[] = [{ version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY);" }];
         new MigrationRunner(db, migrations).run();
         const second = new MigrationRunner(db, migrations).run();
         assert.strictEqual(second.applied.length, 0);
@@ -59,9 +61,7 @@ describe("MigrationRunner", () => {
     });
 
     it("applies only newly-added migrations on a subsequent run", () => {
-        new MigrationRunner(db, [
-            { version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY);" },
-        ]).run();
+        new MigrationRunner(db, [{ version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY);" }]).run();
 
         const result = new MigrationRunner(db, [
             { version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY);" },
@@ -84,10 +84,7 @@ describe("MigrationRunner", () => {
             up: "INSERT INTO does_not_exist (id) VALUES ('x');",
         };
 
-        assert.throws(
-            () => new MigrationRunner(db, [ok, bad]).run(),
-            /migration v2 \(bad\) failed/,
-        );
+        assert.throws(() => new MigrationRunner(db, [ok, bad]).run(), /migration v2 \(bad\) failed/);
 
         // Migration v2 must not be recorded.
         const runner = new MigrationRunner(db, [ok]);
@@ -95,47 +92,45 @@ describe("MigrationRunner", () => {
     });
 
     it("rejects a checksum mismatch on a previously-applied migration", () => {
-        const original: Migration[] = [
-            { version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY);" },
-        ];
+        const original: Migration[] = [{ version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY);" }];
         new MigrationRunner(db, original).run();
 
         // Operator silently edits v1 — the runner must catch it.
         const tampered: Migration[] = [
             { version: 1, name: "init", up: "CREATE TABLE foo (id TEXT PRIMARY KEY, evil TEXT);" },
         ];
-        assert.throws(
-            () => new MigrationRunner(db, tampered).run(),
-            /checksum mismatch/,
-        );
+        assert.throws(() => new MigrationRunner(db, tampered).run(), /checksum mismatch/);
     });
 
     it("rejects gaps in declared migration versions", () => {
         assert.throws(
-            () => new MigrationRunner(db, [
-                { version: 1, name: "a", up: "SELECT 1;" },
-                { version: 3, name: "c", up: "SELECT 3;" }, // missing v2
-            ]),
+            () =>
+                new MigrationRunner(db, [
+                    { version: 1, name: "a", up: "SELECT 1;" },
+                    { version: 3, name: "c", up: "SELECT 3;" }, // missing v2
+                ]),
             /must be 1-indexed and contiguous/,
         );
     });
 
     it("rejects duplicate migration versions", () => {
         assert.throws(
-            () => new MigrationRunner(db, [
-                { version: 1, name: "a", up: "SELECT 1;" },
-                { version: 1, name: "b", up: "SELECT 2;" },
-            ]),
+            () =>
+                new MigrationRunner(db, [
+                    { version: 1, name: "a", up: "SELECT 1;" },
+                    { version: 1, name: "b", up: "SELECT 2;" },
+                ]),
             /duplicate migration version/,
         );
     });
 
     it("rejects duplicate migration names", () => {
         assert.throws(
-            () => new MigrationRunner(db, [
-                { version: 1, name: "shared", up: "SELECT 1;" },
-                { version: 2, name: "shared", up: "SELECT 2;" },
-            ]),
+            () =>
+                new MigrationRunner(db, [
+                    { version: 1, name: "shared", up: "SELECT 1;" },
+                    { version: 2, name: "shared", up: "SELECT 2;" },
+                ]),
             /duplicate migration name/,
         );
     });
@@ -172,9 +167,7 @@ describe("MigrationRunner", () => {
 
     it("MigrationError is the thrown error type for runtime failures", () => {
         try {
-            new MigrationRunner(db, [
-                { version: 1, name: "bad", up: "this is not sql;" },
-            ]).run();
+            new MigrationRunner(db, [{ version: 1, name: "bad", up: "this is not sql;" }]).run();
             assert.fail("expected throw");
         } catch (e) {
             assert.ok(e instanceof MigrationError, `expected MigrationError, got ${(e as Error).name}`);

@@ -72,17 +72,14 @@ export class ContainerSandboxTool implements Tool {
 
     // ── Adapter-backed execution ─────────────────────────────────────────
 
-    private async executeViaAdapter(
-        action: string,
-        request: ToolRequest,
-        sandboxId?: string,
-    ): Promise<ToolResult> {
+    private async executeViaAdapter(action: string, request: ToolRequest, sandboxId?: string): Promise<ToolResult> {
         try {
             if (action === "create") {
                 const image = request.args.image ? String(request.args.image) : "prism/default:latest";
-                const quotas = request.args.quotas && typeof request.args.quotas === "object"
-                    ? (request.args.quotas as Record<string, unknown>)
-                    : undefined;
+                const quotas =
+                    request.args.quotas && typeof request.args.quotas === "object"
+                        ? (request.args.quotas as Record<string, unknown>)
+                        : undefined;
                 const container = await this.adapter!.createContainer(image, {
                     cpu_limit: (quotas?.cpu_limit as number) ?? 1,
                     memory_limit_mb: (quotas?.memory_limit_mb as number) ?? 256,
@@ -97,15 +94,17 @@ export class ContainerSandboxTool implements Tool {
                         createdAt: container.created_at,
                         backend: "container-adapter",
                     },
-                    sideEffects: [{
-                        type: "process",
-                        action: "create",
-                        resource: container.container_id,
-                        mutating: true,
-                        reversible: true,
-                        rollbackPlan: request.rollbackPlan,
-                        description: `container_sandbox create: ${container.container_id}`,
-                    }],
+                    sideEffects: [
+                        {
+                            type: "process",
+                            action: "create",
+                            resource: container.container_id,
+                            mutating: true,
+                            reversible: true,
+                            rollbackPlan: request.rollbackPlan,
+                            description: `container_sandbox create: ${container.container_id}`,
+                        },
+                    ],
                 };
             }
 
@@ -117,12 +116,23 @@ export class ContainerSandboxTool implements Tool {
                 const started = await this.adapter!.startContainer(sandboxId);
                 return {
                     ok: true,
-                    output: { sandboxId, state: started.state, startedAt: started.started_at, backend: "container-adapter" },
-                    sideEffects: [{
-                        type: "process", action: "start", resource: sandboxId,
-                        mutating: true, reversible: true, rollbackPlan: request.rollbackPlan,
-                        description: `container_sandbox start: ${sandboxId}`,
-                    }],
+                    output: {
+                        sandboxId,
+                        state: started.state,
+                        startedAt: started.started_at,
+                        backend: "container-adapter",
+                    },
+                    sideEffects: [
+                        {
+                            type: "process",
+                            action: "start",
+                            resource: sandboxId,
+                            mutating: true,
+                            reversible: true,
+                            rollbackPlan: request.rollbackPlan,
+                            description: `container_sandbox start: ${sandboxId}`,
+                        },
+                    ],
                 };
             }
 
@@ -131,11 +141,17 @@ export class ContainerSandboxTool implements Tool {
                 return {
                     ok: true,
                     output: { sandboxId, state: "stopped", backend: "container-adapter" },
-                    sideEffects: [{
-                        type: "process", action: "stop", resource: sandboxId,
-                        mutating: true, reversible: true, rollbackPlan: request.rollbackPlan,
-                        description: `container_sandbox stop: ${sandboxId}`,
-                    }],
+                    sideEffects: [
+                        {
+                            type: "process",
+                            action: "stop",
+                            resource: sandboxId,
+                            mutating: true,
+                            reversible: true,
+                            rollbackPlan: request.rollbackPlan,
+                            description: `container_sandbox stop: ${sandboxId}`,
+                        },
+                    ],
                 };
             }
 
@@ -144,11 +160,17 @@ export class ContainerSandboxTool implements Tool {
                 return {
                     ok: true,
                     output: { sandboxId, destroyed: true, backend: "container-adapter" },
-                    sideEffects: [{
-                        type: "process", action: "destroy", resource: sandboxId,
-                        mutating: true, reversible: false, rollbackPlan: request.rollbackPlan,
-                        description: `container_sandbox destroy: ${sandboxId}`,
-                    }],
+                    sideEffects: [
+                        {
+                            type: "process",
+                            action: "destroy",
+                            resource: sandboxId,
+                            mutating: true,
+                            reversible: false,
+                            rollbackPlan: request.rollbackPlan,
+                            description: `container_sandbox destroy: ${sandboxId}`,
+                        },
+                    ],
                 };
             }
 
@@ -166,11 +188,17 @@ export class ContainerSandboxTool implements Tool {
                         snapshotSizeMb: snapshot.snapshot_size_mb,
                         backend: "container-adapter",
                     },
-                    sideEffects: [{
-                        type: "file", action: "snapshot", resource: `${sandboxId}/${snapshot.snapshot_id}`,
-                        mutating: true, reversible: true, rollbackPlan: request.rollbackPlan,
-                        description: `container_sandbox snapshot: ${sandboxId}/${snapshot.snapshot_id}`,
-                    }],
+                    sideEffects: [
+                        {
+                            type: "file",
+                            action: "snapshot",
+                            resource: `${sandboxId}/${snapshot.snapshot_id}`,
+                            mutating: true,
+                            reversible: true,
+                            rollbackPlan: request.rollbackPlan,
+                            description: `container_sandbox snapshot: ${sandboxId}/${snapshot.snapshot_id}`,
+                        },
+                    ],
                 };
             }
 
@@ -183,11 +211,17 @@ export class ContainerSandboxTool implements Tool {
                 return {
                     ok: true,
                     output: { sandboxId, revertedTo: snapshotId, state: reverted.state, backend: "container-adapter" },
-                    sideEffects: [{
-                        type: "process", action: "revert", resource: `${sandboxId}/${snapshotId}`,
-                        mutating: true, reversible: false, rollbackPlan: request.rollbackPlan,
-                        description: `container_sandbox revert: ${sandboxId}/${snapshotId}`,
-                    }],
+                    sideEffects: [
+                        {
+                            type: "process",
+                            action: "revert",
+                            resource: `${sandboxId}/${snapshotId}`,
+                            mutating: true,
+                            reversible: false,
+                            rollbackPlan: request.rollbackPlan,
+                            description: `container_sandbox revert: ${sandboxId}/${snapshotId}`,
+                        },
+                    ],
                 };
             }
 
@@ -201,7 +235,7 @@ export class ContainerSandboxTool implements Tool {
                         image: container.image,
                         state: container.state,
                         resourceQuota: container.resource_quota,
-                        snapshots: snapshots.map(s => s.snapshot_id),
+                        snapshots: snapshots.map((s) => s.snapshot_id),
                         createdAt: container.created_at,
                         startedAt: container.started_at ?? null,
                         stoppedAt: container.stopped_at ?? null,
@@ -221,11 +255,7 @@ export class ContainerSandboxTool implements Tool {
 
     // ── In-memory fallback (no filesystem isolation) ─────────────────────
 
-    private async executeInMemory(
-        action: string,
-        request: ToolRequest,
-        sandboxId?: string,
-    ): Promise<ToolResult> {
+    private async executeInMemory(action: string, request: ToolRequest, sandboxId?: string): Promise<ToolResult> {
         if (action === "create") {
             const id = sandboxId ?? `sandbox-${randomUUID()}`;
             if (sandboxes.has(id)) {
@@ -237,9 +267,10 @@ export class ContainerSandboxTool implements Tool {
                 id,
                 image: request.args.image ? String(request.args.image) : "prism/default:latest",
                 state: "created",
-                quotas: request.args.quotas && typeof request.args.quotas === "object"
-                    ? (request.args.quotas as Record<string, unknown>)
-                    : undefined,
+                quotas:
+                    request.args.quotas && typeof request.args.quotas === "object"
+                        ? (request.args.quotas as Record<string, unknown>)
+                        : undefined,
                 snapshots: [],
                 createdAt: timestamp,
                 updatedAt: timestamp,
@@ -254,15 +285,17 @@ export class ContainerSandboxTool implements Tool {
                     createdAt: record.createdAt,
                     backend: "in-memory",
                 },
-                sideEffects: [{
-                    type: "process",
-                    action: "create",
-                    resource: id,
-                    mutating: true,
-                    reversible: true,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `container_sandbox create: ${id}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "process",
+                        action: "create",
+                        resource: id,
+                        mutating: true,
+                        reversible: true,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `container_sandbox create: ${id}`,
+                    },
+                ],
             };
         }
 
@@ -282,15 +315,17 @@ export class ContainerSandboxTool implements Tool {
             return {
                 ok: true,
                 output: { sandboxId, state: record.state, updatedAt: record.updatedAt, backend: "in-memory" },
-                sideEffects: [{
-                    type: "process",
-                    action: "start",
-                    resource: sandboxId,
-                    mutating: true,
-                    reversible: true,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `container_sandbox start: ${sandboxId}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "process",
+                        action: "start",
+                        resource: sandboxId,
+                        mutating: true,
+                        reversible: true,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `container_sandbox start: ${sandboxId}`,
+                    },
+                ],
             };
         }
 
@@ -301,22 +336,22 @@ export class ContainerSandboxTool implements Tool {
             return {
                 ok: true,
                 output: { sandboxId, state: record.state, updatedAt: record.updatedAt, backend: "in-memory" },
-                sideEffects: [{
-                    type: "process",
-                    action: "stop",
-                    resource: sandboxId,
-                    mutating: true,
-                    reversible: true,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `container_sandbox stop: ${sandboxId}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "process",
+                        action: "stop",
+                        resource: sandboxId,
+                        mutating: true,
+                        reversible: true,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `container_sandbox stop: ${sandboxId}`,
+                    },
+                ],
             };
         }
 
         if (action === "snapshot") {
-            const snapshotId = request.args.snapshotId
-                ? String(request.args.snapshotId)
-                : `snapshot-${randomUUID()}`;
+            const snapshotId = request.args.snapshotId ? String(request.args.snapshotId) : `snapshot-${randomUUID()}`;
             record.snapshots.push(snapshotId);
             record.updatedAt = nowIso();
             sandboxes.set(sandboxId, record);
@@ -329,15 +364,17 @@ export class ContainerSandboxTool implements Tool {
                     updatedAt: record.updatedAt,
                     backend: "in-memory",
                 },
-                sideEffects: [{
-                    type: "file",
-                    action: "snapshot",
-                    resource: `${sandboxId}/${snapshotId}`,
-                    mutating: true,
-                    reversible: true,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `container_sandbox snapshot: ${sandboxId}/${snapshotId}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "file",
+                        action: "snapshot",
+                        resource: `${sandboxId}/${snapshotId}`,
+                        mutating: true,
+                        reversible: true,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `container_sandbox snapshot: ${sandboxId}/${snapshotId}`,
+                    },
+                ],
             };
         }
 
@@ -358,15 +395,17 @@ export class ContainerSandboxTool implements Tool {
             return {
                 ok: true,
                 output: { sandboxId, revertedTo: snapshotId, updatedAt: record.updatedAt, backend: "in-memory" },
-                sideEffects: [{
-                    type: "process",
-                    action: "revert",
-                    resource: `${sandboxId}/${snapshotId}`,
-                    mutating: true,
-                    reversible: false,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `container_sandbox revert: ${sandboxId}/${snapshotId}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "process",
+                        action: "revert",
+                        resource: `${sandboxId}/${snapshotId}`,
+                        mutating: true,
+                        reversible: false,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `container_sandbox revert: ${sandboxId}/${snapshotId}`,
+                    },
+                ],
             };
         }
 
@@ -375,15 +414,17 @@ export class ContainerSandboxTool implements Tool {
             return {
                 ok: true,
                 output: { sandboxId, destroyed: true, backend: "in-memory" },
-                sideEffects: [{
-                    type: "process",
-                    action: "destroy",
-                    resource: sandboxId,
-                    mutating: true,
-                    reversible: false,
-                    rollbackPlan: request.rollbackPlan,
-                    description: `container_sandbox destroy: ${sandboxId}`,
-                }],
+                sideEffects: [
+                    {
+                        type: "process",
+                        action: "destroy",
+                        resource: sandboxId,
+                        mutating: true,
+                        reversible: false,
+                        rollbackPlan: request.rollbackPlan,
+                        description: `container_sandbox destroy: ${sandboxId}`,
+                    },
+                ],
             };
         }
 

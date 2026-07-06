@@ -41,8 +41,11 @@ function makeMockFetch(opts: {
         if (opts.capture) {
             opts.capture.url = url;
             opts.capture.init = init;
-            try { opts.capture.bodyJson = init?.body ? JSON.parse(init.body) : undefined; }
-            catch { /* keep raw */ }
+            try {
+                opts.capture.bodyJson = init?.body ? JSON.parse(init.body) : undefined;
+            } catch {
+                /* keep raw */
+            }
         }
         if (opts.expectUrlIncludes && !url.includes(opts.expectUrlIncludes)) {
             throw new Error(`Unexpected URL ${url} — expected to include ${opts.expectUrlIncludes}`);
@@ -57,14 +60,26 @@ function makeMockFetch(opts: {
     };
 }
 
-function makeFakeProviderManager(routing: Record<string, { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null>): LlmProviderManager {
+function makeFakeProviderManager(
+    routing: Record<
+        string,
+        { providerId: string; model: string; tier: number; degraded: boolean; reason: string } | null
+    >,
+): LlmProviderManager {
     return {
-        async suggestRoutingForAllModalities() { return routing; },
+        async suggestRoutingForAllModalities() {
+            return routing;
+        },
         async getCatalog() {
             return {
                 providers: [
                     { id: "openai", baseUrl: "https://api.openai.com/v1", enabled: true, models: ["gpt-image-1"] },
-                    { id: "openrouter", baseUrl: "https://openrouter.ai/api/v1", enabled: true, models: ["openai/gpt-image-1"] },
+                    {
+                        id: "openrouter",
+                        baseUrl: "https://openrouter.ai/api/v1",
+                        enabled: true,
+                        models: ["openai/gpt-image-1"],
+                    },
                 ],
             };
         },
@@ -73,11 +88,21 @@ function makeFakeProviderManager(routing: Record<string, { providerId: string; m
 
 function makeFakeSecretStore(keys: Record<string, string>): ProviderSecretStore {
     return {
-        hasApiKey(p: string) { return Boolean(keys[p]); },
-        getApiKey(p: string) { return keys[p] ?? null; },
-        setApiKey() { /* no-op */ },
-        clearApiKey() { /* no-op */ },
-        listSlots() { return []; },
+        hasApiKey(p: string) {
+            return Boolean(keys[p]);
+        },
+        getApiKey(p: string) {
+            return keys[p] ?? null;
+        },
+        setApiKey() {
+            /* no-op */
+        },
+        clearApiKey() {
+            /* no-op */
+        },
+        listSlots() {
+            return [];
+        },
     } as unknown as ProviderSecretStore;
 }
 
@@ -88,7 +113,13 @@ export async function testImageGenerateTool(): Promise<void> {
         const capture: { url?: string; init?: FetchInit; bodyJson?: unknown } = {};
         const tool = new ImageGenerateTool({
             providerManager: makeFakeProviderManager({
-                "image-generation": { providerId: "openai", model: "gpt-image-1", tier: 5, degraded: false, reason: "ok" },
+                "image-generation": {
+                    providerId: "openai",
+                    model: "gpt-image-1",
+                    tier: 5,
+                    degraded: false,
+                    reason: "ok",
+                },
             }),
             secretStore: makeFakeSecretStore({ openai: "sk-test-key" }),
             workspaceRootOverride: wsDir,
@@ -154,7 +185,13 @@ export async function testImageGenerateTool(): Promise<void> {
         const wsDir = mkdtempSync(join(tmpdir(), "prism-imggen-empty-"));
         const tool = new ImageGenerateTool({
             providerManager: makeFakeProviderManager({
-                "image-generation": { providerId: "openai", model: "gpt-image-1", tier: 5, degraded: false, reason: "ok" },
+                "image-generation": {
+                    providerId: "openai",
+                    model: "gpt-image-1",
+                    tier: 5,
+                    degraded: false,
+                    reason: "ok",
+                },
             }),
             secretStore: makeFakeSecretStore({ openai: "sk-test-key" }),
             workspaceRootOverride: wsDir,
@@ -177,7 +214,13 @@ export async function testImageGenerateTool(): Promise<void> {
         const wsDir = mkdtempSync(join(tmpdir(), "prism-imggen-escape-"));
         const tool = new ImageGenerateTool({
             providerManager: makeFakeProviderManager({
-                "image-generation": { providerId: "openai", model: "gpt-image-1", tier: 5, degraded: false, reason: "ok" },
+                "image-generation": {
+                    providerId: "openai",
+                    model: "gpt-image-1",
+                    tier: 5,
+                    degraded: false,
+                    reason: "ok",
+                },
             }),
             secretStore: makeFakeSecretStore({ openai: "sk-test-key" }),
             workspaceRootOverride: wsDir,

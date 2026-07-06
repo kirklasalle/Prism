@@ -19,9 +19,7 @@ export function validateToolContract(toolName: string, contract: ToolContract): 
     const errors: string[] = [];
 
     if (!SEMVER_PATTERN.test(contract.version)) {
-        errors.push(
-            `Tool ${toolName} contract version must be semver (x.y.z), got "${contract.version}".`,
-        );
+        errors.push(`Tool ${toolName} contract version must be semver (x.y.z), got "${contract.version}".`);
     }
 
     if (!contract.args || typeof contract.args !== "object") {
@@ -47,10 +45,7 @@ export function validateToolContract(toolName: string, contract: ToolContract): 
     return errors;
 }
 
-export function validateToolRequestAgainstContract(
-    request: ToolRequest,
-    contract: ToolContract,
-): string[] {
+export function validateToolRequestAgainstContract(request: ToolRequest, contract: ToolContract): string[] {
     const errors: string[] = [];
 
     for (const [argName, schema] of Object.entries(contract.args)) {

@@ -71,10 +71,15 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
         http.get({ hostname: "127.0.0.1", port, path }, (res) => {
             let data = "";
-            res.on("data", (chunk: Buffer) => { data += chunk; });
+            res.on("data", (chunk: Buffer) => {
+                data += chunk;
+            });
             res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: data }); }
+                try {
+                    resolve({ status: res.statusCode!, body: JSON.parse(data || "{}") });
+                } catch {
+                    resolve({ status: res.statusCode!, body: data });
+                }
             });
         }).on("error", reject);
     });
@@ -83,20 +88,28 @@ function fetchJson(path: string): Promise<{ status: number; body: any }> {
 /** JSON POST/DELETE/PUT helper */
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        const req = http.request({
-            hostname: "127.0.0.1",
-            port,
-            path,
-            method,
-            headers: body == null ? {} : { "Content-Type": "application/json" },
-        }, (res) => {
-            let payload = "";
-            res.on("data", (chunk: Buffer) => { payload += chunk; });
-            res.on("end", () => {
-                try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                catch { resolve({ status: res.statusCode!, body: payload }); }
-            });
-        });
+        const req = http.request(
+            {
+                hostname: "127.0.0.1",
+                port,
+                path,
+                method,
+                headers: body == null ? {} : { "Content-Type": "application/json" },
+            },
+            (res) => {
+                let payload = "";
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
+                res.on("end", () => {
+                    try {
+                        resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                    } catch {
+                        resolve({ status: res.statusCode!, body: payload });
+                    }
+                });
+            },
+        );
         req.on("error", reject);
         if (body != null) req.write(JSON.stringify(body));
         req.end();
@@ -126,15 +139,15 @@ describe("Agent Control API Routes (/api/agents/*, /api/swarms/*, /api/guardian/
                 executionProfileSegment: "individual",
             },
             chatStore,
-            [],                                          // actions
-            0,                                           // port = ephemeral
-            undefined,                                   // metricsCollector
-            undefined,                                   // retrievalDashboardStore
-            new InMemoryProviderSecretStore(),            // providerSecretStore
-            undefined,                                   // activityStore
-            join(tmpDir, "session-packages.json"),        // sessionPackageStorePath
-            join(tmpDir, "exports"),                      // sessionPackageExportDir
-            registry,                                    // toolRegistry
+            [], // actions
+            0, // port = ephemeral
+            undefined, // metricsCollector
+            undefined, // retrievalDashboardStore
+            new InMemoryProviderSecretStore(), // providerSecretStore
+            undefined, // activityStore
+            join(tmpDir, "session-packages.json"), // sessionPackageStorePath
+            join(tmpDir, "exports"), // sessionPackageExportDir
+            registry, // toolRegistry
         );
 
         // Wire agent control dependencies
@@ -517,7 +530,9 @@ describe("Agent Control API Routes (/api/agents/*, /api/swarms/*, /api/guardian/
             bareService.start();
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            const addr = (bareService as unknown as { server: { address(): { port: number } | null } }).server.address();
+            const addr = (
+                bareService as unknown as { server: { address(): { port: number } | null } }
+            ).server.address();
             barePort = addr ? addr.port : 0;
         });
 
@@ -528,20 +543,28 @@ describe("Agent Control API Routes (/api/agents/*, /api/swarms/*, /api/guardian/
 
         function bareRequestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
             return new Promise((resolve, reject) => {
-                const req = http.request({
-                    hostname: "127.0.0.1",
-                    port: barePort,
-                    path,
-                    method,
-                    headers: body == null ? {} : { "Content-Type": "application/json" },
-                }, (res) => {
-                    let payload = "";
-                    res.on("data", (chunk: Buffer) => { payload += chunk; });
-                    res.on("end", () => {
-                        try { resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") }); }
-                        catch { resolve({ status: res.statusCode!, body: payload }); }
-                    });
-                });
+                const req = http.request(
+                    {
+                        hostname: "127.0.0.1",
+                        port: barePort,
+                        path,
+                        method,
+                        headers: body == null ? {} : { "Content-Type": "application/json" },
+                    },
+                    (res) => {
+                        let payload = "";
+                        res.on("data", (chunk: Buffer) => {
+                            payload += chunk;
+                        });
+                        res.on("end", () => {
+                            try {
+                                resolve({ status: res.statusCode!, body: JSON.parse(payload || "{}") });
+                            } catch {
+                                resolve({ status: res.statusCode!, body: payload });
+                            }
+                        });
+                    },
+                );
                 req.on("error", reject);
                 if (body != null) req.write(JSON.stringify(body));
                 req.end();

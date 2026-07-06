@@ -52,9 +52,19 @@ export async function testDockerContainerAdapter(): Promise<void> {
     const { engine } = probeResult;
     const db = new sqlite3.Database(":memory:");
     try {
-        const adapter = new DockerContainerAdapter(db, new PolicyEngine(), new ActivityBus(), INDIVIDUAL_PROFILE, engine);
+        const adapter = new DockerContainerAdapter(
+            db,
+            new PolicyEngine(),
+            new ActivityBus(),
+            INDIVIDUAL_PROFILE,
+            engine,
+        );
         assert.strictEqual(adapter.getRuntimeBackend(), "docker", "Backend discriminator should be 'docker'");
-        assert.strictEqual(await adapter.isDockerEnabled(), true, "isDockerEnabled() should be true when ping succeeds");
+        assert.strictEqual(
+            await adapter.isDockerEnabled(),
+            true,
+            "isDockerEnabled() should be true when ping succeeds",
+        );
 
         // Lifecycle round-trip on alpine:latest.
         const container = await adapter.createContainer("alpine:latest", {

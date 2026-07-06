@@ -14,12 +14,8 @@ import os from "node:os";
 import { PrismClient } from "./api/prism-client.js";
 import { PrismWsClient } from "./api/ws-client.js";
 import { LoginTab } from "./tabs/LoginTab.js";
-import {
-    colors, symbols, TABS, PRISM_LOGO, TAB_SHORTCUTS,
-} from "./theme.js";
-import {
-    Header, TabBar, StatusBar, HelpOverlay, Loading,
-} from "./components/ui.js";
+import { colors, symbols, TABS, PRISM_LOGO, TAB_SHORTCUTS } from "./theme.js";
+import { Header, TabBar, StatusBar, HelpOverlay, Loading } from "./components/ui.js";
 import { useConnection, useTabNavigation, useQuit } from "./hooks.js";
 
 // Tab components
@@ -76,12 +72,17 @@ function App({ client, wsClient }: { client: PrismClient; wsClient: PrismWsClien
 
     // Detect execution profile from server health
     useEffect(() => {
-        client.getHealth().then((h) => {
-            const obj = h as unknown as Record<string, unknown>;
-            if (obj && "executionProfile" in obj) {
-                setProfile(String(obj.executionProfile ?? "individual"));
-            }
-        }).catch(() => {/* ignore */ });
+        client
+            .getHealth()
+            .then((h) => {
+                const obj = h as unknown as Record<string, unknown>;
+                if (obj && "executionProfile" in obj) {
+                    setProfile(String(obj.executionProfile ?? "individual"));
+                }
+            })
+            .catch(() => {
+                /* ignore */
+            });
     }, [client]);
 
     // Global keyboard
@@ -173,7 +174,9 @@ function Splash({ port, onDone }: { port: number; onDone: () => void }): React.J
         <Box flexDirection="column" alignItems="center" justifyContent="center" paddingY={2}>
             <Text color={colors.brand}>{PRISM_LOGO}</Text>
             <Text> </Text>
-            <Text color={colors.text} bold>Terminal User Interface</Text>
+            <Text color={colors.text} bold>
+                Terminal User Interface
+            </Text>
             <Text color={colors.muted}>Connecting to localhost:{port}...</Text>
             <Box marginTop={1}>
                 <Loading label="Initializing..." />
@@ -207,7 +210,9 @@ function getAdminToken(): string | null {
                     return fs.readFileSync(tokenPath, "utf-8").trim();
                 }
             }
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }
     // 3. Fallback to default OS path
     const home = os.homedir();
@@ -223,7 +228,19 @@ function getAdminToken(): string | null {
 /*  Root                                                               */
 /* ------------------------------------------------------------------ */
 
-function Root({ client, wsClient, port, forceSetup, autoLogin }: { client: PrismClient; wsClient: PrismWsClient; port: number; forceSetup: boolean; autoLogin: boolean }): React.JSX.Element {
+function Root({
+    client,
+    wsClient,
+    port,
+    forceSetup,
+    autoLogin,
+}: {
+    client: PrismClient;
+    wsClient: PrismWsClient;
+    port: number;
+    forceSetup: boolean;
+    autoLogin: boolean;
+}): React.JSX.Element {
     const [ready, setReady] = useState(false);
     const [needsSetup, setNeedsSetup] = useState<boolean | null>(forceSetup || null);
     const [authenticated, setAuthenticated] = useState<boolean>(false);
@@ -309,7 +326,9 @@ function Root({ client, wsClient, port, forceSetup, autoLogin }: { client: Prism
                 setAuthenticating(false);
             } catch (err: any) {
                 if (!active) return;
-                setConnectionError(`Server not reachable on port ${port} or ${port === 7070 ? 7071 : 7070}. Retrying connection...`);
+                setConnectionError(
+                    `Server not reachable on port ${port} or ${port === 7070 ? 7071 : 7070}. Retrying connection...`,
+                );
                 // Retry in 3 seconds
                 timer = setTimeout(checkConnection, 3000);
             }
@@ -323,15 +342,18 @@ function Root({ client, wsClient, port, forceSetup, autoLogin }: { client: Prism
         };
     }, [client, wsClient, forceSetup, autoLogin, port]);
 
-    const handleLoginSuccess = useCallback((token: string | null, cookie: string | null) => {
-        client.setToken(token);
-        client.setCookie(cookie);
-        wsClient.setToken(token);
-        wsClient.setCookie(cookie);
-        wsClient.disconnect();
-        wsClient.connect();
-        setAuthenticated(true);
-    }, [client, wsClient]);
+    const handleLoginSuccess = useCallback(
+        (token: string | null, cookie: string | null) => {
+            client.setToken(token);
+            client.setCookie(cookie);
+            wsClient.setToken(token);
+            wsClient.setCookie(cookie);
+            wsClient.disconnect();
+            wsClient.connect();
+            setAuthenticated(true);
+        },
+        [client, wsClient],
+    );
 
     if (!ready) {
         return <Splash port={port} onDone={() => setReady(true)} />;

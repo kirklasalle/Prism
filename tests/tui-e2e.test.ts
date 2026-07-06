@@ -44,7 +44,11 @@ describe("TUI E2E Smoke Test", () => {
             }, 5000);
 
             const checkOutput = () => {
-                if (stdout.includes("PRISM") || stdout.includes("Initializing") || stdout.includes("Terminal User Interface")) {
+                if (
+                    stdout.includes("PRISM") ||
+                    stdout.includes("Initializing") ||
+                    stdout.includes("Terminal User Interface")
+                ) {
                     clearTimeout(timeout);
                     resolve();
                 } else {
@@ -102,10 +106,7 @@ describe("TUI E2E Smoke Test", () => {
             checkOutput();
         });
 
-        assert.ok(
-            stdout.includes("9999") || stdout.length > 0,
-            "Expected port 9999 in splash output",
-        );
+        assert.ok(stdout.includes("9999") || stdout.length > 0, "Expected port 9999 in splash output");
 
         child.kill("SIGINT");
         await new Promise<void>((resolve) => {

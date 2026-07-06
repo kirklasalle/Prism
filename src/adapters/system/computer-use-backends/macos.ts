@@ -58,7 +58,9 @@ export class MacOSComputerUseBackend implements ComputerUseBackend {
             await execFileAsync("/usr/bin/env", ["swift", "-e", code]);
             return;
         }
-        throw new Error("macOS computer-use: mouseMove needs `cliclick` (brew install cliclick) or Apple's `swift` toolchain");
+        throw new Error(
+            "macOS computer-use: mouseMove needs `cliclick` (brew install cliclick) or Apple's `swift` toolchain",
+        );
     }
 
     async click(button: "left" | "right" | "double"): Promise<void> {
@@ -139,33 +141,64 @@ function commandExists(bin: string): Promise<boolean> {
 
 /** Escape a string for safe inclusion inside an AppleScript double-quoted literal. */
 function appleScriptEscape(text: string): string {
-    return text.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+    return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 /** Apple key-code constants (subset matching the Win32 VK table semantically). */
 const APPLE_KEY_CODES: Record<string, number> = {
-    enter: 36, return: 36,
-    tab: 48, space: 49,
-    delete: 51, backspace: 51, del: 117,
-    escape: 53, esc: 53,
-    left: 123, right: 124, down: 125, up: 126,
-    home: 115, end: 119, pageup: 116, pagedown: 121, page_up: 116, page_down: 121,
-    f1: 122, f2: 120, f3: 99, f4: 118, f5: 96, f6: 97, f7: 98, f8: 100,
-    f9: 101, f10: 109, f11: 103, f12: 111,
+    enter: 36,
+    return: 36,
+    tab: 48,
+    space: 49,
+    delete: 51,
+    backspace: 51,
+    del: 117,
+    escape: 53,
+    esc: 53,
+    left: 123,
+    right: 124,
+    down: 125,
+    up: 126,
+    home: 115,
+    end: 119,
+    pageup: 116,
+    pagedown: 121,
+    page_up: 116,
+    page_down: 121,
+    f1: 122,
+    f2: 120,
+    f3: 99,
+    f4: 118,
+    f5: 96,
+    f6: 97,
+    f7: 98,
+    f8: 100,
+    f9: 101,
+    f10: 109,
+    f11: 103,
+    f12: 111,
 };
 
 const APPLE_MODIFIER_NAMES: Record<string, string> = {
-    ctrl: "control down", control: "control down",
+    ctrl: "control down",
+    control: "control down",
     shift: "shift down",
-    alt: "option down", option: "option down",
-    cmd: "command down", command: "command down",
-    win: "command down", super: "command down",
+    alt: "option down",
+    option: "option down",
+    cmd: "command down",
+    command: "command down",
+    win: "command down",
+    super: "command down",
 };
 
 function mapChordToAppleScript(chord: string): { keyCode: number; modifiers: string[] } {
-    const parts = chord.split(/[+\-]/).map((p) => p.trim()).filter(Boolean);
+    const parts = chord
+        .split(/[+\-]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
     const main = parts[parts.length - 1].toLowerCase();
-    const modifiers = parts.slice(0, -1)
+    const modifiers = parts
+        .slice(0, -1)
         .map((m) => APPLE_MODIFIER_NAMES[m.toLowerCase()])
         .filter((m): m is string => Boolean(m));
     const keyCode = APPLE_KEY_CODES[main];

@@ -50,10 +50,35 @@ export async function testPluginMarketplace(): Promise<void> {
         writeCatalog({
             version: "1.0.0",
             entries: [
-                { id: "demo", name: "Demo", version: "0.1.0", source: "file://samples/demo.zip", trust: "signed", tags: ["demo"] },
-                { id: "remote", name: "Remote", version: "0.1.0", source: "https://example.com/pack.zip", trust: "signed" },
-                { id: "missing", name: "Missing", version: "0.1.0", source: "file://samples/missing.zip", trust: "signed" },
-                { id: "unsigned", name: "Unsigned", version: "0.1.0", source: "file://samples/demo.zip", trust: "unsigned" },
+                {
+                    id: "demo",
+                    name: "Demo",
+                    version: "0.1.0",
+                    source: "file://samples/demo.zip",
+                    trust: "signed",
+                    tags: ["demo"],
+                },
+                {
+                    id: "remote",
+                    name: "Remote",
+                    version: "0.1.0",
+                    source: "https://example.com/pack.zip",
+                    trust: "signed",
+                },
+                {
+                    id: "missing",
+                    name: "Missing",
+                    version: "0.1.0",
+                    source: "file://samples/missing.zip",
+                    trust: "signed",
+                },
+                {
+                    id: "unsigned",
+                    name: "Unsigned",
+                    version: "0.1.0",
+                    source: "file://samples/demo.zip",
+                    trust: "unsigned",
+                },
             ],
         });
 

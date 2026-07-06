@@ -59,9 +59,7 @@ async function testRuntimeSchemaValidationBlocksExecution(): Promise<void> {
         mutatesState: false,
     });
 
-    const validationEvent = bus
-        .listEvents()
-        .find((event) => event.operation === "shell_exec.contract_validation");
+    const validationEvent = bus.listEvents().find((event) => event.operation === "shell_exec.contract_validation");
 
     assert.ok(validationEvent);
     assert.strictEqual(validationEvent!.status, "failed");
@@ -91,7 +89,7 @@ async function testMissingArgsSchemaFails(): Promise<void> {
     } as unknown as ToolContract;
     const errors = validateToolContract("bad_args", contract);
     assert.ok(errors.length > 0, "Expected errors for null args schema");
-    assert.ok(errors.some(e => e.includes("args schema")));
+    assert.ok(errors.some((e) => e.includes("args schema")));
 }
 
 async function testUnsupportedArgTypeFails(): Promise<void> {
@@ -103,7 +101,7 @@ async function testUnsupportedArgTypeFails(): Promise<void> {
     };
     const errors = validateToolContract("bad_type", contract);
     assert.ok(errors.length > 0, "Expected error for unsupported arg type");
-    assert.ok(errors.some(e => e.includes("unsupported type")));
+    assert.ok(errors.some((e) => e.includes("unsupported type")));
 }
 
 async function testEnumOnNonStringFails(): Promise<void> {
@@ -115,7 +113,7 @@ async function testEnumOnNonStringFails(): Promise<void> {
     };
     const errors = validateToolContract("enum_mismatch", contract);
     assert.ok(errors.length > 0, "Expected error for enum on non-string type");
-    assert.ok(errors.some(e => e.includes("enum")));
+    assert.ok(errors.some((e) => e.includes("enum")));
 }
 
 async function testRequestMissingRequiredArg(): Promise<void> {
@@ -130,7 +128,7 @@ async function testRequestMissingRequiredArg(): Promise<void> {
         contract,
     );
     assert.ok(errors.length > 0, "Expected error for missing required arg");
-    assert.ok(errors.some(e => e.includes('Missing required arg "command"')));
+    assert.ok(errors.some((e) => e.includes('Missing required arg "command"')));
 }
 
 async function testRequestTypeMismatch(): Promise<void> {
@@ -145,7 +143,7 @@ async function testRequestTypeMismatch(): Promise<void> {
         contract,
     );
     assert.ok(errors.length > 0, "Expected error for type mismatch");
-    assert.ok(errors.some(e => e.includes("expected number")));
+    assert.ok(errors.some((e) => e.includes("expected number")));
 }
 
 async function testRequestEnumViolation(): Promise<void> {
@@ -160,7 +158,7 @@ async function testRequestEnumViolation(): Promise<void> {
         contract,
     );
     assert.ok(errors.length > 0, "Expected error for enum violation");
-    assert.ok(errors.some(e => e.includes("must be one of")));
+    assert.ok(errors.some((e) => e.includes("must be one of")));
 }
 
 async function testRequestPassesValidContract(): Promise<void> {

@@ -10,7 +10,11 @@ import { WorkflowExecutor } from "../src/core/runtime/workflow.js";
 import type { WorkflowStep } from "../src/core/runtime/workflow.js";
 import { CausalCompiler } from "../src/core/incubation/ccc/compiler.js";
 import { RuntimePlanEnforcer } from "../src/core/incubation/ccc/enforcer.js";
-import { loadConstitution, validateConstitution, ConstitutionValidationError } from "../src/core/incubation/ccc/constitution.js";
+import {
+    loadConstitution,
+    validateConstitution,
+    ConstitutionValidationError,
+} from "../src/core/incubation/ccc/constitution.js";
 
 export async function testCccCompiler(): Promise<void> {
     const policyEngine = new PolicyEngine();

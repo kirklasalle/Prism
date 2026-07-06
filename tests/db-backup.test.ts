@@ -12,23 +12,12 @@
  */
 
 import { strict as assert } from "node:assert";
-import {
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readFileSync,
-    rmSync,
-    writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it, beforeEach, afterEach } from "mocha";
-import {
-    runBackup,
-    runRestore,
-    discoverSqliteFiles,
-} from "../src/core/db/backup.js";
+import { runBackup, runRestore, discoverSqliteFiles } from "../src/core/db/backup.js";
 
 describe("R5 backup / restore", () => {
     let tmp: string;
@@ -55,7 +44,10 @@ describe("R5 backup / restore", () => {
     function readAll(path: string, table: string): Array<{ id: string; v: string }> {
         const db = new DatabaseSync(path);
         try {
-            const rows = db.prepare(`SELECT id, v FROM ${table} ORDER BY id ASC`).all() as Array<{ id: string; v: string }>;
+            const rows = db.prepare(`SELECT id, v FROM ${table} ORDER BY id ASC`).all() as Array<{
+                id: string;
+                v: string;
+            }>;
             // node:sqlite returns null-prototype rows — normalize for deepStrictEqual.
             return rows.map((r) => ({ id: r.id, v: r.v }));
         } finally {
@@ -67,7 +59,10 @@ describe("R5 backup / restore", () => {
         const dbA = join(tmp, "activity.db");
         const dbB = join(tmp, "chat.db");
         const prefs = join(tmp, ".prism-preferences.json");
-        makeDb(dbA, "events", [{ id: "e1", v: "hello" }, { id: "e2", v: "world" }]);
+        makeDb(dbA, "events", [
+            { id: "e1", v: "hello" },
+            { id: "e2", v: "world" },
+        ]);
         makeDb(dbB, "sessions", [{ id: "s1", v: "session-1" }]);
         writeFileSync(prefs, JSON.stringify({ workspaceRoot: "/tmp/wsx" }), "utf8");
 
@@ -190,11 +185,12 @@ describe("R5 backup / restore", () => {
 
         const target = join(tmp, "target.db");
         assert.throws(
-            () => runRestore({
-                backupDir: out,
-                targets: { "src.db": target },
-                force: true,
-            }),
+            () =>
+                runRestore({
+                    backupDir: out,
+                    targets: { "src.db": target },
+                    force: true,
+                }),
             /checksum mismatch/,
         );
         // Target must not have been written despite force=true.
@@ -203,10 +199,7 @@ describe("R5 backup / restore", () => {
 
     it("rejects a missing manifest", () => {
         const out = join(tmp, "empty");
-        assert.throws(
-            () => runRestore({ backupDir: out, targets: {} }),
-            /no manifest found/,
-        );
+        assert.throws(() => runRestore({ backupDir: out, targets: {} }), /no manifest found/);
     });
 
     it("rejects an unsupported manifest schemaVersion", () => {
@@ -248,13 +241,14 @@ describe("R5 backup / restore", () => {
         makeDb(b, "t", [{ id: "1", v: "y" }]);
         const out = join(tmp, "out");
         assert.throws(
-            () => runBackup({
-                outputDir: out,
-                sources: [
-                    { path: a, kind: "sqlite" },
-                    { path: b, kind: "sqlite" }, // collides on basename "a.db"
-                ],
-            }),
+            () =>
+                runBackup({
+                    outputDir: out,
+                    sources: [
+                        { path: a, kind: "sqlite" },
+                        { path: b, kind: "sqlite" }, // collides on basename "a.db"
+                    ],
+                }),
             /duplicate backup file name/,
         );
     });
@@ -267,24 +261,24 @@ describe("R5 backup / restore", () => {
         writeFileSync(join(dir, "a.db-wal"), "");
         writeFileSync(join(dir, "a.db-shm"), "");
         writeFileSync(join(dir, "notes.txt"), "");
-        const found = discoverSqliteFiles(dir).map((p) => p.split(/[\\/]/).pop()!).sort();
+        const found = discoverSqliteFiles(dir)
+            .map((p) => p.split(/[\\/]/).pop()!)
+            .sort();
         assert.deepStrictEqual(found, ["a.db", "b.db"]);
     });
 
     it("discoverSqliteFiles returns empty array for missing dir", () => {
-        assert.deepStrictEqual(
-            discoverSqliteFiles(join(tmp, "does-not-exist")),
-            [],
-        );
+        assert.deepStrictEqual(discoverSqliteFiles(join(tmp, "does-not-exist")), []);
     });
 
     it("rejects a non-existent source", () => {
         const out = join(tmp, "out");
         assert.throws(
-            () => runBackup({
-                outputDir: out,
-                sources: [{ path: join(tmp, "missing.db"), kind: "sqlite" }],
-            }),
+            () =>
+                runBackup({
+                    outputDir: out,
+                    sources: [{ path: join(tmp, "missing.db"), kind: "sqlite" }],
+                }),
             /backup source not found/,
         );
     });

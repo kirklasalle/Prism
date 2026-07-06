@@ -78,13 +78,34 @@ export interface PostToolUseResponse {
  * workflow and requiring explicit human approval via PRISM's approval queue.
  */
 const TIER3_TOOL_NAMES = new Set([
-    "shell", "exec", "bash", "sh", "powershell", "cmd",
-    "file_write", "write_file", "file_delete", "delete_file",
-    "rm", "rmdir", "format", "truncate", "shred",
-    "docker", "kubectl", "podman",
-    "kill", "terminate", "stop_process",
-    "deploy", "publish", "push",
-    "database_write", "sql_exec", "drop_table", "alter_table",
+    "shell",
+    "exec",
+    "bash",
+    "sh",
+    "powershell",
+    "cmd",
+    "file_write",
+    "write_file",
+    "file_delete",
+    "delete_file",
+    "rm",
+    "rmdir",
+    "format",
+    "truncate",
+    "shred",
+    "docker",
+    "kubectl",
+    "podman",
+    "kill",
+    "terminate",
+    "stop_process",
+    "deploy",
+    "publish",
+    "push",
+    "database_write",
+    "sql_exec",
+    "drop_table",
+    "alter_table",
 ]);
 
 /**
@@ -92,11 +113,24 @@ const TIER3_TOOL_NAMES = new Set([
  * These are allowed with audit trail (permission_decision: "allow" + ActivityBus record).
  */
 const TIER2_TOOL_NAMES = new Set([
-    "file_read", "read_file", "file_list", "list_files", "list_dir",
-    "http_request", "http_get", "http_post", "http_put", "api_call",
-    "database_query", "sql_query", "db_select",
-    "process_list", "network_scan", "port_scan",
-    "registry_read", "env_read",
+    "file_read",
+    "read_file",
+    "file_list",
+    "list_files",
+    "list_dir",
+    "http_request",
+    "http_get",
+    "http_post",
+    "http_put",
+    "api_call",
+    "database_query",
+    "sql_query",
+    "db_select",
+    "process_list",
+    "network_scan",
+    "port_scan",
+    "registry_read",
+    "env_read",
 ]);
 
 /** Patterns in tool_input that escalate to Tier 3 regardless of tool name. */
@@ -111,7 +145,7 @@ function tierToAuthorityTier(tier: "tier1" | "tier2" | "tier3"): AuthorityTier {
 // ── Adapter ──────────────────────────────────────────────────────────────────
 
 export class GovernanceHooksAdapter {
-    constructor(private readonly activityBus: ActivityBus) { }
+    constructor(private readonly activityBus: ActivityBus) {}
 
     /**
      * Classify a tool invocation into a governance tier.
@@ -169,10 +203,7 @@ export class GovernanceHooksAdapter {
                 prism_audit_id,
             },
             authorityTier,
-            policyDecision:
-                tier === "tier3" ? "require_approval" :
-                    tier === "tier2" ? "allow" :
-                        "allow",
+            policyDecision: tier === "tier3" ? "require_approval" : tier === "tier2" ? "allow" : "allow",
         });
 
         return { permission_decision, message, prism_audit_id };

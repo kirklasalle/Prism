@@ -114,7 +114,8 @@ export class IamAdminRouteHandler implements IRouteHandler {
                 return this.removeUserRole(
                     decodeURIComponent(userRoleDelM[1]),
                     decodeURIComponent(userRoleDelM[2]),
-                    tenantId, res,
+                    tenantId,
+                    res,
                 );
             }
 
@@ -158,7 +159,11 @@ export class IamAdminRouteHandler implements IRouteHandler {
     }
 
     private async setUserStatus(
-        req: IncomingMessage, userId: string, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        userId: string,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const user = this.store.getUser(userId);
         if (!user || user.tenantId !== tenantId) {
@@ -167,14 +172,20 @@ export class IamAdminRouteHandler implements IRouteHandler {
         const body = await this.readJson(req, service);
         const status = body && typeof body["status"] === "string" ? body["status"] : "";
         if (status !== "active" && status !== "suspended" && status !== "deprovisioned") {
-            return this.json(res, 400, { error: { code: "invalid_status", message: "status must be active|suspended|deprovisioned" } });
+            return this.json(res, 400, {
+                error: { code: "invalid_status", message: "status must be active|suspended|deprovisioned" },
+            });
         }
         this.store.setUserStatus(userId, status as IamUserStatus);
         return this.json(res, 200, { ok: true });
     }
 
     private async setUserPassword(
-        req: IncomingMessage, userId: string, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        userId: string,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const user = this.store.getUser(userId);
         if (!user || user.tenantId !== tenantId) {
@@ -201,7 +212,11 @@ export class IamAdminRouteHandler implements IRouteHandler {
     }
 
     private async addUserRole(
-        req: IncomingMessage, userId: string, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        userId: string,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const user = this.store.getUser(userId);
         if (!user || user.tenantId !== tenantId) {
@@ -230,7 +245,10 @@ export class IamAdminRouteHandler implements IRouteHandler {
     }
 
     private async createUser(
-        req: IncomingMessage, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const body = await this.readJson(req, service);
         if (!body || typeof body !== "object") {
@@ -246,7 +264,7 @@ export class IamAdminRouteHandler implements IRouteHandler {
         }
         const displayName = typeof body.displayName === "string" ? body.displayName.trim() : email;
         const status = body.status === "suspended" ? "suspended" : "active";
-        
+
         let passwordHash: string | undefined;
         if (typeof body.password === "string" && body.password.trim()) {
             passwordHash = createHash("sha256").update(body.password.trim(), "utf-8").digest("hex");
@@ -275,7 +293,10 @@ export class IamAdminRouteHandler implements IRouteHandler {
     }
 
     private async createScimToken(
-        req: IncomingMessage, tenantId: string, res: ServerResponse, service: DashboardService,
+        req: IncomingMessage,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
     ): Promise<void> {
         const body = await this.readJson(req, service);
         const label = body && typeof body["label"] === "string" ? body["label"] : "";
@@ -315,13 +336,17 @@ export class IamAdminRouteHandler implements IRouteHandler {
         const svc = service as unknown as { readJsonBody?: (r: IncomingMessage) => Promise<unknown> };
         if (svc && typeof svc.readJsonBody === "function") {
             const v = await svc.readJsonBody(req);
-            return (v && typeof v === "object") ? v as Record<string, unknown> : null;
+            return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
         }
         const chunks: Buffer[] = [];
         for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         const text = Buffer.concat(chunks).toString("utf-8");
         if (!text) return null;
-        try { return JSON.parse(text) as Record<string, unknown>; } catch { return null; }
+        try {
+            return JSON.parse(text) as Record<string, unknown>;
+        } catch {
+            return null;
+        }
     }
 
     private json(res: ServerResponse, status: number, body: unknown): void {

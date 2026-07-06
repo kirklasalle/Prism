@@ -65,7 +65,7 @@ export class DatabaseManager {
             if (!config) {
                 throw new Error(
                     "DatabaseManager.getInstance() requires a config on first call. " +
-                    "Call it once at startup with { dbPath: '...' }.",
+                        "Call it once at startup with { dbPath: '...' }.",
                 );
             }
             DatabaseManager._instance = new DatabaseManager(config);

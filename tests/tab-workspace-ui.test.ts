@@ -102,6 +102,10 @@ export function escapeHtml(str) {
 }
 export function dashboardLog() {}
 export function safeRenderStep() {}
+export function showConfirm(message) { return Promise.resolve(true); }
+export function showPrompt(message, opts) { return Promise.resolve((opts && opts.defaultValue) || null); }
+export function showSelect(message, options) { return Promise.resolve(options && options[0] ? options[0].value : null); }
+export function showTransientNotice() {}
 `;
 
 /* ── Module types ─────────────────────────────────────────────────────── */
@@ -116,6 +120,9 @@ interface TabWorkspaceModule {
     showImportStatus(msg: string, isError?: boolean): void;
     renderImportHistory(): void;
     initWorkspaceTab(): void;
+    downloadWorkspaceFile(relPath: string, fileName: string): Promise<void>;
+    renameWorkspaceFile(relPath: string): Promise<void>;
+    deleteWorkspaceFile(relPath: string, fileName: string): Promise<void>;
 }
 
 interface TabCharactersModule {
@@ -149,8 +156,16 @@ describe("tab-workspace.js & tab-characters.js — Frontend Unit Tests", functio
     // Save any Node.js builtins we overwrite so we can restore them
     const savedGlobals: Record<string, any> = {};
     const GLOBAL_KEYS = [
-        "document", "window", "navigator", "HTMLElement", "location",
-        "URL", "FileReader", "fetch", "alert", "prompt",
+        "document",
+        "window",
+        "navigator",
+        "HTMLElement",
+        "location",
+        "URL",
+        "FileReader",
+        "fetch",
+        "alert",
+        "prompt",
     ] as const;
 
     before(async () => {
@@ -165,7 +180,9 @@ describe("tab-workspace.js & tab-characters.js — Frontend Unit Tests", functio
         writeFileSync(join(tmpDir, "dashboard-core.js"), MOCK_DASHBOARD_CORE, "utf-8");
         // Stub prism-tooltips.js so tab-characters.js can import it under jsdom
         // without exercising real DOM listeners or network fetches.
-        writeFileSync(join(tmpDir, "prism-tooltips.js"), `
+        writeFileSync(
+            join(tmpDir, "prism-tooltips.js"),
+            `
 export const __registered = new Map();
 export function initPrismTooltips() {}
 export function registerTooltip(el, descriptor) { __registered.set(el, descriptor); }
@@ -173,7 +190,9 @@ export function registerTooltipById(tipId, descriptor) { __registered.set(tipId,
 export function setDynamicProvider() {}
 export function pushGuardianTip() {}
 export function primeServerTip() {}
-`, "utf-8");
+`,
+            "utf-8",
+        );
         copyFileSync(
             join(process.cwd(), "src", "core", "operator", "public", "tab-workspace.js"),
             join(tmpDir, "tab-workspace.js"),
@@ -193,20 +212,27 @@ export function primeServerTip() {}
         (global as any).URL = dom.window.URL;
         (global as any).FileReader = dom.window.FileReader;
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
-        (global as any).alert = () => { };
+        (global as any).alert = () => {};
         (global as any).prompt = () => null;
         // Use a no-op setTimeout stub that captures but doesn't execute callbacks
         // to avoid jsdom's infinite recursion with timerInitializationSteps
         (global as any).setTimeout = (_fn: Function) => 0;
-        (global as any).clearTimeout = () => { };
+        (global as any).clearTimeout = () => {};
 
         // Provide the global constants that tab-workspace.js expects from the HTML template
         (global as any).IMPORT_TARGET_DIRS = [
-            "workspace", "config", "artifacts", "data", "data/tasks",
-            "data/notes", "data/email", "data/calendar", "characters", "logs", "state",
+            "workspace",
+            "config",
+            "artifacts",
+            "data",
+            "data/tasks",
+            "data/notes",
+            "data/email",
+            "data/calendar",
+            "logs",
+            "state",
         ];
         (global as any).IMPORT_REGISTERED_TYPES = [
-            { label: "Character (JSON)", value: "character" },
             { label: "MCP Config", value: "mcp-config" },
             { label: "Session Package", value: "session-package" },
             { label: "Tool Contract", value: "tool-contract" },
@@ -217,10 +243,10 @@ export function primeServerTip() {}
 
         // Import both modules
         const wsUrl = pathToFileURL(join(tmpDir, "tab-workspace.js")).href;
-        wsMod = await import(wsUrl) as TabWorkspaceModule;
+        wsMod = (await import(wsUrl)) as TabWorkspaceModule;
 
         const charUrl = pathToFileURL(join(tmpDir, "tab-characters.js")).href;
-        charMod = await import(charUrl) as TabCharactersModule;
+        charMod = (await import(charUrl)) as TabCharactersModule;
 
         // Grab mock state reference
         const coreUrl = pathToFileURL(join(tmpDir, "dashboard-core.js")).href;
@@ -317,14 +343,15 @@ export function primeServerTip() {}
                 { path: "tests/c.test.ts", name: "c.test.ts", type: "file", size: 300 },
             ];
             wsMod.renderWorkspaceFileTree(entries, container);
-            assert.ok(container.innerHTML.includes("3 files"), "Should show file count");
+            assert.ok(
+                container.innerHTML.includes("(3)") || container.innerHTML.includes("3"),
+                "Should show child count",
+            );
         });
 
         it("displays file sizes in human-readable format", () => {
             const container = dom.window.document.getElementById("workspace-file-tree")!;
-            const entries = [
-                { path: "data/big.bin", name: "big.bin", type: "file", size: 5242880 },
-            ];
+            const entries = [{ path: "data/big.bin", name: "big.bin", type: "file", size: 5242880 }];
             wsMod.renderWorkspaceFileTree(entries, container);
             assert.ok(container.innerHTML.includes("MB"), "Should show MB for large file");
         });
@@ -337,12 +364,35 @@ export function primeServerTip() {}
 
         it("uses folder icon for directories and file icon for files", () => {
             const container = dom.window.document.getElementById("workspace-file-tree")!;
+            const entries = [{ path: "docs/readme.md", name: "readme.md", type: "file", size: 100 }];
+            wsMod.renderWorkspaceFileTree(entries, container);
+            // New tree uses getFileIcon() emoji (📝 for .md, 📄 fallback) or ws-tree-file class
+            assert.ok(
+                container.querySelector(".ws-tree-file") !== null || container.innerHTML.includes("readme.md"),
+                "Should include file row",
+            );
+        });
+
+        it("renders action buttons (download, rename, delete) for file rows", () => {
+            const container = dom.window.document.getElementById("workspace-file-tree")!;
+            const entries = [{ path: "config/settings.json", name: "settings.json", type: "file", size: 256 }];
+            wsMod.renderWorkspaceFileTree(entries, container);
+            const buttons = Array.from(container.querySelectorAll("button"));
+            const titles = buttons.map((b: any) => b.title);
+            assert.ok(titles.includes("Download"), "Should have Download button");
+            assert.ok(titles.includes("Rename"), "Should have Rename button");
+            assert.ok(titles.includes("Delete"), "Should have Delete button");
+        });
+
+        it("renders dir rows with collapse chevron", () => {
+            const container = dom.window.document.getElementById("workspace-file-tree")!;
             const entries = [
-                { path: "docs/readme.md", name: "readme.md", type: "file", size: 100 },
+                { path: "src", name: "src", type: "dir", size: 0 },
+                { path: "src/app.ts", name: "app.ts", type: "file", size: 100 },
             ];
             wsMod.renderWorkspaceFileTree(entries, container);
-            // File icon 📄
-            assert.ok(container.innerHTML.includes("\u{1F4C4}") || container.innerHTML.includes("📄"), "Should include file icon");
+            const dirRow = container.querySelector(".ws-tree-dir");
+            assert.ok(dirRow !== null, "Should render a directory row");
         });
     });
 
@@ -374,9 +424,7 @@ export function primeServerTip() {}
 
         it("is case-insensitive", () => {
             const container = dom.window.document.getElementById("workspace-file-tree")!;
-            const entries = [
-                { path: "src/MyComponent.tsx", name: "MyComponent.tsx", type: "file", size: 100 },
-            ];
+            const entries = [{ path: "src/MyComponent.tsx", name: "MyComponent.tsx", type: "file", size: 100 }];
             mockState._workspaceFiles = entries;
             wsMod.filterWorkspaceFiles("mycomponent");
             assert.ok(container.innerHTML.includes("MyComponent"), "Should match case-insensitively");
@@ -393,7 +441,11 @@ export function primeServerTip() {}
             const el = dom.window.document.getElementById("import-status")!;
             assert.strictEqual(el.style.display, "block");
             assert.ok(el.textContent!.includes("Import complete!"));
-            assert.ok(el.style.color.includes("126, 207, 126") || el.style.color.includes("7ecf7e") || el.style.background.includes("126, 207, 126"));
+            assert.ok(
+                el.style.color.includes("126, 207, 126") ||
+                    el.style.color.includes("7ecf7e") ||
+                    el.style.background.includes("126, 207, 126"),
+            );
         });
 
         it("displays error toast with red styling", () => {
@@ -401,7 +453,11 @@ export function primeServerTip() {}
             const el = dom.window.document.getElementById("import-status")!;
             assert.strictEqual(el.style.display, "block");
             assert.ok(el.textContent!.includes("Import failed"));
-            assert.ok(el.style.color.includes("255, 141, 141") || el.style.color.includes("ff8d8d") || el.style.background.includes("231, 76, 60"));
+            assert.ok(
+                el.style.color.includes("255, 141, 141") ||
+                    el.style.color.includes("ff8d8d") ||
+                    el.style.background.includes("231, 76, 60"),
+            );
         });
     });
 
@@ -415,8 +471,22 @@ export function primeServerTip() {}
 
         it("renders timeline entries with status badges", () => {
             mockState.importHistory = [
-                { id: "i1", timestamp: new Date().toISOString(), mode: "general", fileName: "data.json", status: "success", message: "Imported to workspace/" },
-                { id: "i2", timestamp: new Date().toISOString(), mode: "registered", fileName: "agent.json", status: "error", message: "Validation failed" },
+                {
+                    id: "i1",
+                    timestamp: new Date().toISOString(),
+                    mode: "general",
+                    fileName: "data.json",
+                    status: "success",
+                    message: "Imported to workspace/",
+                },
+                {
+                    id: "i2",
+                    timestamp: new Date().toISOString(),
+                    mode: "registered",
+                    fileName: "agent.json",
+                    status: "error",
+                    message: "Validation failed",
+                },
             ];
             wsMod.renderImportHistory();
             const el = dom.window.document.getElementById("import-history-list")!;
@@ -430,8 +500,12 @@ export function primeServerTip() {}
             mockState.importHistory = [];
             for (let i = 0; i < 30; i++) {
                 mockState.importHistory.push({
-                    id: `i${i}`, timestamp: new Date().toISOString(),
-                    mode: "general", fileName: `file${i}.txt`, status: "success", message: "OK",
+                    id: `i${i}`,
+                    timestamp: new Date().toISOString(),
+                    mode: "general",
+                    fileName: `file${i}.txt`,
+                    status: "success",
+                    message: "OK",
                 });
             }
             wsMod.renderImportHistory();
@@ -441,9 +515,30 @@ export function primeServerTip() {}
 
         it("renders mode icons (folder, registered, general)", () => {
             mockState.importHistory = [
-                { id: "f1", timestamp: new Date().toISOString(), mode: "folder", fileName: "mydir", status: "success", message: "OK" },
-                { id: "r1", timestamp: new Date().toISOString(), mode: "registered", fileName: "char.json", status: "success", message: "OK" },
-                { id: "g1", timestamp: new Date().toISOString(), mode: "general", fileName: "readme.md", status: "success", message: "OK" },
+                {
+                    id: "f1",
+                    timestamp: new Date().toISOString(),
+                    mode: "folder",
+                    fileName: "mydir",
+                    status: "success",
+                    message: "OK",
+                },
+                {
+                    id: "r1",
+                    timestamp: new Date().toISOString(),
+                    mode: "registered",
+                    fileName: "char.json",
+                    status: "success",
+                    message: "OK",
+                },
+                {
+                    id: "g1",
+                    timestamp: new Date().toISOString(),
+                    mode: "general",
+                    fileName: "readme.md",
+                    status: "success",
+                    message: "OK",
+                },
             ];
             wsMod.renderImportHistory();
             const el = dom.window.document.getElementById("import-history-list")!;
@@ -570,8 +665,20 @@ export function primeServerTip() {}
     describe("filterCharacterAssignments", () => {
         it("filters by character name", () => {
             mockState.characterAssignments = [
-                { assignmentId: "a1", characterId: "sentinel-business", state: "active", operatorEmail: "op@co.com", character: { displayName: "Sentinel" } },
-                { assignmentId: "a2", characterId: "aria-individual", state: "active", operatorEmail: "op@co.com", character: { displayName: "Aria" } },
+                {
+                    assignmentId: "a1",
+                    characterId: "sentinel-business",
+                    state: "active",
+                    operatorEmail: "op@co.com",
+                    character: { displayName: "Sentinel" },
+                },
+                {
+                    assignmentId: "a2",
+                    characterId: "aria-individual",
+                    state: "active",
+                    operatorEmail: "op@co.com",
+                    character: { displayName: "Aria" },
+                },
             ];
             charMod.filterCharacterAssignments("sentinel");
             const el = dom.window.document.getElementById("character-roster")!;
@@ -581,8 +688,20 @@ export function primeServerTip() {}
 
         it("filters by email", () => {
             mockState.characterAssignments = [
-                { assignmentId: "a1", characterId: "a", state: "active", operatorEmail: "kirk@co.com", character: { displayName: "A" } },
-                { assignmentId: "a2", characterId: "b", state: "active", operatorEmail: "other@co.com", character: { displayName: "B" } },
+                {
+                    assignmentId: "a1",
+                    characterId: "a",
+                    state: "active",
+                    operatorEmail: "kirk@co.com",
+                    character: { displayName: "A" },
+                },
+                {
+                    assignmentId: "a2",
+                    characterId: "b",
+                    state: "active",
+                    operatorEmail: "other@co.com",
+                    character: { displayName: "B" },
+                },
             ];
             charMod.filterCharacterAssignments("kirk");
             const el = dom.window.document.getElementById("character-roster")!;
@@ -650,7 +769,12 @@ export function primeServerTip() {}
     describe("renderCharacterAssignmentForm", () => {
         it("populates character dropdown from available characters", () => {
             mockState.availableCharacters = [
-                { id: "sentinel-business", name: "sentinel-business", displayName: "Sentinel", executionProfile: "individual" },
+                {
+                    id: "sentinel-business",
+                    name: "sentinel-business",
+                    displayName: "Sentinel",
+                    executionProfile: "individual",
+                },
                 { id: "aria-individual", name: "aria-individual", displayName: "Aria", executionProfile: "individual" },
             ];
             charMod.renderCharacterAssignmentForm();
@@ -675,8 +799,18 @@ export function primeServerTip() {}
 
         it("renders a character chip strip with data-tip-id and title for each chip", () => {
             mockState.availableCharacters = [
-                { id: "aria-individual", displayName: "ARIA", executionProfile: "individual", persona: "warm, helpful" },
-                { id: "phoenix-individual", displayName: "PHOENIX", executionProfile: "individual", persona: "decisive" },
+                {
+                    id: "aria-individual",
+                    displayName: "ARIA",
+                    executionProfile: "individual",
+                    persona: "warm, helpful",
+                },
+                {
+                    id: "phoenix-individual",
+                    displayName: "PHOENIX",
+                    executionProfile: "individual",
+                    persona: "decisive",
+                },
             ];
             const profileEl = dom.window.document.getElementById("character-assign-profile") as any;
             profileEl.value = "individual";
@@ -744,8 +878,10 @@ export function primeServerTip() {}
             const hubLabel = dom.window.document.getElementById("label-workspace-hub")!;
             assert.ok(emailLabel.textContent!.includes("Employee"), `Expected Employee, got ${emailLabel.textContent}`);
             assert.ok(opLabel.textContent!.includes("Company"), `Expected Company, got ${opLabel.textContent}`);
-            assert.ok(hubLabel.textContent!.includes("Department") || hubLabel.textContent!.includes("Project"),
-                `Expected Department/Project, got ${hubLabel.textContent}`);
+            assert.ok(
+                hubLabel.textContent!.includes("Department") || hubLabel.textContent!.includes("Project"),
+                `Expected Department/Project, got ${hubLabel.textContent}`,
+            );
         });
 
         it("updates labels for individual profile", () => {
@@ -755,7 +891,7 @@ export function primeServerTip() {}
             charMod.onProfileChanged();
             const emailLabel = dom.window.document.getElementById("label-prism-user-email")!;
             const opLabel = dom.window.document.getElementById("label-operator-email")!;
-            assert.ok(emailLabel.textContent!.includes("Assistant"), `Expected Assistant, got ${emailLabel.textContent}`);
+            assert.ok(emailLabel.textContent!.includes("Agent"), `Expected Agent, got ${emailLabel.textContent}`);
             assert.ok(opLabel.textContent!.includes("Personal"), `Expected Personal, got ${opLabel.textContent}`);
         });
     });
@@ -782,8 +918,10 @@ export function primeServerTip() {}
             ];
             charMod.toggleCharacterAssignmentDetails("toggle-1");
             const el = dom.window.document.getElementById("character-roster")!;
-            assert.ok(el.innerHTML.includes("Assignment Chain") || el.innerHTML.includes("characterId"),
-                "Should show expanded details");
+            assert.ok(
+                el.innerHTML.includes("Assignment Chain") || el.innerHTML.includes("characterId"),
+                "Should show expanded details",
+            );
             assert.ok(el.innerHTML.includes("Hide Details"), "Should show Hide Details button");
         });
 

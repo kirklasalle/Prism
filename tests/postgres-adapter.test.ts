@@ -23,26 +23,20 @@ function assert(cond: unknown, msg: string): void {
 export async function testPostgresAdapter(): Promise<void> {
     // ── Parameter translation ──
     {
-        const { sql, order } = translateNamedParams(
-            "SELECT * FROM t WHERE a = :foo AND b = :bar AND c = :foo",
-        );
+        const { sql, order } = translateNamedParams("SELECT * FROM t WHERE a = :foo AND b = :bar AND c = :foo");
         assert(sql === "SELECT * FROM t WHERE a = $1 AND b = $2 AND c = $1", `translated sql: ${sql}`);
         assert(order.length === 2 && order[0] === "foo" && order[1] === "bar", "param order");
     }
     {
         // String literal must NOT have its `:colon` substituted.
-        const { sql, order } = translateNamedParams(
-            "SELECT 'hello :world' AS msg, :real AS r",
-        );
+        const { sql, order } = translateNamedParams("SELECT 'hello :world' AS msg, :real AS r");
         assert(sql.includes("'hello :world'"), "string literal preserved");
         assert(sql.endsWith("$1 AS r"), "real param substituted");
         assert(order.length === 1 && order[0] === "real", "only real param tracked");
     }
     {
         // Doubled single quotes inside literal must not break parser.
-        const { sql } = translateNamedParams(
-            "INSERT INTO t (s) VALUES ('it''s :ok') RETURNING :id",
-        );
+        const { sql } = translateNamedParams("INSERT INTO t (s) VALUES ('it''s :ok') RETURNING :id");
         assert(sql.includes("'it''s :ok'"), "doubled quote literal preserved");
         assert(sql.endsWith("$1"), "post-literal param substituted");
     }
@@ -55,7 +49,11 @@ export async function testPostgresAdapter(): Promise<void> {
 
     // Synchronous methods must throw a clear error rather than crash.
     let threw = false;
-    try { adapter.exec("SELECT 1"); } catch { threw = true; }
+    try {
+        adapter.exec("SELECT 1");
+    } catch {
+        threw = true;
+    }
     assert(threw, "exec throws when not ready");
 
     // Connect attempt should NOT throw — degrades to error/unsupported.

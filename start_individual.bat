@@ -91,8 +91,8 @@ echo [PROFILE] Dashboard port          = %PRISM_DASHBOARD_PORT%
 echo.
 
 echo [START] Launching PRISM Individual server...
-echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will stay open to inspect.
-start "PRISM Individual Server" cmd /k npm start
+echo [INFO] Spawning server in a separate window. If it crashes or has errors, that window will close upon exit.
+start "PRISM Individual Server" cmd /c npm start
 
 echo [WAIT] Waiting for server on port %PRISM_DASHBOARD_PORT%...
 REM ── Wait for startup ──────────────────────────────────────────────────
@@ -108,7 +108,13 @@ goto :wait_loop
 echo [START] Opening login screen at http://localhost:%PRISM_DASHBOARD_PORT%/login
 start "" "http://localhost:%PRISM_DASHBOARD_PORT%/login"
 
-pause
+echo [MONITOR] PRISM is running. Monitoring for shutdown...
+:monitor_loop
+timeout /t 2 /nobreak >nul
+netstat -ano | find "LISTENING" | find ":%PRISM_DASHBOARD_PORT%" >nul
+if %errorlevel% equ 0 goto :monitor_loop
+
+echo [SHUTDOWN] PRISM server has shut down. Exiting launcher.
 goto :eof
 
 :fail

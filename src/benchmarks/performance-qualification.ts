@@ -9,10 +9,7 @@ import { ActivityBus } from "../core/activity/bus.js";
 import { SqliteActivityStore } from "../core/activity/sqlite-store.js";
 import type { ActivityEvent } from "../core/activity/types.js";
 import { ApprovalQueue } from "../core/approval/approval-queue.js";
-import {
-    getPerformanceSloProfile,
-    resolveEnvironmentProfile,
-} from "../core/config/environment-profiles.js";
+import { getPerformanceSloProfile, resolveEnvironmentProfile } from "../core/config/environment-profiles.js";
 import { SemanticMemoryIndex } from "../core/memory/semantic-memory.js";
 import { PolicyEngine } from "../core/policy/engine.js";
 
@@ -84,10 +81,20 @@ const ACTIVE_SLO_PROFILE = getPerformanceSloProfile(ENVIRONMENT_PROFILE);
 const SLO_POLICY_P95_MS = readNumberEnv("PRISM_SLO_POLICY_P95_MS", ACTIVE_SLO_PROFILE.policyP95Ms);
 const SLO_RETRIEVAL_P95_MS = readNumberEnv("PRISM_SLO_RETRIEVAL_P95_MS", ACTIVE_SLO_PROFILE.retrievalP95Ms);
 const SLO_EVENT_P95_MS = readNumberEnv("PRISM_SLO_EVENT_P95_MS", ACTIVE_SLO_PROFILE.eventDeliveryP95Ms);
-const SLO_TELEMETRY_OVERHEAD_P95_MS = readNumberEnv("PRISM_SLO_TELEMETRY_OVERHEAD_P95_MS", ACTIVE_SLO_PROFILE.telemetryOverheadP95Ms);
-const SLO_PERSISTENCE_OVERHEAD_P95_MS = readNumberEnv("PRISM_SLO_PERSISTENCE_OVERHEAD_P95_MS", ACTIVE_SLO_PROFILE.persistenceOverheadP95Ms);
-const SLO_APPROVAL_PATHWAY_P99_MS = readNumberEnv("PRISM_SLO_APPROVAL_PATHWAY_P99_MS", ACTIVE_SLO_PROFILE.approvalPathwayP99Ms);
-const PERF_OUTPUT_PATH = process.env.PRISM_PERF_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "perf-qualification.json");
+const SLO_TELEMETRY_OVERHEAD_P95_MS = readNumberEnv(
+    "PRISM_SLO_TELEMETRY_OVERHEAD_P95_MS",
+    ACTIVE_SLO_PROFILE.telemetryOverheadP95Ms,
+);
+const SLO_PERSISTENCE_OVERHEAD_P95_MS = readNumberEnv(
+    "PRISM_SLO_PERSISTENCE_OVERHEAD_P95_MS",
+    ACTIVE_SLO_PROFILE.persistenceOverheadP95Ms,
+);
+const SLO_APPROVAL_PATHWAY_P99_MS = readNumberEnv(
+    "PRISM_SLO_APPROVAL_PATHWAY_P99_MS",
+    ACTIVE_SLO_PROFILE.approvalPathwayP99Ms,
+);
+const PERF_OUTPUT_PATH =
+    process.env.PRISM_PERF_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "perf-qualification.json");
 
 async function main(): Promise<void> {
     const policyResult = benchmarkPolicyEngine(POLICY_ITERATIONS);
@@ -97,10 +104,7 @@ async function main(): Promise<void> {
     const persistenceResult = benchmarkActivityBus(EVENT_EMITS, { semantic: true, sqlite: true });
     const telemetryOverheadP95 = Math.max(0, eventResult.p95Ms - eventBaseline.p95Ms);
     const persistenceOverheadP95 = Math.max(0, persistenceResult.p95Ms - eventResult.p95Ms);
-    const approvalContention = await benchmarkApprovalPathwayContention(
-        APPROVAL_REQUESTS,
-        APPROVAL_CONCURRENCY,
-    );
+    const approvalContention = await benchmarkApprovalPathwayContention(APPROVAL_REQUESTS, APPROVAL_CONCURRENCY);
 
     const gates: PerformanceGate[] = [
         gate("Policy decision p95 (ms)", policyResult.p95Ms, SLO_POLICY_P95_MS),
@@ -276,8 +280,8 @@ async function settleOne(queue: ApprovalQueue, approve: boolean): Promise<void> 
 async function withMutedConsole<T>(fn: () => Promise<T>): Promise<T> {
     const originalLog = console.log;
     const originalWarn = console.warn;
-    console.log = () => { };
-    console.warn = () => { };
+    console.log = () => {};
+    console.warn = () => {};
 
     try {
         return await fn();
@@ -344,10 +348,7 @@ function benchmarkSemanticRetrieval(documentCount: number, queryCount: number): 
     return summarize(samples);
 }
 
-function benchmarkActivityBus(
-    eventCount: number,
-    options: { semantic: boolean; sqlite: boolean },
-): BenchmarkResult {
+function benchmarkActivityBus(eventCount: number, options: { semantic: boolean; sqlite: boolean }): BenchmarkResult {
     const bus = new ActivityBus();
     const semantic = new SemanticMemoryIndex();
     const subscribers: Array<{ close?: () => void }> = [];
@@ -407,9 +408,10 @@ function syntheticEvent(index: number): ActivityEvent {
         operation: index % 2 === 0 ? "retrieval.lookup" : "workflow.step",
         status: "succeeded",
         details: {
-            text: index % 2 === 0
-                ? "governance approval workflow retrieval policy"
-                : "memory utility novelty coverage diagnostics",
+            text:
+                index % 2 === 0
+                    ? "governance approval workflow retrieval policy"
+                    : "memory utility novelty coverage diagnostics",
         },
     };
 }

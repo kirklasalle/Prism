@@ -52,7 +52,7 @@ class MockSupervisor extends EventEmitter {
 
     async unloadModel(modelAlias: string): Promise<boolean> {
         this.unloadCalled++;
-        this.slots = this.slots.filter(s => s.modelAlias !== modelAlias);
+        this.slots = this.slots.filter((s) => s.modelAlias !== modelAlias);
         return true;
     }
 }
@@ -193,7 +193,7 @@ describe("GuardianAgent", () => {
         const events: Array<{ operation: string; detail: string }> = [];
         guardian.on("guardian_event", (evt) => events.push(evt));
         await guardian.start();
-        assert.ok(events.some(e => e.operation === "guardian.started"));
+        assert.ok(events.some((e) => e.operation === "guardian.started"));
         guardian.stop();
     });
 
@@ -202,14 +202,14 @@ describe("GuardianAgent", () => {
         const events: Array<{ operation: string; detail: string }> = [];
         guardian.on("guardian_event", (evt) => events.push(evt));
         guardian.stop();
-        assert.ok(events.some(e => e.operation === "guardian.stopped"));
+        assert.ok(events.some((e) => e.operation === "guardian.stopped"));
     });
 
     it("recordAction emits guardian.action event", async () => {
         const events: Array<{ operation: string; detail: string }> = [];
         guardian.on("guardian_event", (evt) => events.push(evt));
         await guardian.executeTool("test_tool", { action: "test_action" });
-        assert.ok(events.some(e => e.operation === "guardian.action"));
+        assert.ok(events.some((e) => e.operation === "guardian.action"));
     });
 
     it("emits start_failed event when no model path", async () => {
@@ -221,7 +221,7 @@ describe("GuardianAgent", () => {
         const events: Array<{ operation: string; detail: string }> = [];
         noModelGuardian.on("guardian_event", (evt) => events.push(evt));
         await noModelGuardian.start();
-        assert.ok(events.some(e => e.operation === "guardian.start_failed"));
+        assert.ok(events.some((e) => e.operation === "guardian.start_failed"));
     });
 
     // ── executeTool ───────────────────────────────────────────────────
@@ -255,7 +255,7 @@ describe("GuardianAgent", () => {
         await guardian.executeTool("test_tool", { action: "test_action" });
         const status = guardian.getStatus();
         assert.ok(status.recentActions.length > 0);
-        assert.ok(status.recentActions.some(a => a.action === "tool_exec"));
+        assert.ok(status.recentActions.some((a) => a.action === "tool_exec"));
     });
 
     // ── getStatus with slot info ──────────────────────────────────────
@@ -312,14 +312,43 @@ describe("GuardianAgent", () => {
 
     it("mcp_health_recovery returns warning when reconnect fails", async () => {
         guardian.setMcpAdapterFn(() => ({
-            getServerStates: () => [
-                { name: "beta", state: "down" as const, retryCount: 1, lastError: "exited" },
-            ],
+            getServerStates: () => [{ name: "beta", state: "down" as const, retryCount: 1, lastError: "exited" }],
             forceReconnect: async () => ({ ok: false, error: "still broken" }),
         }));
         const result = await guardian.runTask("mcp_health_recovery");
         assert.equal(result!.lastResult, "warning");
         assert.match(String(result!.lastDetail), /still down/);
+    });
+
+    // ── log_volume_analysis task ──────────────────────────────────────
+
+    it("log_volume_analysis returns success when no log entries resolver is set", async () => {
+        const result = await guardian.runTask("log_volume_analysis");
+        assert.ok(result);
+        assert.equal(result.lastResult, "success");
+        assert.match(String(result.lastDetail), /skipped|not configured/i);
+    });
+
+    it("log_volume_analysis reports warning on high error rate", async () => {
+        guardian.setLogEntriesFn(() => [
+            { severity: "error", timestamp: new Date().toISOString() },
+            { severity: "info", timestamp: new Date().toISOString() },
+        ]);
+        const result = await guardian.runTask("log_volume_analysis");
+        assert.ok(result);
+        assert.equal(result.lastResult, "warning");
+        assert.match(String(result.lastDetail), /High error rate/);
+    });
+
+    it("log_volume_analysis returns success for healthy log state", async () => {
+        guardian.setLogEntriesFn(() => [
+            { severity: "info", timestamp: new Date().toISOString() },
+            { severity: "info", timestamp: new Date().toISOString() },
+        ]);
+        const result = await guardian.runTask("log_volume_analysis");
+        assert.ok(result);
+        assert.equal(result.lastResult, "success");
+        assert.match(String(result.lastDetail), /0 errors/);
     });
 });
 

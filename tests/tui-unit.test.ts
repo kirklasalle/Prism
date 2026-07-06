@@ -8,10 +8,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-    profileColor, tierColor, statusColor,
-    colors, TABS, TAB_SHORTCUTS,
-} from "../src/tui/theme.js";
+import { profileColor, tierColor, statusColor, colors, TABS, TAB_SHORTCUTS } from "../src/tui/theme.js";
 
 /* ================================================================== */
 /*  theme.ts — profileColor                                            */
@@ -116,14 +113,30 @@ describe("TABS array", () => {
 
     it("TAB_SHORTCUTS maps all shortcuts to correct tab ids", () => {
         for (const tab of TABS) {
-            assert.strictEqual(TAB_SHORTCUTS[tab.shortcut], tab.id,
-                `shortcut "${tab.shortcut}" should map to "${tab.id}"`);
+            assert.strictEqual(
+                TAB_SHORTCUTS[tab.shortcut],
+                tab.id,
+                `shortcut "${tab.shortcut}" should map to "${tab.id}"`,
+            );
         }
     });
 
     it("includes essential tabs", () => {
         const ids = TABS.map((t) => t.id);
-        for (const expected of ["chat", "settings", "tools", "agentic", "computer", "browser", "workspace", "network", "telemetry", "logs", "scheduler", "characters"]) {
+        for (const expected of [
+            "chat",
+            "settings",
+            "tools",
+            "agentic",
+            "computer",
+            "browser",
+            "workspace",
+            "network",
+            "telemetry",
+            "logs",
+            "scheduler",
+            "characters",
+        ]) {
             assert.ok(ids.includes(expected), `missing tab: ${expected}`);
         }
     });

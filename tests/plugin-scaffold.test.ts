@@ -46,7 +46,12 @@ export async function testPluginScaffold(): Promise<void> {
     const tmp = mkdtempSync(join(tmpdir(), "prism-scaffold-"));
     const target = join(tmp, "pack");
     try {
-        const out = scaffolder.scaffold({ id: "test-org.demo", name: "Demo Pack", out: target, description: "Test scaffold." });
+        const out = scaffolder.scaffold({
+            id: "test-org.demo",
+            name: "Demo Pack",
+            out: target,
+            description: "Test scaffold.",
+        });
         assert.strictEqual(out, target);
 
         const expected = [
@@ -75,11 +80,12 @@ export async function testPluginScaffold(): Promise<void> {
         assert.ok(helloSrc.includes("exports.hello"), "stub exports hello function");
 
         // Refuses to overwrite a non-empty directory
-        assert.throws(
-            () => scaffolder.scaffold({ id: "x", name: "X", out: target }),
-            /non-empty directory/,
-        );
+        assert.throws(() => scaffolder.scaffold({ id: "x", name: "X", out: target }), /non-empty directory/);
     } finally {
-        try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+            rmSync(tmp, { recursive: true, force: true });
+        } catch {
+            /* best effort */
+        }
     }
 }

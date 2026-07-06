@@ -19,7 +19,12 @@ const TEST_DB = "prism-kg-diag-integration-test.db";
 const MCP_UKS_GRAPH_PATH = join(process.cwd(), ".mcp", "ids-mcp", "ids_knowledge_graph.pkl");
 const MCP_UKS_DB_DIR = join(process.cwd(), ".mcp", "impressioncore-dpa", "knowledge");
 
-function makeEvent(id: string, operation: string, layer: string = "tool_execution", details: Record<string, unknown> = {}): ActivityEvent {
+function makeEvent(
+    id: string,
+    operation: string,
+    layer: string = "tool_execution",
+    details: Record<string, unknown> = {},
+): ActivityEvent {
     return {
         id,
         timestamp: new Date().toISOString(),
@@ -43,14 +48,26 @@ describe("Knowledge Graph Integration", function () {
     before(function () {
         semanticIndex = new SemanticMemoryIndex();
         episodicMemory = new EpisodicMemory(500);
-        try { unlinkSync(TEST_DB); } catch { /* ok */ }
+        try {
+            unlinkSync(TEST_DB);
+        } catch {
+            /* ok */
+        }
         sessionMemory = new SessionMemoryStore(TEST_DB);
         memoryQueryTool = new MemoryQueryTool(semanticIndex, episodicMemory, sessionMemory);
     });
 
     after(function () {
-        try { sessionMemory.close(); } catch { /* ok */ }
-        try { unlinkSync(TEST_DB); } catch { /* ok */ }
+        try {
+            sessionMemory.close();
+        } catch {
+            /* ok */
+        }
+        try {
+            unlinkSync(TEST_DB);
+        } catch {
+            /* ok */
+        }
     });
 
     // ── Semantic Memory Full Lifecycle ───────────────────────────────────
@@ -193,9 +210,11 @@ describe("Knowledge Graph Integration", function () {
         it("semantic query latency < 500ms on 2000 documents", function () {
             const idx = new SemanticMemoryIndex();
             for (let i = 0; i < 2000; i++) {
-                idx.onEvent(makeEvent(`perf-${i}`, `op_${i % 100}`, "tool_execution", {
-                    data: `payload_${i}_knowledge_graph_${i % 10}`,
-                }));
+                idx.onEvent(
+                    makeEvent(`perf-${i}`, `op_${i % 100}`, "tool_execution", {
+                        data: `payload_${i}_knowledge_graph_${i % 10}`,
+                    }),
+                );
             }
 
             const start = performance.now();

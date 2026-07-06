@@ -40,7 +40,9 @@ export async function testReleaseValidationGates(): Promise<void> {
     });
 
     assert.strictEqual(strictFail.passed, false);
-    assert.ok(strictFail.gates.filter((gate) => gate.requiredFor === "production").every((gate) => gate.status === "failed"));
+    assert.ok(
+        strictFail.gates.filter((gate) => gate.requiredFor === "production").every((gate) => gate.status === "failed"),
+    );
 
     const candidateFail = evaluateReleaseGates({
         commandResults: [

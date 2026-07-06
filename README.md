@@ -156,7 +156,19 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 - **Intelligent telemetry**: pattern detection, role hotspot analysis, lifecycle promotion recommendations
 - **Guardian Agent**: permanent autonomous system agent powered by local `llama.cpp` inference — monitors runtime health, self-heals crashed model slots, enforces policy boundaries
 
-### 6. Identity, Access & Accountability
+### 6. Advanced Model Routing
+
+- **Fully Configurable & AI-Assisted**: Complete operator control over routing topologies with AI assistance to dynamically determine the optimal model assignments based on task parameters.
+- **Role-Based Overrides**: Map specific models or providers to individual task roles (e.g., chat, code-generation, summarization, memory indexing, or research) with automatic validation.
+- **Power-Aware Strategies**: Supports routing strategies based on target profiles: `eco` (prioritizes local models to eliminate API charges), `performance` (highest available capability tier), and `adaptive` (balances VRAM and API costs dynamically).
+
+### 7. Advanced Model Matrix (Exclusive Platform Core)
+
+- **Operator-Exclusive Registry**: A dynamically updated, proprietary database of providers, models, use cases, capabilities, and attributes.
+- **Local Model Auto-Discovery**: Automatically queries local runtime environments (e.g., Ollama `/api/ps`) to register and measure local capability parameters (VRAM, speed, parameter size).
+- **Deprecation & Sunset Lifecycle Tracking**: Preserves deprecation dates, sunset deadlines, replacement successor patterns, and legacy telemetry configurations to prevent silent failures and preserve historical regression check capabilities.
+
+### 8. Identity, Access & Accountability
 
 - **IAM Store** with RBAC, multi-tenant support, and user lifecycle management
 - **SSO**: OIDC and SAML integration for enterprise identity providers
@@ -164,7 +176,7 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 - **Character Accountability Control (CAC)**: every agent action linked to a character identity, a Prism user, and an operator via an immutable accountability chain
 - **Session management** with cryptographic session tokens and cookie-based auth
 
-### 7. Skills Engine — Autonomous Agent Capabilities
+### 9. Skills Engine — Autonomous Agent Capabilities
 
 Production-ready skills that agents use to interact with the world:
 

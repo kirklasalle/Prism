@@ -113,7 +113,7 @@ export function runBackup(options: BackupOptions): { manifestPath: string; manif
     if (existsSync(join(outputDir, MANIFEST_NAME))) {
         throw new Error(
             `backup output directory already contains a manifest: ${outputDir} ` +
-            `(refusing to overwrite — pick a fresh path)`,
+                `(refusing to overwrite — pick a fresh path)`,
         );
     }
 
@@ -178,8 +178,7 @@ export function runRestore(options: RestoreOptions): RestoreResult {
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as BackupManifest;
     if (manifest.schemaVersion !== 1) {
         throw new Error(
-            `unsupported backup manifest schemaVersion=${manifest.schemaVersion} ` +
-            `(this build supports v1)`,
+            `unsupported backup manifest schemaVersion=${manifest.schemaVersion} ` + `(this build supports v1)`,
         );
     }
 
@@ -193,7 +192,7 @@ export function runRestore(options: RestoreOptions): RestoreResult {
         if (actual !== entry.checksum) {
             throw new Error(
                 `backup checksum mismatch for ${entry.fileName}: ` +
-                `expected=${entry.checksum.slice(0, 12)} actual=${actual.slice(0, 12)}`,
+                    `expected=${entry.checksum.slice(0, 12)} actual=${actual.slice(0, 12)}`,
             );
         }
     }
@@ -223,7 +222,11 @@ export function runRestore(options: RestoreOptions): RestoreResult {
             for (const suffix of ["-wal", "-shm"]) {
                 const side = absTarget + suffix;
                 if (existsSync(side)) {
-                    try { unlinkSync(side); } catch { /* best effort */ }
+                    try {
+                        unlinkSync(side);
+                    } catch {
+                        /* best effort */
+                    }
                 }
             }
         }

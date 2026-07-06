@@ -32,14 +32,14 @@ export class EmailCapabilityTool implements Tool {
 
         return mutatingAction
             ? {
-                ok: true,
-                output,
-                sideEffects: [{ type: "api", description: "email_ops mutating request" }],
-            }
+                  ok: true,
+                  output,
+                  sideEffects: [{ type: "api", description: "email_ops mutating request" }],
+              }
             : {
-                ok: true,
-                output,
-            };
+                  ok: true,
+                  output,
+              };
     }
 }
 
@@ -74,14 +74,14 @@ export class CalendarPlanningTool implements Tool {
 
         return mutatingAction
             ? {
-                ok: true,
-                output,
-                sideEffects: [{ type: "api", description: "calendar_plan mutating request" }],
-            }
+                  ok: true,
+                  output,
+                  sideEffects: [{ type: "api", description: "calendar_plan mutating request" }],
+              }
             : {
-                ok: true,
-                output,
-            };
+                  ok: true,
+                  output,
+              };
     }
 }
 
@@ -112,14 +112,14 @@ export class NotesExtractionTool implements Tool {
 
         return mutatingAction
             ? {
-                ok: true,
-                output,
-                sideEffects: [{ type: "api", description: "notes_extract mutating request" }],
-            }
+                  ok: true,
+                  output,
+                  sideEffects: [{ type: "api", description: "notes_extract mutating request" }],
+              }
             : {
-                ok: true,
-                output,
-            };
+                  ok: true,
+                  output,
+              };
     }
 }
 
@@ -150,14 +150,14 @@ export class TasksTimelineTool implements Tool {
 
         return mutatingAction
             ? {
-                ok: true,
-                output,
-                sideEffects: [{ type: "api", description: "tasks_timeline mutating request" }],
-            }
+                  ok: true,
+                  output,
+                  sideEffects: [{ type: "api", description: "tasks_timeline mutating request" }],
+              }
             : {
-                ok: true,
-                output,
-            };
+                  ok: true,
+                  output,
+              };
     }
 }
 

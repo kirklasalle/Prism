@@ -47,7 +47,11 @@ function setPrefs(prefs: Record<string, unknown>): void {
     writeFileSync(preferencesPath(), JSON.stringify(prefs, null, 2) + "\n", "utf-8");
 }
 
-function fetchRaw(method: string, path: string, body?: unknown): Promise<{ status: number; body: string; contentType: string }> {
+function fetchRaw(
+    method: string,
+    path: string,
+    body?: unknown,
+): Promise<{ status: number; body: string; contentType: string }> {
     return new Promise((resolve, reject) => {
         const bodyStr = body != null ? JSON.stringify(body) : undefined;
         const req = http.request(
@@ -62,15 +66,17 @@ function fetchRaw(method: string, path: string, body?: unknown): Promise<{ statu
             },
             (res) => {
                 let payload = "";
-                res.on("data", (chunk: Buffer) => { payload += chunk; });
+                res.on("data", (chunk: Buffer) => {
+                    payload += chunk;
+                });
                 res.on("end", () =>
                     resolve({
                         status: res.statusCode!,
                         body: payload,
                         contentType: String(res.headers["content-type"] ?? ""),
-                    })
+                    }),
                 );
-            }
+            },
         );
         req.on("error", reject);
         if (bodyStr != null) req.write(bodyStr);
@@ -80,8 +86,11 @@ function fetchRaw(method: string, path: string, body?: unknown): Promise<{ statu
 
 function fetchJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return fetchRaw(method, path, body).then(({ status, body: raw }) => {
-        try { return { status, body: JSON.parse(raw) }; }
-        catch { return { status, body: raw }; }
+        try {
+            return { status, body: JSON.parse(raw) };
+        } catch {
+            return { status, body: raw };
+        }
     });
 }
 
@@ -100,9 +109,7 @@ describe("Simple Mode (E3a)", function () {
         // Save + overwrite the real prefs file so tests start from a clean state.
         // writePreferences() merges, so we use writeFileSync directly.
         const realPrefsPath = preferencesPath();
-        originalPrefs = existsSync(realPrefsPath)
-            ? readFileSync(realPrefsPath, "utf-8")
-            : null;
+        originalPrefs = existsSync(realPrefsPath) ? readFileSync(realPrefsPath, "utf-8") : null;
         setPrefs({ setupComplete: true });
 
         const bus = new ActivityBus();
@@ -121,8 +128,8 @@ describe("Simple Mode (E3a)", function () {
                 executionProfileSegment: "individual",
             },
             chatStore,
-            [],                                   // actions
-            0,                                    // ephemeral port
+            [], // actions
+            0, // ephemeral port
             undefined,
             undefined,
             new InMemoryProviderSecretStore(),
@@ -150,7 +157,11 @@ describe("Simple Mode (E3a)", function () {
 
         // Cleanup temp dir — on Windows a brief delay helps release file handles
         await new Promise((resolve) => setTimeout(resolve, 100));
-        try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows EPERM: non-fatal */ }
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            /* Windows EPERM: non-fatal */
+        }
     });
 
     // ── HTML structure ────────────────────────────────────────────────────────
@@ -192,26 +203,20 @@ describe("Simple Mode (E3a)", function () {
         it("includes the simple-mode.js script tag", () => {
             assert.ok(
                 html.includes('src="/public/simple-mode.js"'),
-                "HTML should include /public/simple-mode.js script"
+                "HTML should include /public/simple-mode.js script",
             );
-            assert.ok(
-                html.includes('type="module"'),
-                "script tag should use type=module"
-            );
+            assert.ok(html.includes('type="module"'), "script tag should use type=module");
         });
 
         it("includes prism-auth-token meta tag", () => {
-            assert.ok(
-                html.includes('name="prism-auth-token"'),
-                "HTML should include prism-auth-token meta tag"
-            );
+            assert.ok(html.includes('name="prism-auth-token"'), "HTML should include prism-auth-token meta tag");
         });
 
         it("does NOT include the full operator dashboard script/components", () => {
             // Simple mode should NOT contain the full operator dashboard's chat UI elements
             assert.ok(
-                !html.includes("id=\"chat-container\"") && !html.includes("id=\"agent-panel\""),
-                "Simple mode HTML should not include full dashboard panel IDs"
+                !html.includes('id="chat-container"') && !html.includes('id="agent-panel"'),
+                "Simple mode HTML should not include full dashboard panel IDs",
             );
         });
     });
@@ -247,7 +252,7 @@ describe("Simple Mode (E3a)", function () {
             // Full dashboard contains its own script logic, NOT simple-mode-specific IDs
             assert.ok(
                 !body.includes('id="sm-character-picker"'),
-                "dashboard should not contain simple mode character picker"
+                "dashboard should not contain simple mode character picker",
             );
         });
     });
@@ -259,20 +264,14 @@ describe("Simple Mode (E3a)", function () {
             setPrefs({ setupComplete: true, uiMode: "simple" });
 
             const { body } = await fetchRaw("GET", "/");
-            assert.ok(
-                body.includes('id="sm-character-picker"'),
-                "should serve simple mode when uiMode=simple"
-            );
+            assert.ok(body.includes('id="sm-character-picker"'), "should serve simple mode when uiMode=simple");
         });
 
         it("serves full dashboard when prefs.uiMode === 'advanced'", async () => {
             setPrefs({ setupComplete: true, uiMode: "advanced" });
 
             const { body } = await fetchRaw("GET", "/");
-            assert.ok(
-                !body.includes('id="sm-character-picker"'),
-                "should serve full dashboard when uiMode=advanced"
-            );
+            assert.ok(!body.includes('id="sm-character-picker"'), "should serve full dashboard when uiMode=advanced");
 
             // Reset
             setPrefs({ setupComplete: true });
@@ -282,10 +281,7 @@ describe("Simple Mode (E3a)", function () {
             setPrefs({ setupComplete: true }); // no uiMode
 
             const { body } = await fetchRaw("GET", "/?mode=advanced");
-            assert.ok(
-                !body.includes('id="sm-character-picker"'),
-                "/?mode=advanced should serve full dashboard"
-            );
+            assert.ok(!body.includes('id="sm-character-picker"'), "/?mode=advanced should serve full dashboard");
 
             // Reset
             setPrefs({ setupComplete: true });

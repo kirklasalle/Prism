@@ -62,7 +62,11 @@ export async function testIamRbac(): Promise<void> {
 
     // ── requireRole throws RbacError when insufficient ────────────────────
     let thrown: unknown = null;
-    try { requireRole(op, "admin"); } catch (e) { thrown = e; }
+    try {
+        requireRole(op, "admin");
+    } catch (e) {
+        thrown = e;
+    }
     assert.ok(thrown instanceof RbacError, "RbacError must be thrown");
     assert.equal((thrown as RbacError).statusCode, 403);
     assert.equal((thrown as RbacError).code, "forbidden");
@@ -71,7 +75,11 @@ export async function testIamRbac(): Promise<void> {
 
     // requireRole on null/undefined principal also throws
     let nullThrown: unknown = null;
-    try { requireRole(null, "viewer"); } catch (e) { nullThrown = e; }
+    try {
+        requireRole(null, "viewer");
+    } catch (e) {
+        nullThrown = e;
+    }
     assert.ok(nullThrown instanceof RbacError);
 
     // requireRole passes silently on satisfaction

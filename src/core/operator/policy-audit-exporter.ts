@@ -57,7 +57,7 @@ export interface PolicyAuditBundle {
 }
 
 export class PolicyAuditExporter {
-    constructor(private readonly store: SqliteActivityStore) { }
+    constructor(private readonly store: SqliteActivityStore) {}
 
     /**
      * Fetch all activity events matching the filter that carry a policyDecision field.
@@ -168,9 +168,7 @@ export class PolicyAuditExporter {
      */
     exportBundle(filter: PolicyAuditFilter): PolicyAuditBundle {
         const events = this.fetchDecisionEvents(filter);
-        const sorted = events.sort((a, b) =>
-            a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0
-        );
+        const sorted = events.sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0));
         const records = sorted.map((e) => this.toRecord(e));
         const stats = this.computeStats(records);
 

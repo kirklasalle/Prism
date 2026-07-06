@@ -54,8 +54,8 @@ export async function testApprovalContentionMixedOutcomes(): Promise<void> {
     // Mute noisy console output from ApprovalQueue's request()/timeout warnings.
     const origLog = console.log;
     const origWarn = console.warn;
-    console.log = () => { };
-    console.warn = () => { };
+    console.log = () => {};
+    console.warn = () => {};
 
     try {
         const TOTAL = 30; // 10 × 3 outcomes
@@ -65,8 +65,7 @@ export async function testApprovalContentionMixedOutcomes(): Promise<void> {
         // Deterministic schedule: cycle through approve / deny / timeout, alternating profiles.
         const schedule: Array<{ outcome: Outcome; profile: Profile }> = [];
         for (let i = 0; i < TOTAL; i++) {
-            const outcome: Outcome =
-                i % 3 === 0 ? "approved" : i % 3 === 1 ? "denied" : "timeout";
+            const outcome: Outcome = i % 3 === 0 ? "approved" : i % 3 === 1 ? "denied" : "timeout";
             const profile: Profile = i % 2 === 0 ? "individual" : "business";
             schedule.push({ outcome, profile });
         }
@@ -124,7 +123,10 @@ export async function testApprovalContentionMixedOutcomes(): Promise<void> {
 
         // ── Approve/deny paths must be fast (way under timeout budget) ──
         const settledSamples = samples.filter((s) => s.outcome !== "timeout");
-        const settledP95 = percentile(settledSamples.map((s) => s.latencyMs), 0.95);
+        const settledP95 = percentile(
+            settledSamples.map((s) => s.latencyMs),
+            0.95,
+        );
         assert.ok(
             settledP95 < TIMEOUT_BUDGET_MS,
             `approve/deny p95 ${settledP95.toFixed(2)}ms must stay under timeout budget ${TIMEOUT_BUDGET_MS}ms`,
@@ -140,18 +142,25 @@ export async function testApprovalContentionMixedOutcomes(): Promise<void> {
         // ── Profile-differentiated trend summary ─────────────────────────
         // Surface a structured object that downstream CI can serialize to
         // perf-qualification.json for trend tracking.
-        const profileSummary: Record<Profile, {
-            count: number;
-            p50Ms: number;
-            p95Ms: number;
-            outcomes: Record<Outcome, number>;
-        }> = {
+        const profileSummary: Record<
+            Profile,
+            {
+                count: number;
+                p50Ms: number;
+                p95Ms: number;
+                outcomes: Record<Outcome, number>;
+            }
+        > = {
             individual: {
-                count: 0, p50Ms: 0, p95Ms: 0,
+                count: 0,
+                p50Ms: 0,
+                p95Ms: 0,
                 outcomes: { approved: 0, denied: 0, timeout: 0 },
             },
             business: {
-                count: 0, p50Ms: 0, p95Ms: 0,
+                count: 0,
+                p50Ms: 0,
+                p95Ms: 0,
                 outcomes: { approved: 0, denied: 0, timeout: 0 },
             },
         };
@@ -168,7 +177,8 @@ export async function testApprovalContentionMixedOutcomes(): Promise<void> {
 
             // Each profile receives ~half the samples (15 of 30) due to alternation.
             assert.equal(
-                profileSummary[profile].count, 15,
+                profileSummary[profile].count,
+                15,
                 `profile=${profile} should receive 15 samples, got ${profileSummary[profile].count}`,
             );
             assert.ok(

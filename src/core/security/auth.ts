@@ -36,14 +36,9 @@ export interface AuthResult {
     principal?: IamPrincipal;
 }
 
-const DEFAULT_PUBLIC_ROUTES = [
-    "/health",
-    "/api/health",
-];
+const DEFAULT_PUBLIC_ROUTES = ["/health", "/api/health"];
 
-const DEFAULT_PUBLIC_PREFIXES = [
-    "/public/",
-];
+const DEFAULT_PUBLIC_PREFIXES = ["/public/"];
 
 export class AuthGate {
     private token: string;
@@ -53,14 +48,8 @@ export class AuthGate {
 
     constructor(private readonly config: AuthConfig) {
         this.disabled = config.disabled ?? false;
-        this.publicRoutes = new Set([
-            ...DEFAULT_PUBLIC_ROUTES,
-            ...(config.publicRoutes ?? []),
-        ]);
-        this.publicPrefixes = [
-            ...DEFAULT_PUBLIC_PREFIXES,
-            ...(config.publicPrefixes ?? []),
-        ];
+        this.publicRoutes = new Set([...DEFAULT_PUBLIC_ROUTES, ...(config.publicRoutes ?? [])]);
+        this.publicPrefixes = [...DEFAULT_PUBLIC_PREFIXES, ...(config.publicPrefixes ?? [])];
         this.token = this.loadOrCreateToken();
     }
 
@@ -78,12 +67,15 @@ export class AuthGate {
         const url = req.url ?? "";
         const urlPath = url.split("?")[0];
 
+        // Normalize /api/v1/ prefix to /api/ for public route/prefix bypass check
+        const checkPath = urlPath.startsWith("/api/v1/") ? "/api/" + urlPath.substring("/api/v1/".length) : urlPath;
+
         // Public routes bypass auth
-        if (this.publicRoutes.has(urlPath)) {
+        if (this.publicRoutes.has(checkPath) || this.publicRoutes.has(urlPath)) {
             return { authenticated: true };
         }
         for (const prefix of this.publicPrefixes) {
-            if (urlPath.startsWith(prefix)) {
+            if (checkPath.startsWith(prefix) || urlPath.startsWith(prefix)) {
                 return { authenticated: true };
             }
         }

@@ -14,7 +14,15 @@ function assert(cond: unknown, msg: string): void {
 export async function testPlatformParityAudit(): Promise<void> {
     const require = createRequire(import.meta.url);
     const audit = require(resolve(process.cwd(), "scripts/platform-parity-audit.cjs")) as {
-        scan: (root: string) => { files: number; findings: { file: string; line: number; pattern: string; classification: "gated" | "cross-platform" | "needs-fix" }[] };
+        scan: (root: string) => {
+            files: number;
+            findings: {
+                file: string;
+                line: number;
+                pattern: string;
+                classification: "gated" | "cross-platform" | "needs-fix";
+            }[];
+        };
         summarize: (findings: { classification: string }[]) => Record<string, number>;
     };
 
@@ -36,18 +44,10 @@ export async function testPlatformParityAudit(): Promise<void> {
         );
 
         // Naked windows-only path — should be `needs-fix`.
-        writeFileSync(
-            join(tmp, "src", "naked.ts"),
-            "const home = process.env.USERPROFILE;\n",
-            "utf-8",
-        );
+        writeFileSync(join(tmp, "src", "naked.ts"), "const home = process.env.USERPROFILE;\n", "utf-8");
 
         // Annotated (allowlisted) — must be skipped entirely.
-        writeFileSync(
-            join(tmp, "src", "allowed.ts"),
-            "const x = process.env.USERPROFILE; // @parity-allow\n",
-            "utf-8",
-        );
+        writeFileSync(join(tmp, "src", "allowed.ts"), "const x = process.env.USERPROFILE; // @parity-allow\n", "utf-8");
 
         const result = audit.scan(tmp);
         const counts = audit.summarize(result.findings);
@@ -58,6 +58,10 @@ export async function testPlatformParityAudit(): Promise<void> {
         const allowed = result.findings.find((f) => f.file.endsWith("allowed.ts"));
         assert(!allowed, "annotated finding suppressed");
     } finally {
-        try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+            rmSync(tmp, { recursive: true, force: true });
+        } catch {
+            /* best effort */
+        }
     }
 }

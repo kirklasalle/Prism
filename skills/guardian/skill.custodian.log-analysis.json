@@ -1,0 +1,66 @@
+{
+    "id": "skill.custodian.log-analysis",
+    "version": "1.0.0",
+    "name": "Log Volume and Self-Review Analysis",
+    "description": "Analyze system logs and self-review recommendations to diagnose issues, register support tickets, and update the knowledge base.",
+    "tags": [
+        "guardian",
+        "custodian",
+        "monitoring",
+        "self-review",
+        "support"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_agent_disruption"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 120000,
+    "workflow": {
+        "steps": [
+            {
+                "id": "read-logs",
+                "name": "Read System Logs & Telemetry",
+                "tools": ["run_command"],
+                "action": "Load recent console logs and activity event telemetry from the ActivityBus log entries.",
+                "transitions": {
+                    "success": "evaluate-failures",
+                    "failed": "read-logs"
+                }
+            },
+            {
+                "id": "evaluate-failures",
+                "name": "Evaluate Failures & Latencies",
+                "tools": [],
+                "action": "Analyze failures, latencies, and self-review recommendations to identify issues or configuration drift.",
+                "transitions": {
+                    "success": "triage-and-heal",
+                    "failed": "read-logs"
+                }
+            },
+            {
+                "id": "triage-and-heal",
+                "name": "Triage & Log Support Tickets",
+                "tools": ["run_command"],
+                "action": "Update status, raise support desk tickets for any detected critical failures, and trigger remedial actions.",
+                "transitions": {
+                    "success": "update-knowledge-base",
+                    "failed": "read-logs"
+                }
+            },
+            {
+                "id": "update-knowledge-base",
+                "name": "Update Self-Review Knowledge Base",
+                "tools": ["file_write"],
+                "action": "Persist review diagnostics report to the self-review knowledge base and update system heuristics.",
+                "transitions": {
+                    "success": "complete",
+                    "failed": "update-knowledge-base"
+                }
+            }
+        ]
+    }
+}

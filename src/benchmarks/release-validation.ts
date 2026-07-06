@@ -98,21 +98,21 @@ export function evaluateReleaseGates(input: ReleaseGateEvaluationInput): {
             id: "production-staging",
             label: "Staging validation confirmed",
             requiredFor: "production",
-            status: input.stagingValidated ? "passed" : (input.strictMode ? "failed" : "manual_required"),
+            status: input.stagingValidated ? "passed" : input.strictMode ? "failed" : "manual_required",
             details: "Set PRISM_STAGING_VALIDATED=1 when staging qualification is complete.",
         },
         {
             id: "production-rollback",
             label: "Rollback rehearsal confirmed",
             requiredFor: "production",
-            status: input.rollbackRehearsed ? "passed" : (input.strictMode ? "failed" : "manual_required"),
+            status: input.rollbackRehearsed ? "passed" : input.strictMode ? "failed" : "manual_required",
             details: "Set PRISM_ROLLBACK_REHEARSED=1 after rollback drill.",
         },
         {
             id: "production-runbooks",
             label: "Runbook/doc currency confirmed",
             requiredFor: "production",
-            status: input.runbooksCurrent ? "passed" : (input.strictMode ? "failed" : "manual_required"),
+            status: input.runbooksCurrent ? "passed" : input.strictMode ? "failed" : "manual_required",
             details: "Set PRISM_RUNBOOKS_CURRENT=1 once docs are reviewed.",
         },
     ];
@@ -126,11 +126,17 @@ export function evaluateReleaseGates(input: ReleaseGateEvaluationInput): {
 
 async function main(): Promise<void> {
     const strictMode = process.argv.includes("--strict") || process.env.PRISM_RELEASE_STRICT === "1";
-    const outputPath = process.env.PRISM_RELEASE_VALIDATION_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "release-validation.json");
-    const perfPath = process.env.PRISM_PERF_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "perf-qualification.json");
-    const contractPath = process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ?? workspacePath("artifacts", "contracts", "tool-contract-snapshot.json");
-    const cuBgValidationPath = process.env.PRISM_CU_BG_VALIDATION_OUTPUT_PATH
-        ?? workspacePath("artifacts", "ci-gates", "computer-use-business-gate-validation.json");
+    const outputPath =
+        process.env.PRISM_RELEASE_VALIDATION_OUTPUT_PATH ??
+        workspacePath("artifacts", "benchmarks", "release-validation.json");
+    const perfPath =
+        process.env.PRISM_PERF_OUTPUT_PATH ?? workspacePath("artifacts", "benchmarks", "perf-qualification.json");
+    const contractPath =
+        process.env.PRISM_CONTRACT_SNAPSHOT_OUTPUT_PATH ??
+        workspacePath("artifacts", "contracts", "tool-contract-snapshot.json");
+    const cuBgValidationPath =
+        process.env.PRISM_CU_BG_VALIDATION_OUTPUT_PATH ??
+        workspacePath("artifacts", "ci-gates", "computer-use-business-gate-validation.json");
     const latestReleaseCandidate = resolveLatestReleaseCandidateDir();
     const releasePacketManifestPath = latestReleaseCandidate
         ? `${latestReleaseCandidate}/release-packet-manifest.md`
@@ -171,10 +177,7 @@ async function main(): Promise<void> {
             process.env.PRISM_ROLLBACK_REHEARSED,
             detectRollbackRehearsed(governancePathReportPath),
         ),
-        runbooksCurrent: resolveBooleanOverride(
-            process.env.PRISM_RUNBOOKS_CURRENT,
-            detectRunbooksCurrent(runbookPath),
-        ),
+        runbooksCurrent: resolveBooleanOverride(process.env.PRISM_RUNBOOKS_CURRENT, detectRunbooksCurrent(runbookPath)),
         strictMode,
     });
 
@@ -265,22 +268,15 @@ function fileIncludesAll(pathValue: string | undefined, terms: string[]): boolea
     }
 }
 
-function detectStagingValidated(
-    perfPath: string,
-    contractPath: string,
-    releasePacketManifestPath?: string,
-): boolean {
-    const stage2Passed = readJsonFlag(workspacePath("artifacts", "ci-gates", "e-stage2-qualification-summary.json"), "passed");
+function detectStagingValidated(perfPath: string, contractPath: string, releasePacketManifestPath?: string): boolean {
+    const stage2Passed = readJsonFlag(
+        workspacePath("artifacts", "ci-gates", "e-stage2-qualification-summary.json"),
+        "passed",
+    );
     const ciGatePassed = readJsonFlag(workspacePath("artifacts", "ci-gates", "ci-gate-summary.json"), "passed");
     const packetComplete = fileIncludesAll(releasePacketManifestPath, ["packet complete", "yes"]);
 
-    return (
-        existsSync(perfPath) &&
-        existsSync(contractPath) &&
-        stage2Passed &&
-        ciGatePassed &&
-        packetComplete
-    );
+    return existsSync(perfPath) && existsSync(contractPath) && stage2Passed && ciGatePassed && packetComplete;
 }
 
 function detectRollbackRehearsed(governancePathReportPath?: string): boolean {
@@ -315,9 +311,10 @@ function resolveBuildId(): string {
 
 function resolveCommitHash(): string {
     const command = process.platform === "win32" ? "cmd.exe" : "git";
-    const args = process.platform === "win32"
-        ? ["/d", "/s", "/c", "git rev-parse --short HEAD"]
-        : ["rev-parse", "--short", "HEAD"];
+    const args =
+        process.platform === "win32"
+            ? ["/d", "/s", "/c", "git rev-parse --short HEAD"]
+            : ["rev-parse", "--short", "HEAD"];
     const result = spawnSync(command, args, {
         cwd: process.cwd(),
         encoding: "utf-8",

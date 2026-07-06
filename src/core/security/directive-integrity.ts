@@ -18,10 +18,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-    DIRECTIVE_SHA256_GENERATED,
-    DIRECTIVE_HASH_GENERATED_AT,
-} from "./directive-hash.generated.js";
+import { DIRECTIVE_SHA256_GENERATED, DIRECTIVE_HASH_GENERATED_AT } from "./directive-hash.generated.js";
 
 /* ── Known-Good Directive Hash ───────────────────────────────────────── */
 
@@ -73,7 +70,7 @@ function resolveDirectivePath(workspaceRoot?: string): string {
     if (workspaceRoot) {
         return join(workspaceRoot, DIRECTIVE_FILENAME);
     }
-    
+
     // Resolve robustly whether running from `src/` (via tsx) or `dist/`
     let currentDir = dirname(fileURLToPath(import.meta.url));
     while (currentDir !== "/" && !currentDir.match(/^[a-zA-Z]:\\$/)) {
@@ -82,7 +79,7 @@ function resolveDirectivePath(workspaceRoot?: string): string {
         }
         currentDir = dirname(currentDir);
     }
-    
+
     // Fallback if package.json isn't found
     return join(process.cwd(), DIRECTIVE_FILENAME);
 }

@@ -107,7 +107,7 @@ describe("Spectrum Refraction — Left (Logic) Hemisphere Validation", () => {
         const result = validateSRLeftModel(profile);
         assert.strictEqual(result.valid, false);
         assert.strictEqual(result.level, "insufficient");
-        assert.ok(result.missingCapabilities.some(c => c.includes("Tier")));
+        assert.ok(result.missingCapabilities.some((c) => c.includes("Tier")));
     });
 
     it("rejects a model lacking logic-oriented strengths", () => {
@@ -121,7 +121,7 @@ describe("Spectrum Refraction — Left (Logic) Hemisphere Validation", () => {
         });
         const result = validateSRLeftModel(profile);
         assert.strictEqual(result.valid, false);
-        assert.ok(result.missingCapabilities.some(c => c.includes("code") || c.includes("reasoning")));
+        assert.ok(result.missingCapabilities.some((c) => c.includes("code") || c.includes("reasoning")));
     });
 });
 
@@ -183,7 +183,7 @@ describe("Spectrum Refraction — Right (Creative) Hemisphere Validation", () =>
         const result = validateSRRightModel(profile);
         assert.strictEqual(result.valid, false);
         assert.strictEqual(result.level, "insufficient");
-        assert.ok(result.missingCapabilities.some(c => c.includes("image-generation")));
+        assert.ok(result.missingCapabilities.some((c) => c.includes("image-generation")));
     });
 });
 
@@ -222,20 +222,14 @@ describe("Spectrum Refraction — Triad Isolation Enforcement", () => {
     });
 
     it("rejects when Left hemisphere is missing", () => {
-        const result = validateSRTriad(
-            null,
-            { providerId: "anthropic", model: "claude-3-5-sonnet-latest" },
-        );
+        const result = validateSRTriad(null, { providerId: "anthropic", model: "claude-3-5-sonnet-latest" });
         assert.strictEqual(result.valid, false);
         assert.strictEqual(result.isolationLevel, "insufficient");
         assert.ok(result.advisory.includes("Both"));
     });
 
     it("rejects when Right hemisphere is missing", () => {
-        const result = validateSRTriad(
-            { providerId: "openai", model: "gpt-5" },
-            null,
-        );
+        const result = validateSRTriad({ providerId: "openai", model: "gpt-5" }, null);
         assert.strictEqual(result.valid, false);
         assert.strictEqual(result.isolationLevel, "insufficient");
     });
@@ -306,7 +300,7 @@ describe("Spectrum Refraction — System Prompts", () => {
     it("aggregation prompt mentions synthesis/coordinator", () => {
         assert.ok(
             SR_SYSTEM_PROMPTS.aggregation.includes("Coordinator") ||
-            SR_SYSTEM_PROMPTS.aggregation.includes("Synthesize"),
+                SR_SYSTEM_PROMPTS.aggregation.includes("Synthesize"),
         );
     });
 });
@@ -330,10 +324,7 @@ describe("Spectrum Refraction — generateSR Integration", () => {
             leftModel: { providerId: "openai", model: "gpt-5" },
             rightModel: { providerId: "anthropic", model: "claude-3-5-sonnet-latest" },
         };
-        const result = await manager.generateSR(
-            { message: "test", conversation: [], systemPrompt: "test" },
-            srConfig,
-        );
+        const result = await manager.generateSR({ message: "test", conversation: [], systemPrompt: "test" }, srConfig);
         assert.strictEqual(result, null);
     });
 
@@ -344,10 +335,7 @@ describe("Spectrum Refraction — generateSR Integration", () => {
             leftModel: null,
             rightModel: { providerId: "anthropic", model: "claude-3-5-sonnet-latest" },
         };
-        const result = await manager.generateSR(
-            { message: "test", conversation: [], systemPrompt: "test" },
-            srConfig,
-        );
+        const result = await manager.generateSR({ message: "test", conversation: [], systemPrompt: "test" }, srConfig);
         assert.strictEqual(result, null);
     });
 
@@ -358,10 +346,7 @@ describe("Spectrum Refraction — generateSR Integration", () => {
             leftModel: { providerId: "openai", model: "gpt-5" },
             rightModel: null,
         };
-        const result = await manager.generateSR(
-            { message: "test", conversation: [], systemPrompt: "test" },
-            srConfig,
-        );
+        const result = await manager.generateSR({ message: "test", conversation: [], systemPrompt: "test" }, srConfig);
         assert.strictEqual(result, null);
     });
 
@@ -372,10 +357,7 @@ describe("Spectrum Refraction — generateSR Integration", () => {
             leftModel: { providerId: "openai", model: "gpt-5" },
             rightModel: { providerId: "openai", model: "gpt-5" },
         };
-        const result = await manager.generateSR(
-            { message: "test", conversation: [], systemPrompt: "test" },
-            srConfig,
-        );
+        const result = await manager.generateSR({ message: "test", conversation: [], systemPrompt: "test" }, srConfig);
         assert.strictEqual(result, null);
     });
 });
@@ -464,9 +446,7 @@ describe("Spectrum Refraction — Output Structure Contract", () => {
             },
             aggregation: { providerId: "openai", model: "gpt-5", content: "synthesized" },
             timing: { fanOutMs: 1200, aggregationMs: 800, totalMs: 2000 },
-            mediaArtifacts: [
-                { type: "image", data: "iVBOR==", mimeType: "image/png" },
-            ],
+            mediaArtifacts: [{ type: "image", data: "iVBOR==", mimeType: "image/png" }],
             isolationLevel: "full",
         };
         assert.strictEqual(output.content, "synthesized response");

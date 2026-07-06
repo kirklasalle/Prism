@@ -41,6 +41,10 @@ export async function testPersistenceInterfaces(): Promise<void> {
         assert(typeof activity.close === "function", "IActivityStore.close");
         activity.close();
     } finally {
-        try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+            rmSync(tmp, { recursive: true, force: true });
+        } catch {
+            /* best effort */
+        }
     }
 }

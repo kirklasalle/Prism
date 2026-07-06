@@ -18,7 +18,8 @@ export const MIGRATIONS: Migration[] = [
     // ── 001: Initial schema (v0.21.0 baseline) ────────────────────────────
     {
         id: 1,
-        description: "Initial schema — activity_events, prism_llre_telemetry, retrieval_metrics, session_summaries, chat_sessions, usage_metering, retrieval_dashboard",
+        description:
+            "Initial schema — activity_events, prism_llre_telemetry, retrieval_metrics, session_summaries, chat_sessions, usage_metering, retrieval_dashboard",
         up: (db) => {
             db.exec(`
                 -- Activity events (from SqliteActivityStore)

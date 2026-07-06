@@ -71,8 +71,8 @@ export function buildLlmProviderChatExecutor(service: DashboardService): ChatExe
             // the operator should fix that via the dashboard.
             return {
                 content:
-                    "[PRISM] No active LLM provider is configured. Configure one in the dashboard "
-                    + "(Settings → Providers) to receive real model output via the OpenAI compatibility shim.",
+                    "[PRISM] No active LLM provider is configured. Configure one in the dashboard " +
+                    "(Settings → Providers) to receive real model output via the OpenAI compatibility shim.",
                 model: input.requestedModel ?? "prism-no-provider",
             };
         }
@@ -170,9 +170,7 @@ export class OpenAiCompatHandler implements IRouteHandler {
 
     match(req: IncomingMessage): boolean {
         const url = (req.url ?? "").split("?")[0];
-        return url === "/v1/chat/completions"
-            || url === "/v1/threads"
-            || url.startsWith("/v1/threads/");
+        return url === "/v1/chat/completions" || url === "/v1/threads" || url.startsWith("/v1/threads/");
     }
 
     async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {

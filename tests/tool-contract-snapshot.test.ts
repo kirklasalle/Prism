@@ -1,17 +1,11 @@
 import assert from "node:assert";
 import { HttpRequestTool } from "../src/adapters/protocol/http-tool.js";
 import { ShellTool } from "../src/adapters/system/shell-tool.js";
-import {
-    buildToolContractSnapshot,
-    compareToolContractSnapshots,
-} from "../src/core/tools/contract-snapshot.js";
+import { buildToolContractSnapshot, compareToolContractSnapshots } from "../src/core/tools/contract-snapshot.js";
 import type { Tool } from "../src/core/tools/types.js";
 
 export async function testToolContractSnapshots(): Promise<void> {
-    const baseline = buildToolContractSnapshot([
-        new ShellTool(),
-        new HttpRequestTool(),
-    ]);
+    const baseline = buildToolContractSnapshot([new ShellTool(), new HttpRequestTool()]);
 
     assert.strictEqual(baseline.toolCount, 2);
     assert.ok(baseline.tools.every((tool) => tool.contractHash.length > 0));

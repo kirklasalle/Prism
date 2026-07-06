@@ -124,7 +124,11 @@ export async function testOpenAiCompatRoutes(): Promise<void> {
             messages: [{ role: "user", content: "hi" }],
         });
         assert(r.status === 200, `expected 200, got ${r.status}`);
-        const b = r.body as { object: string; choices: Array<{ message: { content: string } }>; prism_metadata: { compat_shim: string } };
+        const b = r.body as {
+            object: string;
+            choices: Array<{ message: { content: string } }>;
+            prism_metadata: { compat_shim: string };
+        };
         assert(b.object === "chat.completion", "object field");
         assert(b.choices[0].message.content === "echo: hi", "executor invoked end-to-end");
         assert(b.prism_metadata.compat_shim === "openai", "transparency tag");

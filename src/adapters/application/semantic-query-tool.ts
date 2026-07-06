@@ -105,12 +105,7 @@ function numberArg(value: unknown, fallback: number): number {
 }
 
 function memoryModeArg(value: unknown, fallback: MemoryQueryMode): MemoryQueryMode {
-    if (
-        value === "semantic" ||
-        value === "episodic_recent" ||
-        value === "session_summary" ||
-        value === "all"
-    ) {
+    if (value === "semantic" || value === "episodic_recent" || value === "session_summary" || value === "all") {
         return value;
     }
 

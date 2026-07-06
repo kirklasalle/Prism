@@ -20,21 +20,21 @@ export const defaultRetrievalAlertPolicy: RetrievalAlertPolicy = {
     volumeTrendChangeThreshold: 0.15,
     volumeSpikeMultiplier: 2.0,
     recentMinUtility: 0.35,
-    recentMinNovelty: 0.20,
+    recentMinNovelty: 0.2,
     coverageDropThreshold: -0.15,
-    cohortMinHitRate: 0.40,
-    cohortMinUtility: 0.30,
+    cohortMinHitRate: 0.4,
+    cohortMinUtility: 0.3,
     cohortMaxP95LatencyMs: 250,
     trendUtilityDropThreshold: -0.15,
-    trendHitRateDropThreshold: -0.20,
+    trendHitRateDropThreshold: -0.2,
     trendP95LatencyIncreaseMs: 100,
 };
 
 export const retrievalAlertPolicyProfiles: Record<RetrievalAlertProfile, RetrievalAlertPolicy> = {
     dev: {
         ...defaultRetrievalAlertPolicy,
-        driftScoreThreshold: 0.20,
-        recentMinUtility: 0.30,
+        driftScoreThreshold: 0.2,
+        recentMinUtility: 0.3,
         cohortMaxP95LatencyMs: 300,
         trendP95LatencyIncreaseMs: 120,
     },
@@ -44,21 +44,19 @@ export const retrievalAlertPolicyProfiles: Record<RetrievalAlertProfile, Retriev
     prod: {
         ...defaultRetrievalAlertPolicy,
         driftScoreThreshold: 0.12,
-        recentMinUtility: 0.40,
+        recentMinUtility: 0.4,
         recentMinNovelty: 0.25,
-        coverageDropThreshold: -0.10,
-        cohortMinHitRate: 0.50,
-        cohortMinUtility: 0.40,
+        coverageDropThreshold: -0.1,
+        cohortMinHitRate: 0.5,
+        cohortMinUtility: 0.4,
         cohortMaxP95LatencyMs: 200,
-        trendUtilityDropThreshold: -0.10,
+        trendUtilityDropThreshold: -0.1,
         trendHitRateDropThreshold: -0.15,
         trendP95LatencyIncreaseMs: 80,
     },
 };
 
-export function withRetrievalAlertPolicy(
-    overrides: Partial<RetrievalAlertPolicy> = {},
-): RetrievalAlertPolicy {
+export function withRetrievalAlertPolicy(overrides: Partial<RetrievalAlertPolicy> = {}): RetrievalAlertPolicy {
     return {
         ...defaultRetrievalAlertPolicy,
         ...overrides,
@@ -118,10 +116,7 @@ export interface PolicyTuningResult {
  * signals), and the static profile policy remains the floor — adjustments
  * are bounded multiplicative deltas.
  */
-export function tuneFromIncidentTrends(
-    base: RetrievalAlertPolicy,
-    signals: IncidentTrendSignal,
-): PolicyTuningResult {
+export function tuneFromIncidentTrends(base: RetrievalAlertPolicy, signals: IncidentTrendSignal): PolicyTuningResult {
     const tuned: RetrievalAlertPolicy = { ...base };
     const rationale: string[] = [];
 
@@ -182,9 +177,10 @@ export function tuneFromIncidentTrends(
     }
 
     if (rationale.length === 0) {
-        rationale.push(`No tuning applied — incident trend signals below thresholds (profile=${signals.profile}, window=${signals.windowDays}d).`);
+        rationale.push(
+            `No tuning applied — incident trend signals below thresholds (profile=${signals.profile}, window=${signals.windowDays}d).`,
+        );
     }
 
     return { base, tuned, rationale };
 }
-

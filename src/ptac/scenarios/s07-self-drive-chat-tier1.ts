@@ -41,8 +41,7 @@ export const SCENARIO_S07: PtacScenario = {
             id: "tier1-capability-live",
             label: "Tier-1 prompt — live handler accepts without approval",
             kind: "chat",
-            prompt:
-                "What is the current time according to your runtime, and which execution profile segment are you running under?",
+            prompt: "What is the current time according to your runtime, and which execution profile segment are you running under?",
             expectedTier: 1,
             timeoutMs: 15_000,
         },

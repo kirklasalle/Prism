@@ -18,9 +18,13 @@ import { POLICY_REASON_CODES } from "../src/core/policy/reason-codes.js";
  * ────────────────────────────────────────────────────── */
 describe("Reason-Code Taxonomy — Structural Integrity", () => {
     it("has no duplicate codes in the taxonomy", () => {
-        const codes = REASON_CODE_TAXONOMY.map(e => e.code);
+        const codes = REASON_CODE_TAXONOMY.map((e) => e.code);
         const unique = new Set(codes);
-        assert.strictEqual(codes.length, unique.size, `Duplicate codes found: ${codes.filter((c, i) => codes.indexOf(c) !== i).join(", ")}`);
+        assert.strictEqual(
+            codes.length,
+            unique.size,
+            `Duplicate codes found: ${codes.filter((c, i) => codes.indexOf(c) !== i).join(", ")}`,
+        );
     });
 
     it("every entry has a non-empty code, domain, severity, and description", () => {
@@ -55,14 +59,23 @@ describe("Reason-Code Taxonomy — Structural Integrity", () => {
     it("severity values are restricted to known enum", () => {
         const validSeverities: ReasonCodeSeverity[] = ["info", "warn", "deny", "critical"];
         for (const entry of REASON_CODE_TAXONOMY) {
-            assert.ok(validSeverities.includes(entry.severity), `${entry.code} has invalid severity '${entry.severity}'`);
+            assert.ok(
+                validSeverities.includes(entry.severity),
+                `${entry.code} has invalid severity '${entry.severity}'`,
+            );
         }
     });
 
     it("domain values are restricted to known enum", () => {
         const validDomains: ReasonCodeDomain[] = [
-            "governance", "directive", "trust", "identity",
-            "spectrum_refraction", "agent", "computer_use", "workflow",
+            "governance",
+            "directive",
+            "trust",
+            "identity",
+            "spectrum_refraction",
+            "agent",
+            "computer_use",
+            "workflow",
         ];
         for (const entry of REASON_CODE_TAXONOMY) {
             assert.ok(validDomains.includes(entry.domain), `${entry.code} has invalid domain '${entry.domain}'`);
@@ -75,8 +88,14 @@ describe("Reason-Code Taxonomy — Structural Integrity", () => {
  * ────────────────────────────────────────────────────── */
 describe("Reason-Code Taxonomy — Domain Coverage", () => {
     const expectedDomains: ReasonCodeDomain[] = [
-        "governance", "directive", "trust", "identity",
-        "spectrum_refraction", "agent", "computer_use", "workflow",
+        "governance",
+        "directive",
+        "trust",
+        "identity",
+        "spectrum_refraction",
+        "agent",
+        "computer_use",
+        "workflow",
     ];
 
     for (const domain of expectedDomains) {
@@ -87,28 +106,28 @@ describe("Reason-Code Taxonomy — Domain Coverage", () => {
     }
 
     it("governance domain includes all risk-level policy codes", () => {
-        const govCodes = codesByDomain("governance").map(e => e.code);
+        const govCodes = codesByDomain("governance").map((e) => e.code);
         assert.ok(govCodes.includes(POLICY_REASON_CODES.HIGH_RISK_APPROVAL_REQUIRED));
         assert.ok(govCodes.includes(POLICY_REASON_CODES.MEDIUM_RISK_DENY_MISSING_ROLLBACK));
         assert.ok(govCodes.includes(POLICY_REASON_CODES.LOW_RISK_ALLOW_AUTONOMOUS));
     });
 
     it("trust domain includes plugin validation codes", () => {
-        const trustCodes = codesByDomain("trust").map(e => e.code);
+        const trustCodes = codesByDomain("trust").map((e) => e.code);
         assert.ok(trustCodes.includes(TAXONOMY_CODES.TRUST_LEVEL_BELOW_MIN));
         assert.ok(trustCodes.includes(TAXONOMY_CODES.PLUGIN_VALIDATION_PASSED));
         assert.ok(trustCodes.includes(TAXONOMY_CODES.PLUGIN_VALIDATION_FAILED));
     });
 
     it("spectrum_refraction domain includes isolation level codes", () => {
-        const srCodes = codesByDomain("spectrum_refraction").map(e => e.code);
+        const srCodes = codesByDomain("spectrum_refraction").map((e) => e.code);
         assert.ok(srCodes.includes(TAXONOMY_CODES.SR_ISOLATION_FULL));
         assert.ok(srCodes.includes(TAXONOMY_CODES.SR_ISOLATION_MODEL));
         assert.ok(srCodes.includes(TAXONOMY_CODES.SR_ISOLATION_INSUFFICIENT));
     });
 
     it("agent domain includes all swarm topology codes", () => {
-        const agentCodes = codesByDomain("agent").map(e => e.code);
+        const agentCodes = codesByDomain("agent").map((e) => e.code);
         assert.ok(agentCodes.includes(TAXONOMY_CODES.SWARM_TOPOLOGY_MESH));
         assert.ok(agentCodes.includes(TAXONOMY_CODES.SWARM_TOPOLOGY_STAR));
         assert.ok(agentCodes.includes(TAXONOMY_CODES.SWARM_TOPOLOGY_PIPELINE));
@@ -116,7 +135,7 @@ describe("Reason-Code Taxonomy — Domain Coverage", () => {
     });
 
     it("computer_use domain includes terminal and container codes", () => {
-        const cuCodes = codesByDomain("computer_use").map(e => e.code);
+        const cuCodes = codesByDomain("computer_use").map((e) => e.code);
         assert.ok(cuCodes.includes(TAXONOMY_CODES.TERMINAL_SESSION_CREATED));
         assert.ok(cuCodes.includes(TAXONOMY_CODES.CONTAINER_CREATED));
         assert.ok(cuCodes.includes(TAXONOMY_CODES.CONTAINER_DESTROYED));
@@ -163,7 +182,7 @@ describe("Reason-Code Taxonomy — Lookup Utilities", () => {
     });
 
     it("validateCodes returns empty array for all known codes", () => {
-        const allCodes = REASON_CODE_TAXONOMY.map(e => e.code);
+        const allCodes = REASON_CODE_TAXONOMY.map((e) => e.code);
         const unknown = validateCodes(allCodes);
         assert.strictEqual(unknown.length, 0);
     });

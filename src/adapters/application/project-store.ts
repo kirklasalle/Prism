@@ -235,7 +235,8 @@ export class ProjectStoreTool implements Tool {
             case "update_milestone": {
                 const projectId = args.projectId as string;
                 const milestoneId = args.milestoneId as string;
-                if (!projectId || !milestoneId) return { ok: false, output: { error: "projectId and milestoneId required" } };
+                if (!projectId || !milestoneId)
+                    return { ok: false, output: { error: "projectId and milestoneId required" } };
                 const project = loadProject(dir, projectId);
                 if (!project) return { ok: false, output: { error: `Project not found: ${projectId}` } };
                 const milestone = project.milestones.find((m) => m.id === milestoneId);
@@ -258,7 +259,8 @@ export class ProjectStoreTool implements Tool {
             case "delete_milestone": {
                 const projectId = args.projectId as string;
                 const milestoneId = args.milestoneId as string;
-                if (!projectId || !milestoneId) return { ok: false, output: { error: "projectId and milestoneId required" } };
+                if (!projectId || !milestoneId)
+                    return { ok: false, output: { error: "projectId and milestoneId required" } };
                 const project = loadProject(dir, projectId);
                 if (!project) return { ok: false, output: { error: `Project not found: ${projectId}` } };
                 const idx = project.milestones.findIndex((m) => m.id === milestoneId);
@@ -360,8 +362,12 @@ export class ProjectStoreTool implements Tool {
             case "dashboard": {
                 const projects = listAllProjects(dir);
                 const now = new Date();
-                const allTasks = projects.flatMap((p) => p.tasks.map((t) => ({ ...t, projectId: p.id, projectTitle: p.title })));
-                const allMilestones = projects.flatMap((p) => p.milestones.map((m) => ({ ...m, projectId: p.id, projectTitle: p.title })));
+                const allTasks = projects.flatMap((p) =>
+                    p.tasks.map((t) => ({ ...t, projectId: p.id, projectTitle: p.title })),
+                );
+                const allMilestones = projects.flatMap((p) =>
+                    p.milestones.map((m) => ({ ...m, projectId: p.id, projectTitle: p.title })),
+                );
                 const overdueTasks = allTasks.filter(
                     (t) => t.endDate && new Date(t.endDate) < now && t.status !== "done",
                 );

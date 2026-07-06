@@ -1,14 +1,14 @@
 /**
  * Tool Contract Extractor
- * 
+ *
  * Extracts tool contracts from three sources (manifest, decorators, dynamic),
  * compares against baseline for breaking changes, assigns risk tier via
  * keyword scoring, and routes high-risk changes through approval gates.
- * 
+ *
  * Supports deterministic replay validation for Stage 2 testing.
- * 
+ *
  * See: TOOL_CONTRACT_EXTRACTION_SPEC.md for full specification
- * 
+ *
  * @module core/tools/tool-contract-extractor
  */
 
@@ -80,20 +80,44 @@ export interface ExtractionResult {
  * Risk scoring keywords
  */
 const HIGH_RISK_KEYWORDS = [
-    "delete", "destroy", "remove", "uninstall", "reset", "wipe",
-    "revoke", "terminate", "halt", "shutdown", "kill", "abort",
-    "dangerous", "unsafe", "privileged", "elevated", "root",
-    "kernel", "system", "critical"
+    "delete",
+    "destroy",
+    "remove",
+    "uninstall",
+    "reset",
+    "wipe",
+    "revoke",
+    "terminate",
+    "halt",
+    "shutdown",
+    "kill",
+    "abort",
+    "dangerous",
+    "unsafe",
+    "privileged",
+    "elevated",
+    "root",
+    "kernel",
+    "system",
+    "critical",
 ];
 
 const BREAKING_CHANGE_KEYWORDS = [
-    "removed", "deleted", "deprecated", "no_longer", "incompatible",
-    "changed", "renamed", "moved", "migrated", "breaking"
+    "removed",
+    "deleted",
+    "deprecated",
+    "no_longer",
+    "incompatible",
+    "changed",
+    "renamed",
+    "moved",
+    "migrated",
+    "breaking",
 ];
 
 /**
  * Tool Contract Extractor
- * 
+ *
  * Orchestrates contract extraction from multiple sources, validates against
  * baseline, scores risk, and routes through approval gates for deployment.
  */
@@ -140,7 +164,8 @@ export class ToolContractExtractor {
     private initializeDatabase(): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
-                this.db.run(`
+                this.db.run(
+                    `
                     CREATE TABLE IF NOT EXISTS tool_contracts (
                         tool_id TEXT PRIMARY KEY,
                         tool_name TEXT NOT NULL,
@@ -153,13 +178,15 @@ export class ToolContractExtractor {
                         extracted_at TEXT NOT NULL,
                         created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                `, (err) => {
-                    if (err) {
-                        reject(err);
-                        return;
-                    }
+                `,
+                    (err) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
 
-                    this.db.run(`
+                        this.db.run(
+                            `
                         CREATE TABLE IF NOT EXISTS contract_baseline (
                             baseline_id TEXT PRIMARY KEY,
                             tool_id TEXT NOT NULL,
@@ -170,13 +197,15 @@ export class ToolContractExtractor {
                             created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             UNIQUE(tool_id, version)
                         )
-                    `, (baselineErr) => {
-                        if (baselineErr) {
-                            reject(baselineErr);
-                            return;
-                        }
+                    `,
+                            (baselineErr) => {
+                                if (baselineErr) {
+                                    reject(baselineErr);
+                                    return;
+                                }
 
-                        this.db.run(`
+                                this.db.run(
+                                    `
                             CREATE TABLE IF NOT EXISTS extraction_requests (
                                 request_id TEXT PRIMARY KEY,
                                 tool_ids TEXT,
@@ -189,13 +218,15 @@ export class ToolContractExtractor {
                                 result_summary TEXT,
                                 created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                             )
-                        `, (requestErr) => {
-                            if (requestErr) {
-                                reject(requestErr);
-                                return;
-                            }
+                        `,
+                                    (requestErr) => {
+                                        if (requestErr) {
+                                            reject(requestErr);
+                                            return;
+                                        }
 
-                            this.db.run(`
+                                        this.db.run(
+                                            `
                                 CREATE TABLE IF NOT EXISTS contract_changes (
                                     change_id TEXT PRIMARY KEY,
                                     tool_id TEXT NOT NULL,
@@ -209,23 +240,28 @@ export class ToolContractExtractor {
                                     created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                     FOREIGN KEY(tool_id) REFERENCES tool_contracts(tool_id)
                                 )
-                            `, (changesErr) => {
-                                if (changesErr) {
-                                    reject(changesErr);
-                                } else {
-                                    resolve();
-                                }
-                            });
-                        });
-                    });
-                });
+                            `,
+                                            (changesErr) => {
+                                                if (changesErr) {
+                                                    reject(changesErr);
+                                                } else {
+                                                    resolve();
+                                                }
+                                            },
+                                        );
+                                    },
+                                );
+                            },
+                        );
+                    },
+                );
             });
         });
     }
 
     /**
      * Extract contracts from all specified sources
-     * 
+     *
      * @param request - Extraction request with source specification
      * @returns Extraction result with contracts and analysis
      */
@@ -296,10 +332,10 @@ export class ToolContractExtractor {
                 details: {
                     contract_count: extracted_contracts.length,
                     risk_summary,
-                    approval_required
+                    approval_required,
                 },
                 authorityTier: approval_required ? "tier3_approval" : "tier2_conditional",
-                policyDecision: "allow"
+                policyDecision: "allow",
             });
 
             return {
@@ -309,7 +345,7 @@ export class ToolContractExtractor {
                 risk_summary,
                 approval_required,
                 status: "success",
-                details: `Extracted ${extracted_contracts.length} contracts from ${request.sources.join(", ")}`
+                details: `Extracted ${extracted_contracts.length} contracts from ${request.sources.join(", ")}`,
             };
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
@@ -322,7 +358,7 @@ export class ToolContractExtractor {
                 status: "failed",
                 details: { error: errorMsg },
                 authorityTier: "tier1_autonomous",
-                policyDecision: "deny"
+                policyDecision: "deny",
             });
 
             return {
@@ -332,7 +368,7 @@ export class ToolContractExtractor {
                 risk_summary,
                 approval_required: false,
                 status: "failed",
-                details: errorMsg
+                details: errorMsg,
             };
         }
     }
@@ -393,7 +429,7 @@ export class ToolContractExtractor {
         }
 
         if (tool_ids && tool_ids.length > 0) {
-            return contracts.filter(c => tool_ids.includes(c.tool_id));
+            return contracts.filter((c) => tool_ids.includes(c.tool_id));
         }
 
         return contracts;
@@ -422,7 +458,7 @@ export class ToolContractExtractor {
                 description: src.description || "",
                 extraction_method: "manifest",
                 risk_tier: src.risk_tier || "tier2",
-                extracted_at: new Date().toISOString()
+                extracted_at: new Date().toISOString(),
             };
         } catch {
             return null;
@@ -450,7 +486,7 @@ export class ToolContractExtractor {
                     description: `Tool: ${entry.name}`,
                     extraction_method: "manifest",
                     risk_tier: "tier1",
-                    extracted_at: new Date().toISOString()
+                    extracted_at: new Date().toISOString(),
                 });
             }
 
@@ -492,7 +528,7 @@ export class ToolContractExtractor {
                 }
             }
             if (tool_ids && tool_ids.length > 0) {
-                return contracts.filter(c => tool_ids.includes(c.tool_id));
+                return contracts.filter((c) => tool_ids.includes(c.tool_id));
             }
             return contracts;
         }
@@ -521,7 +557,7 @@ export class ToolContractExtractor {
                 }
             }
             if (tool_ids && tool_ids.length > 0) {
-                return contracts.filter(c => tool_ids.includes(c.tool_id));
+                return contracts.filter((c) => tool_ids.includes(c.tool_id));
             }
             return contracts;
         }
@@ -536,7 +572,7 @@ export class ToolContractExtractor {
     private toolToContract(tool: Tool, method: "manifest" | "decorator" | "dynamic"): ToolContract {
         const contract = tool.contract!;
         const hasMutatingActions = tool.governance
-            ? Object.values(tool.governance.actions).some(a => a.mutating)
+            ? Object.values(tool.governance.actions).some((a) => a.mutating)
             : false;
 
         return {
@@ -548,7 +584,7 @@ export class ToolContractExtractor {
             description: `Registered tool: ${tool.name}`,
             extraction_method: method,
             risk_tier: hasMutatingActions ? "tier2" : "tier1",
-            extracted_at: new Date().toISOString()
+            extracted_at: new Date().toISOString(),
         };
     }
 
@@ -560,8 +596,8 @@ export class ToolContractExtractor {
     private inferContractFromGovernance(tool: Tool): ToolContract {
         const governance = tool.governance!;
         const actions = Object.keys(governance.actions);
-        const hasMutating = Object.values(governance.actions).some(a => a.mutating);
-        const hasHighRisk = Object.values(governance.actions).some(a => a.minimumRisk === "high");
+        const hasMutating = Object.values(governance.actions).some((a) => a.mutating);
+        const hasHighRisk = Object.values(governance.actions).some((a) => a.minimumRisk === "high");
 
         // Infer parameters from action names
         const parameters: Record<string, any> = {
@@ -582,13 +618,13 @@ export class ToolContractExtractor {
             description: `Inferred from governance: ${actions.join(", ")}`,
             extraction_method: "dynamic",
             risk_tier: riskTier,
-            extracted_at: new Date().toISOString()
+            extracted_at: new Date().toISOString(),
         };
     }
 
     /**
      * Compare extracted contract against baseline version
-     * 
+     *
      * @private
      * @param current - Current contract to compare
      * @returns Comparison result with change analysis
@@ -610,7 +646,7 @@ export class ToolContractExtractor {
                         row = {
                             version: cachedBaseline.version,
                             parameters: JSON.stringify(cachedBaseline.parameters),
-                            return_type: cachedBaseline.return_type
+                            return_type: cachedBaseline.return_type,
                         };
                     }
 
@@ -624,7 +660,7 @@ export class ToolContractExtractor {
                             safe_additions: Object.keys(current.parameters),
                             deprecations: [],
                             risk_assessment: "new_tool",
-                            requires_approval: false
+                            requires_approval: false,
                         });
                         return;
                     }
@@ -639,7 +675,7 @@ export class ToolContractExtractor {
                     const baseline = {
                         version: row.version,
                         parameters: parsedParameters,
-                        return_type: row.return_type
+                        return_type: row.return_type,
                     };
 
                     const breaking_changes: string[] = [];
@@ -678,16 +714,16 @@ export class ToolContractExtractor {
                         safe_additions,
                         deprecations,
                         risk_assessment,
-                        requires_approval
+                        requires_approval,
                     });
-                }
+                },
             );
         });
     }
 
     /**
      * Assess risk tier based on contract content
-     * 
+     *
      * @private
      * @param contract - Contract to assess
      * @returns Risk tier assignment
@@ -718,8 +754,18 @@ export class ToolContractExtractor {
         }
 
         // Score based on parameter types indicating side effects
-        const paramValues = Object.values(contract.parameters).map(v => String(v).toLowerCase());
-        const sideEffectParamKeywords = ["file", "path", "url", "host", "command", "shell", "exec", "network", "socket"];
+        const paramValues = Object.values(contract.parameters).map((v) => String(v).toLowerCase());
+        const sideEffectParamKeywords = [
+            "file",
+            "path",
+            "url",
+            "host",
+            "command",
+            "shell",
+            "exec",
+            "network",
+            "socket",
+        ];
         for (const val of paramValues) {
             for (const kw of sideEffectParamKeywords) {
                 if (val.includes(kw)) {
@@ -770,17 +816,14 @@ export class ToolContractExtractor {
 
     /**
      * Route contracts requiring approval through policy gates
-     * 
+     *
      * @private
      * @param request_id - Extraction request ID
      * @param comparisons - Contract comparisons
      * @returns Whether approval is required
      */
-    private async routeForApproval(
-        request_id: string,
-        comparisons: ContractComparison[]
-    ): Promise<boolean> {
-        const approvalsNeeded = comparisons.filter(c => c.requires_approval);
+    private async routeForApproval(request_id: string, comparisons: ContractComparison[]): Promise<boolean> {
+        const approvalsNeeded = comparisons.filter((c) => c.requires_approval);
 
         if (approvalsNeeded.length === 0) {
             return false;
@@ -802,12 +845,12 @@ export class ToolContractExtractor {
                         comp.breaking_changes.length > 0 ? 1 : 0,
                         comp.breaking_changes.length * 2,
                         JSON.stringify(comp.breaking_changes),
-                        "pending"
+                        "pending",
                     ],
                     (err: any) => {
                         if (err) reject(err);
                         else resolve();
-                    }
+                    },
                 );
             });
         }
@@ -817,21 +860,21 @@ export class ToolContractExtractor {
 
     /**
      * Stage contract for deployment after approval
-     * 
+     *
      * @param request_id - Extraction request ID
      * @param approval - Whether approved
      * @returns Deployment status
      */
     async stageForDeployment(
         request_id: string,
-        approval: boolean
+        approval: boolean,
     ): Promise<{ request_id: string; staged: boolean; details: string }> {
         await this.initializationPromise;
         if (!approval) {
             return {
                 request_id,
                 staged: false,
-                details: "Deployment blocked due to missing approval"
+                details: "Deployment blocked due to missing approval",
             };
         }
 
@@ -842,7 +885,7 @@ export class ToolContractExtractor {
                 (err: any) => {
                     if (err) reject(err);
                     else resolve();
-                }
+                },
             );
         });
 
@@ -854,19 +897,19 @@ export class ToolContractExtractor {
             status: "succeeded",
             details: { request_id },
             authorityTier: "tier3_approval",
-            policyDecision: "allow"
+            policyDecision: "allow",
         });
 
         return {
             request_id,
             staged: true,
-            details: "Contracts staged for deployment"
+            details: "Contracts staged for deployment",
         };
     }
 
     /**
      * Get current extraction request status
-     * 
+     *
      * @param request_id - Request ID
      * @returns Request status and results
      */
@@ -891,17 +934,17 @@ export class ToolContractExtractor {
                             baseline_comparison: Boolean(row.baseline_comparison),
                             risk_assessment: Boolean(row.risk_assessment),
                             approval_routing: Boolean(row.approval_routing),
-                            created_at: row.created_at
+                            created_at: row.created_at,
                         });
                     }
-                }
+                },
             );
         });
     }
 
     /**
      * Persist extracted contract
-     * 
+     *
      * @private
      * @param contract - Contract to persist
      */
@@ -920,12 +963,12 @@ export class ToolContractExtractor {
                     contract.description,
                     contract.extraction_method,
                     contract.risk_tier,
-                    contract.extracted_at
+                    contract.extracted_at,
                 ],
                 (err: any) => {
                     if (err) reject(err);
                     else resolve();
-                }
+                },
             );
         });
     }
@@ -947,7 +990,7 @@ export class ToolContractExtractor {
     async consumeApprovalDecision(
         tool_id: string,
         decision: "approved" | "denied" | "timeout",
-        decisionContext?: { decidedBy?: string; decidedAt?: string; decisionSource?: string }
+        decisionContext?: { decidedBy?: string; decidedAt?: string; decisionSource?: string },
     ): Promise<{ tool_id: string; decision: typeof decision; updated: boolean }> {
         await this.initializationPromise;
 
@@ -960,7 +1003,7 @@ export class ToolContractExtractor {
                 function (this: { changes: number }, err: any) {
                     if (err) reject(err);
                     else resolve(this.changes ?? 0);
-                }
+                },
             );
         });
 
@@ -987,7 +1030,7 @@ export class ToolContractExtractor {
                     (err: any) => {
                         if (err) reject(err);
                         else resolve();
-                    }
+                    },
                 );
             });
         }
@@ -1020,7 +1063,7 @@ export class ToolContractExtractor {
      * @returns Status row, or null if no contract change exists for the tool
      */
     async getContractChangeStatus(
-        tool_id: string
+        tool_id: string,
     ): Promise<{ tool_id: string; approval_status: string; change_id: string; created_timestamp: string } | null> {
         await this.initializationPromise;
         return new Promise((resolve, reject) => {
@@ -1034,13 +1077,14 @@ export class ToolContractExtractor {
                 (err: any, row: any) => {
                     if (err) reject(err);
                     else if (!row) resolve(null);
-                    else resolve({
-                        tool_id: row.tool_id,
-                        approval_status: row.approval_status,
-                        change_id: row.change_id,
-                        created_timestamp: row.created_timestamp,
-                    });
-                }
+                    else
+                        resolve({
+                            tool_id: row.tool_id,
+                            approval_status: row.approval_status,
+                            change_id: row.change_id,
+                            created_timestamp: row.created_timestamp,
+                        });
+                },
             );
         });
     }
@@ -1055,7 +1099,7 @@ export class ToolContractExtractor {
      */
     async resolveApproval(
         request_id: string,
-        approved: boolean
+        approved: boolean,
     ): Promise<{ request_id: string; resolved: boolean; registered: string[]; details: string }> {
         await this.initializationPromise;
 
@@ -1069,9 +1113,14 @@ export class ToolContractExtractor {
                 status: "succeeded",
                 details: { request_id, reason: "Approval denied" },
                 authorityTier: "tier3_approval",
-                policyDecision: "deny"
+                policyDecision: "deny",
             });
-            return { request_id, resolved: true, registered: [], details: "Approval denied — contracts not registered" };
+            return {
+                request_id,
+                resolved: true,
+                registered: [],
+                details: "Approval denied — contracts not registered",
+            };
         }
 
         // Retrieve approved contracts and register into ToolRegistry
@@ -1086,7 +1135,7 @@ export class ToolContractExtractor {
                 (err: any, rows: any[]) => {
                     if (err) reject(err);
                     else resolve(rows || []);
-                }
+                },
             );
         });
 
@@ -1098,9 +1147,12 @@ export class ToolContractExtractor {
                         name: row.tool_name,
                         contract: {
                             version: row.version,
-                            args: params
+                            args: params,
                         },
-                        execute: async () => ({ ok: true, output: { message: `Staged tool ${row.tool_name} — awaiting runtime binding` } })
+                        execute: async () => ({
+                            ok: true,
+                            output: { message: `Staged tool ${row.tool_name} — awaiting runtime binding` },
+                        }),
                     });
                     registered.push(row.tool_name);
                 }
@@ -1114,20 +1166,20 @@ export class ToolContractExtractor {
             status: "succeeded",
             details: { request_id, registered_count: registered.length, registered },
             authorityTier: "tier3_approval",
-            policyDecision: "allow"
+            policyDecision: "allow",
         });
 
         return {
             request_id,
             resolved: true,
             registered,
-            details: `Approved and registered ${registered.length} tool(s): ${registered.join(", ") || "none (already registered)"}`
+            details: `Approved and registered ${registered.length} tool(s): ${registered.join(", ") || "none (already registered)"}`,
         };
     }
 
     /**
      * Persist extraction request to database
-     * 
+     *
      * @private
      * @param request - Request to persist
      * @param contract_count - Number of contracts extracted
@@ -1136,7 +1188,7 @@ export class ToolContractExtractor {
     private async persistExtractionRequest(
         request: ExtractionRequest,
         contract_count: number,
-        approval_required: boolean
+        approval_required: boolean,
     ): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -1154,13 +1206,13 @@ export class ToolContractExtractor {
                     "completed",
                     JSON.stringify({
                         contract_count,
-                        approval_required
-                    })
+                        approval_required,
+                    }),
                 ],
                 (err: any) => {
                     if (err) reject(err);
                     else resolve();
-                }
+                },
             );
         });
     }
