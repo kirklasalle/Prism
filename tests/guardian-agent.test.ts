@@ -350,6 +350,15 @@ describe("GuardianAgent", () => {
         assert.equal(result.lastResult, "success");
         assert.match(String(result.lastDetail), /0 errors/);
     });
+
+    // ── doc_alignment_sentinel task ───────────────────────────────────
+
+    it("doc_alignment_sentinel task executes successfully or reports expected warnings", async () => {
+        const result = await guardian.runTask("doc_alignment_sentinel");
+        assert.ok(result);
+        assert.ok(result.lastResult === "success" || result.lastResult === "warning");
+        assert.ok(result.lastDetail && result.lastDetail.includes("requirements"));
+    });
 });
 
 export async function testGuardianAgent(): Promise<void> {

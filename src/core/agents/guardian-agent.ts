@@ -155,6 +155,13 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
         intervalMs: 900000,
         enabled: true,
     },
+    {
+        id: "doc_alignment_sentinel",
+        name: "Documentation Alignment Sentinel",
+        category: "diagnostics",
+        intervalMs: 900000,
+        enabled: true,
+    },
     // Monitoring — every 2 minutes
     {
         id: "system_snapshot",
@@ -854,6 +861,8 @@ export class GuardianAgent extends EventEmitter {
                 return this.taskCovenantAudit();
             case "initialization_certificate_verify":
                 return this.taskInitializationCertificateVerify();
+            case "doc_alignment_sentinel":
+                return await this.taskDocAlignmentSentinel();
             default:
                 return { status: "failure", detail: `Unknown task: ${taskId}` };
         }
@@ -1617,6 +1626,7 @@ export class GuardianAgent extends EventEmitter {
             knowledge_graph_check: "skill.custodian.agent-health",
             tool_contract_audit: "skill.custodian.agent-health",
             agent_health_check: "skill.custodian.agent-health",
+            doc_alignment_sentinel: "skill.custodian.agent-health",
             system_snapshot: "skill.custodian.system-snapshot",
             agent_census: "skill.custodian.agent-health",
             log_volume_analysis: "skill.custodian.log-analysis",
@@ -1674,6 +1684,126 @@ export class GuardianAgent extends EventEmitter {
         } catch (error) {
             this.emitEvent("guardian.custodian_skill.failed", `Custodian skill execution failed: ${String(error)}`);
             return { status: "failure", detail: `Custodian skill error: ${String(error)}` };
+        }
+    }
+
+    private async queryModel(prompt: string, systemPrompt = "You are the PRISM Guardian Agent."): Promise<string> {
+        let port = this.supervisor.getPortForAlias(this.config.modelAlias);
+        if (!port) {
+            const readySlot = this.supervisor.getSnapshot().find((s) => s.status === "ready");
+            if (readySlot) {
+                port = readySlot.port;
+            }
+        }
+        if (!port) {
+            throw new Error("No ready local model slot available");
+        }
+
+        const url = `http://127.0.0.1:${port}/v1/chat/completions`;
+        const resp = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                model: this.config.modelAlias,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: prompt },
+                ],
+                temperature: 0.1,
+                max_tokens: 1000,
+            }),
+        });
+
+        if (!resp.ok) {
+            throw new Error(`Model query failed with status ${resp.status}`);
+        }
+
+        const data = (await resp.json()) as any;
+        return data.choices?.[0]?.message?.content || "";
+    }
+
+    private async taskDocAlignmentSentinel(): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
+        try {
+            const rtmPath = join(process.cwd(), "docs", "REQUIREMENTS_TRACEABILITY_MATRIX.md");
+            if (!existsSync(rtmPath)) {
+                return { status: "warning", detail: "docs/REQUIREMENTS_TRACEABILITY_MATRIX.md not found — skipped" };
+            }
+
+            const content = readFileSync(rtmPath, "utf-8");
+            const lines = content.split(/\r?\n/);
+            const requirements: Array<{ id: string; requirement: string; verification: string }> = [];
+
+            for (const line of lines) {
+                if (line.trim().startsWith("|") && !line.includes("Requirement ID") && !line.includes("---")) {
+                    const parts = line.split("|").map((p) => p.trim());
+                    if (parts.length >= 6) {
+                        const id = parts[1] || "";
+                        const req = parts[3] || "";
+                        const ver = parts[4] || "";
+                        if (id && req && id !== "Requirement ID") {
+                            requirements.push({ id, requirement: req, verification: ver });
+                        }
+                    }
+                }
+            }
+
+            if (requirements.length === 0) {
+                return { status: "warning", detail: "No requirements found in the Traceability Matrix table" };
+            }
+
+            const missingTargets: string[] = [];
+            const checkedRequirements: string[] = [];
+
+            for (const r of requirements) {
+                const testMatch = r.verification.match(/(tests\/[a-zA-Z0-9_-]+\.test\.(?:ts|js))/);
+                const srcMatch = r.verification.match(/(src\/[a-zA-Z0-9_\/-]+\.(?:ts|js))/);
+
+                const targetFile = testMatch ? testMatch[1] : srcMatch ? srcMatch[1] : null;
+                if (targetFile) {
+                    const fullPath = join(process.cwd(), targetFile);
+                    if (!existsSync(fullPath)) {
+                        missingTargets.push(`${r.id} refers to missing file ${targetFile}`);
+                    } else {
+                        checkedRequirements.push(r.id);
+                    }
+                }
+            }
+
+            let llmAnalysis = "";
+            let llmSuccess = false;
+            try {
+                const sampleReqs = requirements
+                    .slice(0, 5)
+                    .map((r) => `${r.id}: "${r.requirement}" -> verification: "${r.verification}"`)
+                    .join("\n");
+                const prompt = `Here are some documented system requirements and their verification targets for the PRISM autonomous agent runtime:\n${sampleReqs}\n\nAnalyze if the verification methods seem to logically verify the requirements. If there is a missing link or illogical target, point it out. Output a concise JSON summary: {"isConsistent": true, "notes": "..."}.`;
+
+                const response = await this.queryModel(prompt, "You are a software quality and alignment enforcer.");
+                if (response) {
+                    llmAnalysis = response.trim();
+                    llmSuccess = true;
+                }
+            } catch (err) {
+                llmAnalysis = `LLM analysis skipped: ${String(err)}`;
+            }
+
+            if (missingTargets.length > 0) {
+                this.issuesDetected += missingTargets.length;
+                this.emitEvent("guardian.documentation_drift", `Documentation drift: ${missingTargets.join("; ")}`);
+                return {
+                    status: "warning",
+                    detail: `Detected drift on ${missingTargets.length} requirements. Checked: ${checkedRequirements.length}. LLM Notes: ${llmAnalysis}`,
+                };
+            }
+
+            return {
+                status: "success",
+                detail: `Verified ${checkedRequirements.length} requirements in Traceability Matrix. All referenced files exist. LLM Analysis: ${llmSuccess ? "completed" : "skipped (" + llmAnalysis + ")"}`,
+            };
+        } catch (error) {
+            return { status: "failure", detail: `Documentation alignment sentinel failed: ${String(error)}` };
         }
     }
 }
