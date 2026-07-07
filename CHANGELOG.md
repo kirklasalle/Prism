@@ -2,6 +2,18 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.21.3 — 2026-07-07 — Guardian Agent IDS MCP Integration
+
+Integrates the in-repository Documentation System MCP server (`ids-mcp`) into the Guardian Agent's Documentation Alignment Sentinel (DAS) to enable automated repository-wide integrity verification.
+
+### Added
+
+- **IDS MCP Verification Gates**: The Documentation Alignment Sentinel dynamically discovers and invokes the `ids_get_file_info`, `ids_system_validator`, and `ids_get_system_status` tools if they are registered in the agent's tool set.
+- **File Index Verification**: Queries `ids_get_file_info` for each capability target referenced in `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` to verify it is properly indexed and has active tags.
+- **Repository Integrity Audit**: Runs the `ids_system_validator` under scope `"full"` to automatically audit standard file headers, tags, and covenant compliance.
+- **IDS Metrics Reporting**: Extracts indexing metrics from `ids_get_system_status` to log unified indices and file metadata volume.
+- **Integration Unit Test**: Added a mock-based test suite in `tests/guardian-agent.test.ts` validating tool discovery, payload structures, and output parsing.
+
 ## v0.21.2 — 2026-07-06 — Browser Control Tab Fixes and Viewport Improvements
 
 Remediates the critical and operational issues identified during the Browser Control tab audit. Silently broken sub-panels (Network and DOM) are resolved, and the viewport interface now exposes direct manual controls for standard browsing actions.
