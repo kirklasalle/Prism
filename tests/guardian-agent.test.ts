@@ -359,6 +359,62 @@ describe("GuardianAgent", () => {
         assert.ok(result.lastResult === "success" || result.lastResult === "warning");
         assert.ok(result.lastDetail && result.lastDetail.includes("requirements"));
     });
+
+    it("doc_alignment_sentinel utilizes IDS MCP tools if registered", async () => {
+        let fileInfoCalled = false;
+        let validatorCalled = false;
+        let statusCalled = false;
+
+        const mockFileInfoTool: Tool = {
+            name: "mcp_impressioncor_mcp_impressioncor_get-file-info",
+            contract: undefined,
+            async execute(req: ToolRequest): Promise<ToolResult> {
+                fileInfoCalled = true;
+                assert.ok(req.args.file_path);
+                return { ok: true, output: { exists: true } };
+            }
+        } as any;
+
+        const mockValidatorTool: Tool = {
+            name: "mcp_impressioncor_mcp_impressioncor_run-system-validator",
+            contract: undefined,
+            async execute(req: ToolRequest): Promise<ToolResult> {
+                validatorCalled = true;
+                assert.equal(req.args.validation_scope, "full");
+                return { ok: true, output: { success: true } };
+            }
+        } as any;
+
+        const mockStatusTool: Tool = {
+            name: "mcp_impressioncor_mcp_impressioncor_get-system-status",
+            contract: undefined,
+            async execute(_req: ToolRequest): Promise<ToolResult> {
+                statusCalled = true;
+                return { ok: true, output: { indices_loaded: { file_metadata: 42 } } };
+            }
+        } as any;
+
+        const guardianWithMcp = new GuardianAgent(
+            bus,
+            supervisor as any,
+            [mockFileInfoTool, mockValidatorTool, mockStatusTool],
+            {
+                modelPath: "/models/test.gguf",
+                modelAlias: "test-guardian",
+                autoStart: false,
+                healthCheckIntervalMs: 999999,
+            }
+        );
+
+        const result = await guardianWithMcp.runTask("doc_alignment_sentinel");
+        assert.ok(result);
+        assert.equal(result.lastResult, "success");
+        assert.ok(fileInfoCalled, "should have called ids_get_file_info");
+        assert.ok(validatorCalled, "should have called ids_run_system_validator");
+        assert.ok(statusCalled, "should have called ids_get_system_status");
+        assert.match(String(result.lastDetail), /IDS Index files: 42/);
+        assert.match(String(result.lastDetail), /IDS Validator: OK/);
+    });
 });
 
 export async function testGuardianAgent(): Promise<void> {

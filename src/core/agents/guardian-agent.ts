@@ -1753,8 +1753,21 @@ export class GuardianAgent extends EventEmitter {
                 return { status: "warning", detail: "No requirements found in the Traceability Matrix table" };
             }
 
+            // Find IDS MCP tools in the registered tools array
+            const findIdsTool = (suffix: string) => {
+                return this.tools.find((t) =>
+                    (t.name.includes("impressioncor") || t.name.includes("ids")) &&
+                    t.name.endsWith(suffix)
+                );
+            };
+
+            const idsGetStatusTool = findIdsTool("get-system-status");
+            const idsGetFileInfoTool = findIdsTool("get-file-info");
+            const idsRunValidatorTool = findIdsTool("run-system-validator");
+
             const missingTargets: string[] = [];
             const checkedRequirements: string[] = [];
+            let idsMcpNotes = "";
 
             for (const r of requirements) {
                 const testMatch = r.verification.match(/(tests\/[a-zA-Z0-9_-]+\.test\.(?:ts|js))/);
@@ -1767,7 +1780,61 @@ export class GuardianAgent extends EventEmitter {
                         missingTargets.push(`${r.id} refers to missing file ${targetFile}`);
                     } else {
                         checkedRequirements.push(r.id);
+
+                        // Query IDS MCP file info if available to ensure the file is indexed and healthy
+                        if (idsGetFileInfoTool) {
+                            try {
+                                const fileInfoResult = await this.executeTool(idsGetFileInfoTool.name, { file_path: targetFile });
+                                if (fileInfoResult && fileInfoResult.ok) {
+                                    const outObj = fileInfoResult.output;
+                                    const outData = typeof outObj.result === "string" ? JSON.parse(outObj.result) : outObj;
+                                    if (outData && (outData.exists === false || outData.error)) {
+                                        this.emitEvent("guardian.documentation_drift", `IDS MCP: File ${targetFile} referenced by ${r.id} is not fully indexed or has error.`);
+                                    }
+                                }
+                            } catch (e) {
+                                // non-fatal for individual file check
+                            }
+                        }
                     }
+                }
+            }
+
+            // Execute the IDS System Validator if available
+            if (idsRunValidatorTool) {
+                try {
+                    const valResult = await this.executeTool(idsRunValidatorTool.name, { validation_scope: "full" });
+                    if (valResult && valResult.ok) {
+                        const outObj = valResult.output;
+                        const outData = typeof outObj.result === "string" ? JSON.parse(outObj.result) : outObj;
+                        const valSuccess = outData.success !== false && !outData.error;
+                        if (!valSuccess) {
+                            missingTargets.push(`IDS System Validator reported errors: ${outData.error || "failed validation check"}`);
+                        } else {
+                            idsMcpNotes += ` [IDS Validator: OK]`;
+                        }
+                    } else {
+                        missingTargets.push(`IDS System Validator tool execution failed: ${valResult ? JSON.stringify(valResult.output) : "null"}`);
+                    }
+                } catch (valErr) {
+                    idsMcpNotes += ` [IDS Validator error: ${String(valErr)}]`;
+                }
+            }
+
+            // Query the general IDS MCP status to log indexing details
+            if (idsGetStatusTool) {
+                try {
+                    const statusResult = await this.executeTool(idsGetStatusTool.name, {});
+                    if (statusResult && statusResult.ok) {
+                        const outObj = statusResult.output;
+                        const outData = typeof outObj.result === "string" ? JSON.parse(outObj.result) : outObj;
+                        const indexedCount = outData.indices_loaded && typeof outData.indices_loaded === "object"
+                            ? (outData.indices_loaded as any).file_metadata || 0
+                            : 0;
+                        idsMcpNotes += ` [IDS Index files: ${indexedCount}]`;
+                    }
+                } catch (statusErr) {
+                    idsMcpNotes += ` [IDS status error: ${String(statusErr)}]`;
                 }
             }
 
@@ -1789,18 +1856,20 @@ export class GuardianAgent extends EventEmitter {
                 llmAnalysis = `LLM analysis skipped: ${String(err)}`;
             }
 
+            const mcpNoteStr = idsMcpNotes ? ` IDS MCP Notes:${idsMcpNotes}` : "";
+
             if (missingTargets.length > 0) {
                 this.issuesDetected += missingTargets.length;
                 this.emitEvent("guardian.documentation_drift", `Documentation drift: ${missingTargets.join("; ")}`);
                 return {
                     status: "warning",
-                    detail: `Detected drift on ${missingTargets.length} requirements. Checked: ${checkedRequirements.length}. LLM Notes: ${llmAnalysis}`,
+                    detail: `Detected drift on ${missingTargets.length} requirements. Checked: ${checkedRequirements.length}.${mcpNoteStr} LLM Notes: ${llmAnalysis}`,
                 };
             }
 
             return {
                 status: "success",
-                detail: `Verified ${checkedRequirements.length} requirements in Traceability Matrix. All referenced files exist. LLM Analysis: ${llmSuccess ? "completed" : "skipped (" + llmAnalysis + ")"}`,
+                detail: `Verified ${checkedRequirements.length} requirements in Traceability Matrix. All referenced files exist.${mcpNoteStr} LLM Analysis: ${llmSuccess ? "completed" : "skipped (" + llmAnalysis + ")"}`,
             };
         } catch (error) {
             return { status: "failure", detail: `Documentation alignment sentinel failed: ${String(error)}` };
