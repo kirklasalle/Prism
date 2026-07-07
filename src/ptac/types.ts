@@ -46,6 +46,8 @@ export interface ChatStep extends StepBase {
      * exclusive with `expectApprovalRequired` at the scenario level.
      */
     readonly expectDeny?: boolean;
+    readonly realGeneration?: boolean;
+    readonly expectError?: boolean;
 }
 
 export interface ApproveAtStep extends StepBase {
@@ -168,6 +170,15 @@ export interface PadHashVerifyStep extends StepBase {
     readonly expectTamper?: boolean;
 }
 
+export interface TamperPadStep extends StepBase {
+    readonly kind: "tamperPad";
+    readonly text: string;
+}
+
+export interface RestorePadStep extends StepBase {
+    readonly kind: "restorePad";
+}
+
 /* ── Self-drive steps (Phase R PTAC self-drive expansion) ─────────────────
  *
  * `browserDrive` and `computerUse` lift PTAC out of the pure-HTTP era and
@@ -265,6 +276,18 @@ export interface RealDockerLifecycleStep extends StepBase {
     readonly image?: string;
 }
 
+export interface CccStateRehydrationStep extends StepBase {
+    readonly kind: "cccStateRehydration";
+}
+
+export interface SrAntagonisticPromptsStep extends StepBase {
+    readonly kind: "srAntagonisticPrompts";
+}
+
+export interface SelfHealingEscalationStep extends StepBase {
+    readonly kind: "selfHealingEscalation";
+}
+
 export type PtacStep =
     | SetupWizardStep
     | ChatStep
@@ -281,10 +304,15 @@ export type PtacStep =
     | SrFanOutStep
     | PluginLifecycleStep
     | PadHashVerifyStep
+    | TamperPadStep
+    | RestorePadStep
     | BrowserDriveStep
     | ComputerUseStep
     | RealPtyLifecycleStep
-    | RealDockerLifecycleStep;
+    | RealDockerLifecycleStep
+    | CccStateRehydrationStep
+    | SrAntagonisticPromptsStep
+    | SelfHealingEscalationStep;
 
 /* ── Scenario & run plumbing ───────────────────────────────────────────── */
 

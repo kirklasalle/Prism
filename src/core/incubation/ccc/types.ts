@@ -55,6 +55,12 @@ export interface CompiledStep {
     violations: PrincipleViolation[];
 }
 
+export interface EnvironmentSnapshot {
+    files: Record<string, string>;
+    env: Record<string, string>;
+    timestamp: string;
+}
+
 export interface RuntimePlan {
     dagId: string;
     dagName: string;
@@ -68,4 +74,5 @@ export interface RuntimePlan {
     /** True if every step has a non-deny projection AND no unsatisfiable principles. */
     enforceable: boolean;
     prototype: true;
+    environmentSnapshots?: Record<string, EnvironmentSnapshot>;
 }

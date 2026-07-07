@@ -3101,6 +3101,46 @@ export interface SRTriadValidation {
  *
  * Main is permitted to overlap Left or Right (it serves the distinct coordinator role).
  */
+/** Model families and their architectural kinship scores for cognitive isolation checks. */
+const KINSHIP_MATRIX: Record<string, Record<string, number>> = {
+    gpt: { gpt: 1.0 },
+    claude: { claude: 1.0 },
+    gemini: { gemini: 1.0 },
+    llama: { llama: 1.0, qwen: 0.85, mistral: 0.82 },
+    qwen: { qwen: 1.0, llama: 0.85, mistral: 0.8 },
+    mistral: { mistral: 1.0, llama: 0.82, qwen: 0.8 },
+    deepseek: { deepseek: 1.0 },
+};
+
+export function getModelFamily(modelName: string): string {
+    const lower = modelName.toLowerCase();
+    if (lower.includes("gpt") || lower.includes("o1") || lower.includes("o3")) return "gpt";
+    if (lower.includes("claude") || lower.includes("anthropic")) return "claude";
+    if (lower.includes("gemini") || lower.includes("google")) return "gemini";
+    if (lower.includes("llama") || lower.includes("meta")) return "llama";
+    if (lower.includes("mistral") || lower.includes("mixtral")) return "mistral";
+    if (lower.includes("qwen")) return "qwen";
+    if (lower.includes("deepseek")) return "deepseek";
+    return "unknown";
+}
+
+export function getKinshipScore(modelA: string, modelB: string): number {
+    const famA = getModelFamily(modelA);
+    const famB = getModelFamily(modelB);
+    if (famA === "unknown" || famB === "unknown") {
+        return famA === famB && famA !== "unknown" ? 1.0 : 0.0;
+    }
+    return KINSHIP_MATRIX[famA]?.[famB] ?? 0.0;
+}
+
+/**
+ * Cross-validate the SR triad: Left ≠ Right is mandatory.
+ * - "full": different providers — separate keys, infra, rate limits.
+ * - "model": same provider, different models — separate capabilities, shared key.
+ * - "insufficient": same provider + same model — REJECTED.
+ *
+ * Main is permitted to overlap Left or Right (it serves the distinct coordinator role).
+ */
 export function validateSRTriad(
     left: { providerId: string; model: string } | null,
     right: { providerId: string; model: string } | null,
@@ -3134,6 +3174,12 @@ export function validateSRTriad(
         };
     }
 
+    const kinship = getKinshipScore(left.model, right.model);
+    const kinshipWarning =
+        kinship > 0.8
+            ? `Warning: High architectural kinship score (${kinship}) between Left and Right models. Potential cognitive homogenization.`
+            : "";
+
     // Build advisory from individual model capability checks (advisory only — not blocking)
     const advisoryParts: string[] = [];
     if (leftValidation && !leftValidation.valid) {
@@ -3141,6 +3187,9 @@ export function validateSRTriad(
     }
     if (rightValidation && !rightValidation.valid) {
         advisoryParts.push(`Right: ${rightValidation.advisoryText}`);
+    }
+    if (kinshipWarning) {
+        advisoryParts.push(kinshipWarning);
     }
 
     if (!sameProvider) {
@@ -3168,9 +3217,9 @@ export function validateSRTriad(
 
 /** SR system prompt templates. */
 export const SR_SYSTEM_PROMPTS = {
-    left: `You are the Logic Hemisphere in a Spectrum Refraction (SR) engagement. Your role is analytical reasoning, code generation, structured problem-solving, and tool use. Be precise, thorough, and systematic. Focus on correctness and logical soundness. Do not generate creative media — that is handled by the Creative Hemisphere.`,
+    left: `You are the Logic Hemisphere in a Spectrum Refraction (SR) engagement. Your role is strict analytical reasoning, code generation, structured problem-solving, and tool use. MANDATE step-by-step logical proofs, formal deduction, and systematic verification. You must think strictly in logical, deductive steps. Avoid any creative storytelling, lateral leaps, or artistic styling. Focus solely on correctness and logical soundness. Do not generate creative media — that is handled by the Creative Hemisphere.`,
 
-    right: `You are the Creative Hemisphere in a Spectrum Refraction (SR) engagement. Your role is visual, auditory, and creative expression. Generate images when relevant, suggest or produce audio/video content. Be expressive and generative. Focus on creating compelling media artifacts. Do not focus on code or logical analysis — that is handled by the Logic Hemisphere.`,
+    right: `You are the Creative Hemisphere in a Spectrum Refraction (SR) engagement. Your role is lateral, associative reasoning, visual, auditory, and creative expression. You must force lateral/associative reasoning and creative exploration. Explicitly avoid and do not use step-by-step logical proofs, code generation, or formal deductive reasoning patterns. Suggest or produce audio/video content, be expressive, lateral, and generative. Do not focus on code or logical analysis — that is handled by the Logic Hemisphere.`,
 
     aggregation: `You are the Coordinator in a Spectrum Refraction (SR) engagement. You received outputs from two specialized hemispheres plus your own primary analysis. Synthesize all three into a single cohesive response.
 

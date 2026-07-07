@@ -112,13 +112,15 @@ export class WorkflowSynthesizer {
             constitution: input.constitution,
         });
 
+        const finalSteps = validation.processedSteps ?? proposedSteps;
+
         if (!validation.enforceable) {
             this.stats = { ...this.stats, rejectedCount: this.stats.rejectedCount + 1 };
             const rejected: SynthesizedCandidate = {
                 candidateId,
                 sourceFragmentId: fragment.workflowId,
                 failedStepId: input.failedStepId,
-                proposedSteps,
+                proposedSteps: finalSteps,
                 proposedFallbacks,
                 compiledPlan: validation.plan,
                 rationale: `mined from workflow ${fragment.workflowId} step ${fragment.stepId}`,
@@ -153,7 +155,7 @@ export class WorkflowSynthesizer {
                     candidateId,
                     dagId: input.dag.id,
                     failedStepId: input.failedStepId,
-                    proposedSteps,
+                    proposedSteps: finalSteps,
                     compilationHash: validation.plan.compilationHash,
                 },
                 120_000,
@@ -182,7 +184,7 @@ export class WorkflowSynthesizer {
             candidateId,
             sourceFragmentId: fragment.workflowId,
             failedStepId: input.failedStepId,
-            proposedSteps,
+            proposedSteps: finalSteps,
             proposedFallbacks,
             compiledPlan: validation.plan,
             rationale: `mined from workflow ${fragment.workflowId} step ${fragment.stepId}; depth=${depth}`,
@@ -202,7 +204,7 @@ export class WorkflowSynthesizer {
                 candidateId,
                 dagId: input.dag.id,
                 failedStepId: input.failedStepId,
-                proposedStepCount: proposedSteps.length,
+                proposedStepCount: finalSteps.length,
                 compilationHash: validation.plan.compilationHash,
                 depth,
             },

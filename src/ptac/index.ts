@@ -93,4 +93,8 @@ import "./scenarios/s28-autonomous-self-test.js";
 // vehicle search) prove the autonomous loop persists through failure,
 // iterates across multiple sources, and returns real data.
 import "./scenarios/s29-autonomous-research-litmus.js";
+import "./scenarios/s30-continuous-pad-verify.js";
+import "./scenarios/s31-ccc-state-rehydration.js";
+import "./scenarios/s32-sr-antagonistic-prompts.js";
+import "./scenarios/s33-self-healing-escalation.js";
 import "./scenarios/osworld.js";

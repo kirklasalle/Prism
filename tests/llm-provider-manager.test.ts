@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { LlmProviderManager } from "../src/core/operator/llm-provider-manager.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 
@@ -63,6 +64,52 @@ export async function testLlmProviderManager(): Promise<void> {
     assert.strictEqual(persistedSnapshot!.enabled, true);
     assert.strictEqual(persistedSnapshot!.hasApiKey, true);
     assert.strictEqual(persistedSnapshot!.settingsSource, "persisted");
+
+    // ── Continuous Cryptographic Directive Enforcement Tests ─────────────────
+    const padPath = "Permanent_Active_Directives.txt";
+    if (existsSync(padPath)) {
+        const originalContent = readFileSync(padPath, "utf8");
+        // Instantiate a mock activity bus to capture events
+        const events: any[] = [];
+        const mockBus = {
+            emit: (ev: any) => events.push(ev),
+        } as any;
+        const testManager = new LlmProviderManager(
+            { PRISM_LLM_PROVIDER: "ollama", PRISM_OLLAMA_MODELS: "llama3.1:8b" },
+            [],
+            undefined,
+            undefined,
+            undefined,
+            mockBus,
+        );
+
+        try {
+            // Overwrite with tampered content
+            writeFileSync(padPath, "TAMPERED DIRECTIVES CONTENT");
+
+            // We expect generate to throw an integrity violation error
+            const input = {
+                message: "Test prompt",
+                conversation: [],
+                systemPrompt: "Test system prompt",
+            };
+            await assert.rejects(
+                () => testManager.generate(input),
+                /PAD integrity check failed/i,
+                "Generation should fail when PAD is tampered",
+            );
+
+            // Assert that the activity bus emitted the security violation event
+            assert.strictEqual(events.length, 1, "Should emit exactly 1 event");
+            assert.strictEqual(events[0].layer, "governance");
+            assert.strictEqual(events[0].operation, "directive_integrity_violated");
+            assert.strictEqual(events[0].status, "failed");
+            assert.ok(events[0].details.error.includes("PAD integrity check failed"));
+        } finally {
+            // Restore original content
+            writeFileSync(padPath, originalContent);
+        }
+    }
 
     console.log("✓ LlmProviderManager tests passed");
 }

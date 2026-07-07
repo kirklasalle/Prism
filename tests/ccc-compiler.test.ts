@@ -79,4 +79,34 @@ export async function testCccCompiler(): Promise<void> {
     const ok = enforcer.authorizeStep(safePlan, "s1");
     assert.equal(ok.allowed, true);
     assert.ok(collected.includes("incubation.ccc.step_authorized"));
+
+    // 8. Drift detection: compile a step that requires Tier 3 approval (high risk)
+    const highRiskSteps: WorkflowStep[] = [
+        { id: "s1", operation: "delete.folder", args: {}, risk: "high", mutatesState: true },
+    ];
+    const highRiskDag = executor.createDAG("high-risk-delete", highRiskSteps);
+    const highRiskPlan = compiler.compile(highRiskDag, {
+        profile: BUSINESS_PROFILE,
+        constitution,
+    });
+    // Check that environmentSnapshot was populated for s1
+    assert.ok(highRiskPlan.environmentSnapshots?.["s1"], "must capture snapshot for high risk step");
+
+    // Make a copy of the snapshot and alter it to simulate drift
+    const planWithDrift = {
+        ...highRiskPlan,
+        environmentSnapshots: {
+            s1: {
+                ...highRiskPlan.environmentSnapshots["s1"],
+                env: {
+                    ...highRiskPlan.environmentSnapshots["s1"].env,
+                    NODE_ENV: "DRIFTED_ENV_VALUE",
+                },
+            },
+        },
+    };
+    const driftBlocked = enforcer.authorizeStep(planWithDrift, "s1");
+    assert.equal(driftBlocked.allowed, false, "drifted environment must be blocked");
+    assert.ok(driftBlocked.reason?.includes("Environment drift detected"));
+    assert.ok(collected.includes("incubation.ccc.step_drifted"), "must emit step_drifted");
 }

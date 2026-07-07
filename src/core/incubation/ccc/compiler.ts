@@ -12,7 +12,15 @@ import type { WorkflowDAG } from "../../runtime/workflow.js";
 import type { PolicyEngine } from "../../policy/engine.js";
 import type { PolicyContext, PolicyResult } from "../../policy/types.js";
 import type { ExecutionProfile } from "../../policy/execution-profiles.js";
-import type { CompiledStep, Constitution, ConstitutionPrinciple, PrincipleViolation, RuntimePlan } from "./types.js";
+import type {
+    CompiledStep,
+    Constitution,
+    ConstitutionPrinciple,
+    PrincipleViolation,
+    RuntimePlan,
+    EnvironmentSnapshot,
+} from "./types.js";
+import { captureEnvironmentSnapshot } from "./snapshot.js";
 
 export interface CompileOptions {
     profile: ExecutionProfile;
@@ -29,6 +37,8 @@ export class CausalCompiler {
     compile(dag: WorkflowDAG, opts: CompileOptions): RuntimePlan {
         const steps: CompiledStep[] = [];
         const unsatisfiable: PrincipleViolation[] = [];
+
+        const environmentSnapshots: Record<string, EnvironmentSnapshot> = {};
 
         for (const step of dag.steps) {
             const ctx: PolicyContext = {
@@ -52,6 +62,10 @@ export class CausalCompiler {
                 if (v) {
                     violations.push({ stepId: step.id, principleId: p.id, ...v });
                 }
+            }
+
+            if (projected.tier === "tier3_approval" || projected.decision === "require_approval") {
+                environmentSnapshots[step.id] = captureEnvironmentSnapshot();
             }
 
             const compiledStep: CompiledStep = {
@@ -110,6 +124,7 @@ export class CausalCompiler {
             unsatisfiableSteps: unsatisfiable,
             enforceable,
             prototype: true,
+            environmentSnapshots,
         };
     }
 }

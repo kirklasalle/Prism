@@ -142,6 +142,52 @@ export async function testShwsSynthesizer(): Promise<void> {
     assert.ok(rejected!.rejected, "candidate must be marked rejected");
     assert.ok(events.includes("incubation.shws.candidate_rejected"));
 
+    // 5.5. Aggregate Risk Scoring & Upgrade Gate
+    const riskHistory = new WorkflowHistoryIndex(10);
+    const synth3 = new WorkflowSynthesizer(riskHistory, validator, new ApprovalQueue(), bus);
+    riskHistory.record({
+        workflowId: "wf-risk",
+        stepId: "failed-s1",
+        operation: "delete.folder",
+        succeeded: true,
+        recordedAt: new Date().toISOString(),
+        repairSteps: [
+            {
+                id: "rep-1",
+                operation: "write.file",
+                args: {},
+                risk: "medium",
+                mutatesState: true,
+                rollbackPlan: "delete new file",
+            },
+            {
+                id: "rep-2",
+                operation: "move.file",
+                args: {},
+                risk: "medium",
+                mutatesState: true,
+                rollbackPlan: "move file back",
+            },
+        ],
+    });
+    const riskDag = executor.createDAG("test-wf-risk", [
+        { id: "failed-s1", operation: "delete.folder", args: {}, risk: "high", mutatesState: true },
+    ]);
+    const riskCandidate = synth3.proposeFallback({
+        failedStepId: "failed-s1",
+        dag: riskDag,
+        profile: BUSINESS_PROFILE,
+        constitution,
+    });
+    assert.ok(riskCandidate, "should propose a candidate");
+    assert.equal(riskCandidate.proposedSteps[0].risk, "high", "first step risk should be upgraded to high");
+    assert.equal(riskCandidate.proposedSteps[1].risk, "high", "second step risk should be upgraded to high");
+    assert.equal(
+        riskCandidate.compiledPlan.steps[0].projectedDecision.tier,
+        "tier3_approval",
+        "compiled plan should be upgraded to tier3",
+    );
+
     // Stats sanity
     const stats = synth.getStats();
     assert.ok(stats.proposedCount >= 1);

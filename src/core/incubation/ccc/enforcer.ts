@@ -4,6 +4,7 @@
 
 import type { ActivityBus } from "../../activity/bus.js";
 import type { CompiledStep, RuntimePlan } from "./types.js";
+import { captureEnvironmentSnapshot, detectSnapshotDrift } from "./snapshot.js";
 
 export interface EnforcementDecision {
     allowed: boolean;
@@ -40,6 +41,40 @@ export class RuntimePlanEnforcer {
                     reasons: [`unknown step ${stepId}`],
                 },
             };
+        }
+
+        const originalSnapshot = plan.environmentSnapshots?.[stepId];
+        if (originalSnapshot) {
+            const currentSnapshot = captureEnvironmentSnapshot();
+            const driftReason = detectSnapshotDrift(originalSnapshot, currentSnapshot);
+            if (driftReason) {
+                this.bus.emit({
+                    sessionId: this.sessionId,
+                    layer: "governance",
+                    operation: "incubation.ccc.step_drifted",
+                    status: "failed",
+                    policyDecision: "deny",
+                    details: {
+                        dagId: plan.dagId,
+                        stepId,
+                        operation: step.operation,
+                        driftReason,
+                        compilationHash: plan.compilationHash,
+                    },
+                });
+                return {
+                    allowed: false,
+                    stepId,
+                    reason: `Environment drift detected: ${driftReason}`,
+                    violatedPrincipleIds: [],
+                    projectedDecision: {
+                        tier: "tier3_approval",
+                        decision: "deny",
+                        reasonCodes: ["CCC_ENVIRONMENT_DRIFT"],
+                        reasons: [driftReason],
+                    },
+                };
+            }
         }
 
         if (step.violations.length > 0) {

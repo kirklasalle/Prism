@@ -239,11 +239,13 @@ export class ImageGenerateTool implements Tool {
             throw new Error("Provider returned no b64_json image data");
         }
 
-        if (opts.providerId === "gemini") {
+        if (isGeminiProvider(opts.providerId)) {
             if (!opts.apiKey) {
-                throw new Error("Provider gemini has no API key configured");
+                throw new Error(`Provider ${opts.providerId} has no API key configured`);
             }
-            const url = `${trimTrailingSlash(opts.baseUrl)}/v1beta/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
+            const nativeUrl = getNativeGeminiBaseUrl(opts.baseUrl);
+            const modelName = cleanModelId(opts.model);
+            const url = `${trimTrailingSlash(nativeUrl)}/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
             const body = JSON.stringify({
                 contents: [{ parts: [{ text: opts.prompt }] }],
                 generationConfig: { responseModalities: ["IMAGE"] },
@@ -297,4 +299,24 @@ export class ImageGenerateTool implements Tool {
 
 function trimTrailingSlash(u: string): string {
     return u.endsWith("/") ? u.slice(0, -1) : u;
+}
+
+function isGeminiProvider(providerId: string): boolean {
+    return providerId === "gemini" || providerId === "google" || providerId === "gemini-pro";
+}
+
+function getNativeGeminiBaseUrl(baseUrl: string): string {
+    let u = trimTrailingSlash(baseUrl);
+    if (u.endsWith("/v1beta/openai")) {
+        u = u.slice(0, -"/v1beta/openai".length);
+    } else if (u.endsWith("/v1/openai")) {
+        u = u.slice(0, -"/v1/openai".length);
+    } else if (u.endsWith("/openai")) {
+        u = u.slice(0, -"/openai".length);
+    }
+    return u;
+}
+
+function cleanModelId(model: string): string {
+    return model.startsWith("models/") ? model.slice("models/".length) : model;
 }

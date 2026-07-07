@@ -6307,6 +6307,7 @@ export class DashboardService {
 
                 // Instance isolation enforcement: Left ≠ Right (mandatory)
                 let isolationLevel: string | null = null;
+                let isolationAdvisory: string | null = null;
                 if (body.leftProviderId && body.leftModel && body.rightProviderId && body.rightModel) {
                     const triad = this.llmProviders.validateSRTriadConfig(
                         body.leftProviderId,
@@ -6322,6 +6323,7 @@ export class DashboardService {
                         });
                     }
                     isolationLevel = triad.isolationLevel;
+                    isolationAdvisory = triad.advisory;
                 }
 
                 const existingConfig = this.chatStore.getSRConfig(body.sessionId);
@@ -6344,7 +6346,7 @@ export class DashboardService {
                 );
                 const updated = this.chatStore.getSRConfig(body.sessionId);
 
-                return this.json(res, 200, { config: updated, validation, isolationLevel });
+                return this.json(res, 200, { config: updated, validation, isolationLevel, isolationAdvisory });
             } catch (error) {
                 return this.json(res, 400, { error: String(error) });
             }

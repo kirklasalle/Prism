@@ -8,6 +8,7 @@ import {
     filterSRCreativeModels,
     resolveProfile,
     SR_SYSTEM_PROMPTS,
+    getKinshipScore,
     type ModelCapabilityProfile,
     type AvailableModel,
     type SpectrumRefractionConfig,
@@ -515,5 +516,29 @@ describe("Spectrum Refraction — resolveProfile SR Compatibility", () => {
         assert.ok(profile);
         assert.ok(typeof profile.tier === "number");
         assert.ok(Array.isArray(profile.strengths));
+    });
+});
+
+/* ──────────────────────────────────────────────────────────
+ *  10. Spectrum Refraction — Kinship Validation & Warnings
+ * ────────────────────────────────────────────────────────── */
+describe("Spectrum Refraction — Kinship Validation & Warnings", () => {
+    it("returns high kinship for structurally similar models (e.g. Qwen and Llama)", () => {
+        const score = getKinshipScore("llama3.1:8b", "qwen3-vl:2b");
+        assert.ok(score > 0.8, `Expected score > 0.8, got ${score}`);
+    });
+
+    it("returns low kinship for models of different families (e.g. Claude and GPT)", () => {
+        const score = getKinshipScore("gpt-5", "claude-3-5-sonnet-latest");
+        assert.ok(score < 0.5, `Expected score < 0.5, got ${score}`);
+    });
+
+    it("triad validation includes kinship warning advisory for high-kinship pairs", () => {
+        const result = validateSRTriad(
+            { providerId: "ollama", model: "llama3.1:8b" },
+            { providerId: "ollama", model: "qwen3-vl:2b" },
+        );
+        assert.strictEqual(result.valid, true);
+        assert.ok(result.advisory.includes("Warning: High architectural kinship score"));
     });
 });

@@ -3,6 +3,7 @@ import type { OAuthTokenStore } from "./oauth-token-store.js";
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { join as pathJoin } from "node:path";
 import { readPreferences } from "../config/workspace-resolver.js";
+import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
 
 // ── LLM Trace Logger ─────────────────────────────────────────────────────────
 const LLM_TRACE_DIR = pathJoin(process.cwd(), "logs");
@@ -45,6 +46,7 @@ import {
     filterSRCreativeModels,
     validateSRTriad,
     SR_SYSTEM_PROMPTS,
+    getKinshipScore,
 } from "./model-capability-matrix.js";
 import type {
     TaskRole,
@@ -466,6 +468,7 @@ export class LlmProviderManager {
         bitnetcpp: string[];
         expiresAt: number;
     } | null = null;
+    private catalogCache: LlmProviderCatalog | null = null;
     private static readonly CATALOG_CACHE_TTL_MS = 24 * 3600 * 1000; // 24 hours
 
     /** Circuit breaker state: key = `${hemisphereRole}:${providerId}` */
@@ -781,12 +784,22 @@ export class LlmProviderManager {
                 defaultModel: settingsEntry.defaultModel?.trim() || null,
             });
         }
+        this.catalogCache = null;
         // Note: discoveredModelsCache is intentionally NOT cleared here.
         // Network-discovered model lists (probe results) are unaffected by settings changes.
         // Provider snapshots are always rebuilt from current settings + cached discovered models.
     }
 
     async getCatalog(selection?: Partial<LlmSelection>, forceRefresh?: boolean): Promise<LlmProviderCatalog> {
+        if (
+            !selection &&
+            !forceRefresh &&
+            this.catalogCache &&
+            this.discoveredModelsCache &&
+            Date.now() < this.discoveredModelsCache.expiresAt
+        ) {
+            return this.catalogCache;
+        }
         // Cache only the network-discovered model lists (expensive network probes).
         // Provider snapshots are always rebuilt from current settings so that settings
         // changes (saveProviderSettings) are reflected immediately without re-probing.
@@ -927,11 +940,15 @@ export class LlmProviderManager {
             this.activeModel = effectiveModel;
         }
 
-        return {
+        const result = {
             activeProviderId: effectiveProviderId,
             activeModel: effectiveModel,
             providers,
         };
+        if (!selection) {
+            this.catalogCache = result;
+        }
+        return result;
     }
 
     async setActiveSelection(providerId: string, model?: string): Promise<LlmProviderCatalog> {
@@ -953,6 +970,7 @@ export class LlmProviderManager {
         this.activeProviderId = resolved;
         this.activeModel = model?.trim() || provider.models[0] || null;
         this.discoveredModelsCache = null; // Invalidate discovered-models cache on selection change
+        this.catalogCache = null;
 
         return {
             ...catalog,
@@ -1003,6 +1021,23 @@ export class LlmProviderManager {
     }
 
     async generate(input: LlmGenerationInput, selection?: Partial<LlmSelection>): Promise<LlmGenerationOutput | null> {
+        // Continuous Cryptographic Directive Enforcement (Pillar 1)
+        const padVerify = verifyDirectiveIntegrity();
+        if (!padVerify.valid) {
+            const padErrMsg = `PAD integrity check failed: active memory or directives file tampered. Expected hash ${padVerify.expectedHash}, found ${padVerify.currentHash}`;
+            this.activityBus?.emit({
+                sessionId: "llm-provider-manager",
+                layer: "governance",
+                operation: "directive_integrity_violated",
+                status: "failed",
+                details: {
+                    error: padErrMsg,
+                    expectedHash: padVerify.expectedHash,
+                    currentHash: padVerify.currentHash,
+                },
+            });
+            throw new Error(padErrMsg);
+        }
         const filter = input.allowedTools ?? this.temporaryToolFilter;
         if (filter && input.tools) {
             input = {
@@ -1373,6 +1408,22 @@ export class LlmProviderManager {
         if (!triadCheck.valid) {
             console.error(`[SR] Pre-flight isolation check FAILED: ${triadCheck.advisory}`);
             return null;
+        }
+
+        const kinship = getKinshipScore(srConfig.leftModel.model, srConfig.rightModel.model);
+        if (kinship > 0.8) {
+            this.activityBus?.emit({
+                sessionId: mainSelection?.providerId ?? "sr",
+                layer: "llm",
+                operation: "sr.kinship_warning",
+                status: "failed",
+                details: {
+                    leftModel: srConfig.leftModel.model,
+                    rightModel: srConfig.rightModel.model,
+                    kinshipScore: kinship,
+                    message: `Spectrum Refraction warning: Left and Right models have a high architectural kinship score (${kinship}), which increases the risk of cognitive homogenization.`,
+                },
+            });
         }
 
         const totalStart = Date.now();

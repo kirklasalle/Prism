@@ -62,6 +62,26 @@ function trimTrailingSlash(u: string): string {
     return u.endsWith("/") ? u.slice(0, -1) : u;
 }
 
+function isGeminiProvider(providerId: string): boolean {
+    return providerId === "gemini" || providerId === "google" || providerId === "gemini-pro";
+}
+
+function getNativeGeminiBaseUrl(baseUrl: string): string {
+    let u = trimTrailingSlash(baseUrl);
+    if (u.endsWith("/v1beta/openai")) {
+        u = u.slice(0, -"/v1beta/openai".length);
+    } else if (u.endsWith("/v1/openai")) {
+        u = u.slice(0, -"/v1/openai".length);
+    } else if (u.endsWith("/openai")) {
+        u = u.slice(0, -"/openai".length);
+    }
+    return u;
+}
+
+function cleanModelId(model: string): string {
+    return model.startsWith("models/") ? model.slice("models/".length) : model;
+}
+
 function defaultFetch(): FetchLike {
     return (globalThis as unknown as { fetch: FetchLike }).fetch;
 }
@@ -290,9 +310,11 @@ export class VideoGenerateTool implements Tool {
             if (payload.id) return { kind: "pending", jobId: payload.id, status: payload.status };
             throw new Error("Provider returned no video data and no job id");
         }
-        if (opts.providerId === "gemini") {
-            if (!opts.apiKey) throw new Error("Provider gemini has no API key configured");
-            const url = `${trimTrailingSlash(opts.baseUrl)}/v1beta/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
+        if (isGeminiProvider(opts.providerId)) {
+            if (!opts.apiKey) throw new Error(`Provider ${opts.providerId} has no API key configured`);
+            const nativeUrl = getNativeGeminiBaseUrl(opts.baseUrl);
+            const modelName = cleanModelId(opts.model);
+            const url = `${trimTrailingSlash(nativeUrl)}/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
             const resp = await this.fetchImpl(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -494,9 +516,11 @@ export class AudioGenerateTool implements Tool {
             if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 500)}`);
             return new Uint8Array(await resp.arrayBuffer());
         }
-        if (opts.providerId === "gemini") {
-            if (!opts.apiKey) throw new Error("Provider gemini has no API key configured");
-            const url = `${trimTrailingSlash(opts.baseUrl)}/v1beta/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
+        if (isGeminiProvider(opts.providerId)) {
+            if (!opts.apiKey) throw new Error(`Provider ${opts.providerId} has no API key configured`);
+            const nativeUrl = getNativeGeminiBaseUrl(opts.baseUrl);
+            const modelName = cleanModelId(opts.model);
+            const url = `${trimTrailingSlash(nativeUrl)}/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
             const promptText =
                 opts.kind === "music"
                     ? `Generate music: ${opts.text}`
@@ -673,9 +697,11 @@ export class AudioTranscribeTool implements Tool {
             if (typeof payload.text === "string") return payload.text;
             throw new Error("Provider returned no transcription text");
         }
-        if (opts.providerId === "gemini") {
-            if (!opts.apiKey) throw new Error("Provider gemini has no API key configured");
-            const url = `${trimTrailingSlash(opts.baseUrl)}/v1beta/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
+        if (isGeminiProvider(opts.providerId)) {
+            if (!opts.apiKey) throw new Error(`Provider ${opts.providerId} has no API key configured`);
+            const nativeUrl = getNativeGeminiBaseUrl(opts.baseUrl);
+            const modelName = cleanModelId(opts.model);
+            const url = `${trimTrailingSlash(nativeUrl)}/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
             const resp = await this.fetchImpl(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

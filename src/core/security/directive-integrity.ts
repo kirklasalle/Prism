@@ -111,36 +111,36 @@ export function verifyDirectiveIntegrity(workspaceRoot?: string): DirectiveInteg
     const verifiedAt = new Date().toISOString();
 
     if (!existsSync(filePath)) {
-        return {
+        return Object.freeze({
             valid: false,
             currentHash: "",
             expectedHash: DIRECTIVE_SHA256,
             filePath,
             verifiedAt,
             error: `Directive file not found: ${filePath}`,
-        };
+        });
     }
 
     try {
         const content = readFileSync(filePath, "utf8");
         const currentHash = createHash("sha256").update(content, "utf8").digest("hex");
 
-        return {
+        return Object.freeze({
             valid: currentHash === DIRECTIVE_SHA256,
             currentHash,
             expectedHash: DIRECTIVE_SHA256,
             filePath,
             verifiedAt,
-        };
+        });
     } catch (err) {
-        return {
+        return Object.freeze({
             valid: false,
             currentHash: "",
             expectedHash: DIRECTIVE_SHA256,
             filePath,
             verifiedAt,
             error: `Failed to read directive file: ${err instanceof Error ? err.message : String(err)}`,
-        };
+        });
     }
 }
 

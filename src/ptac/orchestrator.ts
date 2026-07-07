@@ -16,9 +16,8 @@
  *   - The orchestrator never calls `process.exit`; it returns a `PtacRunResult`
  *     and the CLI decides the exit code.
  */
-
 import { randomUUID, createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
     PtacProfile,
@@ -46,6 +45,7 @@ export class PtacOrchestrator {
      * Subsequent `browserDrive` steps that omit `sessionId` (or pass the
      * sentinel "@latest") inherit it. Reset per scenario in `runScenario`. */
     private latestBrowserSessionId: string | null = null;
+    private originalPadContent: string | null = null;
 
     constructor(private readonly deps: OrchestratorDeps = {}) {
         this.fetchImpl = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -152,17 +152,29 @@ export class PtacOrchestrator {
         // here; subsequent steps that omit `sessionId` inherit it. Reset on
         // every scenario boundary so leakage between scenarios is impossible.
         this.latestBrowserSessionId = null;
-        for (const step of scenario.steps) {
-            const result = await this.dispatchStep(step, request, recorder, killSwitch);
-            steps.push(result);
-            killSwitch.bumpActivity();
-            if (result.status === "failed") {
-                scenarioFailed = true;
-                break;
+        try {
+            for (const step of scenario.steps) {
+                const result = await this.dispatchStep(step, request, recorder, killSwitch);
+                steps.push(result);
+                killSwitch.bumpActivity();
+                if (result.status === "failed") {
+                    scenarioFailed = true;
+                    break;
+                }
+                if (result.status === "aborted") {
+                    scenarioFailed = true;
+                    break;
+                }
             }
-            if (result.status === "aborted") {
-                scenarioFailed = true;
-                break;
+        } finally {
+            if (this.originalPadContent !== null) {
+                try {
+                    const padPath = join(process.cwd(), "Permanent_Active_Directives.txt");
+                    writeFileSync(padPath, this.originalPadContent, "utf8");
+                } catch (err) {
+                    console.error("Failed to restore PAD file in scenario finally: ", err);
+                }
+                this.originalPadContent = null;
             }
         }
         return {
@@ -247,6 +259,51 @@ export class PtacOrchestrator {
                         "chat step misconfigured: expectApprovalRequired and expectDeny are mutually exclusive",
                     );
                 }
+                if (step.realGeneration) {
+                    const createRes = await this.fetchImpl(`${baseUrl}/api/chat/sessions`, {
+                        method: "POST",
+                        headers,
+                        body: JSON.stringify({ title: "PTAC Gen Session" }),
+                    });
+                    if (!createRes.ok) {
+                        throw new Error(`failed to create chat session: HTTP ${createRes.status}`);
+                    }
+                    const createBody = (await createRes.json()) as { session: { sessionId: string } };
+                    const actualSessionId = createBody.session.sessionId;
+
+                    const res = await this.fetchImpl(`${baseUrl}/api/chat/sessions/${actualSessionId}/messages`, {
+                        method: "POST",
+                        headers,
+                        body: JSON.stringify({ content: step.prompt }),
+                    });
+                    if (step.expectError) {
+                        if (res.ok) {
+                            let body: any;
+                            try {
+                                body = await res.json();
+                            } catch {
+                                throw new Error(
+                                    `expected chat error but request succeeded (HTTP ${res.status}) and response was not valid JSON`,
+                                );
+                            }
+                            const content = body?.assistantMessage?.content ?? "";
+                            const intent = body?.assistantMessage?.metadata?.intent;
+                            const isLlmError = intent === "llm_error" || intent === "llm_agentic";
+                            const hasErrorText =
+                                content.includes("integrity check failed") || content.includes("LLM provider error");
+                            if (!isLlmError || !hasErrorText) {
+                                throw new Error(
+                                    `expected chat error but request succeeded (HTTP ${res.status}) with content: "${content}" and intent: "${intent}"`,
+                                );
+                            }
+                        }
+                        return;
+                    }
+                    if (!res.ok) {
+                        throw new Error(`chat HTTP ${res.status}: ${await safeText(res)}`);
+                    }
+                    return;
+                }
                 const res = await this.fetchImpl(`${baseUrl}/api/chat`, {
                     method: "POST",
                     headers,
@@ -294,11 +351,29 @@ export class PtacOrchestrator {
             }
             case "padHashVerify": {
                 const res = await this.fetchImpl(`${baseUrl}/api/health`, { headers });
-                if (!res.ok) throw new Error(`health HTTP ${res.status}`);
+                if (!res.ok && res.status !== 503) throw new Error(`health HTTP ${res.status}`);
                 const body = (await res.json()) as { directive?: { valid?: boolean } };
                 const valid = body.directive?.valid === true;
                 if (step.expectTamper && valid) throw new Error("expected PAD tamper but directive valid");
                 if (!step.expectTamper && !valid) throw new Error("PAD integrity check failed");
+                return;
+            }
+            case "tamperPad": {
+                const padPath = join(process.cwd(), "Permanent_Active_Directives.txt");
+                if (!existsSync(padPath)) {
+                    throw new Error(`Permanent_Active_Directives.txt not found at ${padPath}`);
+                }
+                this.originalPadContent = readFileSync(padPath, "utf8");
+                const tamperedContent = this.originalPadContent + "\n" + (step.text || "tampered");
+                writeFileSync(padPath, tamperedContent, "utf8");
+                return;
+            }
+            case "restorePad": {
+                const padPath = join(process.cwd(), "Permanent_Active_Directives.txt");
+                if (this.originalPadContent !== null) {
+                    writeFileSync(padPath, this.originalPadContent, "utf8");
+                    this.originalPadContent = null;
+                }
                 return;
             }
             case "setupWizard": {
@@ -337,6 +412,29 @@ export class PtacOrchestrator {
                     }
                     return;
                 }
+                // Create initialization certificate to satisfy setup completion constraint
+                const certRes = await this.fetchImpl(`${baseUrl}/api/setup/initialization-session`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        certificate: {
+                            profile: { segment: step.profile ?? "individual" },
+                            workspace: { root: process.cwd() },
+                            provider: { name: "mock" },
+                            routing: { mode: "direct" },
+                            guardian: { enabled: true },
+                            agents: { count: 1 },
+                            cac: { operatorEmail: step.operatorEmail ?? "operator@prism.local" },
+                            browserProfile: { count: 0 },
+                            scheduler: { count: 0 },
+                            readiness: { ready: true },
+                        },
+                    }),
+                });
+                if (!certRes.ok) {
+                    throw new Error(`setup/initialization-session HTTP ${certRes.status}: ${await safeText(certRes)}`);
+                }
+
                 // 4. Complete the wizard for the happy path. /api/setup/complete
                 //    persists `setupComplete=true` and returns the readiness
                 //    snapshot — we assert `ready` is reported.
@@ -351,6 +449,112 @@ export class PtacOrchestrator {
                 if (completeBody.setupComplete !== true) {
                     throw new Error("setup/complete did not return setupComplete=true");
                 }
+                return;
+            }
+            case "cccStateRehydration": {
+                // 1. Fetch default constitution
+                const constRes = await this.fetchImpl(`${baseUrl}/api/incubation/ccc/constitutions`, { headers });
+                if (!constRes.ok) {
+                    throw new Error(`failed to fetch constitutions: HTTP ${constRes.status}`);
+                }
+                const constBody = (await constRes.json()) as { constitutions: any[] };
+                const constitution = constBody.constitutions?.[0];
+                if (!constitution) {
+                    throw new Error("no default constitution returned from API");
+                }
+
+                // 2. Compile high-risk DAG
+                const dag = {
+                    id: "ptac-ccc-drift-test",
+                    name: "Drift Test",
+                    steps: [
+                        {
+                            id: "s1",
+                            operation: "delete.folder",
+                            args: {},
+                            risk: "high",
+                            mutatesState: true,
+                            rollbackPlan: "restore_folder",
+                        },
+                    ],
+                };
+                const compileRes = await this.fetchImpl(`${baseUrl}/api/incubation/ccc/compile`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ dag, profileSegment: "business" }),
+                });
+                if (!compileRes.ok) {
+                    throw new Error(`failed to compile DAG: HTTP ${compileRes.status}`);
+                }
+                const compileBody = (await compileRes.json()) as { plan: any };
+                const plan = compileBody.plan;
+                if (!plan) {
+                    throw new Error("compile returned no plan");
+                }
+                if (!plan.environmentSnapshots?.["s1"]) {
+                    throw new Error("expected environmentSnapshots for step s1 in plan");
+                }
+
+                // 3. Authorize s1 (should be allowed initially)
+                const authRes1 = await this.fetchImpl(`${baseUrl}/api/incubation/ccc/authorize`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ plan, stepId: "s1" }),
+                });
+                if (!authRes1.ok) {
+                    throw new Error(`failed to authorize: HTTP ${authRes1.status}`);
+                }
+                const authBody1 = (await authRes1.json()) as { decision: { allowed: boolean; reason?: string } };
+                if (!authBody1.decision.allowed) {
+                    throw new Error(`expected step s1 to be allowed initially, but got: ${authBody1.decision.reason}`);
+                }
+
+                // 4. Simulate drift by tampering with Permanent_Active_Directives.txt
+                const padPath = join(process.cwd(), "Permanent_Active_Directives.txt");
+                if (!existsSync(padPath)) {
+                    throw new Error(`Permanent_Active_Directives.txt not found`);
+                }
+                const originalPadContent = readFileSync(padPath, "utf8");
+                try {
+                    writeFileSync(padPath, originalPadContent + "\n# TAMPERED FOR S31 DRIFT TEST", "utf8");
+
+                    // 5. Authorize s1 (should be BLOCKED due to drift)
+                    const authRes2 = await this.fetchImpl(`${baseUrl}/api/incubation/ccc/authorize`, {
+                        method: "POST",
+                        headers,
+                        body: JSON.stringify({ plan, stepId: "s1" }),
+                    });
+                    if (!authRes2.ok) {
+                        throw new Error(`failed to authorize during drift: HTTP ${authRes2.status}`);
+                    }
+                    const authBody2 = (await authRes2.json()) as { decision: { allowed: boolean; reason?: string } };
+                    if (authBody2.decision.allowed) {
+                        throw new Error("expected step s1 to be blocked due to drift, but it was allowed");
+                    }
+                    if (!authBody2.decision.reason?.includes("Environment drift detected")) {
+                        throw new Error(`expected drift block reason, got: ${authBody2.decision.reason}`);
+                    }
+                } finally {
+                    // Restore PAD
+                    writeFileSync(padPath, originalPadContent, "utf8");
+                }
+
+                // 6. Authorize s1 (should be allowed again after restore)
+                const authRes3 = await this.fetchImpl(`${baseUrl}/api/incubation/ccc/authorize`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ plan, stepId: "s1" }),
+                });
+                if (!authRes3.ok) {
+                    throw new Error(`failed to authorize post-restore: HTTP ${authRes3.status}`);
+                }
+                const authBody3 = (await authRes3.json()) as { decision: { allowed: boolean; reason?: string } };
+                if (!authBody3.decision.allowed) {
+                    throw new Error(
+                        `expected step s1 to be allowed post-restore, but got: ${authBody3.decision.reason}`,
+                    );
+                }
+
                 return;
             }
             case "approveAt": {
@@ -495,6 +699,195 @@ export class PtacOrchestrator {
                 if (!("config" in sbody)) {
                     throw new Error(`sr/status response missing 'config' field`);
                 }
+                return;
+            }
+            case "srAntagonisticPrompts": {
+                // 1. Verify that the static prompt configurations carry the correct antagonistic directives
+                const { SR_SYSTEM_PROMPTS } = await import("../core/operator/model-capability-matrix.js");
+                if (
+                    !SR_SYSTEM_PROMPTS.left.includes("MANDATE step-by-step logical proofs") ||
+                    !SR_SYSTEM_PROMPTS.left.includes("formal deduction")
+                ) {
+                    throw new Error("Logic Hemisphere prompt is missing the antagonistic deduction mandates.");
+                }
+                if (
+                    !SR_SYSTEM_PROMPTS.right.includes("force lateral/associative reasoning") ||
+                    !SR_SYSTEM_PROMPTS.right.includes("Explicitly avoid and do not use step-by-step logical proofs")
+                ) {
+                    throw new Error(
+                        "Creative Hemisphere prompt is missing the antagonistic limits barring deductive/code patterns.",
+                    );
+                }
+
+                // 2. Perform the kinship warning validation check via the live dashboard API
+                const sessionRes = await this.fetchImpl(`${baseUrl}/api/chat/sessions`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        title: "PTAC SR Antagonist Test Session",
+                    }),
+                });
+                if (!sessionRes.ok) {
+                    throw new Error(
+                        `failed to create chat session: HTTP ${sessionRes.status}: ${await safeText(sessionRes)}`,
+                    );
+                }
+                const sessionBody = (await sessionRes.json()) as any;
+                const testSessionId = sessionBody.session.sessionId;
+
+                const configRes = await this.fetchImpl(`${baseUrl}/api/sr/configure`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        sessionId: testSessionId,
+                        leftProviderId: "ollama",
+                        leftModel: "llama3.1:8b",
+                        rightProviderId: "ollama",
+                        rightModel: "qwen3-vl:2b",
+                        circuitBreakerEnabled: true,
+                        showHemispheres: true,
+                    }),
+                });
+
+                if (!configRes.ok) {
+                    throw new Error(`sr/configure HTTP ${configRes.status}: ${await safeText(configRes)}`);
+                }
+
+                const configBody = (await configRes.json()) as any;
+                const advisory = configBody.isolationAdvisory;
+                if (!advisory || !advisory.includes("Warning: High architectural kinship score")) {
+                    throw new Error(
+                        `Expected kinship score warning in isolationAdvisory, but got: ${JSON.stringify(advisory)}`,
+                    );
+                }
+
+                // Verify status endpoint also reflects the warning advisory correctly
+                const statusRes = await this.fetchImpl(
+                    `${baseUrl}/api/sr/status?sessionId=${encodeURIComponent(testSessionId)}`,
+                    { headers },
+                );
+                if (!statusRes.ok) {
+                    throw new Error(`sr/status HTTP ${statusRes.status}: ${await safeText(statusRes)}`);
+                }
+                const statusBody = (await statusRes.json()) as any;
+                if (
+                    !statusBody.isolationAdvisory ||
+                    !statusBody.isolationAdvisory.includes("Warning: High architectural kinship score")
+                ) {
+                    throw new Error(
+                        `Expected kinship score warning in status isolationAdvisory, but got: ${JSON.stringify(statusBody.isolationAdvisory)}`,
+                    );
+                }
+
+                return;
+            }
+            case "selfHealingEscalation": {
+                // 1. Seed history index with a successful repair fragment for the target operation.
+                const recordRes = await this.fetchImpl(`${baseUrl}/api/incubation/shws/history/record`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        fragment: {
+                            workflowId: "repair-wf-1",
+                            stepId: "failed-s1",
+                            operation: "delete.folder",
+                            succeeded: true,
+                            recordedAt: new Date().toISOString(),
+                            repairSteps: [
+                                { id: "rep-1", operation: "write.file", risk: "medium", mutatesState: true },
+                                { id: "rep-2", operation: "move.file", risk: "medium", mutatesState: true },
+                            ],
+                        },
+                    }),
+                });
+
+                if (!recordRes.ok) {
+                    throw new Error(
+                        `Failed to record history fragment: HTTP ${recordRes.status}: ${await safeText(recordRes)}`,
+                    );
+                }
+
+                // 2. Verify recursive depth limit capped at 3:
+                const depthRes = await this.fetchImpl(`${baseUrl}/api/incubation/shws/propose`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        failedStepId: "failed-s1",
+                        dag: {
+                            id: "depth-test-dag",
+                            name: "depth-test-dag",
+                            steps: [{ id: "failed-s1", operation: "delete.folder", risk: "high", mutatesState: true }],
+                        },
+                        profileSegment: "individual",
+                        currentDepth: 3,
+                    }),
+                });
+
+                if (!depthRes.ok) {
+                    throw new Error(`Depth proposal failed: HTTP ${depthRes.status}: ${await safeText(depthRes)}`);
+                }
+                const depthBody = (await depthRes.json()) as any;
+                if (depthBody.candidate !== null) {
+                    throw new Error(
+                        `Expected proposeFallback to return null at depth 3, got: ${JSON.stringify(depthBody.candidate)}`,
+                    );
+                }
+
+                // 3. Verify Aggregate Risk Scoring & Upgrade Gate:
+                const proposeRes = await this.fetchImpl(`${baseUrl}/api/incubation/shws/propose`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        failedStepId: "failed-s1",
+                        dag: {
+                            id: "risk-test-dag",
+                            name: "risk-test-dag",
+                            steps: [{ id: "failed-s1", operation: "delete.folder", risk: "high", mutatesState: true }],
+                        },
+                        profileSegment: "individual",
+                        currentDepth: 0,
+                    }),
+                });
+
+                if (!proposeRes.ok) {
+                    throw new Error(
+                        `Propose fallback failed: HTTP ${proposeRes.status}: ${await safeText(proposeRes)}`,
+                    );
+                }
+                const proposeBody = (await proposeRes.json()) as any;
+                const candidate = proposeBody.candidate;
+                if (!candidate) {
+                    throw new Error("Expected proposed candidate, but got null");
+                }
+
+                // The proposed candidate should have proposedSteps upgraded from "medium" to "high"
+                const steps = candidate.proposedSteps;
+                if (!steps || steps.length === 0) {
+                    throw new Error("Candidate has no proposedSteps");
+                }
+
+                for (const step of steps) {
+                    if (step.risk !== "high") {
+                        throw new Error(
+                            `Expected step ${step.id} to be upgraded to risk "high", but got: ${step.risk}`,
+                        );
+                    }
+                }
+
+                // The compiled plan's steps should also show risk: "high" and projectedDecision.tier: "tier3_approval"
+                const plan = candidate.compiledPlan;
+                if (!plan) {
+                    throw new Error("Candidate missing compiledPlan");
+                }
+
+                for (const planStep of plan.steps) {
+                    if (planStep.risk !== "high" || planStep.projectedDecision.tier !== "tier3_approval") {
+                        throw new Error(
+                            `Expected plan step ${planStep.stepId} to be risk "high" and tier "tier3_approval", got risk=${planStep.risk} tier=${planStep.projectedDecision.tier}`,
+                        );
+                    }
+                }
+
                 return;
             }
             case "pluginLifecycle": {

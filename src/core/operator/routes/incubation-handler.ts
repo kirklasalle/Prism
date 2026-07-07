@@ -51,6 +51,25 @@ export class IncubationHandler implements IRouteHandler {
             }
         }
 
+        // 1.5. POST /api/incubation/ccc/authorize
+        if (method === "POST" && url === "/api/incubation/ccc/authorize") {
+            try {
+                const body = await service.readJsonBody<{
+                    plan?: any;
+                    stepId?: string;
+                }>(req);
+                if (!body?.plan || !body?.stepId) {
+                    return this.json(res, 400, { error: "plan and stepId required", prototype: true });
+                }
+                const { RuntimePlanEnforcer } = await import("../../incubation/ccc/enforcer.js");
+                const enforcer = new RuntimePlanEnforcer(service.getActivityBus(), "api-incubation");
+                const decision = enforcer.authorizeStep(body.plan, body.stepId);
+                return this.json(res, 200, { decision, prototype: true });
+            } catch (error) {
+                return this.json(res, 500, { error: String(error), prototype: true });
+            }
+        }
+
         // 2. GET /api/incubation/ccc/constitutions
         if (method === "GET" && url === "/api/incubation/ccc/constitutions") {
             return this.json(res, 200, { constitutions: [inc.constitution], prototype: true });
@@ -75,6 +94,22 @@ export class IncubationHandler implements IRouteHandler {
             return this.json(res, 200, { weights: inc.arbiter.getWeights(), prototype: true });
         }
 
+        // 4.5. POST /api/incubation/shws/history/record
+        if (method === "POST" && url === "/api/incubation/shws/history/record") {
+            try {
+                const body = await service.readJsonBody<{
+                    fragment?: any;
+                }>(req);
+                if (!body?.fragment) {
+                    return this.json(res, 400, { error: "fragment required", prototype: true });
+                }
+                inc.history.record(body.fragment);
+                return this.json(res, 200, { success: true, prototype: true });
+            } catch (error) {
+                return this.json(res, 500, { error: String(error), prototype: true });
+            }
+        }
+
         // 5. POST /api/incubation/shws/propose
         if (method === "POST" && url === "/api/incubation/shws/propose") {
             try {
@@ -82,6 +117,7 @@ export class IncubationHandler implements IRouteHandler {
                     failedStepId?: string;
                     dag?: { id?: string; name?: string; steps?: unknown[]; fallbacks?: unknown[] };
                     profileSegment?: "individual" | "business";
+                    currentDepth?: number;
                 }>(req);
                 if (!body?.failedStepId || !body?.dag || !Array.isArray(body.dag.steps)) {
                     return this.json(res, 400, { error: "failedStepId and dag.steps required", prototype: true });
@@ -102,6 +138,7 @@ export class IncubationHandler implements IRouteHandler {
                     dag,
                     profile,
                     constitution: inc.constitution,
+                    currentDepth: body.currentDepth,
                 });
                 return this.json(res, 200, { candidate, prototype: true });
             } catch (error) {

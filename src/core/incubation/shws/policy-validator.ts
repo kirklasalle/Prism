@@ -18,16 +18,51 @@ export interface ValidationResult {
     plan: RuntimePlan;
     enforceable: boolean;
     rejectionReason?: string;
+    processedSteps?: WorkflowStep[];
 }
 
 export class PolicyValidator {
     constructor(private readonly compiler: CausalCompiler) {}
 
     validate(inputs: ValidatorInputs): ValidationResult {
+        // Evaluate cumulative risk of all actions in the repair chain
+        let totalMediumRiskCount = 0;
+        let targetsDeletionOrAlteration = false;
+
+        for (const step of inputs.proposedSteps) {
+            if (step.risk === "medium") {
+                totalMediumRiskCount++;
+            }
+            const op = step.operation.toLowerCase();
+            if (
+                op.includes("delete") ||
+                op.includes("remove") ||
+                op.includes("truncate") ||
+                op.includes("destroy") ||
+                op.includes("format")
+            ) {
+                targetsDeletionOrAlteration = true;
+            }
+        }
+
+        // If we have multiple medium-risk steps, or if they target deletion/alteration signatures collectively,
+        // we upgrade the risk tier to "high" (Tier 3)
+        const shouldUpgrade = totalMediumRiskCount >= 2 || (totalMediumRiskCount >= 1 && targetsDeletionOrAlteration);
+
+        const processedSteps = inputs.proposedSteps.map((step) => {
+            if (shouldUpgrade && step.risk === "medium") {
+                return {
+                    ...step,
+                    risk: "high" as const,
+                };
+            }
+            return step;
+        });
+
         const dag = {
             id: `shws-candidate-${inputs.candidateId}`,
             name: `SHWS proposal ${inputs.candidateId}`,
-            steps: inputs.proposedSteps,
+            steps: processedSteps,
             fallbacks: inputs.proposedFallbacks,
         };
         const plan = this.compiler.compile(dag, {
@@ -41,8 +76,9 @@ export class PolicyValidator {
                 plan,
                 enforceable: false,
                 rejectionReason: `policy/constitution violations: denied=[${denials.join(",")}] violations=[${violations.join(",")}]`,
+                processedSteps,
             };
         }
-        return { plan, enforceable: true };
+        return { plan, enforceable: true, processedSteps };
     }
 }
