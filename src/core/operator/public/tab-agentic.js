@@ -107,58 +107,64 @@ export
   html += '</div>';
 
   // Recommended Models & Downloads
+  var isCollapsed = !!state.recommendedModelsCollapsed;
   html += '<div class="panel" style="padding:12px;margin-bottom:12px;background:rgba(126,207,126,0.05);">';
-  html += '<div style="font-weight:600;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);">Recommended for Prism</div>';
-
-  // Active Downloads
-  if (activeDownloads.length > 0) {
-    html += '<div style="margin-bottom:12px;">';
-    for (var dl of activeDownloads) {
-      var pct = Math.round(dl.progress || 0);
-      var statusColor = dl.status === 'error' ? '#ff8d8d' : dl.status === 'completed' ? '#7ecf7e' : 'var(--accent)';
-      html += '<div style="margin-bottom:6px;font-size:11px;">';
-      html += '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">';
-      html += '<span>\u2913 ' + escapeHtml(dl.fileName) + '</span>';
-      html += '<span style="color:' + statusColor + ';">' + (dl.status === 'downloading' ? pct + '%' : escapeHtml(dl.status)) + '</span>';
-      html += '</div>';
-      html += '<div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">';
-      html += '<div style="height:100%;width:' + pct + '%;background:' + statusColor + ';transition:width 0.3s ease;"></div>';
-      html += '</div>';
-      if (dl.error) html += '<div style="font-size:9px;color:#ff8d8d;margin-top:2px;">' + escapeHtml(dl.error) + '</div>';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
-  for (var i = 0; i < allRecommended.length; i++) {
-    var rm = allRecommended[i];
-    var rmIndex = i;
-    var matchingLocal = models.find(function (m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
-    html += '<div class="panel" style="padding:8px;background:rgba(0,0,0,0.2);display:flex;flex-direction:column;justify-content:space-between;">';
-    html += '<div>';
-    html += '<div style="font-weight:700;font-size:11px;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;">';
-    html += '<span>' + escapeHtml(rm.name) + '</span>';
-    if (rm.custom) {
-      html += '<button style="background:none;border:none;color:#ff8d8d;cursor:pointer;font-size:12px;padding:0 2px;" onclick="removeFromRecommended(\'' + escapeHtml(rm.fileName) + '\')" title="Remove from recommended">\u2715</button>';
-    }
-    html += '</div>';
-    html += '<div class="muted" style="font-size:10px;">Size: ' + rm.size + (rm.custom ? ' \u00B7 <span style="color:var(--accent);">Custom</span>' : '') + '</div>';
-    html += '</div>';
-    if (matchingLocal) {
-      html += '<div style="display:flex;gap:4px;margin-top:8px;">';
-      html += '<button class="secondary-button" style="flex:1;font-size:10px;padding:4px;opacity:0.8;" onclick="updateGuardianModel(\'' + escapeHtml(matchingLocal.path) + '\')">\u2705 Ready (Select)</button>';
-      html += '<button class="danger-button" style="font-size:10px;padding:4px 8px;background:rgba(255,100,100,0.2);color:#ff8d8d;border:1px solid rgba(255,100,100,0.4);border-radius:4px;cursor:pointer;" onclick="deleteLocalModel(\'' + escapeHtml(matchingLocal.path) + '\', \'' + escapeHtml(matchingLocal.source) + '\')" title="Delete model file">\uD83D\uDDD1</button>';
-      html += '</div>';
-    } else if (rm.url) {
-      var isDownloading = activeDownloads.some(function (d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
-      html += '<button class="primary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;" ' + (isDownloading ? 'disabled' : '') + ' onclick="startModelDownload(' + rmIndex + ')">' + (isDownloading ? '\u{1F4E5} Downloading...' : '\u{1F4E5} Download to Prism') + '</button>';
-    } else {
-      html += '<button class="secondary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;opacity:0.6;" disabled>\u2705 Available Locally</button>';
-    }
-    html += '</div>';
-  }
+  html += '<div data-action="toggle-recommended" style="font-weight:600;font-size:11px;margin-bottom:' + (isCollapsed ? '0' : '8px') + ';text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;">';
+  html += '<span>Recommended for Prism</span>';
+  html += '<span style="font-size:10px;color:var(--muted);">' + (isCollapsed ? '\u25B6 Expand' : '\u25BC Collapse') + '</span>';
   html += '</div>';
+
+  if (!isCollapsed) {
+    // Active Downloads
+    if (activeDownloads.length > 0) {
+      html += '<div style="margin-bottom:12px;">';
+      for (var dl of activeDownloads) {
+        var pct = Math.round(dl.progress || 0);
+        var statusColor = dl.status === 'error' ? '#ff8d8d' : dl.status === 'completed' ? '#7ecf7e' : 'var(--accent)';
+        html += '<div style="margin-bottom:6px;font-size:11px;">';
+        html += '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">';
+        html += '<span>\u2913 ' + escapeHtml(dl.fileName) + '</span>';
+        html += '<span style="color:' + statusColor + ';">' + (dl.status === 'downloading' ? pct + '%' : escapeHtml(dl.status)) + '</span>';
+        html += '</div>';
+        html += '<div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">';
+        html += '<div style="height:100%;width:' + pct + '%;background:' + statusColor + ';transition:width 0.3s ease;"></div>';
+        html += '</div>';
+        if (dl.error) html += '<div style="font-size:9px;color:#ff8d8d;margin-top:2px;">' + escapeHtml(dl.error) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+    for (var i = 0; i < allRecommended.length; i++) {
+      var rm = allRecommended[i];
+      var rmIndex = i;
+      var matchingLocal = models.find(function (m) { return m.name === rm.fileName && (m.source === 'workspace-models' || m.source === 'workspace'); });
+      html += '<div class="panel" style="padding:8px;background:rgba(0,0,0,0.2);display:flex;flex-direction:column;justify-content:space-between;">';
+      html += '<div>';
+      html += '<div style="font-weight:700;font-size:11px;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;">';
+      html += '<span>' + escapeHtml(rm.name) + '</span>';
+      if (rm.custom) {
+        html += '<button style="background:none;border:none;color:#ff8d8d;cursor:pointer;font-size:12px;padding:0 2px;" onclick="removeFromRecommended(\'' + escapeHtml(rm.fileName) + '\')" title="Remove from recommended">\u2715</button>';
+      }
+      html += '</div>';
+      html += '<div class="muted" style="font-size:10px;">Size: ' + rm.size + (rm.custom ? ' \u00B7 <span style="color:var(--accent);">Custom</span>' : '') + '</div>';
+      html += '</div>';
+      if (matchingLocal) {
+        html += '<div style="display:flex;gap:4px;margin-top:8px;">';
+        html += '<button class="secondary-button" style="flex:1;font-size:10px;padding:4px;opacity:0.8;" onclick="updateGuardianModel(\'' + escapeHtml(matchingLocal.path) + '\')">\u2705 Ready (Select)</button>';
+        html += '<button class="danger-button" style="font-size:10px;padding:4px 8px;background:rgba(255,100,100,0.2);color:#ff8d8d;border:1px solid rgba(255,100,100,0.4);border-radius:4px;cursor:pointer;" onclick="deleteLocalModel(\'' + escapeHtml(matchingLocal.path) + '\', \'' + escapeHtml(matchingLocal.source) + '\')" title="Delete model file">\uD83D\uDDD1</button>';
+        html += '</div>';
+      } else if (rm.url) {
+        var isDownloading = activeDownloads.some(function (d) { return d.fileName === rm.fileName && d.status !== 'error' && d.status !== 'completed'; });
+        html += '<button class="primary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;" ' + (isDownloading ? 'disabled' : '') + ' onclick="startModelDownload(' + rmIndex + ')">' + (isDownloading ? '\u{1F4E5} Downloading...' : '\u{1F4E5} Download to Prism') + '</button>';
+      } else {
+        html += '<button class="secondary-button" style="width:100%;margin-top:8px;font-size:10px;padding:4px;opacity:0.6;" disabled>\u2705 Available Locally</button>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
   html += '</div>';
 
   // Model slot info
@@ -254,14 +260,22 @@ export
   c.innerHTML = html;
 
   // Item 3: delegated listener for Guardian task buttons/checkboxes (no onclick injection)
-  c.addEventListener('change', function (e) {
-    var el = e.target.closest('[data-task-action="toggle"]');
-    if (el) { toggleGuardianTask(el.dataset.taskId); }
-  });
-  c.addEventListener('click', function (e) {
-    var el = e.target.closest('[data-task-action="run"]');
-    if (el) { runGuardianTask(el.dataset.taskId); }
-  });
+  if (!c._listenersAttached) {
+    c._listenersAttached = true;
+    c.addEventListener('change', function (e) {
+      var el = e.target.closest('[data-task-action="toggle"]');
+      if (el) { toggleGuardianTask(el.dataset.taskId); }
+    });
+    c.addEventListener('click', function (e) {
+      var el = e.target.closest('[data-task-action="run"]');
+      if (el) { runGuardianTask(el.dataset.taskId); }
+      var toggleHeader = e.target.closest('[data-action="toggle-recommended"]');
+      if (toggleHeader) {
+        state.recommendedModelsCollapsed = !state.recommendedModelsCollapsed;
+        renderGuardianPanel();
+      }
+    });
+  }
 }
 
 
