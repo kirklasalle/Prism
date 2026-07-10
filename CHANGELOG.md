@@ -9,11 +9,12 @@ Renames the main sidebar panel from PRISM Chat to PRISM Refraction and introduce
 ### Added
 
 - **Active Tab Display**: Dynamically displays the currently selected console tab label directly beneath the PRISM Refraction title on the brand sidebar panel.
+- **Collapsible Recommended Models Panel**: Made the "Recommended for Prism" model catalog panel in the Guardian Agent tab collapsible with interactive expand/collapse header states.
 
 ### Changed
 
-Brand Panel Renaming**: Renamed the primary sidebar panel header from "PRISM Chat" to "PRISM Refraction" across the templates and client-side rendering pipeline.
-Fallback Session Header**: Updated the fallback active session header title from "PRISM Chat" to "PRISM Refraction" when no active session is selected.
+- **Brand Panel Renaming**: Renamed the primary sidebar panel header from "PRISM Chat" to "PRISM Refraction" across the templates and client-side rendering pipeline.
+- **Fallback Session Header**: Updated the fallback active session header title from "PRISM Chat" to "PRISM Refraction" when no active session is selected.
 
 ## v0.22.0 — 2026-07-10 — One-Click Update System and Dashboard Console Integration
 
@@ -143,7 +144,7 @@ Lands the headline operator-facing autonomous experience. The autonomy loop itse
 ### Verified unchanged
 
 - Existing `/api/chat`, `/api/agentic/action`, `/api/health`, `/api/health/extended`, `/api/status` routes return byte-identical payloads.
-genticChatExecutor` budgets and tool allow-lists unchanged.
+  genticChatExecutor` budgets and tool allow-lists unchanged.
 l 27 pre-existing PTAC scenarios continue to register and run.
 l other dashboard tabs (`chat`, `settings`, `tools`, `agentic`, `computer`, `browser`, `workspace`, `network`, `telemetry`, `logs`, `scheduler`) and their HTML fragments and JS modules are byte-for-byte unchanged.
 
@@ -151,7 +152,7 @@ l other dashboard tabs (`chat`, `settings`, `tools`, `agentic`, `computer`, `bro
 
 letes the media-modality tool coverage promised by the model-capability matrix. v0.20.3 shipped `image_generate`; this release adds the remaining three: **`video_generate`**, **`audio_generate`** (covering speech, music, single instrument, and sound effects), and **`audio_transcribe`** (speech-to-text). All three follow the exact pattern of `ImageGenerateTool` — matrix-routed, structured-failure on missing provider, path-traversal-safe writes, dependency-injected fetch for testing.
 
-ontend Protection Guarantee preserved.** No frontend code was removed or altered. The new tools are registered server-side and become available to the chat orchestrator; existing UI continues to render byte-identically.
+ontend Protection Guarantee preserved.\*\* No frontend code was removed or altered. The new tools are registered server-side and become available to the chat orchestrator; existing UI continues to render byte-identically.
 
 New (additive only)
 
@@ -196,9 +197,9 @@ New (additive only)
 
 - NEW: [src/adapters/application/media-tools.ts](src/adapters/application/media-tools.ts), [tests/media-tools.test.ts](tests/media-tools.test.ts)
 - [src/core/operator/model-capability-matrix.ts](src/core/operator/model-capability-matrix.ts) — additive: two new modalities (`music-generation`, `sound-effects`) in `ModelModality` union and `ALL_MODALITIES` metadata.
-rc/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — register `VideoGenerateTool`, `AudioGenerateTool`, `AudioTranscribeTool`.
-ests/index.ts](tests/index.ts) — register the three new tests.
-ackage.json](package.json) — bump `0.20.3` → `0.20.4`.
+  rc/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — register `VideoGenerateTool`, `AudioGenerateTool`, `AudioTranscribeTool`.
+  ests/index.ts](tests/index.ts) — register the three new tests.
+  ackage.json](package.json) — bump `0.20.3` → `0.20.4`.
 
 ## v0.20.3 — 2026-05-09 — Chat attach UX + image generation tool
 
@@ -233,9 +234,9 @@ Closes two operator-facing bugs reported during v0.20.2 dogfooding: chat attachm
 
 - NEW: [src/adapters/application/image-generate-tool.ts](src/adapters/application/image-generate-tool.ts), [tests/image-generate-tool.test.ts](tests/image-generate-tool.test.ts)
 - [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — register `ImageGenerateTool`; enrich `GET …/messages` with `attachments[]`.
-rc/core/operator/public/tab-chat.js](src/core/operator/public/tab-chat.js) — additive attachment chip rendering on user bubbles + optimistic mirror; clipboard text fallback in `pasteFromClipboard()`.
-ests/index.ts](tests/index.ts) — register new test.
-ackage.json](package.json) — bump `0.20.2` → `0.20.3`.
+  rc/core/operator/public/tab-chat.js](src/core/operator/public/tab-chat.js) — additive attachment chip rendering on user bubbles + optimistic mirror; clipboard text fallback in `pasteFromClipboard()`.
+  ests/index.ts](tests/index.ts) — register new test.
+  ackage.json](package.json) — bump `0.20.2` → `0.20.3`.
 
 ## v0.20.2 — 2026-05-10 — Phase R ops + observability gap-fill
 
@@ -385,7 +386,7 @@ Third slice of Phase R+. The `computer` tool (mouse / keyboard / cursor) was pre
 
 nd slice of Phase R+. Adds a **real-Docker** container backend that talks to the local Docker Engine API socket (or Win32 named pipe) without a `dockerode` dependency, preserving PRISM's zero-new-runtime-deps invariant. The existing built-in `ContainerSandboxAdapter` is untouched and remains the default.
 
-w modules.**
+w modules.\*\*
 
 1. **[src/adapters/system/docker-engine-client.ts](src/adapters/system/docker-engine-client.ts)** — pure-Node HTTP-over-UNIX-socket / named-pipe client speaking Docker Engine API `v1.43`. Implements `ping`, `imagePull`, `containerCreate`, `containerStart`, `containerExec` (with multiplexed-stream framing decoder), `containerStop`, `containerCommit`, `containerRemove`, `imageRemove`, `containerInspect`. Honors `PRISM_DOCKER_HOST` / `DOCKER_HOST` (`unix://` and `npipe://` schemes); defaults to `/var/run/docker.sock` (POSIX) or `\\.\pipe\docker_engine` (Win32). Throws a structured `DockerEngineError` on any non-2xx response.
 
@@ -1650,3 +1651,4 @@ Date: 2026-03-11
 - Real adapters: system (shell/fs), protocol (HTTP), application (Neo4j, memory)
 - SQLite persistence
 - Retrieval observability and quality metrics
+```
