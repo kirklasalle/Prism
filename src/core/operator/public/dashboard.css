@@ -1,18 +1,37 @@
 :root {
-    --bg: #07111f;
-    --panel: rgba(7, 19, 36, 0.82);
-    --panel-strong: rgba(10, 24, 45, 0.94);
-    --border: rgba(148, 163, 184, 0.16);
+    /* PRISM Refraction + TRON 16-Color Emissive Array */
+    --c-red: #ff3333;
+    --c-orange: #ff8800;
+    --c-yellow: #ffdd00;
+    --c-green: #00ff66;
+    --c-blue: #00ccff;
+    --c-cyan: #88ffff;
+    --c-magenta: #ff33cc;
+    --c-purple: #9933ff;
+    --c-teal: #00ffaa;
+    --c-indigo: #5533ff;
+    --c-gold: #ffb300;
+    --c-lime: #aaff00;
+    --c-salmon: #ff7766;
+    --c-mint: #aaffdd;
+    --c-steel: #7799bb;
+    --c-white: #ffffff;
+
+    /* Theme Mappings */
+    --bg: #02050b;
+    --panel: rgba(4, 9, 20, 0.85);
+    --panel-strong: rgba(6, 14, 30, 0.94);
+    --border: rgba(0, 204, 255, 0.22);
     --text: #edf3ff;
     --fg: #edf3ff;
-    --fg-muted: #98a6bc;
-    --muted: #98a6bc;
-    --accent: #69d2ff;
-    --accent-2: #7cf1c8;
-    --danger: #ff8d8d;
-    --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
-    --radius: 22px;
-    --surface: rgba(255, 255, 255, 0.03);
+    --fg-muted: #9aa6c7;
+    --muted: #9aa6c7;
+    --accent: var(--c-blue);
+    --accent-2: var(--c-green);
+    --danger: var(--c-red);
+    --shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 15px rgba(0, 204, 255, 0.08);
+    --radius: 16px;
+    --surface: rgba(255, 255, 255, 0.02);
 }
 
 * {
@@ -23,11 +42,13 @@ body {
     margin: 0;
     min-height: 100vh;
     color: var(--text);
-    font-family: Aptos, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-    background:
-        radial-gradient(circle at top left, rgba(105, 210, 255, 0.16), transparent 28%),
-        radial-gradient(circle at top right, rgba(124, 241, 200, 0.12), transparent 24%),
-        linear-gradient(180deg, #06101d 0%, #091728 44%, #07111f 100%);
+    font-family: "Outfit", Aptos, "Segoe UI", sans-serif;
+    background-color: var(--bg);
+    background-image: 
+        linear-gradient(rgba(0, 204, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 204, 255, 0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: center;
 }
 
 button,
