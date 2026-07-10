@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.21.1-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.22.1-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
   <img src="https://img.shields.io/badge/tests-185+_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
@@ -19,7 +19,7 @@ PRISM is not another chatbot wrapper. It is a **production-grade autonomous agen
 
 Where other platforms bolt on safety as an afterthought, PRISM makes governance **load-bearing architecture**: every tool invocation, every agent decision, every autonomous action passes through a 3-tier policy engine before execution. High-risk operations require explicit human approval. Denials and timeouts are first-class tested behaviors. The operator is always supreme.
 
-> *"PRISM doesn't just run agents — it runs them with honor."*
+> _"PRISM doesn't just run agents — it runs them with honor."_
 
 ---
 
@@ -33,16 +33,16 @@ Every agentic framework today asks you to make the same trade-off: **power or sa
 
 PRISM eliminates that trade-off entirely through **governance-native architecture** — safety isn't a guardrail bolted onto the side; it's the foundation everything else is built on.
 
-| Capability | Other Frameworks | PRISM |
-|:---|:---|:---|
-| **Governance** | Prompt-level guardrails, easily bypassed | Cryptographically enforced 10 Laws (SHA-256 integrity, CI-gated) |
-| **Policy Engine** | Basic allow/deny lists | 3-tier authority model with approval queues, timeouts, and denial paths |
-| **Multi-Model** | Single model per request | Spectrum Refraction: tri-model parallel fan-out with structured aggregation |
-| **Computer Use** | Browser-only or terminal-only | Full-stack: browser + terminal + container sandbox, all policy-governed |
-| **Agent Lifecycle** | Stateless tool calls | Managed lifecycles (ephemeral → semi-permanent → permanent) with swarm coordination |
-| **Identity** | API key auth | IAM with RBAC, SSO (OIDC/SAML), SCIM provisioning, character accountability chains |
-| **Observability** | Basic logging | SHA-256 hashed activity events, LLRE cognitive economics, retrieval quality telemetry |
-| **Self-Hosting** | Cloud-only or limited local | Fully self-hostable, runs on consumer hardware, your data never leaves your machine |
+| Capability          | Other Frameworks                         | PRISM                                                                                 |
+| :------------------ | :--------------------------------------- | :------------------------------------------------------------------------------------ |
+| **Governance**      | Prompt-level guardrails, easily bypassed | Cryptographically enforced 10 Laws (SHA-256 integrity, CI-gated)                      |
+| **Policy Engine**   | Basic allow/deny lists                   | 3-tier authority model with approval queues, timeouts, and denial paths               |
+| **Multi-Model**     | Single model per request                 | Spectrum Refraction: tri-model parallel fan-out with structured aggregation           |
+| **Computer Use**    | Browser-only or terminal-only            | Full-stack: browser + terminal + container sandbox, all policy-governed               |
+| **Agent Lifecycle** | Stateless tool calls                     | Managed lifecycles (ephemeral → semi-permanent → permanent) with swarm coordination   |
+| **Identity**        | API key auth                             | IAM with RBAC, SSO (OIDC/SAML), SCIM provisioning, character accountability chains    |
+| **Observability**   | Basic logging                            | SHA-256 hashed activity events, LLRE cognitive economics, retrieval quality telemetry |
+| **Self-Hosting**    | Cloud-only or limited local              | Fully self-hostable, runs on consumer hardware, your data never leaves your machine   |
 
 ---
 
@@ -113,11 +113,11 @@ No other agent platform enforces governance at the cryptographic level.
 
 PRISM's novel **compounding parallel fan-out architecture** simultaneously engages three model instances:
 
-| Hemisphere | Role | Example |
-|:---|:---|:---|
-| **Left** (Logic) | Analytical reasoning, structured analysis | Claude Opus |
-| **Right** (Creative) | Creative generation, lateral thinking | GPT-4o |
-| **Main** (Coordinator) | Synthesis, arbitration, final response | Gemini Pro |
+| Hemisphere             | Role                                      | Example     |
+| :--------------------- | :---------------------------------------- | :---------- |
+| **Left** (Logic)       | Analytical reasoning, structured analysis | Claude Opus |
+| **Right** (Creative)   | Creative generation, lateral thinking     | GPT-4o      |
+| **Main** (Coordinator) | Synthesis, arbitration, final response    | Gemini Pro  |
 
 - **Mandatory instance isolation**: Left ≠ Right enforced at configuration, activation, and runtime gates
 - **Structured XML-tagged aggregation** fuses analytical rigor with creative breadth
@@ -180,26 +180,38 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 
 Production-ready skills that agents use to interact with the world:
 
-| Skill | Capability |
-|:---|:---|
-| **Browser Researcher** | Autonomous web research with search, navigation, extraction, and synthesis |
-| **Terminal** | Shell command execution with risk classification and deny lists |
-| **Container Sandbox** | Docker-based isolated execution environments |
-| **Email (Gmail + Outlook)** | OAuth2-authenticated email read/send via Google and Microsoft APIs |
-| **Calendar** | Google Calendar integration for event management |
-| **Image Generation** | AI image generation tool |
-| **Audio/Video Generation** | Media generation and transcription tools |
-| **Tasks & Notes** | Persistent task management and note-taking |
-| **Project Store** | Structured project data management with SQLite |
-| **Semantic Query** | Memory retrieval across episodic, session, and semantic stores |
+| Skill                       | Capability                                                                 |
+| :-------------------------- | :------------------------------------------------------------------------- |
+| **Browser Researcher**      | Autonomous web research with search, navigation, extraction, and synthesis |
+| **Terminal**                | Shell command execution with risk classification and deny lists            |
+| **Container Sandbox**       | Docker-based isolated execution environments                               |
+| **Email (Gmail + Outlook)** | OAuth2-authenticated email read/send via Google and Microsoft APIs         |
+| **Calendar**                | Google Calendar integration for event management                           |
+| **Image Generation**        | AI image generation tool                                                   |
+| **Audio/Video Generation**  | Media generation and transcription tools                                   |
+| **Tasks & Notes**           | Persistent task management and note-taking                                 |
+| **Project Store**           | Structured project data management with SQLite                             |
+| **Semantic Query**          | Memory retrieval across episodic, session, and semantic stores             |
 
-### 8. Plugin Architecture — MCP + Marketplace
+### 10. Plugin Architecture — MCP + Marketplace
 
 - **Model Context Protocol (MCP)** plugin system with hot-loading
 - **Ed25519 code signing** for plugin integrity verification
 - **Plugin Pack Validator** with manifest schema enforcement
 - **Marketplace curation policy** with OSI license requirements
 - **Plugin toggle** — enable/disable plugins at runtime without restart
+
+### 11. Autonomic Update Engine & Guardian Integration
+
+PRISM features a secure, operator-controlled, and autonomously monitored update orchestration framework integrated directly into the operator dashboard and the Guardian Agent's background cycle:
+
+- **Guardian-Assisted Update Detection**: The Guardian Agent schedules periodic remote checks to query for update availability and alerts the operator on the console in real-time.
+- **One-Click Secure Execution**: Operators can invoke updating via a single click in the sidebar, which spawns the out-of-process update orchestrator (`scripts/prism-update.cjs`).
+- **Safety First (Backup, Auditing, & Fallback)**:
+    - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
+    - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.
+    - Automatically verifies download signature integrity and compile validity post-update.
+    - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
 
 ---
 
@@ -247,18 +259,18 @@ The operator dashboard opens at **`http://localhost:7070`**.
 
 A premium, tab-based operator console with 10 functional areas:
 
-| Tab | Purpose |
-|:---|:---|
-| **Chat Interface** | Conversational LLM interaction with Spectrum Refraction support |
+| Tab                     | Purpose                                                                                               |
+| :---------------------- | :---------------------------------------------------------------------------------------------------- |
+| **Chat Interface**      | Conversational LLM interaction with Spectrum Refraction support                                       |
 | **Provider & Settings** | LLM provider configuration, model capability matrix, runtime settings, LLRE Cognitive Economics panel |
-| **Tools & Plugins** | Browse 19+ built-in tools, MCP plugins, and 30 system utilities |
-| **Agentic Control** | Agent swarm management, Guardian Agent status, hardware resource allocation |
-| **Browser Control** | Autonomous browser sessions with live screenshots and navigation |
-| **Computer Control** | Terminal sessions, container sandbox management, self-drive demonstrations |
-| **Workspace** | Project management, file operations, character assignment |
-| **Network** | 50+ curated network commands with tier-based governance and live interface viewer |
-| **Telemetry** | Retrieval observability, performance metrics, quality trends |
-| **Logs & Debug** | Real-time activity event stream, AI decision path tracing |
+| **Tools & Plugins**     | Browse 19+ built-in tools, MCP plugins, and 30 system utilities                                       |
+| **Agentic Control**     | Agent swarm management, Guardian Agent status, hardware resource allocation                           |
+| **Browser Control**     | Autonomous browser sessions with live screenshots and navigation                                      |
+| **Computer Control**    | Terminal sessions, container sandbox management, self-drive demonstrations                            |
+| **Workspace**           | Project management, file operations, character assignment                                             |
+| **Network**             | 50+ curated network commands with tier-based governance and live interface viewer                     |
+| **Telemetry**           | Retrieval observability, performance metrics, quality trends                                          |
+| **Logs & Debug**        | Real-time activity event stream, AI decision path tracing                                             |
 
 ### 41+ HTTP API Routes
 
@@ -272,19 +284,19 @@ PRISM exposes an OpenAI-compatible `/v1/chat/completions` endpoint, enabling dro
 
 ## 🔐 Security Posture
 
-| Control | Implementation |
-|:---|:---|
-| **Authentication** | Token-based auth gate with timing-safe comparison on all endpoints |
-| **Rate Limiting** | Per-IP rate limiting (configurable, default 200 req/min) |
-| **TLS** | Optional HTTPS via `PRISM_TLS_CERT` + `PRISM_TLS_KEY` |
-| **CORS/CSRF** | Origin validation with rejection logging |
-| **Security Headers** | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` |
-| **API Key Storage** | Windows DPAPI / OS keychain — never persisted in SQLite, never returned by APIs |
-| **PAD Integrity** | SHA-256 boot verification + Guardian Agent periodic re-check |
-| **Plugin Signing** | Ed25519 code signing with key rotation SOP |
-| **Production Guard** | `PRISM_AUTH_DISABLED=true` throws on `NODE_ENV=production` |
-| **IAM** | RBAC, OIDC SSO, SAML SSO, SCIM v2 provisioning |
-| **CodeQL** | Automated security analysis in CI |
+| Control              | Implementation                                                                  |
+| :------------------- | :------------------------------------------------------------------------------ |
+| **Authentication**   | Token-based auth gate with timing-safe comparison on all endpoints              |
+| **Rate Limiting**    | Per-IP rate limiting (configurable, default 200 req/min)                        |
+| **TLS**              | Optional HTTPS via `PRISM_TLS_CERT` + `PRISM_TLS_KEY`                           |
+| **CORS/CSRF**        | Origin validation with rejection logging                                        |
+| **Security Headers** | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`   |
+| **API Key Storage**  | Windows DPAPI / OS keychain — never persisted in SQLite, never returned by APIs |
+| **PAD Integrity**    | SHA-256 boot verification + Guardian Agent periodic re-check                    |
+| **Plugin Signing**   | Ed25519 code signing with key rotation SOP                                      |
+| **Production Guard** | `PRISM_AUTH_DISABLED=true` throws on `NODE_ENV=production`                      |
+| **IAM**              | RBAC, OIDC SSO, SAML SSO, SCIM v2 provisioning                                  |
+| **CodeQL**           | Automated security analysis in CI                                               |
 
 ---
 
@@ -292,15 +304,15 @@ PRISM exposes an OpenAI-compatible `/v1/chat/completions` endpoint, enabling dro
 
 PRISM supports **runtime provider/model switching** with secure credential management:
 
-| Provider | Type | Configuration |
-|:---|:---|:---|
-| **OpenAI** | Cloud | `OPENAI_API_KEY` |
-| **Anthropic** | Cloud | `ANTHROPIC_API_KEY` |
-| **Ollama** | Local | Auto-discovers at `localhost:11434` |
-| **Ollama Cloud** | Cloud | `OLLAMA_API_KEY` |
-| **Llama.cpp** | Local | `PRISM_LLAMACPP_BASE_URL` |
-| **Google AI** | Cloud | `GOOGLE_AI_API_KEY` |
-| **Custom** | Any OpenAI-compatible | `PRISM_CUSTOM_PROVIDER_URL` |
+| Provider         | Type                  | Configuration                       |
+| :--------------- | :-------------------- | :---------------------------------- |
+| **OpenAI**       | Cloud                 | `OPENAI_API_KEY`                    |
+| **Anthropic**    | Cloud                 | `ANTHROPIC_API_KEY`                 |
+| **Ollama**       | Local                 | Auto-discovers at `localhost:11434` |
+| **Ollama Cloud** | Cloud                 | `OLLAMA_API_KEY`                    |
+| **Llama.cpp**    | Local                 | `PRISM_LLAMACPP_BASE_URL`           |
+| **Google AI**    | Cloud                 | `GOOGLE_AI_API_KEY`                 |
+| **Custom**       | Any OpenAI-compatible | `PRISM_CUSTOM_PROVIDER_URL`         |
 
 Provider/model choice is persisted per chat session. Secure API key storage uses OS-native credential managers. Keys are **never** stored in SQLite or returned by APIs.
 
@@ -364,11 +376,11 @@ src/
 
 All runtime data is stored **outside the source tree** in an OS-aware persistent workspace:
 
-| Platform | Default Path |
-|:---|:---|
-| Windows | `%USERPROFILE%\Documents\Prism_Refraction` |
-| macOS | `~/Documents/Prism_Refraction` |
-| Linux | `$XDG_DATA_HOME/Prism_Refraction` |
+| Platform | Default Path                               |
+| :------- | :----------------------------------------- |
+| Windows  | `%USERPROFILE%\Documents\Prism_Refraction` |
+| macOS    | `~/Documents/Prism_Refraction`             |
+| Linux    | `$XDG_DATA_HOME/Prism_Refraction`          |
 
 Override with `PRISM_WORKSPACE_ROOT`. Your data never touches the source directory.
 
@@ -378,20 +390,20 @@ Override with `PRISM_WORKSPACE_ROOT`. Your data never touches the source directo
 
 PRISM ships with **90+ documentation files** covering every aspect of the platform:
 
-| Document | Purpose |
-|:---|:---|
-| [Product Requirements](docs/PRISM_PRD.md) | Full PRD with feature specifications |
-| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Development workflows and implementation guidance |
-| [User Guide](docs/USER_GUIDE.md) | Operator-facing usage and controls |
-| [Getting Started](docs/GETTING_STARTED.md) | First-time setup walkthrough |
-| [Roadmap](docs/ROADMAP.md) | Milestones and delivery sequence |
-| [Test Strategy](docs/TEST_STRATEGY.md) | Testing philosophy and coverage |
-| [Security](SECURITY.md) | Vulnerability reporting and security policy |
-| [Contributing](CONTRIBUTING.md) | Contribution guidelines |
-| [FAQ](docs/PRISM_FAQ.md) | Frequently asked questions |
-| [Glossary](docs/PRISM_GLOSSARY.md) | Terminology reference |
-| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Production deployment options |
-| [Docs Index](docs/DOCS_INDEX.md) | Complete catalog with reading order |
+| Document                                     | Purpose                                           |
+| :------------------------------------------- | :------------------------------------------------ |
+| [Product Requirements](docs/PRISM_PRD.md)    | Full PRD with feature specifications              |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md)   | Development workflows and implementation guidance |
+| [User Guide](docs/USER_GUIDE.md)             | Operator-facing usage and controls                |
+| [Getting Started](docs/GETTING_STARTED.md)   | First-time setup walkthrough                      |
+| [Roadmap](docs/ROADMAP.md)                   | Milestones and delivery sequence                  |
+| [Test Strategy](docs/TEST_STRATEGY.md)       | Testing philosophy and coverage                   |
+| [Security](SECURITY.md)                      | Vulnerability reporting and security policy       |
+| [Contributing](CONTRIBUTING.md)              | Contribution guidelines                           |
+| [FAQ](docs/PRISM_FAQ.md)                     | Frequently asked questions                        |
+| [Glossary](docs/PRISM_GLOSSARY.md)           | Terminology reference                             |
+| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Production deployment options                     |
+| [Docs Index](docs/DOCS_INDEX.md)             | Complete catalog with reading order               |
 
 ---
 
@@ -439,10 +451,10 @@ PRISM is licensed under the [Apache License 2.0](LICENSE).
 
 ## 🔗 References
 
-1. Anthropic Engineering, *Building effective agents* (2024): <https://www.anthropic.com/engineering/building-effective-agents>
-2. Yao et al., *ReAct: Synergizing Reasoning and Acting in Language Models* (arXiv:2210.03629)
-3. Schick et al., *Toolformer: Language Models Can Teach Themselves to Use Tools* (arXiv:2302.04761)
-4. Shen et al., *HuggingGPT* (arXiv:2303.17580)
+1. Anthropic Engineering, _Building effective agents_ (2024): <https://www.anthropic.com/engineering/building-effective-agents>
+2. Yao et al., _ReAct: Synergizing Reasoning and Acting in Language Models_ (arXiv:2210.03629)
+3. Schick et al., _Toolformer: Language Models Can Teach Themselves to Use Tools_ (arXiv:2302.04761)
+4. Shen et al., _HuggingGPT_ (arXiv:2303.17580)
 5. Model Context Protocol: <https://modelcontextprotocol.io/introduction>
 6. NIST AI Risk Management Framework: <https://www.nist.gov/itl/ai-risk-management-framework>
 
