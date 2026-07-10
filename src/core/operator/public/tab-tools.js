@@ -666,7 +666,7 @@ export
       html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
       html += renderStars(state.toolReviews, t.name, 'tool');
       html += approvalBadge(rv.approval);
-      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" data-approval-kind="tool" data-approval-name="' + escapeHtml(t.name) + '">';
+      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);" data-approval-kind="tool" data-approval-name="' + escapeHtml(t.name) + '">';
       var approvals = ['review', 'approved', 'flagged', 'blocked'];
       for (var a = 0; a < approvals.length; a++) {
         html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
@@ -674,7 +674,7 @@ export
       html += '</select>';
       if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
       html += '</div>';
-      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-tool-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="tool" data-notes-name="' + escapeHtml(t.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
+      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-tool-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="tool" data-notes-name="' + escapeHtml(t.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
       html += '</div>';
 
       html += '</div></div>';
@@ -860,7 +860,7 @@ export function renderPluginsPanel() {
       html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
       html += renderStars(state.pluginReviews, p.name, 'plugin');
       html += approvalBadge(rv.approval);
-      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" data-approval-kind="plugin" data-approval-name="' + escapeHtml(p.name) + '">';
+      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);" data-approval-kind="plugin" data-approval-name="' + escapeHtml(p.name) + '">';
       var approvals = ['review', 'approved', 'flagged', 'blocked'];
       for (var a = 0; a < approvals.length; a++) {
         html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
@@ -868,7 +868,7 @@ export function renderPluginsPanel() {
       html += '</select>';
       if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
       html += '</div>';
-      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-plugin-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="plugin" data-notes-name="' + escapeHtml(p.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
+      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-plugin-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="plugin" data-notes-name="' + escapeHtml(p.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
       html += '</div>';
 
       html += '</div></div>';
@@ -1048,7 +1048,7 @@ export
       html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
       html += renderStars(state.utilityReviews, u.name, 'utility');
       html += approvalBadge(rv.approval);
-      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);" data-approval-kind="utility" data-approval-name="' + escapeHtml(u.name) + '">';
+      html += '<select class="tp-approval-select" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);" data-approval-kind="utility" data-approval-name="' + escapeHtml(u.name) + '">';
       var approvals = ['review', 'approved', 'flagged', 'blocked'];
       for (var a = 0; a < approvals.length; a++) {
         html += '<option value="' + approvals[a] + '"' + (rv.approval === approvals[a] ? ' selected' : '') + '>' + approvals[a].charAt(0).toUpperCase() + approvals[a].slice(1) + '</option>';
@@ -1056,7 +1056,7 @@ export
       html += '</select>';
       if (rv.lastReviewed) html += '<span class="muted" style="font-size:10px;">Reviewed: ' + timeAgo(rv.lastReviewed) + '</span>';
       html += '</div>';
-      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-utility-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:rgba(0,0,0,0.25);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="utility" data-notes-name="' + escapeHtml(u.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
+      html += '<div style="margin-top:8px;"><textarea class="tp-review-notes" id="review-notes-utility-' + safeId + '" rows="2" placeholder="Review notes..." style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);font-size:11px;font-family:inherit;box-sizing:border-box;resize:vertical;" data-notes-kind="utility" data-notes-name="' + escapeHtml(u.name) + '">' + escapeHtml(rv.notes) + '</textarea></div>';
       html += '</div>';
 
       html += '</div></div>';

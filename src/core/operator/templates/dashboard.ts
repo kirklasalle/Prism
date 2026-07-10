@@ -11,6 +11,17 @@ export function dashboardHtml(port: number, authToken?: string): string {
   <link rel="stylesheet" href="/public/demo-mode.css">
 </head>
 <body>
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('prism-theme') || 'tron';
+      if (savedTheme === 'auto') {
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.body.className = prefersDark ? 'theme-night' : 'theme-day';
+      } else {
+        document.body.className = 'theme-' + savedTheme;
+      }
+    })();
+  </script>
   <div class="app" id="app">
     <aside class="sidebar panel" id="sidebar">
       <div class="brand" id="brand-panel" data-tip-id="shell:brand" data-tip-kind="shell">

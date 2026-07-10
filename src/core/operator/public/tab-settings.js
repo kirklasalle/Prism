@@ -173,7 +173,7 @@ export
         var overrideVal = override ? (override.providerId + '/' + override.model) : 'auto';
         html += '<div style="display:flex;align-items:center;gap:6px;">';
         html += '<span class="muted" style="font-size:11px;">Override:</span>';
-        html += '<select onchange="setModalityOverride(&#39;' + escapeHtml(state.selectedModalityFilter) + '&#39;, this.value)" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);flex:1;max-width:280px;">';
+        html += '<select onchange="setModalityOverride(&#39;' + escapeHtml(state.selectedModalityFilter) + '&#39;, this.value)" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);flex:1;max-width:280px;">';
         html += '<option value="auto"' + (!override ? ' selected' : '') + '>Auto (AI Suggested)</option>';
         filteredModels.forEach(function (fm) {
           var val = fm.providerId + '/' + fm.model;
@@ -746,7 +746,7 @@ export
 
   html += '<div>';
 
-  var filterStyle = 'padding:5px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);font-size:11px;';
+  var filterStyle = 'padding:5px 8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);font-size:11px;';
   var providerIds = Object.keys(providerSet);
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">';
   html += '<input type="text" placeholder="Search models\u2026" value="' + escapeHtml(state.matrixFilterText || '') + '" oninput="setMatrixFilter(&#39;text&#39;, this.value)" style="' + filterStyle + 'flex:1;min-width:120px;" />';
@@ -1267,7 +1267,7 @@ export
 
     // Build dropdown
     var selectVal = override ? (override.providerId + '/' + override.model) : 'auto';
-    var dropdownHtml = '<select onchange="setRoleOverride(&#39;' + escapeHtml(role) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);max-width:200px;">';
+    var dropdownHtml = '<select onchange="setRoleOverride(&#39;' + escapeHtml(role) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);max-width:200px;">';
     dropdownHtml += '<option value="auto"' + (!override ? ' selected' : '') + '>Auto (AI)</option>';
     availableModels.forEach(function (am) {
       var val = am.providerId + '/' + am.model;
@@ -1313,7 +1313,7 @@ export
     var agentOverride = (state.routingAgentOverrides || {})[agent.id] || null;
     var selectVal = agentOverride ? (agentOverride.providerId + '/' + agentOverride.model) : 'role-default';
 
-    var dropdownHtml = '<select onchange="setAgentOverride(&#39;' + escapeHtml(agent.id) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(148,163,184,0.18);background:#0b1728;color:var(--fg);max-width:200px;">';
+    var dropdownHtml = '<select onchange="setAgentOverride(&#39;' + escapeHtml(agent.id) + '&#39;, this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);max-width:200px;">';
     dropdownHtml += '<option value="role-default"' + (!agentOverride ? ' selected' : '') + '>Use Role Default</option>';
     availableModels.forEach(function (am) {
       var val = am.providerId + '/' + am.model;
@@ -2148,34 +2148,34 @@ export
   sec('powerManager', '\u{1F50B} LLM Power & VRAM Manager', function () {
     var currentMode = state.powerMode || 'adaptive';
 
-    html += '<div class="power-manager-panel" style="background: linear-gradient(135deg, rgba(20,20,35,0.8), rgba(10,10,20,0.9)); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; padding: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); backdrop-filter: blur(8px); margin-bottom: 8px; overflow: hidden; position: relative;">';
+    html += '<div class="power-manager-panel" style="background: var(--power-bg); border: 1px solid var(--power-border); border-radius: 12px; padding: 16px; box-shadow: var(--power-shadow); backdrop-filter: blur(8px); margin-bottom: 8px; overflow: hidden; position: relative;">';
     html += '<div style="position: absolute; top: -50px; right: -50px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(0,0,0,0) 70%); pointer-events: none;"></div>';
 
     html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">';
     html += '<div style="display: flex; align-items: center; gap: 10px;">';
     html += '<span style="font-size: 24px; filter: drop-shadow(0 0 8px #8b5cf6);">\u{1F50B}</span>';
     html += '<div>';
-    html += '<div style="font-size: 14px; font-weight: 700; color: #a78bfa; letter-spacing: 0.5px; text-transform: uppercase;">LLM Power Manager</div>';
+    html += '<div style="font-size: 14px; font-weight: 700; color: #8b5cf6; letter-spacing: 0.5px; text-transform: uppercase;">LLM Power Manager</div>';
     html += '<div style="font-size: 11px; color: var(--fg-muted);">Dynamic battery-like capacity & VRAM routing</div>';
     html += '</div></div>';
 
-    html += '<div style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);">';
+    html += '<div style="display: flex; align-items: center; gap: 6px; background: var(--surface); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border-color);">';
     html += '<div id="power-battery-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></div>';
-    html += '<span id="power-battery-text" style="font-size: 10px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.5px;">MONITORING</span>';
+    html += '<span id="power-battery-text" style="font-size: 10px; font-weight: 700; color: var(--fg); text-transform: uppercase; letter-spacing: 0.5px;">MONITORING</span>';
     html += '</div></div>';
 
     html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 16px;">';
-    html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
+    html += '<div style="background: var(--power-card-bg); border: 1px solid var(--power-card-border); border-radius: 8px; padding: 10px; text-align: center;">';
     html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Dynamic Profile</div>';
     html += '<div id="power-mode-badge" style="font-size: 12px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">' + escapeHtml(currentMode) + '</div>';
     html += '</div>';
 
-    html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
+    html += '<div style="background: var(--power-card-bg); border: 1px solid var(--power-card-border); border-radius: 8px; padding: 10px; text-align: center;">';
     html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Est. Free VRAM</div>';
     html += '<div id="power-vram-text" style="font-size: 12px; font-weight: 700; color: #10b981;">-- / -- MB</div>';
     html += '</div>';
 
-    html += '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; text-align: center;">';
+    html += '<div style="background: var(--power-card-bg); border: 1px solid var(--power-card-border); border-radius: 8px; padding: 10px; text-align: center;">';
     html += '<div style="font-size: 10px; color: var(--fg-muted); text-transform: uppercase; margin-bottom: 4px;">Usage Footprint</div>';
     html += '<div id="power-cost-badge" style="font-size: 12px; font-weight: 700; color: #a78bfa;">MINIMAL</div>';
     html += '</div></div>';
@@ -2185,7 +2185,7 @@ export
     html += '<span style="font-size: 11px; font-weight: 600; color: var(--fg-muted);">Active VRAM Utilization</span>';
     html += '<span id="power-vram-percentage" style="font-size: 11px; font-weight: 700; color: #10b981;">0%</span>';
     html += '</div>';
-    html += '<div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; border: 1px solid rgba(255,255,255,0.04);">';
+    html += '<div style="height: 6px; background: var(--power-card-bg); border-radius: 3px; overflow: hidden; border: 1px solid var(--power-card-border);">';
     html += '<div id="power-vram-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #10b981, #3b82f6); border-radius: 3px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);"></div>';
     html += '</div></div>';
 
@@ -2195,7 +2195,7 @@ export
 
     // Performance Button
     var perfActive = currentMode === 'performance';
-    html += '<button id="power-btn-performance" onclick="savePowerModePreference(\'performance\')" style="background: ' + (perfActive ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)') + '; border: 1px solid ' + (perfActive ? '#3b82f6' : 'rgba(255,255,255,0.08)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (perfActive ? '#fff' : 'var(--fg-muted)') + ';">';
+    html += '<button id="power-btn-performance" onclick="savePowerModePreference(\'performance\')" style="background: ' + (perfActive ? 'rgba(59,130,246,0.15)' : 'var(--power-btn-bg-inactive)') + '; border: 1px solid ' + (perfActive ? '#3b82f6' : 'var(--power-btn-border-inactive)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (perfActive ? 'var(--fg)' : 'var(--fg-muted)') + ';">';
     html += '<span style="font-size: 16px;">⚡</span>';
     html += '<span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Performance</span>';
     html += '<span style="font-size: 9px; color: var(--fg-muted); text-align: center;">Maximize IQ & capability</span>';
@@ -2203,7 +2203,7 @@ export
 
     // Eco Button
     var ecoActive = currentMode === 'eco';
-    html += '<button id="power-btn-eco" onclick="savePowerModePreference(\'eco\')" style="background: ' + (ecoActive ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.02)') + '; border: 1px solid ' + (ecoActive ? '#10b981' : 'rgba(255,255,255,0.08)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (ecoActive ? '#fff' : 'var(--fg-muted)') + ';">';
+    html += '<button id="power-btn-eco" onclick="savePowerModePreference(\'eco\')" style="background: ' + (ecoActive ? 'rgba(16,185,129,0.15)' : 'var(--power-btn-bg-inactive)') + '; border: 1px solid ' + (ecoActive ? '#10b981' : 'var(--power-btn-border-inactive)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (ecoActive ? 'var(--fg)' : 'var(--fg-muted)') + ';">';
     html += '<span style="font-size: 16px;">🌱</span>';
     html += '<span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Eco Mode</span>';
     html += '<span style="font-size: 9px; color: var(--fg-muted); text-align: center;">Prioritize local & shift down</span>';
@@ -2211,7 +2211,7 @@ export
 
     // Adaptive Button
     var adaptiveActive = currentMode === 'adaptive';
-    html += '<button id="power-btn-adaptive" onclick="savePowerModePreference(\'adaptive\')" style="background: ' + (adaptiveActive ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.02)') + '; border: 1px solid ' + (adaptiveActive ? '#8b5cf6' : 'rgba(255,255,255,0.08)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (adaptiveActive ? '#fff' : 'var(--fg-muted)') + ';">';
+    html += '<button id="power-btn-adaptive" onclick="savePowerModePreference(\'adaptive\')" style="background: ' + (adaptiveActive ? 'rgba(139,92,246,0.15)' : 'var(--power-btn-bg-inactive)') + '; border: 1px solid ' + (adaptiveActive ? '#8b5cf6' : 'var(--power-btn-border-inactive)') + '; border-radius: 8px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.3s ease; color: ' + (adaptiveActive ? 'var(--fg)' : 'var(--fg-muted)') + ';">';
     html += '<span style="font-size: 16px;">⚙️</span>';
     html += '<span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Adaptive VRAM</span>';
     html += '<span style="font-size: 9px; color: var(--fg-muted); text-align: center;">Failover dynamically on low VRAM</span>';
@@ -2303,6 +2303,20 @@ export
     ]);
     numberRow('Action History Limit', 'actionHistoryLimit', '', 'entries');
     numberRow('Package History Limit', 'sessionPackageHistoryLimit', '', 'entries');
+
+    var currentTheme = localStorage.getItem('prism-theme') || 'tron';
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Visual Theme';
+    html += ' <span class="stg-hint">Select the console interface styling</span>';
+    html += '</span>';
+    html += '<select class="stg-select" id="stg-prism-theme-select" onchange="applyTheme(this.value)" style="width:240px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:4px;color:var(--fg);padding:4px 8px;font-size:12px;cursor:pointer;">';
+    html += '  <option value="tron"' + (currentTheme === 'tron' ? ' selected' : '') + '>PRISM Refraction + TRON</option>';
+    html += '  <option value="day"' + (currentTheme === 'day' ? ' selected' : '') + '>Day (Light Mode)</option>';
+    html += '  <option value="night"' + (currentTheme === 'night' ? ' selected' : '') + '>Night (Dark Mode)</option>';
+    html += '  <option value="auto"' + (currentTheme === 'auto' ? ' selected' : '') + '>System Auto</option>';
+    html += '</select>';
+    html += '</div>';
+
     html += '<div style="margin-top:8px;text-align:right;">';
     html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\'])">Save</button>';
     html += '</div>';
@@ -3745,6 +3759,40 @@ export async function toggleSshpPreference(checked) {
   } catch (e) {
     console.error('[settings] sshp toggle failed', e);
     showTransientNotice('Failed to toggle SSHP: ' + String(e), 'error');
+  }
+}
+
+export function applyTheme(theme) {
+  dashboardLog('settings', 'theme.apply', 'Applying theme preference: ' + theme);
+  localStorage.setItem('prism-theme', theme);
+  
+  if (window.__prismThemeMediaListener) {
+    try {
+      window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', window.__prismThemeMediaListener);
+    } catch(e) {}
+    window.__prismThemeMediaListener = null;
+  }
+  
+  function applyThemeClass(t) {
+    document.body.classList.remove('theme-day', 'theme-night', 'theme-tron');
+    document.body.classList.add('theme-' + t);
+  }
+  
+  if (theme === 'auto') {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    applyThemeClass(media.matches ? 'night' : 'day');
+    
+    window.__prismThemeMediaListener = function(e) {
+      applyThemeClass(e.matches ? 'night' : 'day');
+    };
+    media.addEventListener('change', window.__prismThemeMediaListener);
+  } else {
+    applyThemeClass(theme);
+  }
+  
+  const select = document.getElementById('stg-prism-theme-select');
+  if (select) {
+    select.value = theme;
   }
 }
 
