@@ -5,7 +5,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PRISM Secure Operator Dashboard</title>
+    <!-- Google Fonts: Outfit (modern UI) & Share Tech Mono (terminal) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #02050b;
+            --panel: rgba(4, 9, 20, 0.85);
+            --panel-solid: #040914;
+            --accent: #00ccff;
+            --accent-rgb: 0, 204, 255;
+            --border-glow: rgba(0, 204, 255, 0.22);
+            --text-glow: 0 0 8px rgba(0, 204, 255, 0.5);
+            
+            /* Status colors */
+            --c-red: #ff3333;
+            --c-orange: #ff8800;
+            --c-yellow: #ffdd00;
+            --c-green: #00ff66;
+            --c-blue: #00ccff;
+            --c-cyan: #88ffff;
+            --c-indigo: #5533ff;
+            --c-steel: #7799bb;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,80 +37,93 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c72, #2a5298);
-            color: #ffffff;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            background-image: 
+                linear-gradient(rgba(0, 204, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 204, 255, 0.02) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center;
+            color: #edf3ff;
             min-height: 100vh;
         }
 
         .header {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 20px;
+            background: rgba(2, 5, 11, 0.95);
+            padding: 16px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--border-glow);
+            box-shadow: 0 0 20px rgba(0, 204, 255, 0.15);
+            backdrop-filter: blur(10px);
+            z-index: 100;
         }
 
         .logo-section {
             display: flex;
             align-items: center;
+            gap: 20px;
         }
 
         .logo {
             font-size: 1.8em;
-            font-weight: bold;
-            background: linear-gradient(45deg, #ffd700, #ffed4e);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-right: 20px;
+            font-weight: 800;
+            color: #ffffff;
+            text-shadow: var(--text-glow);
+            letter-spacing: 0.15em;
         }
 
         .session-info {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 10px 20px;
+            background: rgba(0, 204, 255, 0.12);
+            padding: 6px 16px;
             border-radius: 20px;
-            font-size: 0.9em;
+            font-size: 0.85em;
+            font-family: 'Share Tech Mono', monospace;
+            border: 1px solid rgba(0, 204, 255, 0.25);
+            color: #ffffff;
         }
 
         .security-level {
             display: inline-block;
-            padding: 5px 10px;
-            border-radius: 15px;
+            padding: 2px 8px;
+            border-radius: 4px;
             font-size: 0.8em;
             font-weight: bold;
             margin-left: 10px;
+            text-transform: uppercase;
         }
 
         .security-level.confidential {
-            background: rgba(255, 193, 7, 0.2);
-            border: 1px solid #ffc107;
-            color: #ffc107;
+            background: rgba(255, 221, 0, 0.15);
+            border: 1px solid var(--c-yellow);
+            color: var(--c-yellow);
         }
 
         .security-level.secret {
-            background: rgba(255, 87, 34, 0.2);
-            border: 1px solid #ff5722;
-            color: #ff5722;
+            background: rgba(255, 136, 0, 0.15);
+            border: 1px solid var(--c-orange);
+            color: var(--c-orange);
         }
 
         .security-level.top_secret {
-            background: rgba(244, 67, 54, 0.2);
-            border: 1px solid #f44336;
-            color: #f44336;
+            background: rgba(255, 51, 51, 0.15);
+            border: 1px solid var(--c-red);
+            color: var(--c-red);
+            text-shadow: 0 0 4px rgba(255, 51, 51, 0.5);
         }
 
         .main-container {
             display: grid;
-            grid-template-columns: 250px 1fr;
-            min-height: calc(100vh - 80px);
+            grid-template-columns: 260px 1fr;
+            min-height: calc(100vh - 72px);
         }
 
         .sidebar {
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(2, 5, 11, 0.5);
             padding: 30px 20px;
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            border-right: 1px solid var(--border-glow);
+            backdrop-filter: blur(10px);
         }
 
         .nav-section {
@@ -94,27 +131,36 @@
         }
 
         .nav-section h3 {
-            color: #ffd700;
-            margin-bottom: 15px;
-            font-size: 1.1em;
+            color: #ffffff;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin-bottom: 12px;
+            opacity: 0.7;
         }
 
         .nav-item {
             display: block;
-            padding: 12px 15px;
-            margin-bottom: 5px;
-            color: rgba(255, 255, 255, 0.8);
+            padding: 10px 15px;
+            margin-bottom: 6px;
+            color: #9aa6c7;
             text-decoration: none;
             border-radius: 8px;
-            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid transparent;
+            transition: all 0.25s ease;
             cursor: pointer;
         }
 
         .nav-item:hover,
         .nav-item.active {
-            background: rgba(255, 215, 0, 0.1);
-            color: #ffd700;
-            border-left: 3px solid #ffd700;
+            background: rgba(0, 204, 255, 0.08);
+            color: #ffffff;
+            border-color: rgba(0, 204, 255, 0.25);
+            box-shadow: 0 0 10px rgba(0, 204, 255, 0.15);
+            text-shadow: var(--text-glow);
         }
 
         .content-area {
@@ -124,7 +170,7 @@
 
         .content-section {
             display: none;
-            animation: fadeIn 0.5s ease-in;
+            animation: fadeIn 0.4s ease-out forwards;
         }
 
         .content-section.active {
@@ -134,9 +180,8 @@
         @keyframes fadeIn {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(12px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -151,84 +196,123 @@
         }
 
         .card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--panel);
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid var(--border-glow);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 15px rgba(0, 204, 255, 0.03);
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.5;
         }
 
         .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            transform: translateY(-4px);
+            border-color: var(--accent);
+            box-shadow: 0 12px 35px rgba(0, 204, 255, 0.2);
         }
 
         .card-title {
-            font-size: 1.2em;
-            font-weight: bold;
-            margin-bottom: 15px;
-            color: #ffd700;
+            font-size: 1.1em;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+            color: #ffffff;
+            text-shadow: var(--text-glow);
         }
 
         .card-content {
-            color: rgba(255, 255, 255, 0.9);
-            line-height: 1.5;
+            color: #cbd5e1;
+            font-size: 13px;
+            line-height: 1.6;
         }
 
         .status-indicator {
             display: inline-block;
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             margin-right: 8px;
         }
 
         .status-active {
-            background: #4caf50;
-            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+            background: var(--c-green);
+            box-shadow: 0 0 8px var(--c-green);
         }
 
         .status-inactive {
-            background: #757575;
+            background: var(--c-steel);
         }
 
-        .action-button {
-            background: linear-gradient(45deg, #ffd700, #ffed4e);
-            color: #1e3c72;
-            border: none;
-            padding: 12px 24px;
+        .action-button,
+        .danger-button {
+            background: rgba(0, 204, 255, 0.1);
+            border: 1px solid var(--accent);
+            color: #ffffff;
+            padding: 10px 20px;
             border-radius: 8px;
-            font-weight: bold;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.25s ease;
             margin-right: 10px;
             margin-bottom: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .action-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
+            background: var(--accent);
+            color: #02050b;
+            box-shadow: 0 0 15px rgba(0, 204, 255, 0.4);
+            transform: translateY(-1px);
         }
 
         .danger-button {
-            background: linear-gradient(45deg, #f44336, #e53935);
-            color: white;
+            background: rgba(255, 51, 51, 0.1);
+            border-color: var(--c-red);
+            color: #ffffff;
+        }
+
+        .danger-button:hover {
+            background: var(--c-red);
+            color: #02050b;
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.4);
+            transform: translateY(-1px);
         }
 
         .audit-log {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             padding: 20px;
             max-height: 400px;
             overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
         }
 
         .log-entry {
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 10px;
         }
 
         .log-entry:last-child {
@@ -236,36 +320,41 @@
         }
 
         .log-timestamp {
-            color: #ffd700;
-            margin-right: 10px;
+            color: var(--c-yellow);
+            flex-shrink: 0;
         }
 
         .log-operation {
-            color: #4caf50;
+            color: var(--c-green);
             font-weight: bold;
-            margin-right: 10px;
+            flex-shrink: 0;
         }
 
         .log-details {
-            color: rgba(255, 255, 255, 0.8);
+            color: #cbd5e1;
         }
 
         .computer-controls,
         .browser-controls {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
             margin-top: 20px;
         }
 
         .control-group {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 8px;
         }
 
         .control-group h4 {
-            color: #ffd700;
+            color: #ffffff;
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.05em;
             margin-bottom: 15px;
         }
 
@@ -275,22 +364,34 @@
             margin-bottom: 10px;
         }
 
+        .coordinate-input input,
+        .text-input,
+        .url-input input {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 10px;
+            border-radius: 6px;
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .coordinate-input input:focus,
+        .text-input:focus,
+        .url-input input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px rgba(0, 204, 255, 0.15);
+            background: rgba(0, 204, 255, 0.02);
+        }
+
         .coordinate-input input {
             flex: 1;
-            padding: 8px;
-            border-radius: 5px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
         }
 
         .text-input {
             width: 100%;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
             margin-bottom: 10px;
         }
 
@@ -302,31 +403,32 @@
 
         .url-input input {
             flex: 1;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
         }
 
         .screenshot-preview {
             width: 100%;
             max-width: 400px;
-            border-radius: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border-glow);
+            box-shadow: 0 0 15px rgba(0, 204, 255, 0.15);
             margin-top: 15px;
         }
 
         .emergency-controls {
-            background: rgba(244, 67, 54, 0.1);
-            border: 1px solid rgba(244, 67, 54, 0.3);
-            border-radius: 15px;
+            background: rgba(255, 51, 51, 0.04);
+            border: 1px solid rgba(255, 51, 51, 0.25);
+            border-radius: 12px;
             padding: 25px;
             margin-top: 30px;
         }
 
         .emergency-controls h3 {
-            color: #f44336;
+            color: var(--c-red);
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
             margin-bottom: 15px;
+            text-shadow: 0 0 4px rgba(255, 51, 51, 0.4);
         }
     </style>
 </head>
