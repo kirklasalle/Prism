@@ -1,0 +1,1739 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USER GUIDE - PRISM Documentation</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  
+  <style>
+    :root {
+      /* Theme color tokens - Dark (Default) */
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131a2b;
+      --bg-tertiary: #1b263e;
+      --border-color: #263554;
+      --border-glow: rgba(38, 53, 84, 0.4);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #38bdf8;
+      --accent-secondary: #0ea5e9;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      
+      --code-bg: #090d16;
+      --code-text: #e2e8f0;
+      
+      /* Alerts color coding */
+      --alert-note-bg: rgba(56, 189, 248, 0.08);
+      --alert-note-border: #0ea5e9;
+      --alert-tip-bg: rgba(52, 211, 153, 0.08);
+      --alert-tip-border: #10b981;
+      --alert-important-bg: rgba(99, 102, 241, 0.08);
+      --alert-important-border: #6366f1;
+      --alert-warning-bg: rgba(251, 191, 36, 0.08);
+      --alert-warning-border: #f59e0b;
+      --alert-caution-bg: rgba(244, 63, 94, 0.08);
+      --alert-caution-border: #f43f5e;
+      
+      --sidebar-width: 320px;
+    }
+    
+    [data-theme="light"] {
+      /* Theme color tokens - Light */
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --border-color: #cbd5e1;
+      --border-glow: rgba(203, 213, 225, 0.4);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-secondary: #0369a1;
+      --accent-glow: rgba(2, 132, 199, 0.1);
+      
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      
+      --alert-note-bg: rgba(14, 165, 233, 0.05);
+      --alert-tip-bg: rgba(16, 185, 129, 0.05);
+      --alert-important-bg: rgba(99, 102, 241, 0.05);
+      --alert-warning-bg: rgba(245, 158, 11, 0.05);
+      --alert-caution-bg: rgba(244, 63, 94, 0.05);
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* Layout */
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      overflow-y: auto;
+      transition: background-color 0.3s, border-color 0.3s;
+    }
+    
+    .main-viewport {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      min-height: 100vh;
+      padding: 3rem 4rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .article-container {
+      width: 100%;
+      max-width: 880px;
+    }
+    
+    /* Sidebar Header & Brand */
+    .sidebar-header {
+      padding: 1.75rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-family: 'Outfit', sans-serif;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: 0.5px;
+      background: linear-gradient(to right, var(--text-primary), var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    /* Theme Toggle */
+    .theme-toggle-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .theme-toggle-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .theme-toggle-btn svg {
+      transition: transform 0.3s;
+    }
+    
+    .theme-toggle-btn:hover svg {
+      transform: rotate(20deg);
+    }
+    
+    /* Sidebar Navigation Links */
+    .sidebar-nav {
+      padding: 1.5rem 1rem;
+      flex-grow: 1;
+    }
+    
+    .toc-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      padding-left: 0.75rem;
+    }
+    
+    .toc-list {
+      list-style: none;
+    }
+    
+    .toc-item {
+      margin-bottom: 0.35rem;
+    }
+    
+    .toc-item a {
+      display: block;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: background-color 0.2s, color 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .toc-item a:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+    }
+    
+    .toc-item.active a {
+      background-color: var(--accent-glow);
+      color: var(--accent-primary);
+      font-weight: 500;
+      border-left: 2px solid var(--accent-primary);
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    
+    .toc-item-level-1 { padding-left: 0; }
+    .toc-item-level-2 { padding-left: 0.75rem; }
+    .toc-item-level-3 { padding-left: 1.5rem; }
+    .toc-item-level-4 { padding-left: 2.25rem; }
+    
+    /* Markdown Article Styles */
+    article h1, article h2, article h3, article h4, article h5, article h6 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2.25rem;
+      margin-bottom: 1rem;
+      line-height: 1.35;
+    }
+    
+    article h1 {
+      font-size: 2.5rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      letter-spacing: -0.5px;
+    }
+    
+    article h2 {
+      font-size: 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.4rem;
+      margin-top: 3rem;
+    }
+    
+    article h3 { font-size: 1.35rem; }
+    article h4 { font-size: 1.15rem; }
+    
+    article p {
+      margin-bottom: 1.25rem;
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+    
+    article a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-bottom-color 0.2s;
+    }
+    
+    article a:hover {
+      border-bottom-color: var(--accent-primary);
+    }
+    
+    /* Lists */
+    article ul, article ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+    
+    article li {
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }
+    
+    article li strong {
+      color: var(--text-primary);
+    }
+    
+    /* Inline Code */
+    article code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--accent-primary);
+      word-break: break-word;
+    }
+    
+    /* Blockquotes */
+    article blockquote {
+      border-left: 4px solid var(--border-color);
+      padding: 0.75rem 1.25rem;
+      background-color: var(--bg-secondary);
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1.5rem;
+    }
+    
+    article blockquote p {
+      margin-bottom: 0;
+      font-style: italic;
+    }
+    
+    /* Horizontal Rule */
+    article hr {
+      border: 0;
+      height: 1px;
+      background-color: var(--border-color);
+      margin: 3rem 0;
+    }
+    
+    /* Code Cards */
+    .code-card {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 1.75rem;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .code-card-header {
+      padding: 0.5rem 1rem;
+      background-color: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .code-card-lang {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .copy-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .code-card pre {
+      margin: 0;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    
+    .code-card code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      background: none;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      color: var(--code-text);
+      word-break: normal;
+      white-space: pre;
+    }
+    
+    /* Tables */
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.925rem;
+      text-align: left;
+    }
+    
+    th {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      padding: 0.85rem 1.25rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+    
+    td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      background-color: var(--bg-secondary);
+      transition: background-color 0.2s;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    tr:hover td {
+      background-color: var(--bg-tertiary);
+    }
+    
+    /* GitHub Style Alerts */
+    .alert-box {
+      border-left: 4px solid var(--border-color);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    
+    .alert-box-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.875rem;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+    
+    .alert-box-content {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    
+    .alert-box-content a {
+      font-weight: 500;
+    }
+    
+    .alert-note {
+      background-color: var(--alert-note-bg);
+      border-left-color: var(--alert-note-border);
+    }
+    
+    .alert-note .alert-box-header {
+      color: var(--alert-note-border);
+    }
+    
+    .alert-tip {
+      background-color: var(--alert-tip-bg);
+      border-left-color: var(--alert-tip-border);
+    }
+    
+    .alert-tip .alert-box-header {
+      color: var(--alert-tip-border);
+    }
+    
+    .alert-important {
+      background-color: var(--alert-important-bg);
+      border-left-color: var(--alert-important-border);
+    }
+    
+    .alert-important .alert-box-header {
+      color: var(--alert-important-border);
+    }
+    
+    .alert-warning {
+      background-color: var(--alert-warning-bg);
+      border-left-color: var(--alert-warning-border);
+    }
+    
+    .alert-warning .alert-box-header {
+      color: var(--alert-warning-border);
+    }
+    
+    .alert-caution {
+      background-color: var(--alert-caution-bg);
+      border-left-color: var(--alert-caution-border);
+    }
+    
+    .alert-caution .alert-box-header {
+      color: var(--alert-caution-border);
+    }
+    
+    /* Mermaid Diagrams Styling */
+    .mermaid {
+      background-color: var(--bg-secondary) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Image and Figures */
+    .content-image {
+      margin: 2rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .content-image img {
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .content-image figcaption {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+    }
+    
+    /* Responsive Design adjustments */
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      
+      .main-viewport {
+        margin-left: 0;
+        width: 100%;
+        padding: 2rem 1.5rem;
+      }
+      
+      /* Toggle Sidebar Menu trigger for mobile */
+      .menu-trigger {
+        display: flex;
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        cursor: pointer;
+        z-index: 1000;
+      }
+    }
+    
+    @media (min-width: 1025px) {
+      .menu-trigger {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Menu trigger for small screens -->
+  <button class="menu-trigger" onclick="toggleSidebar()">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+
+  <!-- Left Sidebar (TOC) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-group">
+        <div class="brand-logo">Δ</div>
+        <div class="brand-title">PRISM</div>
+      </div>
+      <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
+        <svg id="theme-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Sun icon -->
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <div class="toc-title">Table of Contents</div>
+      <ul class="toc-list">
+  <li class="toc-item toc-item-level-1"><a href="#prism-user-guide">PRISM User Guide</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#1-what-prism-is">1 What PRISM is</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#2-what-you-can-do-with-prism-today">2 What you can do with PRISM today</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#3-safety-model-you-should-understand">3 Safety model you should understand</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#31-authority-tiers">31 Authority tiers</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#32-approval-outcomes">32 Approval outcomes</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#4-quick-start">4 Quick Start</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#41-one-click-dashboard-startup-windows">41 One-click dashboard startup Windows</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#42-cli-startup-options">42 CLI startup options</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#4a-setup-wizard">4A Setup Wizard</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4a1-when-to-use-each-wizard">4A1 When to use each wizard</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4a2-web-setup-wizard-4-step-basic">4A2 Web Setup Wizard 4-step basic</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4a3-web-advanced-wizard-8-step">4A3 Web Advanced Wizard 8-step</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4a4-tui-setup-wizard">4A4 TUI Setup Wizard</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4a5-cli-setup-wizard">4A5 CLI Setup Wizard</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#cli-advanced-wizard-8-step">CLI Advanced Wizard 8-Step</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4a6-re-running-the-wizard">4A6 Re-running the wizard</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4a7-troubleshooting">4A7 Troubleshooting</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#5-dashboard-navigation">5 Dashboard Navigation</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#51-tab-system">51 Tab system</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#52-collapsible-panels">52 Collapsible panels</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#53-provider-settings-tab">53 Provider  Settings tab</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#54-tools-plugins-tab">54 Tools  Plugins tab</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#55-network-tab">55 Network tab</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#56-agentic-control-tab">56 Agentic Control tab</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#57-scheduler-tab">57 Scheduler tab</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#58-browser-control-tab">58 Browser Control tab</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#appendix-computer-use-core-business-operator-guardrails-2026-03-25">Appendix Computer Use Core  Business Operator Guardrails 2026-03-25</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#6-workspace-persistence">6 Workspace  Persistence</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#61-default-workspace-location">61 Default workspace location</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#62-workspace-structure">62 Workspace structure</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#63-dashboard-visibility">63 Dashboard visibility</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#64-legacy-path-migration">64 Legacy path migration</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#7-approval-workflow-operator-perspective">7 Approval workflow operator perspective</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#8-memory-tools">8 Memory tools</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#71-semanticquery">71 semanticquery</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#72-memoryquery">72 memoryquery</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#9-workflow-behavior-in-plain-language">9 Workflow behavior in plain language</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#10-operational-troubleshooting">10 Operational troubleshooting</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#91-high-risk-step-never-executed">91 High-risk step never executed</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#92-workflow-unexpectedly-failed">92 Workflow unexpectedly failed</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#93-memory-query-seems-weak">93 Memory query seems weak</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#11-best-practices-for-operators">11 Best practices for operators</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#12-character-accountability-identity">12 Character Accountability  Identity</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#121-identity-fields-you-provide">121 Identity fields you provide</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#122-profile-behavior-differences">122 Profile behavior differences</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#123-lifecycle-states">123 Lifecycle states</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#124-inspecting-accountability-traces">124 Inspecting accountability traces</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#125-troubleshooting">125 Troubleshooting</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#13-security-and-trust-expectations">13 Security and trust expectations</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#131-session-lifecycle">131 Session lifecycle</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#132-local-only-data-storage">132 Local-only data storage</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#133-api-key-security">133 API key security</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#134-localhost-binding">134 Localhost binding</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#135-action-visibility">135 Action visibility</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#136-approval-safeguards">136 Approval safeguards</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#14-where-to-learn-more">14 Where to learn more</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#15-external-references">15 External references</a></li>
+</ul>
+
+    </nav>
+  </aside>
+
+  <!-- Main Viewport -->
+  <main class="main-viewport">
+    <div class="article-container">
+      <article>
+        <h1 id="prism-user-guide">PRISM User Guide</h1>
+
+<p>Date: 2026-03-11</p>
+
+<h2 id="1-what-prism-is">1. What PRISM is</h2>
+
+<p>PRISM is a governed autonomous agent runtime that acts as your infrastructure for Agents As A Service (AaaS). It can execute operations across your computer environment, bridging machine automation and human calendar/project management for a " Return of Growth and Integrity.</p>
+
+<p>Research context reference:</p>
+
+<ul class="list-level-0">
+  <li><code>PRISM<em>RESEARCH</em>DOCUMENTATION.md</code> (full-context rationale for governance, workflows, and safety model).</li>
+</ul>
+<p>It is designed for high-trust operation:</p>
+
+<ul class="list-level-0">
+  <li>transparent decisions,</li>
+  <li>explicit approvals for high-risk actions,</li>
+  <li>recoverable workflows,</li>
+  <li>complete activity traces.</li>
+</ul>
+<h2 id="2-what-you-can-do-with-prism-today">2. What you can do with PRISM today</h2>
+
+<ul class="list-level-0">
+  <li>run tiered autonomous operations</li>
+  <li>enforce approval for high-risk actions</li>
+  <li>execute multi-step workflows with retries, timeout, and fallback</li>
+  <li>query memory of prior operations (<code>semantic<em>query</code>, <code>memory</em>query</code>)</li>
+  <li>inspect persisted traces in SQLite</li>
+  <li>bind character identities to operators with full accountability chains</li>
+  <li>enforce profile-aware email domain validation (business vs individual)</li>
+  <li>activate Spectrum Refraction (SR) for tri-model parallel generation with structured aggregation</li>
+</ul>
+<h2 id="3-safety-model-you-should-understand">3. Safety model you should understand</h2>
+
+<h3 id="31-authority-tiers">3.1 Authority tiers</h3>
+
+<ul class="list-level-0">
+  <li><code>tier1_autonomous</code>: low-risk operations run automatically.</li>
+  <li><code>tier2_conditional</code>: medium-risk operations require additional governance constraints.</li>
+  <li><code>tier3_approval</code>: high-risk operations pause for explicit approval.</li>
+</ul>
+<h3 id="32-approval-outcomes">3.2 Approval outcomes</h3>
+
+<p>A high-risk action can:</p>
+
+<ul class="list-level-0">
+  <li>be approved,</li>
+  <li>be denied,</li>
+  <li>time out (treated as denied behavior).</li>
+</ul>
+<p>Workflows may:</p>
+
+<ul class="list-level-0">
+  <li>fail (if no recovery path exists), or</li>
+  <li>continue through fallback routes (if configured).</li>
+</ul>
+<h2 id="4-quick-start">4. Quick Start</h2>
+
+<h3 id="41-one-click-dashboard-startup-windows">4.1 One-click dashboard startup (Windows)</h3>
+
+<ol class="list-level-0">
+  <li>Double-click <code>start_web.bat</code></li>
+  <li>Wait for startup logs</li>
+  <li>Browser opens automatically to <code>http://localhost:7070</code></li>
+</ol>
+<p>From the dashboard you can:</p>
+
+<ul class="list-level-0">
+  <li>view runtime status,</li>
+  <li>trigger built-in demo actions from the Actions panel,</li>
+  <li>review pending approvals,</li>
+  <li>approve/deny Tier-3 requests,</li>
+  <li>inspect recent activity events.</li>
+</ul>
+<h3 id="42-cli-startup-options">4.2 CLI startup options</h3>
+
+<ol class="list-level-0">
+  <li>Install dependencies:</li>
+</ol>
+<ul class="list-level-0">
+  <li><code>npm install</code></li>
+</ul>
+<ol class="list-level-0">
+  <li>Build:</li>
+</ol>
+<ul class="list-level-0">
+  <li><code>npm run build</code></li>
+</ul>
+<ol class="list-level-0">
+  <li>Start runtime demo:</li>
+</ol>
+<ul class="list-level-0">
+  <li><code>npm start</code></li>
+</ul>
+<ol class="list-level-0">
+  <li>Start persistent server mode:</li>
+</ol>
+<ul class="list-level-0">
+  <li><code>npm run start:server</code></li>
+</ul>
+<ol class="list-level-0">
+  <li>Run tests:</li>
+</ol>
+<ul class="list-level-0">
+  <li><code>npm test</code></li>
+</ul>
+<h2 id="4a-setup-wizard">4A. Setup Wizard</h2>
+
+<p>PRISM includes guided setup wizards to help you configure the system on first run. Three wizard surfaces are available — choose whichever matches your workflow.</p>
+
+<h3 id="4a1-when-to-use-each-wizard">4A.1 When to use each wizard</h3>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Surface</th>
+  <th>Best for</th>
+  <th>Launch method</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Web Wizard</strong></td>
+  <td>Browser-based users, visual configuration</td>
+  <td><code>start_wizard.bat</code> or navigate to <code>http://localhost:7070/setup</code></td>
+</tr>
+<tr>
+  <td><strong>Web Advanced Wizard</strong></td>
+  <td>Power users who want routing, guardian, CAC, and scheduler config</td>
+  <td>Navigate to <code>http://localhost:7070/setup/advanced</code></td>
+</tr>
+<tr>
+  <td><strong>TUI Wizard</strong></td>
+  <td>Terminal users with a rich terminal (colors, Unicode)</td>
+  <td><code>start_tui.bat</code> → Setup Wizard tab</td>
+</tr>
+<tr>
+  <td><strong>CLI Wizard</strong></td>
+  <td>Headless, SSH, Docker, CI environments</td>
+  <td><code>npm run setup</code> or <code>start_wizard.bat --cli</code></td>
+</tr>
+</tbody>
+</table></div>
+
+<h3 id="4a2-web-setup-wizard-4-step-basic">4A.2 Web Setup Wizard (4-step basic)</h3>
+
+<p>The web wizard guides you through four steps:</p>
+
+<ol class="list-level-0">
+  <li><strong>Execution Profile</strong> — Choose <code>Individual</code> (fast defaults, maximum capability) or <code>Business</code> (strict governance, approval pathways).</li>
+  <li><strong>Workspace Directory</strong> — Validate or change the <code>Prism_Refraction</code> workspace location. The wizard runs prerequisite checks (Node.js version, disk access, workspace structure).</li>
+  <li><strong>LLM Provider</strong> — Select your primary provider (Ollama, OpenAI, Anthropic, Google, Mistral, Groq, Together, DeepSeek, OpenRouter, etc.). Enter an API key if required. Use the "Test Connection" button to verify reachability.</li>
+  <li><strong>Summary</strong> — Review your selections, see the readiness check results, and launch PRISM.</li>
+</ol>
+<p><strong>To launch:</strong> Run <code>start_wizard.bat</code> (Windows) or navigate to <code>http://localhost:7070/setup</code> in your browser while the server is running. To re-run later, click the "✨ Setup Wizard" button in the dashboard sidebar or go to Provider &amp; Settings → Setup Wizard → "Re-run Setup Wizard".</p>
+
+<h3 id="4a3-web-advanced-wizard-8-step">4A.3 Web Advanced Wizard (8-step)</h3>
+
+<p>The advanced wizard extends the basic flow with four additional configuration steps:</p>
+
+<ol class="list-level-0">
+  <li><strong>Model Routing</strong> — Choose between Single Provider, Multi-Provider, or Modality-Based routing. Assign specific models to task roles (chat, code-generation, summarization, etc.) and accept AI-suggested optimal assignments.</li>
+  <li><strong>Guardian Agent</strong> — Configure the Guardian Agent's model, governance tier, and auto-start behavior.</li>
+  <li><strong>Identity (CAC)</strong> — Bind a character persona to an operator identity with email validation. Configure workspace hub for persistence.</li>
+  <li><strong>Browser &amp; Scheduler</strong> — Set up browser automation profiles and pre-configure scheduled jobs.</li>
+</ol>
+<p>At completion, the advanced wizard generates an <strong>Initialization Certificate</strong> — a packaged session record documenting every configuration choice for audit and compliance.</p>
+
+<h3 id="4a4-tui-setup-wizard">4A.4 TUI Setup Wizard</h3>
+
+<p>The TUI wizard mirrors the 4-step basic web wizard in a terminal-native interface built with React/Ink:</p>
+
+<ul class="list-level-0">
+  <li><strong>Navigation:</strong> Arrow keys to move, Space to select, Enter to confirm, Escape to go back.</li>
+  <li><strong>API Key input:</strong> Press <code>K</code> on the provider step to enter an API key (masked input).</li>
+  <li><strong>Progress:</strong> Visual progress bar at the top shows current step.</li>
+</ul>
+<p>Launch via <code>start_tui.bat</code> and select the Setup Wizard tab.</p>
+
+<h3 id="4a5-cli-setup-wizard">4A.5 CLI Setup Wizard</h3>
+
+<p>A pure readline-based wizard for headless and minimal environments. Zero UI dependencies — works over SSH, in Docker containers, and CI pipelines.</p>
+
+<p><strong>Launch:</strong></p>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">BASH</span>
+    <button class="copy-btn" onclick="copyCode('code-9b85spr', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-9b85spr"># Interactive 4-step wizard (auto-detects server)
+npm run setup
+
+# Via batch file (Windows)
+start_wizard.bat --cli
+
+# Via shell script (Linux/macOS)
+./start_wizard.sh --cli
+
+# Non-interactive mode (all options via flags)
+npm run setup -- --non-interactive --profile individual --provider ollama
+
+# Standalone mode (no server needed)
+npm run setup -- --standalone --non-interactive --profile individual --workspace /data/Prism_Refraction --provider ollama</code></pre>
+</div>
+
+
+<p><strong>Modes:</strong></p>
+
+<ul class="list-level-0">
+  <li><strong>Connected</strong> (default): Auto-detects PRISM server and uses the same <code>/api/setup/*</code> endpoints as the web wizard. Provider connectivity test included.</li>
+  <li><strong>Standalone</strong> (<code>--standalone</code> or auto-detected if server unreachable): Writes <code>.prism-preferences.json</code> directly using workspace-resolver functions. No server required.</li>
+  <li><strong>Non-interactive</strong> (<code>--non-interactive</code>): No prompts — reads all config from CLI flags and environment variables. Exit code <code>0</code> = success, <code>1</code> = failure, <code>2</code> = cancelled/missing args.</li>
+</ul>
+<p><strong>Features:</strong></p>
+
+<ul class="list-level-0">
+  <li>Arrow-key selection menus with visual feedback</li>
+  <li>Masked API key input for cloud providers</li>
+  <li>Inline provider connectivity test (connected mode)</li>
+  <li>Prerequisites checks (Node.js version, workspace directory)</li>
+  <li>Readiness summary at completion</li>
+  <li>Identical <code>.prism-preferences.json</code> output as web and TUI wizards</li>
+</ul>
+<h4 id="cli-advanced-wizard-8-step">CLI Advanced Wizard (8-Step)</h4>
+
+<p>For deep configuration, use the advanced CLI wizard which mirrors the 8-step web advanced wizard:</p>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">BASH</span>
+    <button class="copy-btn" onclick="copyCode('code-6tui49r', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-6tui49r">npm run setup:advanced</code></pre>
+</div>
+
+
+<p>Additional steps beyond the basic 4-step flow:</p>
+
+<ul class="list-level-0">
+  <li><strong>Model Routing</strong> — Choose single, multi-model, or modality-aware routing with per-role model overrides</li>
+  <li><strong>Guardian &amp; Agents</strong> — Select a GGUF model for local guardian, set authority tier and swarm topology</li>
+  <li><strong>CAC Identity</strong> — Bind a character to an operator identity for accountability</li>
+  <li><strong>Browser &amp; Scheduler</strong> — Pre-configure browser automation profile and scheduled tasks</li>
+  <li><strong>Initialization Certificate</strong> — Auto-generated provenance certificate at completion</li>
+</ul>
+<p>Profile-aware defaults are applied (e.g., business profiles default to strict governance tiers and star topology).</p>
+
+<h3 id="4a6-re-running-the-wizard">4A.6 Re-running the wizard</h3>
+
+<p>You can re-run the setup wizard at any time to change your profile, workspace, or provider:</p>
+
+<ul class="list-level-0">
+  <li><strong>Web:</strong> Click "✨ Setup Wizard" in the sidebar, or go to Provider &amp; Settings → Setup Wizard section → "Re-run Setup Wizard"</li>
+  <li><strong>Direct URL:</strong> <code>http://localhost:7070/setup?rerun=true</code></li>
+  <li><strong>TUI:</strong> Navigate to the Setup Wizard tab</li>
+  <li><strong>CLI:</strong> <code>npm run setup</code> or <code>start_wizard.bat --cli</code></li>
+</ul>
+<h3 id="4a7-troubleshooting">4A.7 Troubleshooting</h3>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Problem</th>
+  <th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td>Wizard page is blank</td>
+  <td>Ensure the server is running (<code>start_web.bat</code>). Check browser console for errors.</td>
+</tr>
+<tr>
+  <td>"Node.js 22+ required" check fails</td>
+  <td>Install Node.js 22 or later. Verify with <code>node --version</code>.</td>
+</tr>
+<tr>
+  <td>Provider test fails</td>
+  <td>Check that the provider is running (Ollama: <code>ollama serve</code>). For cloud providers, verify your API key.</td>
+</tr>
+<tr>
+  <td>Workspace directory check fails</td>
+  <td>Ensure the path exists and is writable. PRISM will create subdirectories automatically.</td>
+</tr>
+<tr>
+  <td>TUI wizard doesn't render</td>
+  <td>Ensure your terminal supports ANSI colors and Unicode. Try a modern terminal (Windows Terminal, iTerm2, Kitty).</td>
+</tr>
+</tbody>
+</table></div>
+
+<h2 id="5-dashboard-navigation">5. Dashboard Navigation</h2>
+
+<p>The PRISM dashboard (<code>http://localhost:7070</code>) is the primary operator interface. It uses a tab-based layout with collapsible panels for organized access to all runtime features.</p>
+
+<h3 id="51-tab-system">5.1 Tab system</h3>
+
+<p>The dashboard provides nine tabs across the top navigation bar:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Tab</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Chat Interface</strong></td>
+  <td>Conversational interface for interacting with the active LLM provider. Messages are scoped to the current chat session.</td>
+</tr>
+<tr>
+  <td><strong>Provider &amp; Settings</strong></td>
+  <td>Configure LLM providers, review model capabilities, adjust runtime settings, and audit provider switch history.</td>
+</tr>
+<tr>
+  <td><strong>Tools &amp; Plugins</strong></td>
+  <td>Browse all registered built-in tools, MCP plugins, and system utilities.</td>
+</tr>
+<tr>
+  <td><strong>Agentic Control</strong></td>
+  <td>Manage agents, assign per-agent models, orchestrate swarms, and view intelligent telemetry.</td>
+</tr>
+<tr>
+  <td><strong>Computer Control</strong></td>
+  <td>Local system info, shell execution, vision framebuffer, device management, and policy controls.</td>
+</tr>
+<tr>
+  <td><strong>Workspace</strong></td>
+  <td>Workspace location management, file browser, import manager, workspace settings, and git integration.</td>
+</tr>
+<tr>
+  <td><strong>Network</strong></td>
+  <td>Execute curated network commands, view interface data, and monitor network operations with tier-based governance.</td>
+</tr>
+<tr>
+  <td><strong>Telemetry</strong></td>
+  <td>View runtime performance metrics, retrieval quality cohorts, and alert status.</td>
+</tr>
+<tr>
+  <td><strong>Logs &amp; Debug</strong></td>
+  <td>Inspect the live activity event stream, errors, and debug-level trace output.</td>
+</tr>
+<tr>
+  <td><strong>Browser Control</strong></td>
+  <td>Playwright-powered browser automation with session management, viewport capture, network/console monitoring, DOM inspection, and governance-gated operations.</td>
+</tr>
+<tr>
+  <td><strong>Scheduler</strong></td>
+  <td>Full-year calendar, project management, kanban board, and Gantt timeline for scheduling and tracking work.</td>
+</tr>
+</tbody>
+</table></div>
+
+<p>Click any tab label to switch views. The active tab is visually highlighted and persists across data refreshes within your session.</p>
+
+<h3 id="52-collapsible-panels">5.2 Collapsible panels</h3>
+
+<p>Every panel within each tab has a collapsible header. Click the panel header (or the chevron indicator <code>▼</code>/<code>▶</code>) to toggle the panel body between expanded and collapsed states. This lets you focus on the panels most relevant to your current task without scrolling through unneeded information.</p>
+
+<h3 id="53-provider-settings-tab">5.3 Provider &amp; Settings tab</h3>
+
+<p>This tab contains five panels arranged top-to-bottom:</p>
+
+<p><strong>Session Provider Assignment</strong> — Shows the LLM provider and model currently bound to your active chat session. Use the dropdown selectors to choose a different provider/model, then click <strong>Apply</strong> to persist the change for that session.</p>
+
+<p><strong>Provider Configuration</strong> — Displays per-provider configuration for all supported LLM providers (OpenAI, Anthropic, Ollama, Custom). For each provider you can review or edit:</p>
+
+<ul class="list-level-0">
+  <li>Base URL</li>
+  <li>Comma-separated model list</li>
+  <li>Default model</li>
+  <li>API key presence (shown as <code>hasApiKey: true/false</code>; keys are never displayed)</li>
+</ul>
+<p>Use the <strong>Save</strong> button to persist non-secret settings. Use the <strong>Store API Key</strong> and <strong>Clear API Key</strong> buttons for secure credential management.</p>
+
+<p><strong>Model Capability Matrix &amp; Registry</strong> — A dynamically updated comparison grid displaying per-model capabilities (context window, vision, streaming, function-calling).</p>
+<ul class="list-level-0">
+  <li><strong>Dynamic Updates</strong>: Displays built-in profiles alongside user-registered runtime models and auto-discovered local models (e.g., from your running Ollama instance).</li>
+  <li><strong>Deprecation Warning Indicators</strong>: Models approaching sunset or marked deprecated display clear warnings, detailed deprecation reasons, and recommended successor models. Sunset/deprecated models are kept for legacy telemetry but de-prioritized for active tasks.</li>
+</ul>
+<p><strong>Advanced Model Routing Settings</strong> — Full operator configuration over how PRISM delegates tasks to models:</p>
+<ul class="list-level-0">
+  <li><strong>Routing Topologies</strong>: Switch between Single-Provider, Multi-Provider, and Modality-Based routing.</li>
+  <li><strong>AI-Assisted Routing</strong>: Enable AI suggestions to auto-assign the most qualified available model to specific task roles (e.g. Chat, Code-generation, Summarization, Research).</li>
+  <li><strong>Power Profile Modes</strong>: Set system-wide performance targets:</li>
+  <li><code>performance</code> — Routes to the highest capability tier models available.</li>
+  <li><code>eco</code> — Prioritizes local open-source models over paid cloud APIs, minimizing outbound API costs.</li>
+  <li><code>adaptive</code> — Inspects your local hardware VRAM. If local memory is sufficient, it routes tasks locally. If a model threatens to cause an Out-Of-Memory (OOM) crash, it dynamically routes the task to a cloud fallback.</li>
+</ul>
+<p><strong>Settings</strong> — Displays runtime system configuration:</p>
+
+<ul class="list-level-0">
+  <li>Server uptime and event count</li>
+  <li>Server running status</li>
+  <li>PRISM version and Node.js platform</li>
+  <li>Runtime readiness state</li>
+  <li>Currently active LLM provider, model, and active Power Mode (<code>performance</code> | <code>eco</code> | <code>adaptive</code>)</li>
+</ul>
+<p><strong>LLM Audit Trail</strong> — Session-scoped audit of provider/model switch events. Shows:</p>
+
+<ul class="list-level-0">
+  <li>Success and failure counts for provider switches</li>
+  <li>Recent transition history (<code>requested → selected</code>)</li>
+  <li><strong>Export JSON</strong> — Download the full audit payload as a <code>.json</code> file</li>
+  <li><strong>Copy JSON</strong> — Place the audit payload on your clipboard</li>
+  <li><strong>Export CSV</strong> — Download as a <code>.csv</code> file for spreadsheet analysis</li>
+</ul>
+<p><strong>Spectrum Refraction (SR) Model Orchestration</strong> — PRISM's novel tri-model parallel fan-out system. This panel lets you configure and activate SR mode, which generates simultaneously from three distinct model instances and fuses their outputs.</p>
+
+<p>SR panel controls:</p>
+
+<ul class="list-level-0">
+  <li><strong>Left (Logic) Model</strong>: Select a model qualified for analytical reasoning. The dropdown filters to logic-strength models via <code>filterSRLogicModels()</code>.</li>
+  <li><strong>Right (Creative) Model</strong>: Select a model qualified for creative synthesis and multimedia. The dropdown filters to creative-modality models via <code>filterSRCreativeModels()</code>.</li>
+  <li><strong>Main (Coordination) Model</strong>: Select the model that will aggregate Left + Right outputs into a unified response.</li>
+  <li><strong>Isolation Badge</strong>: Displays the current isolation quality level:</li>
+  <li>🔒 <strong>Full</strong> — Different providers (strongest isolation: separate API keys, infrastructure, rate limits)</li>
+  <li>🔏 <strong>Model</strong> — Same provider, different models (separate capabilities, shared key)</li>
+  <li>⛔ <strong>Insufficient</strong> — Same provider + same model (REJECTED — Activate button disabled)</li>
+  <li><strong>Cost Advisory</strong>: Estimates per-generation cost based on model pricing.</li>
+  <li><strong>Activate / Deactivate</strong>: Enable or disable SR mode. Activation re-validates isolation before enabling.</li>
+</ul>
+<p>When SR is active, chat messages are generated through the parallel fan-out pipeline:</p>
+
+<ol class="list-level-0">
+  <li>Left and Right hemispheres generate concurrently on your prompt</li>
+  <li>Outputs are tagged with <code>&lt;logic<em>analysis&gt;</code> and <code>&lt;creative</em>synthesis&gt;</code> XML sections</li>
+  <li>Main model receives both tagged sections and produces a unified compound response</li>
+  <li>The response appears in Chat with an SR badge showing the isolation level</li>
+</ol>
+<p>SR API endpoints (for programmatic access):</p>
+
+<ul class="list-level-0">
+  <li><code>GET /api/sr/status</code> — Returns current SR configuration, active state, and isolation level</li>
+  <li><code>POST /api/sr/configure</code> — Set Left/Right/Main model assignments (validates isolation)</li>
+  <li><code>POST /api/sr/activate</code> — Enable SR mode (re-validates isolation)</li>
+  <li><code>POST /api/sr/deactivate</code> — Disable SR mode</li>
+</ul>
+<h3 id="54-tools-plugins-tab">5.4 Tools &amp; Plugins tab</h3>
+
+<p>This tab contains three panels that inventory all PRISM capabilities:</p>
+
+<p><strong>Tools</strong> — Lists all 19 built-in tools organized into four categories:</p>
+
+<ul class="list-level-0">
+  <li><strong>System</strong> (7 tools): <code>file<em>read</code>, <code>file</em>write</code>, <code>file<em>delete</code>, <code>file</em>list</code>, <code>shell<em>exec</code>, <code>terminal</em>session</code>, <code>container_sandbox</code></li>
+  <li><strong>Application</strong> (5 tools): <code>email<em>ops</code>, <code>calendar</em>plan</code>, <code>notes<em>extract</code>, <code>tasks</em>timeline</code>, and <code>neo4j_query</code>-adjacent capabilities</li>
+  <li><strong>Knowledge</strong> (3 tools): <code>neo4j<em>query</code>, <code>memory</em>query</code>, <code>semantic_query</code></li>
+  <li><strong>Integration</strong> (4 tools): <code>http<em>request</code>, <code>nexus</em>check<em>hotline</code>, <code>nexus</em>read<em>memory</code>, <code>nexus</em>log<em>insight</code>, <code>nexus</em>broadcast</code></li>
+</ul>
+<p>Each tool entry shows:</p>
+
+<ul class="list-level-0">
+  <li>Tool name and one-line description</li>
+  <li>Risk level badge (green = low, amber = medium, red = high)</li>
+  <li>Mutation badge (green = read-only, amber = mutating)</li>
+</ul>
+<p><strong>Plugins</strong> — Lists all 7 registered MCP server plugins organized by source:</p>
+
+<ul class="list-level-0">
+  <li><strong>In-Repo</strong> (2 plugins): <code>ids-mcp</code> (identity services), <code>web-search-mcp</code> (web search)</li>
+  <li><strong>ImpressionCore Suite</strong> (5 plugins): <code>impressioncore-eds</code> (data services), <code>impressioncore-ipa</code> (process automation), <code>impressioncore-goliath</code> (data pipelines), <code>impressioncore-vrgc</code> (visual rendering), <code>impressioncore-dpa</code> (document processing)</li>
+</ul>
+<p>Each plugin entry shows:</p>
+
+<ul class="list-level-0">
+  <li>Plugin name and server type (Python MCP Server)</li>
+  <li>One-line description of capabilities</li>
+  <li>Active/Inactive status badge</li>
+</ul>
+<p><strong>Utilities</strong> — Lists all 30 system utilities organized into six categories:</p>
+
+<ul class="list-level-0">
+  <li><strong>Benchmarks &amp; Qualification</strong> (11): performance harnesses, qualification suites (e1–e4), release validation, CI gates, event lineage bundles</li>
+  <li><strong>Operator Services</strong> (5): SelfReviewScheduler, SessionTraceExplorer, PolicyAuditExporter, SessionPackageSqliteStore, DashboardService</li>
+  <li><strong>Memory &amp; Retrieval</strong> (5): SemanticMemoryIndex, EpisodicMemory, SessionMemoryStore, RetrievalMetricsCollector, RetrievalDashboardStore</li>
+  <li><strong>Activity &amp; Audit</strong> (3): ActivityBus, SqliteActivityStore, ConsoleActivitySubscriber</li>
+  <li><strong>Replay &amp; Verification</strong> (3): normalizeReplayEvent, buildReplaySignature, compareReplayParity</li>
+  <li><strong>Configuration</strong> (3): resolveExecutionProfileFromEnv, resolveEnvironmentProfile, getPerformanceSloProfile</li>
+</ul>
+<p>Each utility entry shows its name and a brief description of its function.</p>
+
+<h3 id="55-network-tab">5.5 Network tab</h3>
+
+<p>The Network tab provides dedicated network management capabilities organized into four collapsible panels:</p>
+
+<p><strong>Network Tools</strong> — A curated catalog of ~50 network commands classified by security tier:</p>
+
+<ul class="list-level-0">
+  <li><strong>Tier 1 — Diagnostics (Read-Only):</strong> <code>ipconfig</code>/<code>ifconfig</code>, <code>ping</code>, <code>nslookup</code>/<code>dig</code>, <code>tracert</code>/<code>traceroute</code>, <code>netstat</code>/<code>ss</code>, <code>arp</code>, <code>hostname</code>, <code>nbtstat</code>, <code>pathping</code>, <code>getmac</code>, <code>net view</code>, <code>net statistics</code>, <code>curl</code>/<code>wget</code>, <code>ip addr</code>/<code>ip route</code></li>
+  <li><strong>Tier 2 — Config Inspection (Conditional):</strong> <code>route print</code>, <code>netsh interface show</code>, <code>netsh wlan show</code>, <code>netsh firewall show</code>, <code>net use</code>, <code>net share</code>, <code>net session</code>, <code>net user</code>, <code>net localgroup</code>, <code>net config</code></li>
+  <li><strong>Tier 3 — Mutating Operations (Approval-Gated):</strong> <code>netsh interface set</code>, <code>netsh interface ip set</code>, <code>netsh firewall set</code>, <code>netsh wlan connect/disconnect</code>, <code>route add/delete/change</code>, <code>net start/stop</code>, <code>ip addr add/del</code>, <code>ip route add/del</code>, <code>iptables</code>/<code>ufw</code></li>
+</ul>
+<p>Each command shows its name, description, tier badge (green/amber/red), and platform badge (WIN/LINUX/CROSS).</p>
+
+<p><strong>Network Settings</strong> — Displays live network interface data from the local host. Click "Refresh Interfaces" to query the system and display all adapter details (IP addresses, MAC addresses, DHCP status, DNS servers, etc.).</p>
+
+<p><strong>Network Telemetry</strong> — Dashboard showing network operation metrics: total commands executed, per-tier counts (Tier 1/2/3), error count, and most recent command.</p>
+
+<p><strong>Network Console</strong> — An interactive command console for executing network commands in real time. Type a network command and press Enter or click Run. Output is displayed in a monospace pre-formatted area. Only commands from the curated allowlist are permitted; blocked patterns are rejected.</p>
+
+<h3 id="56-agentic-control-tab">5.6 Agentic Control tab</h3>
+
+<p>The Agentic Control tab is the operator interface for managing the PRISM agent fleet.</p>
+
+<p><strong>Agent Management</strong> — View all registered agents (built-in and dynamically spawned). Each agent card shows:</p>
+
+<ul class="list-level-0">
+  <li>Agent ID, role, and current lifecycle state (ephemeral / semi-permanent / permanent)</li>
+  <li>Assigned LLM provider and model (overridable per-agent)</li>
+  <li>Dispatch count, average response time, and last active timestamp</li>
+  <li>Controls: Stop, Promote (ephemeral → semi-permanent → permanent), Demote, Reassign Model</li>
+</ul>
+<p>Use the <strong>Launch Agent</strong> button to spawn a new agent instance with a selected role and model assignment.</p>
+
+<p><strong>Per-Agent Model Assignment</strong> — Each agent can be assigned a different LLM provider and model. The assignment is applied at dispatch time and confirmed in telemetry. Models can be switched dynamically on the fly without restarting the agent. The system uses the model capability matrix to validate that the assigned model meets the minimum tier requirement for the agent's role.</p>
+
+<p><strong>Sub-Agent Control</strong> — Displays the current task decomposition tree when the planner agent is active. Shows parent → child relationships, dependency links, and per-step status (pending / running / completed / failed).</p>
+
+<p><strong>Swarm Control</strong> — Orchestrate multi-agent goal completion using four topologies:</p>
+
+<ul class="list-level-0">
+  <li><strong>Mesh</strong>: all agents communicate peer-to-peer</li>
+  <li><strong>Star</strong>: one coordinator dispatches to N workers</li>
+  <li><strong>Pipeline</strong>: sequential handoff from agent to agent</li>
+  <li><strong>Broadcast</strong>: one message to all agents, aggregate results</li>
+</ul>
+<p>Create a swarm by selecting a topology, assigning agents, and defining the goal. The swarm coordinator manages lifecycle, timeout, and result aggregation.</p>
+
+<p><strong>Agent Telemetry</strong> — Intelligent tracking dashboard that learns from agent dispatch patterns:</p>
+
+<ul class="list-level-0">
+  <li>Dispatch frequency analysis per agent and role</li>
+  <li>Model performance comparison (latency, token usage, quality proxy)</li>
+  <li>Promotion recommendations (ephemeral agents that consistently perform well)</li>
+  <li>Efficiency patterns and bottleneck detection</li>
+  <li>Historical trends with configurable time windows</li>
+</ul>
+<h3 id="57-scheduler-tab">5.7 Scheduler tab</h3>
+
+<p>The Scheduler tab provides integrated project management and scheduling capabilities with four sub-views:</p>
+
+<p><strong>Calendar</strong> — A Google-like full calendar with year, month, week, and day views. Events are color-coded by category (meeting, deadline, milestone, reminder, blocked, general). Click any date to drill down; dots on mini-calendar cells indicate days with events. Create events via the <strong>+ Event</strong> button with title, date/time, category, location, and all-day support.</p>
+
+<p><strong>Projects</strong> — Card-based project overview showing all projects with progress bars, task counts, milestone counts, and completion percentages. Click a project card to see its milestones and tasks in a detail modal. Create projects via the <strong>+ Project</strong> button.</p>
+
+<p><strong>Board</strong> — A Kanban board with five columns: Backlog, To Do, In Progress, Review, and Done. Tasks are shown as draggable cards with priority indicators (colored left border), labels, assignees, and progress bars. Drag cards between columns to update task status. Create tasks via the <strong>+ Task</strong> button.</p>
+
+<p><strong>Timeline</strong> — A Gantt chart showing all tasks with start/end dates plotted on a time axis. Bars are color-coded by status. A vertical line marks today. The timeline auto-ranges to cover the current quarter.</p>
+
+<p><strong>Scheduling engine</strong> — The backend <code>SchedulerEngine</code> supports both one-time and recurring schedules using standard cron expressions. Scheduled actions are audited through the ActivityBus. Schedules are managed via the <code>/api/scheduler/schedules</code> API endpoint.</p>
+
+<p><strong>Data persistence</strong> — Calendar events are stored in <code>{workspace}/calendar/</code>, projects in <code>{workspace}/projects/</code>, and tasks within their respective project files. All data is JSON-backed and survives restarts.</p>
+
+<h3 id="58-browser-control-tab">5.8 Browser Control tab</h3>
+
+<p>The Browser Control tab provides Playwright-powered browser automation with full governance integration. It contains five sub-views:</p>
+
+<p><strong>Sessions</strong> — Manage browser sessions. Launch new sessions (headless or headed), view active session states, and close sessions. Each session runs in an isolated Playwright BrowserContext for security.</p>
+
+<p><strong>Viewport</strong> — Live browser interaction. Enter a URL in the address bar and navigate. Take screenshots of the current page (rendered as inline images). Use the click and type inputs to interact with page elements via CSS selectors.</p>
+
+<p><strong>Network</strong> — Network waterfall log showing all HTTP requests/responses captured during the session, including URL, method, status code, content type, and response size.</p>
+
+<p><strong>Console</strong> — Browser console output captured from the page, showing log level (log, warn, error, info, debug) and message text.</p>
+
+<p><strong>DOM</strong> — Full DOM snapshot of the current page rendered as syntax-highlighted HTML source.</p>
+
+<h2 id="appendix-computer-use-core-business-operator-guardrails-2026-03-25">Appendix: Computer Use Core — Business Operator Guardrails (2026-03-25)</h2>
+
+<p>For Business profile operations, computer use must be treated as governed automation, not unconstrained autonomy.</p>
+
+<p>Operator requirements:</p>
+
+<ol class="list-level-0">
+  <li>Use approvals and confirmation checkpoints for consequential actions.</li>
+  <li>Run computer-use operations in sandboxed/isolated environments.</li>
+  <li>Validate audit traces for high-risk browser/terminal/container actions.</li>
+  <li>Treat external benchmark claims as informational unless explicitly marked Prism-validated.</li>
+</ol>
+<p>Related references:</p>
+
+<ul class="list-level-0">
+  <li><code>COMPUTER<em>USE</em>COMPREHENSIVE<em>DEEP</em>DIVE.md</code></li>
+  <li><code>PRODUCTION<em>RELEASE</em>RUNBOOK.md</code></li>
+  <li><code>BUSINESS<em>TRUST</em>PROVENANCE_POLICY.md</code></li>
+</ul>
+<p><strong>Governance</strong> — Browser actions are gated by governance tiers. Navigation, click, and type are medium-risk. JavaScript evaluation is high-risk with rollback required. Screenshots and read-only operations are low-risk. All actions emit ActivityBus events for audit.</p>
+
+<p><strong>Session lifecycle</strong> — Sessions progress through states: <code>idle → launching → active ⇄ navigating → terminated</code>. Sessions auto-close after 10 minutes of inactivity.</p>
+
+<h2 id="6-workspace-persistence">6. Workspace &amp; Persistence</h2>
+
+<p>PRISM stores all runtime artifacts, databases, and configuration in a persistent workspace directory outside the source tree. This prevents data loss during project updates and keeps the repository clean.</p>
+
+<h3 id="61-default-workspace-location">6.1 Default workspace location</h3>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Platform</th>
+  <th>Default Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Windows</td>
+  <td><code>%USERPROFILE%\Documents\Prism_Refraction</code></td>
+</tr>
+<tr>
+  <td>macOS</td>
+  <td><code>~/Documents/Prism_Refraction</code></td>
+</tr>
+<tr>
+  <td>Linux</td>
+  <td><code>$XDG<em>DATA</em>HOME/Prism<em>Refraction</code> (fallback: <code>~/.local/share/Prism</em>Refraction</code>)</td>
+</tr>
+</tbody>
+</table></div>
+
+<p>Override the location by setting the <code>PRISM<em>WORKSPACE</em>ROOT</code> environment variable before starting PRISM.</p>
+
+<h3 id="62-workspace-structure">6.2 Workspace structure</h3>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">TEXT</span>
+    <button class="copy-btn" onclick="copyCode('code-vxfhriy', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-vxfhriy">Prism_Refraction/
+  prism-workspace.json        # manifest (version, creation date, profile, platform)
+  config/                     # MCP settings, runtime config
+  artifacts/
+    benchmarks/               # performance qualification results
+    releases/                 # release candidate packages
+    self-review/              # self-review scheduler output
+    contracts/                # tool contract snapshots and diffs
+    ci-gates/                 # CI gate summaries
+    packages/                 # session export packages
+  data/
+    tasks/                    # tasks tool data
+    notes/                    # notes tool data
+    email/                    # email tool data
+    calendar/                 # calendar tool data
+  state/
+    container-snapshots/      # container sandbox snapshots
+  characters/                 # agent character briefs (JSON)
+  logs/                       # runtime logs
+  workspace/                  # general workspace storage</code></pre>
+</div>
+
+
+<h3 id="63-dashboard-visibility">6.3 Dashboard visibility</h3>
+
+<p>The <strong>Settings</strong> panel on the Provider &amp; Settings tab shows the active <strong>Workspace Root</strong> path so you can always confirm where data is being stored.</p>
+
+<h3 id="64-legacy-path-migration">6.4 Legacy path migration</h3>
+
+<p>If PRISM detects data at old CWD-relative locations (<code>prism-output/</code>, <code>prism-data/</code>, <code>prism-activity.db</code>, <code>.mcp/</code>), a console notice will suggest moving them to the new workspace. Existing environment variable overrides (<code>PRISM<em>DATA</em>DIR</code>, <code>PRISM<em>PERF</em>OUTPUT_PATH</code>, etc.) continue to take precedence over workspace defaults.</p>
+
+<h2 id="7-approval-workflow-operator-perspective">7. Approval workflow (operator perspective)</h2>
+
+<p>When a Tier-3 action is triggered, PRISM emits:</p>
+
+<ul class="list-level-0">
+  <li>approval request event,</li>
+  <li>pending approval ID,</li>
+  <li>approve/deny endpoints,</li>
+  <li>timeout window.</li>
+</ul>
+<p>Operator options:</p>
+
+<ul class="list-level-0">
+  <li>approve action,</li>
+  <li>deny action,</li>
+  <li>do nothing (timeout).</li>
+</ul>
+<p>Expected behavior:</p>
+
+<ul class="list-level-0">
+  <li>approved action executes,</li>
+  <li>denied/timed-out action is blocked,</li>
+  <li>workflow either fails or takes fallback route.</li>
+</ul>
+<h2 id="8-memory-tools">8. Memory tools</h2>
+
+<h3 id="71-semanticquery">7.1 semantic_query</h3>
+
+<p>Purpose:</p>
+
+<ul class="list-level-0">
+  <li>retrieve semantically similar events to a query string.</li>
+</ul>
+<h3 id="72-memoryquery">7.2 memory_query</h3>
+
+<p>Modes:</p>
+
+<ul class="list-level-0">
+  <li><code>semantic</code></li>
+  <li><code>episodic_recent</code></li>
+  <li><code>session_summary</code></li>
+  <li><code>all</code></li>
+</ul>
+<p>Typical use:</p>
+
+<ul class="list-level-0">
+  <li>inspect what happened,</li>
+  <li>recover context,</li>
+  <li>inform next action selection.</li>
+</ul>
+<h2 id="9-workflow-behavior-in-plain-language">9. Workflow behavior in plain language</h2>
+
+<p>A workflow is a sequence of steps. Each step can be retried and can have a timeout.</p>
+
+<p>If a step fails or times out:</p>
+
+<ul class="list-level-0">
+  <li>PRISM checks whether a fallback route is defined.</li>
+  <li>If yes, PRISM continues via fallback.</li>
+  <li>If not, workflow ends as failed.</li>
+</ul>
+<p>This is intentional and tested behavior.</p>
+
+<h2 id="10-operational-troubleshooting">10. Operational troubleshooting</h2>
+
+<h3 id="91-high-risk-step-never-executed">9.1 High-risk step never executed</h3>
+
+<p>Possible causes:</p>
+
+<ul class="list-level-0">
+  <li>approval denied,</li>
+  <li>approval timeout,</li>
+  <li>policy denied operation before approval.</li>
+</ul>
+<p>Check:</p>
+
+<ul class="list-level-0">
+  <li>governance events in activity trace,</li>
+  <li>approval queue activity.</li>
+</ul>
+<h3 id="92-workflow-unexpectedly-failed">9.2 Workflow unexpectedly failed</h3>
+
+<p>Check:</p>
+
+<ul class="list-level-0">
+  <li>whether failure step had fallback rule,</li>
+  <li>whether fallback condition matched actual outcome,</li>
+  <li>whether retries were exhausted.</li>
+</ul>
+<h3 id="93-memory-query-seems-weak">9.3 Memory query seems weak</h3>
+
+<p>Check:</p>
+
+<ul class="list-level-0">
+  <li>query wording specificity,</li>
+  <li>session size,</li>
+  <li>retrieval metrics and latency output.</li>
+</ul>
+<h2 id="11-best-practices-for-operators">11. Best practices for operators</h2>
+
+<ol class="list-level-0">
+  <li>Keep rollback plans explicit for mutating actions.</li>
+  <li>Use staged workflows for critical operations.</li>
+  <li>Require approval for any sensitive file/system changes.</li>
+  <li>Monitor retrieval quality and investigate drift.</li>
+  <li>Review traces after incidents and update policy/tool rules.</li>
+</ol>
+<h2 id="12-character-accountability-identity">12. Character Accountability &amp; Identity</h2>
+
+<p>PRISM enforces a Character Accountability Control (CAC) model that links every agent action to a verifiable identity chain.</p>
+
+<h3 id="121-identity-fields-you-provide">12.1 Identity fields you provide</h3>
+
+<p>When assigning a character to an agent session, the following identity fields are required:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Field</th>
+  <th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>characterId</code></td>
+  <td>The character brief (from <code>characters/*.json</code>) defining the agent's persona and constraints.</td>
+</tr>
+<tr>
+  <td><code>prismUserEmail</code></td>
+  <td>The email of the Prism platform user under which the agent operates.</td>
+</tr>
+<tr>
+  <td><code>operatorEmail</code></td>
+  <td>The email of the human operator responsible for this session.</td>
+</tr>
+<tr>
+  <td><code>clientId</code></td>
+  <td>An identifier for the client application (e.g., dashboard, CLI, API caller).</td>
+</tr>
+<tr>
+  <td><code>sessionId</code></td>
+  <td>The current session identifier.</td>
+</tr>
+<tr>
+  <td><code>executionProfile</code></td>
+  <td>The target profile: <code>individual</code>, <code>business</code>, <code>enterprise</code>, or <code>corporate</code>.</td>
+</tr>
+</tbody>
+</table></div>
+
+<h3 id="122-profile-behavior-differences">12.2 Profile behavior differences</h3>
+
+<ul class="list-level-0">
+  <li><strong>Individual profile</strong>: any valid email is accepted for both Prism user and operator. No domain constraints.</li>
+  <li><strong>Business profile</strong>: the Prism user and operator email domains must match. If an <code>allowedDomains</code> list is configured, both emails must belong to a listed domain.</li>
+  <li><strong>Enterprise / Corporate</strong>: these are aliases that resolve to the <code>business</code> profile and follow its rules.</li>
+</ul>
+<h3 id="123-lifecycle-states">12.3 Lifecycle states</h3>
+
+<p>Each character assignment progresses through these states:</p>
+
+<ol class="list-level-0">
+  <li><strong>Assigned</strong> — character is bound to operator/session; ready for dispatch.</li>
+  <li><strong>Active</strong> — at least one dispatch has occurred.</li>
+  <li><strong>Suspended</strong> — temporarily paused by operator or policy (with a reason code). No further dispatches until resumed.</li>
+  <li><strong>Revoked</strong> — permanently terminated. Cannot be resumed.</li>
+</ol>
+<h3 id="124-inspecting-accountability-traces">12.4 Inspecting accountability traces</h3>
+
+<p>All activity events emitted during a governed session carry the full accountability chain:</p>
+
+<ul class="list-level-0">
+  <li><code>characterId</code>, <code>prismUserEmail</code>, <code>operatorEmail</code>, <code>clientId</code>, <code>assignmentId</code>, <code>executionProfileSegment</code></li>
+</ul>
+<p>These fields are included in the SHA-256 integrity hash, so any post-hoc modification is detectable. Use the <strong>Logs &amp; Debug</strong> tab or the <code>/api/events</code> endpoint to query events filtered by operator email, character ID, or profile segment.</p>
+
+<h3 id="125-troubleshooting">12.5 Troubleshooting</h3>
+
+<ul class="list-level-0">
+  <li><strong>"Domain mismatch" error on assignment</strong>: In business profile, the Prism user and operator emails must share the same domain (e.g., both <code>@acme.com</code>). Switch to individual profile or ensure matching domains.</li>
+  <li><strong>"Invalid email" error</strong>: The email format is validated at assignment time. Ensure a valid <code>user@domain.tld</code> format.</li>
+  <li><strong>Cannot resume a revoked assignment</strong>: Revocation is terminal by design. Create a new assignment to continue.</li>
+</ul>
+<h2 id="13-security-and-trust-expectations">13. Security and trust expectations</h2>
+
+<p>PRISM is designed to increase trust through:</p>
+
+<ul class="list-level-0">
+  <li>deterministic governance decisions,</li>
+  <li>explicit approval boundaries,</li>
+  <li>auditable event streams,</li>
+  <li>fail-safe timeout/denial handling.</li>
+</ul>
+<h3 id="131-session-lifecycle">13.1 Session lifecycle</h3>
+
+<p>PRISM cannot be used until an operator chat session is established. Every tool execution, agent dispatch, and governance decision is scoped to the active session.</p>
+
+<ul class="list-level-0">
+  <li><strong>Individual profile</strong>: A default session is created automatically on first launch.</li>
+  <li><strong>Business profile</strong>: You must explicitly create a session before any operations can proceed.</li>
+</ul>
+<p>To create a session, use the <strong>Chat</strong> tab and click <strong>New Session</strong>. To switch sessions, use the session dropdown. All actions within a session are recorded and visible in that session's context.</p>
+
+<h3 id="132-local-only-data-storage">13.2 Local-only data storage</h3>
+
+<p>All PRISM data — chat history, activity logs, model configurations, and agent state — is stored locally on your machine in the workspace directory (see Section 3 for the default location). No data is sent to external servers except LLM API calls to your configured providers.</p>
+
+<h3 id="133-api-key-security">13.3 API key security</h3>
+
+<p>LLM provider API keys are stored locally in the workspace and transmitted only to the respective provider API during generation requests. Keys are never logged in activity events, debug output, or chat history.</p>
+
+<h3 id="134-localhost-binding">13.4 Localhost binding</h3>
+
+<p>The PRISM dashboard binds to <code>localhost:7070</code> by default, meaning it is accessible only from your local machine. No external network exposure is configured. If you need remote access, place PRISM behind a TLS reverse proxy.</p>
+
+<h3 id="135-action-visibility">13.5 Action visibility</h3>
+
+<p>Every action PRISM takes on your behalf is visible in two places:</p>
+
+<ul class="list-level-0">
+  <li><strong>Chat tab</strong>: Tool calls appear inline in the conversation with tool name, arguments, result, and duration.</li>
+  <li><strong>Logs tab</strong>: The activity log shows a complete, filterable record of all events with severity levels, governance decisions, and timestamps.</li>
+</ul>
+<p>This dual-surface visibility ensures no action is hidden from the operator.</p>
+
+<h3 id="136-approval-safeguards">13.6 Approval safeguards</h3>
+
+<p>High-risk operations (tier 3) require explicit operator approval before execution. If you do not respond within 2 minutes, the action is automatically denied. Approval requests appear in the dashboard and are never auto-approved.</p>
+
+<h2 id="14-where-to-learn-more">14. Where to learn more</h2>
+
+<ul class="list-level-0">
+  <li>Architecture and strategy: <code>README.md</code></li>
+  <li>Product requirements and roadmap intent: <code>PRISM_PRD.md</code></li>
+  <li>Engineering implementation standards: <code>DEVELOPER_GUIDE.md</code></li>
+  <li>Milestone status: <code>ROADMAP.md</code></li>
+</ul>
+<h2 id="15-external-references">15. External references</h2>
+
+<ol class="list-level-0">
+  <li>&lt;https://www.anthropic.com/engineering/building-effective-agents&gt;</li>
+  <li>&lt;https://arxiv.org/abs/2210.03629&gt;</li>
+  <li>&lt;https://arxiv.org/abs/2302.04761&gt;</li>
+  <li>&lt;https://arxiv.org/abs/2303.17580&gt;</li>
+  <li>&lt;https://modelcontextprotocol.io/introduction&gt;</li>
+  <li>&lt;https://www.nist.gov/itl/ai-risk-management-framework&gt;</li>
+</ol>
+
+      </article>
+    </div>
+  </main>
+
+  <script>
+    // Theme toggle logic
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      html.setAttribute('data-theme', newTheme);
+      updateThemeIcon(newTheme);
+      localStorage.setItem('prism-docs-theme', newTheme);
+      
+      // Re-initialize mermaid to match the new theme if needed
+      if (window.mermaid) {
+        mermaid.initialize({ 
+          startOnLoad: true, 
+          theme: newTheme === 'dark' ? 'dark' : 'default' 
+        });
+      }
+    }
+    
+    function updateThemeIcon(theme) {
+      const icon = document.getElementById('theme-icon');
+      if (theme === 'dark') {
+        icon.innerHTML = `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
+      } else {
+        // Render moon icon
+        icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`;
+      }
+    }
+    
+    // Auto-load theme
+    const savedTheme = localStorage.getItem('prism-docs-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+    
+    // Initialize Mermaid
+    mermaid.initialize({ 
+      startOnLoad: true, 
+      theme: savedTheme === 'dark' ? 'dark' : 'default',
+      securityLevel: 'loose'
+    });
+    
+    // Copy code button logic
+    function copyCode(codeId, btnElement) {
+      const codeElement = document.getElementById(codeId);
+      if (!codeElement) return;
+      
+      const textArea = document.createElement("textarea");
+      textArea.value = codeElement.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      
+      try {
+        document.execCommand("copy");
+        // Update button visual state
+        const textSpan = btnElement.querySelector('span');
+        const origText = textSpan.textContent;
+        textSpan.textContent = "Copied!";
+        btnElement.style.borderColor = "var(--alert-tip-border)";
+        btnElement.style.color = "var(--alert-tip-border)";
+        
+        setTimeout(() => {
+          textSpan.textContent = origText;
+          btnElement.style.borderColor = "";
+          btnElement.style.color = "";
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy code: ", err);
+      }
+      
+      document.body.removeChild(textArea);
+    }
+    
+    // Toggle Mobile Sidebar
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('open');
+    }
+    
+    // Active heading tracking in TOC on scroll
+    window.addEventListener('DOMContentLoaded', () => {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('id');
+          if (entry.intersectionRatio > 0) {
+            document.querySelectorAll('.toc-list li').forEach(li => {
+              li.classList.remove('active');
+            });
+            const activeLi = document.querySelector(`.toc-list li a[href="#${id}"]`);
+            if (activeLi) {
+              activeLi.parentElement.classList.add('active');
+            }
+          }
+        });
+      }, { rootMargin: '0px 0px -60% 0px' });
+      
+      // Track all headers
+      document.querySelectorAll('article h1, article h2, article h3, article h4').forEach(header => {
+        observer.observe(header);
+      });
+    });
+  </script>
+</body>
+</html>

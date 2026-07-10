@@ -42,3 +42,14 @@ __pycache__/
 # Plugin signing private keys — must be stored in operator-controlled secret manager
 config/plugin-private-key*.pem
 *.priv.pem
+
+# Secrets and backups
+client_secret*.json
+*.bak
+*.tmp*
+
+# Large media files
+*.mp4
+*.m4a
+*.wav
+*.mp3

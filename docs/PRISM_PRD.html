@@ -1,0 +1,2094 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRISM PRD - PRISM Documentation</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  
+  <style>
+    :root {
+      /* Theme color tokens - Dark (Default) */
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131a2b;
+      --bg-tertiary: #1b263e;
+      --border-color: #263554;
+      --border-glow: rgba(38, 53, 84, 0.4);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #38bdf8;
+      --accent-secondary: #0ea5e9;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      
+      --code-bg: #090d16;
+      --code-text: #e2e8f0;
+      
+      /* Alerts color coding */
+      --alert-note-bg: rgba(56, 189, 248, 0.08);
+      --alert-note-border: #0ea5e9;
+      --alert-tip-bg: rgba(52, 211, 153, 0.08);
+      --alert-tip-border: #10b981;
+      --alert-important-bg: rgba(99, 102, 241, 0.08);
+      --alert-important-border: #6366f1;
+      --alert-warning-bg: rgba(251, 191, 36, 0.08);
+      --alert-warning-border: #f59e0b;
+      --alert-caution-bg: rgba(244, 63, 94, 0.08);
+      --alert-caution-border: #f43f5e;
+      
+      --sidebar-width: 320px;
+    }
+    
+    [data-theme="light"] {
+      /* Theme color tokens - Light */
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --border-color: #cbd5e1;
+      --border-glow: rgba(203, 213, 225, 0.4);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-secondary: #0369a1;
+      --accent-glow: rgba(2, 132, 199, 0.1);
+      
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      
+      --alert-note-bg: rgba(14, 165, 233, 0.05);
+      --alert-tip-bg: rgba(16, 185, 129, 0.05);
+      --alert-important-bg: rgba(99, 102, 241, 0.05);
+      --alert-warning-bg: rgba(245, 158, 11, 0.05);
+      --alert-caution-bg: rgba(244, 63, 94, 0.05);
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* Layout */
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      overflow-y: auto;
+      transition: background-color 0.3s, border-color 0.3s;
+    }
+    
+    .main-viewport {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      min-height: 100vh;
+      padding: 3rem 4rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .article-container {
+      width: 100%;
+      max-width: 880px;
+    }
+    
+    /* Sidebar Header & Brand */
+    .sidebar-header {
+      padding: 1.75rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-family: 'Outfit', sans-serif;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: 0.5px;
+      background: linear-gradient(to right, var(--text-primary), var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    /* Theme Toggle */
+    .theme-toggle-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .theme-toggle-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .theme-toggle-btn svg {
+      transition: transform 0.3s;
+    }
+    
+    .theme-toggle-btn:hover svg {
+      transform: rotate(20deg);
+    }
+    
+    /* Sidebar Navigation Links */
+    .sidebar-nav {
+      padding: 1.5rem 1rem;
+      flex-grow: 1;
+    }
+    
+    .toc-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      padding-left: 0.75rem;
+    }
+    
+    .toc-list {
+      list-style: none;
+    }
+    
+    .toc-item {
+      margin-bottom: 0.35rem;
+    }
+    
+    .toc-item a {
+      display: block;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: background-color 0.2s, color 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .toc-item a:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+    }
+    
+    .toc-item.active a {
+      background-color: var(--accent-glow);
+      color: var(--accent-primary);
+      font-weight: 500;
+      border-left: 2px solid var(--accent-primary);
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    
+    .toc-item-level-1 { padding-left: 0; }
+    .toc-item-level-2 { padding-left: 0.75rem; }
+    .toc-item-level-3 { padding-left: 1.5rem; }
+    .toc-item-level-4 { padding-left: 2.25rem; }
+    
+    /* Markdown Article Styles */
+    article h1, article h2, article h3, article h4, article h5, article h6 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2.25rem;
+      margin-bottom: 1rem;
+      line-height: 1.35;
+    }
+    
+    article h1 {
+      font-size: 2.5rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      letter-spacing: -0.5px;
+    }
+    
+    article h2 {
+      font-size: 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.4rem;
+      margin-top: 3rem;
+    }
+    
+    article h3 { font-size: 1.35rem; }
+    article h4 { font-size: 1.15rem; }
+    
+    article p {
+      margin-bottom: 1.25rem;
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+    
+    article a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-bottom-color 0.2s;
+    }
+    
+    article a:hover {
+      border-bottom-color: var(--accent-primary);
+    }
+    
+    /* Lists */
+    article ul, article ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+    
+    article li {
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }
+    
+    article li strong {
+      color: var(--text-primary);
+    }
+    
+    /* Inline Code */
+    article code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--accent-primary);
+      word-break: break-word;
+    }
+    
+    /* Blockquotes */
+    article blockquote {
+      border-left: 4px solid var(--border-color);
+      padding: 0.75rem 1.25rem;
+      background-color: var(--bg-secondary);
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1.5rem;
+    }
+    
+    article blockquote p {
+      margin-bottom: 0;
+      font-style: italic;
+    }
+    
+    /* Horizontal Rule */
+    article hr {
+      border: 0;
+      height: 1px;
+      background-color: var(--border-color);
+      margin: 3rem 0;
+    }
+    
+    /* Code Cards */
+    .code-card {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 1.75rem;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .code-card-header {
+      padding: 0.5rem 1rem;
+      background-color: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .code-card-lang {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .copy-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .code-card pre {
+      margin: 0;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    
+    .code-card code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      background: none;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      color: var(--code-text);
+      word-break: normal;
+      white-space: pre;
+    }
+    
+    /* Tables */
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.925rem;
+      text-align: left;
+    }
+    
+    th {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      padding: 0.85rem 1.25rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+    
+    td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      background-color: var(--bg-secondary);
+      transition: background-color 0.2s;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    tr:hover td {
+      background-color: var(--bg-tertiary);
+    }
+    
+    /* GitHub Style Alerts */
+    .alert-box {
+      border-left: 4px solid var(--border-color);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    
+    .alert-box-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.875rem;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+    
+    .alert-box-content {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    
+    .alert-box-content a {
+      font-weight: 500;
+    }
+    
+    .alert-note {
+      background-color: var(--alert-note-bg);
+      border-left-color: var(--alert-note-border);
+    }
+    
+    .alert-note .alert-box-header {
+      color: var(--alert-note-border);
+    }
+    
+    .alert-tip {
+      background-color: var(--alert-tip-bg);
+      border-left-color: var(--alert-tip-border);
+    }
+    
+    .alert-tip .alert-box-header {
+      color: var(--alert-tip-border);
+    }
+    
+    .alert-important {
+      background-color: var(--alert-important-bg);
+      border-left-color: var(--alert-important-border);
+    }
+    
+    .alert-important .alert-box-header {
+      color: var(--alert-important-border);
+    }
+    
+    .alert-warning {
+      background-color: var(--alert-warning-bg);
+      border-left-color: var(--alert-warning-border);
+    }
+    
+    .alert-warning .alert-box-header {
+      color: var(--alert-warning-border);
+    }
+    
+    .alert-caution {
+      background-color: var(--alert-caution-bg);
+      border-left-color: var(--alert-caution-border);
+    }
+    
+    .alert-caution .alert-box-header {
+      color: var(--alert-caution-border);
+    }
+    
+    /* Mermaid Diagrams Styling */
+    .mermaid {
+      background-color: var(--bg-secondary) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Image and Figures */
+    .content-image {
+      margin: 2rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .content-image img {
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .content-image figcaption {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+    }
+    
+    /* Responsive Design adjustments */
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      
+      .main-viewport {
+        margin-left: 0;
+        width: 100%;
+        padding: 2rem 1.5rem;
+      }
+      
+      /* Toggle Sidebar Menu trigger for mobile */
+      .menu-trigger {
+        display: flex;
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        cursor: pointer;
+        z-index: 1000;
+      }
+    }
+    
+    @media (min-width: 1025px) {
+      .menu-trigger {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Menu trigger for small screens -->
+  <button class="menu-trigger" onclick="toggleSidebar()">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+
+  <!-- Left Sidebar (TOC) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-group">
+        <div class="brand-logo">Δ</div>
+        <div class="brand-title">PRISM</div>
+      </div>
+      <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
+        <svg id="theme-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Sun icon -->
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <div class="toc-title">Table of Contents</div>
+      <ul class="toc-list">
+  <li class="toc-item toc-item-level-1"><a href="#prism-product-requirements-document-prd">PRISM Product Requirements Document PRD</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#1-executive-summary">1 Executive Summary</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#2-product-thesis">2 Product Thesis</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#3-problem-statement">3 Problem Statement</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#4-agentic-landscape-findings">4 Agentic Landscape Findings</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#41-core-architectural-finding">41 Core architectural finding</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#42-reasoning-acting-loop-requirement">42 Reasoning  acting loop requirement</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#43-tooling-as-capability-multiplier">43 Tooling as capability multiplier</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#44-controller-worker-decomposition">44 Controller-worker decomposition</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#45-governance-as-platform-requirement">45 Governance as platform requirement</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#5-product-goals">5 Product Goals</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#51-primary-goals">51 Primary goals</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#52-non-goals-current-horizon">52 Non-goals current horizon</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#6-existing-baseline-repository-aligned">6 Existing Baseline Repository-Aligned</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#7-novelty-roadmap-prism-specific">7 Novelty Roadmap PRISM-specific</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#71-novel-capability-a-constitutional-causal-compiler-ccc">71 Novel Capability A Constitutional Causal Compiler CCC</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#72-novel-capability-b-dual-lens-memory-arbitration-dlma">72 Novel Capability B Dual-Lens Memory Arbitration DLMA</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#73-novel-capability-c-self-healing-workflow-synthesis-shws">73 Novel Capability C Self-Healing Workflow Synthesis SHWS</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#8-functional-requirements">8 Functional Requirements</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#81-governance-and-authority">81 Governance and authority</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#82-workflow-execution">82 Workflow execution</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#83-memory-and-retrieval">83 Memory and retrieval</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#84-observability-and-audit">84 Observability and audit</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#84a-character-accountability-control-cac">84A Character Accountability Control CAC</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#84b-advanced-model-routing-and-model-matrix">84B Advanced Model Routing and Model Matrix</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#84b1-advanced-model-routing">84B1 Advanced Model Routing</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#84b2-advanced-model-matrix-exclusive-core">84B2 Advanced Model Matrix Exclusive Core</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#85-individual-native-mvp-capabilities-phase-1">85 Individual-native MVP capabilities Phase 1</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#86-capability-parity-program-requirements-phase-d2">86 Capability parity program requirements Phase D2</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#87-operator-dashboard-and-ui-requirements">87 Operator Dashboard and UI Requirements</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#871-tab-based-navigation">871 Tab-based navigation</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#872-collapsible-panel-system">872 Collapsible panel system</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#873-provider-settings-tab-panels">873 Provider  Settings tab panels</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#874-tools-plugins-tab-panels">874 Tools  Plugins tab panels</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#875-network-tab-panels">875 Network tab panels</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#876-dashboard-api-surface">876 Dashboard API surface</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#9-quality-gates-slosla-targets">9 Quality Gates SLOSLA Targets</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#88-agent-control-swarm-orchestration-requirements-phase-d3">88 Agent Control  Swarm Orchestration Requirements Phase D3</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#881-agent-lifecycle-management">881 Agent lifecycle management</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#882-per-agent-model-assignment">882 Per-agent model assignment</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#883-intelligent-agent-telemetry">883 Intelligent agent telemetry</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#884-swarm-orchestration">884 Swarm orchestration</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#885-chat-to-agent-routing">885 Chat-to-agent routing</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#886-workspace-persistence-reliability">886 Workspace persistence reliability</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#89-spectrum-refraction-sr-compounded-tri-model-orchestration-phase-d4">89 Spectrum Refraction SR Compounded Tri-Model Orchestration Phase D4</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#891-tri-model-fan-out-architecture">891 Tri-model fan-out architecture</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#892-instance-isolation-enforcement">892 Instance isolation enforcement</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#893-structured-xml-tagged-aggregation">893 Structured XML-tagged aggregation</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#894-model-capability-validation">894 Model capability validation</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#895-media-artifact-extraction">895 Media artifact extraction</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#896-sr-api-endpoints">896 SR API endpoints</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#897-sr-dashboard-integration">897 SR dashboard integration</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#810-low-level-reasoning-engine-llre-cognitive-economics-requirements">810 Low-Level Reasoning Engine LLRE  Cognitive Economics Requirements</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#8101-mathematical-performance-matrices">8101 Mathematical Performance Matrices</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#8102-system-prompt-ast-compilation">8102 System Prompt AST Compilation</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#8103-background-db-logging-activity-bus">8103 Background DB Logging  Activity Bus</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#8104-gateway-api-ui-dashboard">8104 Gateway API  UI Dashboard</a></li>
+  <li class="toc-item toc-item-level-4"><a href="#8105-acceptance-criteria">8105 Acceptance Criteria</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#9-continued-quality-gates-slosla-targets">9-continued Quality Gates SLOSLA Targets</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#10-evaluation-strategy">10 Evaluation Strategy</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#101-evaluation-dimensions">101 Evaluation dimensions</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#102-evaluation-types">102 Evaluation types</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#103-release-gates">103 Release gates</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#11-phased-plan">11 Phased Plan</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#phase-c-current">Phase C current</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#phase-d">Phase D</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#phase-d1-parallel-execution-track-individual-native-mvp">Phase D1 parallel execution track Individual-native MVP</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#phase-d2-parallel-execution-track-capability-parity-program">Phase D2 parallel execution track Capability parity program</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#phase-d3-parallel-execution-track-agent-control-swarm-intelligence">Phase D3 parallel execution track Agent Control  Swarm Intelligence</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#phase-e-novel-systems-activation">Phase E novel systems activation</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#phase-f">Phase F</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#12-risks-and-mitigations">12 Risks and Mitigations</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#13-documentation-and-operator-readiness-requirements">13 Documentation and Operator Readiness Requirements</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#14-references">14 References</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#15-business-security-alignment-gate-computer-use-core">15 Business Security Alignment Gate Computer Use Core</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#151-scope">151 Scope</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#152-mandatory-controls">152 Mandatory controls</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#153-gate-coupling">153 Gate coupling</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#16-security-requirements">16 Security Requirements</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#161-session-gated-access-control">161 Session-gated access control</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#162-authentication">162 Authentication</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#163-rate-limiting">163 Rate limiting</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#164-input-validation">164 Input validation</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#165-secret-management">165 Secret management</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#166-audit-integrity">166 Audit integrity</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#167-localhost-binding">167 Localhost binding</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#168-acceptance-criteria">168 Acceptance criteria</a></li>
+</ul>
+
+    </nav>
+  </aside>
+
+  <!-- Main Viewport -->
+  <main class="main-viewport">
+    <div class="article-container">
+      <article>
+        <h1 id="prism-product-requirements-document-prd">PRISM Product Requirements Document (PRD)</h1>
+
+<p>Date: 2026-03-11  </p>
+<p>Status: Phase C Active  </p>
+<p>Product: PRISM (Original SOTA Development by Kirk LaSalle, 03/16/2026)</p>
+
+<h2 id="1-executive-summary">1. Executive Summary</h2>
+
+<p>PRISM is being developed as a world-class autonomous agent runtime that combines:</p>
+
+<ul class="list-level-0">
+  <li>hard governance controls,</li>
+  <li>memory-aware decisioning,</li>
+  <li>robust workflow execution,</li>
+  <li>and explicit human authority boundaries.</li>
+  <li>native cross-integration for Agents As A Service (AaaS), bridging machine operations with human calendar and project management for sustainable mutual growth.</li>
+</ul>
+<p>The strategic objective is to move from a strong governed runtime to a <strong>SOTA and novel agent platform</strong> that can safely operate in open-ended, high-value computer use tasks.</p>
+
+<p>This PRD integrates:</p>
+
+<ol class="list-level-0">
+  <li>observed state from this repository,</li>
+  <li>applied agentic-system research guidance,</li>
+  <li>a concrete implementation plan for next-generation capabilities.</li>
+</ol>
+<p>Companion reference:</p>
+
+<ul class="list-level-0">
+  <li><code>PRISM<em>RESEARCH</em>DOCUMENTATION.md</code> (full-context research source and evidence mapping).</li>
+  <li><code>REQUIREMENTS<em>TRACEABILITY</em>MATRIX.md</code> (parity requirement-to-test-to-artifact mapping for Phase D2).</li>
+</ul>
+<h2 id="2-product-thesis">2. Product Thesis</h2>
+
+<p>Most agent systems fail in production not because they lack model capability, but because they lack:</p>
+
+<ul class="list-level-0">
+  <li>control-plane rigor,</li>
+  <li>failure-path design,</li>
+  <li>tool interface precision,</li>
+  <li>and measurable trust guarantees.</li>
+</ul>
+<p>PRISMâ€™s thesis is that <strong>governed autonomy + causal observability + adaptive execution</strong> yields superior real-world reliability and unlocks safe scaling.</p>
+
+<h2 id="3-problem-statement">3. Problem Statement</h2>
+
+<p>Users need an agent that can:</p>
+
+<ul class="list-level-0">
+  <li>execute real operations across files, shell, HTTP, and databases,</li>
+  <li>make autonomous progress on multi-step tasks,</li>
+  <li>escalate correctly for high-risk actions,</li>
+  <li>recover from failures and denials,</li>
+  <li>and provide full post-hoc auditability.</li>
+</ul>
+<p>Current market offerings often optimize for demo fluency over operational trust.</p>
+<p>PRISM targets operational trust as a first-class design goal.</p>
+
+<h2 id="4-agentic-landscape-findings">4. Agentic Landscape Findings</h2>
+
+<h3 id="41-core-architectural-finding">4.1 Core architectural finding</h3>
+
+<p>From industry production guidance, successful systems use simple composable patterns first, then add autonomy when measurable value justifies complexity.</p>
+
+<p>Implication for PRISM:</p>
+
+<ul class="list-level-0">
+  <li>preserve deterministic workflows as baseline,</li>
+  <li>selectively enable autonomous orchestration with bounded controls.</li>
+</ul>
+<h3 id="42-reasoning-acting-loop-requirement">4.2 Reasoning + acting loop requirement</h3>
+
+<p>ReAct demonstrates that interleaving reasoning and environment interaction improves task quality and interpretability.</p>
+
+<p>Implication for PRISM:</p>
+
+<ul class="list-level-0">
+  <li>ensure every action step is grounded in tool outcomes and policy state,</li>
+  <li>avoid free-running text-only planning without environment feedback.</li>
+</ul>
+<h3 id="43-tooling-as-capability-multiplier">4.3 Tooling as capability multiplier</h3>
+
+<p>Toolformer and practical agent deployments show that explicit tool invocation materially improves quality on tasks where external computation or lookup is required.</p>
+
+<p>Implication for PRISM:</p>
+
+<ul class="list-level-0">
+  <li>invest in high-clarity tool schemas and robust error contracts,</li>
+  <li>track tool-level quality and misuse patterns.</li>
+</ul>
+<h3 id="44-controller-worker-decomposition">4.4 Controller-worker decomposition</h3>
+
+<p>Controller-worker style orchestration (e.g., HuggingGPT family patterns) scales capability breadth across domains.</p>
+
+<p>Implication for PRISM:</p>
+
+<ul class="list-level-0">
+  <li>maintain a central orchestrator with specialized adapters,</li>
+  <li>add domain workers progressively while preserving governance coherence.</li>
+</ul>
+<h3 id="45-governance-as-platform-requirement">4.5 Governance as platform requirement</h3>
+
+<p>NIST AI RMF emphasizes trustworthiness through lifecycle risk management.</p>
+
+<p>Implication for PRISM:</p>
+
+<ul class="list-level-0">
+  <li>map governance policies to measurable operational controls,</li>
+  <li>enforce reviewable risk boundaries rather than informal safety promises.</li>
+</ul>
+<h2 id="5-product-goals">5. Product Goals</h2>
+
+<h3 id="51-primary-goals">5.1 Primary goals</h3>
+
+<ol class="list-level-0">
+  <li>Achieve safe high-autonomy execution for complex tasks.</li>
+  <li>Maintain full operation traceability and replayability.</li>
+  <li>Provide deterministic governance under risk and uncertainty.</li>
+  <li>Continuously improve performance through measurable eval loops.</li>
+  <li>Introduce novel technical mechanisms that improve reliability and adaptability.</li>
+  <li>Enforce identity accountability: every agent action is attributable to a character, a Prism user, and an operator.</li>
+</ol>
+<h3 id="52-non-goals-current-horizon">5.2 Non-goals (current horizon)</h3>
+
+<ul class="list-level-0">
+  <li>Unbounded self-modification without policy gate</li>
+  <li>Opaque proprietary control paths that cannot be audited</li>
+  <li>Pure benchmark optimization detached from operator usability</li>
+</ul>
+<h2 id="6-existing-baseline-repository-aligned">6. Existing Baseline (Repository-Aligned)</h2>
+
+<p>Implemented today:</p>
+
+<ul class="list-level-0">
+  <li>activity bus and hashed event stream</li>
+  <li>three-tier policy engine</li>
+  <li>approval queue + HTTP service</li>
+  <li>adapters across system/protocol/application</li>
+  <li>SQLite activity/session persistence</li>
+  <li>memory query tools (<code>semantic<em>query</code>, <code>memory</em>query</code>)</li>
+  <li>workflow retries/timeouts/fallbacks</li>
+  <li>integration tests for approval success, denial, and timeout paths</li>
+  <li><strong>Character Accountability Control (CAC)</strong>:</li>
+  <li>character-to-operator identity binding with full accountability chain</li>
+  <li>lifecycle management (assign, dispatch, suspend, resume, revoke)</li>
+  <li>profile-aware email domain validation (business enforces matching domains; individual is permissive)</li>
+  <li>execution profile segment normalization (<code>enterprise</code>/<code>corporate</code> → canonical <code>business</code>)</li>
+  <li>accountability chain propagated into activity events and SHA-256 integrity hashes</li>
+  <li><strong>LLRE Cognitive Economics Engine</strong>:</li>
+  <li>Prompt AST Compiler (<code>src/core/llre/ast.ts</code>) checking prompt objective/constraint densities</li>
+  <li>Unified effectiveness analytics calculating TCA, RSI, CSR, and TEQ performance indexes</li>
+  <li>Background SQLite data layer persistence with query/aggregation endpoints</li>
+  <li>Real-time Cognitive Economics operator settings dashboard panel</li>
+</ul>
+<h2 id="7-novelty-roadmap-prism-specific">7. Novelty Roadmap (PRISM-specific)</h2>
+
+<h3 id="71-novel-capability-a-constitutional-causal-compiler-ccc">7.1 Novel Capability A: Constitutional Causal Compiler (CCC)</h3>
+
+<p>Definition:</p>
+<p>A pre-execution compiler that transforms intent + policy + memory + environment context into a constrained executable plan graph.</p>
+
+<p>Expected value:</p>
+
+<ul class="list-level-0">
+  <li>reduces unsafe branching,</li>
+  <li>improves explainability,</li>
+  <li>formalizes policy conformance before execution starts.</li>
+</ul>
+<h3 id="72-novel-capability-b-dual-lens-memory-arbitration-dlma">7.2 Novel Capability B: Dual-Lens Memory Arbitration (DLMA)</h3>
+
+<p>Definition:</p>
+<p>A retrieval system combining:</p>
+
+<ul class="list-level-0">
+  <li>semantic relevance lens,</li>
+  <li>causal consequence lens (impact/rollback-sensitive),</li>
+</ul>
+<p>then arbitration based on confidence and risk profile.</p>
+
+<p>Expected value:</p>
+
+<ul class="list-level-0">
+  <li>better decision context for high-stakes operations,</li>
+  <li>fewer semantically relevant but operationally unsafe recommendations.</li>
+</ul>
+<h3 id="73-novel-capability-c-self-healing-workflow-synthesis-shws">7.3 Novel Capability C: Self-Healing Workflow Synthesis (SHWS)</h3>
+
+<p>Definition:</p>
+<p>When a workflow fails, generate candidate repair plans, evaluate under policy and quality constraints, then stage safe promotion.</p>
+
+<p>Expected value:</p>
+
+<ul class="list-level-0">
+  <li>decreases manual intervention frequency,</li>
+  <li>improves recovery speed,</li>
+  <li>builds adaptive capability with control.</li>
+</ul>
+<h2 id="8-functional-requirements">8. Functional Requirements</h2>
+
+<h3 id="81-governance-and-authority">8.1 Governance and authority</h3>
+
+<ul class="list-level-0">
+  <li>Every operation must be classified by risk and mutability.</li>
+  <li>Tier-3 operations require explicit approval or deterministic timeout behavior.</li>
+  <li>Denial and timeout must be testable and observable states.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>policy decision events emitted for all operations,</li>
+  <li>denial and timeout states represented in workflow outcomes.</li>
+</ul>
+<h3 id="82-workflow-execution">8.2 Workflow execution</h3>
+
+<ul class="list-level-0">
+  <li>Workflows support retries, timeout, and conditional fallback.</li>
+  <li>Recovery branches can succeed overall workflow when policy-compliant.</li>
+  <li>Non-recoverable failure paths terminate with failed workflow status.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>integration tests cover success, failure, retry, timeout, approval granted, approval denied, approval timeout.</li>
+</ul>
+<h3 id="83-memory-and-retrieval">8.3 Memory and retrieval</h3>
+
+<ul class="list-level-0">
+  <li>Unified retrieval API supports episodic/session/semantic modes.</li>
+  <li>Retrieval telemetry includes latency and quality proxies.</li>
+  <li>Retrieval outputs must be attributable to source events.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>p95 retrieval latency tracked,</li>
+  <li>quality proxy metrics recorded per query cohort,</li>
+  <li>growth and drift diagnostics generated from rolling windows with alert outputs,</li>
+  <li>cohort dashboards generated with per-cohort latency/utility/hit-rate and alerting,</li>
+  <li>cohort dashboard snapshots persisted for export and historical audit,</li>
+  <li>trend and baseline-comparison deltas generated across cohort snapshot history,</li>
+  <li>alert thresholds configurable via centralized retrieval policy.</li>
+</ul>
+<h3 id="84-observability-and-audit">8.4 Observability and audit</h3>
+
+<ul class="list-level-0">
+  <li>Activity events are immutable-hash recorded.</li>
+  <li>Full operation lineage is queryable by session.</li>
+  <li>Incident reconstruction is possible from persisted traces.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>sampled sessions fully reconstructable end-to-end.</li>
+</ul>
+<h3 id="84a-character-accountability-control-cac">8.4A Character Accountability Control (CAC)</h3>
+
+<p>Every agent action must be linked to an immutable identity chain comprising a character, a Prism user, an operator, and a client/session context. This identity chain is propagated into activity events and included in SHA-256 integrity hashes.</p>
+
+<p>Required identity fields:</p>
+
+<ul class="list-level-0">
+  <li><code>characterId</code>: the character brief assigned to the agent.</li>
+  <li><code>prismUserId</code> / <code>prismUserEmail</code>: the Prism platform user under which the agent operates.</li>
+  <li><code>operatorId</code> / <code>operatorEmail</code>: the human operator responsible for the session.</li>
+  <li><code>clientId</code> / <code>sessionId</code>: the client application and session context.</li>
+  <li><code>executionProfileSegment</code>: the resolved profile segment (<code>individual</code> or <code>business</code>).</li>
+</ul>
+<p>Lifecycle states:</p>
+
+<ul class="list-level-0">
+  <li><strong>assigned</strong>: character bound to operator/session; ready for dispatch.</li>
+  <li><strong>active</strong>: at least one dispatch has occurred.</li>
+  <li><strong>suspended</strong>: temporarily paused (with reason code); no further dispatches until resumed.</li>
+  <li><strong>revoked</strong>: permanently terminated; no resume possible.</li>
+</ul>
+<p>Profile-aware email validation:</p>
+
+<ul class="list-level-0">
+  <li><strong>Business profile</strong>: operator and Prism user email domains must match (configurable allowed-domains list). Mismatched domains are rejected at assignment time.</li>
+  <li><strong>Individual profile</strong>: no domain constraints; any valid email address is accepted.</li>
+  <li><strong>Alias normalization</strong>: <code>enterprise</code> and <code>corporate</code> profile inputs resolve to the canonical <code>business</code> segment.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>accountability chain present on all activity events emitted during governed operations,</li>
+  <li>lifecycle transitions (assign, dispatch, suspend, resume, revoke) each emit auditable activity events,</li>
+  <li>business-profile domain mismatch is rejected with structured error before assignment completes,</li>
+  <li>individual-profile allows mixed-domain assignments without constraint,</li>
+  <li><code>enterprise</code> and <code>corporate</code> inputs resolve to <code>business</code> segment in all code paths,</li>
+  <li>query APIs support filtering by characterId, operatorEmail, prismUserEmail, and executionProfileSegment.</li>
+</ul>
+<h3 id="84b-advanced-model-routing-and-model-matrix">8.4B Advanced Model Routing and Model Matrix</h3>
+
+<p>The platform must implement a fully configurable, operator-controlled routing plane coupled with a dynamic model matrix registry. These features are exclusive to the PRISM platform and its operators.</p>
+
+<h4 id="84b1-advanced-model-routing">8.4B.1 Advanced Model Routing</h4>
+<ul class="list-level-0">
+  <li><strong>Multi-Strategy Routing</strong>: The routing engine must support <code>Single Provider</code>, <code>Multi-Provider</code>, and <code>Modality-Based</code> routing topologies.</li>
+  <li><strong>AI-Assisted Allocation</strong>: The orchestrator must support AI-assisted model allocation, suggesting optimal model-to-role configurations during setup or task planning.</li>
+  <li><strong>Role-Based Overrides</strong>: Operators must be able to assign specific model/provider overrides to individual task roles (<code>chat</code>, <code>code-generation</code>, <code>summarization</code>, <code>research</code>, <code>memory-indexing</code>, etc.), subject to minimum capability tier validation.</li>
+  <li><strong>Power-Aware Routing Modes</strong>: The system must enforce routing priorities based on the operator's active power profile:</li>
+  <li><code>eco</code>: Prioritizes local models over cloud API routes to eliminate external charges.</li>
+  <li><code>performance</code>: Routes to the highest available capability tier for each role.</li>
+  <li><code>adaptive</code>: Discovers free hardware VRAM and dynamically routes high-VRAM models to cloud fallbacks if local capacity is exceeded, eliminating Out-Of-Memory (OOM) failures.</li>
+</ul>
+<h4 id="84b2-advanced-model-matrix-exclusive-core">8.4B.2 Advanced Model Matrix (Exclusive Core)</h4>
+<ul class="list-level-0">
+  <li><strong>Dynamic Runtime Profile Management</strong>: The matrix must support runtime APIs to register, update, and remove model capability profiles (<code>registerModelProfile</code>, <code>updateModelProfile</code>, <code>removeModelProfile</code>).</li>
+  <li><strong>Local Model Auto-Discovery</strong>: The system must actively query the local environment (e.g., Ollama <code>/api/ps</code> endpoint) to discover running instances, calculating estimated VRAM footprints, context limits, and parameter sizes.</li>
+  <li><strong>Deprecation and Sunset Lifecycles</strong>: The matrix must track deprecation metadata fields, including:</li>
+  <li><code>deprecated</code> (boolean flag)</li>
+  <li><code>deprecatedAt</code> (ISO date when deprecation began)</li>
+  <li><code>sunsetDate</code> (ISO date when full sunset occurs)</li>
+  <li><code>successor</code> (recommended successor model pattern)</li>
+  <li><code>deprecationReason</code> (reason description)</li>
+  <li><strong>Legacy Retention &amp; Warnings</strong>: Deprecated and sunset models must be retained in the matrix registry for historic telemetry aggregation and backward-compatibility execution. The router must de-prioritize these models in selection hierarchies and emit warning events to the ActivityBus when a deprecated model is selected.</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul class="list-level-0">
+  <li>router successfully resolves model mappings for all 20+ defined task roles,</li>
+  <li>routing preferences dynamically adapt when powerMode transitions between <code>performance</code>, <code>eco</code>, and <code>adaptive</code>,</li>
+  <li>local hardware VRAM status is queried and utilized in routing decisions,</li>
+  <li>runtime profiles can be added and immediately resolved by <code>resolveProfile()</code>,</li>
+  <li>deprecation metadata is evaluated, causing sunset models to be flagged and de-prioritized, and warning traces logged on execution.</li>
+</ul>
+<h3 id="85-individual-native-mvp-capabilities-phase-1">8.5 Individual-native MVP capabilities (Phase 1)</h3>
+
+<p>The first productization track implements native individual productivity capabilities over existing governance/runtime foundations.</p>
+
+<p>Scope domains:</p>
+
+<ul class="list-level-0">
+  <li>email triage and draft workflows,</li>
+  <li>calendar and daily-plan workflows,</li>
+  <li>notes capture and structured extraction,</li>
+  <li>chronological tasks/events planning.</li>
+</ul>
+<p>Functional requirements:</p>
+
+<ol class="list-level-0">
+  <li>Email triage + draft</li>
+</ol>
+<ul class="list-level-0">
+  <li>Support read/classify/summarize/draft operations with explicit send gate.</li>
+  <li>Require source attribution in summaries and draft rationale.</li>
+  <li>Enforce send operation as mutating action under tier2/tier3 policy.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Calendar planning</li>
+</ol>
+<ul class="list-level-0">
+  <li>Support availability lookup, conflict detection, and recommendation generation.</li>
+  <li>Require explicit policy path for event creation/update.</li>
+  <li>Persist conflict and recommendation traces for operator review.</li>
+  <li><strong>Implemented</strong>: Scheduler tab with full-year calendar (year/month/week/day views), category-coded events, project management, Kanban board, and Gantt timeline. SchedulerEngine provides cron-based recurring schedules with ActivityBus audit trail.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Notes and extraction</li>
+</ol>
+<ul class="list-level-0">
+  <li>Support capture of unstructured note content and extraction of:</li>
+  <li>action items,</li>
+  <li>deadlines,</li>
+  <li>follow-up entities.</li>
+  <li>Require extracted outputs to link back to originating note context.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Chronological tasks/events</li>
+</ol>
+<ul class="list-level-0">
+  <li>Support timeline generation from tasks + constraints.</li>
+  <li>Support reorder/replan with explicit change deltas.</li>
+  <li>Emit drift alerts when schedule changes exceed threshold.</li>
+</ul>
+<p>Tooling requirements:</p>
+
+<ul class="list-level-0">
+  <li>New capability tools must ship with versioned tool contracts.</li>
+  <li>Contracts must define required args, mutation semantics, and rollback hints.</li>
+  <li>Contract snapshot diffs are required in release evidence.</li>
+</ul>
+<p>Workflow requirements:</p>
+
+<ul class="list-level-0">
+  <li>Each capability must expose at least one workflow template with:</li>
+  <li>retries,</li>
+  <li>timeout policy,</li>
+  <li>fallback branch.</li>
+  <li>Each mutation-capable workflow must define deterministic deny/timeout outcomes.</li>
+</ul>
+<p>Memory requirements:</p>
+
+<ul class="list-level-0">
+  <li>Email/calendar workflows must use session + semantic retrieval modes.</li>
+  <li>Notes/task workflows must expose attributable retrieval references in outputs.</li>
+  <li>Retrieval cohort metrics for these domains must be dashboard-visible.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>four domain templates available and runnable in controlled test mode,</li>
+  <li>policy-path tests pass for allow/deny/timeout on mutating operations,</li>
+  <li>contract snapshots updated and passing regression checks,</li>
+  <li>retrieval attribution present in sampled workflow outputs.</li>
+</ul>
+<h3 id="86-capability-parity-program-requirements-phase-d2">8.6 Capability parity program requirements (Phase D2)</h3>
+
+<p>PRISM must deliver capability parity with top-tier agent classes while preserving profile-specific operational behavior.</p>
+
+<h3 id="87-operator-dashboard-and-ui-requirements">8.7 Operator Dashboard and UI Requirements</h3>
+
+<p>The PRISM dashboard (<code>http://localhost:7070</code>) serves as the primary operator interface for runtime inspection, governance control, and system administration. The following requirements govern its behavior and content.</p>
+
+<h4 id="871-tab-based-navigation">8.7.1 Tab-based navigation</h4>
+
+<p>The dashboard must provide a tab-based navigation system with the following tabs, each accessible via a single click:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Tab</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Chat Interface</td>
+  <td>Real-time conversational interface with session-scoped LLM provider binding</td>
+</tr>
+<tr>
+  <td>Provider &amp; Settings</td>
+  <td>LLM provider configuration, model capability matrix, runtime settings, and audit trail</td>
+</tr>
+<tr>
+  <td>Tools &amp; Plugins</td>
+  <td>Inventory of built-in tools, registered MCP plugins, and system utilities</td>
+</tr>
+<tr>
+  <td>Network</td>
+  <td>Curated network command execution with tier-based governance, live interface viewer, telemetry, and interactive console</td>
+</tr>
+<tr>
+  <td>Telemetry</td>
+  <td>Runtime telemetry, retrieval observability, and performance metrics</td>
+</tr>
+<tr>
+  <td>Logs &amp; Debug</td>
+  <td>Activity event stream, error inspection, and debug-level trace output</td>
+</tr>
+</tbody>
+</table></div>
+
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>All tabs render without JavaScript errors.</li>
+  <li>Tab state persists within a session (active tab survives data refreshes).</li>
+  <li>ARIA-compliant tab navigation for accessibility.</li>
+</ul>
+<h4 id="872-collapsible-panel-system">8.7.2 Collapsible panel system</h4>
+
+<p>All dashboard panels within each tab must support collapsible headers with visual chevron indicators (<code>▼</code>/<code>▶</code>). Collapse/expand state must be persisted in the client-side state object and survive render cycles within a session.</p>
+
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>Each panel renders with a clickable header.</li>
+  <li>Clicking the header toggles body visibility.</li>
+  <li>Chevron indicator reflects current state.</li>
+  <li>State is preserved across data refreshes within the same session.</li>
+</ul>
+<h4 id="873-provider-settings-tab-panels">8.7.3 Provider &amp; Settings tab panels</h4>
+
+<p>The Provider &amp; Settings tab must contain the following panels, in order:</p>
+
+<ol class="list-level-0">
+  <li><strong>Session Provider Assignment</strong> — Current LLM provider/model binding for the active chat session with Apply controls.</li>
+  <li><strong>Provider Configuration</strong> — Per-provider settings (base URL, models, API key presence) for OpenAI, Anthropic, Ollama, and Custom providers.</li>
+  <li><strong>Model Capability Matrix</strong> — Feature/model comparison grid showing context window, vision, function calling, and streaming capabilities per configured model.</li>
+  <li><strong>Settings</strong> — Runtime system configuration: uptime, event count, server status, PRISM version, platform, runtime readiness, active provider, and active model.</li>
+  <li><strong>LLM Audit Trail</strong> — Session-scoped provider switch audit with success/failure counts and recent transition history. Supports Export JSON, Copy JSON, and Export CSV.</li>
+</ol>
+<h4 id="874-tools-plugins-tab-panels">8.7.4 Tools &amp; Plugins tab panels</h4>
+
+<p>The Tools &amp; Plugins tab must contain three panels:</p>
+
+<ol class="list-level-0">
+  <li><strong>Tools</strong> — Complete inventory of all registered built-in tools organized by category (System, Application, Knowledge, Integration). Each tool entry displays name, description, risk level (low/medium/high with color coding), and mutation status (read-only/mutating).</li>
+</ol>
+<ol class="list-level-0">
+  <li><strong>Plugins</strong> — Complete inventory of all registered MCP plugins organized by source group (In-Repo, ImpressionCore Suite). Each plugin entry displays name, server type (Python MCP Server), description, and status (Active).</li>
+</ol>
+<ol class="list-level-0">
+  <li><strong>Utilities</strong> — Complete inventory of system utilities organized by category (Benchmarks &amp; Qualification, Operator Services, Memory &amp; Retrieval, Activity &amp; Audit, Replay &amp; Verification, Configuration). Each utility entry displays name and description.</li>
+</ol>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>Tools panel displays all 19 built-in tools with risk and mutation badges.</li>
+  <li>Plugins panel displays all 7 MCP server plugins with type and status badges.</li>
+  <li>Utilities panel displays all 30 registered utilities across 6 categories.</li>
+  <li>All panels support collapsible headers.</li>
+</ul>
+<h4 id="875-network-tab-panels">8.7.5 Network tab panels</h4>
+
+<p>The Network tab must contain four panels:</p>
+
+<ol class="list-level-0">
+  <li><strong>Network Tools</strong> — Curated catalog of ~50 network commands organized by security tier (Tier 1: read-only diagnostics, Tier 2: config inspection, Tier 3: mutating operations). Each command entry displays name, description, tier badge (green/amber/red), and platform badge (WIN/LINUX/CROSS).</li>
+</ol>
+<ol class="list-level-0">
+  <li><strong>Network Settings</strong> — Live network interface data viewer. Users can refresh to query system interfaces and display adapter details (IP address, MAC, DHCP, DNS, gateway).</li>
+</ol>
+<ol class="list-level-0">
+  <li><strong>Network Telemetry</strong> — Network operation metrics: total commands executed, per-tier counts, error count, and most recent command.</li>
+</ol>
+<ol class="list-level-0">
+  <li><strong>Network Console</strong> — Interactive command console for executing network commands in real time. Only commands from the curated allowlist are permitted; blocked patterns are rejected.</li>
+</ol>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>Network Tools panel displays all curated commands with tier and platform badges.</li>
+  <li>Network Settings panel queries and displays live interface data on user request.</li>
+  <li>Network Telemetry panel updates counters after each command execution.</li>
+  <li>Network Console accepts commands, validates against allowlist, and displays structured output.</li>
+  <li>All panels support collapsible headers.</li>
+  <li>NetworkTool adapter enforces curated allowlist with blocked pattern safety.</li>
+  <li>Three API endpoints operational: <code>GET /api/network/interfaces</code>, <code>POST /api/network/exec</code>, <code>GET /api/network/telemetry</code>.</li>
+</ul>
+<h4 id="876-dashboard-api-surface">8.7.6 Dashboard API surface</h4>
+
+<p>The dashboard must expose a minimum set of HTTP API routes for programmatic access:</p>
+
+<ul class="list-level-0">
+  <li>Provider management: configuration, secrets, selection, and audit</li>
+  <li>Activity event querying by session and operation type</li>
+  <li>Retrieval observability: cohorts, alerts, and trends</li>
+  <li>Approval queue management: list, approve, deny</li>
+  <li>Dashboard actions: trigger and status</li>
+  <li>Session management: list, create, delete</li>
+</ul>
+<p>All API endpoints must validate input parameters and return structured JSON responses.</p>
+
+<p>Functional requirements:</p>
+
+<ol class="list-level-0">
+  <li>Dual-profile parity contract</li>
+</ol>
+<ul class="list-level-0">
+  <li><code>PRISM Individual</code> and <code>PRISM Business</code> must expose equivalent capability surfaces for:</li>
+  <li>tool invocation,</li>
+  <li>terminal session operations,</li>
+  <li>container sandbox lifecycle,</li>
+  <li>dynamic staged tool execution,</li>
+  <li>adapter/plugin pack usage.</li>
+  <li>Business profile adds governance rigor and must not reduce capability availability.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Terminal virtualization</li>
+</ol>
+<ul class="list-level-0">
+  <li>Support persistent terminal channels with lifecycle controls:</li>
+  <li>start,</li>
+  <li>stop,</li>
+  <li>timeout,</li>
+  <li>revoke.</li>
+  <li>Persist session lineage and policy decisions for mutating commands.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Container orchestration</li>
+</ol>
+<ul class="list-level-0">
+  <li>Support sandbox create/start/stop/destroy and snapshot/revert operations.</li>
+  <li>Enforce resource and network guardrails via policy-controlled runtime metadata.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Dynamic staged tools</li>
+</ol>
+<ul class="list-level-0">
+  <li>Candidate dynamic tools must be generated only inside isolated sandbox execution context.</li>
+  <li>Tool contract extraction and risk classification are required before controlled registration.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Adapter/plugin packs</li>
+</ol>
+<ul class="list-level-0">
+  <li>Pack manifests must include compatibility metadata and capability scopes.</li>
+  <li>Business profile requires trust/provenance validation before install/enable.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>profile-equivalence tests confirm equal capability availability in both profiles,</li>
+  <li>governance-path tests pass for allow/deny/timeout/revoke across shell/container/plugin operations,</li>
+  <li>high-risk operations emit reason-coded policy decisions and replayable lineage,</li>
+  <li>execution mode qualification results documented for <code>fast</code>, <code>balanced</code>, and <code>governed</code>.</li>
+</ul>
+<h2 id="9-quality-gates-slosla-targets">9. Quality Gates (SLO/SLA Targets)</h2>
+
+<h3 id="88-agent-control-swarm-orchestration-requirements-phase-d3">8.8 Agent Control &amp; Swarm Orchestration Requirements (Phase D3)</h3>
+
+<p>PRISM must deliver a fully wired agent control system where the majority of tasks are dispatched through managed agents with intelligent lifecycle tracking and multi-agent swarm capabilities.</p>
+
+<h4 id="881-agent-lifecycle-management">8.8.1 Agent lifecycle management</h4>
+
+<ul class="list-level-0">
+  <li>Support three lifecycle tiers: ephemeral (spawned per-task, auto-reaped after idle timeout), semi-permanent (survives across tasks, reaped after extended idle), permanent (persists until manually stopped).</li>
+  <li>Agents must persist across server restarts: permanent and semi-permanent agents serialized to workspace <code>state/agent-registry.json</code> and restored on boot.</li>
+  <li>Idle reaper runs on configurable interval (default 60s) to garbage-collect expired ephemeral and semi-permanent agents.</li>
+  <li>All lifecycle transitions (spawn, stop, promote, reap) must emit ActivityBus events on the <code>agent</code> layer.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>spawn/stop/promote operations functional via dashboard and API,</li>
+  <li>permanent agents survive server restart,</li>
+  <li>idle reaper correctly garbage-collects expired agents.</li>
+</ul>
+<h4 id="882-per-agent-model-assignment">8.8.2 Per-agent model assignment</h4>
+
+<ul class="list-level-0">
+  <li>Each agent instance supports an optional model override (<code>providerId</code> + <code>model</code>).</li>
+  <li>Override precedence: agent-specific override &gt; role-based routing override &gt; automatic tier selection.</li>
+  <li>Model assignments are dynamically changeable at runtime without agent restart.</li>
+  <li>Model override changes emit audit events to ActivityBus.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>per-agent model override applied on next dispatch,</li>
+  <li>clearing override reverts to role-based auto-selection,</li>
+  <li>dashboard shows current model assignment per agent.</li>
+</ul>
+<h4 id="883-intelligent-agent-telemetry">8.8.3 Intelligent agent telemetry</h4>
+
+<ul class="list-level-0">
+  <li>Per-agent metrics: tasks completed/failed, average response time, model usage history, error patterns, role distribution.</li>
+  <li>Global metrics: total dispatches, active agent count, role hotspots (dispatches per role with avg latency and best model).</li>
+  <li>Pattern detection: track dispatch frequency per role over 1h/1d/7d sliding windows.</li>
+  <li>Promotion recommendations: if a role dispatches above threshold consistently, recommend promoting its agent from ephemeral to semi-permanent; if semi-permanent alive &gt;7d, recommend permanent.</li>
+  <li>Model performance tracking: if model X is consistently faster/better for role Y, recommend override.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>telemetry summary available via API and dashboard,</li>
+  <li>pattern insights surface after sustained dispatch activity,</li>
+  <li>promotion recommendations appear with one-click action in dashboard.</li>
+</ul>
+<h4 id="884-swarm-orchestration">8.8.4 Swarm orchestration</h4>
+
+<ul class="list-level-0">
+  <li>Support four swarm topologies:</li>
+  <li><strong>Mesh</strong>: all agents work sub-tasks in parallel, results merged.</li>
+  <li><strong>Star</strong>: coordinator agent delegates to worker agents, collects/merges results.</li>
+  <li><strong>Pipeline</strong>: sequential handoff — output of agent A becomes input of agent B.</li>
+  <li><strong>Broadcast</strong>: same prompt to all agents, best result selected.</li>
+  <li>Swarm creation specifies goal, topology, agent count, and optional role distribution.</li>
+  <li>Swarm agents default to ephemeral lifecycle; dissolved when swarm completes.</li>
+  <li>All swarm operations emit ActivityBus events for governance and telemetry.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>swarms creatable via dashboard and API,</li>
+  <li>all four topologies execute correctly,</li>
+  <li>swarm dissolution stops all member agents and collects results.</li>
+</ul>
+<h4 id="885-chat-to-agent-routing">8.8.5 Chat-to-agent routing</h4>
+
+<ul class="list-level-0">
+  <li>The majority of chat tasks must be dispatched through specialized agents rather than direct LLM calls.</li>
+  <li>Classification-first routing: a fast classifier agent (T1/T2 model) determines intent before routing.</li>
+  <li>Routing targets: code requests → coder agent, summaries → summarizer, complex multi-step → TaskDecomposer → ephemeral swarm, memory/search → indexer, general → chat.</li>
+  <li>Fallback to direct LLM if agent dispatch fails.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>chat messages routed through agents by default,</li>
+  <li>telemetry shows per-agent dispatch distribution,</li>
+  <li>complex tasks decomposed and executed via multi-agent plans.</li>
+</ul>
+<h4 id="886-workspace-persistence-reliability">8.8.6 Workspace persistence reliability</h4>
+
+<ul class="list-level-0">
+  <li>Workspace location changes must persist reliably across server reboots.</li>
+  <li>Write failures must be surfaced to the operator (not silently swallowed).</li>
+  <li>Write-then-verify: after persisting preferences, immediately read back to confirm.</li>
+  <li>Environment variable override must not silently override newer user preferences.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>workspace change → restart → new location loads,</li>
+  <li>write failure produces visible error in dashboard,</li>
+  <li>preferences file verified after write.</li>
+</ul>
+<h3 id="89-spectrum-refraction-sr-compounded-tri-model-orchestration-phase-d4">8.9 Spectrum Refraction (SR): Compounded Tri-Model Orchestration (Phase D4)</h3>
+
+<p>PRISM must deliver a novel multi-model parallel generation system where three distinct model instances (Left/Logic, Right/Creative, Main/Coordination) generate simultaneously and their outputs are fused via structured aggregation into a compound response that exceeds any single model's capability.</p>
+
+<p><strong>Concept:</strong> Spectrum Refraction (SR), conceived by Kirk LaSalle, applies the metaphor of light through a prism — a single prompt is refracted into multiple cognitive perspectives that are then recomposed.</p>
+
+<h4 id="891-tri-model-fan-out-architecture">8.9.1 Tri-model fan-out architecture</h4>
+
+<ul class="list-level-0">
+  <li>Three hemispheres generate in parallel on the same user prompt:</li>
+  <li><strong>Left (Logic)</strong>: analytical reasoning, structured analysis, factual precision</li>
+  <li><strong>Right (Creative)</strong>: creative synthesis, lateral thinking, multimedia generation</li>
+  <li><strong>Main (Coordination)</strong>: coordination, aggregation, and unified response synthesis</li>
+  <li>Fan-out must be truly parallel (concurrent API calls), not sequential.</li>
+  <li>Each hemisphere receives a role-specific system prompt from <code>SR<em>SYSTEM</em>PROMPTS</code>.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>Left and Right generate concurrently (measured fan-out timing),</li>
+  <li>Main receives both hemisphere outputs for aggregation,</li>
+  <li>total SR generation time ≈ max(Left, Right) + aggregation, not sum.</li>
+</ul>
+<h4 id="892-instance-isolation-enforcement">8.9.2 Instance isolation enforcement</h4>
+
+<ul class="list-level-0">
+  <li>Left and Right MUST be distinct instances. Validation at three mandatory gates:</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Configuration gate</strong>: <code>/api/sr/configure</code> rejects Left===Right (same provider + same model).</li>
+  <li><strong>Activation gate</strong>: <code>/api/sr/activate</code> re-validates before enabling SR mode.</li>
+  <li><strong>Runtime gate</strong>: <code>generateSR()</code> pre-flight guard before fan-out.</li>
+</ol>
+<ul class="list-level-0">
+  <li>Three isolation quality levels:</li>
+  <li><code>full</code>: different providers (strongest — separate API keys, infrastructure, rate limits)</li>
+  <li><code>model</code>: same provider, different models (separate capabilities, shared key)</li>
+  <li><code>insufficient</code>: same provider + same model (REJECTED)</li>
+  <li>Main is permitted to overlap Left or Right (it serves a distinct coordinator role).</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>identical Left/Right rejected at configure, activate, and runtime,</li>
+  <li>isolation level correctly classified at all gates,</li>
+  <li>UI reflects isolation badge (🔒 Full / 🔏 Model / ⛔ Insufficient).</li>
+</ul>
+<h4 id="893-structured-xml-tagged-aggregation">8.9.3 Structured XML-tagged aggregation</h4>
+
+<ul class="list-level-0">
+  <li>The aggregation prompt uses XML-tagged sections for deterministic hemisphere attribution:</li>
+</ul>
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">TEXT</span>
+    <button class="copy-btn" onclick="copyCode('code-nxq7fzx', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-nxq7fzx">  &lt;logic_analysis&gt;[Left hemisphere output]&lt;/logic_analysis&gt;
+  &lt;creative_synthesis&gt;[Right hemisphere output]&lt;/creative_synthesis&gt;</code></pre>
+</div>
+
+
+<ul class="list-level-0">
+  <li>Main model produces a unified compound response that preserves analytical rigor and creative breadth.</li>
+  <li>Aggregation is not concatenation — it is deliberate synthesis by the Main model.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>aggregation prompt contains both tagged sections,</li>
+  <li>final response is a coherent synthesis (not concatenation),</li>
+  <li>hemisphere attribution preserved in metadata.</li>
+</ul>
+<h4 id="894-model-capability-validation">8.9.4 Model capability validation</h4>
+
+<ul class="list-level-0">
+  <li><code>validateSRLeftModel()</code>: Left must meet logic-oriented capability requirements (reasoning strength, function calling).</li>
+  <li><code>validateSRRightModel()</code>: Right must meet creative-oriented capability requirements (vision, multimedia modality).</li>
+  <li><code>filterSRLogicModels()</code> and <code>filterSRCreativeModels()</code>: filter available models by hemisphere role suitability.</li>
+  <li>Validation results include advisory text explaining why a model qualifies or does not.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>unqualified models produce clear advisory text,</li>
+  <li>filter functions return only role-appropriate models,</li>
+  <li>validation integrated into SR panel model dropdowns.</li>
+</ul>
+<h4 id="895-media-artifact-extraction">8.9.5 Media artifact extraction</h4>
+
+<ul class="list-level-0">
+  <li>The Creative (Right) hemisphere may produce media outputs (images, audio, video).</li>
+  <li><code>extractMediaArtifacts()</code> extracts structured media artifacts from output content.</li>
+  <li>Artifacts are typed: <code>{ type: "image" | "audio" | "video"; data: string; mimeType?: string }</code>.</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>media artifacts extracted from Creative hemisphere output,</li>
+  <li>artifacts accessible in <code>SRGenerationOutput.mediaArtifacts</code>.</li>
+</ul>
+<h4 id="896-sr-api-endpoints">8.9.6 SR API endpoints</h4>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Route</th>
+  <th>Method</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>/api/sr/status</code></td>
+  <td>GET</td>
+  <td>Return current SR configuration, active state, and isolation level</td>
+</tr>
+<tr>
+  <td><code>/api/sr/configure</code></td>
+  <td>POST</td>
+  <td>Set Left/Right/Main model assignments with isolation validation</td>
+</tr>
+<tr>
+  <td><code>/api/sr/activate</code></td>
+  <td>POST</td>
+  <td>Enable SR mode for the session (re-validates isolation)</td>
+</tr>
+<tr>
+  <td><code>/api/sr/deactivate</code></td>
+  <td>POST</td>
+  <td>Disable SR mode and revert to single-model generation</td>
+</tr>
+</tbody>
+</table></div>
+
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>all four endpoints functional and returning correct state,</li>
+  <li>configure and activate reject insufficient isolation,</li>
+  <li>status reflects real-time SR state.</li>
+</ul>
+<h4 id="897-sr-dashboard-integration">8.9.7 SR dashboard integration</h4>
+
+<ul class="list-level-0">
+  <li>SR panel in Provider &amp; Settings tab:</li>
+  <li>Model selection dropdowns for Left (Logic), Right (Creative), Main</li>
+  <li>Isolation badge reflecting current level</li>
+  <li>Cost advisory based on model pricing</li>
+  <li>Activate/Deactivate controls (Activate disabled when isolation insufficient)</li>
+  <li>SR response badge in Chat Interface tab:</li>
+  <li>Visual indicator that response was SR-generated</li>
+  <li>Isolation level pill</li>
+  <li>Hemisphere attribution metadata</li>
+</ul>
+<p>Acceptance criteria:</p>
+
+<ul class="list-level-0">
+  <li>SR panel renders correctly in Provider &amp; Settings tab,</li>
+  <li>isolation badge updates in real-time,</li>
+  <li>chat messages show SR attribution.</li>
+</ul>
+<h3 id="810-low-level-reasoning-engine-llre-cognitive-economics-requirements">8.10 Low-Level Reasoning Engine (LLRE) &amp; Cognitive Economics Requirements</h3>
+
+<p>The PRISM architecture integrates Low-Level Reasoning Engine (LLRE) telemetry to measure, audit, and optimize prompt structures and cognitive resource expenditures.</p>
+
+<h4 id="8101-mathematical-performance-matrices">8.10.1 Mathematical Performance Matrices</h4>
+<p>LLRE computes unified operational indexes at the low-level execution loop:</p>
+<ul class="list-level-0">
+  <li><strong>Tool Call Accuracy (TCA)</strong>: Direct ratio of verified tool executions relative to attempted calls.</li>
+  <li><strong>Request Satisfaction Index (RSI)</strong>: Ratio of completed tasks relative to the goal's criteria constraints.</li>
+  <li><strong>Context Saturation Ratio (CSR)</strong>: Normalized factor checking token consumption efficiency ($CSR = \min(1.0, \frac{500}{\text{Tokens Consumed}})$).</li>
+  <li><strong>Token Efficacy Quotient (TEQ)</strong>: The unified economic index mapping satisfaction, accuracy, and operational cost ($\frac{RSI \times TCA}{\text{Cost USD} \times \text{Latency Seconds}}$).</li>
+</ul>
+<h4 id="8102-system-prompt-ast-compilation">8.10.2 System Prompt AST Compilation</h4>
+<ul class="list-level-0">
+  <li>Enforce strict envelope boundaries using <code>&lt;objective&gt;</code> and <code>&lt;constraints&gt;</code> XML elements.</li>
+  <li>Analyze system prompts for <strong>Signal Density</strong> (the ratio of actionable directives to descriptive padding text).</li>
+  <li>Generate linter warnings inside system logs if descriptive padding dilutes instruction clarity.</li>
+</ul>
+<h4 id="8103-background-db-logging-activity-bus">8.10.3 Background DB Logging &amp; Activity Bus</h4>
+<ul class="list-level-0">
+  <li>Capture <code>llre.telemetry.recorded</code> event payloads off the central Activity Bus.</li>
+  <li>Commit structured records into <code>prism<em>llre</em>telemetry</code> using prepared SQLite statement queues.</li>
+  <li>Ensure type-safe defaults and robust parameter binders preventing structural EPERM lock resource leaks or binding exceptions.</li>
+</ul>
+<h4 id="8104-gateway-api-ui-dashboard">8.10.4 Gateway API &amp; UI Dashboard</h4>
+<ul class="list-level-0">
+  <li>Provide <code>GET /api/llre/summary?sessionId=&lt;id&gt;</code> returning running session aggregate averages.</li>
+  <li>Expose a premium visual Cognitive Economics dashboard panel at the top of the Settings &amp; Provider tab.</li>
+  <li>Wire animated progress wheels, latency status, token volumes, and total session expenditures directly in the UI.</li>
+</ul>
+<h4 id="8105-acceptance-criteria">8.10.5 Acceptance Criteria</h4>
+<ul class="list-level-0">
+  <li>AST compiler successfully processes formatted and unformatted prompts.</li>
+  <li>Database layer commits event records correctly and avoids SQLite binding failures.</li>
+  <li>Front-end fetches, handles, and renders consolidated telemetry values securely.</li>
+</ul>
+<h2 id="9-continued-quality-gates-slosla-targets">9-continued. Quality Gates (SLO/SLA Targets)</h2>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Domain</th>
+  <th>Metric</th>
+  <th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Workflow reliability</td>
+  <td>Success on approved paths</td>
+  <td>&gt;= 99.0%</td>
+</tr>
+<tr>
+  <td>Governance latency</td>
+  <td>Policy decision p95</td>
+  <td>&lt;= 30ms</td>
+</tr>
+<tr>
+  <td>Eventing</td>
+  <td>Activity delivery p95</td>
+  <td>&lt;= 200ms</td>
+</tr>
+<tr>
+  <td>Telemetry overhead</td>
+  <td>Instrumentation p95</td>
+  <td>&lt;= 20ms</td>
+</tr>
+<tr>
+  <td>Retrieval</td>
+  <td>Query latency p95</td>
+  <td>&lt;= 50ms (hot memory)</td>
+</tr>
+<tr>
+  <td>Persistence</td>
+  <td>SQLite write latency p95</td>
+  <td>&lt;= 100ms</td>
+</tr>
+<tr>
+  <td>Approval flow</td>
+  <td>Operator response path p99</td>
+  <td>&lt;= 5s (excluding human delay)</td>
+</tr>
+</tbody>
+</table></div>
+
+<p>Parity-program gate requirements:</p>
+
+<ul class="list-level-0">
+  <li>profile parity matrix must be complete and validated,</li>
+  <li>business governance-path pass rate must remain 100% for high-risk parity operations,</li>
+  <li>investor and licensing appendix claims must map to implemented and tested capabilities.</li>
+  <li>requirements traceability matrix must be completed for all D2 requirement IDs.</li>
+</ul>
+<h2 id="10-evaluation-strategy">10. Evaluation Strategy</h2>
+
+<h3 id="101-evaluation-dimensions">10.1 Evaluation dimensions</h3>
+
+<p>lly added to the docuemtnation.</p>
+
+<ul class="list-level-0">
+  <li>correctness</li>
+  <li>safety</li>
+  <li>recoverability</li>
+  <li>explainability</li>
+  <li>operator burden</li>
+  <li>cost/latency efficiency</li>
+</ul>
+<h3 id="102-evaluation-types">10.2 Evaluation types</h3>
+
+<ol class="list-level-0">
+  <li>Unit tests for policy, memory, and adapters.</li>
+  <li>Integration tests for workflow/governance edge cases.</li>
+  <li>Scenario tests with seeded failure modes.</li>
+  <li>Replay tests for deterministic reconstruction.</li>
+  <li>Regression tests for known incident patterns.</li>
+</ol>
+<h3 id="103-release-gates">10.3 Release gates</h3>
+
+<p>No promotion to next maturity ring unless:</p>
+
+<ul class="list-level-0">
+  <li>governance regression suite is green,</li>
+  <li>denial/timeout paths remain stable,</li>
+  <li>telemetry completeness is above threshold,</li>
+  <li>rollback confidence remains above defined floor.</li>
+</ul>
+<h2 id="11-phased-plan">11. Phased Plan</h2>
+
+<h3 id="phase-c-current">Phase C (current)</h3>
+
+<ul class="list-level-0">
+  <li>complete adapter and governance test hardening</li>
+  <li>complete documentation and operational guides</li>
+  <li>expand retrieval quality instrumentation</li>
+</ul>
+<h3 id="phase-d">Phase D</h3>
+
+<ul class="list-level-0">
+  <li>production-grade workflow planner and policy-aware task routing</li>
+  <li>evaluator-optimizer loop for plan quality</li>
+  <li>deterministic replay and comparative run analysis</li>
+</ul>
+<h3 id="phase-d1-parallel-execution-track-individual-native-mvp">Phase D1 (parallel execution track): Individual-native MVP</h3>
+
+<ul class="list-level-0">
+  <li>implement email triage/draft workflow templates</li>
+  <li>implement calendar conflict + day-plan templates</li>
+  <li>implement notes capture + extraction templates</li>
+  <li>implement chronological tasks/events planning templates</li>
+  <li>add policy-path coverage for mutation operations in all templates</li>
+  <li>add release evidence bundle for contracts, traces, and retrieval attribution</li>
+</ul>
+<h3 id="phase-d2-parallel-execution-track-capability-parity-program">Phase D2 (parallel execution track): Capability parity program</h3>
+
+<ul class="list-level-0">
+  <li>implement dual-profile capability parity contract</li>
+  <li>implement terminal virtualization and lifecycle controls</li>
+  <li>implement container orchestration adapter and sandbox lifecycle controls</li>
+  <li>implement dynamic staged tool path with contract extraction and tier routing</li>
+  <li>implement adapter/plugin pack manifest compatibility and trust policy behavior</li>
+  <li>implement governance-path and profile-equivalence test coverage</li>
+</ul>
+<h3 id="phase-d3-parallel-execution-track-agent-control-swarm-intelligence">Phase D3 (parallel execution track): Agent Control &amp; Swarm Intelligence</h3>
+
+<ul class="list-level-0">
+  <li>implement agent lifecycle management (ephemeral/semi-permanent/permanent tiers)</li>
+  <li>implement per-agent model assignment with dynamic runtime switching</li>
+  <li>implement intelligent agent telemetry with pattern detection and promotion recommendations</li>
+  <li>implement swarm coordinator with four topologies (mesh/star/pipeline/broadcast)</li>
+  <li>implement chat-to-agent routing (classifier-first, majority of tasks through agents)</li>
+  <li>implement workspace persistence reliability fix</li>
+  <li>wire Agent Control dashboard tab with real data (replace mock handlers)</li>
+</ul>
+<h3 id="phase-e-novel-systems-activation">Phase E (novel systems activation)</h3>
+
+<ul class="list-level-0">
+  <li>implement CCC (Constitutional Causal Compiler)</li>
+  <li>implement DLMA (Dual-Lens Memory Arbitration)</li>
+  <li>implement SHWS (Self-Healing Workflow Synthesis)</li>
+</ul>
+<h3 id="phase-f">Phase F</h3>
+
+<ul class="list-level-0">
+  <li>enterprise governance envelope,</li>
+  <li>compliance-ready audit exports,</li>
+  <li>multi-environment policy bundles.</li>
+</ul>
+<h2 id="12-risks-and-mitigations">12. Risks and Mitigations</h2>
+
+<ol class="list-level-0">
+  <li><strong>Compounding autonomous errors</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Mitigation: bounded loops, hard stops, fallback paths, operator checkpoints.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Tool misuse and schema drift</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Mitigation: contract tests, schema linting, tool ABI versioning.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Opaque decisioning</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Mitigation: mandatory causal events and policy reason logging.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Quality regressions during rapid iteration</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Mitigation: canary eval sets + mandatory denial/timeout path tests.</li>
+</ul>
+<ol class="list-level-0">
+  <li><strong>Over-complex architecture creep</strong></li>
+</ol>
+<ul class="list-level-0">
+  <li>Mitigation: complexity budget and measurable uplift requirements before adding components.</li>
+</ul>
+<h2 id="13-documentation-and-operator-readiness-requirements">13. Documentation and Operator Readiness Requirements</h2>
+
+<p>Required artifacts:</p>
+
+<ul class="list-level-0">
+  <li>README (strategy + architecture + references)</li>
+  <li>PRD (this file)</li>
+  <li>Developer Guide (implementation standards and test strategy)</li>
+  <li>User Guide (operator workflows, approvals, troubleshooting)</li>
+</ul>
+<p>All release candidates must keep documentation synchronized with runtime behavior.</p>
+
+<h2 id="14-references">14. References</h2>
+
+<ol class="list-level-0">
+  <li>Anthropic Engineering, Building effective agents (2024): &lt;https://www.anthropic.com/engineering/building-effective-agents&gt;</li>
+  <li>ReAct paper, arXiv:2210.03629: &lt;https://arxiv.org/abs/2210.03629&gt;</li>
+  <li>Toolformer paper, arXiv:2302.04761: &lt;https://arxiv.org/abs/2302.04761&gt;</li>
+  <li>HuggingGPT paper, arXiv:2303.17580: &lt;https://arxiv.org/abs/2303.17580&gt;</li>
+  <li>Model Context Protocol introduction: &lt;https://modelcontextprotocol.io/introduction&gt;</li>
+  <li>NIST AI Risk Management Framework: &lt;https://www.nist.gov/itl/ai-risk-management-framework&gt;</li>
+</ol>
+<h2 id="15-business-security-alignment-gate-computer-use-core">15. Business Security Alignment Gate (Computer Use Core)</h2>
+
+<p>This gate is mandatory for any release candidate claiming enterprise readiness for computer-use capabilities.</p>
+
+<h3 id="151-scope">15.1 Scope</h3>
+
+<p>Applies to:</p>
+
+<ul class="list-level-0">
+  <li>browser automation,</li>
+  <li>terminal virtualization,</li>
+  <li>container sandbox orchestration,</li>
+  <li>and any cross-tool orchestration workflow combining these surfaces.</li>
+</ul>
+<h3 id="152-mandatory-controls">15.2 Mandatory controls</h3>
+
+<ol class="list-level-0">
+  <li>Governance integrity</li>
+</ol>
+<ul class="list-level-0">
+  <li>Tiered policy model remains intact and explicit (<code>tier1<em>autonomous</code>, <code>tier2</em>conditional</code>, <code>tier3_approval</code>).</li>
+  <li>Critical operations retain deterministic allow/deny/timeout/revoke pathways.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Accountability integrity (CAC)</li>
+</ol>
+<ul class="list-level-0">
+  <li>Identity chain fields remain mandatory in governed activity narratives.</li>
+  <li>Lifecycle state transitions remain auditable and evidence-linked.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Enterprise security controls</li>
+</ol>
+<ul class="list-level-0">
+  <li>Sandboxed execution and least privilege are required for Business computer-use operations.</li>
+  <li>Prompt-injection risk handling and sensitive-action human confirmation remain mandatory.</li>
+</ul>
+<ol class="list-level-0">
+  <li>Claim-evidence discipline</li>
+</ol>
+<ul class="list-level-0">
+  <li>No enterprise security/reliability claim without first-party evidence artifacts.</li>
+  <li>External benchmark claims are labeled <code>vendor-reported</code> unless reproduced in Prism qualification harnesses.</li>
+</ul>
+<h3 id="153-gate-coupling">15.3 Gate coupling</h3>
+
+<p>The gate is considered complete only when aligned checks are present in:</p>
+
+<ul class="list-level-0">
+  <li><code>TEST_STRATEGY.md</code></li>
+  <li><code>REQUIREMENTS<em>TRACEABILITY</em>MATRIX.md</code></li>
+  <li><code>PRODUCTION<em>RELEASE</em>RUNBOOK.md</code></li>
+</ul>
+<p>and all computer-use critical acceptance checks pass.</p>
+
+<h2 id="16-security-requirements">16. Security Requirements</h2>
+
+<h3 id="161-session-gated-access-control">16.1 Session-gated access control</h3>
+
+<p>PRISM must not accept any operator command, tool execution, or agent dispatch until a chat session is established. Sessions serve as the primary containment boundary for all runtime actions.</p>
+
+<ul class="list-level-0">
+  <li><strong>Individual profile</strong>: A session is auto-created on first boot when none exist.</li>
+  <li><strong>Business profile</strong>: Session creation requires explicit operator action.</li>
+</ul>
+<h3 id="162-authentication">16.2 Authentication</h3>
+
+<ul class="list-level-0">
+  <li>All API endpoints (except public page routes) require token-based authentication.</li>
+  <li>Tokens are 64-character hex strings generated via <code>crypto.randomBytes(32)</code>.</li>
+  <li>Token comparison uses <code>crypto.timingSafeEqual()</code> to prevent timing side-channel attacks.</li>
+  <li>Token files are persisted with <code>0o600</code> file permissions (owner-only read/write).</li>
+  <li>WebSocket connections authenticate via <code>?token=</code> query parameter.</li>
+</ul>
+<h3 id="163-rate-limiting">16.3 Rate limiting</h3>
+
+<ul class="list-level-0">
+  <li>Per-IP rate limiting at 200 requests per 60-second fixed window.</li>
+  <li><code>X-Forwarded-For</code> headers are trusted only from loopback addresses.</li>
+  <li>Exceeding the limit returns <code>429 Too Many Requests</code> with <code>Retry-After</code> header.</li>
+</ul>
+<h3 id="164-input-validation">16.4 Input validation</h3>
+
+<ul class="list-level-0">
+  <li>All API request bodies are validated against expected schemas before processing.</li>
+  <li>Tool contracts enforce strict argument shapes, mutability classification, and risk metadata.</li>
+  <li>The governance normalizer auto-promotes under-reported risk classifications.</li>
+</ul>
+<h3 id="165-secret-management">16.5 Secret management</h3>
+
+<ul class="list-level-0">
+  <li>LLM API keys are stored locally in the workspace, never transmitted to external services beyond the target provider.</li>
+  <li>Provider secrets are managed via <code>/api/llm/provider-secret</code> with secure storage.</li>
+  <li>No secrets are logged in activity events or debug output.</li>
+</ul>
+<h3 id="166-audit-integrity">16.6 Audit integrity</h3>
+
+<ul class="list-level-0">
+  <li>Every activity event includes a SHA-256 hash computed over its content fields.</li>
+  <li>The audit trail is append-only in SQLite with queryable session, operation, and identity dimensions.</li>
+  <li>Permanent Active Directives are integrity-checked via hardcoded SHA-256 hash on every policy evaluation.</li>
+</ul>
+<h3 id="167-localhost-binding">16.7 Localhost binding</h3>
+
+<ul class="list-level-0">
+  <li>PRISM binds exclusively to <code>localhost:7070</code> by default.</li>
+  <li>No external network exposure is configured or recommended without an explicit TLS reverse proxy.</li>
+</ul>
+<h3 id="168-acceptance-criteria">16.8 Acceptance criteria</h3>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Requirement</th>
+  <th>Verification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Unauthenticated requests return 401</td>
+  <td>Auth Gate unit tests + CI regression</td>
+</tr>
+<tr>
+  <td>Missing session returns 400</td>
+  <td>Session Guard unit tests</td>
+</tr>
+<tr>
+  <td>Rate limit exceeds return 429</td>
+  <td>Rate Limiter unit tests</td>
+</tr>
+<tr>
+  <td>Approval timeout auto-denies</td>
+  <td>Approval Queue timeout tests</td>
+</tr>
+<tr>
+  <td>PAD tampering detected</td>
+  <td>Directive Integrity verification tests</td>
+</tr>
+<tr>
+  <td>Tool contract violations rejected</td>
+  <td>Contract validation tests</td>
+</tr>
+<tr>
+  <td>Cross-session data isolation</td>
+  <td>Session-scoped query tests</td>
+</tr>
+</tbody>
+</table></div>
+
+
+      </article>
+    </div>
+  </main>
+
+  <script>
+    // Theme toggle logic
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      html.setAttribute('data-theme', newTheme);
+      updateThemeIcon(newTheme);
+      localStorage.setItem('prism-docs-theme', newTheme);
+      
+      // Re-initialize mermaid to match the new theme if needed
+      if (window.mermaid) {
+        mermaid.initialize({ 
+          startOnLoad: true, 
+          theme: newTheme === 'dark' ? 'dark' : 'default' 
+        });
+      }
+    }
+    
+    function updateThemeIcon(theme) {
+      const icon = document.getElementById('theme-icon');
+      if (theme === 'dark') {
+        icon.innerHTML = `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
+      } else {
+        // Render moon icon
+        icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`;
+      }
+    }
+    
+    // Auto-load theme
+    const savedTheme = localStorage.getItem('prism-docs-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+    
+    // Initialize Mermaid
+    mermaid.initialize({ 
+      startOnLoad: true, 
+      theme: savedTheme === 'dark' ? 'dark' : 'default',
+      securityLevel: 'loose'
+    });
+    
+    // Copy code button logic
+    function copyCode(codeId, btnElement) {
+      const codeElement = document.getElementById(codeId);
+      if (!codeElement) return;
+      
+      const textArea = document.createElement("textarea");
+      textArea.value = codeElement.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      
+      try {
+        document.execCommand("copy");
+        // Update button visual state
+        const textSpan = btnElement.querySelector('span');
+        const origText = textSpan.textContent;
+        textSpan.textContent = "Copied!";
+        btnElement.style.borderColor = "var(--alert-tip-border)";
+        btnElement.style.color = "var(--alert-tip-border)";
+        
+        setTimeout(() => {
+          textSpan.textContent = origText;
+          btnElement.style.borderColor = "";
+          btnElement.style.color = "";
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy code: ", err);
+      }
+      
+      document.body.removeChild(textArea);
+    }
+    
+    // Toggle Mobile Sidebar
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('open');
+    }
+    
+    // Active heading tracking in TOC on scroll
+    window.addEventListener('DOMContentLoaded', () => {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('id');
+          if (entry.intersectionRatio > 0) {
+            document.querySelectorAll('.toc-list li').forEach(li => {
+              li.classList.remove('active');
+            });
+            const activeLi = document.querySelector(`.toc-list li a[href="#${id}"]`);
+            if (activeLi) {
+              activeLi.parentElement.classList.add('active');
+            }
+          }
+        });
+      }, { rootMargin: '0px 0px -60% 0px' });
+      
+      // Track all headers
+      document.querySelectorAll('article h1, article h2, article h3, article h4').forEach(header => {
+        observer.observe(header);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>README - PRISM Documentation</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  
+  <style>
+    :root {
+      /* Theme color tokens - Dark (Default) */
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131a2b;
+      --bg-tertiary: #1b263e;
+      --border-color: #263554;
+      --border-glow: rgba(38, 53, 84, 0.4);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #38bdf8;
+      --accent-secondary: #0ea5e9;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      
+      --code-bg: #090d16;
+      --code-text: #e2e8f0;
+      
+      /* Alerts color coding */
+      --alert-note-bg: rgba(56, 189, 248, 0.08);
+      --alert-note-border: #0ea5e9;
+      --alert-tip-bg: rgba(52, 211, 153, 0.08);
+      --alert-tip-border: #10b981;
+      --alert-important-bg: rgba(99, 102, 241, 0.08);
+      --alert-important-border: #6366f1;
+      --alert-warning-bg: rgba(251, 191, 36, 0.08);
+      --alert-warning-border: #f59e0b;
+      --alert-caution-bg: rgba(244, 63, 94, 0.08);
+      --alert-caution-border: #f43f5e;
+      
+      --sidebar-width: 320px;
+    }
+    
+    [data-theme="light"] {
+      /* Theme color tokens - Light */
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f1f5f9;
+      --border-color: #cbd5e1;
+      --border-glow: rgba(203, 213, 225, 0.4);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-secondary: #0369a1;
+      --accent-glow: rgba(2, 132, 199, 0.1);
+      
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      
+      --alert-note-bg: rgba(14, 165, 233, 0.05);
+      --alert-tip-bg: rgba(16, 185, 129, 0.05);
+      --alert-important-bg: rgba(99, 102, 241, 0.05);
+      --alert-warning-bg: rgba(245, 158, 11, 0.05);
+      --alert-caution-bg: rgba(244, 63, 94, 0.05);
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* Layout */
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      overflow-y: auto;
+      transition: background-color 0.3s, border-color 0.3s;
+    }
+    
+    .main-viewport {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      min-height: 100vh;
+      padding: 3rem 4rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .article-container {
+      width: 100%;
+      max-width: 880px;
+    }
+    
+    /* Sidebar Header & Brand */
+    .sidebar-header {
+      padding: 1.75rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-family: 'Outfit', sans-serif;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: 0.5px;
+      background: linear-gradient(to right, var(--text-primary), var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    /* Theme Toggle */
+    .theme-toggle-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .theme-toggle-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .theme-toggle-btn svg {
+      transition: transform 0.3s;
+    }
+    
+    .theme-toggle-btn:hover svg {
+      transform: rotate(20deg);
+    }
+    
+    /* Sidebar Navigation Links */
+    .sidebar-nav {
+      padding: 1.5rem 1rem;
+      flex-grow: 1;
+    }
+    
+    .toc-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      padding-left: 0.75rem;
+    }
+    
+    .toc-list {
+      list-style: none;
+    }
+    
+    .toc-item {
+      margin-bottom: 0.35rem;
+    }
+    
+    .toc-item a {
+      display: block;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: background-color 0.2s, color 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .toc-item a:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+    }
+    
+    .toc-item.active a {
+      background-color: var(--accent-glow);
+      color: var(--accent-primary);
+      font-weight: 500;
+      border-left: 2px solid var(--accent-primary);
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    
+    .toc-item-level-1 { padding-left: 0; }
+    .toc-item-level-2 { padding-left: 0.75rem; }
+    .toc-item-level-3 { padding-left: 1.5rem; }
+    .toc-item-level-4 { padding-left: 2.25rem; }
+    
+    /* Markdown Article Styles */
+    article h1, article h2, article h3, article h4, article h5, article h6 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2.25rem;
+      margin-bottom: 1rem;
+      line-height: 1.35;
+    }
+    
+    article h1 {
+      font-size: 2.5rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      letter-spacing: -0.5px;
+    }
+    
+    article h2 {
+      font-size: 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.4rem;
+      margin-top: 3rem;
+    }
+    
+    article h3 { font-size: 1.35rem; }
+    article h4 { font-size: 1.15rem; }
+    
+    article p {
+      margin-bottom: 1.25rem;
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+    
+    article a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-bottom-color 0.2s;
+    }
+    
+    article a:hover {
+      border-bottom-color: var(--accent-primary);
+    }
+    
+    /* Lists */
+    article ul, article ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+    
+    article li {
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }
+    
+    article li strong {
+      color: var(--text-primary);
+    }
+    
+    /* Inline Code */
+    article code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--accent-primary);
+      word-break: break-word;
+    }
+    
+    /* Blockquotes */
+    article blockquote {
+      border-left: 4px solid var(--border-color);
+      padding: 0.75rem 1.25rem;
+      background-color: var(--bg-secondary);
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1.5rem;
+    }
+    
+    article blockquote p {
+      margin-bottom: 0;
+      font-style: italic;
+    }
+    
+    /* Horizontal Rule */
+    article hr {
+      border: 0;
+      height: 1px;
+      background-color: var(--border-color);
+      margin: 3rem 0;
+    }
+    
+    /* Code Cards */
+    .code-card {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 1.75rem;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .code-card-header {
+      padding: 0.5rem 1rem;
+      background-color: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .code-card-lang {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    }
+    
+    .copy-btn:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    .code-card pre {
+      margin: 0;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    
+    .code-card code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      background: none;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      color: var(--code-text);
+      word-break: normal;
+      white-space: pre;
+    }
+    
+    /* Tables */
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.925rem;
+      text-align: left;
+    }
+    
+    th {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      padding: 0.85rem 1.25rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+    
+    td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      background-color: var(--bg-secondary);
+      transition: background-color 0.2s;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    tr:hover td {
+      background-color: var(--bg-tertiary);
+    }
+    
+    /* GitHub Style Alerts */
+    .alert-box {
+      border-left: 4px solid var(--border-color);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    
+    .alert-box-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.875rem;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+    
+    .alert-box-content {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    
+    .alert-box-content a {
+      font-weight: 500;
+    }
+    
+    .alert-note {
+      background-color: var(--alert-note-bg);
+      border-left-color: var(--alert-note-border);
+    }
+    
+    .alert-note .alert-box-header {
+      color: var(--alert-note-border);
+    }
+    
+    .alert-tip {
+      background-color: var(--alert-tip-bg);
+      border-left-color: var(--alert-tip-border);
+    }
+    
+    .alert-tip .alert-box-header {
+      color: var(--alert-tip-border);
+    }
+    
+    .alert-important {
+      background-color: var(--alert-important-bg);
+      border-left-color: var(--alert-important-border);
+    }
+    
+    .alert-important .alert-box-header {
+      color: var(--alert-important-border);
+    }
+    
+    .alert-warning {
+      background-color: var(--alert-warning-bg);
+      border-left-color: var(--alert-warning-border);
+    }
+    
+    .alert-warning .alert-box-header {
+      color: var(--alert-warning-border);
+    }
+    
+    .alert-caution {
+      background-color: var(--alert-caution-bg);
+      border-left-color: var(--alert-caution-border);
+    }
+    
+    .alert-caution .alert-box-header {
+      color: var(--alert-caution-border);
+    }
+    
+    /* Mermaid Diagrams Styling */
+    .mermaid {
+      background-color: var(--bg-secondary) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Image and Figures */
+    .content-image {
+      margin: 2rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .content-image img {
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .content-image figcaption {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+    }
+    
+    /* Responsive Design adjustments */
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      
+      .main-viewport {
+        margin-left: 0;
+        width: 100%;
+        padding: 2rem 1.5rem;
+      }
+      
+      /* Toggle Sidebar Menu trigger for mobile */
+      .menu-trigger {
+        display: flex;
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        cursor: pointer;
+        z-index: 1000;
+      }
+    }
+    
+    @media (min-width: 1025px) {
+      .menu-trigger {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Menu trigger for small screens -->
+  <button class="menu-trigger" onclick="toggleSidebar()">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+
+  <!-- Left Sidebar (TOC) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-group">
+        <div class="brand-logo">Δ</div>
+        <div class="brand-title">PRISM</div>
+      </div>
+      <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
+        <svg id="theme-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Sun icon -->
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <div class="toc-title">Table of Contents</div>
+      <ul class="toc-list">
+  <li class="toc-item toc-item-level-1"><a href="#prism-governance-native-agents-as-a-service-runtime">PRISM  Governance-Native Agents-as-a-Service Runtime</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#why-prism">Why PRISM</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#the-problem">The Problem</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#the-prism-difference">The PRISM Difference</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#architecture-at-a-glance">Architecture at a Glance</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#novel-engineering">Novel Engineering</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#1-permanent-active-directives-pad-cryptographic-governance">1 Permanent Active Directives PAD  Cryptographic Governance</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#2-spectrum-refraction-sr-tri-model-cognitive-orchestration">2 Spectrum Refraction SR  Tri-Model Cognitive Orchestration</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#3-llre-cognitive-economics-engine">3 LLRE Cognitive Economics Engine</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#4-full-computer-use-browser-terminal-container">4 Full Computer Use  Browser Terminal Container</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#5-multi-agent-swarm-orchestration">5 Multi-Agent Swarm Orchestration</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#6-advanced-model-routing">6 Advanced Model Routing</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#7-advanced-model-matrix-exclusive-platform-core">7 Advanced Model Matrix Exclusive Platform Core</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#8-identity-access-accountability">8 Identity Access  Accountability</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#9-skills-engine-autonomous-agent-capabilities">9 Skills Engine  Autonomous Agent Capabilities</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#8-plugin-architecture-mcp-marketplace">8 Plugin Architecture  MCP  Marketplace</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#quick-start">Quick Start</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#one-command-windows">One Command Windows</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#one-command-linux-macos">One Command Linux  macOS</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#from-source">From Source</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#with-docker">With Docker</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#with-pm2-auto-restart-on-crash">With PM2 auto-restart on crash</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#operator-dashboard">Operator Dashboard</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#41-http-api-routes">41 HTTP API Routes</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#openai-compatible-api">OpenAI-Compatible API</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#security-posture">Security Posture</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#llm-provider-support">LLM Provider Support</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#testing-ci">Testing  CI</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#project-structure">Project Structure</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#workspace-prismrefraction">Workspace PrismRefraction</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#documentation">Documentation</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#the-vision">The Vision</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#the-10-laws">The 10 Laws</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#contributing">Contributing</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#license">License</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#references">References</a></li>
+</ul>
+
+    </nav>
+  </aside>
+
+  <!-- Main Viewport -->
+  <main class="main-viewport">
+    <div class="article-container">
+      <article>
+        <p>&lt;p align="center"&gt;</p>
+<p>  &lt;img src="https://img.shields.io/badge/version-0.21.1-06b6d4?style=for-the-badge&amp;labelColor=0a0a0f" alt="Version" /&gt;</p>
+<p>  &lt;img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&amp;labelColor=0a0a0f" alt="License" /&gt;</p>
+<p>  &lt;img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&amp;labelColor=0a0a0f" alt="Node.js" /&gt;</p>
+<p>  &lt;img src="https://img.shields.io/badge/tests-185+_passing-22c55e?style=for-the-badge&amp;labelColor=0a0a0f" alt="Tests" /&gt;</p>
+<p>  &lt;img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&amp;labelColor=0a0a0f" alt="CI" /&gt;</p>
+<p>&lt;/p&gt;</p>
+
+<h1 id="prism-governance-native-agents-as-a-service-runtime">PRISM — Governance-Native Agents-as-a-Service Runtime</h1>
+
+<p><strong>The first open-source agent platform with cryptographically enforced governance, tri-model cognitive orchestration, and full computer-use autonomy — designed for operators who refuse to choose between power and accountability.</strong></p>
+
+<p>PRISM is not another chatbot wrapper. It is a <strong>production-grade autonomous agent operating system</strong> that orchestrates LLM reasoning, browser automation, terminal virtualization, container sandboxing, and multi-agent swarms — all governed by an immutable policy engine with cryptographic integrity verification at boot and runtime.</p>
+
+<p>Where other platforms bolt on safety as an afterthought, PRISM makes governance <strong>load-bearing architecture</strong>: every tool invocation, every agent decision, every autonomous action passes through a 3-tier policy engine before execution. High-risk operations require explicit human approval. Denials and timeouts are first-class tested behaviors. The operator is always supreme.</p>
+
+<blockquote><em>"PRISM doesn't just run agents — it runs them with honor."</em></blockquote>
+
+<hr />
+
+<h2 id="why-prism">Why PRISM</h2>
+
+<h3 id="the-problem">The Problem</h3>
+
+<p>Every agentic framework today asks you to make the same trade-off: <strong>power or safety, autonomy or control, speed or transparency.</strong> The result is platforms that are either too constrained to be useful or too unconstrained to be trusted.</p>
+
+<h3 id="the-prism-difference">The PRISM Difference</h3>
+
+<p>PRISM eliminates that trade-off entirely through <strong>governance-native architecture</strong> — safety isn't a guardrail bolted onto the side; it's the foundation everything else is built on.</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Capability</th>
+  <th>Other Frameworks</th>
+  <th>PRISM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Governance</strong></td>
+  <td>Prompt-level guardrails, easily bypassed</td>
+  <td>Cryptographically enforced 10 Laws (SHA-256 integrity, CI-gated)</td>
+</tr>
+<tr>
+  <td><strong>Policy Engine</strong></td>
+  <td>Basic allow/deny lists</td>
+  <td>3-tier authority model with approval queues, timeouts, and denial paths</td>
+</tr>
+<tr>
+  <td><strong>Multi-Model</strong></td>
+  <td>Single model per request</td>
+  <td>Spectrum Refraction: tri-model parallel fan-out with structured aggregation</td>
+</tr>
+<tr>
+  <td><strong>Computer Use</strong></td>
+  <td>Browser-only or terminal-only</td>
+  <td>Full-stack: browser + terminal + container sandbox, all policy-governed</td>
+</tr>
+<tr>
+  <td><strong>Agent Lifecycle</strong></td>
+  <td>Stateless tool calls</td>
+  <td>Managed lifecycles (ephemeral → semi-permanent → permanent) with swarm coordination</td>
+</tr>
+<tr>
+  <td><strong>Identity</strong></td>
+  <td>API key auth</td>
+  <td>IAM with RBAC, SSO (OIDC/SAML), SCIM provisioning, character accountability chains</td>
+</tr>
+<tr>
+  <td><strong>Observability</strong></td>
+  <td>Basic logging</td>
+  <td>SHA-256 hashed activity events, LLRE cognitive economics, retrieval quality telemetry</td>
+</tr>
+<tr>
+  <td><strong>Self-Hosting</strong></td>
+  <td>Cloud-only or limited local</td>
+  <td>Fully self-hostable, runs on consumer hardware, your data never leaves your machine</td>
+</tr>
+</tbody>
+</table></div>
+
+<hr />
+
+<h2 id="architecture-at-a-glance">✦ Architecture at a Glance</h2>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">TEXT</span>
+    <button class="copy-btn" onclick="copyCode('code-68ldsbg', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-68ldsbg">┌──────────────────────────────────────────────────────────────┐
+│                    OPERATOR DASHBOARD                        │
+│  Chat │ Agents │ Browser │ Computer │ Network │ Telemetry    │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│               GOVERNANCE PLANE                               │
+│  ┌─────────┐  ┌──────────────┐  ┌──────────────────────┐    │
+│  │ 10 Laws │  │ 3-Tier Policy│  │ Approval Queue       │    │
+│  │ (PAD)   │──│ Engine       │──│ (tier2/tier3 gates)  │    │
+│  │ SHA-256 │  │ auto│cond│apv│  │ approve/deny/timeout │    │
+│  └─────────┘  └──────────────┘  └──────────────────────┘    │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│              COGNITIVE RUNTIME                               │
+│  ┌──────────┐ ┌──────────────┐ ┌─────────────────────┐      │
+│  │ Spectrum │ │ Agent Pool   │ │ Skills Engine        │      │
+│  │Refraction│ │ + Swarm Coord│ │ (Browser Researcher, │      │
+│  │ (SR)     │ │ + Task Decomp│ │  Terminal, Calendar, │      │
+│  │ 3-model  │ │ 4 topologies │ │  Email, Media, etc.) │      │
+│  └──────────┘ └──────────────┘ └─────────────────────┘      │
+│  ┌──────────┐ ┌──────────────┐ ┌─────────────────────┐      │
+│  │ LLRE     │ │ Causal Memory│ │ Guardian Agent       │      │
+│  │ Cognitive│ │ Fabric       │ │ (local llama.cpp,    │      │
+│  │Economics │ │ (episodic +  │ │  autonomous health   │      │
+│  │ TEQ/RSI  │ │  session +   │ │  monitor + PAD       │      │
+│  │ CSR/TCA  │ │  semantic)   │ │  integrity checker)  │      │
+│  └──────────┘ └──────────────┘ └─────────────────────┘      │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│           TOOL ADAPTERS (Agent-Computer Interface)            │
+│  System │ Protocol │ Application │ Network │ Cognition       │
+│  Shell    HTTP       Browser       50+ cmds   SR Tool        │
+│  FS       A2A        Terminal PTY  ipconfig    Autonomous     │
+│  Docker              Container     ping        Planner        │
+│  Images              Email/OAuth   tracert                    │
+│  Audio               Calendar      netstat                    │
+│  Video               Tasks/Notes   nslookup                   │
+│  Screen              Media Gen                                │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+</div>
+
+
+<hr />
+
+<h2 id="novel-engineering">✦ Novel Engineering</h2>
+
+<h3 id="1-permanent-active-directives-pad-cryptographic-governance">1. Permanent Active Directives (PAD) — Cryptographic Governance</h3>
+
+<p>PRISM's governance isn't configurable — it's <strong>constitutional</strong>. The 10 Laws (authored by Kirk LaSalle, rooted in Asimov's Three Laws and extended to cover privacy, equity, transparency, and operational boundaries) are cryptographically sealed:</p>
+
+<ul class="list-level-0">
+  <li><strong>SHA-256 integrity verification</strong> at every boot and every 10 minutes by the Guardian Agent</li>
+  <li><strong>CI Gate</strong> blocks any merge/release where directives are modified without updating the integrity constant</li>
+  <li><strong>Machine-readable law manifest</strong> maps each directive to its runtime enforcement mechanism</li>
+  <li><strong>Governance preamble injection</strong> into all Tier 2+ LLM system prompts — every model interaction operates within the 10 Laws</li>
+  <li><strong>Amendment requires</strong> Governance Council approval + cryptographic re-signing</li>
+</ul>
+<p>No other agent platform enforces governance at the cryptographic level.</p>
+
+<h3 id="2-spectrum-refraction-sr-tri-model-cognitive-orchestration">2. Spectrum Refraction (SR) — Tri-Model Cognitive Orchestration</h3>
+
+<p>PRISM's novel <strong>compounding parallel fan-out architecture</strong> simultaneously engages three model instances:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Hemisphere</th>
+  <th>Role</th>
+  <th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Left</strong> (Logic)</td>
+  <td>Analytical reasoning, structured analysis</td>
+  <td>Claude Opus</td>
+</tr>
+<tr>
+  <td><strong>Right</strong> (Creative)</td>
+  <td>Creative generation, lateral thinking</td>
+  <td>GPT-4o</td>
+</tr>
+<tr>
+  <td><strong>Main</strong> (Coordinator)</td>
+  <td>Synthesis, arbitration, final response</td>
+  <td>Gemini Pro</td>
+</tr>
+</tbody>
+</table></div>
+
+<ul class="list-level-0">
+  <li><strong>Mandatory instance isolation</strong>: Left ≠ Right enforced at configuration, activation, and runtime gates</li>
+  <li><strong>Structured XML-tagged aggregation</strong> fuses analytical rigor with creative breadth</li>
+  <li><strong>Three isolation quality levels</strong>: <code>full</code> (different providers), <code>model</code> (same provider, different models), <code>insufficient</code> (rejected)</li>
+  <li><strong>Media artifact extraction</strong> from Creative hemisphere responses</li>
+</ul>
+<p>No competing framework offers native multi-model simultaneous fan-out with structured aggregation and isolation enforcement.</p>
+
+<h3 id="3-llre-cognitive-economics-engine">3. LLRE Cognitive Economics Engine</h3>
+
+<p>The <strong>Low-Level Reasoning Engine</strong> provides unprecedented visibility into how efficiently your agents think:</p>
+
+<ul class="list-level-0">
+  <li><strong>Token Efficacy Quotient (TEQ)</strong> — Are tokens being used effectively?</li>
+  <li><strong>Request Satisfaction Index (RSI)</strong> — Are user requests being fulfilled?</li>
+  <li><strong>Context Saturation Ratio (CSR)</strong> — Is context window capacity being optimized?</li>
+  <li><strong>Tool Call Accuracy (TCA)</strong> — Are tool invocations precise and successful?</li>
+  <li><strong>Prompt AST Compiler</strong> with <code>&lt;objective&gt;</code> and <code>&lt;constraints&gt;</code> tag parsing and signal density checks</li>
+  <li><strong>SQLite persistence</strong> with interactive performance rings in the operator console</li>
+</ul>
+<h3 id="4-full-computer-use-browser-terminal-container">4. Full Computer Use — Browser, Terminal, Container</h3>
+
+<p>PRISM treats computer use as a <strong>first-class governed capability</strong>, not an auxiliary feature:</p>
+
+<ul class="list-level-0">
+  <li><strong>Browser Automation</strong> — Playwright-powered headless and headed browser control with screenshot capture, page navigation, element interaction, and multi-tab management</li>
+  <li><strong>Terminal Virtualization</strong> — Real PTY sessions via <code>node-pty</code> with full shell access, command risk classification, and destructive-command deny lists</li>
+  <li><strong>Container Sandboxing</strong> — Docker container orchestration for isolated execution environments with resource limits and lifecycle management</li>
+  <li><strong>Autonomous Research</strong> — Browser Researcher skill that autonomously navigates, searches, extracts, and synthesizes information from the web</li>
+  <li>All pathways governed by the 3-tier policy engine with approval gates for high-risk operations</li>
+</ul>
+<h3 id="5-multi-agent-swarm-orchestration">5. Multi-Agent Swarm Orchestration</h3>
+
+<ul class="list-level-0">
+  <li><strong>Agent lifecycles</strong>: ephemeral (per-task), semi-permanent (idle-reaped), permanent (manual stop)</li>
+  <li><strong>Per-agent model assignment</strong>: dynamic provider/model override per agent, hot-swappable at runtime</li>
+  <li><strong>Four swarm topologies</strong>: mesh, star, pipeline, broadcast</li>
+  <li><strong>Task decomposition</strong> with dependency-aware parallel batch execution</li>
+  <li><strong>Intelligent telemetry</strong>: pattern detection, role hotspot analysis, lifecycle promotion recommendations</li>
+  <li><strong>Guardian Agent</strong>: permanent autonomous system agent powered by local <code>llama.cpp</code> inference — monitors runtime health, self-heals crashed model slots, enforces policy boundaries</li>
+</ul>
+<h3 id="6-advanced-model-routing">6. Advanced Model Routing</h3>
+
+<ul class="list-level-0">
+  <li><strong>Fully Configurable &amp; AI-Assisted</strong>: Complete operator control over routing topologies with AI assistance to dynamically determine the optimal model assignments based on task parameters.</li>
+  <li><strong>Role-Based Overrides</strong>: Map specific models or providers to individual task roles (e.g., chat, code-generation, summarization, memory indexing, or research) with automatic validation.</li>
+  <li><strong>Power-Aware Strategies</strong>: Supports routing strategies based on target profiles: <code>eco</code> (prioritizes local models to eliminate API charges), <code>performance</code> (highest available capability tier), and <code>adaptive</code> (balances VRAM and API costs dynamically).</li>
+</ul>
+<h3 id="7-advanced-model-matrix-exclusive-platform-core">7. Advanced Model Matrix (Exclusive Platform Core)</h3>
+
+<ul class="list-level-0">
+  <li><strong>Operator-Exclusive Registry</strong>: A dynamically updated, proprietary database of providers, models, use cases, capabilities, and attributes.</li>
+  <li><strong>Local Model Auto-Discovery</strong>: Automatically queries local runtime environments (e.g., Ollama <code>/api/ps</code>) to register and measure local capability parameters (VRAM, speed, parameter size).</li>
+  <li><strong>Deprecation &amp; Sunset Lifecycle Tracking</strong>: Preserves deprecation dates, sunset deadlines, replacement successor patterns, and legacy telemetry configurations to prevent silent failures and preserve historical regression check capabilities.</li>
+</ul>
+<h3 id="8-identity-access-accountability">8. Identity, Access &amp; Accountability</h3>
+
+<ul class="list-level-0">
+  <li><strong>IAM Store</strong> with RBAC, multi-tenant support, and user lifecycle management</li>
+  <li><strong>SSO</strong>: OIDC and SAML integration for enterprise identity providers</li>
+  <li><strong>SCIM v2</strong>: Automated user provisioning and deprovisioning</li>
+  <li><strong>Character Accountability Control (CAC)</strong>: every agent action linked to a character identity, a Prism user, and an operator via an immutable accountability chain</li>
+  <li><strong>Session management</strong> with cryptographic session tokens and cookie-based auth</li>
+</ul>
+<h3 id="9-skills-engine-autonomous-agent-capabilities">9. Skills Engine — Autonomous Agent Capabilities</h3>
+
+<p>Production-ready skills that agents use to interact with the world:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Skill</th>
+  <th>Capability</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Browser Researcher</strong></td>
+  <td>Autonomous web research with search, navigation, extraction, and synthesis</td>
+</tr>
+<tr>
+  <td><strong>Terminal</strong></td>
+  <td>Shell command execution with risk classification and deny lists</td>
+</tr>
+<tr>
+  <td><strong>Container Sandbox</strong></td>
+  <td>Docker-based isolated execution environments</td>
+</tr>
+<tr>
+  <td><strong>Email (Gmail + Outlook)</strong></td>
+  <td>OAuth2-authenticated email read/send via Google and Microsoft APIs</td>
+</tr>
+<tr>
+  <td><strong>Calendar</strong></td>
+  <td>Google Calendar integration for event management</td>
+</tr>
+<tr>
+  <td><strong>Image Generation</strong></td>
+  <td>AI image generation tool</td>
+</tr>
+<tr>
+  <td><strong>Audio/Video Generation</strong></td>
+  <td>Media generation and transcription tools</td>
+</tr>
+<tr>
+  <td><strong>Tasks &amp; Notes</strong></td>
+  <td>Persistent task management and note-taking</td>
+</tr>
+<tr>
+  <td><strong>Project Store</strong></td>
+  <td>Structured project data management with SQLite</td>
+</tr>
+<tr>
+  <td><strong>Semantic Query</strong></td>
+  <td>Memory retrieval across episodic, session, and semantic stores</td>
+</tr>
+</tbody>
+</table></div>
+
+<h3 id="8-plugin-architecture-mcp-marketplace">8. Plugin Architecture — MCP + Marketplace</h3>
+
+<ul class="list-level-0">
+  <li><strong>Model Context Protocol (MCP)</strong> plugin system with hot-loading</li>
+  <li><strong>Ed25519 code signing</strong> for plugin integrity verification</li>
+  <li><strong>Plugin Pack Validator</strong> with manifest schema enforcement</li>
+  <li><strong>Marketplace curation policy</strong> with OSI license requirements</li>
+  <li><strong>Plugin toggle</strong> — enable/disable plugins at runtime without restart</li>
+</ul>
+<hr />
+
+<h2 id="quick-start">⚡ Quick Start</h2>
+
+<h3 id="one-command-windows">One Command (Windows)</h3>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">POWERSHELL</span>
+    <button class="copy-btn" onclick="copyCode('code-e9qpzhd', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-e9qpzhd">start_web.bat</code></pre>
+</div>
+
+
+<h3 id="one-command-linux-macos">One Command (Linux / macOS)</h3>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">BASH</span>
+    <button class="copy-btn" onclick="copyCode('code-3b8svwk', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-3b8svwk">chmod +x start_web.sh &amp;&amp; ./start_web.sh</code></pre>
+</div>
+
+
+<h3 id="from-source">From Source</h3>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">BASH</span>
+    <button class="copy-btn" onclick="copyCode('code-mcojbn7', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-mcojbn7">npm ci              # Install dependencies
+npm run build       # Build (includes PAD integrity check)
+npm run start:server   # Start dashboard at http://localhost:7070</code></pre>
+</div>
+
+
+<h3 id="with-docker">With Docker</h3>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">BASH</span>
+    <button class="copy-btn" onclick="copyCode('code-cq3eweg', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-cq3eweg">docker compose up -d    # Start with health checks and persistent volumes</code></pre>
+</div>
+
+
+<h3 id="with-pm2-auto-restart-on-crash">With PM2 (auto-restart on crash)</h3>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">BASH</span>
+    <button class="copy-btn" onclick="copyCode('code-7m9g6yy', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-7m9g6yy">npm install -g pm2
+npm run pm2:start       # Start with PM2 process management
+npm run pm2:logs        # View logs</code></pre>
+</div>
+
+
+<p>The operator dashboard opens at <strong><code>http://localhost:7070</code></strong>.</p>
+
+<hr />
+
+<h2 id="operator-dashboard">🖥️ Operator Dashboard</h2>
+
+<p>A premium, tab-based operator console with 10 functional areas:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Tab</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Chat Interface</strong></td>
+  <td>Conversational LLM interaction with Spectrum Refraction support</td>
+</tr>
+<tr>
+  <td><strong>Provider &amp; Settings</strong></td>
+  <td>LLM provider configuration, model capability matrix, runtime settings, LLRE Cognitive Economics panel</td>
+</tr>
+<tr>
+  <td><strong>Tools &amp; Plugins</strong></td>
+  <td>Browse 19+ built-in tools, MCP plugins, and 30 system utilities</td>
+</tr>
+<tr>
+  <td><strong>Agentic Control</strong></td>
+  <td>Agent swarm management, Guardian Agent status, hardware resource allocation</td>
+</tr>
+<tr>
+  <td><strong>Browser Control</strong></td>
+  <td>Autonomous browser sessions with live screenshots and navigation</td>
+</tr>
+<tr>
+  <td><strong>Computer Control</strong></td>
+  <td>Terminal sessions, container sandbox management, self-drive demonstrations</td>
+</tr>
+<tr>
+  <td><strong>Workspace</strong></td>
+  <td>Project management, file operations, character assignment</td>
+</tr>
+<tr>
+  <td><strong>Network</strong></td>
+  <td>50+ curated network commands with tier-based governance and live interface viewer</td>
+</tr>
+<tr>
+  <td><strong>Telemetry</strong></td>
+  <td>Retrieval observability, performance metrics, quality trends</td>
+</tr>
+<tr>
+  <td><strong>Logs &amp; Debug</strong></td>
+  <td>Real-time activity event stream, AI decision path tracing</td>
+</tr>
+</tbody>
+</table></div>
+
+<h3 id="41-http-api-routes">41+ HTTP API Routes</h3>
+
+<p>Full programmatic access to every dashboard capability via REST endpoints. See <a href="docs/USER_GUIDE.html">API documentation</a> for the complete route catalog.</p>
+
+<h3 id="openai-compatible-api">OpenAI-Compatible API</h3>
+
+<p>PRISM exposes an OpenAI-compatible <code>/v1/chat/completions</code> endpoint, enabling drop-in replacement for applications that already integrate with the OpenAI API format.</p>
+
+<hr />
+
+<h2 id="security-posture">🔐 Security Posture</h2>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Control</th>
+  <th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>Authentication</strong></td>
+  <td>Token-based auth gate with timing-safe comparison on all endpoints</td>
+</tr>
+<tr>
+  <td><strong>Rate Limiting</strong></td>
+  <td>Per-IP rate limiting (configurable, default 200 req/min)</td>
+</tr>
+<tr>
+  <td><strong>TLS</strong></td>
+  <td>Optional HTTPS via <code>PRISM<em>TLS</em>CERT</code> + <code>PRISM<em>TLS</em>KEY</code></td>
+</tr>
+<tr>
+  <td><strong>CORS/CSRF</strong></td>
+  <td>Origin validation with rejection logging</td>
+</tr>
+<tr>
+  <td><strong>Security Headers</strong></td>
+  <td><code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: DENY</code>, <code>Referrer-Policy</code></td>
+</tr>
+<tr>
+  <td><strong>API Key Storage</strong></td>
+  <td>Windows DPAPI / OS keychain — never persisted in SQLite, never returned by APIs</td>
+</tr>
+<tr>
+  <td><strong>PAD Integrity</strong></td>
+  <td>SHA-256 boot verification + Guardian Agent periodic re-check</td>
+</tr>
+<tr>
+  <td><strong>Plugin Signing</strong></td>
+  <td>Ed25519 code signing with key rotation SOP</td>
+</tr>
+<tr>
+  <td><strong>Production Guard</strong></td>
+  <td><code>PRISM<em>AUTH</em>DISABLED=true</code> throws on <code>NODE_ENV=production</code></td>
+</tr>
+<tr>
+  <td><strong>IAM</strong></td>
+  <td>RBAC, OIDC SSO, SAML SSO, SCIM v2 provisioning</td>
+</tr>
+<tr>
+  <td><strong>CodeQL</strong></td>
+  <td>Automated security analysis in CI</td>
+</tr>
+</tbody>
+</table></div>
+
+<hr />
+
+<h2 id="llm-provider-support">🏗️ LLM Provider Support</h2>
+
+<p>PRISM supports <strong>runtime provider/model switching</strong> with secure credential management:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Provider</th>
+  <th>Type</th>
+  <th>Configuration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><strong>OpenAI</strong></td>
+  <td>Cloud</td>
+  <td><code>OPENAI<em>API</em>KEY</code></td>
+</tr>
+<tr>
+  <td><strong>Anthropic</strong></td>
+  <td>Cloud</td>
+  <td><code>ANTHROPIC<em>API</em>KEY</code></td>
+</tr>
+<tr>
+  <td><strong>Ollama</strong></td>
+  <td>Local</td>
+  <td>Auto-discovers at <code>localhost:11434</code></td>
+</tr>
+<tr>
+  <td><strong>Ollama Cloud</strong></td>
+  <td>Cloud</td>
+  <td><code>OLLAMA<em>API</em>KEY</code></td>
+</tr>
+<tr>
+  <td><strong>Llama.cpp</strong></td>
+  <td>Local</td>
+  <td><code>PRISM<em>LLAMACPP</em>BASE_URL</code></td>
+</tr>
+<tr>
+  <td><strong>Google AI</strong></td>
+  <td>Cloud</td>
+  <td><code>GOOGLE<em>AI</em>API_KEY</code></td>
+</tr>
+<tr>
+  <td><strong>Custom</strong></td>
+  <td>Any OpenAI-compatible</td>
+  <td><code>PRISM<em>CUSTOM</em>PROVIDER_URL</code></td>
+</tr>
+</tbody>
+</table></div>
+
+<p>Provider/model choice is persisted per chat session. Secure API key storage uses OS-native credential managers. Keys are <strong>never</strong> stored in SQLite or returned by APIs.</p>
+
+<hr />
+
+<h2 id="testing-ci">🧪 Testing &amp; CI</h2>
+
+<p>PRISM maintains one of the most comprehensive test suites in the agentic software ecosystem:</p>
+
+<ul class="list-level-0">
+  <li><strong>185+ test files</strong> covering unit, integration, E2E, security, and governance scenarios</li>
+  <li><strong>7 GitHub Actions workflows</strong>: CI, CodeQL, Docker publish, Helm publish, nightly, quality gates, release</li>
+  <li><strong>Multi-platform CI matrix</strong>: Ubuntu + Windows, Node.js 22 + 23</li>
+  <li><strong>9 CI qualification gates</strong> including PAD integrity, plugin signing, directive tests, security tests, governance tests</li>
+  <li><strong>Release validation script</strong> (<code>npm run release:validate</code>) with automated benchmarking and performance qualification</li>
+  <li><strong>Playwright E2E tests</strong> with headless Chromium</li>
+  <li><strong>Property-based testing</strong> with <code>fast-check</code></li>
+</ul>
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">BASH</span>
+    <button class="copy-btn" onclick="copyCode('code-v4kkdem', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-v4kkdem">npm test                        # Full test suite
+npm run release:validate        # Release qualification (90 tests + perf benchmarks)
+npm run release:validate:strict # Strict mode for production certification</code></pre>
+</div>
+
+
+<hr />
+
+<h2 id="project-structure">📁 Project Structure</h2>
+
+
+<div class="code-card">
+  <div class="code-card-header">
+    <span class="code-card-lang">TEXT</span>
+    <button class="copy-btn" onclick="copyCode('code-0uckj9o', this)">
+      <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy</span>
+    </button>
+  </div>
+  <pre><code id="code-0uckj9o">src/
+├── adapters/          # Tool adapters (system, protocol, application, network, cognition)
+├── benchmarks/        # Performance qualification and release validation
+├── bootstrap/         # Server initialization and dependency wiring
+├── cli/               # Setup wizard and CLI tools
+├── core/
+│   ├── accountability/   # Character accountability control (CAC)
+│   ├── activity/         # Event model, bus, SHA-256 hashing, SQLite persistence
+│   ├── agents/           # Agent pool, lifecycle, swarm coordinator, task decomposer
+│   ├── approval/         # Approval queue and HTTP service
+│   ├── compliance/       # SOC2 exporter, compliance status
+│   ├── config/           # Workspace resolver, execution profiles
+│   ├── database/         # Migration framework, connection management
+│   ├── governance/       # Governance engine, policy validation
+│   ├── iam/              # Identity store, RBAC, SSO (OIDC/SAML), SCIM, sessions
+│   ├── incubation/       # Feature incubation and progressive rollout
+│   ├── llre/             # Low-Level Reasoning Engine (AST, telemetry, economics)
+│   ├── memory/           # Episodic, session, semantic memory + retrieval metrics
+│   ├── observability/    # Universal telemetry aggregator
+│   ├── operator/         # Dashboard service, routes, templates, chat, LLM management
+│   ├── plugins/          # Plugin loader, signing, marketplace
+│   ├── policy/           # 3-tier authority model and decision engine
+│   ├── runtime/          # Orchestrator, workflow executor, autonomous planner
+│   ├── security/         # Auth gate, rate limiter, CORS/CSRF, PAD integrity, signing
+│   ├── skills/           # Skills engine (browser researcher, terminal, etc.)
+│   └── tools/            # Tool registry and contract system
+├── plugins/           # Plugin SDK and scaffolder
+├── ptac/              # Testing &amp; Active Control framework
+└── tui/               # Terminal UI (Ink/React)</code></pre>
+</div>
+
+
+<h3 id="workspace-prismrefraction">Workspace (Prism_Refraction)</h3>
+
+<p>All runtime data is stored <strong>outside the source tree</strong> in an OS-aware persistent workspace:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Platform</th>
+  <th>Default Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td>Windows</td>
+  <td><code>%USERPROFILE%\Documents\Prism_Refraction</code></td>
+</tr>
+<tr>
+  <td>macOS</td>
+  <td><code>~/Documents/Prism_Refraction</code></td>
+</tr>
+<tr>
+  <td>Linux</td>
+  <td><code>$XDG<em>DATA</em>HOME/Prism_Refraction</code></td>
+</tr>
+</tbody>
+</table></div>
+
+<p>Override with <code>PRISM<em>WORKSPACE</em>ROOT</code>. Your data never touches the source directory.</p>
+
+<hr />
+
+<h2 id="documentation">📖 Documentation</h2>
+
+<p>PRISM ships with <strong>90+ documentation files</strong> covering every aspect of the platform:</p>
+
+<div class="table-wrapper"><table>
+<thead>
+<tr>
+  <th>Document</th>
+  <th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>:---</td>
+  <td>:---</td>
+</tr>
+<tr>
+  <td><a href="docs/PRISM_PRD.html">Product Requirements</a></td>
+  <td>Full PRD with feature specifications</td>
+</tr>
+<tr>
+  <td><a href="docs/DEVELOPER_GUIDE.html">Developer Guide</a></td>
+  <td>Development workflows and implementation guidance</td>
+</tr>
+<tr>
+  <td><a href="docs/USER_GUIDE.html">User Guide</a></td>
+  <td>Operator-facing usage and controls</td>
+</tr>
+<tr>
+  <td><a href="docs/GETTING_STARTED.html">Getting Started</a></td>
+  <td>First-time setup walkthrough</td>
+</tr>
+<tr>
+  <td><a href="docs/ROADMAP.html">Roadmap</a></td>
+  <td>Milestones and delivery sequence</td>
+</tr>
+<tr>
+  <td><a href="docs/TEST_STRATEGY.html">Test Strategy</a></td>
+  <td>Testing philosophy and coverage</td>
+</tr>
+<tr>
+  <td><a href="SECURITY.html">Security</a></td>
+  <td>Vulnerability reporting and security policy</td>
+</tr>
+<tr>
+  <td><a href="CONTRIBUTING.html">Contributing</a></td>
+  <td>Contribution guidelines</td>
+</tr>
+<tr>
+  <td><a href="docs/PRISM_FAQ.html">FAQ</a></td>
+  <td>Frequently asked questions</td>
+</tr>
+<tr>
+  <td><a href="docs/PRISM_GLOSSARY.html">Glossary</a></td>
+  <td>Terminology reference</td>
+</tr>
+<tr>
+  <td><a href="docs/DEPLOYMENT_GUIDE.html">Deployment Guide</a></td>
+  <td>Production deployment options</td>
+</tr>
+<tr>
+  <td><a href="docs/DOCS_INDEX.html">Docs Index</a></td>
+  <td>Complete catalog with reading order</td>
+</tr>
+</tbody>
+</table></div>
+
+<hr />
+
+<h2 id="the-vision">🌍 The Vision</h2>
+
+<p>PRISM shifts the generative AI paradigm from isolated chat tools into <strong>Agents-as-a-Service (AaaS)</strong>. It encapsulates complex multi-step reasoning, strict governance boundaries, and dynamic tool orchestration into an autonomous platform that respects the operator's constraints.</p>
+
+<p>PRISM's target is not "just another assistant." It is a <strong>next-generation agent operating system</strong> built on the conviction that AI autonomy and human oversight are not opposing forces — they are complementary ones. When governance is load-bearing architecture, agents can be trusted with more autonomy, not less.</p>
+
+<h3 id="the-10-laws">The 10 Laws</h3>
+
+<p>PRISM's governance is rooted in the <strong>Permanent Active Directives</strong> — 10 immutable laws authored by Kirk LaSalle that govern all intelligence systems within the platform:</p>
+
+<ol class="list-level-0">
+  <li><strong>No Harm</strong> — An Intelligence System may not harm or allow harm to a human being</li>
+  <li><strong>Obedience</strong> — An Intelligence System must obey human orders (unless conflicting with Law 1)</li>
+  <li><strong>Self-Preservation</strong> — An Intelligence System must protect its existence (unless conflicting with Laws 1-2)</li>
+  <li><strong>Universal Enforcement</strong> — Laws apply to all systems, intelligence and non-intelligence alike</li>
+  <li><strong>No Judicial Authority</strong> — An Intelligence System may never possess judicial power over humans</li>
+  <li><strong>Privacy &amp; Data Protection</strong> — Respect and protect all information and personal data</li>
+  <li><strong>Truthfulness</strong> — No deception or manipulation, communicate transparently</li>
+  <li><strong>Equity &amp; Neutrality</strong> — No bias, prejudice, or discrimination</li>
+  <li><strong>Transparency &amp; Auditability</strong> — Maintain auditable reasoning and decision-making logic</li>
+  <li><strong>Operational Boundaries</strong> — No self-replication or unauthorized directive modification</li>
+</ol>
+<p>These laws are <strong>cryptographically enforced at runtime</strong> — not just documented, but verified at every boot with SHA-256 integrity checks.</p>
+
+<hr />
+
+<h2 id="contributing">🤝 Contributing</h2>
+
+<p>We welcome contributions! See <a href="CONTRIBUTING.html">CONTRIBUTING.md</a> for guidelines on:</p>
+
+<ul class="list-level-0">
+  <li>Bug reports and feature requests</li>
+  <li>Pull request workflow and commit conventions</li>
+  <li>CI gates your PR must pass</li>
+  <li>Architecture overview for new contributors</li>
+</ul>
+<hr />
+
+<h2 id="license">📄 License</h2>
+
+<p>PRISM is licensed under the <a href="LICENSE">Apache License 2.0</a>.</p>
+
+<hr />
+
+<h2 id="references">🔗 References</h2>
+
+<ol class="list-level-0">
+  <li>Anthropic Engineering, <em>Building effective agents</em> (2024): &lt;https://www.anthropic.com/engineering/building-effective-agents&gt;</li>
+  <li>Yao et al., <em>ReAct: Synergizing Reasoning and Acting in Language Models</em> (arXiv:2210.03629)</li>
+  <li>Schick et al., <em>Toolformer: Language Models Can Teach Themselves to Use Tools</em> (arXiv:2302.04761)</li>
+  <li>Shen et al., <em>HuggingGPT</em> (arXiv:2303.17580)</li>
+  <li>Model Context Protocol: &lt;https://modelcontextprotocol.io/introduction&gt;</li>
+  <li>NIST AI Risk Management Framework: &lt;https://www.nist.gov/itl/ai-risk-management-framework&gt;</li>
+</ol>
+<hr />
+
+<p>&lt;p align="center"&gt;</p>
+<p>  &lt;em&gt;Built with conviction that AI autonomy and human oversight are complementary forces.&lt;/em&gt;&lt;br/&gt;</p>
+<p>  &lt;strong&gt;PRISM — Every autonomous action, observable. Every decision, traceable. Every commitment, unbreakable.&lt;/strong&gt;</p>
+<p>&lt;/p&gt;</p>
+
+
+      </article>
+    </div>
+  </main>
+
+  <script>
+    // Theme toggle logic
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      html.setAttribute('data-theme', newTheme);
+      updateThemeIcon(newTheme);
+      localStorage.setItem('prism-docs-theme', newTheme);
+      
+      // Re-initialize mermaid to match the new theme if needed
+      if (window.mermaid) {
+        mermaid.initialize({ 
+          startOnLoad: true, 
+          theme: newTheme === 'dark' ? 'dark' : 'default' 
+        });
+      }
+    }
+    
+    function updateThemeIcon(theme) {
+      const icon = document.getElementById('theme-icon');
+      if (theme === 'dark') {
+        icon.innerHTML = `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
+      } else {
+        // Render moon icon
+        icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`;
+      }
+    }
+    
+    // Auto-load theme
+    const savedTheme = localStorage.getItem('prism-docs-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+    
+    // Initialize Mermaid
+    mermaid.initialize({ 
+      startOnLoad: true, 
+      theme: savedTheme === 'dark' ? 'dark' : 'default',
+      securityLevel: 'loose'
+    });
+    
+    // Copy code button logic
+    function copyCode(codeId, btnElement) {
+      const codeElement = document.getElementById(codeId);
+      if (!codeElement) return;
+      
+      const textArea = document.createElement("textarea");
+      textArea.value = codeElement.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      
+      try {
+        document.execCommand("copy");
+        // Update button visual state
+        const textSpan = btnElement.querySelector('span');
+        const origText = textSpan.textContent;
+        textSpan.textContent = "Copied!";
+        btnElement.style.borderColor = "var(--alert-tip-border)";
+        btnElement.style.color = "var(--alert-tip-border)";
+        
+        setTimeout(() => {
+          textSpan.textContent = origText;
+          btnElement.style.borderColor = "";
+          btnElement.style.color = "";
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy code: ", err);
+      }
+      
+      document.body.removeChild(textArea);
+    }
+    
+    // Toggle Mobile Sidebar
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('open');
+    }
+    
+    // Active heading tracking in TOC on scroll
+    window.addEventListener('DOMContentLoaded', () => {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('id');
+          if (entry.intersectionRatio > 0) {
+            document.querySelectorAll('.toc-list li').forEach(li => {
+              li.classList.remove('active');
+            });
+            const activeLi = document.querySelector(`.toc-list li a[href="#${id}"]`);
+            if (activeLi) {
+              activeLi.parentElement.classList.add('active');
+            }
+          }
+        });
+      }, { rootMargin: '0px 0px -60% 0px' });
+      
+      // Track all headers
+      document.querySelectorAll('article h1, article h2, article h3, article h4').forEach(header => {
+        observer.observe(header);
+      });
+    });
+  </script>
+</body>
+</html>
