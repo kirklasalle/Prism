@@ -1,4 +1,4 @@
-import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector, trimAgenticEvent, showConfirm, showPrompt, showForm, showTransientNotice } from './dashboard-core.js';
+import { state, tabs, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector, trimAgenticEvent, showConfirm, showPrompt, showForm, showTransientNotice } from './dashboard-core.js';
 import { renderToolCallLog } from './tab-logs.js';
 
 // Holds files staged for upload prior to server ACK. Ensure initialized.
@@ -1175,6 +1175,9 @@ export
   var s = state.status;
   if (!s) return;
 
+  var activeTabObj = tabs.find(function(t) { return t.id === state.activeTab; });
+  var activeTabName = activeTabObj ? activeTabObj.label : 'Chat Interface';
+
   var segment = (s.executionProfileSegment || 'individual').toLowerCase();
   var isDemo = s.mode === 'demo';
   var badgeClass = isDemo ? 'demo' : segment;
@@ -1207,7 +1210,8 @@ export
     + '</button>'
     + '</div>'
     + '</div>'
-    + '<h1>PRISM Chat</h1>'
+    + '<h1 style="margin-bottom: 2px;">PRISM Refraction</h1>'
+    + '<div class="active-tab-display" style="font-size: 11px; font-weight: 600; color: var(--accent); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">' + escapeHtml(activeTabName) + '</div>'
     + '<div class="brand-profile-badge ' + badgeClass + '">' + badgeLabel + '</div>';
 
   if (state.principal && state.principal.email) {

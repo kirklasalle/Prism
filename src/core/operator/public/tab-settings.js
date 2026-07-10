@@ -399,7 +399,7 @@ export
 export
   function renderHeader() {
   const activeSession = state.sessions.find(session => session.sessionId === state.selectedSessionId);
-  document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Chat';
+  document.getElementById('active-session-title').textContent = activeSession ? activeSession.title : 'PRISM Refraction';
   document.getElementById('active-session-meta').textContent = activeSession
     ? 'Updated ' + formatRelativeTime(activeSession.updatedAt) + ' • ' + activeSession.messageCount + ' messages'
     : 'Persistent runtime session';

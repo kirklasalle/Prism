@@ -25,7 +25,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
             </button>
           </div>
         </div>
-        <h1>PRISM Chat</h1>
+        <h1 style="margin-bottom: 2px;">PRISM Refraction</h1>
+        <div class="active-tab-display" style="font-size: 11px; font-weight: 600; color: var(--accent); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Chat Interface</div>
         <a href="http://localhost:${port}" target="_blank" rel="noopener" class="muted" style="display:block;margin-top:0;text-decoration:none;color:var(--muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'" data-tip-id="shell:console-link" data-tip-kind="shell">http://localhost:${port} \u2197</a>
         
         <!-- PRISM WebSocket Real-Time Tunnel Indicator -->

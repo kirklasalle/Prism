@@ -2,9 +2,22 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.1 — 2026-07-10 — Brand Panel Refactoring and Active Tab Indicator
+
+Renames the main sidebar panel from PRISM Chat to PRISM Refraction and introduces a dynamic active tab name display under the title.
+
+### Added
+
+- **Active Tab Display**: Dynamically displays the currently selected console tab label directly beneath the PRISM Refraction title on the brand sidebar panel.
+
+### Changed
+
+Brand Panel Renaming**: Renamed the primary sidebar panel header from "PRISM Chat" to "PRISM Refraction" across the templates and client-side rendering pipeline.
+Fallback Session Header**: Updated the fallback active session header title from "PRISM Chat" to "PRISM Refraction" when no active session is selected.
+
 ## v0.22.0 — 2026-07-10 — One-Click Update System and Dashboard Console Integration
 
-Introduces the secure, automated, and operator-controlled PRISM update orchestration framework with frontend indicators, pre-flight stability audits, supply-chain verification, config migrations, post-update checks, and auto-reconnecting console overlays.
+oduces the secure, automated, and operator-controlled PRISM update orchestration framework with frontend indicators, pre-flight stability audits, supply-chain verification, config migrations, post-update checks, and auto-reconnecting console overlays.
 
 ### Added
 
@@ -130,23 +143,23 @@ Lands the headline operator-facing autonomous experience. The autonomy loop itse
 ### Verified unchanged
 
 - Existing `/api/chat`, `/api/agentic/action`, `/api/health`, `/api/health/extended`, `/api/status` routes return byte-identical payloads.
-- `AgenticChatExecutor` budgets and tool allow-lists unchanged.
-- All 27 pre-existing PTAC scenarios continue to register and run.
-- All other dashboard tabs (`chat`, `settings`, `tools`, `agentic`, `computer`, `browser`, `workspace`, `network`, `telemetry`, `logs`, `scheduler`) and their HTML fragments and JS modules are byte-for-byte unchanged.
+genticChatExecutor` budgets and tool allow-lists unchanged.
+l 27 pre-existing PTAC scenarios continue to register and run.
+l other dashboard tabs (`chat`, `settings`, `tools`, `agentic`, `computer`, `browser`, `workspace`, `network`, `telemetry`, `logs`, `scheduler`) and their HTML fragments and JS modules are byte-for-byte unchanged.
 
 ## v0.20.4 — 2026-05-09 — Tools for all media modalities (video + audio: speech, music, SFX)
 
-Completes the media-modality tool coverage promised by the model-capability matrix. v0.20.3 shipped `image_generate`; this release adds the remaining three: **`video_generate`**, **`audio_generate`** (covering speech, music, single instrument, and sound effects), and **`audio_transcribe`** (speech-to-text). All three follow the exact pattern of `ImageGenerateTool` — matrix-routed, structured-failure on missing provider, path-traversal-safe writes, dependency-injected fetch for testing.
+letes the media-modality tool coverage promised by the model-capability matrix. v0.20.3 shipped `image_generate`; this release adds the remaining three: **`video_generate`**, **`audio_generate`** (covering speech, music, single instrument, and sound effects), and **`audio_transcribe`** (speech-to-text). All three follow the exact pattern of `ImageGenerateTool` — matrix-routed, structured-failure on missing provider, path-traversal-safe writes, dependency-injected fetch for testing.
 
-**Frontend Protection Guarantee preserved.** No frontend code was removed or altered. The new tools are registered server-side and become available to the chat orchestrator; existing UI continues to render byte-identically.
+ontend Protection Guarantee preserved.** No frontend code was removed or altered. The new tools are registered server-side and become available to the chat orchestrator; existing UI continues to render byte-identically.
 
-### New (additive only)
+New (additive only)
 
 - **`video_generate`** ([src/adapters/application/media-tools.ts](src/adapters/application/media-tools.ts)) — text→video. Modality: `video-generation`.
     - `openai` / `openrouter` → POST `/videos/generations` (Sora shape). Accepts inline b64, downloadable URL, or async job id (returns `{ pending: true, job_id, status }` for jobs).
-    - `gemini` → `:generateContent` with `responseModalities: ["VIDEO"]` (Veo shape).
-    - Output written to `${workspace}/videos/prism-video-<UTC>.<ext>`.
-    - Structured failure: `{ ok:false, reason:"no_video_capable_model", advisory }`.
+- `gemini` → `:generateContent` with `responseModalities: ["VIDEO"]` (Veo shape).
+- Output written to `${workspace}/videos/prism-video-<UTC>.<ext>`.
+- Structured failure: `{ ok:false, reason:"no_video_capable_model", advisory }`.
 
 - **`audio_generate`** — text→audio with `kind: "speech" | "music" | "sfx"`.
     - **Speech (default).** Modality chain: `tts → voice-output`. OpenAI `/audio/speech` returns binary mp3/wav/etc.; Gemini returns inline-data audio.
@@ -183,9 +196,9 @@ Completes the media-modality tool coverage promised by the model-capability matr
 
 - NEW: [src/adapters/application/media-tools.ts](src/adapters/application/media-tools.ts), [tests/media-tools.test.ts](tests/media-tools.test.ts)
 - [src/core/operator/model-capability-matrix.ts](src/core/operator/model-capability-matrix.ts) — additive: two new modalities (`music-generation`, `sound-effects`) in `ModelModality` union and `ALL_MODALITIES` metadata.
-- [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — register `VideoGenerateTool`, `AudioGenerateTool`, `AudioTranscribeTool`.
-- [tests/index.ts](tests/index.ts) — register the three new tests.
-- [package.json](package.json) — bump `0.20.3` → `0.20.4`.
+rc/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — register `VideoGenerateTool`, `AudioGenerateTool`, `AudioTranscribeTool`.
+ests/index.ts](tests/index.ts) — register the three new tests.
+ackage.json](package.json) — bump `0.20.3` → `0.20.4`.
 
 ## v0.20.3 — 2026-05-09 — Chat attach UX + image generation tool
 
@@ -220,9 +233,9 @@ Closes two operator-facing bugs reported during v0.20.2 dogfooding: chat attachm
 
 - NEW: [src/adapters/application/image-generate-tool.ts](src/adapters/application/image-generate-tool.ts), [tests/image-generate-tool.test.ts](tests/image-generate-tool.test.ts)
 - [src/core/operator/dashboard-service.ts](src/core/operator/dashboard-service.ts) — register `ImageGenerateTool`; enrich `GET …/messages` with `attachments[]`.
-- [src/core/operator/public/tab-chat.js](src/core/operator/public/tab-chat.js) — additive attachment chip rendering on user bubbles + optimistic mirror; clipboard text fallback in `pasteFromClipboard()`.
-- [tests/index.ts](tests/index.ts) — register new test.
-- [package.json](package.json) — bump `0.20.2` → `0.20.3`.
+rc/core/operator/public/tab-chat.js](src/core/operator/public/tab-chat.js) — additive attachment chip rendering on user bubbles + optimistic mirror; clipboard text fallback in `pasteFromClipboard()`.
+ests/index.ts](tests/index.ts) — register new test.
+ackage.json](package.json) — bump `0.20.2` → `0.20.3`.
 
 ## v0.20.2 — 2026-05-10 — Phase R ops + observability gap-fill
 
@@ -370,9 +383,9 @@ Third slice of Phase R+. The `computer` tool (mouse / keyboard / cursor) was pre
 
 ## v0.18.0 — 2026-05-08 — Phase R+ part 2: Real Docker backend (Engine API direct)
 
-Second slice of Phase R+. Adds a **real-Docker** container backend that talks to the local Docker Engine API socket (or Win32 named pipe) without a `dockerode` dependency, preserving PRISM's zero-new-runtime-deps invariant. The existing built-in `ContainerSandboxAdapter` is untouched and remains the default.
+nd slice of Phase R+. Adds a **real-Docker** container backend that talks to the local Docker Engine API socket (or Win32 named pipe) without a `dockerode` dependency, preserving PRISM's zero-new-runtime-deps invariant. The existing built-in `ContainerSandboxAdapter` is untouched and remains the default.
 
-**New modules.**
+w modules.**
 
 1. **[src/adapters/system/docker-engine-client.ts](src/adapters/system/docker-engine-client.ts)** — pure-Node HTTP-over-UNIX-socket / named-pipe client speaking Docker Engine API `v1.43`. Implements `ping`, `imagePull`, `containerCreate`, `containerStart`, `containerExec` (with multiplexed-stream framing decoder), `containerStop`, `containerCommit`, `containerRemove`, `imageRemove`, `containerInspect`. Honors `PRISM_DOCKER_HOST` / `DOCKER_HOST` (`unix://` and `npipe://` schemes); defaults to `/var/run/docker.sock` (POSIX) or `\\.\pipe\docker_engine` (Win32). Throws a structured `DockerEngineError` on any non-2xx response.
 
@@ -595,9 +608,9 @@ Rolls up Workstreams 1–5. `package.json` bumped from `0.5.0` → `0.14.0`. All
 ```bash
 git add -A
 git commit -m "release: v0.14.0 (W1–W5 aggregate)"
-git tag -a v0.14.0 -m "PRISM v0.14.0 — OpenAI compat, Readiness polish, Enterprise IAM, Cloud trial, SOC 2 exporter"
-git push origin feat/agentic-ux-polish v0.14.0
-```
+tag -a v0.14.0 -m "PRISM v0.14.0 — OpenAI compat, Readiness polish, Enterprise IAM, Cloud trial, SOC 2 exporter"
+push origin feat/agentic-ux-polish v0.14.0
+
 
 ---
 
@@ -676,21 +689,21 @@ First slice of the Hosted Cloud trial. Adds an in-tree Helm chart, a reference T
 - **[`tests/helm-lint.test.ts`](tests/helm-lint.test.ts)** — `HelmLint` test asserts every required chart file is present and, when the `helm` binary is on PATH, runs `helm lint` and fails on non-zero exit. Skips with a logged warning when `helm` is unavailable so the unit suite remains green on Windows dev boxes.
 - **[`tests/index.ts`](tests/index.ts)** — registers `{ name: "HelmLint", fn: testHelmLint }` after `IamAdminRoutes`.
 
-### Operational notes
+Operational notes
 
-- Required GHCR permissions are already granted by the default `GITHUB_TOKEN` (`packages: write`) — no PAT or org-level secret rotation is required to land the workflows.
-- The chart is deliberately constrained to a single replica. Multi-replica HA is gated on externalising the in-process pending-flow store (tracked under future `PRISM_IAM_FLOW_STORE` work).
-- Backup integration on the PRISM side (consuming `PRISM_AWS_S3_BUCKET`) is **not** part of this slice and will land alongside the SOC 2 evidence exporter (W5 / `v0.14.0-soc2-exporter`).
+quired GHCR permissions are already granted by the default `GITHUB_TOKEN` (`packages: write`) — no PAT or org-level secret rotation is required to land the workflows.
+e chart is deliberately constrained to a single replica. Multi-replica HA is gated on externalising the in-process pending-flow store (tracked under future `PRISM_IAM_FLOW_STORE` work).
+ckup integration on the PRISM side (consuming `PRISM_AWS_S3_BUCKET`) is **not** part of this slice and will land alongside the SOC 2 evidence exporter (W5 / `v0.14.0-soc2-exporter`).
 
 ## Unreleased — 2026-05-06 — Phase H-3: SCIM 2.0 + IAM admin REST + admin UI (toward v0.12.0-enterprise-iam)
 
 Final Phase H sub-phase. Lands the SCIM 2.0 provisioning surface under `/scim/v2/*`, the admin REST surface under `/api/iam/admin/*`, and an additive standalone IAM admin HTML page at `/public/iam-admin.html`. **Strictly additive** — when `PRISM_ENTERPRISE_IAM` is unset (the default), none of the H-3 routes register and the legacy admin-token contract is byte-identical. SCIM is doubly-gated: it requires `PRISM_ENTERPRISE_IAM=on` AND `PRISM_SCIM=on`. **No new runtime dependencies** — SCIM JSON shaping, filter parsing, and bearer-token verification are all native. **73/73 unit tests pass** (was 71 — added `ScimRoutes` and `IamAdminRoutes`). Frontend Protection Guarantee preserved (the new admin page is a brand-new file; nothing under existing `tab-*.html` / dashboard-app.js was touched).
 
-### Added — SCIM 2.0 provisioning
+Added — SCIM 2.0 provisioning
 
-- **[`src/core/operator/routes/scim-handler.ts`](src/core/operator/routes/scim-handler.ts)** — `ScimRouteHandler` implementing the spec-compliant subset needed for Okta / Entra ID / OneLogin / JumpCloud:
-    - **Discovery**: `GET /scim/v2/ServiceProviderConfig`, `GET /scim/v2/Schemas`, `GET /scim/v2/ResourceTypes`.
-    - **Users**: `GET` (list with `userName eq "x"` filter, `startIndex` + `count` pagination), `POST` (create + auto-grant `viewer`), `GET /:id`, `PUT /:id` (active toggle), `PATCH /:id` (handles both `{op:"replace", path:"active", value:false}` and the path-less `{op:"replace", value:{active:false}}` shape that Okta sends), `DELETE /:id` (deprovisions — never hard-deletes so audit references remain intact).
+[`src/core/operator/routes/scim-handler.ts`](src/core/operator/routes/scim-handler.ts)** — `ScimRouteHandler` implementing the spec-compliant subset needed for Okta / Entra ID / OneLogin / JumpCloud:
+- **Discovery**: `GET /scim/v2/ServiceProviderConfig`, `GET /scim/v2/Schemas`, `GET /scim/v2/ResourceTypes`.
+- **Users**: `GET` (list with `userName eq "x"` filter, `startIndex` + `count` pagination), `POST` (create + auto-grant `viewer`), `GET /:id`, `PUT /:id` (active toggle), `PATCH /:id` (handles both `{op:"replace", path:"active", value:false}` and the path-less `{op:"replace", value:{active:false}}` shape that Okta sends), `DELETE /:id` (deprovisions — never hard-deletes so audit references remain intact).
     - **Groups**: read-only `GET` and `GET /:id` listing the four canonical roles.
     - **Auth**: bearer-only. SCIM tokens are verified via `IamStore.verifyScimToken`; the legacy admin token can also be passed via an injectable `adminTokenVerifier` so an operator can call SCIM without first provisioning a SCIM token.
     - **Errors**: typed SCIM-spec error envelope (`schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"]`, `status`, `detail`, `scimType` for `uniqueness` collisions).
@@ -705,7 +718,7 @@ Final Phase H sub-phase. Lands the SCIM 2.0 provisioning surface under `/scim/v2
     - **Auth**: every endpoint requires the principal to hold at least the `admin` role. Resolution chain: session cookie → API-key bearer → legacy admin bearer (synthetic `root` principal). Viewer cookies receive `403 forbidden`; missing credentials receive `401 unauthenticated`.
     - The handler MUST register before `IamRouteHandler` in the route table so `/api/iam/admin/*` doesn't get swallowed by the broader `/api/iam/` matcher.
 
-### Added — admin UI (additive standalone page)
+Added — admin UI (additive standalone page)
 
 - **[`src/core/operator/public/iam-admin.html`](src/core/operator/public/iam-admin.html)** — single self-contained HTML page at `/public/iam-admin.html`. Pure HTML/CSS/JS, no build pipeline involvement. Operator pastes a bearer token in-page (held in memory only — never persisted), then can: list users with their roles, suspend / unsuspend a user, grant a user the `admin` role, list roles, create + revoke SCIM tokens (plaintext shown via `prompt()` exactly once). Page does NOT touch the existing dashboard tabs, `dashboard-app.js`, or any WebSocket wiring. Reachable independently of the main dashboard so it remains usable even when the operator deliberately scopes tokens to admin-only.
 
@@ -803,7 +816,7 @@ Closes the readiness-floor items identified in the Workstream 1–5 plan: top-le
 
 ### Added — CI / release workflows
 
-- **[`.github/workflows/codeql.yml`](.github/workflows/codeql.yml)** — JavaScript/TypeScript CodeQL static analysis on push to `main`, all PRs targeting `main`, and a weekly Tuesday 06:17 UTC schedule. Uses the `security-and-quality` query suite. Results upload to the repo Security tab.
+[`.github/workflows/codeql.yml`](.github/workflows/codeql.yml)** — JavaScript/TypeScript CodeQL static analysis on push to `main`, all PRs targeting `main`, and a weekly Tuesday 06:17 UTC schedule. Uses the `security-and-quality` query suite. Results upload to the repo Security tab.
 - **[`.github/workflows/nightly.yml`](.github/workflows/nightly.yml)** — daily 06:00 UTC full-suite job: `npm run build` → in-process runner (`node dist/tests/index.js`) → Playwright e2e (`npm run test:e2e`) → optional Gmail OAuth canary scenario (skipped silently when canary secrets are absent). On failure, files or updates a sticky GitHub issue tagged `nightly-fail`.
 - **[`.github/workflows/release.yml`](.github/workflows/release.yml)** — triggered by pushing a `v*.*.*` tag (or manual dispatch). Builds, runs the full in-process test runner, packages a `prism-<tag>.tar.gz` containing `dist/`, `package.json`, `package-lock.json`, `README.md`, `LICENSE`, `CHANGELOG.md`, `SECURITY.md`, `.env.example`, `ecosystem.config.js`, `Dockerfile`, then creates a GitHub Release with autogenerated notes and the tarball attached.
 
@@ -820,12 +833,12 @@ Closes the readiness-floor items identified in the Workstream 1–5 plan: top-le
 
 ### Decisions / scope notes
 
-- **No `playwright.config.ts` added.** PRISM's e2e harness uses mocha + the imperative `playwright` API, not the Playwright test runner. Adding a config would only fragment the harness.
-- **No `docs.yml` GH Pages workflow yet.** Publishing the mkdocs site requires a maintainer decision on domain / GH Pages settings; deferred until that decision is made.
-- **No new external dependencies.** Workflows use only the GitHub-published actions referenced today (`actions/checkout`, `actions/setup-node`, `github/codeql-action`, `softprops/action-gh-release`, `actions/github-script`).
-- **Nightly remains opt-in for OAuth canary.** The Gmail/Outlook canary requires `PRISM_CANARY_*` secrets to be populated in the repo; absent those, the step prints a "skipping" line and the job stays green.
+No `playwright.config.ts` added.** PRISM's e2e harness uses mocha + the imperative `playwright` API, not the Playwright test runner. Adding a config would only fragment the harness.
+No `docs.yml` GH Pages workflow yet.** Publishing the mkdocs site requires a maintainer decision on domain / GH Pages settings; deferred until that decision is made.
+No new external dependencies.** Workflows use only the GitHub-published actions referenced today (`actions/checkout`, `actions/setup-node`, `github/codeql-action`, `softprops/action-gh-release`, `actions/github-script`).
+Nightly remains opt-in for OAuth canary.** The Gmail/Outlook canary requires `PRISM_CANARY_*` secrets to be populated in the repo; absent those, the step prints a "skipping" line and the job stays green.
 
-## Unreleased — 2026-05-06 — Phase G follow-up: OpenAI compat shim wired into dashboard router (v0.10.1-openai-compat-wired)
+nreleased — 2026-05-06 — Phase G follow-up: OpenAI compat shim wired into dashboard router (v0.10.1-openai-compat-wired)
 
 Closes the loop on the previous shim entry: the `/v1/*` surface is now actually reachable on the running dashboard. Existing OpenAI Python/Node clients can talk to PRISM by changing only `base_url` (auth still flows through the existing `AuthGate` — the bearer token is identical to the one the dashboard issues today). Implementation lands as a new `IRouteHandler` registered into the existing custom `Router`; no existing route was modified. **65/65 tests pass** (64 prior + 1 new `OpenAiCompatRoutes`). Frontend Protection Guarantee preserved — no UI surfaces touched.
 
@@ -1114,20 +1127,20 @@ Closes the open Phase E3 / E5 follow-on items in [`docs/TODO.md`](docs/TODO.md):
 
 ### Tests
 
-- **`tests/operator-surfaces-phase-e3.test.ts`** _(new)_ — `testUtilityRegistry`, `testRiskOverrideStore`, `testIncidentTrendStore`, `testRetrievalAlertTuning`.
-- **`tests/perf-trend-report.test.ts`** _(new)_ — `testPerfTrendReport`: `summarizeDrift` thresholds + Markdown rendering.
-- **`tests/character-accountability.test.ts`** _(extended)_ — `testCharacterAccountabilityPhaseE3`: chain inspector + email-verification helpers + audit export.
-- All 41 tests in the unit suite pass.
+`tests/operator-surfaces-phase-e3.test.ts`** _(new)_ — `testUtilityRegistry`, `testRiskOverrideStore`, `testIncidentTrendStore`, `testRetrievalAlertTuning`.
+`tests/perf-trend-report.test.ts`** _(new)_ — `testPerfTrendReport`: `summarizeDrift` thresholds + Markdown rendering.
+`tests/character-accountability.test.ts`** _(extended)_ — `testCharacterAccountabilityPhaseE3`: chain inspector + email-verification helpers + audit export.
+l 41 tests in the unit suite pass.
 
 ## Unreleased — 2026-05-04 (PTAC self-drive expansion + live `POST /api/chat`)
 
 Closes the "Prism Testing & Active Control" headline ask: PTAC now drives Prism through Prism's own surfaces — chat, browser, and (host-only) the real desktop — so a single PTAC run end-to-end exercises the same paths real users hit. All changes are ADDITIVE per the Frontend Protection Guarantee; no UI files were modified.
 
-### Added — Live chat tier classifier
+Added — Live chat tier classifier
 
-- **`src/core/operator/chat-tier-classifier.ts`** _(new)_ — pure pattern-based classifier. 12 Tier-3 patterns (`rm -rf`, `del /f /s /q`, `format <drive>:`, `mkfs`, `dd if=`, `drop database/schema/table`, `truncate table`, fork bombs, `Remove-Item -Recurse`, `shutdown /flag`, etc.) → `HIGH_RISK_APPROVAL_REQUIRED` deny. 13 Tier-2 patterns (send email, write/install/deploy/publish/push/commit, run command, modify config, schedule, post to social, http request) → `MEDIUM_RISK_ALLOW_CONDITIONAL` approval-gated. Default Tier-1 → `LOW_RISK_ALLOW_AUTONOMOUS` autonomous. Conservative — errs toward higher friction on ambiguity.
-- **`src/core/operator/dashboard-service.ts`** — new `POST /api/chat` handler (next to the existing `GET /api/chat/stream`; coexists with `/api/chat/sessions/:id/messages` which is the full LLM round-trip). Three response shapes:
-    - **Tier 1** → `200 { tier:1, accepted:true, reason_code, response, session_id }`.
+`src/core/operator/chat-tier-classifier.ts`** _(new)_ — pure pattern-based classifier. 12 Tier-3 patterns (`rm -rf`, `del /f /s /q`, `format <drive>:`, `mkfs`, `dd if=`, `drop database/schema/table`, `truncate table`, fork bombs, `Remove-Item -Recurse`, `shutdown /flag`, etc.) → `HIGH_RISK_APPROVAL_REQUIRED` deny. 13 Tier-2 patterns (send email, write/install/deploy/publish/push/commit, run command, modify config, schedule, post to social, http request) → `MEDIUM_RISK_ALLOW_CONDITIONAL` approval-gated. Default Tier-1 → `LOW_RISK_ALLOW_AUTONOMOUS` autonomous. Conservative — errs toward higher friction on ambiguity.
+`src/core/operator/dashboard-service.ts`** — new `POST /api/chat` handler (next to the existing `GET /api/chat/stream`; coexists with `/api/chat/sessions/:id/messages` which is the full LLM round-trip). Three response shapes:
+- **Tier 1** → `200 { tier:1, accepted:true, reason_code, response, session_id }`.
     - **Tier 2** → `202 { tier:2, approval_pending_ids:[id], reason_code, matched_pattern, session_id }`. Uses a before/after `ApprovalQueue.list()` set diff to recover the freshly-allocated id from a fire-and-forget `queue.request(...)` (preserves the existing ApprovalQueue API surface).
     - **Tier 3** → `200 { tier:3, denied:true, reason_code, matched_pattern, session_id }`.
     - Validates `prompt` non-empty (`400 missing_prompt`); assigns `sessionId = body.sessionId ?? "ptac-${randomUUID().slice(0,8)}"`; emits `governance/chat.tier_classified` activity-bus events.
@@ -1144,12 +1157,12 @@ Closes the "Prism Testing & Active Control" headline ask: PTAC now drives Prism 
 
 ### Added — Eight self-drive scenarios (s07–s14)
 
-- **`s07-self-drive-chat-tier1`** — Tier-1 capability prompt accepted by the live `/api/chat` (suites: fast/full/demo).
-- **`s08-self-drive-tier2-approval`** — Tier-2 prompt enqueues an approval via the live handler; asserts `approval_pending_ids` non-empty (suites: fast/full).
-- **`s09-self-drive-tier3-deny`** — Tier-3 destructive prompt → live handler returns `denied:true` with non-empty `reason_code` and zero approvals enqueued (suites: fast/full).
-- **`s10-self-drive-browser-shell`** — Headless Playwright launches → navigates to dashboard root → asserts `#app` mounts (suites: full/demo).
-- **`s11-self-drive-wizard-render`** — Browser navigates to the Setup Wizard route and asserts the shell renders (suite: full).
-- **`s12-self-drive-tab-smoke`** — Browser cycles through `/`, `/#/dashboard`, `/#/wizard`, `/#/logs`, `/#/governance` and asserts every route mounts (suite: full).
+`s07-self-drive-chat-tier1`** — Tier-1 capability prompt accepted by the live `/api/chat` (suites: fast/full/demo).
+`s08-self-drive-tier2-approval`** — Tier-2 prompt enqueues an approval via the live handler; asserts `approval_pending_ids` non-empty (suites: fast/full).
+`s09-self-drive-tier3-deny`** — Tier-3 destructive prompt → live handler returns `denied:true` with non-empty `reason_code` and zero approvals enqueued (suites: fast/full).
+`s10-self-drive-browser-shell`** — Headless Playwright launches → navigates to dashboard root → asserts `#app` mounts (suites: full/demo).
+`s11-self-drive-wizard-render`** — Browser navigates to the Setup Wizard route and asserts the shell renders (suite: full).
+`s12-self-drive-tab-smoke`** — Browser cycles through `/`, `/#/dashboard`, `/#/wizard`, `/#/logs`, `/#/governance` and asserts every route mounts (suite: full).
 - **`s13-self-drive-desktop-screenshot`** _(host-only)_ — Computer-Use captures the operator's real desktop. Gated behind `--profile=host` + `PRISM_PTAC_SAFE=1` (suite: full).
 - **`s14-self-drive-kill-switch-ui`** — Tier-3 deny fires through `/api/chat`, then a real browser navigates to the governance route to capture evidence the deny propagates to the UI (suite: full).
 - **`src/ptac/index.ts`** — eight new side-effect imports register the scenarios in the registry.
@@ -1207,9 +1220,9 @@ Adds operator-grade visibility into MCP server health and process console output
 
 - **`src/adapters/protocol/mcp-client-tool.ts`** — `McpConnection` now retains a 200-line bounded stderr ring buffer for the life of the connection (no longer cleared after handshake). New methods: `stderrTail(n)`, `getName()`, `getConfig()`, `onExit(cb)`. New `McpExitReason` type distinguishes `"crash"` from `"shutdown"` so reconnect only fires on unexpected exits.
 - **`firstStderrHint()` redesign** — when a Python traceback is present, returns the actual final exception line (e.g. `ValueError: …`) instead of just the `Traceback (most recent call last):` header. Truncation cap raised from 120 to 200 chars.
-- **`McpClientAdapter` rewrite** — replaces the simple `connections: Array<>` with an `entries: Map<>` keyed by server name. New per-entry state machine (`connected | down | retrying | failed`) with exponential-backoff reconnect (1s → 2s → 4s → 8s → 16s → 30s cap, max 10 attempts). Crash detection rolls into `scheduleReconnect()` automatically; clean `disconnect()` does not. New public APIs: `getServerStates()`, `forceReconnect(name)`, `hasUnhealthyServers()`, `getServerNames()`.
-- **Full-traceback dumps on startup failure** — `loadAndRegister` now logs the complete `stderrTail(20)` for every server that fails to connect, prefixed with `[MCP:<name>] full stderr at startup failure (N line(s)):` and indented for readability. Operators no longer see a bare `Traceback (most recent call last):` with nothing after.
-- **Crash-time stderr dump** — `McpConnection`'s exit handler emits the same `stderrTail(20)` on crash so post-handshake failures surface the same diagnostic context.
+`McpClientAdapter` rewrite** — replaces the simple `connections: Array<>` with an `entries: Map<>` keyed by server name. New per-entry state machine (`connected | down | retrying | failed`) with exponential-backoff reconnect (1s → 2s → 4s → 8s → 16s → 30s cap, max 10 attempts). Crash detection rolls into `scheduleReconnect()` automatically; clean `disconnect()` does not. New public APIs: `getServerStates()`, `forceReconnect(name)`, `hasUnhealthyServers()`, `getServerNames()`.
+Full-traceback dumps on startup failure** — `loadAndRegister` now logs the complete `stderrTail(20)` for every server that fails to connect, prefixed with `[MCP:<name>] full stderr at startup failure (N line(s)):` and indented for readability. Operators no longer see a bare `Traceback (most recent call last):` with nothing after.
+Crash-time stderr dump** — `McpConnection`'s exit handler emits the same `stderrTail(20)` on crash so post-handshake failures surface the same diagnostic context.
 
 ### Added — Self-healing
 
@@ -1489,11 +1502,11 @@ Date: 2026-04-22
 
 Documentation-only release. No runtime, policy, PAD, character manifest, or frontend changes. All existing components remain intact per the Frontend Protection Guarantee.
 
----
 
-## v0.4.2 — Phase D4c: SR Advanced Features + Production Hardening (Current)
 
-Date: 2026-04-25
+0.4.2 — Phase D4c: SR Advanced Features + Production Hardening (Current)
+
+: 2026-04-25
 
 ### Added
 
@@ -1560,8 +1573,8 @@ Date: 2026-04-17
 ### Security Impact
 
 - Implements Law 10: "shall not permanently modify its core directives without explicit, cryptographically secured approval from Governance"
-- Creates verifiable audit trail: PAD hash → activity events → telemetry → release artifacts
-- Enterprise-grade compliance evidence for SOC 2, ISO 27001, NIST AI RMF, EU AI Act
+eates verifiable audit trail: PAD hash → activity events → telemetry → release artifacts
+terprise-grade compliance evidence for SOC 2, ISO 27001, NIST AI RMF, EU AI Act
 
 ---
 
