@@ -111,6 +111,7 @@ export interface PrismPreferences {
         smsPhone?: string;
         smsCarrier?: string;
     };
+    autoUpdate?: boolean;
     lastModified: string;
 }
 

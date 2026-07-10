@@ -18,7 +18,7 @@ export const PAD_VERSION = "2026-02-23";
 export const PAD_CREATED = "2025-03-08";
 
 /** Author of the PAD. */
-export const PAD_AUTHOR = "Kirk LaSalle; GitHub Copilot";
+export const PAD_AUTHOR = "Kirk LaSalle";
 
 /** Number of laws in the current PAD version. */
 export const PAD_LAW_COUNT = 10;

@@ -23,6 +23,8 @@ import type { CovenantStatus } from "../governance/prism-covenant.js";
 import { readPreferences, workspacePath } from "../config/workspace-resolver.js";
 import { verifyMarkdownCertificate } from "../security/initialization-signature.js";
 import { DatabaseSync } from "node:sqlite";
+import { PRISM_VERSION } from "../version.js";
+import { execSync, spawn } from "node:child_process";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Guardian Agent — Permanent autonomous system agent powered by llama.cpp
@@ -198,6 +200,14 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
         intervalMs: 300000,
         enabled: true,
     },
+    // Update check — every 30 minutes
+    {
+        id: "update_version_check",
+        name: "Update Version Check",
+        category: "monitoring",
+        intervalMs: 1800000,
+        enabled: true,
+    },
 ];
 
 const DEFAULT_CONFIG: GuardianConfig = {
@@ -255,6 +265,9 @@ export class GuardianAgent extends EventEmitter {
     private covenantFn?: () => CovenantStatus;
     /** Optional Skills Engine for dynamic, multi-step self-healing workflows. */
     private skillsEngine?: any;
+
+    public latestVersion: string = "";
+    public updateAvailable: boolean = false;
 
     constructor(
         private readonly activityBus: ActivityBus,
@@ -863,6 +876,8 @@ export class GuardianAgent extends EventEmitter {
                 return this.taskInitializationCertificateVerify();
             case "doc_alignment_sentinel":
                 return await this.taskDocAlignmentSentinel();
+            case "update_version_check":
+                return await this.taskUpdateVersionCheck();
             default:
                 return { status: "failure", detail: `Unknown task: ${taskId}` };
         }
@@ -1755,9 +1770,8 @@ export class GuardianAgent extends EventEmitter {
 
             // Find IDS MCP tools in the registered tools array
             const findIdsTool = (suffix: string) => {
-                return this.tools.find((t) =>
-                    (t.name.includes("impressioncor") || t.name.includes("ids")) &&
-                    t.name.endsWith(suffix)
+                return this.tools.find(
+                    (t) => (t.name.includes("impressioncor") || t.name.includes("ids")) && t.name.endsWith(suffix),
                 );
             };
 
@@ -1784,12 +1798,18 @@ export class GuardianAgent extends EventEmitter {
                         // Query IDS MCP file info if available to ensure the file is indexed and healthy
                         if (idsGetFileInfoTool) {
                             try {
-                                const fileInfoResult = await this.executeTool(idsGetFileInfoTool.name, { file_path: targetFile });
+                                const fileInfoResult = await this.executeTool(idsGetFileInfoTool.name, {
+                                    file_path: targetFile,
+                                });
                                 if (fileInfoResult && fileInfoResult.ok) {
                                     const outObj = fileInfoResult.output;
-                                    const outData = typeof outObj.result === "string" ? JSON.parse(outObj.result) : outObj;
+                                    const outData =
+                                        typeof outObj.result === "string" ? JSON.parse(outObj.result) : outObj;
                                     if (outData && (outData.exists === false || outData.error)) {
-                                        this.emitEvent("guardian.documentation_drift", `IDS MCP: File ${targetFile} referenced by ${r.id} is not fully indexed or has error.`);
+                                        this.emitEvent(
+                                            "guardian.documentation_drift",
+                                            `IDS MCP: File ${targetFile} referenced by ${r.id} is not fully indexed or has error.`,
+                                        );
                                     }
                                 }
                             } catch (e) {
@@ -1809,12 +1829,16 @@ export class GuardianAgent extends EventEmitter {
                         const outData = typeof outObj.result === "string" ? JSON.parse(outObj.result) : outObj;
                         const valSuccess = outData.success !== false && !outData.error;
                         if (!valSuccess) {
-                            missingTargets.push(`IDS System Validator reported errors: ${outData.error || "failed validation check"}`);
+                            missingTargets.push(
+                                `IDS System Validator reported errors: ${outData.error || "failed validation check"}`,
+                            );
                         } else {
                             idsMcpNotes += ` [IDS Validator: OK]`;
                         }
                     } else {
-                        missingTargets.push(`IDS System Validator tool execution failed: ${valResult ? JSON.stringify(valResult.output) : "null"}`);
+                        missingTargets.push(
+                            `IDS System Validator tool execution failed: ${valResult ? JSON.stringify(valResult.output) : "null"}`,
+                        );
                     }
                 } catch (valErr) {
                     idsMcpNotes += ` [IDS Validator error: ${String(valErr)}]`;
@@ -1828,9 +1852,10 @@ export class GuardianAgent extends EventEmitter {
                     if (statusResult && statusResult.ok) {
                         const outObj = statusResult.output;
                         const outData = typeof outObj.result === "string" ? JSON.parse(outObj.result) : outObj;
-                        const indexedCount = outData.indices_loaded && typeof outData.indices_loaded === "object"
-                            ? (outData.indices_loaded as any).file_metadata || 0
-                            : 0;
+                        const indexedCount =
+                            outData.indices_loaded && typeof outData.indices_loaded === "object"
+                                ? (outData.indices_loaded as any).file_metadata || 0
+                                : 0;
                         idsMcpNotes += ` [IDS Index files: ${indexedCount}]`;
                     }
                 } catch (statusErr) {
@@ -1873,6 +1898,86 @@ export class GuardianAgent extends EventEmitter {
             };
         } catch (error) {
             return { status: "failure", detail: `Documentation alignment sentinel failed: ${String(error)}` };
+        }
+    }
+
+    private async taskUpdateVersionCheck(): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
+        try {
+            // Run git fetch to update origin refs
+            try {
+                execSync("git fetch origin", { stdio: "ignore" });
+            } catch (fetchErr: any) {
+                return {
+                    status: "warning",
+                    detail: `Could not fetch remote repository: ${fetchErr.message}. Offline or origin is not configured.`,
+                };
+            }
+
+            const currentVersion = PRISM_VERSION;
+            let remoteVersion = currentVersion;
+            let updateAvailable = false;
+
+            try {
+                const remotePkgStr = execSync("git show origin/main:package.json", { encoding: "utf8", stdio: "pipe" });
+                const remotePkg = JSON.parse(remotePkgStr);
+                remoteVersion = remotePkg.version || currentVersion;
+            } catch (e: any) {
+                // Fallback: compare local HEAD commit with origin/main commit
+                try {
+                    const localCommit = execSync("git rev-parse HEAD", { encoding: "utf8", stdio: "pipe" }).trim();
+                    const remoteCommit = execSync("git rev-parse origin/main", {
+                        encoding: "utf8",
+                        stdio: "pipe",
+                    }).trim();
+                    updateAvailable = localCommit !== remoteCommit;
+                } catch (_) {}
+            }
+
+            if (remoteVersion !== currentVersion) {
+                updateAvailable = true;
+            }
+
+            this.latestVersion = remoteVersion;
+            this.updateAvailable = updateAvailable;
+
+            if (updateAvailable) {
+                const prefs = readPreferences();
+                if (prefs?.autoUpdate) {
+                    this.emitEvent(
+                        "guardian.update.auto_trigger",
+                        `Auto-update triggered: upgrading from v${currentVersion} to v${remoteVersion}`,
+                    );
+                    setTimeout(() => {
+                        const child = spawn(
+                            "node",
+                            [join(process.cwd(), "scripts", "prism-update.cjs", "--from-guardian")],
+                            {
+                                cwd: process.cwd(),
+                                detached: true,
+                                stdio: "ignore",
+                            },
+                        );
+                        child.unref();
+                    }, 1000);
+                    return {
+                        status: "success",
+                        detail: `Update available (v${remoteVersion}). Auto-update triggered.`,
+                    };
+                } else {
+                    this.emitEvent(
+                        "guardian.update.available",
+                        `Update available: v${currentVersion} -> v${remoteVersion}`,
+                    );
+                    return {
+                        status: "warning",
+                        detail: `Update available (v${remoteVersion}). Notification sent to operator console.`,
+                    };
+                }
+            }
+
+            return { status: "success", detail: `System is up to date (version v${currentVersion}).` };
+        } catch (err: any) {
+            return { status: "failure", detail: `Failed to check for updates: ${err.message}` };
         }
     }
 }

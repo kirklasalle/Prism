@@ -553,16 +553,18 @@ export
     + (state.selectedSessionId ? '&chatSessionId=' + encodeURIComponent(state.selectedSessionId) : '');
 
   // 1. Critical Initialization Phase: Fetch readiness and core settings
-  const [status, readiness, llmCatalog, llmConfig, pending] = await Promise.all([
+  const [status, readiness, llmCatalog, llmConfig, pending, updateInfo] = await Promise.all([
     request('/api/status').catch(() => null),
     request(readinessUrl).catch(() => null),
     request(llmUrl).catch(() => null),
     llmConfigUrl ? request(llmConfigUrl).catch(() => null) : Promise.resolve(null),
-    request('/api/pending').catch(() => [])
+    request('/api/pending').catch(() => []),
+    request('/api/update/check').catch(() => null)
   ]);
 
   if (status) state.status = status;
   if (readiness) state.readiness = readiness;
+  if (updateInfo) state.updateInfo = updateInfo;
   if (llmCatalog) {
     state.llmCatalog = llmCatalog;
     try {
@@ -1212,6 +1214,12 @@ export
     html += '<div class="brand-profile-email" style="font-size: 10px; color: var(--fg-muted); margin-top: 4px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + escapeHtml(state.principal.email) + '</div>';
   }
 
+  var upInfo = state.updateInfo || { currentVersion: s.version || '0.0.1', latestVersion: s.version || '0.0.1', updateAvailable: false, autoUpdate: false };
+  var btnText = upInfo.updateAvailable ? '⚡ Update Available (' + upInfo.latestVersion + ')' : '🔄 Check for Updates';
+  var btnStyle = upInfo.updateAvailable 
+    ? 'background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.5); color: #fbbf24; box-shadow: 0 0 10px rgba(245, 158, 11, 0.2); animation: pulse-border 2s infinite;'
+    : 'background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); color: #94a3b8;';
+
   html += '<div class="brand-info-grid">'
     + '<div class="brand-info-item"><span class="brand-info-label">Env</span><br><span class="brand-info-value"><span class="brand-env-dot ' + envDotClass + '"></span>' + escapeHtml(envProfile) + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Mode</span><br><span class="brand-info-value">' + escapeHtml(s.mode || 'server') + '</span></div>'
@@ -1220,9 +1228,21 @@ export
     + '<div class="brand-info-item"><span class="brand-info-label">Sessions</span><br><span class="brand-info-value">' + (s.chatSessionCount || 0) + '</span></div>'
     + '<div class="brand-info-item"><span class="brand-info-label">Events</span><br><span class="brand-info-value">' + (s.eventCount || 0) + '</span></div>'
     + '</div>'
-    + '<div class="muted" style="margin-top:8px;">http://localhost:' + (location.port || '7070') + '</div>'
+    + '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">'
+    + '<div class="muted">http://localhost:' + (location.port || '7070') + '</div>'
+    + '<div style="display:flex; align-items:center; gap:4px;">'
+    + '<input type="checkbox" id="prism-autoupdate-chk" onchange="toggleAutoUpdate(this.checked)" ' + (upInfo.autoUpdate ? 'checked' : '') + ' style="cursor: pointer; accent-color: #fbbf24; margin: 0; width: 12px; height: 12px;">'
+    + '<label for="prism-autoupdate-chk" style="font-size: 9px; color: var(--fg-muted); cursor: pointer; user-select: none; margin-top: 1px;">Auto-update</label>'
+    + '</div>'
+    + '</div>'
+    + '<div style="margin-top: 6px;">'
+    + '<button id="prism-update-btn" onclick="triggerPrismUpdate()" style="width: 100%; ' + btnStyle + ' border-radius: 6px; padding: 4px 8px; font-size: 9px; font-weight: 700; cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; height: 22px; line-height: 1;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">'
+    + btnText
+    + '</button>'
+    + '</div>'
+    + '<style>@keyframes pulse-border { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }</style>'
     + '<!-- PRISM WebSocket Real-Time Tunnel Indicator -->'
-    + '<div class="ws-connection-panel" style="display:flex;align-items:center;gap:10px;margin-top:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:8px 12px;font-size:11px;">'
+    + '<div class="ws-connection-panel" style="display:flex;align-items:center;gap:10px;margin-top:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:8px 12px;font-size:11px;">'
     + '<span id="prism-ws-status" style="width:8px;height:8px;border-radius:50%;background:' + wsBg + ';box-shadow:0 0 6px rgba(34,197,94,0.5);transition:background 0.3s;display:inline-block;" data-tip-id="shell:ws-status" data-tip-kind="shell" tabindex="0" role="status" aria-label="WebSocket connection status"></span>'
     + '<div style="display:flex;flex-direction:column;gap:2px;">'
     + '<span style="font-weight:600;color:#ddd;letter-spacing:0.3px;font-size:10px;text-transform:uppercase;">Frontier WS Tunnel</span>'
@@ -2077,4 +2097,107 @@ export function showThinkingTraceModal(messageIdOrTrace) {
       }
     }, 500);
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.triggerPrismUpdate = async function() {
+    if (!confirm("Are you sure you want to update PRISM? This will stop the server, apply updates from origin/main, execute supply-chain security verification gates, and restart the gateway.")) {
+      return;
+    }
+
+    try {
+      const overlay = document.createElement('div');
+      overlay.id = 'prism-update-overlay';
+      overlay.style = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(13, 15, 18, 0.95); backdrop-filter: blur(8px); z-index: 100000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-family: sans-serif; text-align: center;';
+      overlay.innerHTML = `
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); max-width: 450px;">
+          <div style="font-size: 40px; animation: pulse-glow 2s infinite;">⚡</div>
+          <div style="font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">PRISM SYSTEM UPDATE IN PROGRESS</div>
+          <div id="update-status-msg" style="color: #cbd5e1; font-size: 13px; max-width: 350px; line-height: 1.5;">Initiating update orchestrator and shutting down active gateway session...</div>
+          <div style="width: 200px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; position: relative;">
+            <div id="update-progress-bar" style="position: absolute; top: 0; left: 0; height: 100%; width: 10%; background: #fbbf24; border-radius: 2px; transition: width 0.5s;"></div>
+          </div>
+          <div id="update-spinner" style="width: 24px; height: 24px; border: 3px solid rgba(250, 204, 21, 0.2); border-top-color: #facc15; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          <div id="reconnect-countdown" style="display: none; font-size: 11px; color: #a1a1aa; font-family: monospace;">Attempting reconnection in <span id="countdown-secs">5</span>s...</div>
+        </div>
+        <style>
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          @keyframes pulse-glow { 0% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.5)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.8)); } 100% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.5)); } }
+        </style>
+      `;
+      document.body.appendChild(overlay);
+
+      const response = await request('/api/update/run', { method: 'POST' });
+      if (!response.success) {
+        throw new Error(response.message || "Failed to trigger update");
+      }
+
+      let progress = 10;
+      const statusMsg = document.getElementById('update-status-msg');
+      const progressBar = document.getElementById('update-progress-bar');
+      const reconnectCountdown = document.getElementById('reconnect-countdown');
+      const countdownSecs = document.getElementById('countdown-secs');
+      
+      const interval = setInterval(async () => {
+        progress = Math.min(95, progress + 2);
+        if (progressBar) progressBar.style.width = progress + '%';
+        if (statusMsg) statusMsg.textContent = "Gateway stopped. Rebuilding workspace files, applying migrations, running security checks...";
+      }, 1000);
+
+      // Reconnection check
+      let attempt = 0;
+      const checkOnline = async () => {
+        try {
+          const res = await fetch('/api/v1/status', { method: 'GET', cache: 'no-store' });
+          if (res.ok) {
+            clearInterval(interval);
+            if (progressBar) progressBar.style.width = '100%';
+            if (statusMsg) statusMsg.innerHTML = '<span style="color:#34d399">✓ Update Successful! Reconnection established. Reloading console...</span>';
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+            return;
+          }
+        } catch (_) {}
+
+        attempt++;
+        if (reconnectCountdown) reconnectCountdown.style.display = 'block';
+        
+        let countdown = 5;
+        const tick = () => {
+          if (countdownSecs) countdownSecs.textContent = countdown;
+          if (countdown <= 0) {
+            checkOnline();
+          } else {
+            countdown--;
+            setTimeout(tick, 1000);
+          }
+        };
+        tick();
+      };
+
+      setTimeout(checkOnline, 8000);
+
+    } catch (e) {
+      alert("Error initiating update: " + e.message);
+      const ov = document.getElementById('prism-update-overlay');
+      if (ov) ov.remove();
+    }
+  };
+
+  window.toggleAutoUpdate = async function(enabled) {
+    try {
+      await request('/api/update/auto-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      if (state.updateInfo) {
+        state.updateInfo.autoUpdate = enabled;
+      }
+      showTransientNotice('Auto-update ' + (enabled ? 'enabled' : 'disabled'), 'success');
+    } catch (e) {
+      showTransientNotice('Failed to update preference: ' + e.message, 'error');
+    }
+  };
 }

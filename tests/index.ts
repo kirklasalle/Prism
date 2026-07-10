@@ -82,6 +82,7 @@ import { testSoc2Exporter } from "./soc2-exporter.test.js";
 import { testLlreSuite } from "./llre.test.js";
 import { testDsvarSuite } from "./dsvar.test.js";
 import { testGuiRlSuite } from "./gui-rl.test.js";
+import { testGovernanceAmendments } from "./governance-amendments.test.js";
 import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -236,6 +237,7 @@ async function runTests(): Promise<void> {
         { name: "DsvarSuite", fn: testDsvarSuite },
         { name: "GuiRlSuite", fn: testGuiRlSuite },
         { name: "OperatorPresenceChannels", fn: testOperatorPresenceChannels },
+        { name: "GovernanceAmendments", fn: testGovernanceAmendments },
     ];
 
     let passed = 0;

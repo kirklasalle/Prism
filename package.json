@@ -1,6 +1,6 @@
 {
     "name": "prism-core",
-    "version": "0.21.3",
+    "version": "0.22.0",
     "private": true,
     "type": "module",
     "scripts": {
@@ -10,6 +10,7 @@
         "keys:validate": "node scripts/validate-plugin-keys.cjs",
         "backup": "npm run build && node scripts/prism-backup.cjs",
         "restore": "npm run build && node scripts/prism-restore.cjs",
+        "update": "node scripts/prism-update.cjs",
         "ptac:sandbox": "npm run build && node dist/src/ptac/cli.js --profile=sandbox",
         "ptac:host": "npm run build && node dist/src/ptac/cli.js --profile=host",
         "ptac:demo": "npm run build && node dist/src/ptac/cli.js --profile=sandbox --suite=demo",
@@ -82,6 +83,8 @@
         "setup:advanced": "tsx src/cli/setup-wizard.ts --advanced",
         "doctor": "node scripts/prism-doctor.cjs",
         "doctor:json": "node scripts/prism-doctor.cjs --json",
+        "governance:verify-signature": "node scripts/verify-governance-signature.cjs",
+        "governance:verify-signature:strict": "node scripts/verify-governance-signature.cjs --strict",
         "build:watch": "tsc --noEmit --watch",
         "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts'",
         "lint:fix": "eslint 'src/**/*.ts' 'tests/**/*.ts' --fix",

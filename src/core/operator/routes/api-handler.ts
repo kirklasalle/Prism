@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { IRouteHandler } from "./types.js";
 import type { DashboardService } from "../dashboard-service.js";
-import { resolveWorkspaceRoot, writePreferences } from "../../config/workspace-resolver.js";
+import { resolveWorkspaceRoot, writePreferences, readPreferences } from "../../config/workspace-resolver.js";
 import { PRISM_VERSION } from "../../version.js";
 import {
     DIRECTIVE_SHA256,
@@ -22,7 +22,8 @@ import { generateOpenApiSpec } from "../openapi-generator.js";
 
 export class ApiHandler implements IRouteHandler {
     match(req: IncomingMessage): boolean {
-        const url = req.url ?? "";
+        const rawUrl = req.url ?? "";
+        const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
         const pathname = url.split("?")[0];
         const method = req.method?.toUpperCase() ?? "GET";
         if (
@@ -36,7 +37,7 @@ export class ApiHandler implements IRouteHandler {
                 url === "/api/skills" ||
                 pathname === "/api/llre/summary" ||
                 url === "/api/openapi.json" ||
-                url === "/api/v1/openapi.json" ||
+                url === "/api/update/check" ||
                 url === "/api/mcp/servers")
         )
             return true;
@@ -44,6 +45,8 @@ export class ApiHandler implements IRouteHandler {
             method === "POST" &&
             (url === "/api/mode" ||
                 url === "/api/system/shutdown" ||
+                url === "/api/update/run" ||
+                url === "/api/update/auto-update" ||
                 /^\/api\/mcp\/servers\/[^/]+\/reconnect$/.test(url))
         )
             return true;
@@ -73,6 +76,62 @@ export class ApiHandler implements IRouteHandler {
             setTimeout(() => {
                 process.kill(process.pid, "SIGTERM");
             }, 500);
+            return;
+        }
+
+        if (method === "GET" && url === "/api/update/check") {
+            const currentVersion = PRISM_VERSION;
+            const guardian = service.getGuardianAgent();
+            let latestVersion = currentVersion;
+            let updateAvailable = false;
+            if (guardian) {
+                latestVersion = (guardian as any).latestVersion || currentVersion;
+                updateAvailable = (guardian as any).updateAvailable || false;
+            }
+            const prefs = readPreferences();
+            const autoUpdate = prefs?.autoUpdate ?? false;
+            this.json(res, 200, {
+                currentVersion,
+                latestVersion,
+                updateAvailable,
+                autoUpdate,
+            });
+            return;
+        }
+
+        if (method === "POST" && url === "/api/update/run") {
+            console.log("[PRISM][update] Operator triggered system update. Spawning updater...");
+            this.json(res, 200, {
+                success: true,
+                message: "Update process spawned. Server is shutting down.",
+            });
+            setTimeout(() => {
+                const child = spawn("node", [join(process.cwd(), "scripts", "prism-update.cjs")], {
+                    cwd: process.cwd(),
+                    detached: true,
+                    stdio: "ignore",
+                });
+                child.unref();
+            }, 500);
+            return;
+        }
+
+        if (method === "POST" && url === "/api/update/auto-update") {
+            let body = "";
+            req.on("data", (chunk) => {
+                body += chunk;
+            });
+            req.on("end", () => {
+                try {
+                    const parsed = JSON.parse(body);
+                    const enabled = !!parsed.enabled;
+                    writePreferences({ autoUpdate: enabled });
+                    console.log(`[PRISM][update] Auto-update setting changed to: ${enabled}`);
+                    this.json(res, 200, { success: true, autoUpdate: enabled });
+                } catch (e: any) {
+                    this.json(res, 400, { error: e.message || "Invalid payload" });
+                }
+            });
             return;
         }
 
@@ -235,6 +294,7 @@ export class ApiHandler implements IRouteHandler {
 
             this.json(res, 200, {
                 ...service.getRuntimeStatus(),
+                version: PRISM_VERSION,
                 uptimeSeconds: Math.floor((Date.now() - Date.parse(service.getRuntimeStatus().startedAt)) / 1000),
                 pendingApprovals: service.getApprovalQueue().list().length,
                 chatSessionCount,

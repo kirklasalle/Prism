@@ -10,51 +10,62 @@ This policy defines mandatory CI checks that must pass before merge/release prom
 ## Required CI Gates
 
 1. **Core Test Gate**
-   - Command: `npm test`
-   - Must pass all unit/integration suites.
+    - Command: `npm test`
+    - Must pass all unit/integration suites.
 
 2. **Performance Qualification Gate**
-   - Command: `npm run perf:qualify` (staging profile in CI)
-   - Artifact: `prism-output/perf-qualification.json`
-   - Must report `passed: true`.
+    - Command: `npm run perf:qualify` (staging profile in CI)
+    - Artifact: `prism-output/perf-qualification.json`
+    - Must report `passed: true`.
 
 3. **Tool Contract Snapshot Gate**
-   - Command: `npm run contracts:snapshot`
-   - Artifact: `prism-output/tool-contract-snapshot.json`
+    - Command: `npm run contracts:snapshot`
+    - Artifact: `prism-output/tool-contract-snapshot.json`
 
 4. **Stage 2 Qualification Gate**
-   - Command: `npm run e:qualify:stage2`
-   - Artifact: `prism-output/e-stage2-qualification-summary.json`
-   - Must report `passed: true`.
+    - Command: `npm run e:qualify:stage2`
+    - Artifact: `prism-output/e-stage2-qualification-summary.json`
+    - Must report `passed: true`.
 
 5. **Business Trust Qualification Gate**
-   - Command: `npm run g:trust:qualify`
-   - Must pass trust/provenance validator tests.
+    - Command: `npm run g:trust:qualify`
+    - Must pass trust/provenance validator tests.
 
 6. **Release Validation Gate**
-   - Command: `npm run release:validate:strict`
-   - Artifact: `prism-output/release-validation.json`
-   - Must report `passed: true`.
+    - Command: `npm run release:validate:strict`
+    - Artifact: `prism-output/release-validation.json`
+    - Must report `passed: true`.
 
 7. **Artifact Integrity Gate**
-   - Command: `npm run ci:gate:check`
-   - Artifact: `prism-output/ci-gate-summary.json`
-   - Confirms all required artifacts exist and required pass flags are true.
+    - Command: `npm run ci:gate:check`
+    - Artifact: `prism-output/ci-gate-summary.json`
+    - Confirms all required artifacts exist and required pass flags are true.
 
 8. **Computer-Use Business Alignment Gate**
-   - Command: `npm run cu:bg:check` (automatically run by strict release validation)
-   - Artifacts:
-     - workspace: `artifacts/ci-gates/computer-use-business-gate-validation.json`
-     - CI copy: `prism-output/computer-use-business-gate-validation.json`
-   - Requirement IDs: `CU-BG-1` through `CU-BG-5`
-   - Required for release-bound branches when computer-use surfaces are impacted
-   - Must verify that release evidence includes Business gate status and artifact linkage
+    - Command: `npm run cu:bg:check` (automatically run by strict release validation)
+    - Artifacts:
+        - workspace: `artifacts/ci-gates/computer-use-business-gate-validation.json`
+        - CI copy: `prism-output/computer-use-business-gate-validation.json`
+    - Requirement IDs: `CU-BG-1` through `CU-BG-5`
+    - Required for release-bound branches when computer-use surfaces are impacted
+    - Must verify that release evidence includes Business gate status and artifact linkage
 
 9. **Directive Integrity Gate**
-   - Verification: SHA-256 of `Permanent_Active_Directives.txt` must match `DIRECTIVE_SHA256` constant in `src/core/security/directive-integrity.ts`
-   - Enforces Law 10: core directives cannot be modified without cryptographically secured approval
-   - Any mismatch indicates unauthorized directive modification and blocks merge/release
-   - If the PAD was intentionally amended (per Governance Council approval), the `DIRECTIVE_SHA256` constant must be updated in the same commit
+    - Verification: SHA-256 of `Permanent_Active_Directives.txt` must match `DIRECTIVE_SHA256` constant in `src/core/security/directive-integrity.ts`
+    - Enforces Law 10: core directives cannot be modified without cryptographically secured approval
+    - Any mismatch indicates unauthorized directive modification and blocks merge/release
+    - If the PAD was intentionally amended (per Governance Council approval), the `DIRECTIVE_SHA256` constant must be updated in the same commit
+
+10. **Governance Signature Verification Gate (Gate 9+)**
+    - Command: `npm run governance:verify-signature`
+    - Artifact: `prism-output/governance-signature-verification.json`
+    - When a PR modifies `Permanent_Active_Directives.txt`:
+        - Verifies the commit is cryptographically signed (GPG or SSH)
+        - Verifies the signer is in the authorized Governance Council signers list (`PRISM_GOVERNANCE_ALLOWED_SIGNERS`)
+        - Verifies that both the PAD and `directive-hash.generated.ts` were modified together
+    - The 10 Laws are **immutable** — no amendment process may modify them
+    - Amendments to the PAD require dual-binary approval: CAC (system) + Operator (human)
+    - Each Prism instance's registered CAC-user and operator participate in amendment governance
 
 ## CI Failure Semantics
 

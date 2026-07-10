@@ -2,6 +2,25 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.0 — 2026-07-10 — One-Click Update System and Dashboard Console Integration
+
+Introduces the secure, automated, and operator-controlled PRISM update orchestration framework with frontend indicators, pre-flight stability audits, supply-chain verification, config migrations, post-update checks, and auto-reconnecting console overlays.
+
+### Added
+
+- **Update Orchestrator Backend (`scripts/prism-update.cjs`)**: Executing secure updates from `origin/main` branch with pre-flight stability doctor runs, local automated backups (of configurations, keys, databases), cryptographic signature checks, config migration helper, dependency updates, and post-update compilation verification with automated fallback rollbacks.
+- **Root Entrypoint Wrappers (`update.bat` / `update.sh`)**: Quick shell launch wrappers executing the update orchestrator out-of-process.
+- **REST update endpoints (`src/core/operator/routes/api-handler.ts`)**:
+    - `GET /api/update/check` providing current version, latest version, and auto-update preference status.
+    - `POST /api/update/run` spawning the update orchestrator asynchronously.
+    - `POST /api/update/auto-update` saving the preference for automatic updates.
+- **Guardian Agent Integration (`src/core/agents/guardian-agent.ts`)**: Schedules a periodic `update_version_check` task to poll git remote repository for updates, alert operators, and optionally trigger autonomous execution when configured.
+- **Operator Console UI (`src/core/operator/public/tab-chat.js`)**:
+    - Adds a dynamic glowing **UPDATE AVAILABLE** button next to the localhost link on the Brand sidebar panel.
+    - Adds an **Auto-update** checkbox persisting preference status.
+    - Adds a blur-effect full-screen installation overlay displaying execution progress, installation steps, and an auto-reconnecting reload loop.
+- **Integration Test Suite (`tests/prism-update-system.test.ts`)**: Verifies status endpoint versioning, update check states, and auto-update preference APIs.
+
 ## v0.21.3 — 2026-07-07 — Guardian Agent IDS MCP Integration
 
 Integrates the in-repository Documentation System MCP server (`ids-mcp`) into the Guardian Agent's Documentation Alignment Sentinel (DAS) to enable automated repository-wide integrity verification.
