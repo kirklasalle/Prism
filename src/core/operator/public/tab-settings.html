@@ -2,12 +2,12 @@
     <section
         class="rail-section panel llre-cognitive-widget"
         style="
-            border: 1px solid rgba(79, 70, 229, 0.4);
-            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+            border: 1px solid var(--llre-border);
+            background: var(--llre-bg);
             margin-bottom: 24px;
             padding: 18px;
             border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            box-shadow: var(--shadow);
         "
     >
         <div
@@ -15,7 +15,7 @@
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                border-bottom: 1px solid rgba(49, 46, 129, 0.6);
+                border-bottom: 1px solid var(--llre-divider);
                 padding-bottom: 12px;
                 margin-bottom: 16px;
             "
@@ -23,7 +23,7 @@
             <h3
                 style="
                     margin: 0;
-                    color: #c7d2fe;
+                    color: var(--llre-text-header);
                     font-weight: 700;
                     font-size: 15px;
                     display: flex;
@@ -49,7 +49,7 @@
                 >
             </h3>
             <div style="display: flex; align-items: center; gap: 14px">
-                <span id="llre-last-sync" style="color: #64748b; font-size: 11px; font-weight: 500"
+                <span id="llre-last-sync" style="color: var(--fg-muted); font-size: 11px; font-weight: 500"
                     >Last synced: Just now</span
                 >
                 <label
@@ -59,10 +59,10 @@
                         cursor: pointer;
                         user-select: none;
                         gap: 8px;
-                        background: rgba(30, 41, 59, 0.5);
+                        background: var(--surface);
                         padding: 4px 10px;
                         border-radius: 20px;
-                        border: 1px solid rgba(79, 70, 229, 0.3);
+                        border: 1px solid var(--llre-border);
                         transition: all 0.3s ease;
                     "
                 >
@@ -79,7 +79,7 @@
                             filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.5));
                         "
                     />
-                    <span style="font-size: 11px; font-weight: 600; color: #c7d2fe; letter-spacing: 0.3px"
+                    <span style="font-size: 11px; font-weight: 600; color: var(--llre-text-header); letter-spacing: 0.3px"
                         >Enable Telemetry</span
                     >
                 </label>
@@ -90,17 +90,16 @@
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px">
             <div
                 style="
-                    background: #090d16;
-                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    background: var(--llre-card-bg);
+                    border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
                 "
             >
                 <div
                     style="
-                        color: #94a3b8;
+                        color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
@@ -115,22 +114,21 @@
                 >
                     --
                 </div>
-                <div style="color: #475569; font-size: 9px; font-weight: 500">Quality / ($ * Latency)</div>
+                <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Quality / ($ * Latency)</div>
             </div>
 
             <div
                 style="
-                    background: #090d16;
-                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    background: var(--llre-card-bg);
+                    border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
                 "
             >
                 <div
                     style="
-                        color: #94a3b8;
+                        color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
@@ -145,22 +143,21 @@
                 >
                     --
                 </div>
-                <div style="color: #475569; font-size: 9px; font-weight: 500">Goal criteria passed</div>
+                <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Goal criteria passed</div>
             </div>
 
             <div
                 style="
-                    background: #090d16;
-                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    background: var(--llre-card-bg);
+                    border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
                 "
             >
                 <div
                     style="
-                        color: #94a3b8;
+                        color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
@@ -175,22 +172,21 @@
                 >
                     --
                 </div>
-                <div style="color: #475569; font-size: 9px; font-weight: 500">Instruction SNR Density</div>
+                <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Instruction SNR Density</div>
             </div>
 
             <div
                 style="
-                    background: #090d16;
-                    border: 1px solid rgba(30, 41, 59, 0.7);
+                    background: var(--llre-card-bg);
+                    border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
                 "
             >
                 <div
                     style="
-                        color: #94a3b8;
+                        color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
@@ -205,7 +201,7 @@
                 >
                     --
                 </div>
-                <div style="color: #475569; font-size: 9px; font-weight: 500">Valid tool executions</div>
+                <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Valid tool executions</div>
             </div>
         </div>
 
@@ -214,7 +210,7 @@
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                color: #94a3b8;
+                color: var(--fg-muted);
                 font-size: 12px;
                 padding: 4px 4px 0;
             "
@@ -223,13 +219,13 @@
                 <strong>Accumulated Session Cost:</strong>
                 <span
                     id="llre-cost-accumulated"
-                    style="color: #f1f5f9; font-weight: 700; font-family: monospace; font-size: 13px"
+                    style="color: var(--llre-text-value); font-weight: 700; font-family: monospace; font-size: 13px"
                     >$0.0000</span
                 >
             </div>
             <div>
                 <strong>Signal-to-Noise Rating:</strong>
-                <span id="llre-snr-rating" style="color: #c7d2fe; font-weight: 700">No Active Runs</span>
+                <span id="llre-snr-rating" style="color: var(--llre-text-header); font-weight: 700">No Active Runs</span>
             </div>
         </div>
     </section>
@@ -240,8 +236,8 @@
         data-tip-id="settings:sr-toggle"
         data-tip-kind="settings"
         style="
-            border: 1px solid rgba(139, 92, 246, 0.25);
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(59, 130, 246, 0.04));
+            border: 1px solid var(--sr-border);
+            background: var(--sr-bg);
         "
     >
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 8px">
@@ -255,18 +251,8 @@
                 </div>
             </div>
             <button
-                class="btn btn-primary"
+                class="btn btn-primary btn-sm"
                 onclick="toggleSRPanel()"
-                style="
-                    background: linear-gradient(135deg, #8b5cf6, #3b82f6);
-                    border: none;
-                    font-weight: 600;
-                    font-size: 12px;
-                    padding: 6px 16px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    color: #fff;
-                "
             >
                 Spectrum Refraction
             </button>

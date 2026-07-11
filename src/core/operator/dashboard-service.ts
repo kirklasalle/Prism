@@ -980,7 +980,7 @@ export class DashboardService {
         constitution: import("../incubation/ccc/types.js").Constitution;
     };
     public usageMetering?: UsageMeteringService;
-    private runtimeSettings: Record<string, unknown> = {
+    public runtimeSettings: Record<string, unknown> = {
         approvalTimeoutMs: 30000,
         selfReviewDailyMs: 86400000,
         selfReviewWeeklyMs: 604800000,
@@ -999,6 +999,7 @@ export class DashboardService {
         // require manual operator follow-up after approval.
         autoRunApprovedTier2: true,
         llreEnabled: true,
+        verboseLogging: false,
     };
     private readonly downloadStatus = new Map<string, DownloadProgress>();
     private readonly iamStore: IamStore;
@@ -1007,6 +1008,9 @@ export class DashboardService {
     private readonly router: Router;
     private readonly activityStore: SqliteActivityStore | null = null;
 
+    public getRuntimeSettings(): Record<string, unknown> {
+        return this.runtimeSettings;
+    }
     public getIamStore(): IamStore {
         return this.iamStore;
     }
@@ -7271,6 +7275,13 @@ export class DashboardService {
             } catch (err: unknown) {
                 console.warn(`[PRISM][settings] Failed to persist settings: ${String(err)}`);
             }
+            this.activityBus.emit({
+                sessionId: this.status.sessionId,
+                layer: "causal",
+                operation: "system.settings.update",
+                status: "succeeded",
+                details: { changes },
+            });
             return this.json(res, 200, { updated: changes, settings: this.runtimeSettings });
         }
 
@@ -9623,57 +9634,6 @@ $r | ConvertTo-Json -Depth 4 -Compress
                 return this.json(res, 200, { enabled: false });
             }
             return this.json(res, 200, this.activityRetentionPolicy.getStatus());
-        }
-
-        // ── CAC Identity Chain API ────────────────────────────────────────────────
-        if (method === "GET" && url.startsWith("/api/cac/chain")) {
-            try {
-                const parsed = new URL(`http://localhost${url}`);
-                const sessionId = parsed.searchParams.get("sessionId") || this.status.sessionId;
-                let assignments = this.characterAccountabilityManager.queryBySession(sessionId);
-
-                // Fallback: If no assignment for this specific session, look up the active assignment for the session's character
-                if (assignments.length === 0 && sessionId) {
-                    const session = this.chatStore.getSession(sessionId);
-                    if (session && session.characterId) {
-                        assignments = this.characterAccountabilityManager.list({
-                            characterId: session.characterId,
-                            state: "active",
-                        });
-                    }
-                }
-
-                const principal = this.getIamHandler().resolvePrincipalFromCookie(req);
-                const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
-                const isAdmin =
-                    authDisabled ||
-                    (principal ? principal.roles.includes("admin") || principal.roles.includes("root") : true);
-
-                if (!isAdmin && principal && principal.email) {
-                    assignments = assignments.filter((a) => a.operatorEmail === principal.email);
-                }
-
-                // Include events for the assignments
-                const chains = assignments.map((assignment) => {
-                    const events = this.activityBus
-                        .listEvents()
-                        .filter(
-                            (e) =>
-                                e.details?.assignmentId === assignment.assignmentId ||
-                                e.assignmentId === assignment.assignmentId,
-                        );
-                    return {
-                        assignment,
-                        events: events.sort(
-                            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-                        ),
-                    };
-                });
-
-                return this.json(res, 200, { chains });
-            } catch (err) {
-                return this.json(res, 400, { error: String(err) });
-            }
         }
 
         // ── Usage / Cost API ──────────────────────────────────────────────────────

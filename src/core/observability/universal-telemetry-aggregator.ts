@@ -29,6 +29,9 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { readPreferences } from "../config/workspace-resolver.js";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent, ActivitySubscriber } from "../activity/types.js";
 import type { ConsoleLine, ConsoleLineListener } from "../logging/console-interceptor.js";
@@ -498,11 +501,45 @@ export class UniversalTelemetryAggregator implements ActivitySubscriber {
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────
+    private lastPrefsCheck = 0;
+    private cachedVerbose = false;
+
+    private isVerboseLoggingEnabled(): boolean {
+        const now = Date.now();
+        if (now - this.lastPrefsCheck > 2000) {
+            this.lastPrefsCheck = now;
+            try {
+                const prefs = readPreferences();
+                this.cachedVerbose = prefs?.runtimeSettings?.verboseLogging === true;
+            } catch {
+                this.cachedVerbose = false;
+            }
+        }
+        return this.cachedVerbose;
+    }
+
+    private writeTraceToFile(entry: UnifiedTelemetryEntry): void {
+        try {
+            const dir = join(process.cwd(), "logs");
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+            const file = join(dir, "prism-trace.log");
+            const serialized = JSON.stringify(entry);
+            appendFileSync(file, serialized + "\n", "utf-8");
+        } catch {
+            /* never break operations for logging */
+        }
+    }
 
     private pushEntry(entry: UnifiedTelemetryEntry): void {
         this.buffer.push(entry);
         if (this.buffer.length > this.capacity) {
             this.buffer.splice(0, this.buffer.length - this.capacity);
+        }
+
+        const isVerbose = this.isVerboseLoggingEnabled();
+        const isLowSeverity = entry.severity === "trace" || entry.severity === "debug";
+        if (!isLowSeverity || isVerbose) {
+            this.writeTraceToFile(entry);
         }
 
         // Fan out to listeners

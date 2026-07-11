@@ -68,15 +68,15 @@ From the dashboard you can:
 ### 4.2 CLI startup options
 
 1. Install dependencies:
-   - `npm install`
+    - `npm install`
 2. Build:
-   - `npm run build`
+    - `npm run build`
 3. Start runtime demo:
-   - `npm start`
+    - `npm start`
 4. Start persistent server mode:
-   - `npm run start:server`
+    - `npm run start:server`
 5. Run tests:
-   - `npm test`
+    - `npm test`
 
 ## 4A. Setup Wizard
 
@@ -84,12 +84,12 @@ PRISM includes guided setup wizards to help you configure the system on first ru
 
 ### 4A.1 When to use each wizard
 
-| Surface | Best for | Launch method |
-| :--- | :--- | :--- |
-| **Web Wizard** | Browser-based users, visual configuration | `start_wizard.bat` or navigate to `http://localhost:7070/setup` |
-| **Web Advanced Wizard** | Power users who want routing, guardian, CAC, and scheduler config | Navigate to `http://localhost:7070/setup/advanced` |
-| **TUI Wizard** | Terminal users with a rich terminal (colors, Unicode) | `start_tui.bat` → Setup Wizard tab |
-| **CLI Wizard** | Headless, SSH, Docker, CI environments | `npm run setup` or `start_wizard.bat --cli` |
+| Surface                 | Best for                                                          | Launch method                                                   |
+| :---------------------- | :---------------------------------------------------------------- | :-------------------------------------------------------------- |
+| **Web Wizard**          | Browser-based users, visual configuration                         | `start_wizard.bat` or navigate to `http://localhost:7070/setup` |
+| **Web Advanced Wizard** | Power users who want routing, guardian, CAC, and scheduler config | Navigate to `http://localhost:7070/setup/advanced`              |
+| **TUI Wizard**          | Terminal users with a rich terminal (colors, Unicode)             | `start_tui.bat` → Setup Wizard tab                              |
+| **CLI Wizard**          | Headless, SSH, Docker, CI environments                            | `npm run setup` or `start_wizard.bat --cli`                     |
 
 ### 4A.2 Web Setup Wizard (4-step basic)
 
@@ -190,13 +190,13 @@ You can re-run the setup wizard at any time to change your profile, workspace, o
 
 ### 4A.7 Troubleshooting
 
-| Problem | Solution |
-| :--- | :--- |
-| Wizard page is blank | Ensure the server is running (`start_web.bat`). Check browser console for errors. |
-| "Node.js 22+ required" check fails | Install Node.js 22 or later. Verify with `node --version`. |
-| Provider test fails | Check that the provider is running (Ollama: `ollama serve`). For cloud providers, verify your API key. |
-| Workspace directory check fails | Ensure the path exists and is writable. PRISM will create subdirectories automatically. |
-| TUI wizard doesn't render | Ensure your terminal supports ANSI colors and Unicode. Try a modern terminal (Windows Terminal, iTerm2, Kitty). |
+| Problem                            | Solution                                                                                                        |
+| :--------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| Wizard page is blank               | Ensure the server is running (`start_web.bat`). Check browser console for errors.                               |
+| "Node.js 22+ required" check fails | Install Node.js 22 or later. Verify with `node --version`.                                                      |
+| Provider test fails                | Check that the provider is running (Ollama: `ollama serve`). For cloud providers, verify your API key.          |
+| Workspace directory check fails    | Ensure the path exists and is writable. PRISM will create subdirectories automatically.                         |
+| TUI wizard doesn't render          | Ensure your terminal supports ANSI colors and Unicode. Try a modern terminal (Windows Terminal, iTerm2, Kitty). |
 
 ## 5. Dashboard Navigation
 
@@ -206,20 +206,20 @@ The PRISM dashboard (`http://localhost:7070`) is the primary operator interface.
 
 The dashboard provides nine tabs across the top navigation bar:
 
-| Tab | Description |
-| --- | --- |
-| **Chat Interface** | Conversational interface for interacting with the active LLM provider. Messages are scoped to the current chat session. |
-| **Provider & Settings** | Configure LLM providers, review model capabilities, adjust runtime settings, and audit provider switch history. |
-| **Tools & Plugins** | Browse all registered built-in tools, MCP plugins, and system utilities. |
-| **Agentic Control** | Manage agents, assign per-agent models, orchestrate swarms, and view intelligent telemetry. |
-| **Computer Control** | Local system info, shell execution, vision framebuffer, device management, and policy controls. |
-| **Workspace** | Workspace location management, file browser, import manager, workspace settings, and git integration. |
-| **Network** | Execute curated network commands, view interface data, and monitor network operations with tier-based governance. |
-| **Telemetry** | View runtime performance metrics, retrieval quality cohorts, and alert status. |
-| **Logs & Debug** | Inspect the live activity event stream, errors, and debug-level trace output. |
-| **Browser Control** | Playwright-powered browser automation with session management, viewport capture, network/console monitoring, DOM inspection, and governance-gated operations. |
-| **Scheduler** | Full-year calendar, project management, kanban board, and Gantt timeline for scheduling and tracking work. |
-| **Channels** | Manage operator presence states, auto-away idle triggers, SMTP-to-SMS gateway configurations, Gmail/Outlook connections, and communication poller logs. |
+| Tab                     | Description                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat Interface**      | Conversational interface for interacting with the active LLM provider. Messages are scoped to the current chat session.                                       |
+| **Provider & Settings** | Configure LLM providers, review model capabilities, adjust runtime settings, and audit provider switch history.                                               |
+| **Tools & Plugins**     | Browse all registered built-in tools, MCP plugins, and system utilities.                                                                                      |
+| **Agentic Control**     | Manage agents, assign per-agent models, orchestrate swarms, and view intelligent telemetry.                                                                   |
+| **Computer Control**    | Local system info, shell execution, vision framebuffer, device management, and policy controls.                                                               |
+| **Workspace**           | Workspace location management, file browser, import manager, workspace settings, and git integration.                                                         |
+| **Network**             | Execute curated network commands, view interface data, and monitor network operations with tier-based governance.                                             |
+| **Telemetry**           | View runtime performance metrics, retrieval quality cohorts, and alert status.                                                                                |
+| **Logs & Debug**        | Inspect the live activity event stream, errors, and debug-level trace output.                                                                                 |
+| **Browser Control**     | Playwright-powered browser automation with session management, viewport capture, network/console monitoring, DOM inspection, and governance-gated operations. |
+| **Scheduler**           | Full-year calendar, project management, kanban board, and Gantt timeline for scheduling and tracking work.                                                    |
+| **Channels**            | Manage operator presence states, auto-away idle triggers, SMTP-to-SMS gateway configurations, Gmail/Outlook connections, and communication poller logs.       |
 
 Click any tab label to switch views. The active tab is visually highlighted and persists across data refreshes within your session.
 
@@ -243,16 +243,18 @@ This tab contains five panels arranged top-to-bottom:
 Use the **Save** button to persist non-secret settings. Use the **Store API Key** and **Clear API Key** buttons for secure credential management.
 
 **Model Capability Matrix & Registry** — A dynamically updated comparison grid displaying per-model capabilities (context window, vision, streaming, function-calling).
+
 - **Dynamic Updates**: Displays built-in profiles alongside user-registered runtime models and auto-discovered local models (e.g., from your running Ollama instance).
 - **Deprecation Warning Indicators**: Models approaching sunset or marked deprecated display clear warnings, detailed deprecation reasons, and recommended successor models. Sunset/deprecated models are kept for legacy telemetry but de-prioritized for active tasks.
 
 **Advanced Model Routing Settings** — Full operator configuration over how PRISM delegates tasks to models:
+
 - **Routing Topologies**: Switch between Single-Provider, Multi-Provider, and Modality-Based routing.
 - **AI-Assisted Routing**: Enable AI suggestions to auto-assign the most qualified available model to specific task roles (e.g. Chat, Code-generation, Summarization, Research).
 - **Power Profile Modes**: Set system-wide performance targets:
-  - `performance` — Routes to the highest capability tier models available.
-  - `eco` — Prioritizes local open-source models over paid cloud APIs, minimizing outbound API costs.
-  - `adaptive` — Inspects your local hardware VRAM. If local memory is sufficient, it routes tasks locally. If a model threatens to cause an Out-Of-Memory (OOM) crash, it dynamically routes the task to a cloud fallback.
+    - `performance` — Routes to the highest capability tier models available.
+    - `eco` — Prioritizes local open-source models over paid cloud APIs, minimizing outbound API costs.
+    - `adaptive` — Inspects your local hardware VRAM. If local memory is sufficient, it routes tasks locally. If a model threatens to cause an Out-Of-Memory (OOM) crash, it dynamically routes the task to a cloud fallback.
 
 **Settings** — Displays runtime system configuration:
 
@@ -278,9 +280,9 @@ SR panel controls:
 - **Right (Creative) Model**: Select a model qualified for creative synthesis and multimedia. The dropdown filters to creative-modality models via `filterSRCreativeModels()`.
 - **Main (Coordination) Model**: Select the model that will aggregate Left + Right outputs into a unified response.
 - **Isolation Badge**: Displays the current isolation quality level:
-  - 🔒 **Full** — Different providers (strongest isolation: separate API keys, infrastructure, rate limits)
-  - 🔏 **Model** — Same provider, different models (separate capabilities, shared key)
-  - ⛔ **Insufficient** — Same provider + same model (REJECTED — Activate button disabled)
+    - 🔒 **Full** — Different providers (strongest isolation: separate API keys, infrastructure, rate limits)
+    - 🔏 **Model** — Same provider, different models (separate capabilities, shared key)
+    - ⛔ **Insufficient** — Same provider + same model (REJECTED — Activate button disabled)
 - **Cost Advisory**: Estimates per-generation cost based on model pricing.
 - **Activate / Deactivate**: Enable or disable SR mode. Activation re-validates isolation before enabling.
 
@@ -446,10 +448,10 @@ PRISM stores all runtime artifacts, databases, and configuration in a persistent
 
 ### 6.1 Default workspace location
 
-| Platform | Default Path                                                                      |
-|----------|-----------------------------------------------------------------------------------|
-| Windows  | `%USERPROFILE%\Documents\Prism_Refraction`                                       |
-| macOS    | `~/Documents/Prism_Refraction`                                                    |
+| Platform | Default Path                                                                    |
+| -------- | ------------------------------------------------------------------------------- |
+| Windows  | `%USERPROFILE%\Documents\Prism_Refraction`                                      |
+| macOS    | `~/Documents/Prism_Refraction`                                                  |
 | Linux    | `$XDG_DATA_HOME/Prism_Refraction` (fallback: `~/.local/share/Prism_Refraction`) |
 
 Override the location by setting the `PRISM_WORKSPACE_ROOT` environment variable before starting PRISM.
@@ -590,14 +592,14 @@ PRISM enforces a Character Accountability Control (CAC) model that links every a
 
 When assigning a character to an agent session, the following identity fields are required:
 
-| Field | Description |
-| --- | --- |
-| `characterId` | The character brief (from `characters/*.json`) defining the agent's persona and constraints. |
-| `prismUserEmail` | The email of the Prism platform user under which the agent operates. |
-| `operatorEmail` | The email of the human operator responsible for this session. |
-| `clientId` | An identifier for the client application (e.g., dashboard, CLI, API caller). |
-| `sessionId` | The current session identifier. |
-| `executionProfile` | The target profile: `individual`, `business`, `enterprise`, or `corporate`. |
+| Field              | Description                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `characterId`      | The character brief (from `characters/*.json`) defining the agent's persona and constraints. |
+| `prismUserEmail`   | The email of the Prism platform user under which the agent operates.                         |
+| `operatorEmail`    | The email of the human operator responsible for this session.                                |
+| `clientId`         | An identifier for the client application (e.g., dashboard, CLI, API caller).                 |
+| `sessionId`        | The current session identifier.                                                              |
+| `executionProfile` | The target profile: `individual`, `business`, `enterprise`, or `corporate`.                  |
 
 ### 12.2 Profile behavior differences
 
@@ -685,6 +687,7 @@ PRISM features a dedicated **Channels** control center allowing operators to rem
 ### 16.1 Presence Statuses
 
 The system supports four distinct presence states:
+
 - **Online (Active):** Default mode. Notifications and tasks are managed locally through the workstation UI.
 - **Away (Forward Relays):** Active notification mode. Critical tier-3 tasks and approval requests are immediately relayed to the operator via their configured SMS/Email gateway.
 - **Do Not Disturb (DND):** Silences notifications and holds pending approvals silently in the queue.
@@ -693,6 +696,7 @@ The system supports four distinct presence states:
 ### 16.2 Auto-Away & Idle Tracker
 
 The dashboard includes a client-side idle tracking system. If enabled:
+
 - The system monitors user activity (keypresses, mouse movement, scrolls, touch events) on the page.
 - If no activity is detected for the configured timeout (`5 min`, `10 min`, `20 min`, `30 min`, or `1 hr`), the presence automatically transitions to **Away**, and outbound notifications are routed to the mobile device.
 - Any subsequent user interaction resets the timer and restores the previous presence state.
@@ -700,6 +704,7 @@ The dashboard includes a client-side idle tracking system. If enabled:
 ### 16.3 SMS-via-Email Gateway Configuration
 
 PRISM forwards outbound notifications to carrier gateways:
+
 - **Supported Carrier Gateways:** AT&T (`txt.att.net`), Verizon (`vtext.com`), T-Mobile (`tmomail.net`), and Sprint (`messaging.sprintpcs.com`).
 - **Formatting Constraints:** Mobile numbers are automatically stripped of non-numeric characters before dispatch. Transmitted messages are limited to **150 characters** for SMS compatibility.
 - **Two-Way Subject Markers:** Outbound messages contain `[PRISM-TASK:<approvalId>]` tags for task correlation.
@@ -707,8 +712,26 @@ PRISM forwards outbound notifications to carrier gateways:
 ### 16.4 Two-Way Inbound Channel Poller
 
 A background poller checks configured mailboxes every 30 seconds for operator responses:
+
 - **Remote Approvals:** Replying `APPROVE` or `DENY` to a relayed message parses the subject's correlation tag and immediately resolves the corresponding tier-3 approval.
 - **Freeform Chat Relays:** Any other response is treated as a remote chat contribution and injected into the active conversation.
+
+## 17. Secure Operator Console & IAM Management
+
+PRISM provides a world-class secure Operator Console and IAM Management dashboard at `/public/iam-admin.html` with high-end cyberpunk glassmorphism visual styling.
+
+### 17.1 How to Access the Console
+
+- Log in with the standard operator credentials or input a developer bearer token in the console login screen.
+- Access the Console directly by clicking the **Manage Operators** link on the main login screen or navigating to `http://localhost:7070/public/iam-admin.html`.
+- To return to the chat interface, click the **Launch Refraction Dashboard** button.
+
+### 17.2 Core Management Features
+
+- **Operator Directory**: Manage operator accounts (Create accounts, Suspend/Activate status, Reset passwords, and Grant/Revoke the `admin` role). Self-deletion of the active admin account is restricted for safety.
+- **Character Accountability Certificates (CAC)**: Audit all active agent-operator session bindings. Click on any assignment to verify email links, review the full cryptographically signed chain verification timeline, or export the data as CSV/JSON.
+- **SCIM Directory Sync**: Create, view, or revoke SCIM bearer tokens to integrate directory synchronization from identity providers like Okta or Azure AD.
+- **System Actions**: Trigger an immediate system-wide shutdown of the PRISM server using the red **Shutdown Server** button in the console header.
 
 ## 15. External references
 
@@ -718,4 +741,3 @@ A background poller checks configured mailboxes every 30 seconds for operator re
 4. <https://arxiv.org/abs/2303.17580>
 5. <https://modelcontextprotocol.io/introduction>
 6. <https://www.nist.gov/itl/ai-risk-management-framework>
-

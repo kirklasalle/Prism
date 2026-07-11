@@ -106,6 +106,58 @@ export class CacHandler implements IRouteHandler {
             }
         }
 
+        // 5. GET /api/cac/chain
+        if (method === "GET" && url.startsWith("/api/cac/chain")) {
+            try {
+                const parsed = new URL(`http://localhost${url}`);
+                const sessionId = parsed.searchParams.get("sessionId") || service.getRuntimeStatus().sessionId;
+                let assignments = manager.queryBySession(sessionId);
+
+                // Fallback: If no assignment for this specific session, look up the active assignment for the session's character
+                if (assignments.length === 0 && sessionId) {
+                    const session = service.getChatStore().getSession(sessionId);
+                    if (session && session.characterId) {
+                        assignments = manager.list({
+                            characterId: session.characterId,
+                            state: "active",
+                        });
+                    }
+                }
+
+                const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
+                const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
+                const isAdmin =
+                    authDisabled ||
+                    (principal ? principal.roles.includes("admin") || principal.roles.includes("root") : true);
+
+                if (!isAdmin && principal && principal.email) {
+                    assignments = assignments.filter((a) => a.operatorEmail === principal.email);
+                }
+
+                // Include events for the assignments
+                const chains = assignments.map((assignment) => {
+                    const events = service
+                        .getActivityBus()
+                        .listEvents()
+                        .filter(
+                            (e) =>
+                                e.details?.assignmentId === assignment.assignmentId ||
+                                e.assignmentId === assignment.assignmentId,
+                        );
+                    return {
+                        assignment,
+                        events: events.sort(
+                            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+                        ),
+                    };
+                });
+
+                return this.json(res, 200, { chains });
+            } catch (err) {
+                return this.json(res, 400, { error: String(err) });
+            }
+        }
+
         return this.json(res, 404, { error: "Not found", path: url });
     }
 

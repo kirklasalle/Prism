@@ -100,11 +100,11 @@ describe("A2ATaskAdapter", function () {
             assert.strictEqual(task.task_id, customId);
         });
 
-        it("defaults character to aria-individual when not specified", async () => {
+        it("defaults character to unbound when not specified and no active assignment exists", async () => {
             const task = await adapter.submitTask({
                 message: { role: "user", parts: [{ text: "Help me plan my day." }] },
             });
-            assert.strictEqual(task.character_id, "aria-individual");
+            assert.strictEqual(task.character_id, "unbound");
         });
 
         it("persists session_id from request", async () => {

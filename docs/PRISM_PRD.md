@@ -128,16 +128,16 @@ Implemented today:
 - workflow retries/timeouts/fallbacks
 - integration tests for approval success, denial, and timeout paths
 - **Character Accountability Control (CAC)**:
-  - character-to-operator identity binding with full accountability chain
-  - lifecycle management (assign, dispatch, suspend, resume, revoke)
-  - profile-aware email domain validation (business enforces matching domains; individual is permissive)
-  - execution profile segment normalization (`enterprise`/`corporate` → canonical `business`)
-  - accountability chain propagated into activity events and SHA-256 integrity hashes
+    - character-to-operator identity binding with full accountability chain
+    - lifecycle management (assign, dispatch, suspend, resume, revoke)
+    - profile-aware email domain validation (business enforces matching domains; individual is permissive)
+    - execution profile segment normalization (`enterprise`/`corporate` → canonical `business`)
+    - accountability chain propagated into activity events and SHA-256 integrity hashes
 - **LLRE Cognitive Economics Engine**:
-  - Prompt AST Compiler (`src/core/llre/ast.ts`) checking prompt objective/constraint densities
-  - Unified effectiveness analytics calculating TCA, RSI, CSR, and TEQ performance indexes
-  - Background SQLite data layer persistence with query/aggregation endpoints
-  - Real-time Cognitive Economics operator settings dashboard panel
+    - Prompt AST Compiler (`src/core/llre/ast.ts`) checking prompt objective/constraint densities
+    - Unified effectiveness analytics calculating TCA, RSI, CSR, and TEQ performance indexes
+    - Background SQLite data layer persistence with query/aggregation endpoints
+    - Real-time Cognitive Economics operator settings dashboard panel
 
 ## 7. Novelty Roadmap (PRISM-specific)
 
@@ -159,7 +159,7 @@ A retrieval system combining:
 
 - semantic relevance lens,
 - causal consequence lens (impact/rollback-sensitive),
-then arbitration based on confidence and risk profile.
+  then arbitration based on confidence and risk profile.
 
 Expected value:
 
@@ -265,26 +265,29 @@ Acceptance criteria:
 The platform must implement a fully configurable, operator-controlled routing plane coupled with a dynamic model matrix registry. These features are exclusive to the PRISM platform and its operators.
 
 #### 8.4B.1 Advanced Model Routing
+
 - **Multi-Strategy Routing**: The routing engine must support `Single Provider`, `Multi-Provider`, and `Modality-Based` routing topologies.
 - **AI-Assisted Allocation**: The orchestrator must support AI-assisted model allocation, suggesting optimal model-to-role configurations during setup or task planning.
 - **Role-Based Overrides**: Operators must be able to assign specific model/provider overrides to individual task roles (`chat`, `code-generation`, `summarization`, `research`, `memory-indexing`, etc.), subject to minimum capability tier validation.
 - **Power-Aware Routing Modes**: The system must enforce routing priorities based on the operator's active power profile:
-  - `eco`: Prioritizes local models over cloud API routes to eliminate external charges.
-  - `performance`: Routes to the highest available capability tier for each role.
-  - `adaptive`: Discovers free hardware VRAM and dynamically routes high-VRAM models to cloud fallbacks if local capacity is exceeded, eliminating Out-Of-Memory (OOM) failures.
+    - `eco`: Prioritizes local models over cloud API routes to eliminate external charges.
+    - `performance`: Routes to the highest available capability tier for each role.
+    - `adaptive`: Discovers free hardware VRAM and dynamically routes high-VRAM models to cloud fallbacks if local capacity is exceeded, eliminating Out-Of-Memory (OOM) failures.
 
 #### 8.4B.2 Advanced Model Matrix (Exclusive Core)
+
 - **Dynamic Runtime Profile Management**: The matrix must support runtime APIs to register, update, and remove model capability profiles (`registerModelProfile`, `updateModelProfile`, `removeModelProfile`).
 - **Local Model Auto-Discovery**: The system must actively query the local environment (e.g., Ollama `/api/ps` endpoint) to discover running instances, calculating estimated VRAM footprints, context limits, and parameter sizes.
 - **Deprecation and Sunset Lifecycles**: The matrix must track deprecation metadata fields, including:
-  - `deprecated` (boolean flag)
-  - `deprecatedAt` (ISO date when deprecation began)
-  - `sunsetDate` (ISO date when full sunset occurs)
-  - `successor` (recommended successor model pattern)
-  - `deprecationReason` (reason description)
+    - `deprecated` (boolean flag)
+    - `deprecatedAt` (ISO date when deprecation began)
+    - `sunsetDate` (ISO date when full sunset occurs)
+    - `successor` (recommended successor model pattern)
+    - `deprecationReason` (reason description)
 - **Legacy Retention & Warnings**: Deprecated and sunset models must be retained in the matrix registry for historic telemetry aggregation and backward-compatibility execution. The router must de-prioritize these models in selection hierarchies and emit warning events to the ActivityBus when a deprecated model is selected.
 
 Acceptance criteria:
+
 - router successfully resolves model mappings for all 20+ defined task roles,
 - routing preferences dynamically adapt when powerMode transitions between `performance`, `eco`, and `adaptive`,
 - local hardware VRAM status is queried and utilized in routing decisions,
@@ -320,9 +323,9 @@ Functional requirements:
 1. Notes and extraction
 
 - Support capture of unstructured note content and extraction of:
-  - action items,
-  - deadlines,
-  - follow-up entities.
+    - action items,
+    - deadlines,
+    - follow-up entities.
 - Require extracted outputs to link back to originating note context.
 
 1. Chronological tasks/events
@@ -340,9 +343,9 @@ Tooling requirements:
 Workflow requirements:
 
 - Each capability must expose at least one workflow template with:
-  - retries,
-  - timeout policy,
-  - fallback branch.
+    - retries,
+    - timeout policy,
+    - fallback branch.
 - Each mutation-capable workflow must define deterministic deny/timeout outcomes.
 
 Memory requirements:
@@ -370,14 +373,14 @@ The PRISM dashboard (`http://localhost:7070`) serves as the primary operator int
 
 The dashboard must provide a tab-based navigation system with the following tabs, each accessible via a single click:
 
-| Tab | Purpose |
-| --- | --- |
-| Chat Interface | Real-time conversational interface with session-scoped LLM provider binding |
-| Provider & Settings | LLM provider configuration, model capability matrix, runtime settings, and audit trail |
-| Tools & Plugins | Inventory of built-in tools, registered MCP plugins, and system utilities |
-| Network | Curated network command execution with tier-based governance, live interface viewer, telemetry, and interactive console |
-| Telemetry | Runtime telemetry, retrieval observability, and performance metrics |
-| Logs & Debug | Activity event stream, error inspection, and debug-level trace output |
+| Tab                 | Purpose                                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Chat Interface      | Real-time conversational interface with session-scoped LLM provider binding                                             |
+| Provider & Settings | LLM provider configuration, model capability matrix, runtime settings, and audit trail                                  |
+| Tools & Plugins     | Inventory of built-in tools, registered MCP plugins, and system utilities                                               |
+| Network             | Curated network command execution with tier-based governance, live interface viewer, telemetry, and interactive console |
+| Telemetry           | Runtime telemetry, retrieval observability, and performance metrics                                                     |
+| Logs & Debug        | Activity event stream, error inspection, and debug-level trace output                                                   |
 
 Acceptance criteria:
 
@@ -458,25 +461,36 @@ The dashboard must expose a minimum set of HTTP API routes for programmatic acce
 
 All API endpoints must validate input parameters and return structured JSON responses.
 
+#### 8.7.7 Secure Operator & IAM Management Console
+
+PRISM must provide a dedicated, secure operator and identity management dashboard served at `/public/iam-admin.html` with:
+
+- **Authentication Bypass Mitigation**: Support for developer/admin tokens for direct system administration when external OIDC/SSO services are offline.
+- **Operator Lifecycle Directory**: Full CRUD options for operators, including creation, suspending, activating, resetting passwords, and role assignment.
+- **Character Accountability Certificates (CAC)**: Table for monitoring all active operator-agent session bindings, audit trail exploration for provenance validation, dynamic CSV/JSON export actions, and manual email verification gates.
+- **SCIM Directory Sync Integration**: Direct interface to generate and rotate SCIM provisioning bearer tokens.
+- **Emergency Platform Actions**: Single-button trigger for immediate system-wide shutdown.
+- **Unified Navigation Integration**: Rerouting legacy login flows to the secure operator console when query or configuration gates mandate management access.
+
 Functional requirements:
 
 1. Dual-profile parity contract
 
 - `PRISM Individual` and `PRISM Business` must expose equivalent capability surfaces for:
-  - tool invocation,
-  - terminal session operations,
-  - container sandbox lifecycle,
-  - dynamic staged tool execution,
-  - adapter/plugin pack usage.
+    - tool invocation,
+    - terminal session operations,
+    - container sandbox lifecycle,
+    - dynamic staged tool execution,
+    - adapter/plugin pack usage.
 - Business profile adds governance rigor and must not reduce capability availability.
 
 1. Terminal virtualization
 
 - Support persistent terminal channels with lifecycle controls:
-  - start,
-  - stop,
-  - timeout,
-  - revoke.
+    - start,
+    - stop,
+    - timeout,
+    - revoke.
 - Persist session lineage and policy decisions for mutating commands.
 
 1. Container orchestration
@@ -550,10 +564,10 @@ Acceptance criteria:
 #### 8.8.4 Swarm orchestration
 
 - Support four swarm topologies:
-  - **Mesh**: all agents work sub-tasks in parallel, results merged.
-  - **Star**: coordinator agent delegates to worker agents, collects/merges results.
-  - **Pipeline**: sequential handoff — output of agent A becomes input of agent B.
-  - **Broadcast**: same prompt to all agents, best result selected.
+    - **Mesh**: all agents work sub-tasks in parallel, results merged.
+    - **Star**: coordinator agent delegates to worker agents, collects/merges results.
+    - **Pipeline**: sequential handoff — output of agent A becomes input of agent B.
+    - **Broadcast**: same prompt to all agents, best result selected.
 - Swarm creation specifies goal, topology, agent count, and optional role distribution.
 - Swarm agents default to ephemeral lifecycle; dissolved when swarm completes.
 - All swarm operations emit ActivityBus events for governance and telemetry.
@@ -599,9 +613,9 @@ PRISM must deliver a novel multi-model parallel generation system where three di
 #### 8.9.1 Tri-model fan-out architecture
 
 - Three hemispheres generate in parallel on the same user prompt:
-  - **Left (Logic)**: analytical reasoning, structured analysis, factual precision
-  - **Right (Creative)**: creative synthesis, lateral thinking, multimedia generation
-  - **Main (Coordination)**: coordination, aggregation, and unified response synthesis
+    - **Left (Logic)**: analytical reasoning, structured analysis, factual precision
+    - **Right (Creative)**: creative synthesis, lateral thinking, multimedia generation
+    - **Main (Coordination)**: coordination, aggregation, and unified response synthesis
 - Fan-out must be truly parallel (concurrent API calls), not sequential.
 - Each hemisphere receives a role-specific system prompt from `SR_SYSTEM_PROMPTS`.
 
@@ -614,13 +628,13 @@ Acceptance criteria:
 #### 8.9.2 Instance isolation enforcement
 
 - Left and Right MUST be distinct instances. Validation at three mandatory gates:
-  1. **Configuration gate**: `/api/sr/configure` rejects Left===Right (same provider + same model).
-  2. **Activation gate**: `/api/sr/activate` re-validates before enabling SR mode.
-  3. **Runtime gate**: `generateSR()` pre-flight guard before fan-out.
+    1. **Configuration gate**: `/api/sr/configure` rejects Left===Right (same provider + same model).
+    2. **Activation gate**: `/api/sr/activate` re-validates before enabling SR mode.
+    3. **Runtime gate**: `generateSR()` pre-flight guard before fan-out.
 - Three isolation quality levels:
-  - `full`: different providers (strongest — separate API keys, infrastructure, rate limits)
-  - `model`: same provider, different models (separate capabilities, shared key)
-  - `insufficient`: same provider + same model (REJECTED)
+    - `full`: different providers (strongest — separate API keys, infrastructure, rate limits)
+    - `model`: same provider, different models (separate capabilities, shared key)
+    - `insufficient`: same provider + same model (REJECTED)
 - Main is permitted to overlap Left or Right (it serves a distinct coordinator role).
 
 Acceptance criteria:
@@ -633,10 +647,10 @@ Acceptance criteria:
 
 - The aggregation prompt uses XML-tagged sections for deterministic hemisphere attribution:
 
-  ```
-  <logic_analysis>[Left hemisphere output]</logic_analysis>
-  <creative_synthesis>[Right hemisphere output]</creative_synthesis>
-  ```
+    ```
+    <logic_analysis>[Left hemisphere output]</logic_analysis>
+    <creative_synthesis>[Right hemisphere output]</creative_synthesis>
+    ```
 
 - Main model produces a unified compound response that preserves analytical rigor and creative breadth.
 - Aggregation is not concatenation — it is deliberate synthesis by the Main model.
@@ -673,12 +687,12 @@ Acceptance criteria:
 
 #### 8.9.6 SR API endpoints
 
-| Route | Method | Purpose |
-| --- | --- | --- |
-| `/api/sr/status` | GET | Return current SR configuration, active state, and isolation level |
-| `/api/sr/configure` | POST | Set Left/Right/Main model assignments with isolation validation |
-| `/api/sr/activate` | POST | Enable SR mode for the session (re-validates isolation) |
-| `/api/sr/deactivate` | POST | Disable SR mode and revert to single-model generation |
+| Route                | Method | Purpose                                                            |
+| -------------------- | ------ | ------------------------------------------------------------------ |
+| `/api/sr/status`     | GET    | Return current SR configuration, active state, and isolation level |
+| `/api/sr/configure`  | POST   | Set Left/Right/Main model assignments with isolation validation    |
+| `/api/sr/activate`   | POST   | Enable SR mode for the session (re-validates isolation)            |
+| `/api/sr/deactivate` | POST   | Disable SR mode and revert to single-model generation              |
 
 Acceptance criteria:
 
@@ -689,14 +703,14 @@ Acceptance criteria:
 #### 8.9.7 SR dashboard integration
 
 - SR panel in Provider & Settings tab:
-  - Model selection dropdowns for Left (Logic), Right (Creative), Main
-  - Isolation badge reflecting current level
-  - Cost advisory based on model pricing
-  - Activate/Deactivate controls (Activate disabled when isolation insufficient)
+    - Model selection dropdowns for Left (Logic), Right (Creative), Main
+    - Isolation badge reflecting current level
+    - Cost advisory based on model pricing
+    - Activate/Deactivate controls (Activate disabled when isolation insufficient)
 - SR response badge in Chat Interface tab:
-  - Visual indicator that response was SR-generated
-  - Isolation level pill
-  - Hemisphere attribution metadata
+    - Visual indicator that response was SR-generated
+    - Isolation level pill
+    - Hemisphere attribution metadata
 
 Acceptance criteria:
 
@@ -709,43 +723,49 @@ Acceptance criteria:
 The PRISM architecture integrates Low-Level Reasoning Engine (LLRE) telemetry to measure, audit, and optimize prompt structures and cognitive resource expenditures.
 
 #### 8.10.1 Mathematical Performance Matrices
+
 LLRE computes unified operational indexes at the low-level execution loop:
+
 - **Tool Call Accuracy (TCA)**: Direct ratio of verified tool executions relative to attempted calls.
 - **Request Satisfaction Index (RSI)**: Ratio of completed tasks relative to the goal's criteria constraints.
 - **Context Saturation Ratio (CSR)**: Normalized factor checking token consumption efficiency ($CSR = \min(1.0, \frac{500}{\text{Tokens Consumed}})$).
 - **Token Efficacy Quotient (TEQ)**: The unified economic index mapping satisfaction, accuracy, and operational cost ($\frac{RSI \times TCA}{\text{Cost USD} \times \text{Latency Seconds}}$).
 
 #### 8.10.2 System Prompt AST Compilation
+
 - Enforce strict envelope boundaries using `<objective>` and `<constraints>` XML elements.
 - Analyze system prompts for **Signal Density** (the ratio of actionable directives to descriptive padding text).
 - Generate linter warnings inside system logs if descriptive padding dilutes instruction clarity.
 
 #### 8.10.3 Background DB Logging & Activity Bus
+
 - Capture `llre.telemetry.recorded` event payloads off the central Activity Bus.
 - Commit structured records into `prism_llre_telemetry` using prepared SQLite statement queues.
 - Ensure type-safe defaults and robust parameter binders preventing structural EPERM lock resource leaks or binding exceptions.
 
 #### 8.10.4 Gateway API & UI Dashboard
+
 - Provide `GET /api/llre/summary?sessionId=<id>` returning running session aggregate averages.
 - Expose a premium visual Cognitive Economics dashboard panel at the top of the Settings & Provider tab.
 - Wire animated progress wheels, latency status, token volumes, and total session expenditures directly in the UI.
 
 #### 8.10.5 Acceptance Criteria
+
 - AST compiler successfully processes formatted and unformatted prompts.
 - Database layer commits event records correctly and avoids SQLite binding failures.
 - Front-end fetches, handles, and renders consolidated telemetry values securely.
 
 ## 9-continued. Quality Gates (SLO/SLA Targets)
 
-| Domain | Metric | Target |
-| --- | --- | --- |
-| Workflow reliability | Success on approved paths | >= 99.0% |
-| Governance latency | Policy decision p95 | <= 30ms |
-| Eventing | Activity delivery p95 | <= 200ms |
-| Telemetry overhead | Instrumentation p95 | <= 20ms |
-| Retrieval | Query latency p95 | <= 50ms (hot memory) |
-| Persistence | SQLite write latency p95 | <= 100ms |
-| Approval flow | Operator response path p99 | <= 5s (excluding human delay) |
+| Domain               | Metric                     | Target                        |
+| -------------------- | -------------------------- | ----------------------------- |
+| Workflow reliability | Success on approved paths  | >= 99.0%                      |
+| Governance latency   | Policy decision p95        | <= 30ms                       |
+| Eventing             | Activity delivery p95      | <= 200ms                      |
+| Telemetry overhead   | Instrumentation p95        | <= 20ms                       |
+| Retrieval            | Query latency p95          | <= 50ms (hot memory)          |
+| Persistence          | SQLite write latency p95   | <= 100ms                      |
+| Approval flow        | Operator response path p99 | <= 5s (excluding human delay) |
 
 Parity-program gate requirements:
 
@@ -841,19 +861,19 @@ No promotion to next maturity ring unless:
 ## 12. Risks and Mitigations
 
 1. **Compounding autonomous errors**
-   - Mitigation: bounded loops, hard stops, fallback paths, operator checkpoints.
+    - Mitigation: bounded loops, hard stops, fallback paths, operator checkpoints.
 
 2. **Tool misuse and schema drift**
-   - Mitigation: contract tests, schema linting, tool ABI versioning.
+    - Mitigation: contract tests, schema linting, tool ABI versioning.
 
 3. **Opaque decisioning**
-   - Mitigation: mandatory causal events and policy reason logging.
+    - Mitigation: mandatory causal events and policy reason logging.
 
 4. **Quality regressions during rapid iteration**
-   - Mitigation: canary eval sets + mandatory denial/timeout path tests.
+    - Mitigation: canary eval sets + mandatory denial/timeout path tests.
 
 5. **Over-complex architecture creep**
-   - Mitigation: complexity budget and measurable uplift requirements before adding components.
+    - Mitigation: complexity budget and measurable uplift requirements before adding components.
 
 ## 13. Documentation and Operator Readiness Requirements
 
@@ -968,12 +988,12 @@ PRISM must not accept any operator command, tool execution, or agent dispatch un
 
 ### 16.8 Acceptance criteria
 
-| Requirement | Verification |
-| --- | --- |
-| Unauthenticated requests return 401 | Auth Gate unit tests + CI regression |
-| Missing session returns 400 | Session Guard unit tests |
-| Rate limit exceeds return 429 | Rate Limiter unit tests |
-| Approval timeout auto-denies | Approval Queue timeout tests |
-| PAD tampering detected | Directive Integrity verification tests |
-| Tool contract violations rejected | Contract validation tests |
-| Cross-session data isolation | Session-scoped query tests |
+| Requirement                         | Verification                           |
+| ----------------------------------- | -------------------------------------- |
+| Unauthenticated requests return 401 | Auth Gate unit tests + CI regression   |
+| Missing session returns 400         | Session Guard unit tests               |
+| Rate limit exceeds return 429       | Rate Limiter unit tests                |
+| Approval timeout auto-denies        | Approval Queue timeout tests           |
+| PAD tampering detected              | Directive Integrity verification tests |
+| Tool contract violations rejected   | Contract validation tests              |
+| Cross-session data isolation        | Session-scoped query tests             |

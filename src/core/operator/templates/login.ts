@@ -321,8 +321,11 @@ export function loginHtml(port: number): string {
         <button type="button" class="badge-btn" style="width:100%; justify-content:center;" onclick="window.location.href='/setup'" title="Open the guided setup wizard">
           <span>Run Setup Wizard</span>
         </button>
-        <button type="button" class="badge-btn" style="width:100%; justify-content:center; margin-top:0.75rem;" onclick="window.location.href='/login?manage=true'" title="Open operator account management">
+        <button type="button" class="badge-btn" style="width:100%; justify-content:center; margin-top:0.75rem;" onclick="window.location.href='/public/iam-admin.html'" title="Open operator account management">
           <span>Manage Operators</span>
+        </button>
+        <button type="button" class="badge-btn" style="width:100%; justify-content:center; margin-top:0.75rem; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.12); color: #fca5a5;" onclick="shutdownSystem()" title="Shutdown the PRISM console server">
+          <span>Shutdown Console</span>
         </button>
       </div>
     </div>
@@ -347,6 +350,7 @@ export function loginHtml(port: number): string {
   </div>
 
   <script>
+    let currentUser = null;
     const params = new URL(window.location.href).searchParams;
     const manageMode = params.get('manage') === 'true';
     const loginPanel = document.getElementById('loginPanel');
@@ -430,161 +434,29 @@ export function loginHtml(port: number): string {
     }
 
     async function ensureManageView() {
-      if (!manageMode || !managePanel) return;
-      if (loginPanel) loginPanel.style.display = 'none';
-      managePanel.style.display = 'block';
+      if (!manageMode) return;
+      window.location.href = '/public/iam-admin.html';
+      return;
+    }
+
+    async function shutdownSystem() {
+      if (!confirm('Are you sure you want to shutdown the PRISM console server?')) {
+        return;
+      }
       setBanner(errorBanner, '', false);
-      setBanner(infoBanner, '', false);
-      setBanner(manageStatus, 'Checking current session...', true);
-      const { ok, json } = await fetchJson('/api/iam/me');
-      if (!ok) {
-        setBanner(manageStatus, 'Please log in first to manage operators.', true);
-        manageContent.style.display = 'none';
-        if (loginPanel) loginPanel.style.display = 'block';
-        return;
-      }
-      const roles = Array.isArray(json?.principal?.roles) ? json.principal.roles : [];
-      if (!roles.includes('admin')) {
-        setBanner(manageStatus, 'Admin access is required to manage operator accounts.', true);
-        manageContent.style.display = 'none';
-        return;
-      }
-      setBanner(manageStatus, 'Loading operator accounts...', true);
-      await refreshOperators();
-    }
-
-    async function refreshOperators() {
-      const { ok, json } = await fetchJson('/api/iam/admin/users');
-      if (!ok) {
-        setBanner(manageStatus, 'Unable to load operators. Ensure you are signed in as an admin.', true);
-        manageContent.style.display = 'none';
-        return;
-      }
-      const users = Array.isArray(json?.users) ? json.users : [];
-      renderOperatorTable(users);
-      setBanner(manageStatus, 'Showing ' + users.length + ' operator' + (users.length === 1 ? '' : 's') + '.', true);
-      manageContent.style.display = 'block';
-    }
-
-    function renderOperatorTable(users) {
-      const list = document.getElementById('operatorList');
-      if (!list) return;
-      if (users.length === 0) {
-        list.innerHTML = '<div style="color:var(--text-muted);">No operator accounts found.</div>';
-        return;
-      }
-      const rows = users.map((user) => {
-        const isAdmin = Array.isArray(user.roles) && user.roles.includes('admin');
-        const statusAction = user.status === 'active' ? 'suspend' : 'activate';
-        const statusLabel = user.status === 'active' ? 'Active' : user.status === 'suspended' ? 'Suspended' : 'Deprovisioned';
-        return '<tr>' +
-          '<td>' + escapeHtml(user.email) + '</td>' +
-          '<td>' + escapeHtml(user.displayName || '') + '</td>' +
-          '<td>' + escapeHtml(statusLabel) + '</td>' +
-          '<td>' + escapeHtml((user.roles || []).join(', ')) + '</td>' +
-          '<td>' +
-            '<button class="small-button warn" data-user-id="' + encodeURIComponent(user.id) + '" data-action="' + statusAction + '" onclick="window.operatorActionFromButton(this)">' +
-              (statusAction === 'activate' ? 'Activate' : 'Suspend') +
-            '</button>' +
-            '<button class="small-button ' + (isAdmin ? 'warn' : 'positive') + '" data-user-id="' + encodeURIComponent(user.id) + '" data-action="' + (isAdmin ? 'remove' : 'add') + '" onclick="window.operatorRoleToggleFromButton(this)">' +
-              (isAdmin ? 'Remove Admin' : 'Grant Admin') +
-            '</button>' +
-          '</td>' +
-        '</tr>';
-      }).join('');
-      list.innerHTML = '<table class="user-table">' +
-        '<thead>' +
-          '<tr><th>Email</th><th>Name</th><th>Status</th><th>Roles</th><th>Actions</th></tr>' +
-        '</thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table>';
-    }
-
-    function escapeHtml(value) {
-      if (typeof value !== 'string') return '';
-      return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
-
-    window.operatorAction = async function operatorAction(userId, action) {
-      const status = action === 'activate' ? 'active' : 'suspended';
-      const id = decodeURIComponent(userId);
-      const { ok, json } = await fetchJson('/api/iam/admin/users/' + encodeURIComponent(id) + '/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!ok) {
-        setBanner(manageStatus, json?.error?.message || 'Failed to update user status.', true);
-        return;
-      }
-      await refreshOperators();
-    };
-
-    window.operatorRoleToggle = async function operatorRoleToggle(userId, action) {
-      const id = decodeURIComponent(userId);
-      if (action === 'add') {
-        const { ok, json } = await fetchJson('/api/iam/admin/users/' + encodeURIComponent(id) + '/roles', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'admin' }),
-        });
-        if (!ok) {
-          setBanner(manageStatus, json?.error?.message || 'Failed to grant admin role.', true);
+      setBanner(infoBanner, 'Sending shutdown command...', true);
+      try {
+        const res = await fetch('/api/system/shutdown', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setBanner(infoBanner, 'Shutdown initialized. You may close this window.', true);
           return;
         }
-      } else {
-        const { ok, json } = await fetchJson('/api/iam/admin/users/' + encodeURIComponent(id) + '/roles/admin', {
-          method: 'DELETE',
-        });
-        if (!ok) {
-          setBanner(manageStatus, json?.error?.message || 'Failed to remove admin role.', true);
-          return;
-        }
+        throw new Error(data.message || 'Shutdown failed');
+      } catch (err) {
+        setBanner(infoBanner, '', false);
+        setBanner(errorBanner, 'Failed to shutdown server: ' + err.message, true);
       }
-      await refreshOperators();
-    };
-
-    window.operatorActionFromButton = function operatorActionFromButton(btn) {
-      if (!btn) return;
-      const userId = btn.getAttribute('data-user-id') || '';
-      const action = btn.getAttribute('data-action') || '';
-      if (!userId || !action) return;
-      window.operatorAction(userId, action);
-    };
-
-    window.operatorRoleToggleFromButton = function operatorRoleToggleFromButton(btn) {
-      if (!btn) return;
-      const userId = btn.getAttribute('data-user-id') || '';
-      const action = btn.getAttribute('data-action') || '';
-      if (!userId || !action) return;
-      window.operatorRoleToggle(userId, action);
-    };
-
-    async function createOperator() {
-      const email = document.getElementById('new-email').value.trim();
-      const password = document.getElementById('new-password').value.trim();
-      if (!email || !password) {
-        setBanner(manageStatus, 'Email and password are required to create a new operator.', true);
-        return;
-      }
-      setBanner(manageStatus, 'Creating operator account...', true);
-      const { ok, json } = await fetchJson('/api/iam/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email,
-          displayName: email,
-          password: password,
-        }),
-      });
-      if (!ok) {
-        setBanner(manageStatus, json?.detail || json?.error?.message || 'Failed to create operator.', true);
-        return;
-      }
-      setBanner(manageStatus, 'Operator created successfully.', true);
-      document.getElementById('new-email').value = '';
-      document.getElementById('new-password').value = '';
-      await refreshOperators();
     }
 
     function showPanel() {
