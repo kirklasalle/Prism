@@ -1,4 +1,4 @@
-# PRISM — Authoritative Status (v0.22.1)
+# PRISM — Authoritative Status (v0.22.3)
 
 > Single source of truth for what's shipped, what's pending, and what's gated.
 > Replaces the audit-doc maze for operator and investor reading. Linked from
@@ -17,7 +17,7 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.22.1`                                       |
+| Current version  | `0.22.3`                                       |
 | Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
 | Doctor           | `npm run doctor`                               |
@@ -26,11 +26,11 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 Operators are expected to run `npm run doctor` before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.21.0 → v0.22.1)
+## What's Shipped (v0.21.0 → v0.22.3)
 
 ### Robotics Add-on & Intelligent Integration
 
-- **VRGC Robotics Subsystem** (v0.22.1): Integrated a dedicated **Robotics** tab into the Operator Console containing four enterprise-grade panels:
+- **VRGC Robotics Subsystem** (v0.22.3): Integrated a dedicated **Robotics** tab into the Operator Console containing four enterprise-grade panels:
   - **Entity Registry:** Registering, monitoring, and managing robotic and cognitive entities.
   - **Workshop:** Building characters, configuring safety thresholds, monitoring learning progress, and graduation gates.
   - **Integrations:** Bridge connections to built-in VRGC MCP Server, external spiking neural net runtime BrainSim III, graph-based conceptual store UKS (Universal Knowledge Store), ROS 2, and physical I/O endpoints.

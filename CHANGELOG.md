@@ -2,6 +2,26 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.3 — 2026-07-11 — VRGC Robotics Add-on & Intelligent Integration
+
+Introduces the world-class VRGC Robotics Add-on system for managing physical, virtual, and simulated robotic entities and intelligent cognitive/knowledge bridges (UKS, BrainSim III, ROS 2, Physical I/O) under full PRISM governance and policy execution controls.
+
+### Added
+
+- **VRGC Robotics Subsystem Dashboard Tab (`src/core/operator/public/tab-robotics.html`)**: Added a dedicated, highly responsive, cyberpunk glassmorphic operator interface featuring four panels:
+    - **Entity Registry**: Register, transition, and monitor robotic and cognitive entities.
+    - **Workshop**: Build characters, view learning lifecycle milestones, monitor skill acquisition, and configure graduation gates.
+    - **Integration Bridges**: Live validation status and latency monitoring for UKS (Universal Knowledge Store), BrainSim III spiking neural networks, ROS 2 middleware, Physical I/O endpoints, and the built-in VRGC MCP server.
+    - **Telemetry & Governance**: Real-time activity telemetry and policy validation log stream.
+- **REST Add-on Endpoints (`src/core/operator/routes/robotics-handler.ts`)**:
+    - `GET /api/addons/vrgc-robotics/entities` to retrieve active registered entities.
+    - `POST /api/addons/vrgc-robotics/entities` to register new cognitive/robotic entities.
+    - `POST /api/addons/vrgc-robotics/entities/:id/transition` to transition entity lifecycle states.
+    - `GET /api/addons/vrgc-robotics/integrations` to fetch connection status for UKS, BrainSim III, ROS 2, Physical I/O, and the MCP Server.
+- **Unified Add-on Loading Framework (`src/core/addons/`)**: Introduces a modular, typed add-on loader, validator, and registry structure allowing future expansions to be plugged into the core.
+- **Robotics Integration Tests (`tests/robotics-addon.test.ts`)**: Added integration test suite verifying entity registration, lifecycle state changes, and bridge check operations.
+- **Documentation**: Updated the PRISM Skills Architecture to include `tab.robotics` and the Documentation Index to index the new robotics design discussion and walkthrough guides.
+
 ## v0.22.2 — 2026-07-11 — Secure Operator Management Console & Global Emergency Shutdown
 
 Introduces the world-class secure standalone Operator Management Console (`/public/iam-admin.html`) with advanced IAM controls, CAC accountability timelines, SCIM token sync management, and global emergency shutdown functionality.
