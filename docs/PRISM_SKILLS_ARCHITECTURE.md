@@ -18,9 +18,9 @@
 
 ---
 
-## Layer 1: CAC Character — Tab Skills (12)
+## Layer 1: CAC Character — Tab Skills (13)
 
-The CAC Character (your PRISM agent identity, e.g. Aria) gets 12 tab skills — one per dashboard tab — granting full knowledge and operational control:
+The CAC Character (your PRISM agent identity, e.g. Aria) gets 13 tab skills — one per dashboard tab — granting full knowledge and operational control:
 
 | Skill | Tab | Purpose |
 |-------|-----|---------|
@@ -36,6 +36,7 @@ The CAC Character (your PRISM agent identity, e.g. Aria) gets 12 tab skills — 
 | `tab.agentic` | Agentic | Manage agents, swarms, lifecycle |
 | `tab.workspace` | Workspace | Manage files, characters, disk usage |
 | `tab.demo` | Demo | View PTAC scenarios, Watch-Me status |
+| `tab.robotics` | Robotics | Register, transition, and monitor robotic entities and integration bridges |
 
 Each tab skill is a workflow: `inspect → evaluate → control` — the agent inspects the tab state, decides what to do, then performs the action via existing API handlers through `TabToolAdapter`.
 
@@ -62,7 +63,7 @@ The Guardian's CAC identity (`guardian@prism.local`) has permission scopes for `
 
 ---
 
-## Layer 3: Architecture — Guardian ↔ Skills ↔ CAC
+## Layer 3: Guardian Task — `skill-audit`
 
 **New Guardian Task: `skill-audit`**
 

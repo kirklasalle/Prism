@@ -235,7 +235,12 @@ export const state = {
   demoDiagnosticsProgress: [],
   demoDiagnosticsLastRunAt: null,
   expandedDemoDiagnosticSuiteId: null,
+  roboticsMainCollapsed: false,
+  roboticsEntities: [],
+  roboticsStats: null,
+  roboticsIntegrations: [],
 };
+
 
 export const tabs = [
   { id: 'chat', label: 'Chat Interface' },
@@ -246,6 +251,7 @@ export const tabs = [
   { id: 'browser', label: 'Browser Control' },
   { id: 'workspace', label: 'Workspace' },
   { id: 'network', label: 'Network' },
+  { id: 'robotics', label: 'Robotics Entity' },
   { id: 'telemetry', label: 'Telemetry' },
   { id: 'logs', label: 'Logs & Debug' },
   { id: 'scheduler', label: 'Scheduler' },

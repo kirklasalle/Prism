@@ -15,7 +15,9 @@ import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWo
 import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick, showCustomCharacterModal, closeCustomCharacterModal, onCustomCharProfileChange, submitCustomCharacter } from './tab-characters.js';
 import { renderNetworkToolsPanel, renderNetworkSettingsPanel, renderNetworkTelemetryPanel, renderNetworkConsolePanel, runNetworkCommand, refreshNetworkInterfaces, refreshNetworkTelemetry, renderNetworkIntelligencePanel, checkVrgcStatus, runVrgcResearch, runVrgcSecurityScan, runVrgcPerformanceTest, runVrgcFtpBrowse, initNetworkTab } from './tab-network.js';
 import { initHardwareTab, refreshHardwareSwarm, loadModelToSlot, unloadModelSlot } from './tab-hardware.js';
+import { initRoboticsTab, renderRobotics } from './tab-robotics.js';
 import { initPrismTooltips, pushGuardianTip } from './prism-tooltips.js';
+
 import { registerShellTooltips } from './shell-tooltips.js';
 import { registerChatTooltips } from './tab-chat-tooltips.js';
 import { registerTabTooltipCatalog } from './tab-tips-catalog.js';
@@ -193,7 +195,9 @@ function render() {
   safeRenderStep('networkTelemetryPanel', renderNetworkTelemetryPanel);
   safeRenderStep('networkConsolePanel', renderNetworkConsolePanel);
   safeRenderStep('networkIntelligencePanel', renderNetworkIntelligencePanel);
+  safeRenderStep('robotics', renderRobotics);
   safeRenderStep('actions', renderActions);
+
   safeRenderStep('approvals', renderApprovals);
   safeRenderStep('actionHistory', renderActionHistory);
   safeRenderStep('chatTelemetry', renderChatTelemetry);
@@ -333,6 +337,10 @@ async function setActiveTab(tabId) {
   if (tabId === 'browser') {
     try { await initBrowserTab(); } catch (e) { console.error('[tab] browser init:', e); }
   }
+  if (tabId === 'robotics') {
+    try { await initRoboticsTab(); } catch (e) { console.error('[tab] robotics init:', e); }
+  }
+
   if (tabId === 'tools') {
     // Lazy-load diagnostics report on first visit
     if (!state.diagnosticsReport) {

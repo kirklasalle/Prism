@@ -1,0 +1,59 @@
+{
+  "addonFormatVersion": 1,
+  "id": "prism.addon.vrgc-robotics",
+  "name": "VRGC Robotics Entity Management",
+  "version": "0.1.0",
+  "author": {
+    "name": "Kirk LaSalle",
+    "publicKeyId": "ed25519-prism-core-2026"
+  },
+  "description": "Robotics Entity Management Hub — register, monitor, train, and govern robotic entities (physical and virtual) within PRISM's governed autonomy framework. Bridges MCP frameworks, LLM providers, BrainSim III, and UKS for robotics workloads.",
+  "license": "Apache-2.0",
+  "minPrismVersion": "0.21.0",
+  "integrationPoints": {
+    "memorySubsystem": true,
+    "dashboardTab": true,
+    "dashboardTabId": "robotics",
+    "dashboardSubPanels": ["entities", "workshop", "integrations", "telemetry"],
+    "characterExtensions": true,
+    "guardianSkills": [
+      "skill.custodian.robotics-heartbeat",
+      "skill.custodian.robotics-safety-audit",
+      "skill.custodian.robotics-graduation-gate"
+    ],
+    "policyExtensions": [
+      "robotics.entity.register",
+      "robotics.entity.train",
+      "robotics.entity.promote",
+      "robotics.entity.suspend",
+      "robotics.entity.retire",
+      "robotics.actuator.command",
+      "robotics.sensor.calibrate"
+    ],
+    "skillDefinitions": [
+      "skill.robotics.entity-inspect",
+      "skill.robotics.entity-train",
+      "skill.robotics.entity-deploy",
+      "skill.robotics.workshop-build",
+      "skill.robotics.integration-bridge"
+    ],
+    "adapterBridges": [
+      "vrgc-mcp",
+      "brainsim-iii",
+      "uks-bridge",
+      "ros2-bridge",
+      "physical-io"
+    ]
+  },
+  "dependencies": {
+    "addons": [],
+    "plugins": [],
+    "systemCapabilities": []
+  },
+  "trust": "certified",
+  "governanceCouncilSignoff": {
+    "councilMember": "kirk.lasalle@prism.local",
+    "signedAt": "2026-07-11T18:34:00Z",
+    "signatureId": "gc-sig-vrgc-robotics-001"
+  }
+}

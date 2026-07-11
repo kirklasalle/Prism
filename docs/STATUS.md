@@ -1,4 +1,4 @@
-# PRISM — Authoritative Status (v0.21.0)
+# PRISM — Authoritative Status (v0.22.1)
 
 > Single source of truth for what's shipped, what's pending, and what's gated.
 > Replaces the audit-doc maze for operator and investor reading. Linked from
@@ -9,8 +9,7 @@
 PRISM is an **open-source, self-hostable, governance-native Agents-as-a-Service
 runtime**. It runs on a single laptop or a Kubernetes cluster, ships with a
 provable Permanent Active Directives integrity gate, a tiered approval queue, a
-self-driving test harness (PTAC), and — as of v0.21 — an autonomous "Watch Me"
-operator experience powered by the existing `AgenticChatExecutor` ReAct loop.
+self-driving test harness (PTAC), and — as of v0.22 — an additive **VRGC Robotics Add-on** for managing robotic and cognitive entities (physical, virtual, simulated) integrated with external systems like UKS and BrainSim III under full PRISM governance.
 
 The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
@@ -18,8 +17,8 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.21.0`                                       |
-| Branch           | `feat/agentic-ux-polish` (cuts to `main`)      |
+| Current version  | `0.22.1`                                       |
+| Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
 | Doctor           | `npm run doctor`                               |
 | Headline demo    | `npm run ptac:demo` and the `Watch Me` tab     |
@@ -27,7 +26,17 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 Operators are expected to run `npm run doctor` before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.20.x → v0.21.0)
+## What's Shipped (v0.21.0 → v0.22.1)
+
+### Robotics Add-on & Intelligent Integration
+
+- **VRGC Robotics Subsystem** (v0.22.1): Integrated a dedicated **Robotics** tab into the Operator Console containing four enterprise-grade panels:
+  - **Entity Registry:** Registering, monitoring, and managing robotic and cognitive entities.
+  - **Workshop:** Building characters, configuring safety thresholds, monitoring learning progress, and graduation gates.
+  - **Integrations:** Bridge connections to built-in VRGC MCP Server, external spiking neural net runtime BrainSim III, graph-based conceptual store UKS (Universal Knowledge Store), ROS 2, and physical I/O endpoints.
+  - **Telemetry & Governance:** Real-time ActivityBus telemetry stream and policy validation log for robotic actions.
+- **REST Endpoints:** Exposed `/api/addons/vrgc-robotics/entities`, `/api/addons/vrgc-robotics/integrations`, and `/api/addons/vrgc-robotics/entities/:id/transition` for client control and state-machine automation.
+- **Integration Tests:** Comprehensive suite `tests/robotics-addon.test.ts` verifying all registration, status transitions, and integration bridge routes.
 
 ### Governance
 

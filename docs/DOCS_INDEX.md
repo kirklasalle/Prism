@@ -95,6 +95,8 @@
 - PLUGIN_SDK_AUTHORING_GUIDE.md: plugin SDK guide
 - MARKETPLACE_CURATION_POLICY.md: marketplace curation policy
 - VRGC_NETWORK_PROTOCOLS.md: VRGC network protocols
+- VRGC_ROBOTICS_ADDON_DESIGN_DISCUSSION.md: VRGC Robotics, UKS, and BrainSim III architecture & integration strategy
+- VRGC_ROBOTICS_INTEGRATION_WALKTHROUGH.md: Walkthrough of VRGC Robotics dashboard tab integration & routes
 
 ## Reference
 

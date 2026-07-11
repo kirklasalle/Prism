@@ -101,6 +101,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
         <button id="tab-button-browser" type="button" class="tab-button" data-tab-id="browser" role="tab" aria-selected="false" aria-controls="tab-browser" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:browser" data-tip-kind="shell-tab">Browser Control</button>
         <button id="tab-button-workspace" type="button" class="tab-button" data-tab-id="workspace" role="tab" aria-selected="false" aria-controls="tab-workspace" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:workspace" data-tip-kind="shell-tab">Workspace</button>
         <button id="tab-button-network" type="button" class="tab-button" data-tab-id="network" role="tab" aria-selected="false" aria-controls="tab-network" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:network" data-tip-kind="shell-tab">Network</button>
+        <button id="tab-button-robotics" type="button" class="tab-button" data-tab-id="robotics" role="tab" aria-selected="false" aria-controls="tab-robotics" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:robotics" data-tip-kind="shell-tab">Robotics Entity</button>
+
         <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:telemetry" data-tip-kind="shell-tab">Telemetry</button>
         <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:logs" data-tip-kind="shell-tab">Logs &amp; Debug</button>
         <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:scheduler" data-tip-kind="shell-tab">Scheduler</button>
@@ -123,6 +125,9 @@ export function dashboardHtml(port: number, authToken?: string): string {
       <section id="tab-workspace" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-workspace" aria-hidden="true"></section>
 
       <section id="tab-network" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-network" aria-hidden="true"></section>
+
+      <section id="tab-robotics" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-robotics" aria-hidden="true"></section>
+
 
       <section id="tab-telemetry" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-telemetry" aria-hidden="true"></section>
 
@@ -169,6 +174,10 @@ export function dashboardHtml(port: number, authToken?: string): string {
 
   <!-- Additive (v0.21): Prism Wiki - serves dynamic docs directory and custom SVG diagrams -->
   <script src="/public/tab-wiki.js"></script>
+
+  <!-- Additive (v0.22): VRGC Robotics Add-on client controller -->
+  <script type="module" src="/public/tab-robotics.js"></script>
+
 
   <!-- Demonstration Mode: Interactive showcase with Mad Libs prompts,
        9 demos (3 self-control, 3 browser, 3 computer), tab tour,
