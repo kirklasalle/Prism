@@ -295,6 +295,7 @@ export class ApiHandler implements IRouteHandler {
             this.json(res, 200, {
                 ...service.getRuntimeStatus(),
                 version: PRISM_VERSION,
+                serviceVersion: PRISM_VERSION,
                 uptimeSeconds: Math.floor((Date.now() - Date.parse(service.getRuntimeStatus().startedAt)) / 1000),
                 pendingApprovals: service.getApprovalQueue().list().length,
                 chatSessionCount,

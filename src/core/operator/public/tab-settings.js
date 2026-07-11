@@ -2077,7 +2077,7 @@ export
       readonlyRow('Dashboard Port', location.port || '7070');
       readonlyRow('Session ID', s.sessionId);
       readonlyRow('Uptime', formatUptime(s.uptimeSeconds));
-      readonlyRow('Version', 'v' + (state.status && state.status.serviceVersion ? state.status.serviceVersion : (s && s.serviceVersion ? s.serviceVersion : '—')));
+      readonlyRow('Version', 'v' + ((s && (s.version || s.serviceVersion)) || (state.status && (state.status.version || state.status.serviceVersion)) || '—'));
       readonlyRow('Node', (s.nodeVersion || '\u2014'));
       readonlyRow('Platform', (s.platform || '\u2014'));
     } else {
@@ -2304,6 +2304,16 @@ export
     numberRow('Action History Limit', 'actionHistoryLimit', '', 'entries');
     numberRow('Package History Limit', 'sessionPackageHistoryLimit', '', 'entries');
 
+    var verbose = state.runtimeSettings ? (state.runtimeSettings.verboseLogging === true) : false;
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Verbose Logging';
+    html += ' <span class="stg-hint">Enable detailed verbose trace logging for all operations & settings</span>';
+    html += '</span>';
+    html += '<span style="display:flex;align-items:center;">';
+    html += '<input type="checkbox" id="stg-verboseLogging"' + (verbose ? ' checked' : '') + ' onchange="markSettingDirty(\'verboseLogging\')" style="width:16px;height:16px;cursor:pointer;" />';
+    html += '</span>';
+    html += '</div>';
+
     var currentTheme = localStorage.getItem('prism-theme') || 'tron';
     html += '<div class="stg-row">';
     html += '<span class="stg-label">Visual Theme';
@@ -2318,7 +2328,7 @@ export
     html += '</div>';
 
     html += '<div style="margin-top:8px;text-align:right;">';
-    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\'])">Save</button>';
+    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\', \'' + 'verboseLogging' + '\'])">Save</button>';
     html += '</div>';
   });
 
@@ -2663,7 +2673,7 @@ export async function submitCreateOperator() {
   var password = pwEl ? pwEl.value : '';
   if (!email || !password) { showTransientNotice('Email and password are required.', 'error'); return; }
   try {
-    await request('/api/iam/operators', {
+    await request('/api/iam/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, displayName: displayName || email.split('@')[0], password })
@@ -2676,16 +2686,16 @@ export async function submitCreateOperator() {
 
 async function _opRefreshList() {
   try {
-    var data = await request('/api/iam/operators');
-    state.operatorList = Array.isArray(data.operators) ? data.operators : [];
+    var data = await request('/api/iam/admin/users');
+    state.operatorList = Array.isArray(data.users) ? data.users : [];
   } catch (_) { }
   safeRenderStep('settingsPanel', renderSettingsPanel);
 }
 
 async function _opChangeStatus(id, nextStatus) {
   try {
-    await request('/api/iam/operators/' + encodeURIComponent(id) + '/status', {
-      method: 'PATCH',
+    await request('/api/iam/admin/users/' + encodeURIComponent(id) + '/status', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus })
     });
@@ -2696,8 +2706,17 @@ async function _opChangeStatus(id, nextStatus) {
 
 async function _opToggleAdminRole(id, hasAdmin) {
   try {
-    var method = hasAdmin ? 'DELETE' : 'PUT';
-    await request('/api/iam/operators/' + encodeURIComponent(id) + '/roles/admin', { method });
+    if (hasAdmin) {
+      await request('/api/iam/admin/users/' + encodeURIComponent(id) + '/roles/admin', {
+        method: 'DELETE'
+      });
+    } else {
+      await request('/api/iam/admin/users/' + encodeURIComponent(id) + '/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'admin' })
+      });
+    }
     showTransientNotice(hasAdmin ? 'Admin role revoked.' : 'Admin role granted.', 'success');
     await _opRefreshList();
   } catch (err) { showTransientNotice('Role change failed: ' + String(err), 'error'); }
@@ -2711,8 +2730,8 @@ async function _opChangePassword(id, email) {
   });
   if (!newPw || !newPw.trim()) return;
   try {
-    await request('/api/iam/operators/' + encodeURIComponent(id) + '/password', {
-      method: 'PATCH',
+    await request('/api/iam/admin/users/' + encodeURIComponent(id) + '/password', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: newPw.trim() })
     });
@@ -2724,7 +2743,7 @@ async function _opDelete(id, email) {
   var confirmed = await showConfirm('Delete operator "' + email + '"?\n\nThis cannot be undone.');
   if (!confirmed) return;
   try {
-    await request('/api/iam/operators/' + encodeURIComponent(id), { method: 'DELETE' });
+    await request('/api/iam/admin/users/' + encodeURIComponent(id), { method: 'DELETE' });
     showTransientNotice('Operator "' + email + '" deleted.', 'success');
     await _opRefreshList();
   } catch (err) { showTransientNotice('Delete failed: ' + String(err), 'error'); }
@@ -2762,7 +2781,7 @@ export
   for (var i = 0; i < keys.length; i++) {
     var el = document.getElementById('stg-' + keys[i]);
     if (el) {
-      var val = el.tagName === 'SELECT' ? el.value : el.value;
+      var val = el.tagName === 'SELECT' ? el.value : (el.type === 'checkbox' ? el.checked : el.value);
       if (el.type === 'number') val = Number(val);
       payload[keys[i]] = val;
     }

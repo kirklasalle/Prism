@@ -2,6 +2,24 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.2 — 2026-07-11 — Secure Operator Management Console & Global Emergency Shutdown
+
+Introduces the world-class secure standalone Operator Management Console (`/public/iam-admin.html`) with advanced IAM controls, CAC accountability timelines, SCIM token sync management, and global emergency shutdown functionality.
+
+### Added
+
+- **Secure Operator Console (`src/core/operator/public/iam-admin.html`)**: A high-end cyberpunk glassmorphism standalone UI for administrative operator operations.
+- **Global Emergency Shutdown**: Added dedicated shutdown buttons to the Operator login page, setup wizards, and Operator management page, communicating securely via `POST /api/system/shutdown`.
+- **Operator Directory CRUD & Role Management**: Administrative interface to create operator accounts, toggle suspend/active states, assign/revoke roles (`root`, `admin`, `operator`, `viewer`), and reset passwords, with protection preventing active administrators from self-deletion.
+- **CAC Chain Verification Timeline**: Table listing active agent-operator sessions with expandable logs to verify email domains, inspect cryptographically signed chain verification events, and download audit logs in CSV/JSON.
+- **SCIM Provisioning Sync Interface**: Interactive card to generate and view Okta/Azure AD sync tokens (visible once) and revoke active tokens.
+
+### Fixed
+
+- **Operator Deletion**: Resolved a backend route handler issue where operator deletion requests were incorrectly parsed, allowing full admin-level operator decommissioning.
+- **Version Detection Settings Audit**: Fixed an issue where system version information was not properly detected and displayed in the Settings tab, adding robust trace logs.
+- **A2ATaskAdapter Default**: Aligned the A2ATaskAdapter test assertions to match the dynamic active assignment character queries.
+
 ## v0.22.1 — 2026-07-10 — Brand Panel Refactoring and Active Tab Indicator
 
 Renames the main sidebar panel from PRISM Chat to PRISM Refraction and introduces a dynamic active tab name display under the title.

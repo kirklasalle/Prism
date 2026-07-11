@@ -479,7 +479,8 @@ export function setupWizardHtml(port: number): string {
       </div>
 
       <!-- Navigation -->
-      <div class="wizard-nav">
+      <div class="wizard-nav" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <button class="secondary-button" style="font-size:12px; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.12); color: #fca5a5;" onclick="window.shutdownSystem()" title="Shutdown the PRISM console server">Shutdown Server</button>
         <!-- Skip setup removed: Initialization Certificate is REQUIRED -->
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="secondary-button" style="font-size:12px;opacity:0.8;" onclick="startAdvancedWizard()">Advanced Setup \u2192</button>
@@ -490,6 +491,24 @@ export function setupWizardHtml(port: number): string {
     </div>
   </div>
 
+  <script>
+    window.shutdownSystem = async function() {
+      if (!confirm('Are you sure you want to shutdown the PRISM console server?')) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/system/shutdown', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert('Shutdown initialized successfully. You may now close this browser window.');
+          return;
+        }
+        alert('Shutdown failed: ' + (data.message || 'Unknown error'));
+      } catch (err) {
+        alert('Failed to shutdown server: ' + err.message);
+      }
+    }
+  </script>
   <script type="module" src="/public/setup-wizard.js"></script>
 </body>
 </html>`;
@@ -1281,9 +1300,10 @@ export function setupWizardAdvancedHtml(port: number): string {
       </div>
 
       <!-- Navigation -->
-      <div class="wizard-nav">
-        <button class="skip-link" id="adv-wizard-skip" onclick="advSkipSetup()">Use Basic Setup</button>
-        <div style="display:flex;gap:8px;">
+      <div class="wizard-nav" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <button class="secondary-button" style="font-size:12px; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.12); color: #fca5a5;" onclick="window.shutdownSystem()" title="Shutdown the PRISM console server">Shutdown Server</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="skip-link" id="adv-wizard-skip" onclick="advSkipSetup()">Use Basic Setup</button>
           <button class="secondary-button" id="adv-wizard-back" onclick="advWizardBack()" style="display:none;">Back</button>
           <button class="primary-button" id="adv-wizard-next" onclick="advWizardNext()">Continue</button>
         </div>
@@ -1291,6 +1311,24 @@ export function setupWizardAdvancedHtml(port: number): string {
     </div>
   </div>
 
+  <script>
+    window.shutdownSystem = async function() {
+      if (!confirm('Are you sure you want to shutdown the PRISM console server?')) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/system/shutdown', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert('Shutdown initialized successfully. You may now close this browser window.');
+          return;
+        }
+        alert('Shutdown failed: ' + (data.message || 'Unknown error'));
+      } catch (err) {
+        alert('Failed to shutdown server: ' + err.message);
+      }
+    }
+  </script>
   <script type="module" src="/public/setup-wizard-advanced.js"></script>
 </body>
 </html>`;

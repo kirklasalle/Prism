@@ -45,6 +45,7 @@
 - ERROR_RECOVERY.md: lost admin token, corrupted DB, lost JWT secret
 - CHARACTER_SELECTION_GUIDE.md: when to use Aria / Phoenix / Sentinel
 - OPERATOR_DASHBOARD_WALKTHROUGH.md: operator dashboard playbook
+- operator_management_system.md: secure operator console & identity management reference
 - COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md: computer/browser control
 - INCIDENT_TRIAGE_RUNBOOK.md: incident triage procedure
 - PRODUCTION_RELEASE_RUNBOOK.md: staging-to-production release procedure

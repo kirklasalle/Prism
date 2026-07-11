@@ -1,172 +1,447 @@
 <!doctype html>
 <!--
-  PRISM Enterprise IAM — admin console (Phase H-3)
-
-  Standalone additive HTML page served from the dashboard's `public/`
-  directory. Reachable at `/public/iam-admin.html` (the existing
-  `/public/` route prefix is registered as a non-auth-gated path, but
-  every API call from this page carries the configured bearer token in
-  `Authorization: Bearer <token>`, so the actual data fetches go
-  through the normal `AuthGate` + admin role gate.
-
-  This page does NOT touch the existing dashboard tabs, navigation, or
-  WebSocket wiring. Operators reach it directly via the URL above.
+  PRISM Secure Operator & IAM Management Console (Phase H-3 Additive Page)
+  This page is served publicly at `/public/iam-admin.html`, handles its own
+  session authentication via cookie or developer token, and provides complete
+  operator CRUD, Role Assignments, SCIM token sync, and CAC accountability auditing.
 -->
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <title>PRISM IAM Admin</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Google Fonts: Outfit (modern UI) & Share Tech Mono (terminal) -->
+<head>
+    <meta charset="utf-8" />
+    <title>PRISM Operator Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    
+    <!-- Google Fonts: Outfit (modern UI) & Share Tech Mono (terminal font) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
     <style>
         :root {
-            --bg: #02050b;
-            --panel: rgba(4, 9, 20, 0.85);
-            --panel-solid: #040914;
-            --panel-2: rgba(6, 14, 30, 0.95);
-            --fg: #edf3ff;
-            --fg-dim: #9aa6c7;
-            --accent: #00ccff;
-            --accent-rgb: 0, 204, 255;
-            --danger: #ff3333;
-            --ok: #00ff66;
-            --border: rgba(0, 204, 255, 0.22);
-            --border-glow: rgba(0, 204, 255, 0.22);
-            --text-glow: 0 0 8px rgba(0, 204, 255, 0.5);
+            --bg-base: #030712;
+            --bg-grid: rgba(6, 182, 212, 0.015);
+            --panel-bg: rgba(15, 23, 42, 0.65);
+            --panel-border: rgba(6, 182, 212, 0.15);
+            --panel-border-hover: rgba(6, 182, 212, 0.35);
+            --panel-shadow: rgba(0, 0, 0, 0.5);
+            
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --text-cyan: #06b6d4;
+            --text-green: #10b981;
+            --text-red: #ef4444;
+            --text-yellow: #f59e0b;
+            --text-purple: #a855f7;
+            
+            --neon-glow: 0 0 15px rgba(6, 182, 212, 0.25);
+            --neon-glow-strong: 0 0 25px rgba(6, 182, 212, 0.5);
+            --neon-red-glow: 0 0 15px rgba(239, 68, 68, 0.25);
+            
+            --font-ui: 'Outfit', sans-serif;
+            --font-mono: 'Share Tech Mono', monospace;
         }
 
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg);
+            background-color: var(--bg-base);
             background-image: 
-                linear-gradient(rgba(0, 204, 255, 0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 204, 255, 0.02) 1px, transparent 1px);
-            background-size: 40px 40px;
+                linear-gradient(var(--bg-grid) 1px, transparent 1px),
+                linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+            background-size: 30px 30px;
             background-position: center;
-            color: var(--fg);
+            color: var(--text-main);
+            font-family: var(--font-ui);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Loading Overlay */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: var(--bg-base);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease, visibility 0.5s;
+        }
+
+        .loader-pulse {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-top-color: var(--text-cyan);
+            border-bottom-color: var(--text-cyan);
+            animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            position: relative;
+            margin-bottom: 24px;
+        }
+        
+        .loader-pulse::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-left-color: var(--text-purple);
+            border-right-color: var(--text-purple);
+            animation: spin-reverse 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes spin-reverse {
+            0% { transform: rotate(360deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        .loader-text {
+            font-family: var(--font-mono);
+            letter-spacing: 0.25em;
+            color: var(--text-cyan);
+            text-shadow: var(--neon-glow);
+            font-size: 14px;
+            animation: pulse-light 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-light {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(6, 182, 212, 0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(6, 182, 212, 0.4);
+        }
+
+        /* Glowing Accent Badge */
+        .badge {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid currentColor;
+            font-weight: 500;
+        }
+        .badge.cyan { color: var(--text-cyan); background: rgba(6, 182, 212, 0.06); }
+        .badge.green { color: var(--text-green); background: rgba(16, 185, 129, 0.06); }
+        .badge.red { color: var(--text-red); background: rgba(239, 68, 68, 0.06); }
+        .badge.yellow { color: var(--text-yellow); background: rgba(245, 158, 11, 0.06); }
+        .badge.purple { color: var(--text-purple); background: rgba(168, 85, 247, 0.06); }
+        .badge.muted { color: var(--text-muted); background: rgba(255, 255, 255, 0.03); }
+
+        /* Login Container styling */
+        #login-container {
+            display: none;
+            flex: 1;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .login-card {
+            background: var(--panel-bg);
+            backdrop-filter: blur(24px);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 20px 50px var(--panel-shadow), inset 0 0 15px rgba(6, 182, 212, 0.02);
+            text-align: center;
+            position: relative;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--text-cyan), transparent);
+            border-radius: 16px 16px 0 0;
+        }
+
+        .login-logo {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            color: #ffffff;
+            text-shadow: var(--neon-glow);
+            margin-bottom: 8px;
+        }
+
+        .login-subtitle {
+            font-family: var(--font-mono);
+            color: var(--text-cyan);
+            font-size: 11px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 32px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-wrapper input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .input-wrapper input:focus {
+            border-color: var(--text-cyan);
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.15);
+            background: rgba(6, 182, 212, 0.02);
+        }
+
+        .login-button {
+            width: 100%;
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(6, 182, 212, 0.05));
+            border: 1px solid var(--text-cyan);
+            color: #ffffff;
+            padding: 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .login-button:hover {
+            background: var(--text-cyan);
+            color: #000000;
+            box-shadow: var(--neon-glow-strong);
+            transform: translateY(-1px);
+        }
+
+        .login-divider {
+            margin: 24px 0;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .login-divider::before, .login-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+        .login-divider:not(:empty)::before { margin-right: 12px; }
+        .login-divider:not(:empty)::after { margin-left: 12px; }
+
+        .developer-token-link {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-decoration: underline;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .developer-token-link:hover {
+            color: var(--text-cyan);
+        }
+
+        .token-fields {
+            display: none;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        /* Dashboard Container styling */
+        #dashboard-container {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            animation: fadeIn 0.4s ease-out;
         }
 
         header {
-            background: rgba(2, 5, 11, 0.95);
-            padding: 16px 30px;
-            border-bottom: 1px solid var(--border-glow);
-            box-shadow: 0 0 20px rgba(0, 204, 255, 0.15);
-            backdrop-filter: blur(10px);
+            background: rgba(3, 7, 18, 0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--panel-border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .header-logo-section {
             display: flex;
             align-items: center;
             gap: 16px;
         }
 
-        header h1 {
-            font-size: 20px;
+        .header-title-wrapper h1 {
+            font-size: 18px;
             font-weight: 800;
-            color: #ffffff;
-            text-shadow: var(--text-glow);
             letter-spacing: 0.12em;
-            margin: 0;
+            text-shadow: var(--neon-glow);
+            color: #ffffff;
         }
 
-        header .badge {
+        .header-title-wrapper p {
             font-size: 11px;
-            padding: 4px 12px;
-            border-radius: 4px;
-            background: rgba(0, 204, 255, 0.12);
-            border: 1px solid rgba(0, 204, 255, 0.25);
-            color: var(--accent);
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
-        }
-
-        main {
-            padding: 30px 24px;
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-
-        section {
-            background: var(--panel);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 25px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 15px rgba(0, 204, 255, 0.03);
-            position: relative;
-            overflow: hidden;
-        }
-
-        section::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-            opacity: 0.5;
-        }
-
-        section h2 {
-            font-size: 12px;
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
+            font-family: var(--font-mono);
+            color: var(--text-cyan);
             letter-spacing: 0.1em;
-            color: #ffffff;
-            text-shadow: var(--text-glow);
-            margin: 0 0 16px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-
-        th,
-        td {
-            text-align: left;
-            padding: 12px 14px;
-            border-bottom: 1px solid rgba(0, 204, 255, 0.12);
-        }
-
-        th {
-            color: var(--fg-dim);
-            font-weight: 700;
-            font-family: 'Share Tech Mono', monospace;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-size: 11px;
-            background: rgba(0, 204, 255, 0.02);
         }
 
-        tr:hover td {
-            background: rgba(0, 204, 255, 0.01);
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
-        tr:last-child td {
-            border-bottom: none;
+        .operator-identity {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            font-size: 12px;
         }
 
-        button {
-            background: rgba(0, 204, 255, 0.1);
-            border: 1px solid var(--accent);
+        .operator-identity .name {
+            font-weight: 600;
             color: #ffffff;
-            padding: 8px 16px;
-            border-radius: 6px;
+        }
+
+        .operator-identity .role {
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        button.btn-primary {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(6, 182, 212, 0.03));
+            border: 1px solid var(--text-cyan);
+            color: #ffffff;
             font-size: 12px;
             font-weight: 600;
-            letter-spacing: 0.05em;
+            padding: 8px 18px;
+            border-radius: 6px;
             text-transform: uppercase;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button.btn-primary:hover {
+            background: var(--text-cyan);
+            color: #000000;
+            box-shadow: var(--neon-glow);
+            transform: translateY(-1px);
+        }
+
+        button.btn-secondary {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        button.btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        button.btn-danger {
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid var(--text-red);
+            color: var(--text-red);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
             cursor: pointer;
             transition: all 0.25s ease;
             display: inline-flex;
@@ -174,508 +449,1551 @@
             gap: 6px;
         }
 
-        button:hover {
-            background: var(--accent);
-            color: #02050b;
-            box-shadow: 0 0 12px rgba(0, 204, 255, 0.4);
+        button.btn-danger:hover {
+            background: var(--text-red);
+            color: #000000;
+            box-shadow: var(--neon-red-glow);
             transform: translateY(-1px);
         }
 
-        button.secondary {
+        button.btn-action-small {
             background: rgba(255, 255, 255, 0.02);
-            border-color: rgba(255, 255, 255, 0.15);
-            color: var(--fg-dim);
-        }
-
-        button.secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
-            box-shadow: none;
-            transform: translateY(-1px);
-        }
-
-        button.danger {
-            background: rgba(255, 51, 51, 0.1);
-            border-color: var(--danger);
-            color: #ffffff;
-        }
-
-        button.danger:hover {
-            background: var(--danger);
-            color: #02050b;
-            box-shadow: 0 0 12px rgba(255, 51, 51, 0.4);
-            transform: translateY(-1px);
-        }
-
-        input,
-        select {
-            background: rgba(0, 0, 0, 0.4);
-            color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 13px;
-            outline: none;
-            transition: all 0.3s ease;
-        }
-
-        input:focus,
-        select:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 10px rgba(0, 204, 255, 0.15);
-            background: rgba(0, 204, 255, 0.02);
-        }
-
-        select option {
-            background: var(--panel-solid);
-            color: #ffffff;
-        }
-
-        .row {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .row > * {
-            flex: 0 0 auto;
-        }
-
-        .pill {
-            font-size: 11px;
-            padding: 3px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            padding: 5px 10px;
             border-radius: 4px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: var(--fg-dim);
-            font-family: 'Share Tech Mono', monospace;
-            display: inline-block;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-family: var(--font-ui);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        button.btn-action-small:hover {
+            background: rgba(6, 182, 212, 0.1);
+            border-color: var(--text-cyan);
+            color: #ffffff;
+        }
+        button.btn-action-small.danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--text-red);
+            color: #ffffff;
         }
 
-        .pill.ok {
-            color: var(--ok);
-            border-color: rgba(0, 255, 102, 0.3);
-            background: rgba(0, 255, 102, 0.05);
+        /* Workspace Grid and Tabs */
+        .workspace-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
         }
 
-        .pill.warn {
-            color: var(--danger);
-            border-color: rgba(255, 51, 51, 0.3);
-            background: rgba(255, 51, 51, 0.05);
+        .sidebar-tabs {
+            width: 240px;
+            background: rgba(3, 7, 18, 0.5);
+            border-right: 1px solid var(--panel-border);
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        .toast {
+        .tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            padding: 12px 16px;
+            border-radius: 8px;
+            text-align: left;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .tab-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            transition: stroke 0.25s;
+        }
+
+        .tab-btn:hover {
+            color: #ffffff;
+            background: rgba(255,255,255,0.02);
+            border-color: rgba(255,255,255,0.05);
+        }
+
+        .tab-btn.active {
+            color: var(--text-cyan);
+            background: rgba(6, 182, 212, 0.06);
+            border-color: var(--panel-border);
+            box-shadow: inset 0 0 10px rgba(6, 182, 212, 0.05);
+            text-shadow: 0 0 8px rgba(6, 182, 212, 0.25);
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+            background: rgba(3, 7, 18, 0.1);
+        }
+
+        .content-section {
+            display: none;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .section-header {
+            margin-bottom: 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .section-title p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* Glassmorphic Panel styling */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 8px 32px var(--panel-shadow);
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s ease;
+        }
+        
+        .glass-panel:hover {
+            border-color: var(--panel-border-hover);
+        }
+
+        .glass-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.2), transparent);
+        }
+
+        .panel-title {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--text-cyan);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13px;
+            text-align: left;
+        }
+
+        th {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-weight: 600;
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-main);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: rgba(6, 182, 212, 0.015);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Inline Forms / Card Layouts */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .form-actions-inline {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* Role editor pill list */
+        .roles-list-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .role-pill-interactive {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(6, 182, 212, 0.06);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            color: var(--text-cyan);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-family: var(--font-mono);
+        }
+
+        .role-pill-interactive .remove-btn {
+            cursor: pointer;
+            color: var(--text-red);
+            font-weight: bold;
+            font-size: 10px;
+            margin-left: 2px;
+            transition: transform 0.15s;
+        }
+        .role-pill-interactive .remove-btn:hover {
+            transform: scale(1.3);
+        }
+
+        .add-role-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .select-mini {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            font-size: 11px;
+            border-radius: 4px;
+            padding: 2px 6px;
+            outline: none;
+        }
+        .select-mini option {
+            background: var(--bg-base);
+            color: #ffffff;
+        }
+
+        /* Toast Host */
+        #toast-host {
             position: fixed;
             bottom: 24px;
             right: 24px;
-            max-width: 480px;
-            background: var(--panel-solid);
-            color: var(--fg);
-            padding: 14px 20px;
-            border-left: 3px solid var(--accent);
-            border-radius: 6px;
-            font-size: 13px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(0, 204, 255, 0.1);
-            border-top: 1px solid var(--border-glow);
-            border-right: 1px solid var(--border-glow);
-            border-bottom: 1px solid var(--border-glow);
             z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 420px;
+            width: 100%;
         }
 
-        .toast.error {
-            border-left-color: var(--danger);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(255, 51, 51, 0.1);
+        .toast-notification {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            border-left: 4px solid var(--text-cyan);
+            border-top: 1px solid rgba(255,255,255,0.08);
+            border-right: 1px solid rgba(255,255,255,0.08);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            border-radius: 6px;
+            padding: 16px 20px;
+            color: var(--text-main);
+            font-size: 13px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            animation: slideInRight 0.3s ease-out forwards;
         }
 
-        code {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 2px 6px;
+        .toast-notification.error {
+            border-left-color: var(--text-red);
+        }
+        .toast-notification.success {
+            border-left-color: var(--text-green);
+        }
+        .toast-notification.warning {
+            border-left-color: var(--text-yellow);
+        }
+
+        /* Timeline Modal / Component */
+        .timeline {
+            position: relative;
+            padding-left: 24px;
+            margin-top: 16px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 5px;
+            bottom: 0;
+            width: 2px;
+            background: rgba(6, 182, 212, 0.15);
+        }
+
+        .timeline-event {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .timeline-event::before {
+            content: '';
+            position: absolute;
+            left: -23px;
+            top: 4px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-cyan);
+            box-shadow: 0 0 6px var(--text-cyan);
+        }
+
+        .timeline-time {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-cyan);
+            margin-bottom: 2px;
+        }
+
+        .timeline-desc {
+            font-size: 13px;
+            color: var(--text-main);
+        }
+
+        .timeline-details {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            background: rgba(0,0,0,0.2);
+            padding: 6px 10px;
             border-radius: 4px;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: var(--accent);
+            margin-top: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
 
-        .empty {
+        /* Modal windows */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(3, 7, 18, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        .modal-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: scaleIn 0.25s ease-out;
+        }
+
+        .modal-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+        }
+        .modal-close:hover {
+            color: #ffffff;
+        }
+
+        .modal-body {
             padding: 24px;
+            overflow-y: auto;
+            max-height: 70vh;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            background: rgba(0,0,0,0.1);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .empty-state {
             text-align: center;
-            color: var(--fg-dim);
+            padding: 40px;
+            color: var(--text-muted);
             font-style: italic;
         }
+        
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--text-green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px var(--text-green);
+            animation: pulse-green 2s infinite;
+        }
+        
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
     </style>
-    </head>
+</head>
+<body>
 
-    <body>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="loader-pulse"></div>
+        <div class="loader-text">INTIALIZING SECURITY SUBSYSTEMS...</div>
+    </div>
+
+    <!-- Login Container -->
+    <div id="login-container">
+        <div class="login-card">
+            <div class="login-logo">PRISM</div>
+            <div class="login-subtitle">Secure Operator Console</div>
+            
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="login-email">Operator Email</label>
+                    <div class="input-wrapper">
+                        <input id="login-email" type="email" placeholder="operator@prism.local" required autocomplete="username" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="login-password">Console Password</label>
+                    <div class="input-wrapper">
+                        <input id="login-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+                    </div>
+                </div>
+                <button type="submit" class="login-button">
+                    <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                    Authenticate Console
+                </button>
+            </form>
+
+            <div class="login-divider">or</div>
+
+            <div style="margin-bottom: 24px;">
+                <span class="developer-token-link" onclick="toggleTokenField()">Authenticate with Developer Bearer Token</span>
+                <div id="token-fields-wrapper" class="token-fields">
+                    <div class="input-group" style="margin-top: 15px;">
+                        <label for="token-input">Bearer Admin Token</label>
+                        <div class="input-wrapper">
+                            <input id="token-input" type="password" placeholder="Paste bearer token..." />
+                        </div>
+                    </div>
+                    <button type="button" id="token-login-btn" class="login-button" style="border-color: var(--text-purple); color: #ffffff;">
+                        Load Token
+                    </button>
+                </div>
+            </div>
+
+            <button type="button" id="login-shutdown-btn" class="login-button btn-danger" style="margin-top:20px; font-size:11px; padding:8px;">
+                Emergency Shutdown Console
+            </button>
+        </div>
+    </div>
+
+    <!-- Dashboard Container -->
+    <div id="dashboard-container">
         <header>
-            <h1>PRISM IAM Admin</h1>
-            <span class="badge">Phase H-3 · enterprise IAM</span>
-            <span style="flex: 1"></span>
-            <span id="me-banner" class="badge">…</span>
+            <div class="header-logo-section">
+                <div class="pulse-dot"></div>
+                <div class="header-title-wrapper">
+                    <h1>PRISM CONSOLE</h1>
+                    <p>Core Operator Management & Security</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="operator-identity">
+                    <span class="name" id="current-user-name">...</span>
+                    <span class="role" id="current-user-roles">...</span>
+                </div>
+                <button class="btn-primary" onclick="launchDashboard()">
+                    <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                    Refraction Dashboard
+                </button>
+                <button class="btn-secondary" onclick="handleLogout()">
+                    Logout
+                </button>
+            </div>
         </header>
-        <main>
-            <section>
-                <h2>Bearer token</h2>
-                <p style="font-size: 13px; color: var(--fg-dim); margin: 0 0 8px">
-                    Paste the dashboard admin bearer token (or an API key with the <code>admin</code> role). It is held
-                    in memory only and used to call <code>/api/iam/admin/*</code>.
+
+        <div class="workspace-layout">
+            <!-- Sidebar tabs -->
+            <div class="sidebar-tabs">
+                <button class="tab-btn active" onclick="switchTab('operators-section')">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Operators & Roles
+                </button>
+                <button class="tab-btn" onclick="switchTab('cac-section')">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    CAC Accountability
+                </button>
+                <button class="tab-btn" onclick="switchTab('scim-section')">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                    SCIM Synced Keys
+                </button>
+                <button class="tab-btn" onclick="switchTab('policies-section')">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    Security Reference
+                </button>
+                
+                <div style="flex:1"></div>
+                <button class="btn-danger" style="width:100%; justify-content:center;" onclick="triggerShutdown()">
+                    Shutdown System
+                </button>
+            </div>
+
+            <!-- Content Area -->
+            <main class="main-content">
+                
+                <!-- Operators section -->
+                <section id="operators-section" class="content-section active">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <h2>Operators Directory</h2>
+                            <p>Register, suspend, audit, or delete active PRISM platform operator accounts.</p>
+                        </div>
+                        <button class="btn-primary" onclick="openCreateOperatorModal()">
+                            Register Operator
+                        </button>
+                    </div>
+
+                    <div class="glass-panel">
+                        <div class="panel-title">Active Operator Registry</div>
+                        <table id="operators-table">
+                            <thead>
+                                <tr>
+                                    <th>Display Name</th>
+                                    <th>Email / ID</th>
+                                    <th>Status</th>
+                                    <th>Assigned Roles</th>
+                                    <th style="width:280px; text-align:right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- CAC section -->
+                <section id="cac-section" class="content-section">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <h2>Character Accountability Certificates</h2>
+                            <p>Verify dynamic context bindings between autonomous agents, active chat sessions, and operators.</p>
+                        </div>
+                        <div class="form-actions-inline">
+                            <button class="btn-secondary" onclick="exportCac('json')">Export JSON</button>
+                            <button class="btn-secondary" onclick="exportCac('csv')">Export CSV</button>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel">
+                        <div class="panel-title">CAC Session Provenance Ledger</div>
+                        <table id="cac-table">
+                            <thead>
+                                <tr>
+                                    <th>Agent / Character</th>
+                                    <th>Assigned Operator</th>
+                                    <th>State</th>
+                                    <th>Dispatches</th>
+                                    <th>Verification</th>
+                                    <th style="width:240px; text-align:right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- SCIM section -->
+                <section id="scim-section" class="content-section">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <h2>SCIM Integrations & Directory Synced Keys</h2>
+                            <p>Provision cryptographic bearer tokens for automated identity management integrations (e.g., Okta, Azure AD).</p>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel">
+                        <div class="panel-title">Generate Automated System Token</div>
+                        <div class="form-grid">
+                            <div class="input-group">
+                                <label for="scim-label">Integration Directory Label</label>
+                                <div class="input-wrapper">
+                                    <input id="scim-label" placeholder="e.g. Okta Production Directory" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-actions-inline">
+                            <button class="btn-primary" onclick="createScimToken()">Generate Directory Token</button>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel">
+                        <div class="panel-title">Active Directory Token Registry</div>
+                        <table id="scim-table">
+                            <thead>
+                                <tr>
+                                    <th>Directory Integration</th>
+                                    <th>Token ID Prefix</th>
+                                    <th>Created At</th>
+                                    <th>Status</th>
+                                    <th style="width:120px; text-align:right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Policies Section -->
+                <section id="policies-section" class="content-section">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <h2>Security Reference & Policies</h2>
+                            <p>System-wide permissions documentation and compliance settings for PRISM refractions.</p>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel">
+                        <div class="panel-title">System Role Hierarchies</div>
+                        <table id="roles-reference-table">
+                            <thead>
+                                <tr>
+                                    <th>Role Name</th>
+                                    <th>Access Privileges</th>
+                                    <th>Scope Limit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="glass-panel">
+                        <div class="panel-title">Covenant Compliance Audit</div>
+                        <p style="font-size:13px; line-height:1.6; color:var(--text-muted); margin-bottom:12px;">
+                            PRISM operates under the Sacred Covenant (v1.0.0). All operator accounts, SCIM sync tokens, and agent character bindings are logged onto a read-only transactional audit trail which is verified on startup. Modifying core roles or overriding character accountability restrictions requires multiple digital signatures.
+                        </p>
+                        <div class="badge green">Covenant Verified</div>
+                        <div class="badge cyan" id="directive-hash-badge">Directive Hash: ...</div>
+                    </div>
+                </section>
+                
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Create Operator Modal -->
+    <div id="create-operator-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Register Platform Operator</h3>
+                <button class="modal-close" onclick="closeModal('create-operator-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="create-operator-form">
+                    <div class="input-group">
+                        <label for="op-email">Operator Email Address</label>
+                        <div class="input-wrapper">
+                            <input id="op-email" type="email" placeholder="name@domain.com" required />
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="op-name">Display Name / Identity</label>
+                        <div class="input-wrapper">
+                            <input id="op-name" type="text" placeholder="e.g. Kirk LaSalle" required />
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="op-password">Console Password (Initial)</label>
+                        <div class="input-wrapper">
+                            <input id="op-password" type="password" placeholder="Create secure password" required />
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="op-status">Initial Account Status</label>
+                        <div class="input-wrapper">
+                            <select id="op-status" style="width:100%; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.1); color:#ffffff; padding:10px; border-radius:6px;">
+                                <option value="active">Active</option>
+                                <option value="suspended">Suspended</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('create-operator-modal')">Cancel</button>
+                <button class="btn-primary" onclick="submitCreateOperator()">Register Account</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="reset-password-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 440px;">
+            <div class="modal-header">
+                <h3>Reset Operator Password</h3>
+                <button class="modal-close" onclick="closeModal('reset-password-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="reset-pw-user-id" />
+                <p id="reset-pw-user-desc" style="font-size:13px; color:var(--text-muted); margin-bottom:16px;"></p>
+                <div class="input-group">
+                    <label for="reset-pw-val">New Console Password</label>
+                    <div class="input-wrapper">
+                        <input id="reset-pw-val" type="password" placeholder="Enter new password" required />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('reset-password-modal')">Cancel</button>
+                <button class="btn-primary" onclick="submitResetPassword()">Apply Password</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Verify CAC Email Modal -->
+    <div id="verify-cac-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 460px;">
+            <div class="modal-header">
+                <h3>Verify Character Accountability Email</h3>
+                <button class="modal-close" onclick="closeModal('verify-cac-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="verify-cac-id" />
+                <p id="verify-cac-desc" style="font-size:13px; color:var(--text-muted); margin-bottom:16px;"></p>
+                <div class="input-group">
+                    <label for="verify-cac-email">Verified Email</label>
+                    <div class="input-wrapper">
+                        <input id="verify-cac-email" type="email" placeholder="e.g. operator@company.com" required />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="verify-cac-provider">Identity Provider</label>
+                    <div class="input-wrapper">
+                        <select id="verify-cac-provider" style="width:100%; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.1); color:#ffffff; padding:10px; border-radius:6px;">
+                            <option value="gmail">Google Suite (Gmail)</option>
+                            <option value="outlook">Microsoft 365 (Outlook)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('verify-cac-modal')">Cancel</button>
+                <button class="btn-primary" onclick="submitVerifyCacEmail()">Verify binding</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CAC Provenance Timeline Modal -->
+    <div id="cac-timeline-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>CAC Security Chain Timeline</h3>
+                <button class="modal-close" onclick="closeModal('cac-timeline-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="timeline-assignment-info" style="font-size:13px; margin-bottom:12px;"></div>
+                <div id="timeline-container" class="timeline">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('cac-timeline-modal')">Close Audit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCIM Plaintext Token Modal -->
+    <div id="scim-token-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header" style="background: rgba(16, 185, 129, 0.05); border-bottom-color: rgba(16, 185, 129, 0.2);">
+                <h3 style="color: var(--text-green)">SCIM Token Provisioned Successfully</h3>
+                <button class="modal-close" onclick="closeModal('scim-token-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+                    Copy this bearer token now. For security purposes, it will never be displayed in plaintext again.
                 </p>
-                <div class="row">
-                    <input
-                        id="token-input"
-                        type="password"
-                        placeholder="Bearer token"
-                        style="flex: 1; min-width: 240px"
-                    />
-                    <button id="token-save">Use token</button>
-                    <button id="token-clear" class="secondary">Clear</button>
+                <div class="input-group">
+                    <label>Plaintext Sync Token</label>
+                    <div class="input-wrapper">
+                        <input id="scim-plaintext-val" type="text" readonly style="font-family: var(--font-mono); color: var(--text-green); font-size:13px;" onclick="this.select()" />
+                    </div>
                 </div>
-            </section>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" style="border-color: var(--text-green); background: rgba(16, 185, 129, 0.1);" onclick="copyScimTokenText()">Copy Token & Close</button>
+            </div>
+        </div>
+    </div>
 
-            <section>
-                <h2>Users</h2>
-                <table id="users-table">
-                    <thead>
-                        <tr>
-                            <th>Email</th>
-                            <th>Display name</th>
-                            <th>Status</th>
-                            <th>Roles</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td colspan="5" class="empty">load token to populate</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
+    <div id="toast-host"></div>
 
-            <section>
-                <h2>Roles</h2>
-                <table id="roles-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Description</th>
-                            <th>Created</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td colspan="3" class="empty">—</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
+    <script>
+        "use strict";
+        (function () {
+            const tokenStore = { value: "" };
+            let currentUser = null;
+            let allRoles = [];
 
-            <section>
-                <h2>SCIM tokens</h2>
-                <div class="row" style="margin-bottom: 12px">
-                    <input id="scim-label" placeholder="Label (e.g. Okta production)" />
-                    <button id="scim-create">Create token</button>
-                    <span style="font-size: 12px; color: var(--fg-dim)"
-                        >Plaintext shown once — copy it immediately.</span
-                    >
-                </div>
-                <table id="scim-table">
-                    <thead>
-                        <tr>
-                            <th>Label</th>
-                            <th>ID</th>
-                            <th>Created</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td colspan="5" class="empty">—</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
-        </main>
-        <div id="toast-host"></div>
-        <script>
-            "use strict";
-            (function () {
-                const tokenStore = { value: "" };
-                const $ = (sel) => document.querySelector(sel);
+            // UI helper functions
+            const $ = (sel) => document.querySelector(sel);
 
-                function toast(msg, isError) {
-                    const host = $("#toast-host");
-                    const el = document.createElement("div");
-                    el.className = "toast" + (isError ? " error" : "");
-                    el.textContent = msg;
-                    host.appendChild(el);
-                    setTimeout(() => el.remove(), 4500);
+            function toast(msg, type = "info") {
+                const host = $("#toast-host");
+                const el = document.createElement("div");
+                el.className = "toast-notification " + type;
+                
+                let title = type === "error" ? "SECURITY WARNING" : type === "success" ? "OPERATION SUCCESSFUL" : "SYSTEM MESSAGE";
+                
+                el.innerHTML = `
+                    <div style="flex:1">
+                        <div style="font-family: var(--font-mono); font-size:10px; letter-spacing:0.1em; color:var(--text-muted); margin-bottom:4px;">${title}</div>
+                        <div style="font-weight: 500;">${escapeHtml(msg)}</div>
+                    </div>
+                    <button style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-weight:bold; margin-left:12px;" onclick="this.parentElement.remove()">&times;</button>
+                `;
+                host.appendChild(el);
+                setTimeout(() => el.remove(), 5000);
+            }
+
+            function openModal(id) {
+                const modal = $("#" + id);
+                if (modal) {
+                    modal.style.display = "flex";
                 }
+            }
 
-                async function api(path, init) {
-                    const opts = Object.assign({ method: "GET", headers: {} }, init || {});
-                    if (!opts.headers["Content-Type"] && opts.body) opts.headers["Content-Type"] = "application/json";
-                    if (tokenStore.value) opts.headers["Authorization"] = "Bearer " + tokenStore.value;
-                    const res = await fetch(path, opts);
-                    const text = await res.text();
-                    let body = null;
-                    try {
-                        body = text ? JSON.parse(text) : null;
-                    } catch {
-                        body = { raw: text };
-                    }
-                    if (!res.ok) {
-                        const msg = (body && body.error && body.error.message) || "HTTP " + res.status;
-                        throw new Error(msg);
-                    }
-                    return body;
+            window.closeModal = function(id) {
+                const modal = $("#" + id);
+                if (modal) {
+                    modal.style.display = "none";
                 }
+            }
 
-                function statusPill(status) {
-                    const cls = status === "active" ? "ok" : status === "deprovisioned" ? "warn" : "";
-                    return '<span class="pill ' + cls + '">' + status + "</span>";
+            function toggleTokenField() {
+                const field = $("#token-fields-wrapper");
+                if (field.style.display === "block") {
+                    field.style.display = "none";
+                } else {
+                    field.style.display = "block";
+                    $("#token-input").focus();
                 }
+            }
+            window.toggleTokenField = toggleTokenField;
 
-                async function refreshMe() {
-                    try {
-                        const me = await api("/api/iam/me");
-                        const p = me.principal;
-                        $("#me-banner").textContent = p.email
-                            ? p.email + " · " + (p.roles || []).join(",")
-                            : p.userId + " · " + (p.roles || []).join(",");
-                    } catch (e) {
-                        $("#me-banner").textContent = "not authenticated";
-                    }
+            // API wrapper
+            async function api(path, init) {
+                const opts = Object.assign({ method: "GET", headers: {} }, init || {});
+                if (!opts.headers["Content-Type"] && opts.body) {
+                    opts.headers["Content-Type"] = "application/json";
                 }
-
-                async function refreshUsers() {
-                    const tbody = $("#users-table tbody");
-                    if (!tokenStore.value) {
-                        tbody.innerHTML = '<tr><td colspan="5" class="empty">load token to populate</td></tr>';
-                        return;
-                    }
-                    try {
-                        const data = await api("/api/iam/admin/users");
-                        const users = data.users || [];
-                        if (!users.length) {
-                            tbody.innerHTML = '<tr><td colspan="5" class="empty">no users yet</td></tr>';
-                            return;
-                        }
-                        tbody.innerHTML = users
-                            .map((u) => {
-                                const roles = (u.roles || [])
-                                    .map((r) => '<span class="pill">' + r + "</span>")
-                                    .join("");
-                                const toggle = u.status === "active" ? "suspended" : "active";
-                                return (
-                                    "<tr>" +
-                                    "<td>" +
-                                    escapeHtml(u.email) +
-                                    "</td>" +
-                                    "<td>" +
-                                    escapeHtml(u.displayName || "") +
-                                    "</td>" +
-                                    "<td>" +
-                                    statusPill(u.status) +
-                                    "</td>" +
-                                    "<td>" +
-                                    roles +
-                                    "</td>" +
-                                    '<td><button class="secondary" data-action="status" data-id="' +
-                                    u.id +
-                                    '" data-target="' +
-                                    toggle +
-                                    '">→ ' +
-                                    toggle +
-                                    "</button> " +
-                                    '<button class="secondary" data-action="grant-admin" data-id="' +
-                                    u.id +
-                                    '">grant admin</button></td>' +
-                                    "</tr>"
-                                );
-                            })
-                            .join("");
-                        tbody.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", onUserAction));
-                    } catch (e) {
-                        toast("users: " + e.message, true);
-                    }
+                if (tokenStore.value) {
+                    opts.headers["Authorization"] = "Bearer " + tokenStore.value;
                 }
-
-                async function onUserAction(ev) {
-                    const btn = ev.currentTarget;
-                    const action = btn.getAttribute("data-action");
-                    const id = btn.getAttribute("data-id");
-                    try {
-                        if (action === "status") {
-                            const target = btn.getAttribute("data-target");
-                            await api("/api/iam/admin/users/" + encodeURIComponent(id) + "/status", {
-                                method: "POST",
-                                body: JSON.stringify({ status: target }),
-                            });
-                            toast("status → " + target);
-                        } else if (action === "grant-admin") {
-                            await api("/api/iam/admin/users/" + encodeURIComponent(id) + "/roles", {
-                                method: "POST",
-                                body: JSON.stringify({ role: "admin" }),
-                            });
-                            toast("granted admin role");
-                        }
-                        await refreshUsers();
-                    } catch (e) {
-                        toast(e.message, true);
-                    }
+                const res = await fetch(path, opts);
+                const text = await res.text();
+                let body = null;
+                try {
+                    body = text ? JSON.parse(text) : null;
+                } catch {
+                    body = { raw: text };
                 }
-
-                async function refreshRoles() {
-                    const tbody = $("#roles-table tbody");
-                    if (!tokenStore.value) {
-                        tbody.innerHTML = '<tr><td colspan="3" class="empty">—</td></tr>';
-                        return;
-                    }
-                    try {
-                        const data = await api("/api/iam/admin/roles");
-                        const roles = data.roles || [];
-                        if (!roles.length) {
-                            tbody.innerHTML = '<tr><td colspan="3" class="empty">no roles</td></tr>';
-                            return;
-                        }
-                        tbody.innerHTML = roles
-                            .map(
-                                (r) =>
-                                    "<tr>" +
-                                    "<td><code>" +
-                                    escapeHtml(r.name) +
-                                    "</code></td>" +
-                                    "<td>" +
-                                    escapeHtml(r.description || "") +
-                                    "</td>" +
-                                    "<td>" +
-                                    escapeHtml(r.createdAt) +
-                                    "</td>" +
-                                    "</tr>",
-                            )
-                            .join("");
-                    } catch (e) {
-                        toast("roles: " + e.message, true);
-                    }
+                if (!res.ok) {
+                    const msg = (body && body.error && body.error.message) || body.error || "HTTP " + res.status;
+                    throw new Error(msg);
                 }
+                return body;
+            }
 
-                async function refreshScim() {
-                    const tbody = $("#scim-table tbody");
-                    if (!tokenStore.value) {
-                        tbody.innerHTML = '<tr><td colspan="5" class="empty">—</td></tr>';
-                        return;
+            // Authentication & Startup Check
+            async function checkAuth() {
+                try {
+                    const data = await api("/api/iam/me");
+                    currentUser = data.principal;
+                    
+                    if (currentUser) {
+                        $("#current-user-name").textContent = currentUser.displayName || currentUser.email || currentUser.userId;
+                        $("#current-user-roles").textContent = (currentUser.roles || []).join(", ");
+                        
+                        $("#login-container").style.display = "none";
+                        $("#dashboard-container").style.display = "flex";
+                        
+                        await loadAllData();
+                    } else {
+                        showLogin();
                     }
-                    try {
-                        const data = await api("/api/iam/admin/scim-tokens");
-                        const tokens = data.tokens || [];
-                        if (!tokens.length) {
-                            tbody.innerHTML = '<tr><td colspan="5" class="empty">no tokens</td></tr>';
-                            return;
-                        }
-                        tbody.innerHTML = tokens
-                            .map((t) => {
-                                const status = t.revokedAt
-                                    ? '<span class="pill warn">revoked</span>'
-                                    : '<span class="pill ok">active</span>';
-                                const actions = t.revokedAt
-                                    ? ""
-                                    : '<button class="danger" data-action="revoke" data-id="' +
-                                      t.id +
-                                      '">revoke</button>';
-                                return (
-                                    "<tr>" +
-                                    "<td>" +
-                                    escapeHtml(t.label || "(unlabeled)") +
-                                    "</td>" +
-                                    "<td><code>" +
-                                    escapeHtml(t.id) +
-                                    "</code></td>" +
-                                    "<td>" +
-                                    escapeHtml(t.createdAt) +
-                                    "</td>" +
-                                    "<td>" +
-                                    status +
-                                    "</td>" +
-                                    "<td>" +
-                                    actions +
-                                    "</td>" +
-                                    "</tr>"
-                                );
-                            })
-                            .join("");
-                        tbody.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", onScimAction));
-                    } catch (e) {
-                        toast("scim-tokens: " + e.message, true);
-                    }
+                } catch (e) {
+                    showLogin();
+                } finally {
+                    $("#loading-overlay").style.opacity = 0;
+                    setTimeout(() => $("#loading-overlay").style.display = "none", 500);
                 }
+            }
 
-                async function onScimAction(ev) {
-                    const btn = ev.currentTarget;
-                    const action = btn.getAttribute("data-action");
-                    const id = btn.getAttribute("data-id");
-                    try {
-                        if (action === "revoke") {
-                            await api("/api/iam/admin/scim-tokens/" + encodeURIComponent(id), { method: "DELETE" });
-                            toast("token revoked");
-                        }
-                        await refreshScim();
-                    } catch (e) {
-                        toast(e.message, true);
+            function showLogin() {
+                currentUser = null;
+                $("#dashboard-container").style.display = "none";
+                $("#login-container").style.display = "flex";
+                $("#loading-overlay").style.opacity = 0;
+                setTimeout(() => $("#loading-overlay").style.display = "none", 500);
+            }
+
+            async function handleLoginSubmit(e) {
+                e.preventDefault();
+                const email = $("#login-email").value.trim();
+                const password = $("#login-password").value.trim();
+                
+                try {
+                    const res = await api("/api/iam/login", {
+                        method: "POST",
+                        body: JSON.stringify({ email, password })
+                    });
+                    
+                    if (res && res.ok) {
+                        toast("Welcome back, console operator.", "success");
+                        tokenStore.value = ""; // Use cookie session primarily
+                        await checkAuth();
+                    } else {
+                        throw new Error("Invalid credentials");
                     }
+                } catch (err) {
+                    toast(err.message || "Authentication failed.", "error");
                 }
+            }
 
-                function escapeHtml(s) {
-                    return String(s == null ? "" : s)
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;")
-                        .replace(/"/g, "&quot;")
-                        .replace(/'/g, "&#39;");
+            async function handleTokenLogin() {
+                const token = $("#token-input").value.trim();
+                if (!token) {
+                    toast("Bearer token required.", "error");
+                    return;
                 }
-
-                // Wire-up
-                $("#token-save").addEventListener("click", async () => {
-                    tokenStore.value = $("#token-input").value.trim();
-                    await Promise.all([refreshMe(), refreshUsers(), refreshRoles(), refreshScim()]);
-                });
-                // Allow pressing Enter in the password field to submit the token (password fields outside forms don't auto-submit)
-                $("#token-input").addEventListener("keydown", (e) => {
-                    if (e.key === "Enter") {
-                        e.preventDefault();
-                        $("#token-save").click();
+                tokenStore.value = token;
+                try {
+                    const data = await api("/api/iam/me");
+                    if (data && data.principal) {
+                        toast("Developer token authenticated.", "success");
+                        await checkAuth();
+                    } else {
+                        throw new Error("Invalid bearer token");
                     }
-                });
-                $("#token-clear").addEventListener("click", () => {
+                } catch (err) {
                     tokenStore.value = "";
-                    $("#token-input").value = "";
-                    $("#me-banner").textContent = "(no token)";
-                    refreshUsers();
-                    refreshRoles();
-                    refreshScim();
-                });
-                $("#scim-create").addEventListener("click", async () => {
-                    const label = $("#scim-label").value.trim();
+                    toast(err.message || "Token authentication failed.", "error");
+                }
+            }
+
+            window.handleLogout = async function() {
+                try {
+                    await api("/api/iam/logout", { method: "POST" });
+                } catch (e) {}
+                tokenStore.value = "";
+                $("#login-email").value = "";
+                $("#login-password").value = "";
+                $("#token-input").value = "";
+                toast("Logged out of secure console session.", "info");
+                showLogin();
+            }
+
+            window.launchDashboard = function() {
+                window.location.href = "/dashboard";
+            }
+
+            window.triggerShutdown = async function() {
+                if (confirm("CRITICAL WARNING: Are you sure you want to trigger a graceful shutdown of the entire PRISM platform server? This will terminate all active agent loops and Refraction dashboards.")) {
                     try {
-                        const r = await api("/api/iam/admin/scim-tokens", {
-                            method: "POST",
-                            body: JSON.stringify({ label }),
+                        toast("Initiating emergency platform shutdown...", "warning");
+                        await fetch('/api/system/shutdown', { method: 'POST' });
+                        toast("Shutdown request accepted. Terminal session will disconnect shortly.", "success");
+                        setTimeout(() => {
+                            window.close();
+                            document.body.innerHTML = '<div style="padding:100px; text-align:center; font-family:var(--font-mono); color:var(--text-red);"><h2>SYSTEM OFFLINE</h2><p>PRISM server has been shut down.</p></div>';
+                        }, 2000);
+                    } catch (err) {
+                        toast("Shutdown command failed: " + err.message, "error");
+                    }
+                }
+            }
+
+            // Tab Switching
+            window.switchTab = function(sectionId) {
+                document.querySelectorAll(".tab-btn").forEach((btn) => {
+                    btn.classList.remove("active");
+                });
+                document.querySelectorAll(".content-section").forEach((sec) => {
+                    sec.classList.remove("active");
+                });
+                
+                event.currentTarget.classList.add("active");
+                $("#" + sectionId).classList.add("active");
+            }
+
+            // Data loading coordinator
+            async function loadAllData() {
+                await Promise.all([
+                    refreshOperators(),
+                    refreshRoles(),
+                    refreshScim(),
+                    refreshCacList()
+                ]);
+            }
+
+            // 1. Operators & Roles Management
+            async function refreshRoles() {
+                try {
+                    const data = await api("/api/iam/admin/roles");
+                    allRoles = data.roles || [];
+                    
+                    const tbody = $("#roles-reference-table tbody");
+                    if (!allRoles.length) {
+                        tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No roles configured</td></tr>';
+                        return;
+                    }
+                    
+                    tbody.innerHTML = allRoles.map(r => `
+                        <tr>
+                            <td><code style="color:var(--text-purple); font-size:12px;">${escapeHtml(r.name)}</code></td>
+                            <td>${escapeHtml(r.description || '—')}</td>
+                            <td><span class="badge muted">${r.name === 'admin' || r.name === 'root' ? 'GLOBAL ACCESS' : 'LIMITED'}</span></td>
+                        </tr>
+                    `).join("");
+                } catch (e) {
+                    toast("Failed to load roles: " + e.message, "error");
+                }
+            }
+
+            async function refreshOperators() {
+                try {
+                    const data = await api("/api/iam/admin/users");
+                    const users = data.users || [];
+                    const tbody = $("#operators-table tbody");
+                    
+                    if (!users.length) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No operator accounts registered</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = users.map((u) => {
+                        const rolesHtml = (u.roles || []).map((role) => `
+                            <span class="role-pill-interactive">
+                                <span>${role}</span>
+                                ${currentUser.id !== u.id ? `<span class="remove-btn" onclick="removeRole('${u.id}', '${role}')" title="Revoke role">&times;</span>` : ''}
+                            </span>
+                        `).join("");
+
+                        const isSelf = currentUser.id === u.id;
+                        const statusBadge = u.status === "active" 
+                            ? `<span class="badge green">Active</span>` 
+                            : `<span class="badge red">Suspended</span>`;
+
+                        const toggleLabel = u.status === "active" ? "Suspend" : "Activate";
+                        const toggleClass = u.status === "active" ? "danger" : "";
+                        const toggleTarget = u.status === "active" ? "suspended" : "active";
+
+                        // Role addition options
+                        const availableRoles = allRoles.filter(r => !(u.roles || []).includes(r.name));
+                        const addRoleSelect = isSelf ? '' : `
+                            <div class="add-role-inline" style="margin-left: 8px;">
+                                <select class="select-mini" onchange="addRole('${u.id}', this.value); this.selectedIndex = 0;">
+                                    <option value="" disabled selected>+ Add Role</option>
+                                    ${availableRoles.map(r => `<option value="${r.name}">${r.name}</option>`).join("")}
+                                </select>
+                            </div>
+                        `;
+
+                        return `
+                            <tr>
+                                <td style="font-weight:600; color:#ffffff;">${escapeHtml(u.displayName || '')} ${isSelf ? '<span class="badge purple" style="font-size:9px; padding:1px 5px; margin-left:4px;">You</span>' : ''}</td>
+                                <td><code style="color:var(--text-cyan); font-size:12px;">${escapeHtml(u.email)}</code></td>
+                                <td>${statusBadge}</td>
+                                <td>
+                                    <div class="roles-list-container">
+                                        ${rolesHtml}
+                                        ${addRoleSelect}
+                                    </div>
+                                </td>
+                                <td style="text-align:right;">
+                                    <button class="btn-action-small" onclick="openResetPasswordModal('${u.id}', '${escapeHtml(u.email)}')">
+                                        Password
+                                    </button>
+                                    ${!isSelf ? `
+                                        <button class="btn-action-small ${toggleClass}" onclick="toggleOperatorStatus('${u.id}', '${toggleTarget}')">
+                                            ${toggleLabel}
+                                        </button>
+                                        <button class="btn-action-small danger" onclick="deleteOperator('${u.id}', '${escapeHtml(u.displayName || u.email)}')" title="Delete Operator">
+                                            <svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                        </button>
+                                    ` : ''}
+                                </td>
+                            </tr>
+                        `;
+                    }).join("");
+                } catch (e) {
+                    toast("Failed to load operators: " + e.message, "error");
+                }
+            }
+
+            window.openCreateOperatorModal = function() {
+                $("#op-email").value = "";
+                $("#op-name").value = "";
+                $("#op-password").value = "";
+                $("#op-status").value = "active";
+                openModal("create-operator-modal");
+            }
+
+            window.submitCreateOperator = async function() {
+                const email = $("#op-email").value.trim();
+                const displayName = $("#op-name").value.trim();
+                const password = $("#op-password").value.trim();
+                const status = $("#op-status").value;
+
+                if (!email || !displayName || !password) {
+                    toast("Please fill in all operator registration fields.", "warning");
+                    return;
+                }
+
+                try {
+                    await api("/api/iam/admin/users", {
+                        method: "POST",
+                        body: JSON.stringify({ email, displayName, password, status })
+                    });
+                    toast(`Operator ${displayName} registered successfully.`, "success");
+                    closeModal("create-operator-modal");
+                    await refreshOperators();
+                } catch (err) {
+                    toast(err.message, "error");
+                }
+            }
+
+            window.toggleOperatorStatus = async function(id, targetStatus) {
+                try {
+                    await api(`/api/iam/admin/users/${encodeURIComponent(id)}/status`, {
+                        method: "POST",
+                        body: JSON.stringify({ status: targetStatus })
+                    });
+                    toast(`Operator status set to ${targetStatus}.`, "success");
+                    await refreshOperators();
+                } catch (err) {
+                    toast(err.message, "error");
+                }
+            }
+
+            window.openResetPasswordModal = function(id, email) {
+                $("#reset-pw-user-id").value = id;
+                $("#reset-pw-user-desc").textContent = `Setting new console password for operator: ${email}`;
+                $("#reset-pw-val").value = "";
+                openModal("reset-password-modal");
+            }
+
+            window.submitResetPassword = async function() {
+                const id = $("#reset-pw-user-id").value;
+                const password = $("#reset-pw-val").value.trim();
+                
+                if (!password) {
+                    toast("Password cannot be empty.", "warning");
+                    return;
+                }
+
+                try {
+                    await api(`/api/iam/admin/users/${encodeURIComponent(id)}/password`, {
+                        method: "POST",
+                        body: JSON.stringify({ password })
+                    });
+                    toast("Operator password updated successfully.", "success");
+                    closeModal("reset-password-modal");
+                } catch (err) {
+                    toast(err.message, "error");
+                }
+            }
+
+            window.deleteOperator = async function(id, name) {
+                if (confirm(`CRITICAL DELETION: Are you sure you want to permanently delete the operator account: "${name}"? This action is irreversible.`)) {
+                    try {
+                        await api(`/api/iam/admin/users/${encodeURIComponent(id)}`, {
+                            method: "DELETE"
                         });
-                        // Show the plaintext token via prompt() so the operator can copy it
-                        // before it disappears. We deliberately do NOT log the value.
-                        window.prompt("Copy this SCIM token NOW. It will not be shown again.", r.token);
-                        $("#scim-label").value = "";
+                        toast("Operator account purged from registry.", "success");
+                        await refreshOperators();
+                    } catch (err) {
+                        toast(err.message, "error");
+                    }
+                }
+            }
+
+            window.addRole = async function(userId, role) {
+                if (!role) return;
+                try {
+                    await api(`/api/iam/admin/users/${encodeURIComponent(userId)}/roles`, {
+                        method: "POST",
+                        body: JSON.stringify({ role })
+                    });
+                    toast(`Granted role "${role}" to operator.`, "success");
+                    await refreshOperators();
+                } catch (err) {
+                    toast(err.message, "error");
+                }
+            }
+
+            window.removeRole = async function(userId, role) {
+                if (confirm(`Revoke role "${role}" from operator?`)) {
+                    try {
+                        await api(`/api/iam/admin/users/${encodeURIComponent(userId)}/roles/${encodeURIComponent(role)}`, {
+                            method: "DELETE"
+                        });
+                        toast(`Revoked role "${role}" from operator.`, "success");
+                        await refreshOperators();
+                    } catch (err) {
+                        toast(err.message, "error");
+                    }
+                }
+            }
+
+
+            // 2. CAC (Character Accountability Certificate) Management
+            async function refreshCacList() {
+                try {
+                    const data = await api("/api/cac/assignments");
+                    const assignments = data.assignments || [];
+                    const tbody = $("#cac-table tbody");
+
+                    if (!assignments.length) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No CAC character assignments detected in the active environment</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = assignments.map((a) => {
+                        const verifiedState = a.emailVerifiedAt 
+                            ? `<span class="badge green" title="Verified via ${a.emailVerifiedProvider} at ${a.emailVerifiedAt}">Verified</span>` 
+                            : `<span class="badge yellow">Unverified</span>`;
+                            
+                        const stateBadge = a.state === "active" 
+                            ? `<span class="badge green">Active</span>` 
+                            : a.state === "revoked" ? `<span class="badge red">Revoked</span>` : `<span class="badge muted">${a.state}</span>`;
+
+                        return `
+                            <tr>
+                                <td style="font-weight:600;"><span style="color:var(--text-purple)">${escapeHtml(a.characterId)}</span></td>
+                                <td><code>${escapeHtml(a.operatorEmail || 'Unassigned')}</code></td>
+                                <td>${stateBadge}</td>
+                                <td style="font-family:var(--font-mono); font-size:12px;">${a.dispatchCount || 0} calls</td>
+                                <td>${verifiedState}</td>
+                                <td style="text-align:right;">
+                                    <button class="btn-action-small" onclick="openVerifyCacModal('${a.assignmentId}', '${escapeHtml(a.characterId)}', '${escapeHtml(a.operatorEmail || '')}')">
+                                        Verify Email
+                                    </button>
+                                    <button class="btn-action-small" onclick="viewCacChain('${a.assignmentId}', '${escapeHtml(a.characterId)}')">
+                                        Audit Chain
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join("");
+                } catch (e) {
+                    toast("Failed to load CAC list: " + e.message, "error");
+                }
+            }
+
+            window.openVerifyCacModal = function(id, charId, email) {
+                $("#verify-cac-id").value = id;
+                $("#verify-cac-desc").textContent = `Configure identity binding verification for agent: "${charId}"`;
+                $("#verify-cac-email").value = email || "";
+                $("#verify-cac-provider").selectedIndex = 0;
+                openModal("verify-cac-modal");
+            }
+
+            window.submitVerifyCacEmail = async function() {
+                const id = $("#verify-cac-id").value;
+                const email = $("#verify-cac-email").value.trim();
+                const provider = $("#verify-cac-provider").value;
+
+                if (!email) {
+                    toast("Email is required.", "warning");
+                    return;
+                }
+
+                try {
+                    await api(`/api/cac/${encodeURIComponent(id)}/verify-email`, {
+                        method: "POST",
+                        body: JSON.stringify({ provider, verifiedEmail: email })
+                    });
+                    toast("Character binding email verified successfully.", "success");
+                    closeModal("verify-cac-modal");
+                    await refreshCacList();
+                } catch (err) {
+                    toast(err.message, "error");
+                }
+            }
+
+            window.viewCacChain = async function(id, charId) {
+                try {
+                    $("#timeline-assignment-info").innerHTML = `
+                        <strong>Character ID:</strong> <span style="color:var(--text-purple)">${escapeHtml(charId)}</span><br/>
+                        <strong>Assignment ID:</strong> <code>${escapeHtml(id)}</code>
+                    `;
+                    $("#timeline-container").innerHTML = '<div style="color:var(--text-muted); font-style:italic">Loading chain provenance data...</div>';
+                    openModal("cac-timeline-modal");
+
+                    const chain = await api(`/api/cac/assignments/${encodeURIComponent(id)}/chain`);
+                    const events = chain.events || [];
+                    
+                    if (!events.length) {
+                        $("#timeline-container").innerHTML = '<div style="color:var(--text-muted); font-style:italic">No audit events logged for this assignment yet.</div>';
+                        return;
+                    }
+
+                    $("#timeline-container").innerHTML = events.map(e => {
+                        const dateStr = new Date(e.timestamp).toLocaleString();
+                        const desc = e.description || e.name || e.operation || 'System action';
+                        let detailBlock = '';
+                        if (e.details && Object.keys(e.details).length > 0) {
+                            detailBlock = `<pre class="timeline-details">${escapeHtml(JSON.stringify(e.details, null, 2))}</pre>`;
+                        } else if (e.metadata && Object.keys(e.metadata).length > 0) {
+                            detailBlock = `<pre class="timeline-details">${escapeHtml(JSON.stringify(e.metadata, null, 2))}</pre>`;
+                        }
+                        
+                        return `
+                            <div class="timeline-event">
+                                <div class="timeline-time">${dateStr}</div>
+                                <div class="timeline-desc"><strong>${escapeHtml(e.name || e.operation || 'AUDIT')}</strong>: ${escapeHtml(desc)}</div>
+                                ${detailBlock}
+                            </div>
+                        `;
+                    }).join("");
+
+                } catch (err) {
+                    toast("Failed to load CAC chain: " + err.message, "error");
+                    closeModal("cac-timeline-modal");
+                }
+            }
+
+            window.exportCac = function(format) {
+                const url = `/api/cac/export?format=${format}` + (tokenStore.value ? `&token=${tokenStore.value}` : '');
+                window.open(url, "_blank");
+            }
+
+
+            // 3. SCIM Key Provisioning
+            async function refreshScim() {
+                try {
+                    const data = await api("/api/iam/admin/scim-tokens");
+                    const tokens = data.tokens || [];
+                    const tbody = $("#scim-table tbody");
+
+                    if (!tokens.length) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No integration SCIM keys active</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = tokens.map((t) => {
+                        const status = t.revokedAt 
+                            ? `<span class="badge red">Revoked</span>` 
+                            : `<span class="badge green">Active</span>`;
+                        
+                        const action = t.revokedAt 
+                            ? `—` 
+                            : `<button class="btn-action-small danger" onclick="revokeScimToken('${t.id}')">Revoke key</button>`;
+                            
+                        const dateStr = new Date(t.createdAt).toLocaleString();
+
+                        return `
+                            <tr>
+                                <td style="font-weight:600;">${escapeHtml(t.label || '(Unlabeled Key)')}</td>
+                                <td><code style="font-size:12px;">${escapeHtml(t.id)}</code></td>
+                                <td style="font-size:12px; color:var(--text-muted);">${dateStr}</td>
+                                <td>${status}</td>
+                                <td style="text-align:right;">${action}</td>
+                            </tr>
+                        `;
+                    }).join("");
+                } catch (e) {
+                    toast("Failed to load SCIM tokens: " + e.message, "error");
+                }
+            }
+
+            window.createScimToken = async function() {
+                const label = $("#scim-label").value.trim();
+                if (!label) {
+                    toast("Label is required to generate integration tokens.", "warning");
+                    return;
+                }
+
+                try {
+                    const r = await api("/api/iam/admin/scim-tokens", {
+                        method: "POST",
+                        body: JSON.stringify({ label })
+                    });
+                    
+                    $("#scim-plaintext-val").value = r.token;
+                    openModal("scim-token-modal");
+                    
+                    $("#scim-label").value = "";
+                    await refreshScim();
+                } catch (e) {
+                    toast(e.message, "error");
+                }
+            }
+
+            window.copyScimTokenText = function() {
+                const input = $("#scim-plaintext-val");
+                input.select();
+                document.execCommand("copy");
+                toast("Plaintext SCIM Token copied to clipboard.", "success");
+                closeModal("scim-token-modal");
+            }
+
+            window.revokeScimToken = async function(id) {
+                if (confirm("Are you sure you want to permanently revoke this directory key? External SCIM synchronization calls from IdP (e.g. Okta) using this token will fail immediately.")) {
+                    try {
+                        await api(`/api/iam/admin/scim-tokens/${encodeURIComponent(id)}`, {
+                            method: "DELETE"
+                        });
+                        toast("SCIM integration token revoked.", "success");
                         await refreshScim();
                     } catch (e) {
-                        toast(e.message, true);
+                        toast(e.message, "error");
                     }
-                });
+                }
+            }
 
-                refreshMe();
-            })();
-        </script>
-    </body>
+            // Helpers
+            function escapeHtml(s) {
+                return String(s == null ? "" : s)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+            }
+
+            // Wire up event listeners
+            $("#login-form").addEventListener("submit", handleLoginSubmit);
+            $("#token-login-btn").addEventListener("click", handleTokenLogin);
+            $("#token-input").addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleTokenLogin();
+                }
+            });
+            $("#login-shutdown-btn").addEventListener("click", triggerShutdown);
+
+            // Document hash extraction for UI reference
+            async function loadDirectiveHash() {
+                try {
+                    // Try to load current platform status info
+                    const res = await fetch("/api/v1/system/status").catch(() => null);
+                    if (res && res.ok) {
+                        const status = await res.json();
+                        if (status.directiveHash) {
+                            $("#directive-hash-badge").textContent = `Directive Hash: ${status.directiveHash.substring(0, 16)}...`;
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            // Init
+            loadDirectiveHash();
+            checkAuth();
+
+        })();
+    </script>
+</body>
 </html>
