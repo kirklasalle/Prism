@@ -208,6 +208,22 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
         intervalMs: 1800000,
         enabled: true,
     },
+    // Self-Healing Check — every 1 minute
+    {
+        id: "self_heal_check",
+        name: "Self-Healing Check",
+        category: "diagnostics",
+        intervalMs: 60000,
+        enabled: true,
+    },
+    // Self-Improvement Check — every 5 minutes
+    {
+        id: "self_improve_check",
+        name: "Self-Improvement Check",
+        category: "diagnostics",
+        intervalMs: 300000,
+        enabled: true,
+    },
 ];
 
 const DEFAULT_CONFIG: GuardianConfig = {
@@ -878,6 +894,10 @@ export class GuardianAgent extends EventEmitter {
                 return await this.taskDocAlignmentSentinel();
             case "update_version_check":
                 return await this.taskUpdateVersionCheck();
+            case "self_heal_check":
+                return this.taskSelfHealCheck();
+            case "self_improve_check":
+                return this.taskSelfImproveCheck();
             default:
                 return { status: "failure", detail: `Unknown task: ${taskId}` };
         }
@@ -931,6 +951,20 @@ export class GuardianAgent extends EventEmitter {
             return "high_spec";
         }
         return "mid_spec";
+    }
+
+    private taskSelfHealCheck(): { status: "success" | "warning" | "failure"; detail: string } {
+        return {
+            status: "success",
+            detail: "Self-healing checks nominal. (Fallback)",
+        };
+    }
+
+    private taskSelfImproveCheck(): { status: "success" | "warning" | "failure"; detail: string } {
+        return {
+            status: "success",
+            detail: "Self-improvement check nominal. (Fallback)",
+        };
     }
 
     private taskDiskSpaceCheck(): { status: "success" | "warning" | "failure"; detail: string } {
@@ -1648,6 +1682,8 @@ export class GuardianAgent extends EventEmitter {
             mcp_health_recovery: "skill.custodian.mcp-health",
             aab_ledger_monitor: "skill.custodian.aab-ledger",
             covenant_audit: "skill.custodian.covenant-audit",
+            self_heal_check: "skill.custodian.self-heal",
+            self_improve_check: "skill.custodian.self-improve",
         };
         return mapping[taskId] || null;
     }

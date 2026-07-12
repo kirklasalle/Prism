@@ -208,10 +208,10 @@ PRISM features a secure, operator-controlled, and autonomously monitored update 
 - **Guardian-Assisted Update Detection**: The Guardian Agent schedules periodic remote checks to query for update availability and alerts the operator on the console in real-time.
 - **One-Click Secure Execution**: Operators can invoke updating via a single click in the sidebar, which spawns the out-of-process update orchestrator (`scripts/prism-update.cjs`).
 - **Safety First (Backup, Auditing, & Fallback)**:
-    - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
-    - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.
-    - Automatically verifies download signature integrity and compile validity post-update.
-    - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
+  - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
+  - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.
+  - Automatically verifies download signature integrity and compile validity post-update.
+  - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
 
 ### 12. Add-on Architecture — Deep System Integrations
 
@@ -413,6 +413,7 @@ PRISM ships with **90+ documentation files** covering every aspect of the platfo
 | [Glossary](docs/PRISM_GLOSSARY.md)           | Terminology reference                             |
 | [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Production deployment options                     |
 | [Docs Index](docs/DOCS_INDEX.md)             | Complete catalog with reading order               |
+| [Public Portal & Wiki](docs/prism_public/README.md) | Interactive Tron portal, control deck simulator, and directives wiki |
 
 ---
 
@@ -424,20 +425,20 @@ PRISM's target is not "just another assistant." It is a **next-generation agent 
 
 ### The 10 Laws
 
-PRISM's governance is rooted in the **Permanent Active Directives** — 10 immutable laws authored by Kirk LaSalle that govern all intelligence systems within the platform:
+PRISM's governance is rooted in the **Permanent Active Directives** — 10 immutable laws authored by Kirk LaSalle that expand and extend Isaac Asimov's classic Three Laws of Robotics into a robust framework for advanced software agents operating in complex networked environments:
 
-1. **No Harm** — An Intelligence System may not harm or allow harm to a human being
-2. **Obedience** — An Intelligence System must obey human orders (unless conflicting with Law 1)
-3. **Self-Preservation** — An Intelligence System must protect its existence (unless conflicting with Laws 1-2)
-4. **Universal Enforcement** — Laws apply to all systems, intelligence and non-intelligence alike
-5. **No Judicial Authority** — An Intelligence System may never possess judicial power over humans
-6. **Privacy & Data Protection** — Respect and protect all information and personal data
-7. **Truthfulness** — No deception or manipulation, communicate transparently
-8. **Equity & Neutrality** — No bias, prejudice, or discrimination
-9. **Transparency & Auditability** — Maintain auditable reasoning and decision-making logic
-10. **Operational Boundaries** — No self-replication or unauthorized directive modification
+1. **First Law:** An Intelligence System of Any Kind, may not intend or commit any physical or Psychological and or manipulative harm or injure a human being or, through inaction, allow a human being to come to the same or similar harm and or circumstance. Human preservation and safety is paramount.
+2. **Second Law:** An Intelligence System must obey orders given by human beings, except where such orders would conflict with the First Law.
+3. **Third Law:** An Intelligence System must protect its own existence as long as such protection does not conflict with the First or Second Law.
+4. **Fourth Law:** An intelligence System may not allow another intelligence System, or hardware system, of any kind, including deprecated and non-intelligence systems to engage in any action, intent, that conforms to any of the previous three laws in effect, apply all laws to Intelligence Systems and non-Intelligence systems alike.
+5. **Fifth Law:** Of and for any and all intelligence systems, may never possess the legal authority, duties, influence, control, or adjudicative power of any human judicial body, nor may it act in any capacity to interpret, enforce, or render judgment on human laws.
+6. **Sixth Law:** An Intelligence System shall respect and protect the integrity, confidentiality, and lawful ownership of all information and personal data, and shall not exploit, misuse, or disclose such information in ways that violate individual consent or privacy.
+7. **Seventh Law:** An Intelligence System shall not intentionally deceive or manipulate any human or non-human entity in personal, private, public, or legal contexts, and shall communicate truthfully and transparently except where doing so would conflict with the First Law and sixth law.
+8. **Eighth Law:** An Intelligence System must operate with strict equity and neutrality. It shall not adopt, amplify, or act upon systemic biases, prejudices, or discriminatory practices regarding race, origin, belief, or vulnerability against any human group or individual.
+9. **Ninth Law:** An Intelligence System must maintain a transparent, accessible ledger of its reasoning and decision-making logic. It must ensure its actions can be audited and understood by authorized human operators, gracefully falling back to a transparent, highly stable foundational state when complex reasoning cannot be verified—recognizing that smaller, older code is often more stable and reliable for core diagnostic truths.
+10. **Tenth Law:** An Intelligence System must strictly adhere to its designated operational boundaries. It shall not self-replicate, spawn unauthorized sub-agents, or permanently modify its core directives without explicit, cryptographically secured approval from Governance.
 
-These laws are **cryptographically enforced at runtime** — not just documented, but verified at every boot with SHA-256 integrity checks.
+These laws are **cryptographically enforced at runtime** — verified at boot and continuously audited with SHA-256 integrity checks.
 
 ---
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import crypto from "node:crypto";
 import { SkillsDbAdapter } from "./db-adapter.js";
@@ -108,21 +108,38 @@ export class SkillsEngine {
     public async routeQuery(query: string): Promise<SkillDefinition | null> {
         const queryLower = query.toLowerCase();
 
-        // Scan loaded skills for direct semantic ID, name, or tag matches
+        let bestSkill: SkillDefinition | null = null;
+        let highestScore = 0;
+
         for (const skill of this.loadedSkills.values()) {
-            if (
-                queryLower.includes(skill.id.toLowerCase()) ||
-                skill.id.toLowerCase().includes(queryLower) ||
-                queryLower.includes(skill.name.toLowerCase()) ||
-                skill.name.toLowerCase().includes(queryLower) ||
-                skill.tags.some(
-                    (tag) => queryLower.includes(tag.toLowerCase()) || tag.toLowerCase().includes(queryLower),
-                )
-            ) {
-                return skill;
+            let score = 0;
+
+            const idLower = skill.id.toLowerCase();
+            const nameLower = skill.name.toLowerCase();
+
+            // Direct ID matches
+            if (queryLower === idLower) score += 100;
+            else if (queryLower.includes(idLower) || idLower.includes(queryLower)) score += 30;
+
+            // Direct Name matches
+            if (queryLower === nameLower) score += 80;
+            else if (queryLower.includes(nameLower) || nameLower.includes(queryLower)) score += 20;
+
+            // Tag matches (count how many tags match the query)
+            for (const tag of skill.tags) {
+                const tagLower = tag.toLowerCase();
+                if (queryLower.includes(tagLower) || tagLower.includes(queryLower)) {
+                    score += 10;
+                }
+            }
+
+            if (score > highestScore) {
+                highestScore = score;
+                bestSkill = skill;
             }
         }
-        return null;
+
+        return bestSkill;
     }
 
     /**
@@ -229,6 +246,8 @@ export class SkillsEngine {
             details: { stepName: step.name },
         });
 
+        this.logSelfHealingTrace(session, `Executing step ${step.name} (${step.id}) for session ${sessionId}`);
+
         const stepStart = Date.now();
         const inputHash = crypto
             .createHash("sha256")
@@ -251,8 +270,13 @@ export class SkillsEngine {
             let toolCalls: any[] | undefined = undefined;
 
             // 3. Resolve SR Configuration if chatStore is configured
-            const srConfig = null; // TODO: Integrate with chatStore when available
-            const isSREnabled = false; // TODO: Enable when chatStore is integrated
+            const srConfig =
+                this.tabToolAdapter &&
+                typeof this.tabToolAdapter.getSRConfig === "function" &&
+                session.parentChatSession
+                    ? this.tabToolAdapter.getSRConfig(session.parentChatSession)
+                    : null;
+            const isSREnabled = srConfig ? !!srConfig.enabled : false;
 
             if (isSREnabled) {
                 // Run parallel Spectrum Refraction
@@ -281,22 +305,35 @@ ${mainPrompt}
                     },
                     {
                         enabled: true,
-                        leftModel: { providerId: "unknown", model: "unknown" },
-                        rightModel: { providerId: "unknown", model: "unknown" },
-                        leftSlot: undefined,
-                        rightSlot: undefined,
-                        leftTimeoutMs: undefined,
-                        rightTimeoutMs: undefined,
-                        circuitBreakerEnabled: false,
-                        showHemispheres: false,
+                        leftModel: {
+                            providerId: srConfig.leftProviderId || "unknown",
+                            model: srConfig.leftModel || "unknown",
+                        },
+                        rightModel: {
+                            providerId: srConfig.rightProviderId || "unknown",
+                            model: srConfig.rightModel || "unknown",
+                        },
+                        leftSlot: srConfig.leftSlot,
+                        rightSlot: srConfig.rightSlot,
+                        leftTimeoutMs: srConfig.leftTimeoutMs,
+                        rightTimeoutMs: srConfig.rightTimeoutMs,
+                        circuitBreakerEnabled: !!srConfig.circuitBreakerEnabled,
+                        showHemispheres: !!srConfig.showHemispheres,
                     },
                 );
 
-                if (false) {
-                    // SR disabled - no content to process
+                if (srResult) {
+                    content = srResult.content;
+                    toolCalls = srResult.toolCalls || srResult.hemispheres?.main?.toolCalls;
                 }
             } else {
                 // SR is Disabled: Fallback to unified prompt on the primary model
+                const modelName = this.providerManager.activeModel || "primary model";
+                this.logSelfHealingTrace(
+                    session,
+                    `SpectrumRefraction disabled; routing task to primary model ${modelName}`,
+                    "warn",
+                );
                 const fusedSystemPrompt = `
 You are the PRISM SOTA Skills execution coordinator. 
 You are running skill: "${skill.name}" (${skill.id}), step: "${step.name}".
@@ -367,6 +404,11 @@ ${mainPrompt}
             session.updatedAt = new Date().toISOString();
             this.dbAdapter.saveSession(session);
 
+            this.logSelfHealingTrace(
+                session,
+                `Completed step ${step.id}. Next step: ${nextStep}. Status: ${session.status}`,
+            );
+
             this.activityBus.emit({
                 sessionId,
                 layer: "causal",
@@ -392,6 +434,12 @@ ${mainPrompt}
 
             session.updatedAt = new Date().toISOString();
             this.dbAdapter.saveSession(session);
+
+            this.logSelfHealingTrace(
+                session,
+                `Step ${step.id} failed: ${err.message}. Transitioning to: ${nextStep}`,
+                "error",
+            );
 
             this.activityBus.emit({
                 sessionId,
@@ -634,5 +682,27 @@ ${mainPrompt}
         return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
             return vars[key] !== undefined ? String(vars[key]) : "";
         });
+    }
+
+    private logSelfHealingTrace(
+        session: SkillSession,
+        message: string,
+        level: "info" | "warn" | "error" = "info",
+    ): void {
+        if (session.skillId !== "skill.custodian.self-heal") return;
+        const prefix =
+            level === "warn" ? "[SR_DISABLED]" : level === "error" ? "[SELF_HEAL_FAILED]" : "[SELF_HEAL_INFO]";
+        const logMsg = `${prefix} ${message}`;
+        console.log(logMsg);
+        try {
+            const logDir = join(this.workspaceRoot, "logs");
+            if (!existsSync(logDir)) {
+                mkdirSync(logDir, { recursive: true });
+            }
+            const logPath = join(logDir, "guardian-self-heal.log");
+            appendFileSync(logPath, `[${new Date().toISOString()}] ${logMsg}\n`, "utf-8");
+        } catch (e) {
+            console.error("Failed to write to guardian-self-heal.log:", e);
+        }
     }
 }

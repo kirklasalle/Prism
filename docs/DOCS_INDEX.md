@@ -123,6 +123,9 @@
 
 - OPERATOR_DASHBOARD_WALKTHROUGH.html: styled dashboard walkthrough
 - PRISM_PUBLIC_LAUNCH_ROADMAP_AND_CHECKLIST_2026.html: interactive launch checklist
+- [prism_public/index.html](prism_public/index.html): Prism Refraction Interactive Portal & Control Deck
+- [prism_public/wiki.html](prism_public/wiki.html): Prism Refraction Knowledge Base & Directives Wiki
+- [prism_public/README.md](prism_public/README.md): Documentation index for the public web portal
 
 ## Archive
 

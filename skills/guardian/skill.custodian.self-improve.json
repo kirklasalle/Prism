@@ -1,0 +1,59 @@
+{
+    "id": "skill.custodian.self-improve",
+    "version": "1.0.0",
+    "name": "Self-Improvement and Chronological Learning",
+    "description": "Log performance patterns, optimize agent preambles, and compile learned-history events into the Prism Experience knowledge base.",
+    "tags": [
+        "guardian",
+        "custodian",
+        "self-improve",
+        "knowledge-base",
+        "experience"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": []
+    },
+    "executor": "guardian",
+    "interval_ms": 300000,
+    "triad_templates": {
+        "left_hemisphere": "Analyze performance statistics, latency rates, and successful healing cases for systemic bottlenecks.",
+        "right_hemisphere": "Formulate optimized prompt preambles or code patterns to prevent repeating historical mistakes.",
+        "main_hemisphere": "Log chronological learned events and commit them into the Prism Experience knowledge base."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "analyze-history",
+                "name": "Analyze Healing & Performance History",
+                "tools": ["run_command"],
+                "action": "Scan recently closed MSD tickets and performance telemetry for optimization opportunities.",
+                "transitions": {
+                    "success": "compile-experience",
+                    "failed": "analyze-history"
+                }
+            },
+            {
+                "id": "compile-experience",
+                "name": "Compile Experience & Optimize Prompts",
+                "tools": [],
+                "action": "Draft updated prompt preambles and chronological experience entries.",
+                "transitions": {
+                    "success": "update-kb",
+                    "failed": "analyze-history"
+                }
+            },
+            {
+                "id": "update-kb",
+                "name": "Update Prism Experience Knowledge Base",
+                "tools": ["run_command"],
+                "action": "Commit chronological learned events to the Prism knowledge base and memory fabric.",
+                "transitions": {
+                    "success": "complete",
+                    "failed": "update-kb"
+                }
+            }
+        ]
+    }
+}

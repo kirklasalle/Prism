@@ -17,7 +17,7 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.22.4`                                       |
+| Current version  | `0.22.5`                                       |
 | Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
 | Doctor           | `npm run doctor`                               |
@@ -26,7 +26,15 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 Operators are expected to run `npm run doctor` before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.21.0 → v0.22.4)
+## What's Shipped (v0.21.0 → v0.22.5)
+
+### Guardian MSD & Self-Healing (v0.22.5)
+
+- **Verbatim 10 Laws Public Publication**: Successfully published the verbatim 10 laws of the Permanent Active Directives (PAD) in the public wiki (`docs/prism_public/wiki.html`) and root `README.md`, highlighting their historical expansion from Asimov's Three Laws of Robotics.
+- **Guardian Self-Healing & Self-Improvement Skills**: Implemented `skill.custodian.self-heal` and `skill.custodian.self-improve` skill workflows, fully registered in the PRISM `SkillsEngine` database.
+- **Micro Support Desk (MSD) & SQLite Ticketing Integration**: Configured the Guardian Agent to route diagnostic fallbacks (Law 9) and recovery actions through the MSD. Enabled SQL-level database level protection for ticket mutations (using `BEGIN IMMEDIATE TRANSACTION`).
+- **Telemetry & Learned-History Logging**: Structured real-time logging of self-healing diagnostics to `logs/guardian-self-heal.log` and the TABS telemetry flow, complete with warning banners for `[SR_DISABLED]` fallback routing.
+- **Test Coverage**: Added robust integration test cases in `tests/guardian-skills-recovery.test.ts` validating the end-to-end task routing.
 
 ### Add-on Management Panel & UI Visibility (v0.22.4)
 

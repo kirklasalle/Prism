@@ -1,0 +1,91 @@
+{
+    "id": "skill.custodian.self-heal",
+    "version": "1.0.0",
+    "name": "Diagnostic Fallback and Self-Healing",
+    "description": "Coordinate automated recovery, fallback orchestration, and software repairs for reasoning engine failures.",
+    "tags": [
+        "guardian",
+        "custodian",
+        "self-heal",
+        "diagnostics",
+        "fallback"
+    ],
+    "governance": {
+        "min_policy_tier": "tier1_autonomous",
+        "required_approvals": [],
+        "covenant_rules": [
+            "no_agent_disruption"
+        ]
+    },
+    "executor": "guardian",
+    "interval_ms": 60000,
+    "triad_templates": {
+        "left_hemisphere": "Identify if Spectrum Refraction (SR) is enabled. If SR is disabled, trigger fallback and log the event: [SR_DISABLED SpectrumRefraction disabled; routing task to primary model Claude 3.5 Sonnet]. Analyze compile or lint errors and ensure changes are made gracefully to prevent write collisions.",
+        "right_hemisphere": "Generate high-quality recovery patches or config fixes. Avoid loops and verify target code correctness.",
+        "main_hemisphere": "Execute compilation and target test suites. If successful, promote the patch and resolve the MSD ticket."
+    },
+    "workflow": {
+        "steps": [
+            {
+                "id": "triage-failure",
+                "name": "Triage Failures & Log Ticket",
+                "tools": ["run_command"],
+                "action": "Check test status, linter, or infinite loops, and create an OPEN ticket in the Micro Support Desk (MSD) database with transaction isolation.",
+                "transitions": {
+                    "success": "verify-sr-status",
+                    "failed": "triage-failure"
+                }
+            },
+            {
+                "id": "verify-sr-status",
+                "name": "Verify SR & Formulate Repair",
+                "tools": [],
+                "action": "Check if SR is enabled. If disabled, raise fallback notification. Otherwise, route error context to Logic Hemisphere to formulate a repair patch.",
+                "transitions": {
+                    "success": "apply-repair",
+                    "failed": "abort-healing"
+                }
+            },
+            {
+                "id": "apply-repair",
+                "name": "Apply & Validate Repair",
+                "tools": ["run_command"],
+                "action": "Apply the formulated repair patch to the workspace code sandbox and run validation checks.",
+                "transitions": {
+                    "success": "resolve-ticket",
+                    "failed": "handle-retry"
+                }
+            },
+            {
+                "id": "handle-retry",
+                "name": "Handle Healing Retries",
+                "tools": [],
+                "action": "Check healing attempt count. If count < 3, retry from formulate-repair. Otherwise, rollback to git baseline and escalate ticket.",
+                "transitions": {
+                    "success": "verify-sr-status",
+                    "failed": "abort-healing"
+                }
+            },
+            {
+                "id": "resolve-ticket",
+                "name": "Resolve MSD Ticket",
+                "tools": ["run_command"],
+                "action": "Update MSD ticket status to RESOLVED and log success metrics to the causal memory fabric.",
+                "transitions": {
+                    "success": "complete",
+                    "failed": "resolve-ticket"
+                }
+            },
+            {
+                "id": "abort-healing",
+                "name": "Abort and Escalate",
+                "tools": ["run_command"],
+                "action": "Restore git baseline, set MSD ticket to MANUAL_TRIAGE, and raise a critical dashboard alert.",
+                "transitions": {
+                    "success": "failed",
+                    "failed": "failed"
+                }
+            }
+        ]
+    }
+}

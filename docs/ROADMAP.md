@@ -218,7 +218,7 @@ Objective: Replace all simulated/mock adapter implementations with production-gr
 
 Replace simulated `child_process.spawn` mocks with production runtime integrations. Both adapters remain backward-compatible via graceful degradation when runtime dependencies are unavailable.
 
-**E1a: Real PTY Terminal (node-pty)**
+#### E1a: Real PTY Terminal (node-pty)
 
 - Replace `child_process.spawn` shell mock with `node-pty` IPty instances
 - Full pseudoterminal I/O (stdin/stdout/stderr over single PTY stream)
@@ -229,7 +229,7 @@ Replace simulated `child_process.spawn` mocks with production runtime integratio
 - Tests: extend existing suite with PTY-specific cases (resize, raw ANSI output, interactive shell)
 - See: `src/adapters/application/terminal-session-adapter.ts`
 
-**E1b: Real Docker Container Isolation (dockerode)**
+#### E1b: Real Docker Container Isolation (dockerode)
 
 - Replace `spawn("sh", ["-c", "sleep infinity"])` mock with Docker Engine API via `dockerode`
 - Full container lifecycle: create, start, exec, stop, remove
@@ -243,84 +243,84 @@ Replace simulated `child_process.spawn` mocks with production runtime integratio
 - See: `src/adapters/application/container-sandbox-adapter.ts`
 
 ### E2: Email & Calendar OAuth Integration (P1)
- 
+
  Deliver real end-user email and calendar integration replacing mock implementations, completing the Individual-Native MVP promise.
- 
- - Gmail OAuth 2.0: authorize, token refresh, thread list, draft, send, label operations
- - Outlook OAuth 2.0: MSAL flow, mailbox read/write, draft, send operations
- - Google Calendar API: event CRUD, free/busy query, conflict detection
- - Outlook Calendar API: event CRUD, calendar view, conflict detection
- - OAuth token storage via `ProviderSecretStore` (encrypted at rest)
- - OAuth setup step added to Setup Wizard (Step 3b: Email & Calendar accounts)
- - Dashboard Settings: OAuth account connection status panel
- - SMS Skills integration: define `communication.send_sms` and `communication.email_to_sms` for character messaging and notifications
- - See: `src/adapters/application/email-tool.ts`, `src/adapters/application/calendar-tool.ts`
- 
+
+- Gmail OAuth 2.0: authorize, token refresh, thread list, draft, send, label operations
+- Outlook OAuth 2.0: MSAL flow, mailbox read/write, draft, send operations
+- Google Calendar API: event CRUD, free/busy query, conflict detection
+- Outlook Calendar API: event CRUD, calendar view, conflict detection
+- OAuth token storage via `ProviderSecretStore` (encrypted at rest)
+- OAuth setup step added to Setup Wizard (Step 3b: Email & Calendar accounts)
+- Dashboard Settings: OAuth account connection status panel
+- SMS Skills integration: define `communication.send_sms` and `communication.email_to_sms` for character messaging and notifications
+- See: `src/adapters/application/email-tool.ts`, `src/adapters/application/calendar-tool.ts`
+
 ### E3: Dashboard UX Uplift (P1)
- 
+
  Establish a two-mode dashboard experience: Simple Mode for individual users (chat-first) and Advanced Mode for operators and developers (existing full dashboard).
- 
- - **Simple Mode**: Character picker landing page → chat panel → settings drawer
-   - Accessible without technical knowledge
-   - Character (Aria/Phoenix/Sentinel) selection as entry point
-   - Minimal chrome: conversation window, provider status pill, history sidebar
- - **Advanced Mode toggle**: Existing full operator dashboard behind explicit switch
- - **CAC Identity Panel** in Settings tab: visual accountability chain inspector, assignment lifecycle timeline, and identity audit export (JSON/CSV)
- - **SLO Gauge Panel** in Telemetry tab: real-time SLO health indicators (p50/p95/p99 vs target)
- - **Live Plugin Enable/Disable Toggle** in Tools tab: MCP server health control + immediate effect
- - **Incident Triage UI** in Logs & Debug tab: guided runbook steps, copy-to-clipboard evidence
- - **Policy Diff Viewer** in Settings tab: side-by-side governance change inspector
- - **Remote Channels Interface**: Away Mode presence toggle, remote session relay tracking, and SMS/Email notification bindings
- - See: `src/core/operator/public/`, `src/core/operator/dashboard-service.ts`
- 
+
+- **Simple Mode**: Character picker landing page → chat panel → settings drawer
+  - Accessible without technical knowledge
+  - Character (Aria/Phoenix/Sentinel) selection as entry point
+  - Minimal chrome: conversation window, provider status pill, history sidebar
+- **Advanced Mode toggle**: Existing full operator dashboard behind explicit switch
+- **CAC Identity Panel** in Settings tab: visual accountability chain inspector, assignment lifecycle timeline, and identity audit export (JSON/CSV)
+- **SLO Gauge Panel** in Telemetry tab: real-time SLO health indicators (p50/p95/p99 vs target)
+- **Live Plugin Enable/Disable Toggle** in Tools tab: MCP server health control + immediate effect
+- **Incident Triage UI** in Logs & Debug tab: guided runbook steps, copy-to-clipboard evidence
+- **Policy Diff Viewer** in Settings tab: side-by-side governance change inspector
+- **Remote Channels Interface**: Away Mode presence toggle, remote session relay tracking, and SMS/Email notification bindings
+- See: `src/core/operator/public/`, `src/core/operator/dashboard-service.ts`
+
 ### E4: API Versioning & OpenAPI (P1)
- 
+
 - Version all API endpoints under `/api/v1/` with backward-compatible redirect from legacy `/api/`
 - Generate OpenAPI 3.0 spec from route definitions, served at `/api/v1/openapi.json`
 - Deprecation policy: 90-day sunset notices for removed endpoints via `Sunset` response header
 - API changelog section added to `CHANGELOG.md`
 - See: `src/core/operator/dashboard-service.ts`
- 
+
 ### E5: Plugin Cryptographic Signature Verification (P1)
- 
+
 - Implement Ed25519 signature verification in `plugin-pack-validator.ts`
 - PRISM signing key management (official pack signing, community key registry)
 - Trust-tier gating: official-only (strict business), community-trusted, unsigned (dev/individual only)
 - Key distribution via `plugin-pack-manifest.json` `signature` field
 - See: `src/core/plugins/plugin-pack-validator.ts`
- 
+
 ### E6: CAC Identity Expansion (P1)
- 
+
 - Browser session fingerprint binding: link `BrowserSessionManager` sessions to CAC chain (client fingerprint, user-agent, session token)
 - Per-character permission scopes with expiry-based auto-revocation
 - OAuth email verification for Business profile characters (Google/Microsoft OAuth)
 - Dashboard CAC Panel (see E3)
 - See: `src/core/accountability/`, `src/core/operator/browser-session-manager.ts`
- 
+
 ### E7: Observability Integration (P1)
- 
+
 - OpenTelemetry trace exporter: instrument activity bus events as OTel spans
 - Prometheus `/metrics` endpoint: expose request rates, error rates, latency histograms, queue depths
 - Grafana dashboard template (starter JSON) in `docs/grafana/`
 - PagerDuty webhook integration for critical governance alerts (tier3 approval timeouts)
 - See: `src/core/activity/bus.ts`, `src/core/operator/dashboard-service.ts`
- 
+
 ### E8: Low-Level Reasoning Engine (LLRE) & Cognitive Economics (P1 — Done)
- 
+
 - Prompt AST linter & compiler to parse prompt directives and signal density ratios (`src/core/llre/ast.ts`)
 - Core math model formulating Tool Call Accuracy, Request Satisfaction Index, Context Saturation Ratio, and Token Efficacy Quotient (`src/core/llre/telemetry.ts`)
 - Event-driven background telemetry store (`src/core/activity/sqlite-store.ts`)
 - REST Gateway endpoint providing aggregated statistics (`src/core/operator/routes/api-handler.ts`)
 - Premium operators setting panel with dynamic metrics visualization (`tab-settings.html`, `tab-settings.js`)
- 
+
 ### E9: Remote Operator Channels & OAuth Expansion (Planned — 2026 Q2/Q3)
- 
+
 - OAuth for LLM Providers: Add an option to authenticate with Google Vertex AI and Azure OpenAI using OAuth tokens instead of API keys, displayed directly above API key input configurations.
 - Away Mode Session Relay: Auto-forward critical agent approvals and alerts via SMS and SMS-via-Email when the operator's status is toggled to "Away".
 - Webhook Inbound Channel: Endpoint `/api/webhooks/sms` to process incoming SMS approvals and relay feedback back into the active Character Agent session.
- 
+
 ### E: Exit Criteria
- 
+
 - `node-pty` PTY terminal executes real shell commands (`ls`, `pwd`, `cat`) with correct output
 - `dockerode` container lifecycle: create → start → exec → stop → remove completes end-to-end
 - OAuth flow: user can authorize Gmail account and retrieve real inbox thread list
@@ -331,7 +331,7 @@ Replace simulated `child_process.spawn` mocks with production runtime integratio
 - LLRE integration test suite (`tests/llre.test.ts`) compiles and passes successfully (`✓ LLRE tests passed`)
 - Provider OAuth option successfully swaps API Key input fields for OAuth token flows
 - SMS/Email-to-SMS skills route agent notifications to Operator mobile number during simulated "Away Mode"
- 
+
 ---
 
 ## Phase F — Production Qualification & Private Beta (Complete — 2026-07-02)
@@ -723,6 +723,7 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 **Architecture:** `docs/PRISM_SKILLS_ARCHITECTURE.md`
 
 ### S1: Core Infrastructure (Done)
+
 - Update `src/core/skills/types.ts` — add `SkillAccountabilityChain`, `SkillExecutor`, `SkillSessionCreateOptions`, `SkillPermissionCheck` ✅
 - Update `src/core/skills/skills-engine.ts` — add CAC gate via `CharacterAccountabilityManager`, add `checkPermission()`, enhance `createSession()` with accountability chain ✅
 - Update `CharacterAccountabilityStore` — add `hasSkillPermission()` method, `SKILL_PERMISSION_SCOPES` migration ✅
@@ -731,6 +732,7 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 - Wire into bootstrap: pass `CharacterAccountabilityManager` to `SkillsEngine`, pass `SkillsEngine` to `GuardianAgent` ✅
 
 ### S2: Guardian Skill Integration (Done)
+
 - Create synthetic Guardian CAC identity (`guardian@prism.local`) with `skill.guardian.*` permissions, `tier1_autonomous` ✅
 - Add `SkillsEngine` reference and `setSkillsEngine()` to `GuardianAgent` ✅
 - Add `taskToSkillId()` mapping — convert all 18 Guardian tasks to skill IDs ✅
@@ -740,6 +742,7 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 - Add `skillIntervalOverrides` to `GuardianConfig` for operator-customizable intervals ✅
 
 ### S3: Tab Skill Definitions (Done)
+
 - Create 12 tab skill definition JSON files under `skills/tab/`: `tab-chat`, `tab-settings`, `tab-tools`, `tab-browser`, `tab-computer`, `tab-network`, `tab-telemetry`, `tab-logs`, `tab-scheduler`, `tab-agentic`, `tab-workspace`, `tab-demo` ✅
 - Create 12 knowledge base Markdown docs under `skills/kb/` — each describing the tab's purpose, API endpoints, and available operations ✅
 - Wire `tab_*_inspect` and `tab_*_control` tools through `TabToolAdapter` to existing API handlers ✅
@@ -747,6 +750,7 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 - Add tab-level governance rules — each skill declares `min_policy_tier` and `required_approvals` ✅
 
 ### S4: Autonomous Loop Integration (Done)
+
 - Wire `SkillsEngine.routeQuery()` into `AutonomousAgentLoop` — auto-detect skill intent from user goals ✅
 - Load skill KB docs into `AutonomousPlanner` system prompt when skill match detected ✅
 - Add skill governance checks to `Orchestrator` — verify CAC permissions before skill execution ✅
@@ -754,6 +758,7 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 - Add skill session dashboard panel in Telemetry tab — view active sessions, step history, governance decisions ✅
 
 ### S5: Validation & Testing (Done)
+
 - Test: CAC-gated skill denial — character without permission gets denied with remediation ✅
 - Test: Guardian skill execution — Guardian executes skill via `SkillsEngine` with synthetic identity ✅
 - Test: TabToolAdapter — each of 12 tabs responds to `inspect` and returns structured results ✅
@@ -762,7 +767,17 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 - Test: Skill-audit Guardian task — detects stalled sessions and reports to AAB ledger ✅
 - Total required: **38+ test cases** ✅
 
-## Target Quality Gates (Updated 2026-07-02)
+### S6: Guardian MSD & Self-Healing Skill Integration (Complete — 2026-07-12)
+
+- **Objective:** Deeply integrate the Diagnostic Fallback (Law 9), Self-Healing, and Self-Improvement skills into the Guardian Agent runtime, utilizing the Micro Support Desk (MSD) for ticket routing, learned-history logging, and automated recovery loops.
+- **Tasks:**
+  - Define `skill.guardian.self-heal` for real-time diagnostic triage, automated software repairs, and recovery orchestration. ✅
+  - Define `skill.guardian.self-improve` for logging optimization metrics, code refactoring history, and learned runtime wisdom. ✅
+  - Configure the Guardian Agent to automatically create, resolve, and update MSD tickets upon executing self-healing actions. ✅
+  - Integrate the Causal Memory Fabric with the MSD ticket schema, enabling the system to reference prior failure contexts for second-chance retries. ✅
+  - Ensure the Guardian Agent uses the MSD to its fullest extent: logging ticket items for diagnostic fallbacks, managing retry schedules, and recording systemic improvements in a learned-history ledger. ✅
+
+## Target Quality Gates (Updated 2026-07-12)
 
 | Gate | Target | Current Estimate |
 |------|--------|-----------------|
@@ -776,5 +791,5 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 | CHANGELOG.md lint errors | **ZERO** | ✅ Met |
 | Security scan findings (critical) | **ZERO** | ✅ Met |
 | **Tab skills defined** | **12** | ✅ Met |
-| **Guardian skills defined** | **9** | ✅ Met |
-| **Skill test coverage** | **35+ cases** | ✅ Met (38 cases) |
+| **Guardian skills defined** | **11** (9 + 2 Self-Heal/Improve) | ✅ Met |
+| **Skill test coverage** | **43+ cases** (38 + 5 MSD-Healing) | ✅ Met |
