@@ -20,7 +20,8 @@ Introduces the world-class VRGC Robotics Add-on system for managing physical, vi
     - `GET /api/addons/vrgc-robotics/integrations` to fetch connection status for UKS, BrainSim III, ROS 2, Physical I/O, and the MCP Server.
 - **Unified Add-on Loading Framework (`src/core/addons/`)**: Introduces a modular, typed add-on loader, validator, and registry structure allowing future expansions to be plugged into the core.
 - **Robotics Integration Tests (`tests/robotics-addon.test.ts`)**: Added integration test suite verifying entity registration, lifecycle state changes, and bridge check operations.
-- **Documentation**: Updated the PRISM Skills Architecture to include `tab.robotics` and the Documentation Index to index the new robotics design discussion and walkthrough guides.
+- **Visual Indication for Add-on Tabs (`src/core/operator/public/dashboard.css`, `src/core/operator/templates/dashboard.ts`)**: Introduced visual distinction for Add-on tabs (e.g. Robotics Entity) using a dedicated `.addon-tab` class with purple/magenta glassmorphic styling in default dark theme and soft lavender/pink gradients in daylight theme.
+- **Documentation & Wiki Integration**: Extensively documented Add-on subsystem governance, lifecycle management, and VRGC Robotics in `README.md` (updated to v0.22.3), `docs/PRISM_PRD.md`, the central Wiki (`docs/SOTA_BROWSER_WIKI.md`), and updated `docs/PRISM_SKILLS_ARCHITECTURE.md` to support 13 tab skills.
 
 ## v0.22.2 — 2026-07-11 — Secure Operator Management Console & Global Emergency Shutdown
 

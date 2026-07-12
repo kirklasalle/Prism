@@ -130,17 +130,17 @@ Operators and developers can run automated browser or OS-level agent scenarios u
 
 PRISM supports two primary execution profiles depending on security and virtualization tolerances:
 
-* **Sandbox Profile (Recommended & Zero-Risk)**: Spins up a containerized browser instance isolated inside a Fluxbox window manager, Playwright, and an Xvfb virtual framebuffer. It is fully sandboxed and has zero access to your host machine's sensitive filesystem.
+- **Sandbox Profile (Recommended & Zero-Risk)**: Spins up a containerized browser instance isolated inside a Fluxbox window manager, Playwright, and an Xvfb virtual framebuffer. It is fully sandboxed and has zero access to your host machine's sensitive filesystem.
 
-  ```bash
-  npm run ptac:sandbox
-  ```
+    ```bash
+    npm run ptac:sandbox
+    ```
 
-* **Host Profile (Direct Input takeover)**: Drives native OS mouse actions and keyboard entries directly on the operator's physical host machine. Requires confirming safety acknowledgement flags before execution:
+- **Host Profile (Direct Input takeover)**: Drives native OS mouse actions and keyboard entries directly on the operator's physical host machine. Requires confirming safety acknowledgement flags before execution:
 
-  ```bash
-  npm run ptac:host -- --i-understand-host-control
-  ```
+    ```bash
+    npm run ptac:host -- --i-understand-host-control
+    ```
 
 ### 2.2 OS World Benchmark Suite
 
@@ -152,26 +152,26 @@ npm run ptac:osworld
 
 ### 2.3 Running Self-Driving Demos
 
-* **Standard Sandbox Demo**: Executes self-driving browser demo scenarios in the isolated sandbox:
+- **Standard Sandbox Demo**: Executes self-driving browser demo scenarios in the isolated sandbox:
 
-  ```bash
-  npm run ptac:demo
-  ```
+    ```bash
+    npm run ptac:demo
+    ```
 
-* **Recorded Demo (Slideshow/Video manifest)**: Compiles visual screenshots of the run into a browser-playable slideshow asset. Make sure you set the dual-safety environment variables first:
+- **Recorded Demo (Slideshow/Video manifest)**: Compiles visual screenshots of the run into a browser-playable slideshow asset. Make sure you set the dual-safety environment variables first:
 
-  ```bash
-  # Windows Powershell
-  $env:PRISM_PTAC_SAFE="1"
-  $env:PRISM_PTAC_RECORD_VIDEO="1"
-  npm run ptac:demo-recording
-  ```
+    ```bash
+    # Windows Powershell
+    $env:PRISM_PTAC_SAFE="1"
+    $env:PRISM_PTAC_RECORD_VIDEO="1"
+    npm run ptac:demo-recording
+    ```
 
 ---
 
 ## 3. Sovereign Sentinel Hyper-Proxy (SSHP)
 
-The **Sovereign Sentinel Hyper-Proxy (SSHP)** acts as a local zero-trust privacy gate embedded directly inside the sandboxed environment. It intercepts play scripts, DOM trees, and screenshots *before* sending payload structures to third-party language model API endpoints.
+The **Sovereign Sentinel Hyper-Proxy (SSHP)** acts as a local zero-trust privacy gate embedded directly inside the sandboxed environment. It intercepts play scripts, DOM trees, and screenshots _before_ sending payload structures to third-party language model API endpoints.
 
 ### 3.1 Key Protective Elements
 
@@ -183,15 +183,15 @@ The **Sovereign Sentinel Hyper-Proxy (SSHP)** acts as a local zero-trust privacy
 
 SSHP is fully operator-controlled. It is enabled by default to secure the workspace but can be toggled on/off interactively.
 
-* **Settings Tab Control**: Toggled directly via the *Sovereign Sentinel Shielding* card.
-* **Live Status Indicator**: A live dynamic badge (`🛡️ SSHP ACTIVE` / `🛡️ SSHP OFF`) is rendered in the Browser Control header to give operators immediate feedback.
-* **Direct REST API Endpoints**:
-  * **Path**: `POST /api/preferences/sshp-redaction`
-  * **Payload**:
+- **Settings Tab Control**: Toggled directly via the _Sovereign Sentinel Shielding_ card.
+- **Live Status Indicator**: A live dynamic badge (`🛡️ SSHP ACTIVE` / `🛡️ SSHP OFF`) is rendered in the Browser Control header to give operators immediate feedback.
+- **Direct REST API Endpoints**:
+    - **Path**: `POST /api/preferences/sshp-redaction`
+    - **Payload**:
 
-    ```json
-    { "enabled": false }
-    ```
+        ```json
+        { "enabled": false }
+        ```
 
 ---
 
@@ -207,18 +207,18 @@ The **Cognitive Session Handoff (CSH)** protocol defines a structured state tran
 
 When a handoff is triggered, PRISM compiles a serializable JSON state package including:
 
-* **Cookies**: Session tokens, cross-site auth tickets.
-* **Storage**: Complete dumps of local storage (`localStorage`) and session storage (`sessionStorage`).
-* **Telemetry**: Navigation history trace arrays, planning DAG states, and internal system logs.
+- **Cookies**: Session tokens, cross-site auth tickets.
+- **Storage**: Complete dumps of local storage (`localStorage`) and session storage (`sessionStorage`).
+- **Telemetry**: Navigation history trace arrays, planning DAG states, and internal system logs.
 
 This allows the agent's task to be suspended safely, letting the operator resolve the blocker manually in a headed viewport.
 
 ### 4.2 Dashboard CSH Integrations (Phase E)
 
-* **CSH Baton Pass Panel**: Renders pending handoffs directly inside the **Agentic Tab**, showing the roadblock reason, target agent, and active objective.
-* **Take Browser Control**: Operators click this button to automatically load the specific session ID and switch to the **Browser Tab**.
-* **road block Banner Alert**: Displays a headed roadblock warning banner at the top of the Viewport in the Browser Tab.
-* **Resume Agent**: Deserializes the saved cookies and storage back into the active agent loop instantly, returning control to the autonomous planner.
+- **CSH Baton Pass Panel**: Renders pending handoffs directly inside the **Agentic Tab**, showing the roadblock reason, target agent, and active objective.
+- **Take Browser Control**: Operators click this button to automatically load the specific session ID and switch to the **Browser Tab**.
+- **road block Banner Alert**: Displays a headed roadblock warning banner at the top of the Viewport in the Browser Tab.
+- **Resume Agent**: Deserializes the saved cookies and storage back into the active agent loop instantly, returning control to the autonomous planner.
 
 ### 4.3 Developer REST API reference
 
@@ -226,53 +226,53 @@ This allows the agent's task to be suspended safely, letting the operator resolv
 
 Saves cookies, `localStorage`, `sessionStorage`, and reason traces to state DB.
 
-* **Path**: `POST /api/v1/autonomous/session/handoff`
-* **Body**:
+- **Path**: `POST /api/v1/autonomous/session/handoff`
+- **Body**:
 
-  ```json
-  {
-    "sessionId": "sess-123",
-    "sourceAgentId": "aria-individual-v1",
-    "targetAgentId": "human-operator",
-    "reason": "captcha_detected",
-    "objective": "Verify quarterly expenses in the corporate portal"
-  }
-  ```
+    ```json
+    {
+        "sessionId": "sess-123",
+        "sourceAgentId": "aria-individual-v1",
+        "targetAgentId": "human-operator",
+        "reason": "captcha_detected",
+        "objective": "Verify quarterly expenses in the corporate portal"
+    }
+    ```
 
 #### 4.3.2 Resume Active CSH Goal
 
 Restores serialized credentials back into Playwright and signals the FSM agent loop to wake up and resume.
 
-* **Path**: `POST /api/v1/autonomous/session/resume`
-* **Body**:
+- **Path**: `POST /api/v1/autonomous/session/resume`
+- **Body**:
 
-  ```json
-  {
-    "handoffId": "handoff-abc",
-    "sessionId": "sess-123"
-  }
-  ```
+    ```json
+    {
+        "handoffId": "handoff-abc",
+        "sessionId": "sess-123"
+    }
+    ```
 
 #### 4.3.3 Fetch Pending Handoff Requests
 
-* **Path**: `GET /api/v1/autonomous/session/pending`
-* **Response**:
+- **Path**: `GET /api/v1/autonomous/session/pending`
+- **Response**:
 
-  ```json
-  {
-    "handoffs": [
-      {
-        "handoffId": "handoff-abc",
-        "sessionId": "sess-123",
-        "status": "pending",
-        "reason": "captcha_detected",
-        "objective": "Verify quarterly expenses in the corporate portal",
-        "sourceAgentId": "aria-individual-v1",
-        "timestamp": 1779831600000
-      }
-    ]
-  }
-  ```
+    ```json
+    {
+        "handoffs": [
+            {
+                "handoffId": "handoff-abc",
+                "sessionId": "sess-123",
+                "status": "pending",
+                "reason": "captcha_detected",
+                "objective": "Verify quarterly expenses in the corporate portal",
+                "sourceAgentId": "aria-individual-v1",
+                "timestamp": 1779831600000
+            }
+        ]
+    }
+    ```
 
 ---
 
@@ -280,11 +280,11 @@ Restores serialized credentials back into Playwright and signals the FSM agent l
 
 For deep dives into operational deployment and code architectures, check out these related core documents:
 
-* **Operator Walkthrough Guide**: [OPERATOR_DASHBOARD_WALKTHROUGH.md](file:///d:/Projects/Prism/docs/OPERATOR_DASHBOARD_WALKTHROUGH.md) — Detailed runbook on visual settings, CSH handoffs, and agent loops.
-* **Direct Control Reference Guide**: [COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md](file:///d:/Projects/Prism/docs/COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md) — The visual UI control manual.
-* **Developer Guidelines**: [DEVELOPER_GUIDE.md](file:///d:/Projects/Prism/docs/DEVELOPER_GUIDE.md) — Backend routing, TypeScript patterns, and testing frameworks.
-* **Learning Curve Journal**: [learning_curve_journal.md](file:///d:/Projects/Prism/docs/learning_curve_journal.md) — Architectural post-mortems, telemetry refactoring details, self-healing support dictionary, and world-class audit reflections.
-* **Complete Product Index**: [DOCS_INDEX.md](file:///d:/Projects/Prism/docs/DOCS_INDEX.md) — Full listing of all Q2 2026 PRISM artifacts.
+- **Operator Walkthrough Guide**: [OPERATOR_DASHBOARD_WALKTHROUGH.md](file:///d:/Projects/Prism/docs/OPERATOR_DASHBOARD_WALKTHROUGH.md) — Detailed runbook on visual settings, CSH handoffs, and agent loops.
+- **Direct Control Reference Guide**: [COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md](file:///d:/Projects/Prism/docs/COMPUTER_AND_BROWSER_CONTROL_OPERATOR_GUIDE.md) — The visual UI control manual.
+- **Developer Guidelines**: [DEVELOPER_GUIDE.md](file:///d:/Projects/Prism/docs/DEVELOPER_GUIDE.md) — Backend routing, TypeScript patterns, and testing frameworks.
+- **Learning Curve Journal**: [learning_curve_journal.md](file:///d:/Projects/Prism/docs/learning_curve_journal.md) — Architectural post-mortems, telemetry refactoring details, self-healing support dictionary, and world-class audit reflections.
+- **Complete Product Index**: [DOCS_INDEX.md](file:///d:/Projects/Prism/docs/DOCS_INDEX.md) — Full listing of all Q2 2026 PRISM artifacts.
 
 ---
 
@@ -306,8 +306,8 @@ To maintain operational integrity, prevent historical regressions, and document 
 
 To support quiet-release investor and operator briefings, PRISM now includes a **world-class visual briefing surface** in the release plan HTML artifact:
 
-* **Primary artifact**: [PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html)
-* **Purpose**: communicate governance, orchestration, and readiness tracks with an interactive 3D experience that is stable even in restricted environments.
+- **Primary artifact**: [PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html)
+- **Purpose**: communicate governance, orchestration, and readiness tracks with an interactive 3D experience that is stable even in restricted environments.
 
 ### 7.1 Why this wiki addition exists
 
@@ -323,19 +323,19 @@ The visualization is implemented with a two-tier rendering strategy:
 
 1. **Tier A — Three.js scene (preferred)**
 
-* Real-time rendered prism, orbiting nodes, ring layers, dynamic light pulse, and pointer-reactive camera drift.
-* Used when `three.min.js` is available and WebGL renderer initialization succeeds.
+- Real-time rendered prism, orbiting nodes, ring layers, dynamic light pulse, and pointer-reactive camera drift.
+- Used when `three.min.js` is available and WebGL renderer initialization succeeds.
 
 1. **Tier B — Local CSS 3D fallback (fail-safe)**
 
-* Animated 3D core + orbit planes rendered via CSS transforms and keyframes.
-* Automatically activated if Three.js CDN load fails or WebGL init throws.
+- Animated 3D core + orbit planes rendered via CSS transforms and keyframes.
+- Automatically activated if Three.js CDN load fails or WebGL init throws.
 
 ### 7.3 Reliability behavior and operator expectations
 
-* The panel should **never appear blank** under normal browser conditions.
-* If the fallback path activates, the overlay message should indicate fallback mode and reason.
-* `prefers-reduced-motion` is honored to minimize motion for accessibility-sensitive viewing environments.
+- The panel should **never appear blank** under normal browser conditions.
+- If the fallback path activates, the overlay message should indicate fallback mode and reason.
+- `prefers-reduced-motion` is honored to minimize motion for accessibility-sensitive viewing environments.
 
 ### 7.4 Maintenance guidance
 
@@ -348,6 +348,30 @@ When modifying the visual system:
 
 ### 7.5 Related references
 
-* [PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.md](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.md)
-* [PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html)
-* [PRISM_WORLD_CLASS_AUDIT_PRESENTATION_2026.html](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_AUDIT_PRESENTATION_2026.html)
+- [PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.md](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.md)
+- [PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_QUIET_RELEASE_MASTER_PLAN_2026-05-27.html)
+- [PRISM_WORLD_CLASS_AUDIT_PRESENTATION_2026.html](file:///d:/Projects/Prism/docs/PRISM_WORLD_CLASS_AUDIT_PRESENTATION_2026.html)
+
+---
+
+## 8. PRISM Add-on Layer & VRGC Robotics Subsystem (v0.22.3)
+
+PRISM introduces a certified **Add-on Layer** designed for deep system integrations that require direct access to core event queues, registry databases, and telemetry systems.
+
+### 8.1 Add-on Trust and Lifecycle Model
+
+- **Certified Trust**: Unlike sandboxed plugins (which operate under strict limits within the Plugin SDK), Add-ons run with full server authority. Thus, they must undergo Ed25519 signature verification and pass manual operator review before activation.
+- **Hook Registration**: Add-ons plug into core lifecycles using dynamic boot-time hooks without modifying core files.
+- **Subsystem Management**: Enabled and configured directly via the operator settings.
+
+### 8.2 VRGC Robotics Add-on (Cognitive & Control Middleware)
+
+The **Virtually Robotic GitHub Copilot (VRGC)** Robotics Add-on provides an interface and cognitive middleware layer bridging PRISM to advanced intelligence simulators and physical hardware.
+
+- **Robotics Console Tab**: Mounted dynamically in the dashboard, featuring:
+    - **UKS & BrainSim III Integrations**: Real-time cognitive state tracking, semantic knowledge maps, and neural fire rates.
+    - **Entity Lifecycle Control**: Spawn, calibrate, suspend, and shut down simulated or physical robotic agents.
+    - **Safety Boundaries**: Real-time telemetry monitoring against the 10 Laws (Asimov-LaSalle directives).
+- **Developer API**:
+    - `GET /api/robotics/status` — Live status of UKS/BrainSim link and active entities.
+    - `POST /api/robotics/control` — Dispatch calibration, emergency halt, or state synchronization commands.

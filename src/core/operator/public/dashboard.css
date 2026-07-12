@@ -83,7 +83,7 @@ body.theme-tron {
     --surface: rgba(255, 255, 255, 0.02);
     --bg-input: #090d16;
     --border-color: rgba(148, 163, 184, 0.22);
-    
+
     /* LLM Power Manager & Widget variables */
     --power-bg: linear-gradient(135deg, rgba(20, 20, 35, 0.8), rgba(10, 10, 20, 0.9));
     --power-border: rgba(139, 92, 246, 0.3);
@@ -113,8 +113,8 @@ body.theme-tron {
     --stg-recheck-bg: rgba(105, 210, 255, 0.08);
     --stg-recheck-fg: #69d2ff;
     --stg-recheck-bg-hover: rgba(105, 210, 255, 0.18);
-    
-    background-image: 
+
+    background-image:
         linear-gradient(rgba(0, 204, 255, 0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(0, 204, 255, 0.02) 1px, transparent 1px) !important;
 }
@@ -512,6 +512,23 @@ body.theme-day .brand-profile-badge.demo {
     color: #92400e !important;
 }
 
+body.theme-day .tab-button.addon-tab {
+    background: #faf5ff !important;
+    border-color: #d8b4fe !important;
+    color: #6b21a8 !important;
+}
+
+body.theme-day .tab-button.addon-tab:hover {
+    background: #f3e8ff !important;
+    border-color: #c084fc !important;
+}
+
+body.theme-day .tab-button.addon-tab.active {
+    background: linear-gradient(135deg, #8b5cf6, #ec4899) !important;
+    color: #ffffff !important;
+    border-color: #8b5cf6 !important;
+}
+
 /* ── End Daylight Theme Overrides ─────────────────────────────── */
 
 * {
@@ -524,7 +541,7 @@ body {
     color: var(--text);
     font-family: "Outfit", Aptos, "Segoe UI", sans-serif;
     background-color: var(--bg);
-    background-image: 
+    background-image:
         linear-gradient(rgba(0, 204, 255, 0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(0, 204, 255, 0.02) 1px, transparent 1px);
     background-size: 40px 40px;
@@ -652,6 +669,24 @@ select {
     border-color: rgba(105, 210, 255, 0.18);
     background: linear-gradient(135deg, var(--accent), var(--accent-2));
     box-shadow: 0 10px 24px rgba(105, 210, 255, 0.16);
+}
+
+/* Add-on Tab Styling (Default / Cyberpunk / Night) */
+.tab-button.addon-tab {
+    border-color: rgba(153, 51, 255, 0.35) !important;
+    background: rgba(22, 14, 43, 0.92) !important;
+}
+
+.tab-button.addon-tab:hover {
+    border-color: rgba(153, 51, 255, 0.6) !important;
+    box-shadow: 0 0 8px rgba(153, 51, 255, 0.25) !important;
+}
+
+.tab-button.addon-tab.active {
+    background: linear-gradient(135deg, var(--c-purple), var(--c-magenta)) !important;
+    color: #ffffff !important;
+    border-color: rgba(153, 51, 255, 0.4) !important;
+    box-shadow: 0 10px 24px rgba(153, 51, 255, 0.3) !important;
 }
 
 .tab-panel {

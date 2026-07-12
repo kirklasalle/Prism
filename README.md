@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.22.1-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.22.3-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
   <img src="https://img.shields.io/badge/tests-185+_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
@@ -213,6 +213,14 @@ PRISM features a secure, operator-controlled, and autonomously monitored update 
     - Automatically verifies download signature integrity and compile validity post-update.
     - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
 
+### 12. Add-on Architecture — Deep System Integrations
+
+PRISM introduces a new **Add-on Layer** sitting between the core system and the sandboxed Plugin SDK:
+
+- **UI & Subsystem Integration**: Add-ons can mount custom dashboard tabs (such as the Robotics Entity console) and extend core system registries, memory systems, or database schemas.
+- **Certified Trust Model**: Because Add-ons run outside the standard plugin sandbox, they require **certified** trust status — requiring manual operator enablement, cryptographic Ed25519 signature validation, and review against the 10 Laws.
+- **Domain-Specific Extensions**: Perfect for deep integrations like external cognitive frameworks (UKS, BrainSim III), physical middleware (ROS 2), or high-throughput protocol bridges.
+
 ---
 
 ## ⚡ Quick Start
@@ -257,7 +265,7 @@ The operator dashboard opens at **`http://localhost:7070`**.
 
 ## 🖥️ Operator Dashboard
 
-A premium, tab-based operator console with 10 functional areas:
+A premium, tab-based operator console with 11 functional areas:
 
 | Tab                     | Purpose                                                                                               |
 | :---------------------- | :---------------------------------------------------------------------------------------------------- |
@@ -269,6 +277,7 @@ A premium, tab-based operator console with 10 functional areas:
 | **Computer Control**    | Terminal sessions, container sandbox management, self-drive demonstrations                            |
 | **Workspace**           | Project management, file operations, character assignment                                             |
 | **Network**             | 50+ curated network commands with tier-based governance and live interface viewer                     |
+| **Robotics Entity**     | _[Add-on]_ Registry, workshop, and connection status for simulated/physical robots (UKS/BrainSim III) |
 | **Telemetry**           | Retrieval observability, performance metrics, quality trends                                          |
 | **Logs & Debug**        | Real-time activity event stream, AI decision path tracing                                             |
 

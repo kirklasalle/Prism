@@ -379,6 +379,7 @@ The dashboard must provide a tab-based navigation system with the following tabs
 | Provider & Settings | LLM provider configuration, model capability matrix, runtime settings, and audit trail                                  |
 | Tools & Plugins     | Inventory of built-in tools, registered MCP plugins, and system utilities                                               |
 | Network             | Curated network command execution with tier-based governance, live interface viewer, telemetry, and interactive console |
+| Robotics Entity     | _[Add-on]_ Registry, workshop, and connection status for simulated/physical robots (UKS/BrainSim III)                   |
 | Telemetry           | Runtime telemetry, retrieval observability, and performance metrics                                                     |
 | Logs & Debug        | Activity event stream, error inspection, and debug-level trace output                                                   |
 
@@ -754,6 +755,24 @@ LLRE computes unified operational indexes at the low-level execution loop:
 - AST compiler successfully processes formatted and unformatted prompts.
 - Database layer commits event records correctly and avoids SQLite binding failures.
 - Front-end fetches, handles, and renders consolidated telemetry values securely.
+
+### 8.11 PRISM Add-on Architecture & Lifecycle Management
+
+PRISM supports an intermediate integration tier called **Add-ons** for deep, domain-specific modules that cannot be sandboxed under the Plugin SDK.
+
+#### 8.11.1 Add-on Architecture
+
+- **Manifest Specifications**: Every Add-on must provide a structured manifest (`addon.manifest.json`) declaring ID, name, version, trust level, and integration points (e.g., UI tabs, custom database tables, character archetypes, memory queries).
+- **Core Decoupling**: Add-ons must plug into core interfaces without mutating core code files directly, utilizing boot-time hook registration.
+- **Trust Tier**: Add-ons operate under a **certified** trust tier, verifying Ed25519 signatures before execution.
+
+#### 8.11.2 Robotics Add-on Integration (v0.22.3)
+
+- **Dedicated Tab**: The Robotics Entity Add-on must render a custom console tab containing:
+    - **Entity Registry**: Status monitoring and lifecycle state machine for physical/virtual entities.
+    - **Workshop**: Safety thresholds, skill metrics, and graduation gates.
+    - **Integrations**: Latency and connection telemetry for UKS, BrainSim III, ROS 2, and the MCP server.
+    - **Telemetry & Governance**: Active CAC session logging and policy validation logs.
 
 ## 9-continued. Quality Gates (SLO/SLA Targets)
 
