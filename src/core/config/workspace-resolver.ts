@@ -112,6 +112,8 @@ export interface PrismPreferences {
         smsCarrier?: string;
     };
     autoUpdate?: boolean;
+    disabledAddons?: string[];
+    addonSettings?: Record<string, any>;
     lastModified: string;
 }
 
@@ -242,6 +244,17 @@ export function workspaceFramebufferDir(): string {
 
 export function workspaceBrowserProfilesDir(): string {
     return workspacePath("state", "browser-profiles");
+}
+
+export function resolveAddonsDir(): string {
+    if (process.env.PRISM_PREFERENCES_PATH) {
+        return join(resolveWorkspaceRoot(), "addons");
+    }
+    const projAddons = join(projectRoot(), "addons");
+    if (existsSync(projAddons)) {
+        return projAddons;
+    }
+    return join(resolveWorkspaceRoot(), "addons");
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

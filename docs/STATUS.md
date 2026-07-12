@@ -1,4 +1,4 @@
-# PRISM — Authoritative Status (v0.22.3)
+# PRISM — Authoritative Status (v0.22.4)
 
 > Single source of truth for what's shipped, what's pending, and what's gated.
 > Replaces the audit-doc maze for operator and investor reading. Linked from
@@ -9,7 +9,7 @@
 PRISM is an **open-source, self-hostable, governance-native Agents-as-a-Service
 runtime**. It runs on a single laptop or a Kubernetes cluster, ships with a
 provable Permanent Active Directives integrity gate, a tiered approval queue, a
-self-driving test harness (PTAC), and — as of v0.22 — an additive **VRGC Robotics Add-on** for managing robotic and cognitive entities (physical, virtual, simulated) integrated with external systems like UKS and BrainSim III under full PRISM governance.
+self-driving test harness (PTAC), and — as of v0.22 — an additive **VRGC Robotics Add-on** and **Boot-time Add-on Management Panel** for managing and studying add-on components under full PRISM governance.
 
 The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
@@ -17,7 +17,7 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.22.3`                                       |
+| Current version  | `0.22.4`                                       |
 | Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
 | Doctor           | `npm run doctor`                               |
@@ -26,9 +26,16 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 Operators are expected to run `npm run doctor` before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.21.0 → v0.22.3)
+## What's Shipped (v0.21.0 → v0.22.4)
 
-### Robotics Add-on & Intelligent Integration
+### Add-on Management Panel & UI Visibility (v0.22.4)
+
+- **Boot-time Add-on Management Panel**: Added a dedicated, collapsible **Add-ons** panel to the top of the **Tools & Plugins** tab. Displays disk/memory state, enabled toggle, and settings configurations.
+- **High-Visibility Learn Feedback**: Replaced transient notice system with a fixed-position progress banner sliding down from the top of the viewport. Features a spinner, real-time elapsed timer, and explicit path outcomes for Wiki/Governance Skills.
+- **Add-on Path Resolution**: Resolved mismatch issues between manifest IDs and folder names on disk using dynamic scan-matching.
+- **Integration Test Suite**: Added `tests/addons-api-routes.test.ts` to test all add-on routes.
+
+### Robotics Add-on & Intelligent Integration (v0.22.3)
 
 - **VRGC Robotics Subsystem** (v0.22.3): Integrated a dedicated **Robotics** tab into the Operator Console containing four enterprise-grade panels:
   - **Entity Registry:** Registering, monitoring, and managing robotic and cognitive entities.

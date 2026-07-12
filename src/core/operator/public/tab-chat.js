@@ -605,7 +605,8 @@ export
       request('/api/tools/status').catch(() => ({ tools: {} })),
       request('/api/plugins/status').catch(() => ({ plugins: {} })),
       request('/api/llm/modalities').catch(() => ({ modalities: [] })),
-      request('/api/workspace/character-assignments').catch(() => ({ assignments: [] }))
+      request('/api/workspace/character-assignments').catch(() => ({ assignments: [] })),
+      request('/api/addons/status').catch(() => ({ addons: [] }))
     ];
 
     // Defer the model matrix request completely unless settings tab is active
@@ -640,8 +641,12 @@ export
     const pluginsStatusPayload = results[20];
     const llmModalitiesPayload = results[21];
     const characterAssignmentsPayload = results[22];
+    const addonsPayload = results[23];
     const modelMatrixPayload = matrixPromiseIndex !== -1 ? results[matrixPromiseIndex] : null;
 
+    if (addonsPayload && addonsPayload.addons) {
+      state.addons = addonsPayload.addons;
+    }
     state.agentData = agentDataPayload || null;
     state.computerSystemInfo = computerSystemInfoPayload || null;
     var serverTools = (toolsStatusPayload && toolsStatusPayload.tools) || {};

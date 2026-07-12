@@ -39,6 +39,9 @@ export const state = {
   localLlmSelectionBySession: {},
   sessionPackages: [],
   sessionPackageHistory: [],
+  addons: [],
+  loadingAddons: false,
+  expandedAddonId: null,
   packageReleaseSnapshot: null,
   expandedSessionPackages: {},
   matrixSortCol: 'tier',
@@ -78,6 +81,7 @@ export const state = {
   srIsolationAdvisory: null,
   settingsPanelCollapsed: true,
   llmAuditCollapsed: true,
+  addonsPanelCollapsed: false,
   toolsPanelCollapsed: true,
   pluginsPanelCollapsed: true,
   utilitiesPanelCollapsed: true,
@@ -834,7 +838,7 @@ export function saveItemNotes(kind, name) {
 }
 
 export function toggleItemExpand(kind, name) {
-  var field = kind === 'tool' ? 'expandedToolId' : kind === 'plugin' ? 'expandedPluginId' : kind === 'skill' ? 'expandedSkillId' : 'expandedUtilityId';
+  var field = kind === 'tool' ? 'expandedToolId' : kind === 'plugin' ? 'expandedPluginId' : kind === 'skill' ? 'expandedSkillId' : kind === 'addon' ? 'expandedAddonId' : 'expandedUtilityId';
   state[field] = state[field] === name ? null : name;
   render();
 }

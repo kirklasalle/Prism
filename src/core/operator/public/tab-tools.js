@@ -110,6 +110,27 @@ export function computePanelSummary(kind) {
 }
 
 export function renderPanelSummaries() {
+  // Addons panel summary
+  var addonsSummaryEl = document.getElementById('addonsPanel-summary');
+  if (addonsSummaryEl) {
+    if (state.addonsPanelCollapsed) {
+      var addons = state.addons || [];
+      var activeCount = addons.filter(function(a) { return a.state === 'active'; }).length;
+      var disabledCount = addons.filter(function(a) { return !a.enabled; }).length;
+      var errorCount = addons.filter(function(a) { return a.state === 'error'; }).length;
+      var pendingCount = addons.filter(function(a) { return a.state === 'pending_restart'; }).length;
+      var ah = '';
+      if (activeCount > 0) ah += '<span class="tp-panel-badge badge-healthy">\uD83D\uDD0C ' + activeCount + ' active</span>';
+      if (disabledCount > 0) ah += '<span class="tp-panel-badge badge-disabled">\u23F8 ' + disabledCount + ' disabled</span>';
+      if (pendingCount > 0) ah += '<span class="tp-panel-badge badge-idle">\uD83D\uDD04 ' + pendingCount + ' pending</span>';
+      if (errorCount > 0) ah += '<span class="tp-panel-badge badge-error">\u26A0\uFE0F ' + errorCount + ' error' + (errorCount !== 1 ? 's' : '') + '</span>';
+      addonsSummaryEl.innerHTML = ah || '<span class="tp-panel-badge badge-disabled">0 add-ons</span>';
+      addonsSummaryEl.style.display = '';
+    } else {
+      addonsSummaryEl.style.display = 'none';
+    }
+  }
+
   // Skills panel summary
   var skillsSummaryEl = document.getElementById('skillsPanel-summary');
   if (skillsSummaryEl) {
@@ -443,7 +464,8 @@ export async function refreshAllToolStatus() {
     var results = await Promise.all([
       request('/api/tools/status').catch(function () { return null; }),
       request('/api/plugins/status').catch(function () { return null; }),
-      request('/api/utilities/status').catch(function () { return null; })
+      request('/api/utilities/status').catch(function () { return null; }),
+      request('/api/addons/status').catch(function () { return null; })
     ]);
     if (results[0]) {
       if (results[0].tools) state.toolStates = results[0].tools;
@@ -454,9 +476,10 @@ export async function refreshAllToolStatus() {
     // uses live data rather than the hardcoded PLUGIN_CATALOG_FALLBACK.
     if (results[1] && Array.isArray(results[1].catalog)) state.pluginCatalog = results[1].catalog;
     if (results[2] && results[2].utilities) state.utilityStates = results[2].utilities;
+    if (results[3] && results[3].addons) state.addons = results[3].addons;
     var barEl = document.getElementById('tools-overview-bar');
     if (barEl) { var inner = barEl.querySelector('.tp-overview-bar'); if (inner) inner.classList.add('tp-pulse'); setTimeout(function () { if (inner) inner.classList.remove('tp-pulse'); }, 600); }
-    dashboardLog('tools', 'refresh.all', 'Refreshed tool, plugin, and utility status');
+    dashboardLog('tools', 'refresh.all', 'Refreshed tool, plugin, utility, and add-on status');
   } catch (e) {
     dashboardLog('tools', 'refresh.error', 'Refresh failed: ' + e.message);
   }
@@ -738,6 +761,429 @@ export async function submitRegisterTool(result) {
     await refreshAllToolStatus();
   } catch (e) {
     showTransientNotice('Registration failed: ' + (e.message || String(e)), 'error');
+  }
+}
+
+// ── Boot-time Add-on Management Panel ──
+
+export function renderAddonsPanel() {
+  var container = document.getElementById('addons-panel');
+  if (!container) return;
+
+  var addons = state.addons || [];
+  var filter = state.toolsFilterText || '';
+
+  var filteredAddons = addons.filter(function (a) {
+    var nameLower = (a.name || '').toLowerCase();
+    var idLower = (a.id || '').toLowerCase();
+    var descLower = (a.description || '').toLowerCase();
+    return !filter || nameLower.indexOf(filter) !== -1 || idLower.indexOf(filter) !== -1 || descLower.indexOf(filter) !== -1;
+  });
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">';
+  html += '<span class="muted">' + addons.length + ' Boot-time Add-on' + (addons.length !== 1 ? 's' : '') + ' registered.</span>';
+  html += '</div>';
+
+  if (filteredAddons.length === 0) {
+    html += '<div style="text-align:center;padding:24px;background:rgba(255,255,255,0.02);border-radius:6px;border:1px dashed rgba(255,255,255,0.08);">';
+    html += '<span class="muted">No add-ons match the current filter or none are installed.</span>';
+    html += '</div>';
+  } else {
+    for (var i = 0; i < filteredAddons.length; i++) {
+      var a = filteredAddons[i];
+      var isExpanded = state.expandedAddonId === a.id;
+      var stateClass = a.state === 'active' ? 'tp-healthy' : a.state === 'suspended' ? 'tp-suspended' : a.state === 'error' ? 'tp-unhealthy' : 'tp-idle';
+      
+      var stateLabel = a.state === 'active' ? 'Active' : a.state === 'suspended' ? 'Suspended' : a.state === 'error' ? 'Error' : 'Pending Restart';
+      if (a.state === 'pending_restart') {
+        stateLabel = 'Pending Restart';
+      } else if (a.state === 'pending_delete') {
+        stateLabel = 'Pending Delete';
+      }
+      
+      var dotColor = a.state === 'active' ? 'green' : a.state === 'suspended' ? 'orange' : a.state === 'error' ? 'red' : 'yellow';
+
+      html += '<div class="tp-card ' + (isExpanded ? 'tp-expanded ' : '') + stateClass + '" style="margin-bottom:8px;" data-item-kind="addon" data-item-name="' + escapeHtml(a.id) + '">';
+      
+      html += '<div class="tp-card-head tp-card-toggle" data-item-kind="addon" data-item-name="' + escapeHtml(a.id) + '" style="cursor:pointer;">';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;">';
+      html += '<span class="tp-card-name">\uD83D\uDD0C ' + escapeHtml(a.name) + '</span>';
+      html += '<span class="tp-status-dot ' + dotColor + '"></span>';
+      html += '<span class="ps-badge" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:10px;">v' + escapeHtml(a.version) + '</span>';
+      
+      if (a.hasSignoff) {
+        html += '<span class="ps-badge" style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;" title="Signed off by Governance Council: ' + escapeHtml(a.signoffId || 'verified') + '">\u2714 Signed</span>';
+      } else {
+        html += '<span class="ps-badge" style="background:rgba(239,68,68,0.12);color:#f87171;font-size:10px;" title="No Governance Council sign-off detected. Running in restricted mode.">\u26A0 Unsigned</span>';
+      }
+      
+      html += '</div>';
+      html += '<div class="tp-card-desc">' + escapeHtml(a.description || '') + '</div>';
+      html += '<div class="tp-card-meta">';
+      html += '<span class="tp-meta-tag">Author: ' + escapeHtml(a.author || 'unknown') + '</span>';
+      html += '<span class="tp-meta-tag">License: ' + escapeHtml(a.license || 'unknown') + '</span>';
+      html += '</div>';
+      html += '</div>';
+      
+      html += '<div class="tp-card-badges" style="display:flex;align-items:center;gap:8px;">';
+      
+      var toggleText = a.enabled ? 'Disable' : 'Enable';
+      var toggleBtnClass = a.enabled ? 'secondary-button' : 'primary-button';
+      var toggleStyle = a.enabled ? 'padding:3px 8px;font-size:10px;background:rgba(239,68,68,0.1);color:#f87171;border-color:rgba(239,68,68,0.2);' : 'padding:3px 8px;font-size:10px;background:rgba(52,211,153,0.1);color:#34d399;border-color:rgba(52,211,153,0.2);';
+      
+      html += '<button class="' + toggleBtnClass + '" style="' + toggleStyle + '" onclick="event.stopPropagation(); toggleAddonEnabled(\'' + escapeHtml(a.id) + '\', ' + !a.enabled + ')">' + toggleText + '</button>';
+      
+      var deleteStyle = 'padding:3px 8px;font-size:10px;background:rgba(239,68,68,0.15);color:#f87171;border-color:rgba(239,68,68,0.25);';
+      html += '<button class="secondary-button" style="' + deleteStyle + '" onclick="event.stopPropagation(); deleteAddon(\'' + escapeHtml(a.id) + '\')">\uD83D\uDDD1\uFE0F Delete</button>';
+      
+      html += '<span class="ps-badge" style="background:rgba(255,255,255,0.08);">' + stateLabel + '</span>';
+      html += '</div></div>';
+
+      html += '<div class="tp-card-body">';
+      
+      if (a.manifest && a.manifest.integrationPoints) {
+        html += '<div class="tp-section"><div class="tp-section-title">\u2699\uFE0F Integration Points</div>';
+        html += '<div style="font-size:11px;color:rgba(255,255,255,0.7);line-height:1.6;">';
+        
+        var ip = a.manifest.integrationPoints;
+        html += '<strong>Memory Subsystem Extension:</strong> ' + (ip.memorySubsystem ? 'Yes' : 'No') + '<br>';
+        html += '<strong>Dashboard Tab Integration:</strong> ' + (ip.dashboardTab ? 'Yes' : 'No') + '<br>';
+        
+        if (ip.dashboardSubPanels && ip.dashboardSubPanels.length > 0) {
+          html += '<strong>Dashboard Sub-panels:</strong> ' + ip.dashboardSubPanels.join(', ') + '<br>';
+        }
+        if (ip.guardianSkills && ip.guardianSkills.length > 0) {
+          html += '<strong>Guardian Skills:</strong> ' + ip.guardianSkills.map(function(s) { return '<code>' + escapeHtml(s) + '</code>'; }).join(', ') + '<br>';
+        }
+        if (ip.policyExtensions && ip.policyExtensions.length > 0) {
+          html += '<strong>Policy Extensions:</strong> ' + ip.policyExtensions.join(', ') + '<br>';
+        }
+        if (ip.skillDefinitions && ip.skillDefinitions.length > 0) {
+          html += '<strong>Skill Definitions:</strong> ' + ip.skillDefinitions.map(function(s) { return '<code>' + escapeHtml(s) + '</code>'; }).join(', ') + '<br>';
+        }
+        html += '</div></div>';
+      }
+
+      if (a.manifest && a.manifest.dependencies) {
+        var dep = a.manifest.dependencies;
+        if ((dep.addons && dep.addons.length > 0) || (dep.plugins && dep.plugins.length > 0) || (dep.systemCapabilities && dep.systemCapabilities.length > 0)) {
+          html += '<div class="tp-section" style="margin-top:8px;"><div class="tp-section-title">\uD83D\uDCCB Dependencies</div>';
+          html += '<div style="font-size:11px;color:rgba(255,255,255,0.7);line-height:1.6;">';
+          if (dep.addons && dep.addons.length > 0) html += '<strong>Required Add-ons:</strong> ' + dep.addons.join(', ') + '<br>';
+          if (dep.plugins && dep.plugins.length > 0) html += '<strong>Required Plugins:</strong> ' + dep.plugins.join(', ') + '<br>';
+          if (dep.systemCapabilities && dep.systemCapabilities.length > 0) html += '<strong>System Capabilities:</strong> ' + dep.systemCapabilities.join(', ') + '<br>';
+          html += '</div></div>';
+        }
+      }
+
+      if (a.validationErrors && a.validationErrors.length > 0) {
+        html += '<div class="tp-section" style="margin-top:8px;"><div class="tp-section-title" style="color:#ffc1c1;">\u26A0\uFE0F Manifest Errors</div>';
+        html += '<div style="font-size:11px;color:#ffc1c1;">' + a.validationErrors.map(function(e) { return '\u2022 ' + escapeHtml(e); }).join('<br>') + '</div>';
+        html += '</div>';
+      }
+      if (a.validationWarnings && a.validationWarnings.length > 0) {
+        html += '<div class="tp-section" style="margin-top:8px;"><div class="tp-section-title" style="color:#ffd17a;">\u26A0\uFE0F Manifest Warnings</div>';
+        html += '<div style="font-size:11px;color:#ffd17a;">' + a.validationWarnings.map(function(w) { return '\u2022 ' + escapeHtml(w); }).join('<br>') + '</div>';
+        html += '</div>';
+      }
+
+      // Settings and runtime configuration section
+      if (isExpanded) {
+        html += '<div class="tp-section" style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;">';
+        html += '<div class="tp-section-title">\u2699\uFE0F Settings & Runtime Configuration</div>';
+        
+        var settings = (state.addonSettings && state.addonSettings[a.id]) ? state.addonSettings[a.id] : null;
+        if (!settings) {
+          html += '<div class="muted" style="font-size:11px;">Loading settings...</div>';
+        } else {
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:10px;">';
+          
+          // Autostart
+          html += '<div>';
+          html += '<label class="tp-toggle" style="margin-bottom:4px;display:flex;align-items:center;gap:6px;">';
+          html += '<input type="checkbox" id="addon-setting-autostart-' + a.id + '" ' + (settings.autostart ? 'checked' : '') + '>';
+          html += '<span class="tp-toggle-track"></span>';
+          html += '<span style="font-size:11px;color:rgba(255,255,255,0.8);">Autostart on Boot</span>';
+          html += '</label>';
+          html += '<div class="muted" style="font-size:10px;margin-left:36px;">Launch automatically when Prism starts.</div>';
+          html += '</div>';
+
+          // Log level
+          html += '<div>';
+          html += '<label style="font-size:11px;color:rgba(255,255,255,0.8);display:block;margin-bottom:4px;">Log Level</label>';
+          html += '<select id="addon-setting-loglevel-' + a.id + '" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);width:100%;box-sizing:border-box;">';
+          var levels = ['debug', 'info', 'warn', 'error'];
+          for (var l = 0; l < levels.length; l++) {
+            html += '<option value="' + levels[l] + '"' + (settings.logLevel === levels[l] ? ' selected' : '') + '>' + levels[l].toUpperCase() + '</option>';
+          }
+          html += '</select>';
+          html += '</div>';
+
+          // Thread mode
+          html += '<div>';
+          html += '<label style="font-size:11px;color:rgba(255,255,255,0.8);display:block;margin-bottom:4px;">Thread Mode</label>';
+          html += '<select id="addon-setting-threadmode-' + a.id + '" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);width:100%;box-sizing:border-box;">';
+          var modes = [['main', 'Main Thread'], ['worker', 'Worker Thread'], ['child_process', 'Separate Process']];
+          for (var m = 0; m < modes.length; m++) {
+            html += '<option value="' + modes[m][0] + '"' + (settings.threadMode === modes[m][0] ? ' selected' : '') + '>' + modes[m][1] + '</option>';
+          }
+          html += '</select>';
+          html += '</div>';
+
+          // Port
+          html += '<div>';
+          html += '<label style="font-size:11px;color:rgba(255,255,255,0.8);display:block;margin-bottom:4px;">MCP Server Port</label>';
+          html += '<input type="number" id="addon-setting-mcpport-' + a.id + '" value="' + (settings.mcpPort || 8000) + '" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);width:100%;box-sizing:border-box;">';
+          html += '</div>';
+
+          html += '</div>';
+
+          // Environment Variables JSON
+          html += '<div style="margin-bottom:10px;">';
+          html += '<label style="font-size:11px;color:rgba(255,255,255,0.8);display:block;margin-bottom:4px;">Custom Environment (JSON)</label>';
+          var envStr = JSON.stringify(settings.customEnvironment || {}, null, 2);
+          html += '<textarea id="addon-setting-customenv-' + a.id + '" rows="3" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--fg);font-size:11px;font-family:monospace;box-sizing:border-box;resize:vertical;" placeholder=\'{\n  "API_KEY": "value"\n}\'>' + escapeHtml(envStr) + '</textarea>';
+          html += '</div>';
+
+          // Save button
+          html += '<div style="text-align:right;">';
+          html += '<button id="addon-settings-save-btn-' + a.id + '" class="primary-button" style="font-size:11px;padding:4px 14px;" onclick="event.stopPropagation(); saveAddonSettings(\'' + escapeHtml(a.id) + '\')">\uD83D\uDCBE Save Settings</button>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      html += '<div class="tp-section" style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;display:flex;gap:10px;">';
+      html += '<button id="addon-learn-btn-' + escapeHtml(a.id) + '" class="secondary-button" style="font-size:11px;padding:6px 12px;" onclick="event.stopPropagation(); learnAddon(\'' + escapeHtml(a.id) + '\')">\uD83D\uDCD6 Learn Add-on</button>';
+      html += '<button class="secondary-button" style="font-size:11px;padding:6px 12px;color:#f87171;border-color:rgba(239,68,68,0.2);" onclick="event.stopPropagation(); deleteAddon(\'' + escapeHtml(a.id) + '\')">\uD83D\uDDD1\uFE0F Delete (Backup)</button>';
+      html += '</div>';
+
+      html += '</div></div>';
+    }
+  }
+
+  html += '<div style="margin-top:16px;text-align:center;">';
+  html += '<button class="secondary-button" style="font-size:12px;padding:8px 20px;" onclick="showInstallAddonForm()">\u2795 Install Add-on</button>';
+  html += '</div>';
+
+  container.innerHTML = html;
+
+  if (!container._addonListenerAttached) {
+    container.addEventListener('click', function (e) {
+      if (e.target.closest('button, input, select, textarea')) return;
+      var toggle = e.target.closest('.tp-card-toggle');
+      if (toggle) {
+        var id = toggle.dataset.itemName;
+        toggleItemExpand('addon', id);
+        if (state.expandedAddonId === id) {
+          loadAddonSettings(id);
+        }
+      }
+    });
+    container._addonListenerAttached = true;
+  }
+}
+
+export async function toggleAddonEnabled(id, enabled) {
+  try {
+    var res = await request('/api/addons/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ id: id, enabled: enabled })
+    });
+    showTransientNotice(res.message || 'Add-on status toggled.', 'success');
+    await refreshAllToolStatus();
+  } catch (e) {
+    showTransientNotice('Failed to toggle add-on: ' + e.message, 'error');
+  }
+}
+
+export async function deleteAddon(id) {
+  if (!confirm('Are you sure you want to delete add-on "' + id + '"? It will be backed up to the addons/.backup/ folder.')) return;
+  try {
+    var res = await request('/api/addons/delete', {
+      method: 'POST',
+      body: JSON.stringify({ id: id })
+    });
+    showTransientNotice(res.message || 'Add-on deleted and backed up.', 'success');
+    await refreshAllToolStatus();
+  } catch (e) {
+    showTransientNotice('Failed to delete add-on: ' + e.message, 'error');
+  }
+}
+
+export async function learnAddon(id) {
+  var btn = document.getElementById('addon-learn-btn-' + id);
+  var originalHtml = btn ? btn.innerHTML : '\uD83D\uDCD6 Learn Add-on';
+
+  // Disable button immediately
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '\u23F3 Learning\u2026';
+  }
+
+  // Remove any existing banner from a prior invocation
+  var existingBanner = document.getElementById('addon-learn-banner');
+  if (existingBanner && existingBanner.parentNode) existingBanner.parentNode.removeChild(existingBanner);
+
+  // Create a fixed-position progress banner at the top of the viewport
+  var banner = document.createElement('div');
+  banner.id = 'addon-learn-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:200000;' +
+    'background:linear-gradient(135deg, rgba(22,22,34,0.97), rgba(30,25,55,0.97));' +
+    'border-bottom:2px solid rgba(139,92,246,0.6);' +
+    'box-shadow:0 4px 24px rgba(0,0,0,0.5);' +
+    'padding:16px 24px;display:flex;align-items:center;gap:14px;' +
+    'font-family:system-ui,-apple-system,sans-serif;color:#e2e8f0;' +
+    'transform:translateY(-100%);opacity:0;transition:transform 0.3s ease,opacity 0.3s ease;';
+
+  var spinnerEl = document.createElement('div');
+  spinnerEl.style.cssText = 'width:22px;height:22px;border:3px solid rgba(139,92,246,0.3);' +
+    'border-top-color:#a78bfa;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;';
+
+  var textArea = document.createElement('div');
+  textArea.style.cssText = 'flex:1;min-width:0;';
+  var titleEl = document.createElement('div');
+  titleEl.style.cssText = 'font-size:14px;font-weight:600;color:#ffffff;margin-bottom:2px;';
+  titleEl.textContent = '\uD83D\uDCD6 Learning Add-on: ' + id;
+  var subtitleEl = document.createElement('div');
+  subtitleEl.style.cssText = 'font-size:12px;color:#94a3b8;';
+  subtitleEl.textContent = 'Sending manifest to LLM for analysis\u2026 generating documentation and governance skill.';
+  textArea.appendChild(titleEl);
+  textArea.appendChild(subtitleEl);
+
+  var timerEl = document.createElement('div');
+  timerEl.style.cssText = 'font-size:11px;color:rgba(167,139,250,0.8);font-family:"Cascadia Code",Consolas,monospace;white-space:nowrap;';
+  timerEl.textContent = '0s';
+
+  banner.appendChild(spinnerEl);
+  banner.appendChild(textArea);
+  banner.appendChild(timerEl);
+  document.body.appendChild(banner);
+
+  requestAnimationFrame(function () {
+    banner.style.transform = 'translateY(0)';
+    banner.style.opacity = '1';
+  });
+
+  var startTime = Date.now();
+  var timerInterval = setInterval(function () {
+    var elapsed = Math.round((Date.now() - startTime) / 1000);
+    var mins = Math.floor(elapsed / 60);
+    var secs = elapsed % 60;
+    timerEl.textContent = mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+  }, 1000);
+
+  function dismissBanner() {
+    banner.style.transform = 'translateY(-100%)';
+    banner.style.opacity = '0';
+    setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 350);
+  }
+
+  function makeDismissBtn(rgb, fg) {
+    var d = document.createElement('button');
+    d.textContent = '\u2715 Dismiss';
+    d.style.cssText = 'padding:6px 14px;border-radius:6px;background:rgba(' + rgb + ',0.15);' +
+      'border:1px solid rgba(' + rgb + ',0.3);color:' + fg + ';' +
+      'font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background 0.15s ease;';
+    d.onmouseenter = function () { d.style.background = 'rgba(' + rgb + ',0.25)'; };
+    d.onmouseleave = function () { d.style.background = 'rgba(' + rgb + ',0.15)'; };
+    d.onclick = dismissBanner;
+    return d;
+  }
+
+  try {
+    var res = await request('/api/addons/learn', {
+      method: 'POST',
+      body: JSON.stringify({ id: id }),
+      timeoutMs: 300000
+    });
+
+    clearInterval(timerInterval);
+
+    // Success: transform banner into result
+    spinnerEl.style.cssText = 'width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;';
+    spinnerEl.textContent = '\u2705';
+    banner.style.borderBottomColor = 'rgba(52,211,153,0.6)';
+    titleEl.textContent = '\u2705 Add-on Learned Successfully';
+    titleEl.style.color = '#34d399';
+
+    var docPath = res.docPath || 'docs/addons/' + id + '.md';
+    var skillPath = res.skillPath || 'skills/addon-' + id.replace(/[^a-zA-Z0-9_-]/g, '_') + '-skill.json';
+
+    subtitleEl.innerHTML = '';
+    subtitleEl.style.lineHeight = '1.6';
+    subtitleEl.style.color = '#cbd5e1';
+    var l1 = document.createElement('div');
+    l1.innerHTML = '\uD83D\uDCDD <strong>Documentation:</strong> <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(docPath) + '</code>';
+    var l2 = document.createElement('div');
+    l2.innerHTML = '\u2699\uFE0F <strong>Governance Skill:</strong> <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;font-size:11px;">' + escapeHtml(skillPath) + '</code>';
+    var l3 = document.createElement('div');
+    l3.style.cssText = 'margin-top:4px;font-size:11px;color:#94a3b8;';
+    l3.textContent = 'Skill registered in Skills Engine. Ready for Operator, CAC, and Guardian use.';
+    subtitleEl.appendChild(l1);
+    subtitleEl.appendChild(l2);
+    subtitleEl.appendChild(l3);
+
+    if (timerEl.parentNode) timerEl.parentNode.replaceChild(makeDismissBtn('52,211,153', '#34d399'), timerEl);
+    setTimeout(function () { if (banner.parentNode) dismissBanner(); }, 15000);
+    await refreshAllToolStatus();
+
+  } catch (e) {
+    clearInterval(timerInterval);
+
+    // Error: transform banner into error result
+    spinnerEl.style.cssText = 'width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;';
+    spinnerEl.textContent = '\u274C';
+    banner.style.borderBottomColor = 'rgba(239,68,68,0.6)';
+    titleEl.textContent = '\u274C Learn Add-on Failed';
+    titleEl.style.color = '#f87171';
+    subtitleEl.textContent = e.message || 'An unknown error occurred during add-on learning.';
+    subtitleEl.style.color = '#fca5a5';
+
+    if (timerEl.parentNode) timerEl.parentNode.replaceChild(makeDismissBtn('239,68,68', '#f87171'), timerEl);
+    setTimeout(function () { if (banner.parentNode) dismissBanner(); }, 10000);
+
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+}
+
+export async function showInstallAddonForm() {
+  var result = await showForm('Install Boot-time Add-on', [
+    { name: 'sourceType', label: 'Source Type', placeholder: 'git / zip / local', defaultValue: 'git', required: true, description: 'Enter "git" for Git URL clone, "zip" for ZIP file download link, or "local" for folder path.' },
+    { name: 'pathOrUrl', label: 'Path or URL', placeholder: 'e.g., https://github.com/org/my-addon.git or C:\\Path\\to\\my-addon', required: true, description: 'Source address / local file system path.' }
+  ], { confirmLabel: 'Install', icon: '\uD83D\uDD0C' });
+  if (!result) return;
+  await submitInstallAddon(result);
+}
+
+export async function submitInstallAddon(result) {
+  var sourceType = result.sourceType ? result.sourceType.trim().toLowerCase() : '';
+  var pathOrUrl = result.pathOrUrl ? result.pathOrUrl.trim() : '';
+
+  if (sourceType !== 'git' && sourceType !== 'zip' && sourceType !== 'local') {
+    showTransientNotice('Invalid source type. Must be "git", "zip", or "local".', 'error');
+    return;
+  }
+  if (!pathOrUrl) {
+    showTransientNotice('Path or URL is required.', 'error');
+    return;
+  }
+
+  showTransientNotice('Installing add-on...', 'info');
+  try {
+    var res = await request('/api/addons/install', {
+      method: 'POST',
+      body: JSON.stringify({ sourceType: sourceType, pathOrUrl: pathOrUrl })
+    });
+    showTransientNotice(res.message || 'Add-on installed successfully.', 'success');
+    await refreshAllToolStatus();
+  } catch (e) {
+    showTransientNotice('Failed to install add-on: ' + e.message, 'error');
   }
 }
 
@@ -2713,6 +3159,53 @@ export function renderSkillsPanel() {
     var toggle = e.target.closest('.tp-card-toggle');
     if (toggle) { toggleItemExpand('skill', toggle.dataset.itemName); }
   });
+}
+
+export async function loadAddonSettings(id) {
+  if (!state.addonSettings) state.addonSettings = {};
+  if (state.addonSettings[id]) return; // already loaded
+  try {
+    var res = await request('/api/addons/settings?id=' + encodeURIComponent(id));
+    state.addonSettings[id] = res;
+    renderAddonsPanel();
+  } catch (e) {
+    console.error('Failed to load settings for ' + id, e);
+  }
+}
+
+export async function saveAddonSettings(id) {
+  if (!state.addonSettings || !state.addonSettings[id]) return;
+  var autostart = document.getElementById('addon-setting-autostart-' + id).checked;
+  var logLevel = document.getElementById('addon-setting-loglevel-' + id).value;
+  var threadMode = document.getElementById('addon-setting-threadmode-' + id).value;
+  var mcpPort = parseInt(document.getElementById('addon-setting-mcpport-' + id).value) || 8000;
+
+  var customEnvStr = document.getElementById('addon-setting-customenv-' + id).value || '{}';
+  var customEnvironment = {};
+  try {
+    customEnvironment = JSON.parse(customEnvStr);
+  } catch (err) {
+    showTransientNotice('Custom Environment settings must be a valid JSON object.', 'error');
+    return;
+  }
+
+  var updated = { autostart, logLevel, threadMode, mcpPort, customEnvironment };
+
+  try {
+    var btn = document.getElementById('addon-settings-save-btn-' + id);
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    var res = await request('/api/addons/settings', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ id: id, settings: updated })
+    });
+    state.addonSettings[id] = res.settings;
+    showTransientNotice('Settings saved successfully.', 'success');
+  } catch (e) {
+    showTransientNotice('Failed to save settings: ' + e.message, 'error');
+  } finally {
+    renderAddonsPanel();
+  }
 }
 
 

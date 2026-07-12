@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AddonManifest, AddonInstance, AddonState } from "./types.js";
 import { validateAddonManifest } from "./addon-validator.js";
+import { readPreferences, resolveAddonsDir } from "../config/workspace-resolver.js";
 
 /** In-memory registry of loaded add-ons. */
 const addonRegistry: Map<string, AddonInstance> = new Map();
@@ -25,17 +26,19 @@ const addonRegistry: Map<string, AddonInstance> = new Map();
  * @returns Array of loaded add-on instances.
  */
 export function loadAddons(workspaceRoot: string): AddonInstance[] {
-    const addonsDir = path.join(workspaceRoot, "addons");
+    const addonsDir = resolveAddonsDir();
     if (!fs.existsSync(addonsDir)) {
         console.log("[addon-loader] No addons/ directory found; skipping add-on loading.");
         return [];
     }
 
+    const disabled = readPreferences()?.disabledAddons || [];
     const entries = fs.readdirSync(addonsDir, { withFileTypes: true });
     const loaded: AddonInstance[] = [];
 
     for (const entry of entries) {
         if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith(".")) continue;
 
         const addonPath = path.join(addonsDir, entry.name);
         const manifestPath = path.join(addonPath, "addon.manifest.json");
@@ -46,11 +49,22 @@ export function loadAddons(workspaceRoot: string): AddonInstance[] {
         }
 
         try {
-            const instance = loadSingleAddon(addonPath, manifestPath);
+            // Read manifest ID to check if it's disabled
+            let isSuspended = disabled.includes(entry.name);
+            try {
+                const raw = fs.readFileSync(manifestPath, "utf-8");
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.id && disabled.includes(parsed.id)) {
+                    isSuspended = true;
+                }
+            } catch {}
+
+            const targetState: AddonState = isSuspended ? "suspended" : "active";
+            const instance = loadSingleAddon(addonPath, manifestPath, targetState);
             addonRegistry.set(instance.manifest.id, instance);
             loaded.push(instance);
             console.log(
-                `[addon-loader] ✅ Loaded add-on: ${instance.manifest.name} v${instance.manifest.version} (${instance.manifest.id})`,
+                `[addon-loader] ${isSuspended ? "⏸️  Suspended" : "✅ Loaded"} add-on: ${instance.manifest.name} v${instance.manifest.version} (${instance.manifest.id})`,
             );
         } catch (err) {
             const errorMsg = (err as Error).message;
@@ -94,7 +108,7 @@ export function loadAddons(workspaceRoot: string): AddonInstance[] {
 /**
  * Load and validate a single add-on from its directory.
  */
-function loadSingleAddon(addonPath: string, manifestPath: string): AddonInstance {
+function loadSingleAddon(addonPath: string, manifestPath: string, state: AddonState = "active"): AddonInstance {
     const raw = fs.readFileSync(manifestPath, "utf-8");
     let parsed: unknown;
     try {
@@ -118,7 +132,7 @@ function loadSingleAddon(addonPath: string, manifestPath: string): AddonInstance
 
     return {
         manifest,
-        state: "active" as AddonState,
+        state,
         loadedAt: new Date().toISOString(),
         rootPath: addonPath,
     };

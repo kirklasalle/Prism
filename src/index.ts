@@ -58,6 +58,7 @@ import {
     detectLegacyPaths,
     seedDefaultCharacters,
     readPreferences,
+    resolveAddonsDir,
 } from "./core/config/workspace-resolver.js";
 import { resolveProfile } from "./core/operator/model-capability-matrix.js";
 import {
@@ -77,6 +78,7 @@ import { GuardianAgent } from "./core/agents/guardian-agent.js";
 import { SkillsEngine } from "./core/skills/skills-engine.js";
 import { TabToolAdapter } from "./core/skills/tab-tool-adapter.js";
 import { SkillsDbAdapter } from "./core/skills/db-adapter.js";
+import { loadAddons } from "./core/addons/index.js";
 
 async function main(): Promise<void> {
     // Auto-create .env from .env.example on first run
@@ -118,6 +120,7 @@ async function main(): Promise<void> {
     // Initialize persistent workspace
     ensureWorkspaceStructure(environmentProfile);
     seedDefaultCharacters();
+    loadAddons(resolveAddonsDir());
 
     // Load and apply powerMode preference early at startup to determine baseMode.
     // Base Mode defaults to off unless a low-end local model (tier <= 2) is actually running.

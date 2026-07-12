@@ -3,6 +3,21 @@
     <section class="rail-section panel">
         <div
             class="collapsible-header"
+            onclick="togglePanelCollapse('addonsPanel')"
+            data-tip-id="tools:addons"
+            data-tip-kind="tools"
+        >
+            <h3>🔌 Boot-time Add-ons</h3>
+            <span class="tp-panel-summary" id="addonsPanel-summary" style="display: none"></span>
+            <span class="collapse-chevron" id="chevron-addonsPanel">▶</span>
+        </div>
+        <div class="collapsible-body collapsed" id="body-addonsPanel">
+            <div id="addons-panel" class="stack"></div>
+        </div>
+    </section>
+    <section class="rail-section panel">
+        <div
+            class="collapsible-header"
             onclick="togglePanelCollapse('skillsPanel')"
             data-tip-id="tools:skills"
             data-tip-kind="tools"

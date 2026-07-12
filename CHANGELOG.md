@@ -2,6 +2,21 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.4 — 2026-07-12 — Add-on Management Panel & UI Visibility Improvements
+
+Introduces the operator-facing Boot-time Add-on Management Panel in the Tools & Plugins tab, featuring high-visibility progress banners for the learn/delete lifecycle workflows, real-time elapsed timers, and manifest-to-directory path resolution.
+
+### Added
+
+- **Boot-time Add-on Management UI Panel (`src/core/operator/public/tab-tools.html`, `tab-tools.js`)**:
+  - Adds a new collapsible "Add-ons" panel displaying currently installed Add-ons on disk/in memory, their trust status, state badges (Active, Error, Pending Restart), and integration details.
+  - Implements a high-visibility, fixed-position progress banner at the top of the viewport for the "Learn Add-on" process, complete with active status spinner, real-time elapsed timer, explicit success/error results, and a manual dismiss button.
+- **REST Add-on Lifecycle Endpoints (`src/core/operator/routes/addons-handler.ts`)**:
+  - Integrated `/api/addons/status`, `/api/addons/toggle`, `/api/addons/install`, `/api/addons/learn`, `/api/addons/settings`, and `/api/addons/delete` routes into the Operator backend.
+  - Added robust directory-to-manifest ID resolution mapping to gracefully handle folders with mismatching manifest IDs (e.g. mapping `prism.addon.vrgc-robotics` to directory `prism-addon-vrgc-robotics`).
+- **Add-on Lifecycle Integration Tests (`tests/addons-api-routes.test.ts`)**:
+  - Added a comprehensive integration test suite covering status listing, toggling, local path installation, learning workflow, settings configuration, and back-up on deletion.
+
 ## v0.22.3 — 2026-07-11 — VRGC Robotics Add-on & Intelligent Integration
 
 Introduces the world-class VRGC Robotics Add-on system for managing physical, virtual, and simulated robotic entities and intelligent cognitive/knowledge bridges (UKS, BrainSim III, ROS 2, Physical I/O) under full PRISM governance and policy execution controls.

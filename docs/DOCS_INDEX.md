@@ -97,6 +97,7 @@
 - VRGC_NETWORK_PROTOCOLS.md: VRGC network protocols
 - VRGC_ROBOTICS_ADDON_DESIGN_DISCUSSION.md: VRGC Robotics, UKS, and BrainSim III architecture & integration strategy
 - VRGC_ROBOTICS_INTEGRATION_WALKTHROUGH.md: Walkthrough of VRGC Robotics dashboard tab integration & routes
+- addon_management_plan.md: Implementation plan for the operator-facing Add-on Management Panel
 
 ## Reference
 
