@@ -25,7 +25,7 @@
  * to externalise this in a follow-up.
  */
 
-import { createHash } from "node:crypto";
+import { verifyPassword, hashPassword } from "../../security/password-util.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ActivityBus } from "../../activity/bus.js";
 import { URL } from "node:url";
@@ -449,8 +449,7 @@ export class IamRouteHandler implements IRouteHandler {
             return this.json(res, 401, { error: { code: "unauthorized", message: "Invalid credentials" } });
         } else {
             const storedHash = String(user.attrs?.passwordHash ?? "");
-            const sha256Hex = (str: string) => createHash("sha256").update(str, "utf-8").digest("hex");
-            if (storedHash && storedHash !== sha256Hex(password)) {
+            if (storedHash && !verifyPassword(password, storedHash)) {
                 this.emitAuthEvent("iam.login.failed", "failed", {
                     email,
                     reason: "invalid_password",
@@ -460,7 +459,7 @@ export class IamRouteHandler implements IRouteHandler {
                 return this.json(res, 401, { error: { code: "unauthorized", message: "Invalid credentials" } });
             }
             if (!storedHash) {
-                user.attrs = { ...user.attrs, passwordHash: sha256Hex(password) };
+                user.attrs = { ...user.attrs, passwordHash: hashPassword(password) };
                 this.store.updateUserAttrs(user.id, user.attrs);
                 this.emitAuthEvent("iam.login.password_set", "succeeded", {
                     email,

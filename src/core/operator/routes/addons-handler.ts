@@ -4,7 +4,13 @@ import type { DashboardService } from "../dashboard-service.js";
 import fs from "node:fs";
 import path from "node:path";
 import { getLoadedAddons, validateAddonManifest } from "../../addons/index.js";
-import { readPreferences, writePreferences, workspacePath, resolveWorkspaceRoot, resolveAddonsDir } from "../../config/workspace-resolver.js";
+import {
+    readPreferences,
+    writePreferences,
+    workspacePath,
+    resolveWorkspaceRoot,
+    resolveAddonsDir,
+} from "../../config/workspace-resolver.js";
 
 export class AddonsHandler implements IRouteHandler {
     match(req: IncomingMessage): boolean {
@@ -54,7 +60,7 @@ export class AddonsHandler implements IRouteHandler {
                             const id = manifest.id || entry.name;
                             processedIds.add(id);
 
-                            const mem = loaded.find(a => a.manifest.id === id);
+                            const mem = loaded.find((a) => a.manifest.id === id);
                             const isSuspended = disabled.includes(id);
 
                             let state = "unloaded";
@@ -85,7 +91,7 @@ export class AddonsHandler implements IRouteHandler {
                                 manifest,
                                 validationErrors: validation.errors,
                                 validationWarnings: validation.warnings,
-                                enabled: !isSuspended
+                                enabled: !isSuspended,
                             });
                         } catch (err) {
                             resultList.push({
@@ -101,7 +107,7 @@ export class AddonsHandler implements IRouteHandler {
                                 path: addonPath,
                                 validationErrors: [`Failed to read manifest: ${(err as Error).message}`],
                                 validationWarnings: [],
-                                enabled: !disabled.includes(entry.name)
+                                enabled: !disabled.includes(entry.name),
                             });
                         }
                     }
@@ -124,7 +130,7 @@ export class AddonsHandler implements IRouteHandler {
                         manifest: mem.manifest,
                         validationErrors: [],
                         validationWarnings: [],
-                        enabled: !disabled.includes(mem.manifest.id)
+                        enabled: !disabled.includes(mem.manifest.id),
                     });
                 }
 
@@ -148,7 +154,7 @@ export class AddonsHandler implements IRouteHandler {
 
                 let nextDisabled = [...disabled];
                 if (targetEnabled) {
-                    nextDisabled = nextDisabled.filter(id => id !== body.id);
+                    nextDisabled = nextDisabled.filter((id) => id !== body.id);
                 } else {
                     if (!nextDisabled.includes(body.id)) {
                         nextDisabled.push(body.id);
@@ -161,7 +167,7 @@ export class AddonsHandler implements IRouteHandler {
                     layer: "governance",
                     operation: "toggle_addon",
                     status: "succeeded",
-                    details: { addonId: body.id, enabled: targetEnabled }
+                    details: { addonId: body.id, enabled: targetEnabled },
                 });
 
                 const logMsg = `[${new Date().toISOString()}] Toggled Add-on ${body.id}: ${targetEnabled ? "ENABLED" : "DISABLED"}. Restart required.\n`;
@@ -171,7 +177,7 @@ export class AddonsHandler implements IRouteHandler {
                     success: true,
                     id: body.id,
                     enabled: targetEnabled,
-                    message: "Add-on preference updated. Server restart required to apply changes."
+                    message: "Add-on preference updated. Server restart required to apply changes.",
                 });
             } catch (err) {
                 return this.json(res, 500, { error: String(err) });
@@ -203,7 +209,7 @@ export class AddonsHandler implements IRouteHandler {
                 }
                 fs.mkdirSync(tempPath, { recursive: true });
 
-                const { execSync } = await import("node:child_process");
+                const { execFileSync } = await import("node:child_process");
 
                 if (body.sourceType === "local") {
                     const localPath = path.resolve(body.pathOrUrl);
@@ -214,7 +220,7 @@ export class AddonsHandler implements IRouteHandler {
                     fs.cpSync(localPath, tempPath, { recursive: true });
                 } else if (body.sourceType === "git") {
                     try {
-                        execSync(`git clone "${body.pathOrUrl}" "${tempPath}"`, { stdio: "pipe" });
+                        execFileSync("git", ["clone", body.pathOrUrl, tempPath], { stdio: "pipe" });
                     } catch (err: any) {
                         fs.rmSync(tempPath, { recursive: true, force: true });
                         return this.json(res, 400, { error: `Git clone failed: ${err.stderr || err.message}` });
@@ -222,11 +228,31 @@ export class AddonsHandler implements IRouteHandler {
                 } else if (body.sourceType === "zip") {
                     try {
                         const tempZip = path.join(addonsDir, `${tempDirName}.zip`);
-                        const downloadCmd = `powershell -Command "Invoke-WebRequest -Uri '${body.pathOrUrl}' -OutFile '${tempZip}'"`;
-                        execSync(downloadCmd, { stdio: "pipe" });
+                        execFileSync(
+                            "powershell",
+                            [
+                                "-NoProfile",
+                                "-NonInteractive",
+                                "-Command",
+                                "& { Invoke-WebRequest -Uri $args[0] -OutFile $args[1] }",
+                                body.pathOrUrl,
+                                tempZip,
+                            ],
+                            { stdio: "pipe" },
+                        );
 
-                        const extractCmd = `powershell -Command "Expand-Archive -Path '${tempZip}' -DestinationPath '${tempPath}' -Force"`;
-                        execSync(extractCmd, { stdio: "pipe" });
+                        execFileSync(
+                            "powershell",
+                            [
+                                "-NoProfile",
+                                "-NonInteractive",
+                                "-Command",
+                                "& { Expand-Archive -Path $args[0] -DestinationPath $args[1] -Force }",
+                                tempZip,
+                                tempPath,
+                            ],
+                            { stdio: "pipe" },
+                        );
 
                         if (fs.existsSync(tempZip)) {
                             fs.rmSync(tempZip, { force: true });
@@ -242,7 +268,7 @@ export class AddonsHandler implements IRouteHandler {
 
                 if (!fs.existsSync(manifestPath)) {
                     const entries = fs.readdirSync(tempPath, { withFileTypes: true });
-                    const subdirs = entries.filter(e => e.isDirectory());
+                    const subdirs = entries.filter((e) => e.isDirectory());
                     let found = false;
                     for (const subdir of subdirs) {
                         const subManifest = path.join(tempPath, subdir.name, "addon.manifest.json");
@@ -273,7 +299,7 @@ export class AddonsHandler implements IRouteHandler {
                     return this.json(res, 422, {
                         error: "Manifest validation failed",
                         errors: validation.errors,
-                        warnings: validation.warnings
+                        warnings: validation.warnings,
                     });
                 }
 
@@ -297,7 +323,7 @@ export class AddonsHandler implements IRouteHandler {
                     layer: "governance",
                     operation: "install_addon",
                     status: "succeeded",
-                    details: { addonId: manifest.id, name: manifest.name, version: manifest.version }
+                    details: { addonId: manifest.id, name: manifest.name, version: manifest.version },
                 });
 
                 const logMsg = `[${new Date().toISOString()}] Installed Add-on: ${manifest.name} (${manifest.id}) v${manifest.version}. Restart required to boot.\n`;
@@ -308,9 +334,8 @@ export class AddonsHandler implements IRouteHandler {
                     id: manifest.id,
                     name: manifest.name,
                     version: manifest.version,
-                    message: "Add-on installed successfully. Server restart required to load."
+                    message: "Add-on installed successfully. Server restart required to load.",
                 });
-
             } catch (err: any) {
                 return this.json(res, 500, { error: err.message });
             }
@@ -340,7 +365,7 @@ export class AddonsHandler implements IRouteHandler {
                     layer: "governance",
                     operation: "delete_addon",
                     status: "succeeded",
-                    details: { addonId: body.id, backupDir }
+                    details: { addonId: body.id, backupDir },
                 });
 
                 const logMsg = `[${new Date().toISOString()}] Deleted Add-on: ${body.id}. Moved to backup: ${backupDir}. Restart required to unload.\n`;
@@ -349,9 +374,8 @@ export class AddonsHandler implements IRouteHandler {
                 return this.json(res, 200, {
                     success: true,
                     id: body.id,
-                    message: "Add-on moved to backup. Server restart required to unload."
+                    message: "Add-on moved to backup. Server restart required to unload.",
                 });
-
             } catch (err: any) {
                 return this.json(res, 500, { error: err.message });
             }
@@ -384,7 +408,7 @@ export class AddonsHandler implements IRouteHandler {
                     layer: "governance",
                     operation: "learn_addon",
                     status: "started",
-                    details: { addonId: body.id, name: manifest.name }
+                    details: { addonId: body.id, name: manifest.name },
                 });
 
                 const systemPrompt = `You are the PRISM SOTA Knowledge and Skills Integrator.
@@ -462,14 +486,14 @@ Respond ONLY with a JSON object in the following format:
                 const response = await service.getLlmProviders().generate({
                     message: "Please analyze the Add-on and generate the documentation and skill JSON.",
                     conversation: [],
-                    systemPrompt: systemPrompt
+                    systemPrompt: systemPrompt,
                 });
 
                 if (!response || !response.content) {
                     throw new Error("No response content received from the LLM provider.");
                 }
 
-                                const startIdx = response.content.indexOf("{");
+                const startIdx = response.content.indexOf("{");
                 const endIdx = response.content.lastIndexOf("}");
                 if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
                     throw new Error("Failed to parse LLM response as JSON.");
@@ -501,7 +525,7 @@ Respond ONLY with a JSON object in the following format:
                     layer: "governance",
                     operation: "learn_addon",
                     status: "succeeded",
-                    details: { addonId: body.id, docPath, skillPath }
+                    details: { addonId: body.id, docPath, skillPath },
                 });
 
                 const logMsg = `[${new Date().toISOString()}] Successfully learned Add-on: ${body.id}. Generated doc: ${docPath}, skill: ${skillPath}.\n`;
@@ -512,16 +536,15 @@ Respond ONLY with a JSON object in the following format:
                     id: body.id,
                     docPath,
                     skillPath,
-                    message: "Add-on learned successfully. Documentation generated and skill registered."
+                    message: "Add-on learned successfully. Documentation generated and skill registered.",
                 });
-
             } catch (err: any) {
                 service.getActivityBus().emit({
                     sessionId: "addons-manager",
                     layer: "governance",
                     operation: "learn_addon",
                     status: "failed",
-                    details: { addonId: targetAddonId, error: err.message }
+                    details: { addonId: targetAddonId, error: err.message },
                 });
                 return this.json(res, 500, { error: err.message });
             }
@@ -542,7 +565,7 @@ Respond ONLY with a JSON object in the following format:
                     logLevel: "info",
                     threadMode: "worker",
                     mcpPort: id === "prism.addon.vrgc-robotics" ? 8203 : 8000,
-                    customEnvironment: {}
+                    customEnvironment: {},
                 };
 
                 return this.json(res, 200, settings);
@@ -563,7 +586,7 @@ Respond ONLY with a JSON object in the following format:
                 const currentSettings = prefs.addonSettings || {};
                 currentSettings[body.id] = {
                     ...currentSettings[body.id],
-                    ...body.settings
+                    ...body.settings,
                 };
 
                 writePreferences({ addonSettings: currentSettings });
@@ -571,7 +594,7 @@ Respond ONLY with a JSON object in the following format:
                 return this.json(res, 200, {
                     success: true,
                     message: "Settings saved successfully",
-                    settings: currentSettings[body.id]
+                    settings: currentSettings[body.id],
                 });
             } catch (err: any) {
                 return this.json(res, 500, { error: err.message });
@@ -595,7 +618,9 @@ Respond ONLY with a JSON object in the following format:
             try {
                 const m = JSON.parse(fs.readFileSync(directManifest, "utf-8"));
                 if (m.id === id) return directPath;
-            } catch { /* fall through to scan */ }
+            } catch {
+                /* fall through to scan */
+            }
         }
 
         // Slow path: scan all addon directories
@@ -609,7 +634,9 @@ Respond ONLY with a JSON object in the following format:
             try {
                 const m = JSON.parse(fs.readFileSync(candidateManifest, "utf-8"));
                 if ((m.id || entry.name) === id) return candidatePath;
-            } catch { /* skip unreadable manifests */ }
+            } catch {
+                /* skip unreadable manifests */
+            }
         }
         return null;
     }

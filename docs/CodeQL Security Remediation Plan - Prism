@@ -1,0 +1,26 @@
+# CodeQL Security Remediation Plan - Prism
+
+We will systematically address each of the 7 vulnerability categories defined in the playbook.
+
+## Target Vulnerabilities and Status
+
+| # | Category | Files | Action | Status |
+|---|---|---|---|---|
+| 1 | OS Command Injection | `src/core/operator/routes/addons-handler.ts`<br>`src/core/operator/routes/computer-handler.ts`<br>`src/core/operator/dashboard-service.ts` | Refactor dynamic shell execution (`exec`) to structured execution (`execFile`/`spawn`). | Completed |
+| 2 | SSRF | `src/core/operator/public/tab-loader.js` | Validate input IP address/host via DNS lookup and range checks before fetching. | Completed |
+| 3 | DOM XSS | `src/core/operator/public/tab-tools.js`<br>`docs/prism_project_strategic_audit.html` | Use safe properties (`textContent`) or safe sanitization (`DOMPurify`/custom escape). | Completed |
+| 4 | Weak Hashing | `src/core/operator/routes/settings-handler.ts`<br>`src/core/operator/dashboard-service.ts`<br>`src/core/operator/routes/workspace-handler.ts`<br>`src/core/operator/routes/iam-handler.ts` | Migrate weak hashing (SHA-1/MD5/low bcrypt rounds) to secure bcrypt (salt rounds = 12). | Completed |
+| 5 | Incomplete URL Sanitization | `tests/cors-csrf.test.ts`<br>`.mcp/impressioncore-ipa/server_ultimate.py`<br>`.mcp/impressioncore-eds/enhanced_server.py` | Parse URLs properly and check hostname matches exactly. | Pending |
+| 6 | Path Traversal | `src/core/operator/dashboard-service.ts` | Ensure resolved paths strictly start with safe base directories. | Pending |
+| 7 | Multi-character Sanitization | `src/core/runtime/dsvar-resolver.ts`<br>`src/core/operator/dashboard-service.ts`<br>`src/core/runtime/autonomous-browser-agent.ts` | Use robust library-based encoding or recursive replace loop. | Pending |
+
+---
+
+## Detailed Execution Steps
+1. **Analyze and Refactor Category 1 (OS Command Injection)** in addons-handler, computer-handler, dashboard-service.
+2. **Analyze and Refactor Category 2 (SSRF)** in tab-loader.js.
+3. **Analyze and Refactor Category 3 (DOM XSS)** in tab-tools.js and prism_project_strategic_audit.html.
+4. **Analyze and Refactor Category 4 (Weak Hashing)** in settings-handler, dashboard-service, workspace-handler, iam-handler.
+5. **Analyze and Refactor Category 5 (URL Sanitization)** in cors-csrf.test.ts, server_ultimate.py, enhanced_server.py.
+6. **Analyze and Refactor Category 6 (Path Traversal)** in dashboard-service.
+7. **Analyze and Refactor Category 7 (Multi-character Sanitization)** in dsvar-resolver, dashboard-service, autonomous-browser-agent.

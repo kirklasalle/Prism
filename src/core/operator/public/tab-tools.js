@@ -851,13 +851,13 @@ export function renderAddonsPanel() {
         html += '<strong>Dashboard Tab Integration:</strong> ' + (ip.dashboardTab ? 'Yes' : 'No') + '<br>';
         
         if (ip.dashboardSubPanels && ip.dashboardSubPanels.length > 0) {
-          html += '<strong>Dashboard Sub-panels:</strong> ' + ip.dashboardSubPanels.join(', ') + '<br>';
+          html += '<strong>Dashboard Sub-panels:</strong> ' + ip.dashboardSubPanels.map(function(x) { return escapeHtml(x); }).join(', ') + '<br>';
         }
         if (ip.guardianSkills && ip.guardianSkills.length > 0) {
           html += '<strong>Guardian Skills:</strong> ' + ip.guardianSkills.map(function(s) { return '<code>' + escapeHtml(s) + '</code>'; }).join(', ') + '<br>';
         }
         if (ip.policyExtensions && ip.policyExtensions.length > 0) {
-          html += '<strong>Policy Extensions:</strong> ' + ip.policyExtensions.join(', ') + '<br>';
+          html += '<strong>Policy Extensions:</strong> ' + ip.policyExtensions.map(function(x) { return escapeHtml(x); }).join(', ') + '<br>';
         }
         if (ip.skillDefinitions && ip.skillDefinitions.length > 0) {
           html += '<strong>Skill Definitions:</strong> ' + ip.skillDefinitions.map(function(s) { return '<code>' + escapeHtml(s) + '</code>'; }).join(', ') + '<br>';
@@ -870,9 +870,9 @@ export function renderAddonsPanel() {
         if ((dep.addons && dep.addons.length > 0) || (dep.plugins && dep.plugins.length > 0) || (dep.systemCapabilities && dep.systemCapabilities.length > 0)) {
           html += '<div class="tp-section" style="margin-top:8px;"><div class="tp-section-title">\uD83D\uDCCB Dependencies</div>';
           html += '<div style="font-size:11px;color:rgba(255,255,255,0.7);line-height:1.6;">';
-          if (dep.addons && dep.addons.length > 0) html += '<strong>Required Add-ons:</strong> ' + dep.addons.join(', ') + '<br>';
-          if (dep.plugins && dep.plugins.length > 0) html += '<strong>Required Plugins:</strong> ' + dep.plugins.join(', ') + '<br>';
-          if (dep.systemCapabilities && dep.systemCapabilities.length > 0) html += '<strong>System Capabilities:</strong> ' + dep.systemCapabilities.join(', ') + '<br>';
+          if (dep.addons && dep.addons.length > 0) html += '<strong>Required Add-ons:</strong> ' + dep.addons.map(function(x) { return escapeHtml(x); }).join(', ') + '<br>';
+          if (dep.plugins && dep.plugins.length > 0) html += '<strong>Required Plugins:</strong> ' + dep.plugins.map(function(x) { return escapeHtml(x); }).join(', ') + '<br>';
+          if (dep.systemCapabilities && dep.systemCapabilities.length > 0) html += '<strong>System Capabilities:</strong> ' + dep.systemCapabilities.map(function(x) { return escapeHtml(x); }).join(', ') + '<br>';
           html += '</div></div>';
         }
       }

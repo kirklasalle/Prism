@@ -164,8 +164,8 @@ export class WorkspaceHandler implements IRouteHandler {
                 const operatorPassword = body.operatorPassword ? String(body.operatorPassword).trim() : null;
                 if (operatorEmail && operatorPassword) {
                     const store = service.getIamHandler().getStore();
-                    const sha256Hex = (str: string) => createHash("sha256").update(str, "utf-8").digest("hex");
-                    const passwordHash = sha256Hex(operatorPassword);
+                    const { hashPassword } = await import("../../security/password-util.js");
+                    const passwordHash = hashPassword(operatorPassword);
                     const existing = store.getUserByEmail("default", operatorEmail);
                     if (existing) {
                         existing.attrs = { ...existing.attrs, passwordHash };

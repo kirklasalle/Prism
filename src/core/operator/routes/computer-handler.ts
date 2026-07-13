@@ -499,8 +499,8 @@ export class ComputerHandler implements IRouteHandler {
             const body = await service.readJsonBody<{ filename?: string }>(req);
             const fname = body?.filename ? String(body.filename).replace(/[/\\:*?"<>|]/g, "") : "";
             const revealPath = fname ? join(workspaceFramebufferDir(), fname) : workspaceFramebufferDir();
-            const { exec } = await import("node:child_process");
-            exec(`explorer.exe /select,"${revealPath}"`);
+            const { execFile } = await import("node:child_process");
+            execFile("explorer.exe", [`/select,${revealPath}`]);
             return this.json(res, 200, { ok: true });
         }
 

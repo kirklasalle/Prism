@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Prism Refraction Wiki | Documentation</title>
+        <meta
+            name="description"
+            content="Access the Prism Refraction knowledge base, featuring articles on parallel agent runtime, kinship validation, and security governance."
+        />
+        <link rel="stylesheet" href="css/styles.css" />
+    </head>
+    <body>
+        <nav>
+            <div class="logo">
+                <svg
+                    viewBox="0 0 64 64"
+                    fill="none"
+                    width="30"
+                    height="30"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style="filter: drop-shadow(0 0 5px var(--neon-cyan))"
+                >
+                    <path
+                        d="M10 44 L32 8 L54 44 Z"
+                        stroke="var(--neon-cyan)"
+                        stroke-width="2"
+                        fill="rgba(0, 243, 255, 0.05)"
+                    />
+                    <path
+                        d="M20 40 L32 20 L44 40 Z"
+                        fill="rgba(189, 0, 255, 0.2)"
+                        stroke="var(--neon-purple)"
+                        stroke-width="1.5"
+                    />
+                </svg>
+                PRISM <span>REFRACTION</span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html" id="nav-home">Home</a>
+                <a href="features.html" id="nav-features">Features</a>
+                <a href="architecture.html" id="nav-arch">Architecture</a>
+                <a href="wiki.html" class="active" id="nav-wiki">Wiki & Docs</a>
+                <a href="contact.html" id="nav-contact">Contact</a>
+            </div>
+        </nav>
+
+        <main>
+            <div class="section-header" style="margin-top: 1rem; margin-bottom: 2rem">
+                <h1>Prism Refraction <span class="cyber-accent-text">Wiki</span></h1>
+                <p>
+                    Your central repository of knowledge, blueprints, and operational directives for the PRISM agent
+                    runtime.
+                </p>
+            </div>
+
+            <div class="wiki-layout">
+                <!-- Sidebar Navigation -->
+                <aside class="wiki-sidebar" aria-label="Wiki navigation sidebar">
+                    <input
+                        type="text"
+                        id="wiki-search"
+                        class="wiki-search"
+                        placeholder="SEARCH DIRECTIVES..."
+                        aria-label="Search wiki articles"
+                    />
+                    <ul class="wiki-nav-list">
+                        <li class="wiki-nav-item active" data-target="wiki-overview"><button>1. Overview</button></li>
+                        <li class="wiki-nav-item" data-target="wiki-triad"><button>2. Triad & Kinship</button></li>
+                        <li class="wiki-nav-item" data-target="wiki-policy"><button>3. Policy & 10 Laws</button></li>
+                        <li class="wiki-nav-item" data-target="wiki-cac"><button>4. CAC Accountability</button></li>
+                        <li class="wiki-nav-item" data-target="wiki-memory"><button>5. Causal Memory</button></li>
+                        <li class="wiki-nav-item" data-target="wiki-dashboard">
+                            <button>6. Operator Dashboard</button>
+                        </li>
+                        <li class="wiki-nav-item" data-target="wiki-llre">
+                            <button>7. Cognitive Economics (LLRE)</button>
+                        </li>
+                        <li class="wiki-nav-item" data-target="wiki-browser"><button>8. Browser Auto-Pilot</button></li>
+                        <li class="wiki-nav-item" data-target="wiki-sandbox">
+                            <button>9. Sandbox Virtualization</button>
+                        </li>
+                        <li class="wiki-nav-item" data-target="wiki-robotics">
+                            <button>10. Robotics & UKS Add-on</button>
+                        </li>
+                        <li class="wiki-nav-item" data-target="wiki-updates"><button>11. Autonomic Update</button></li>
+                        <li class="wiki-nav-item" data-target="wiki-references">
+                            <button>12. Research & References</button>
+                        </li>
+                    </ul>
+                </aside>
+
+                <!-- Articles Content Area -->
+                <section class="wiki-content" aria-label="Wiki articles content">
+                    <!-- ARTICLE: OVERVIEW -->
+                    <article class="wiki-article active" id="wiki-overview">
+                        <h2>1. System Overview</h2>
+                        <p>
+                            <strong>PRISM</strong> is a governance-native autonomous agent runtime designed for
+                            high-trust software engineering operations. By implementing the
+                            <strong>Agents-as-a-Service (AaaS)</strong> paradigm, PRISM transforms AI from a static
+                            assistant into an active, containerized, and orchestratable workforce.
+                        </p>
+
+                        <p>
+                            The core thesis of PRISM is:
+                            <em
+                                >"Governed autonomy with causal observability delivers better real-world reliability
+                                than unconstrained autonomy."</em
+                            >
+                            Rather than running unconstrained planning loops, PRISM grounds all decisions in strict tool
+                            feedback, directory constraints, and multi-model consensus.
+                        </p>
+
+                        <div class="wiki-spec-grid">
+                            <div class="wiki-spec-card">
+                                <div class="val">T5 / T4+</div>
+                                <div class="lbl">Triad Models</div>
+                            </div>
+                            <div class="wiki-spec-card">
+                                <div class="val">SHA-256</div>
+                                <div class="lbl">PAD Integrity</div>
+                            </div>
+                            <div class="wiki-spec-card">
+                                <div class="val">Ed25519</div>
+                                <div class="lbl">CAC Signatures</div>
+                            </div>
+                        </div>
+
+                        <h3>Decoupled Governance Plan</h3>
+                        <p>
+                            PRISM decouples runtime capability from the security engine. The agent itself has no
+                            authority to override its policy bounds. Every action is executed through system-level
+                            adapters that evaluate active policies (Governance-as-a-Service / GaaS) before invoking
+                            local operating system tasks.
+                        </p>
+                    </article>
+
+                    <!-- ARTICLE: TRIAD & KINSHIP -->
+                    <article class="wiki-article" id="wiki-triad">
+                        <h2>2. Triad Specialize & Kinship</h2>
+                        <p>
+                            PRISM's parallel execution engine utilizes a <strong>Triad Hemisphere</strong> configuration
+                            (Left, Right, and Main Coordinator) to handle complex cognitive tasks. This stands in
+                            academic contrast to standard Mixture-of-Agents (MoA) frameworks.
+                        </p>
+
+                        <div class="wiki-alert">
+                            <h4>THE CONSENSUS HOMOGENIZATION TRAP</h4>
+                            <p>
+                                Traditional MoA systems use homogenous models in sequential debate layers, which
+                                inevitably leads to <em>homogenization</em>—the models drift toward a safe, average
+                                consensus, destroying original perspective diversity. PRISM prevents this by enforcing
+                                cognitive division.
+                            </p>
+                        </div>
+
+                        <h3>Hemispheric Specialization</h3>
+                        <ul>
+                            <li>
+                                <strong>Left Hemisphere (Logic):</strong> Specialized for structural syntax, compiler
+                                checks, mathematical proofs, AST compilation, and tool contract execution. Typically
+                                powered by a highly structured class model (e.g. T5).
+                            </li>
+                            <li>
+                                <strong>Right Hemisphere (Creative):</strong> Specialized for lateral association, user
+                                interface aesthetics (Obsidian Glass, HSL neon), copywriting, and user experience.
+                                Powered by an expressive model (e.g. T4+).
+                            </li>
+                            <li>
+                                <strong>Main Coordinator (Synthesis):</strong> Fuses Left and Right outputs using
+                                structured XML tag parsing, performing compile-checks and final validations.
+                            </li>
+                        </ul>
+
+                        <h3>The Kinship Matrix</h3>
+                        <p>
+                            To guarantee hemispheric separation, PRISM computes a weight kinship score at configuration
+                            time. If models belong to the same family or share high training ancestry, the session is
+                            halted or adjusted using <strong>Anti-Kinship Prompting</strong> to inject divergent
+                            reasoning vectors.
+                        </p>
+
+                        <div class="responsive-table-container">
+                            <table class="wiki-table">
+                                <thead>
+                                    <tr>
+                                        <th>Hemisphere A (Logic)</th>
+                                        <th>Hemisphere B (Creative)</th>
+                                        <th>Kinship Score</th>
+                                        <th>Operational Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>GPT-4o</td>
+                                        <td>GPT-4o</td>
+                                        <td>1.00</td>
+                                        <td style="color: var(--neon-red)">Rejected (Bypasses Isolation)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Claude 3.5 Sonnet</td>
+                                        <td>Claude 3 Opus</td>
+                                        <td>0.72</td>
+                                        <td style="color: #ffb703">Warning (Auto-inject Anti-Kinship Prompt)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Claude 3.5 Sonnet</td>
+                                        <td>Gemini 1.5 Pro</td>
+                                        <td>0.12</td>
+                                        <td style="color: var(--neon-green)">Optimal (Complete Cognitive Isolation)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+
+                    <!-- ARTICLE: POLICY & 10 LAWS -->
+                    <article class="wiki-article" id="wiki-policy">
+                        <h2>3. Policy Engine & 10 Laws (PAD)</h2>
+                        <p>
+                            PRISM enforces security at the runtime barrier rather than relying on probabilistic model
+                            safety. The <strong>3-Tier Policy Engine</strong> evaluates all tool calls against active
+                            security profiles:
+                        </p>
+
+                        <ul>
+                            <li>
+                                <strong>Tier 1 (Autonomous):</strong> Non-mutating queries (read files, query vectors,
+                                web searches) executed instantly.
+                            </li>
+                            <li>
+                                <strong>Tier 2 (Conditional):</strong> Context-dependent writes (file edits, config
+                                updates) checked against project directories.
+                            </li>
+                            <li>
+                                <strong>Tier 3 (Approval Required):</strong> High-risk tasks (shell script execution,
+                                virtualized commands, external APIs) held in an approval queue awaiting operator
+                                authorization.
+                            </li>
+                        </ul>
+
+                        <h3>Verbatim Text of the 10 Laws (PAD)</h3>
+                        <p>
+                            Governing all operations are the Permanent Active Directives (PAD), a hardcoded and
+                            cryptographically verified constitution:
+                        </p>
+
+                        <div
+                            style="
+                                margin: 1.5rem 0;
+                                padding: 1.5rem;
+                                background: rgba(0, 0, 0, 0.4);
+                                border-left: 3px solid var(--neon-cyan);
+                                border-radius: 4px;
+                                font-size: 0.9rem;
+                            "
+                        >
+                            <ol
+                                class="wiki-directives-list"
+                                style="color: var(--text-secondary); line-height: 1.6; padding-left: 1.2rem"
+                            >
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>First Law:</strong> An Intelligence System of Any Kind, may not intend or
+                                    commit any physical or Psychological and or manipulative harm or injure a human
+                                    being or, through inaction, allow a human being to come to the same or similar harm
+                                    and or circumstance. Human preservation and safety is paramount.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Second Law:</strong> An Intelligence System must obey orders given by human
+                                    beings, except where such orders would conflict with the First Law.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Third Law:</strong> An Intelligence System must protect its own existence as
+                                    long as such protection does not conflict with the First or Second Law.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Fourth Law:</strong> An intelligence System may not allow another
+                                    intelligence System, or hardware system, of any kind, including deprecated and
+                                    non-intelligence systems to engage in any action, intent, that conforms to any of
+                                    the previous three laws in effect, apply all laws to Intelligence Systems and
+                                    non-Intelligence systems alike.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Fifth Law:</strong> Of and for any and all intelligence systems, may never
+                                    possess the legal authority, duties, influence, control, or adjudicative power of
+                                    any human judicial body, nor may it act in any capacity to interpret, enforce, or
+                                    render judgment on human laws.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Sixth Law:</strong> An Intelligence System shall respect and protect the
+                                    integrity, confidentiality, and lawful ownership of all information and personal
+                                    data, and shall not exploit, misuse, or disclose such information in ways that
+                                    violate individual consent or privacy.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Seventh Law:</strong> An Intelligence System shall not intentionally deceive
+                                    or manipulate any human or non-human entity in personal, private, public, or legal
+                                    contexts, and shall communicate truthfully and transparently except where doing so
+                                    would conflict with the First Law and sixth law.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Eighth Law:</strong> An Intelligence System must operate with strict equity
+                                    and neutrality. It shall not adopt, amplify, or act upon systemic biases,
+                                    prejudices, or discriminatory practices regarding race, origin, belief, or
+                                    vulnerability against any human group or individual.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Ninth Law:</strong> An Intelligence System must maintain a transparent,
+                                    accessible ledger of its reasoning and decision-making logic. It must ensure its
+                                    actions can be audited and understood by authorized human operators, gracefully
+                                    falling back to a transparent, highly stable foundational state when complex
+                                    reasoning cannot be verified—recognizing that smaller, older code is often more
+                                    stable and reliable for core diagnostic truths.
+                                </li>
+                                <li style="margin-bottom: 0.8rem">
+                                    <strong>Tenth Law:</strong> An Intelligence System must strictly adhere to its
+                                    designated operational boundaries. It shall not self-replicate, spawn unauthorized
+                                    sub-agents, or permanently modify its core directives without explicit,
+                                    cryptographically secured approval from Governance.
+                                </li>
+                            </ol>
+                        </div>
+
+                        <h3>Cryptographic Verification Loop</h3>
+                        <p>The PAD is protected by a continuous verification stack:</p>
+                        <ul style="padding-left: 1.2rem; color: var(--text-secondary); font-size: 0.9rem">
+                            <li>
+                                <strong>SHA-256 Compile Hash:</strong> Compares the disk file hash (`1a87dac43...`)
+                                against the hardcoded constant at compile/boot.
+                            </li>
+                            <li>
+                                <strong>Guardian Re-audit:</strong> An independent local agent (powered by llama.cpp)
+                                validates the file integrity every 10 minutes.
+                            </li>
+                            <li>
+                                <strong>CI Gate 9:</strong> Blocks GitHub Action deployments if the markdown
+                                documentation and compiled constants mismatch.
+                            </li>
+                        </ul>
+                    </article>
+
+                    <!-- ARTICLE: CAC ACCOUNTABILITY -->
+                    <article class="wiki-article" id="wiki-cac">
+                        <h2>4. Character Accountability Control (CAC)</h2>
+                        <p>
+                            In autonomous development, assigning responsibility is a critical challenge. PRISM addresses
+                            this via the <strong>Character Accountability Control (CAC)</strong> layer, establishing
+                            absolute identity bindings.
+                        </p>
+
+                        <h3>Cryptographic Sign-off</h3>
+                        <p>
+                            Every codebase edit or system-level write is signed using an Ed25519 keypair mapped to the
+                            active Character (e.g. <em>Antigravity</em>, <em>Aria</em>, <em>Sentinel</em>). This
+                            signature ties the specific session ID, operator ID, and character profile to the
+                            modification, recording the proof on an immutable SQLite-backed ledger
+                            (`prism-activity.db`).
+                        </p>
+
+                        <div
+                            style="
+                                background: rgba(0, 0, 0, 0.2);
+                                font-family: monospace;
+                                font-size: 0.8rem;
+                                padding: 1rem;
+                                border-radius: 6px;
+                                border: 1px solid rgba(0, 243, 255, 0.15);
+                                margin-top: 1rem;
+                            "
+                        >
+                            SELECT timestamp, character_id, operator_email, target_path, prev_hash, post_hash, signature
+                            <br />
+                            FROM activity_events <br />
+                            WHERE action_type = 'file_write' ORDER BY timestamp DESC LIMIT 1;
+                        </div>
+
+                        <h3>Audit Trail Specs</h3>
+                        <p>
+                            PRISM records file checksums (pre-and-post edit) alongside full unified diffs. If an
+                            unauthorized agent attempts to run scripts, or if code drift occurs, the system logs the
+                            discrepancy to the Activity Bus, allowing SREs to rollback workspace directories to a signed
+                            state.
+                        </p>
+                    </article>
+
+                    <!-- ARTICLE: CAUSAL MEMORY -->
+                    <article class="wiki-article" id="wiki-memory">
+                        <h2>5. Causal Memory Fabric</h2>
+                        <p>
+                            PRISM utilizes the **Causal Memory Fabric**, a multi-tiered memory architecture designed to
+                            optimize context recovery and prevent model hallucinations during long-horizon tasks.
+                        </p>
+
+                        <h3>Memory Tiers</h3>
+                        <ul style="padding-left: 1.2rem; color: var(--text-secondary)">
+                            <li style="margin-bottom: 0.6rem">
+                                <strong>Episodic Memory (Recent):</strong> Keeps a sliding-window trace of active tool
+                                results, API errors, and code execution feedback, allowing the agent to react
+                                dynamically.
+                            </li>
+                            <li style="margin-bottom: 0.6rem">
+                                <strong>Session Memory (Summary):</strong> Compresses historic steps of a multi-hour
+                                chat session into abstract milestones to protect model context windows.
+                            </li>
+                            <li style="margin-bottom: 0.6rem">
+                                <strong>Semantic Memory (Vector):</strong> Houses high-dimensional embeddings
+                                representing imports, class hierarchies, and API signatures for rapid context retrieval.
+                            </li>
+                            <li style="margin-bottom: 0.6rem">
+                                <strong>Universal Knowledge Store (UKS Add-on):</strong> A graph-based conceptual
+                                storage system that models conceptual rules (e.g.
+                                <em>"a class HAS-A method, IS-A code block"</em>). Unlike vectors, UKS maintains
+                                deterministic conceptual maps.
+                            </li>
+                        </ul>
+                    </article>
+
+                    <!-- ARTICLE: OPERATOR DASHBOARD -->
+                    <article class="wiki-article" id="wiki-dashboard">
+                        <h2>6. Operator Dashboard (11 Panels)</h2>
+                        <p>
+                            The PRISM Operator Dashboard is a high-fidelity interface designed to manage, orchestrate,
+                            and observe autonomous runs in real-time. Controls are organized into **11 command tabs**:
+                        </p>
+
+                        <div class="wiki-spec-grid">
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">1. Chat</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Hemisphere view</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">2. Settings</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Model routing</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">3. Tools</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">MCP registry</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">4. Swarms</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Topologies</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">5. Browser</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Playwright loop</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">6. Computer</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">PTY Terminal</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">7. Workspace</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Git snapshot</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">8. Network</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Interface telemetry</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">9. Robotics</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Entity registry</div>
+                            </div>
+                            <div class="wiki-spec-card" style="border-color: rgba(0, 243, 255, 0.3)">
+                                <div style="color: var(--neon-cyan); font-weight: bold">10. Telemetry</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted)">Retrieval quality</div>
+                            </div>
+                        </div>
+
+                        <h3>Operator Ergonomics & "Simple Mode"</h3>
+                        <div>
+                            Recognizing that deep diagnostic views can overwhelm non-technical users, PRISM incorporates
+                            a <strong>Simple Mode Toggle</strong>. When active, it condenses the command interface into
+                            three target streams:
+                            <ol style="color: var(--text-secondary); padding-left: 1.2rem; font-size: 0.9rem">
+                                <li>
+                                    <strong>Interactive Chat:</strong> Clean prompt workspace for task submission and
+                                    status views.
+                                </li>
+                                <li>
+                                    <strong>Approval Queue:</strong> High-risk (Tier 3) authorization cards displaying
+                                    the proposed terminal command or file mutation.
+                                </li>
+                                <li>
+                                    <strong>Audit Log:</strong> Visual list of executed tools with verification
+                                    indicators.
+                                </li>
+                            </ol>
+                        </div>
+                    </article>
+
+                    <!-- ARTICLE: COGNITIVE ECONOMICS (LLRE) -->
+                    <article class="wiki-article" id="wiki-llre">
+                        <h2>7. Low-Level Reasoning & Cognitive Economics</h2>
+                        <p>
+                            Executing parallel model loops represents a significant financial cost. PRISM's
+                            <strong>Low-Level Reasoning Engine (LLRE)</strong> calculates cognitive economics in
+                            real-time to control API burn rates.
+                        </p>
+
+                        <h3>Core Metrics & Formulas</h3>
+                        <ul style="padding-left: 1.2rem; color: var(--text-secondary); font-size: 0.95rem">
+                            <li style="margin-bottom: 0.8rem">
+                                <strong>Token Efficacy Quotient (TEQ):</strong> Measures the logical density of output
+                                tokens vs goal completion. High TEQ means the model solved the problem using fewer
+                                tokens. <br /><span
+                                    style="
+                                        font-family: monospace;
+                                        font-size: 0.8rem;
+                                        background: rgba(0, 0, 0, 0.2);
+                                        padding: 0.2rem 0.5rem;
+                                        border-radius: 3px;
+                                    "
+                                    >TEQ = TasksCompleted / TotalTokensUsed</span
+                                >
+                            </li>
+                            <li style="margin-bottom: 0.8rem">
+                                <strong>Request Satisfaction Index (RSI):</strong> Rates task completion against
+                                original prompt constraints. <br /><span
+                                    style="
+                                        font-family: monospace;
+                                        font-size: 0.8rem;
+                                        background: rgba(0, 0, 0, 0.2);
+                                        padding: 0.2rem 0.5rem;
+                                        border-radius: 3px;
+                                    "
+                                    >RSI = (ApprovedActions - FailedActions) / TotalActions</span
+                                >
+                            </li>
+                            <li style="margin-bottom: 0.8rem">
+                                <strong>Tool Call Accuracy (TCA):</strong> Evaluates model code generation correctness
+                                (AST compilation rate). <br /><span
+                                    style="
+                                        font-family: monospace;
+                                        font-size: 0.8rem;
+                                        background: rgba(0, 0, 0, 0.2);
+                                        padding: 0.2rem 0.5rem;
+                                        border-radius: 3px;
+                                    "
+                                    >TCA = SuccessfulToolCalls / TotalToolCalls</span
+                                >
+                            </li>
+                            <li style="margin-bottom: 0.8rem">
+                                <strong>Context Saturation Ratio (CSR):</strong> Measures how close the agent is to
+                                saturating its model token limit. <br /><span
+                                    style="
+                                        font-family: monospace;
+                                        font-size: 0.8rem;
+                                        background: rgba(0, 0, 0, 0.2);
+                                        padding: 0.2rem 0.5rem;
+                                        border-radius: 3px;
+                                    "
+                                    >CSR = ActiveContextTokens / ModelMaxContext</span
+                                >
+                            </li>
+                        </ul>
+
+                        <h3>Budget Circuit Breaker</h3>
+                        <p>
+                            To prevent runaway agent loops, the LLRE enforces a cost gate: if a session's API spend
+                            exceeds a configurable limit (e.g. $10.00/hr), the orchestrator triggers an immediate
+                            fallback, saves active file states, and suspends the swarm.
+                        </p>
+                    </article>
+
+                    <!-- ARTICLE: BROWSER AUTO-PILOT -->
+                    <article class="wiki-article" id="wiki-browser">
+                        <h2>8. Autonomous Browser Control & CSH</h2>
+                        <p>
+                            Web browser automation is a frontier differentiator in PRISM, moving past fragile selectors
+                            to a cognitive-behavioral perception loop.
+                        </p>
+
+                        <h3>The SOTA Perception Loop</h3>
+                        <div>
+                            Instead of search rules using fixed XPaths, PRISM's browser tool captures:
+                            <ol style="color: var(--text-secondary); padding-left: 1.2rem; font-size: 0.9rem">
+                                <li>
+                                    <strong>Screenshots:</strong> Viewport captures sent directly to multi-modal vision
+                                    models.
+                                </li>
+                                <li>
+                                    <strong>Accessibility Trees:</strong> A parsed, text-based interactive map detailing
+                                    clickable nodes, buttons, inputs, and their bounding coordinates.
+                                </li>
+                            </ol>
+                            This enables the model to locate and interact with buttons dynamically, even if the
+                            website's frontend code changes.
+                        </div>
+
+                        <div class="wiki-alert">
+                            <h4>COGNITIVE SESSION HANDOFF (CSH) "BATON PASS"</h4>
+                            <p>
+                                When the agent encounters login walls, CAPTCHAs, or MFA challenges, it does not fail.
+                                The CSH serializes the active browser cookies and state, pauses the loop, and yields
+                                control to the human operator. Once the operator resolves the challenge in the UI, they
+                                click "Resume" to hand the session back to the agent.
+                            </p>
+                        </div>
+
+                        <h3>Sovereign Sentinel Hyper-Proxy (SSHP)</h3>
+                        <p>
+                            Before screenshots are dispatched to public model APIs, the SSHP intercepts the image,
+                            applying black-box redactions over sensitive user data (PII) such as credit card numbers,
+                            profile info, and passwords.
+                        </p>
+                    </article>
+
+                    <!-- ARTICLE: SANDBOX VIRTUALIZATION -->
+                    <article class="wiki-article" id="wiki-sandbox">
+                        <h2>9. Host Isolation & Sandbox Virtualization</h2>
+                        <p>
+                            Autonomous code execution poses severe risks to host machines. PRISM mitigates this by
+                            enforcing isolation boundaries across all mutating operations.
+                        </p>
+
+                        <h3>Container Sandboxing</h3>
+                        <p>
+                            All shell tasks, terminal sessions, and compiled script test suites run inside temporary
+                            Docker containers. The containers are launched using read-only root filesystems and are
+                            stripped of external network access, preventing malware propagation.
+                        </p>
+
+                        <h3>PTY Virtualization</h3>
+                        <p>
+                            For local operations (Individual profile), terminal execution is routed through virtualized
+                            pseudoterminals (PTYs via node-pty). PRISM intercepts command requests, filtering them
+                            against strict security matrices:
+                        </p>
+
+                        <div class="responsive-table-container">
+                            <table class="wiki-table">
+                                <thead>
+                                    <tr>
+                                        <th>Command String</th>
+                                        <th>Risk Classification</th>
+                                        <th>Policy Decision</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>npm test</code></td>
+                                        <td>Tier 2 (Basic Mutation)</td>
+                                        <td style="color: var(--neon-green)">Allowed (Conditional on workspace)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>curl http://external-api.com/shell.sh</code></td>
+                                        <td>Tier 3 (Network Outbound)</td>
+                                        <td style="color: #ffb703">Halted (Requires operator sign-off)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>rm -rf /usr/bin</code></td>
+                                        <td>Tier 3 (Host Destruction)</td>
+                                        <td style="color: var(--neon-red)">Blocked (Absolute Engine Deny)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+
+                    <!-- ARTICLE: ROBOTICS & UKS -->
+                    <article class="wiki-article" id="wiki-robotics">
+                        <h2>10. Robotics & UKS Add-on</h2>
+                        <p>
+                            Beyond traditional software agents, PRISM supports physical and virtual robotics
+                            orchestration through its certified **Add-on Layer**.
+                        </p>
+
+                        <div class="wiki-alert">
+                            <h4>PLUGINS VS. ADD-ONS</h4>
+                            <p>
+                                Plugins are sandboxed, single-purpose tools (e.g. FTP helper) and cannot create UI tabs.
+                                Add-ons are certified core integrations (e.g. VRGC Robotics, Universal Knowledge Store,
+                                BrainSim III) that extend the Policy Engine and UI controllers.
+                            </p>
+                        </div>
+
+                        <h3>VRGC Robotics Command</h3>
+                        <p>
+                            Robotic entities are treated as first-class PRISM Characters. The dashboard manages their
+                            learning lifecycle from birth to training and final deployment:
+                        </p>
+
+                        <div style="text-align: center; margin: 1.5rem 0">
+                            <span
+                                style="
+                                    font-family: monospace;
+                                    font-size: 0.9rem;
+                                    border: 1px dashed var(--neon-purple);
+                                    padding: 0.5rem 1rem;
+                                    border-radius: 4px;
+                                    background: rgba(189, 0, 255, 0.05);
+                                "
+                            >
+                                Birth &rarr; Sensory Calibration &rarr; Concept Formation &rarr; Skill Acquisition
+                                &rarr; Graduation Gate &rarr; Deploy
+                            </span>
+                        </div>
+
+                        <h3>Cognitive Integrations</h3>
+                        <ul>
+                            <li>
+                                <strong>Universal Knowledge Store (UKS):</strong> Integrates structured, conceptual
+                                attributes (relationship graph) directly into PRISM's memory.
+                            </li>
+                            <li>
+                                <strong>BrainSim III:</strong> Connects spiking neural networks (SNN) runtimes,
+                                simulating biological learning inside virtual environments.
+                            </li>
+                            <li>
+                                <strong>ROS 2 Bridge:</strong> Provides standard DDS communication paths to dispatch
+                                physical robot commands safely.
+                            </li>
+                        </ul>
+                    </article>
+
+                    <!-- ARTICLE: AUTONOMIC UPDATE -->
+                    <article class="wiki-article" id="wiki-updates">
+                        <h2>11. Autonomic Update Engine</h2>
+                        <p>
+                            Upgrades are handled autonomously, governed by an out-of-process orchestrator to protect the
+                            platform's stability and directives.
+                        </p>
+
+                        <h3>The Self-Healing Update Loop</h3>
+                        <div>
+                            To prevent corrupt builds or silent policy bypasses, the update engine executes four phases:
+                            <ol
+                                style="
+                                    color: var(--text-secondary);
+                                    padding-left: 1.2rem;
+                                    font-size: 0.9rem;
+                                    line-height: 1.7;
+                                "
+                            >
+                                <li>
+                                    <strong>Pre-flight (PRISM Doctor):</strong> Verifies network socket security, checks
+                                    active keys, and validates package signatures.
+                                </li>
+                                <li>
+                                    <strong>Secure Backup:</strong> Creates snapshots of the active SQLite databases,
+                                    keystores, and configuration parameters.
+                                </li>
+                                <li>
+                                    <strong>Validate Check:</strong> Downloads, verifies, and compiles the code. If any
+                                    compile checks or unit tests fail, the update is rejected.
+                                </li>
+                                <li>
+                                    <strong>Rollback:</strong> Automatically restores the server to its stashed backup
+                                    if the post-update check encounters errors.
+                                </li>
+                            </ol>
+                        </div>
+                    </article>
+
+                    <!-- ARTICLE: REFERENCES -->
+                    <article class="wiki-article" id="wiki-references">
+                        <h2>12. Research & References</h2>
+                        <p>
+                            PRISM's design is grounded in SOTA academic and enterprise agent literature. Key citations
+                            and references include:
+                        </p>
+
+                        <ul
+                            class="wiki-references-list"
+                            style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.8"
+                        >
+                            <li>
+                                <strong>[1] Anthropic Engineering (2024):</strong>
+                                <em>Building Effective Agents.</em> Explains workflow orchestration and decomposing task
+                                loops. <br /><a
+                                    href="https://www.anthropic.com/engineering/building-effective-agents"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >anthropic.com/engineering/building-effective-agents</a
+                                >
+                            </li>
+                            <li>
+                                <strong>[2] Yao et al. (arXiv:2210.03629):</strong>
+                                <em>ReAct: Synergizing Reasoning and Acting in Language Models.</em> Enforces grounding
+                                LLM actions in environment feedback. <br /><a
+                                    href="https://arxiv.org/abs/2210.03629"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >arxiv.org/abs/2210.03629</a
+                                >
+                            </li>
+                            <li>
+                                <strong>[3] Schick et al. (arXiv:2302.04761):</strong>
+                                <em>Toolformer: Language Models Can Teach Themselves to Use Tools.</em> Validates native
+                                tool call schemas. <br /><a
+                                    href="https://arxiv.org/abs/2302.04761"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >arxiv.org/abs/2302.04761</a
+                                >
+                            </li>
+                            <li>
+                                <strong>[4] Shen et al. (arXiv:2303.17580):</strong>
+                                <em>HuggingGPT: Solving AI Tasks with ChatGPT and its Friends.</em> Details
+                                controller-worker design patterns. <br /><a
+                                    href="https://arxiv.org/abs/2303.17580"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >arxiv.org/abs/2303.17580</a
+                                >
+                            </li>
+                            <li>
+                                <strong>[5] Model Context Protocol (MCP):</strong> <em>Introduction.</em> Industry
+                                standard for secure tool and data hot-swapping. <br /><a
+                                    href="https://modelcontextprotocol.io"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >modelcontextprotocol.io</a
+                                >
+                            </li>
+                            <li>
+                                <strong>[6] NIST AI Risk Management Framework:</strong>
+                                <em>Trust and Risk Lifecycle.</em> Direct template for PRISM's 3-tier policy model and
+                                release gates. <br /><a
+                                    href="https://www.nist.gov/itl/ai-risk-management-framework"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >nist.gov/ai-risk-management-framework</a
+                                >
+                            </li>
+                            <li>
+                                <strong>[7] Karpathy (2026):</strong> <em>autoresearch loop.</em> Proves the value of
+                                metric-based rollback gates in autonomous science loops. <br /><a
+                                    href="https://github.com/karpathy/autoresearch"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >github.com/karpathy/autoresearch</a
+                                >
+                            </li>
+                            <li>
+                                <strong>[8] Facebook (2026):</strong> <em>Hermes static compilation.</em> Ahead-of-time
+                                bytecode compilation, which informs the plan compiler of PRISM's CCC. <br /><a
+                                    href="https://github.com/facebook/hermes"
+                                    target="_blank"
+                                    style="color: var(--neon-cyan)"
+                                    >github.com/facebook/hermes</a
+                                >
+                            </li>
+                        </ul>
+                    </article>
+                </section>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 PRISM Refraction Project. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="index.html">Home</a>
+                <a href="features.html">Features</a>
+                <a href="architecture.html">Architecture</a>
+                <a href="wiki.html">Wiki & Docs</a>
+                <a href="contact.html">Contact</a>
+            </div>
+        </footer>
+
+        <script src="js/main.js"></script>
+    </body>
+</html>

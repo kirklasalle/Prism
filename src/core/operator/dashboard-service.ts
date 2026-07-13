@@ -29,6 +29,7 @@ import type { SwarmCoordinator } from "../agents/swarm-coordinator.js";
 import type { AgentPool } from "../agents/agent-pool.js";
 import type { AgentRouter } from "../agents/agent-router.js";
 import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
+import { hashPassword } from "../security/password-util.js";
 import {
     ChatSessionStore,
     type ProviderSettingsInput,
@@ -1136,7 +1137,7 @@ export class DashboardService {
                 email: "admin@prism.ai",
                 displayName: "Administrator",
                 status: "active",
-                attrs: { passwordHash: createHash("sha256").update("admin", "utf-8").digest("hex") },
+                attrs: { passwordHash: hashPassword("admin") },
             });
             const adminRole = this.iamStore.getRoleByName("default", "admin");
             if (adminRole) this.iamStore.addMembership(adminUser.id, "default", adminRole.id);
@@ -1146,7 +1147,7 @@ export class DashboardService {
                 email: "testing@prism.ai",
                 displayName: "Test Operator",
                 status: "active",
-                attrs: { passwordHash: createHash("sha256").update("testing", "utf-8").digest("hex") },
+                attrs: { passwordHash: hashPassword("testing") },
             });
             const operatorRole = this.iamStore.getRoleByName("default", "operator");
             if (operatorRole) this.iamStore.addMembership(testUser.id, "default", operatorRole.id);
@@ -4579,8 +4580,8 @@ export class DashboardService {
                     totalBytes: 0,
                     startTime: new Date().toISOString(),
                 });
-                const { exec: execCb } = await import("node:child_process");
-                execCb(`ollama pull ${tag}`, { timeout: 600000 }, (err, stdout, stderr) => {
+                const { execFile: execFileCb } = await import("node:child_process");
+                execFileCb("ollama", ["pull", tag], { timeout: 600000 }, (err, stdout, stderr) => {
                     const status = this.downloadStatus.get(pullId);
                     if (!status) return;
                     if (err) {
@@ -4607,9 +4608,9 @@ export class DashboardService {
                 const { path: modelPath, source } = body;
 
                 if (source === "ollama") {
-                    const { exec: execCb } = await import("node:child_process");
+                    const { execFile: execFileCb } = await import("node:child_process");
                     await new Promise((resolve, reject) => {
-                        execCb(`ollama rm ${modelPath}`, { timeout: 60000 }, (err, stdout, stderr) => {
+                        execFileCb("ollama", ["rm", modelPath], { timeout: 60000 }, (err, stdout, stderr) => {
                             if (err) reject(new Error(stderr?.trim() || err.message));
                             else resolve(stdout);
                         });
@@ -4913,8 +4914,7 @@ export class DashboardService {
                 // If a password is provided, upsert this operator user in IamStore
                 const operatorPassword = body.operatorPassword ? String(body.operatorPassword).trim() : null;
                 if (operatorPassword) {
-                    const sha256Hex = (str: string) => createHash("sha256").update(str, "utf-8").digest("hex");
-                    const passwordHash = sha256Hex(operatorPassword);
+                    const passwordHash = hashPassword(operatorPassword);
                     const existing = this.iamStore.getUserByEmail("default", operatorEmail);
                     if (existing) {
                         existing.attrs = { ...existing.attrs, passwordHash };
@@ -7620,8 +7620,8 @@ export class DashboardService {
             const body = await this.readJsonBody<{ filename?: string }>(req);
             const fname = body?.filename ? String(body.filename).replace(/[/\\:*?"<>|]/g, "") : "";
             const revealPath = fname ? join(workspaceFramebufferDir(), fname) : workspaceFramebufferDir();
-            const { exec } = await import("node:child_process");
-            exec(`explorer.exe /select,"${revealPath}"`);
+            const { execFile } = await import("node:child_process");
+            execFile("explorer.exe", [`/select,${revealPath}`]);
             return this.json(res, 200, { ok: true });
         }
 

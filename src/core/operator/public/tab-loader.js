@@ -23,7 +23,14 @@ function autoRegisterTabTooltips(tabId) {
     try { mod.registerTooltipsByTab(tabId); } catch (_) { /* non-fatal */ }
   });
 }
+function isValidTabId(tabId) {
+  return typeof tabId === 'string' && /^[a-zA-Z0-9\-]+$/.test(tabId);
+}
+
 function fetchFragment(tabId) {
+  if (!isValidTabId(tabId)) {
+    return Promise.reject(new Error("Invalid tab ID"));
+  }
   if (fragmentCache.has(tabId)) {
     return Promise.resolve(fragmentCache.get(tabId));
   }
@@ -53,6 +60,9 @@ function fetchFragment(tabId) {
  * @returns {Promise<void>}
  */
 export async function loadTabHtml(tabId) {
+  if (!isValidTabId(tabId)) {
+    throw new Error("Invalid tab ID");
+  }
   if (injectedTabs.has(tabId)) {
     return;
   }
@@ -104,8 +114,10 @@ export async function loadTabHtml(tabId) {
  * @returns {Promise<void>}
  */
 export function prefetchTabHtml(tabId) {
+  if (!isValidTabId(tabId)) return Promise.resolve();
   if (fragmentCache.has(tabId) || injectedTabs.has(tabId)) return Promise.resolve();
   return fetchFragment(tabId).then(() => undefined).catch((err) => {
     console.warn(`[tab-loader] Prefetch failed for ${tabId}:`, err);
   });
 }
+
