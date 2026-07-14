@@ -75,6 +75,7 @@ export function escapeHtml(str) {
 }
 export function dashboardLog() {}
 export function safeRenderStep() {}
+export function assetUrl(path) { return path; }
 export function formatUptime(sec) {
   if (!sec || sec <= 0) return '—';
   var h = Math.floor(sec / 3600);
@@ -104,6 +105,8 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
     let mod: TabComputerModule;
     let dom: InstanceType<typeof JSDOM>;
     let mockState: Record<string, any>;
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
 
     before(async () => {
         tmpDir = mkdtempSync(join(tmpdir(), "prism-tab-computer-ui-"));
@@ -121,22 +124,22 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         Object.defineProperty(global, "location", { value: dom.window.location, writable: true, configurable: true });
         (global as any).URL = dom.window.URL;
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
-        (global as any).setInterval = dom.window.setInterval.bind(dom.window);
-        (global as any).clearInterval = dom.window.clearInterval.bind(dom.window);
-        (global as any).alert = () => {};
+        (global as any).setInterval = originalSetInterval;
+        (global as any).clearInterval = originalClearInterval;
+        (global as any).alert = () => { };
 
         // Stub canvas getContext for jsdom (no native canvas)
         const origGetContext = dom.window.HTMLCanvasElement.prototype.getContext;
         dom.window.HTMLCanvasElement.prototype.getContext = function (type: string) {
             if (type === "2d") {
                 return {
-                    clearRect() {},
-                    beginPath() {},
-                    moveTo() {},
-                    lineTo() {},
-                    stroke() {},
-                    closePath() {},
-                    fill() {},
+                    clearRect() { },
+                    beginPath() { },
+                    moveTo() { },
+                    lineTo() { },
+                    stroke() { },
+                    closePath() { },
+                    fill() { },
                     strokeStyle: "",
                     lineWidth: 0,
                     lineJoin: "",
@@ -162,8 +165,8 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         delete (global as any).location;
         delete (global as any).URL;
         delete (global as any).fetch;
-        delete (global as any).setInterval;
-        delete (global as any).clearInterval;
+        (global as any).setInterval = originalSetInterval;
+        (global as any).clearInterval = originalClearInterval;
         delete (global as any).alert;
         rmSync(tmpDir, { recursive: true, force: true });
     });

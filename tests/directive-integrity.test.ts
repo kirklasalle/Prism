@@ -17,6 +17,7 @@ import {
     getDirectiveHash,
     DIRECTIVE_SHA256,
     DIRECTIVE_FILENAME,
+    enforceDirectiveIntegrityBootGate,
 } from "../src/core/security/directive-integrity.js";
 import {
     PAD_LAWS,
@@ -44,7 +45,7 @@ describe("Directive Integrity", function () {
     afterEach(() => {
         try {
             rmSync(tmpDir, { recursive: true, force: true });
-        } catch {}
+        } catch { }
     });
 
     /* ── Hash Computation ────────────────────────────────────────────── */
@@ -150,9 +151,57 @@ describe("Directive Integrity", function () {
                     hash,
                     DIRECTIVE_SHA256,
                     "DIRECTIVE_SHA256 constant does not match the PAD file on disk. " +
-                        "If the PAD was intentionally updated, update the constant in directive-integrity.ts.",
+                    "If the PAD was intentionally updated, update the constant in directive-integrity.ts.",
                 );
             }
+        });
+    });
+
+    describe("enforceDirectiveIntegrityBootGate", () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+        const originalSkip = process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE;
+
+        afterEach(() => {
+            if (originalNodeEnv === undefined) {
+                delete process.env.NODE_ENV;
+            } else {
+                process.env.NODE_ENV = originalNodeEnv;
+            }
+            if (originalSkip === undefined) {
+                delete process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE;
+            } else {
+                process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE = originalSkip;
+            }
+        });
+
+        it("passes when directive file is valid", () => {
+            const workspaceRoot = join(__dirname, "..", "..");
+            delete process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE;
+            process.env.NODE_ENV = "test";
+            const result = enforceDirectiveIntegrityBootGate({ workspaceRoot });
+            assert.strictEqual(result.valid, true);
+        });
+
+        it("throws when directive file is invalid and bypass is disabled", () => {
+            writeFileSync(join(tmpDir, DIRECTIVE_FILENAME), "TAMPERED CONTENT");
+            delete process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE;
+            process.env.NODE_ENV = "test";
+            assert.throws(() => enforceDirectiveIntegrityBootGate({ workspaceRoot: tmpDir }), /Directive integrity check failed/);
+        });
+
+        it("allows invalid directive only when bypass is enabled in non-production", () => {
+            writeFileSync(join(tmpDir, DIRECTIVE_FILENAME), "TAMPERED CONTENT");
+            process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE = "true";
+            process.env.NODE_ENV = "development";
+            const result = enforceDirectiveIntegrityBootGate({ workspaceRoot: tmpDir });
+            assert.strictEqual(result.valid, false);
+        });
+
+        it("rejects bypass in production", () => {
+            writeFileSync(join(tmpDir, DIRECTIVE_FILENAME), "TAMPERED CONTENT");
+            process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE = "true";
+            process.env.NODE_ENV = "production";
+            assert.throws(() => enforceDirectiveIntegrityBootGate({ workspaceRoot: tmpDir }), /not permitted in production/);
         });
     });
 });

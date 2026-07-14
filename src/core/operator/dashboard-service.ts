@@ -103,6 +103,7 @@ import { CSHManager } from "./csh-manager.js";
 import { AuthGate } from "../security/auth.js";
 import { RateLimiter } from "../security/rate-limiter.js";
 import { applyCorsAndCsrf, resolveAllowedOrigins, type CorsCsrfConfig } from "../security/cors-csrf.js";
+import { validateEgressUrl } from "../security/network-egress-guard.js";
 import { loadPluginPack } from "../plugins/plugin-pack-loader.js";
 import type { PluginPackManifest } from "../plugins/plugin-pack-validator.js";
 import {
@@ -1175,6 +1176,24 @@ export class DashboardService {
                 // Dashboard pages — DashboardHandler has its own cookie+token auth
                 // that gracefully redirects to /login; let it handle auth, not the gate.
                 "/",
+                // Auth telemetry beacon — login page sends client-side trace events
+                "/api/v1/telemetry/auth-trace",
+            ],
+            publicPrefixes: [
+                "/public/",
+                "/login",
+                "/api/auth/",
+                "/api/v1/auth/",
+                "/api/iam/sso/",
+                "/api/v1/iam/sso/",
+                "/api/iam/login",
+                "/api/v1/iam/login",
+                "/scim/v2/",
+                // Dashboard pages — DashboardHandler does its own auth (cookie/token → 302 /login)
+                "/dashboard",
+                "/simple",
+            ],
+            bootstrapRoutes: [
                 // Setup wizard (step 4/6): character listing + import
                 "/api/workspace/characters",
                 "/api/workspace/character-import",
@@ -1195,23 +1214,9 @@ export class DashboardService {
                 "/api/guardian/start",
                 // Setup wizard (step 6): readiness recheck
                 "/api/readiness/recheck",
-                // Auth telemetry beacon — login page sends client-side trace events
-                "/api/v1/telemetry/auth-trace",
             ],
-            publicPrefixes: [
-                "/public/",
+            bootstrapPrefixes: [
                 "/setup",
-                "/login",
-                "/api/auth/",
-                "/api/v1/auth/",
-                "/api/iam/sso/",
-                "/api/v1/iam/sso/",
-                "/api/iam/login",
-                "/api/v1/iam/login",
-                "/scim/v2/",
-                // Dashboard pages — DashboardHandler does its own auth (cookie/token → 302 /login)
-                "/dashboard",
-                "/simple",
                 // Setup wizard API — all /api/setup/* endpoints (profile, workspace, character, cac, complete)
                 "/api/setup/",
                 "/api/v1/setup/",
@@ -2842,7 +2847,31 @@ export class DashboardService {
         source: string = "dashboard",
     ): Promise<ProviderSettingsPayload> {
         const resolved = this.requireProviderId(providerId);
-        this.chatStore.upsertProviderSettings(resolved, settings, source);
+        const snapshot = await this.getProviderSnapshot(resolved);
+        const normalizedBaseUrl = settings.baseUrl?.trim() || null;
+        if (normalizedBaseUrl) {
+            const allowPrivateProviderEgress =
+                snapshot.kind === "local" ||
+                (process.env.PRISM_ALLOW_PRIVATE_PROVIDER_EGRESS ?? "").toLowerCase() === "true";
+            const baseUrlCheck = validateEgressUrl(normalizedBaseUrl, {
+                allowLoopback: allowPrivateProviderEgress,
+                allowPrivate: allowPrivateProviderEgress,
+                allowLinkLocal: allowPrivateProviderEgress,
+                allowMetadata: false,
+            });
+            if (!baseUrlCheck.ok) {
+                throw new Error(`Blocked provider baseUrl: ${baseUrlCheck.reason ?? "egress policy violation."}`);
+            }
+        }
+
+        this.chatStore.upsertProviderSettings(
+            resolved,
+            {
+                ...settings,
+                baseUrl: normalizedBaseUrl,
+            },
+            source,
+        );
         this.refreshProviderConfiguration();
 
         // Keep the runtime + persisted model matrix aligned with provider config.
@@ -5978,14 +6007,31 @@ export class DashboardService {
                 if (!body.providerId?.trim()) {
                     return this.json(res, 400, { error: "providerId is required." });
                 }
+                const resolvedProviderId = this.requireProviderId(body.providerId);
                 if (body.apiKey?.trim()) {
-                    await this.saveProviderApiKey(body.providerId, body.apiKey.trim(), "provider-test");
+                    await this.saveProviderApiKey(resolvedProviderId, body.apiKey.trim(), "provider-test");
                 }
-                const result = await this.llmProviders.testProvider(body.providerId);
+                const snapshot = await this.getProviderSnapshot(resolvedProviderId);
+                const allowPrivateProviderEgress =
+                    snapshot.kind === "local" ||
+                    (process.env.PRISM_ALLOW_PRIVATE_PROVIDER_EGRESS ?? "").toLowerCase() === "true";
+                const providerEgressCheck = validateEgressUrl(snapshot.baseUrl, {
+                    allowLoopback: allowPrivateProviderEgress,
+                    allowPrivate: allowPrivateProviderEgress,
+                    allowLinkLocal: allowPrivateProviderEgress,
+                    allowMetadata: false,
+                });
+                if (!providerEgressCheck.ok) {
+                    return this.json(res, 400, {
+                        error: providerEgressCheck.reason ?? "Provider URL blocked by egress policy.",
+                    });
+                }
+
+                const result = await this.llmProviders.testProvider(resolvedProviderId);
                 if (result.ok && result.models.length > 0) {
-                    const current = await this.getProviderSettings(body.providerId);
+                    const current = await this.getProviderSettings(resolvedProviderId);
                     await this.saveProviderSettings(
-                        body.providerId,
+                        resolvedProviderId,
                         {
                             baseUrl: current.baseUrl ?? null,
                             apiKeyHeader: current.apiKeyHeader ?? null,
@@ -7538,13 +7584,36 @@ export class DashboardService {
             const body = await this.readJsonBody<{ command: string }>(req);
             const cmd = (body.command || "").trim();
             if (!cmd) return this.json(res, 400, { error: "Command is required" });
-            const blocked = /rm\s+-rf|del\s+\/[sfq]|format\s+[a-z]:|shutdown|restart|reboot/i;
-            if (blocked.test(cmd)) return this.json(res, 403, { error: "Command blocked by safety policy" });
+
+            // Disallow shell metacharacters and explicit chaining/redirection paths.
+            if (/[|&;<>`$()]/.test(cmd)) {
+                return this.json(res, 403, { error: "Command blocked by safety policy" });
+            }
+
+            const tokens = cmd.split(/\s+/).filter(Boolean);
+            if (tokens.length === 0) return this.json(res, 400, { error: "Command is required" });
+            const binary = tokens[0]?.toLowerCase() ?? "";
+            const args = tokens.slice(1);
+
+            const allowedCommands =
+                process.platform === "win32"
+                    ? new Set(["whoami", "hostname", "ipconfig", "systeminfo", "tasklist", "where"])
+                    : new Set(["whoami", "hostname", "uname", "uptime", "ps", "ls", "pwd", "df", "free"]);
+
+            if (!allowedCommands.has(binary)) {
+                return this.json(res, 403, { error: "Command not allowed by policy" });
+            }
+
+            const safeArg = /^[a-zA-Z0-9_./:=,@+\-]+$/;
+            if (args.some((arg) => !safeArg.test(arg))) {
+                return this.json(res, 403, { error: "Command arguments blocked by safety policy" });
+            }
+
             try {
-                const { exec: execCb } = await import("node:child_process");
+                const { execFile: execFileCb } = await import("node:child_process");
                 const { promisify } = await import("node:util");
-                const execAsync = promisify(execCb);
-                const result = await execAsync(cmd, { timeout: 15000, maxBuffer: 512 * 1024 });
+                const execFileAsync = promisify(execFileCb);
+                const result = await execFileAsync(binary, args, { timeout: 15000, maxBuffer: 512 * 1024 });
                 this.framebufferCapture.captureSingle().catch(() => {});
                 return this.json(res, 200, { stdout: result.stdout, stderr: result.stderr });
             } catch (error: unknown) {
@@ -7563,7 +7632,23 @@ export class DashboardService {
             if (!this.toolRegistry) return this.json(res, 503, { error: "Tool registry not available" });
             try {
                 const tool = this.toolRegistry.get(operation);
-                const result = await tool.execute({ operation, args, risk: "low", mutatesState: false });
+                const safeArgs = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+                const action = typeof safeArgs.action === "string" ? safeArgs.action.toLowerCase() : null;
+                const governanceRule = action ? tool.governance?.actions?.[action] : undefined;
+                const risk = governanceRule?.minimumRisk ?? "medium";
+                const mutatesState = governanceRule?.mutating ?? true;
+                const rollbackPlan =
+                    governanceRule?.rollbackRequired && risk !== "low"
+                        ? `[Rollback plan required for ${operation}${action ? `:${action}` : ""} at risk=${risk}]`
+                        : undefined;
+
+                const result = await tool.execute({
+                    operation,
+                    args: safeArgs,
+                    risk,
+                    mutatesState,
+                    rollbackPlan,
+                });
                 return this.json(res, 200, result);
             } catch (error: unknown) {
                 return this.json(res, 500, { error: String(error) });

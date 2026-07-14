@@ -26,14 +26,19 @@ let service: DashboardService;
 let port: number;
 let tmpDir: string;
 let chatStore: ChatSessionStore;
+let authToken = "";
 
 const isWindows = process.platform === "win32";
 const describeWindows = isWindows ? describe : describe.skip;
 
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return authToken ? { Authorization: `Bearer ${authToken}`, ...extra } : { ...extra };
+}
+
 /** JSON GET helper */
 function fetchJson(urlPath: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        http.get({ hostname: "127.0.0.1", port, path: urlPath }, (res) => {
+        http.get({ hostname: "127.0.0.1", port, path: urlPath, headers: authHeaders() }, (res) => {
             let data = "";
             res.on("data", (chunk: Buffer) => {
                 data += chunk;
@@ -52,7 +57,7 @@ function fetchJson(urlPath: string): Promise<{ status: number; body: any }> {
 /** Raw GET helper (for binary, e.g. screenshot PNG) */
 function fetchRaw(urlPath: string): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer }> {
     return new Promise((resolve, reject) => {
-        http.get({ hostname: "127.0.0.1", port, path: urlPath }, (res) => {
+        http.get({ hostname: "127.0.0.1", port, path: urlPath, headers: authHeaders() }, (res) => {
             const chunks: Buffer[] = [];
             res.on("data", (chunk: Buffer) => {
                 chunks.push(chunk);
@@ -73,7 +78,7 @@ function requestJson(method: string, urlPath: string, body?: unknown): Promise<{
                 port,
                 path: urlPath,
                 method,
-                headers: body == null ? {} : { "Content-Type": "application/json" },
+                headers: body == null ? authHeaders() : authHeaders({ "Content-Type": "application/json" }),
             },
             (res) => {
                 let payload = "";
@@ -135,6 +140,10 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
         const addr = (service as unknown as { server: { address(): { port: number } | null } }).server.address();
         port = addr ? addr.port : 0;
         assert.ok(port > 0, "DashboardService should bind to an ephemeral port");
+
+        // Capture auth token so route requests pass AuthGate.
+        authToken = service.getAuthGate().getToken();
+        assert.ok(authToken.length > 0, "AuthGate should expose an admin token");
     });
 
     after(async () => {

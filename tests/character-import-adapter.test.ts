@@ -7,8 +7,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import {
     detectShape,
     adaptToPrism,
@@ -16,8 +15,7 @@ import {
     validatePrismCharacter,
 } from "../src/core/characters/character-import-adapter.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURES = join(__dirname, "fixtures", "character-imports");
+const FIXTURES = join(process.cwd(), "tests", "fixtures", "character-imports");
 
 function readFixture(name: string): Record<string, unknown> {
     return JSON.parse(readFileSync(join(FIXTURES, name), "utf-8")) as Record<string, unknown>;

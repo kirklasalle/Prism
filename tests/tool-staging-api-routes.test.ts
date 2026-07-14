@@ -25,6 +25,11 @@ import { ToolRegistry } from "../src/core/tools/registry.js";
 let service: DashboardService;
 let port: number;
 let tmpDir: string;
+let authToken = "";
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return authToken ? { Authorization: `Bearer ${authToken}`, ...extra } : { ...extra };
+}
 
 function requestJson(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
@@ -34,7 +39,7 @@ function requestJson(method: string, path: string, body?: unknown): Promise<{ st
                 port,
                 path,
                 method,
-                headers: body == null ? {} : { "Content-Type": "application/json" },
+                headers: body == null ? authHeaders() : authHeaders({ "Content-Type": "application/json" }),
             },
             (res) => {
                 let payload = "";
@@ -62,7 +67,6 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
     this.timeout(60_000);
 
     before(async () => {
-        process.env.PRISM_AUTH_DISABLED = "true";
         tmpDir = mkdtempSync(join(tmpdir(), "prism-tool-staging-api-"));
         const bus = new ActivityBus();
         const chatStore = new ChatSessionStore(":memory:");
@@ -95,10 +99,12 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
         const addr = (service as unknown as { server: { address(): { port: number } | null } }).server.address();
         port = addr ? addr.port : 0;
         assert.ok(port > 0, "DashboardService should bind to an ephemeral port");
+        authToken = service.getAuthGate().getToken();
+        assert.ok(authToken.length > 0, "AuthGate should expose an admin token");
     });
 
-    after(() => {
-        service.stop();
+    after(async () => {
+        await service.stop();
         try {
             rmSync(tmpDir, { recursive: true, force: true });
         } catch {
@@ -172,13 +178,13 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
     });
 
     it("GET /api/tools/stage/status returns 400 when tool_id is missing", async () => {
-        const res = await requestJson("GET", "/api/tools/stage/status", undefined);
+        const res = await requestJson("GET", "/api/v1/tools/stage/status", undefined);
         assert.strictEqual(res.status, 400);
         assert.ok(res.body.error?.includes("tool_id"));
     });
 
     it("GET /api/tools/stage/status returns 404 for an unknown tool", async () => {
-        const res = await requestJson("GET", "/api/tools/stage/status?tool_id=does-not-exist", undefined);
+        const res = await requestJson("GET", "/api/v1/tools/stage/status?tool_id=does-not-exist", undefined);
         assert.strictEqual(res.status, 404);
         assert.strictEqual(res.body.tool_id, "does-not-exist");
         assert.strictEqual(res.body.approval_status, "unknown");

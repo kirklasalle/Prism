@@ -18,6 +18,7 @@ import type { Tool, ToolRequest, ToolResult } from "../tools/types.js";
 import type { LlamaCppSupervisor, LlamaModelSlot } from "../operator/llama-cpp-supervisor.js";
 import type { AgentLifecycleTier, AgentState } from "./agent-types.js";
 import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
+import { verifyDirectiveSignature } from "../security/directive-signature.js";
 import type { AABLedgerEntry } from "../runtime/autonomous-agent-loop.js";
 import type { CovenantStatus } from "../governance/prism-covenant.js";
 import { readPreferences, workspacePath } from "../config/workspace-resolver.js";
@@ -106,7 +107,7 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
         intervalMs: 120000,
         enabled: true,
     },
-    // Security — every 10 minutes
+    // Security — default every 10 minutes unless overridden
     {
         id: "command_filter_verify",
         name: "Command Filter Self-Test",
@@ -132,7 +133,7 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
         id: "directive_integrity",
         name: "Directive Integrity Check",
         category: "security",
-        intervalMs: 600000,
+        intervalMs: resolveDirectiveCheckIntervalMs(),
         enabled: true,
     },
     // Diagnostics — every 15 minutes
@@ -225,6 +226,19 @@ const GUARDIAN_TASK_CATALOG: Omit<GuardianTask, "lastRunAt" | "lastResult" | "la
         enabled: true,
     },
 ];
+
+function resolveDirectiveCheckIntervalMs(): number {
+    const fallbackMs = 120000;
+    const rawValue = Number(process.env.PRISM_GUARDIAN_DIRECTIVE_CHECK_INTERVAL_MS ?? String(fallbackMs));
+    if (!Number.isFinite(rawValue)) {
+        return fallbackMs;
+    }
+    const normalized = Math.floor(rawValue);
+    if (normalized < 30000) {
+        return fallbackMs;
+    }
+    return normalized;
+}
 
 const DEFAULT_CONFIG: GuardianConfig = {
     modelAlias: "guardian",
@@ -1161,9 +1175,16 @@ export class GuardianAgent extends EventEmitter {
     private taskDirectiveIntegrity(): { status: "success" | "warning" | "failure"; detail: string } {
         const result = verifyDirectiveIntegrity();
         if (result.valid) {
+            const signature = verifyDirectiveSignature();
+            if (!signature.valid) {
+                return {
+                    status: "failure",
+                    detail: `PAD signature check failed: ${signature.error ?? "signature mismatch"}`,
+                };
+            }
             return {
                 status: "success",
-                detail: `PAD integrity verified (SHA-256: ${result.currentHash.slice(0, 16)}…)`,
+                detail: `PAD integrity+signature verified (SHA-256: ${result.currentHash.slice(0, 16)}…, keyId=${signature.keyId ?? "unknown"})`,
             };
         }
 
@@ -1174,6 +1195,13 @@ export class GuardianAgent extends EventEmitter {
                 writeFileSync(result.filePath, readFileSync(backupPath));
                 const reVerify = verifyDirectiveIntegrity();
                 if (reVerify.valid) {
+                    const signature = verifyDirectiveSignature();
+                    if (!signature.valid) {
+                        return {
+                            status: "failure",
+                            detail: `PAD hash self-healed, but signature verification failed: ${signature.error ?? "signature mismatch"}`,
+                        };
+                    }
                     this.issuesResolved++;
                     this.emitEvent(
                         "guardian.healed",
@@ -1181,7 +1209,7 @@ export class GuardianAgent extends EventEmitter {
                     );
                     return {
                         status: "success",
-                        detail: `PAD integrity self-healed from backup (SHA-256: ${reVerify.currentHash.slice(0, 16)}…)`,
+                        detail: `PAD integrity+signature self-healed from backup (SHA-256: ${reVerify.currentHash.slice(0, 16)}…, keyId=${signature.keyId ?? "unknown"})`,
                     };
                 }
             } catch (err) {

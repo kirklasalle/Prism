@@ -14,6 +14,7 @@ let wizardState = {
   workspaceRoot: '',
   provider: 'ollama',
   apiKey: '',
+  providerConfigs: {},
   characterId: '',
   operatorEmail: '',
   assistantEmail: '',
@@ -21,6 +22,7 @@ let wizardState = {
   guardianModel: '',
   guardianTier: '',
   guardianAutoStart: true,
+  guardianAutoUpdate: true,
   availableModels: [],
   cacAssignmentId: null,
 };
@@ -42,6 +44,53 @@ function escHtml(str) {
 }
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function getProviderConfig(providerId) {
+  if (!wizardState.providerConfigs[providerId]) {
+    wizardState.providerConfigs[providerId] = {
+      apiKey: '',
+      tested: false,
+      reachable: false,
+      models: [],
+      defaultModel: null,
+      touched: false,
+      saved: false,
+      savedAt: null,
+      lastError: '',
+    };
+  }
+  return wizardState.providerConfigs[providerId];
+}
+
+function formatProviderLabel(providerId) {
+  const providerMeta = providerCatalog?.find((p) => p.id === providerId);
+  return providerMeta?.label || providerId.charAt(0).toUpperCase() + providerId.slice(1);
+}
+
+function renderConfiguredProvidersSummary() {
+  const summary = document.getElementById('provider-config-summary');
+  if (!summary) return;
+
+  const entries = Object.entries(wizardState.providerConfigs)
+    .filter(([, cfg]) => cfg.saved)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (entries.length === 0) {
+    summary.innerHTML = '<div style="opacity:0.7;">No providers saved yet. Select a provider, test it, then Save.</div>';
+    return;
+  }
+
+  summary.innerHTML = entries
+    .map(([providerId, cfg]) => {
+      const modelCount = Array.isArray(cfg.models) ? cfg.models.length : 0;
+      const stateText = cfg.reachable ? 'reachable' : 'saved';
+      return `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.08);">
+        <span><strong>${escHtml(formatProviderLabel(providerId))}</strong>${providerId === wizardState.provider ? ' (primary)' : ''}</span>
+        <span style="opacity:0.8;">${modelCount} models · ${stateText}</span>
+      </div>`;
+    })
+    .join('');
+}
 
 window.toggleApiKeyVisibility = function toggleApiKeyVisibility(inputId, btnEl) {
   const input = document.getElementById(inputId);
@@ -129,7 +178,7 @@ function showStep(n) {
   const nextBtn = document.getElementById('wizard-next');
   const skipBtn = document.getElementById('wizard-skip');
   if (backBtn) backBtn.style.display = n > 1 ? '' : 'none';
-  if (nextBtn) nextBtn.textContent = n === TOTAL_STEPS ? 'Launch PRISM' : 'Continue';
+  if (nextBtn) nextBtn.textContent = 'Continue';
   if (skipBtn) skipBtn.style.display = n === TOTAL_STEPS ? 'none' : '';
   renderProgress();
 
@@ -297,7 +346,9 @@ const PROVIDERS_NEEDING_KEY = ['custom', 'openai', 'anthropic', 'google', 'mistr
 
 async function initProviderGuardianStep() {
   await loadProviderCatalog();
+  getProviderConfig(wizardState.provider);
   updateProviderKeyField();
+  renderConfiguredProvidersSummary();
 
   // Load GGUF models for guardian
   try {
@@ -332,13 +383,44 @@ async function initProviderGuardianStep() {
     autoCheckbox.checked = wizardState.guardianAutoStart;
     autoCheckbox.onchange = () => { wizardState.guardianAutoStart = autoCheckbox.checked; };
   }
+
+  const autoUpdateCheckbox = document.getElementById('wizard-guardian-autoupdate');
+  if (autoUpdateCheckbox) {
+    autoUpdateCheckbox.checked = wizardState.guardianAutoUpdate;
+    autoUpdateCheckbox.onchange = () => { wizardState.guardianAutoUpdate = autoUpdateCheckbox.checked; };
+  }
+}
+
+async function applyGuardianTaskPreference(taskId, shouldEnable) {
+  const tasksRes = await api('GET', '/api/guardian/tasks');
+  const tasks = Array.isArray(tasksRes?.tasks) ? tasksRes.tasks : [];
+  const task = tasks.find((t) => t && t.id === taskId);
+  if (!task) {
+    return;
+  }
+  if (Boolean(task.enabled) !== Boolean(shouldEnable)) {
+    await api('POST', `/api/guardian/tasks/${taskId}/toggle`);
+  }
+}
+
+async function applyGuardianLearningAndUpdatePreferences() {
+  // Tie wizard auto-update preference to Guardian maintenance/learning loops.
+  await applyGuardianTaskPreference('update_version_check', wizardState.guardianAutoUpdate);
+  await applyGuardianTaskPreference('self_improve_check', wizardState.guardianAutoUpdate);
 }
 
 window.selectProvider = function selectProvider(el, value) {
+  const currentProviderCfg = getProviderConfig(wizardState.provider);
+  currentProviderCfg.apiKey = wizardState.apiKey || currentProviderCfg.apiKey || '';
+
   wizardState.provider = value;
   document.querySelectorAll('#step-5 .wizard-option').forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
+
+  const nextCfg = getProviderConfig(value);
+  wizardState.apiKey = nextCfg.apiKey || '';
   updateProviderKeyField();
+  renderConfiguredProvidersSummary();
 };
 
 async function loadProviderCatalog() {
@@ -364,10 +446,22 @@ function updateProviderKeyField() {
   if (keyLabel) keyLabel.textContent = `${providerMeta?.label || wizardState.provider.charAt(0).toUpperCase() + wizardState.provider.slice(1)} API Key`;
   if (testResult) testResult.innerHTML = '';
 
+  const saveResult = document.getElementById('provider-save-result');
+  if (saveResult) saveResult.innerHTML = '';
+
   const keyInput = document.getElementById('provider-api-key');
+  const providerCfg = getProviderConfig(wizardState.provider);
   if (keyInput) {
-    keyInput.value = wizardState.apiKey = '';
-    keyInput.oninput = () => { wizardState.apiKey = keyInput.value; };
+    keyInput.value = providerCfg.apiKey || '';
+    wizardState.apiKey = providerCfg.apiKey || '';
+    keyInput.oninput = () => {
+      const updated = getProviderConfig(wizardState.provider);
+      updated.apiKey = keyInput.value;
+      updated.touched = true;
+      updated.saved = false;
+      wizardState.apiKey = keyInput.value;
+      renderConfiguredProvidersSummary();
+    };
   }
 }
 
@@ -376,21 +470,129 @@ window.testProviderConnection = async function testProviderConnection() {
   if (!testResult) return false;
   testResult.innerHTML = '<span style="color:var(--muted);">Testing connection...</span>';
   try {
+    const providerCfg = getProviderConfig(wizardState.provider);
     const data = await api('POST', '/api/llm/provider-test', {
       providerId: wizardState.provider,
       apiKey: wizardState.apiKey || undefined,
     });
+    providerCfg.tested = true;
+    providerCfg.reachable = Boolean(data.ok || data.reachable);
+    providerCfg.lastError = '';
+    providerCfg.models = Array.isArray(data.models) ? data.models : providerCfg.models;
+    providerCfg.defaultModel = providerCfg.models[0] || providerCfg.defaultModel || null;
+    providerCfg.touched = true;
     if (data.ok || data.reachable) {
       testResult.innerHTML = '<span style="color:var(--accent-2);">✓ Provider is reachable.</span>';
+      renderConfiguredProvidersSummary();
       return true;
     }
+    providerCfg.lastError = data.error || data.reason || 'Could not reach provider.';
     testResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(data.error || data.reason || 'Could not reach provider.')}</span>`;
+    renderConfiguredProvidersSummary();
     return false;
   } catch {
+    const providerCfg = getProviderConfig(wizardState.provider);
+    providerCfg.tested = true;
+    providerCfg.reachable = false;
+    providerCfg.lastError = 'Connection test failed.';
     testResult.innerHTML = '<span style="color:var(--danger);">✗ Connection test failed.</span>';
+    renderConfiguredProvidersSummary();
     return false;
   }
 };
+
+async function saveProviderConfiguration(providerId = wizardState.provider, opts = {}) {
+  const { refreshModels = true, quiet = false } = opts;
+  const providerCfg = getProviderConfig(providerId);
+  const providerMeta = providerCatalog?.find((p) => p.id === providerId);
+  const needsKey = providerMeta?.requiresApiKey ?? PROVIDERS_NEEDING_KEY.includes(providerId);
+  const saveResult = document.getElementById('provider-save-result');
+
+  if (!quiet && saveResult) {
+    saveResult.innerHTML = '<span style="color:var(--muted);">Saving provider configuration...</span>';
+  }
+
+  let models = Array.isArray(providerCfg.models) ? providerCfg.models : [];
+
+  if (refreshModels) {
+    try {
+      const testRes = await api('POST', '/api/llm/provider-test', {
+        providerId,
+        apiKey: providerCfg.apiKey || undefined,
+      });
+      providerCfg.tested = true;
+      providerCfg.reachable = Boolean(testRes.ok || testRes.reachable);
+      providerCfg.lastError = '';
+      if (Array.isArray(testRes.models)) {
+        models = testRes.models;
+      }
+    } catch {
+      providerCfg.reachable = false;
+      providerCfg.lastError = 'Provider test failed during save.';
+    }
+  }
+
+  if (providerCfg.apiKey && needsKey) {
+    await api('POST', '/api/llm/provider-secret', {
+      providerId,
+      apiKey: providerCfg.apiKey,
+    });
+  }
+
+  const defaultModel = models[0] || null;
+  await api('POST', '/api/llm/provider-settings', {
+    providerId,
+    models,
+    defaultModel,
+  });
+
+  providerCfg.models = models;
+  providerCfg.defaultModel = defaultModel;
+  providerCfg.saved = true;
+  providerCfg.savedAt = new Date().toISOString();
+  providerCfg.touched = true;
+
+  if (providerId === wizardState.provider) {
+    wizardState.apiKey = providerCfg.apiKey || '';
+  }
+
+  renderConfiguredProvidersSummary();
+
+  if (!quiet && saveResult) {
+    saveResult.innerHTML = `<span style="color:var(--accent-2);">✓ ${escHtml(formatProviderLabel(providerId))} configuration saved.</span>`;
+  }
+
+  return providerCfg;
+}
+
+window.saveProviderConfiguration = async function saveProviderConfigurationHandler() {
+  try {
+    await saveProviderConfiguration(wizardState.provider, { refreshModels: true, quiet: false });
+    showToast('Provider configuration saved.', 'success');
+  } catch (error) {
+    const saveResult = document.getElementById('provider-save-result');
+    if (saveResult) {
+      saveResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(String(error?.message || error || 'Save failed.'))}</span>`;
+    }
+    showToast('Provider configuration save failed.', 'error');
+  }
+};
+
+async function saveAllConfiguredProviders() {
+  const configured = Object.keys(wizardState.providerConfigs)
+    .filter((providerId) => {
+      const cfg = wizardState.providerConfigs[providerId];
+      return cfg && (cfg.touched || cfg.saved || cfg.apiKey || providerId === wizardState.provider);
+    });
+
+  if (!configured.includes(wizardState.provider)) {
+    configured.push(wizardState.provider);
+  }
+
+  for (const providerId of configured) {
+    await saveProviderConfiguration(providerId, { refreshModels: true, quiet: true });
+  }
+}
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 
@@ -411,7 +613,7 @@ window.wizardNext = async function wizardNext() {
         const wsInput = document.getElementById('workspace-path');
         const workspaceRoot = wsInput ? wsInput.value.trim() : '';
         await api('POST', '/api/setup/workspace', { workspaceRoot });
-        
+
         // Re-run prerequisites check and ensure they all passed
         const data = await api('GET', '/api/setup/prerequisites');
         const allPassed = (data.checks || []).every(c => c.passed);
@@ -498,7 +700,7 @@ window.wizardNext = async function wizardNext() {
       console.error(err);
     } finally {
       nextBtn.disabled = false;
-      nextBtn.textContent = currentStep === TOTAL_STEPS ? 'Launch PRISM' : 'Continue';
+      nextBtn.textContent = 'Continue';
     }
   } else {
     // Step 5: Final launch step
@@ -512,51 +714,13 @@ window.wizardNext = async function wizardNext() {
     }
 
     try {
-      showToast("Testing provider connection...", "info");
-      // 1. Run provider connection test and block if it fails
-      const reachable = await testProviderConnection();
-      if (!reachable) {
-        showToast("LLM provider connection test failed.", "error");
-        if (launchErr) {
-          launchErr.textContent = 'LLM provider connection test failed. Please verify provider reachability and key before launching.';
-          launchErr.style.display = 'block';
-        }
-        return;
-      }
-      showToast("Connection verified successfully!", "success");
-      await delay(500);
+      showToast("Saving provider configurations...", "info");
+      await saveAllConfiguredProviders();
+      showToast("Provider configurations saved.", "success");
+      await delay(300);
 
-      // 2. Save LLM secrets
-      const providerMeta = providerCatalog?.find((p) => p.id === wizardState.provider);
-      const needsKey = providerMeta?.requiresApiKey ?? PROVIDERS_NEEDING_KEY.includes(wizardState.provider);
-      if (wizardState.apiKey && needsKey) {
-        showToast("Saving API key to secrets...", "info");
-        await api('POST', '/api/llm/provider-secret', {
-          providerId: wizardState.provider,
-          apiKey: wizardState.apiKey,
-        });
-        showToast("API key saved.", "success");
-        await delay(500);
-      }
-
-      showToast("Saving provider settings...", "info");
-      let testModels = [];
-      try {
-        const testRes = await api('POST', '/api/llm/provider-test', {
-          providerId: wizardState.provider,
-          apiKey: wizardState.apiKey || undefined,
-        });
-        if (testRes.models) {
-          testModels = testRes.models;
-        }
-      } catch { /* ignore */ }
-
-      const defaultModel = testModels[0] || null;
-      await api('POST', '/api/llm/provider-settings', {
-        providerId: wizardState.provider,
-        models: testModels,
-        defaultModel: defaultModel,
-      });
+      const primaryCfg = getProviderConfig(wizardState.provider);
+      const defaultModel = primaryCfg.defaultModel || (primaryCfg.models?.[0] ?? null);
 
       showToast("Applying model to system...", "info");
       await api('POST', '/api/llm/select', {
@@ -574,6 +738,7 @@ window.wizardNext = async function wizardNext() {
           authorityTier: wizardState.guardianTier,
           autoStart: wizardState.guardianAutoStart,
         });
+        await applyGuardianLearningAndUpdatePreferences();
         showToast("Guardian Agent configured.", "success");
         await delay(500);
       }
@@ -600,6 +765,7 @@ window.wizardNext = async function wizardNext() {
           model: wizardState.guardianModel || 'not configured',
           authorityTier: wizardState.guardianTier || (wizardState.profile === 'business' ? 'tier2_conditional' : 'tier1_autonomous'),
           autoStart: !!wizardState.guardianAutoStart,
+          autoUpdate: !!wizardState.guardianAutoUpdate,
         },
         agents: {
           defaultSwarmTopology: wizardState.profile === 'business' ? 'star' : 'mesh',
@@ -646,7 +812,7 @@ window.wizardNext = async function wizardNext() {
       }
     } finally {
       nextBtn.disabled = false;
-      nextBtn.textContent = 'Launch PRISM';
+      nextBtn.textContent = 'Continue';
     }
   }
 };

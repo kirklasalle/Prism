@@ -2,6 +2,20 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.5 — 2026-07-14 — TUI Smoke-Test Cleanup & Claims Register Alignment
+
+Improves the test harness cleanup path and aligns the claims/audit documentation with the clean-exit TUI smoke test.
+
+### Changed
+
+- **TUI smoke test cleanup (`tests/tui-e2e.test.ts`)**:
+    - The smoke test now launches `tsx` through `node --import tsx` instead of a shell-wrapped `npx` spawn, and its timers are cleanup-aware so the process exits cleanly after assertions complete.
+    - Verified directly via `node --test dist/tests/tui-e2e.test.js`, which now finishes with `2 passing` and no lingering handle shutdown error.
+- **Claims register alignment (`docs/CLAIMS_REGISTER.md`)**:
+    - Added a note that the 195-discovered-suite claim now includes a clean-exit TUI smoke test under direct execution.
+- **Audit note alignment (`docs/PRISM_CRITICAL_AUDIT_2026.md`)**:
+    - Updated the E12 implementation note to reflect the clean-exit TUI smoke test and the deterministic coverage gate.
+
 ## v0.22.4 — 2026-07-12 — Add-on Management Panel & UI Visibility Improvements
 
 Introduces the operator-facing Boot-time Add-on Management Panel in the Tools & Plugins tab, featuring high-visibility progress banners for the learn/delete lifecycle workflows, real-time elapsed timers, and manifest-to-directory path resolution.

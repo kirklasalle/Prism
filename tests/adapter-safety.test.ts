@@ -134,8 +134,15 @@ export async function testAdapterSafetyRegression(): Promise<void> {
     assert.strictEqual(invalidUrl.ok, false);
     assert.match(String((invalidUrl.output as { error?: string }).error ?? ""), /URL must use http/i);
 
+    const privateBlocked = await http.execute(
+        makeRequest("http_request", { url: "http://127.0.0.1:11434" }, false, "low"),
+    );
+    assert.strictEqual(privateBlocked.ok, false);
+    assert.match(String((privateBlocked.output as { error?: string }).error ?? ""), /blocked/i);
+
     const server = await createTestServer();
     try {
+        process.env.PRISM_ALLOW_PRIVATE_EGRESS = "true";
         const getResult = await http.execute(
             makeRequest("http_request", { url: `${server.baseUrl}/json`, method: "GET" }, false, "low"),
         );
@@ -162,6 +169,7 @@ export async function testAdapterSafetyRegression(): Promise<void> {
             received: { probe: "adapter-regression" },
         });
     } finally {
+        delete process.env.PRISM_ALLOW_PRIVATE_EGRESS;
         await server.close();
         await fs.rm(testDir, { recursive: true, force: true });
     }

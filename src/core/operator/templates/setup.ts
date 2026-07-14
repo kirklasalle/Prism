@@ -448,8 +448,13 @@ export function setupWizardHtml(port: number): string {
               </button>
             </div>
           </div>
-          <button type="button" class="secondary-button" style="margin-top:8px;font-size:12px;padding:6px 12px;" onclick="testProviderConnection()">Test Connection</button>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="secondary-button" style="font-size:12px;padding:6px 12px;" onclick="testProviderConnection()">Test Connection</button>
+            <button type="button" class="primary-button" style="font-size:12px;padding:6px 12px;" onclick="saveProviderConfiguration()">Save Provider</button>
+          </div>
           <div id="provider-test-result" style="margin-top:8px;font-size:12px;"></div>
+          <div id="provider-save-result" style="margin-top:6px;font-size:12px;"></div>
+          <div id="provider-config-summary" style="margin-top:10px;font-size:12px;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;background:rgba(255,255,255,0.02);"></div>
         </div>
 
         <div class="wizard-section" style="padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.015);">
@@ -473,6 +478,14 @@ export function setupWizardHtml(port: number): string {
           <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;font-size:13px;">
             <span>Auto-start Guardian on launch</span>
             <input type="checkbox" id="wizard-guardian-autostart" style="cursor:pointer;" checked />
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;font-size:13px;">
+            <span>Auto-update + skill-learning checks</span>
+            <input type="checkbox" id="wizard-guardian-autoupdate" style="cursor:pointer;" checked />
+          </div>
+          <div class="wizard-hint" style="margin-top:4px;">
+            When enabled, Guardian runs update tracking and self-improvement checks to learn from operations.
           </div>
         </div>
         <div id="wizard-launch-error" style="color:var(--danger);font-size:12px;margin-top:12px;display:none;"></div>

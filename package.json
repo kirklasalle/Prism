@@ -29,7 +29,12 @@
         "test:shell-destructive": "npm run build && node --test --test-force-exit dist/tests/shell-tool-destructive.test.js",
         "test:migrations": "npm run build && node --test --test-force-exit dist/tests/db-migration-framework.test.js",
         "test:db-manager": "npm run build && node --test --test-force-exit dist/tests/db-manager.test.js",
-        "test": "npm run build && node dist/tests/index.js && node --test --test-force-exit dist/tests/agent-pool.test.js && node --test --test-force-exit dist/tests/task-decomposer.test.js && node --test --test-force-exit dist/tests/agent-lifecycle.test.js && node --test --test-force-exit dist/tests/agent-telemetry.test.js && node --test --test-force-exit dist/tests/agent-router.test.js && node --test --test-force-exit dist/tests/swarm-coordinator.test.js && node --test --test-force-exit dist/tests/guardian-agent.test.js && node --test --test-force-exit dist/tests/console-interceptor.test.js && node --test --test-force-exit dist/tests/shell-tool-destructive.test.js && node --test --test-force-exit dist/tests/db-migration-framework.test.js && node --test --test-force-exit dist/tests/db-manager.test.js && node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 \"dist/tests/terminal-session-adapter.test.js\" \"dist/tests/container-sandbox-adapter.test.js\" \"dist/tests/docker-container-adapter.test.js\" \"dist/tests/computer-use-cross-platform.test.js\" \"dist/tests/tool-contract-extractor.test.js\" \"dist/tests/profile-parity.test.js\" \"dist/tests/business-trust-validator.test.js\" \"dist/tests/event-lineage-telemetry.test.js\" \"dist/tests/mcp-client-tool.test.js\" \"dist/tests/nexus-bridge-tool.test.js\" \"dist/tests/parallel-execution.test.js\" \"dist/tests/model-capability-matrix.test.js\" \"dist/tests/plugin-pack-validator.test.js\" \"dist/tests/scheduler-api-routes.test.js\" \"dist/tests/compliance-status-routes.test.js\" \"dist/tests/browser-integration.test.js\" \"dist/tests/browser-api-routes.test.js\" \"dist/tests/tab-browser-ui.test.js\" \"dist/tests/agentic-api-routes.test.js\" \"dist/tests/addons-api-routes.test.js\" \"dist/tests/tab-agentic-ui.test.js\" \"dist/tests/tab-scheduler-ui.test.js\" \"dist/tests/tab-wiki-ui.test.js\" \"dist/tests/workspace-handler-security.test.js\" \"dist/tests/workspace-api-routes.test.js\" \"dist/tests/workspace-property.test.js\" \"dist/tests/spectrum-refraction.test.js\" \"dist/tests/reason-code-taxonomy.test.js\" \"dist/tests/plugin-pack-integration.test.js\" \"dist/tests/a2a-governance.test.js\" \"dist/tests/metrics-endpoint.test.js\" \"dist/tests/simple-mode.test.js\" \"dist/tests/slo-gauge.test.js\" \"dist/tests/plugin-toggle.test.js\" \"dist/tests/api-versioning.test.js\" \"dist/tests/tool-contract-extractor-approval-flow.test.js\" \"dist/tests/release-packet-generator.test.js\" \"dist/tests/contract-diff-gate.test.js\" && node --test --test-force-exit dist/tests/tui-unit.test.js && node --test --test-force-exit dist/tests/tui-components.test.js",
+        "test:discover": "node scripts/run-discovered-tests.cjs",
+        "test:discover:list": "node scripts/run-discovered-tests.cjs --list",
+        "test:coverage": "set SKIP_TUI_E2E=1&& npm run build && nyc --reporter=text-summary --reporter=json-summary --exclude='.mcp/**' --exclude='dist/tests/e2e/**' node scripts/run-discovered-tests.cjs --no-build",
+        "test:coverage:check": "node scripts/coverage-floor-gate.cjs",
+        "test:coverage:gate": "npm run test:coverage && node scripts/coverage-floor-gate.cjs --require-floor",
+        "test": "npm run test:discover",
         "perf:qualify": "npm run build && node dist/src/benchmarks/performance-qualification.js",
         "perf:qualify:dev": "set PRISM_ENV_PROFILE=dev&& npm run perf:qualify",
         "perf:qualify:staging": "set PRISM_ENV_PROFILE=staging&& npm run perf:qualify",
@@ -42,7 +47,11 @@
         "release:sign-artifact": "node scripts/sign-release-artifact.cjs",
         "release:verify-artifact": "node scripts/verify-release-artifact.cjs",
         "security:owasp": "node scripts/owasp-scan.cjs",
+        "security:directive-sign": "node scripts/sign-directive-file.cjs",
         "security:secrets": "node scripts/secrets-scan.cjs",
+        "security:directive-integrity": "node scripts/directive-integrity-gate.cjs",
+        "security:sbom-cve-gate": "node scripts/sbom-cve-gate.cjs",
+        "security:sbom": "node scripts/sbom-cve-gate.cjs",
         "audit:platform-parity": "node scripts/platform-parity-audit.cjs",
         "plugin:scaffold": "node scripts/scaffold-plugin.cjs",
         "demo:sr-showcase": "node examples/sr-showcase/run-demo.cjs",
@@ -57,7 +66,7 @@
         "g:trust:qualify:evidence": "npm run build && node dist/src/benchmarks/g-business-trust-qualification.js",
         "j:lineage:qualify": "npm run build && node dist/src/benchmarks/j-event-lineage-qualification.js && node ./node_modules/mocha/bin/mocha.js \"dist/tests/event-lineage-telemetry.test.js\"",
         "cu:bg:check": "npm run build && node dist/src/benchmarks/cu-bg-gate-check.js",
-        "ci:gate:check": "npm run build && node dist/src/benchmarks/ci-gate-check.js",
+        "ci:gate:check": "npm run test:coverage:gate && npm run security:directive-integrity && npm run security:secrets && npm run security:sbom-cve-gate && node dist/src/benchmarks/ci-gate-check.js",
         "contracts:snapshot": "npm run build && node dist/src/benchmarks/tool-contract-snapshot.js",
         "release:validate": "npm run build && node dist/src/benchmarks/release-validation.js",
         "release:validate:strict": "npm run build && node dist/src/benchmarks/release-validation.js --strict",
@@ -99,14 +108,14 @@
         "ink-select-input": "^6.2.0",
         "ink-spinner": "^5.0.0",
         "ink-text-input": "^6.0.0",
-        "markdown-it": "^13.0.1",
+        "markdown-it": "^14.3.0",
         "markdown-it-anchor": "^9.0.1",
         "playwright": "^1.58.2",
         "react": "^18.3.1",
         "sharp": "^0.34.5",
         "sqlite3": "^6.0.1",
         "uuid": "^13.0.0",
-        "ws": "^8.20.0"
+        "ws": "^8.21.0"
     },
     "devDependencies": {
         "@types/jsdom": "^28.0.1",
@@ -121,6 +130,7 @@
         "lint-staged": "^17.0.7",
         "markdownlint-cli2": "^0.22.1",
         "mocha": "^11.7.5",
+        "nyc": "^17.1.0",
         "prettier": "^3.8.4",
         "tsx": "^4.19.0",
         "typescript": "^5.8.0"
@@ -141,5 +151,21 @@
         "dockerode": "^4.0.10",
         "googleapis": "^171.4.0",
         "node-pty": "^1.1.0"
+    },
+    "overrides": {
+        "@grpc/grpc-js": "^1.14.4",
+        "protobufjs": "^7.6.3",
+        "serialize-javascript": "^7.0.5",
+        "undici": "^7.28.0",
+        "ws": "^8.21.0"
+    },
+    "allowScripts": {
+        "cpu-features@0.0.10": true,
+        "esbuild@0.27.3": true,
+        "node-pty@1.1.0": true,
+        "protobufjs@7.6.5": true,
+        "sharp@0.34.5": true,
+        "sqlite3@6.0.1": true,
+        "ssh2@1.17.0": true
     }
 }

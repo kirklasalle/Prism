@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "description": "PRISM governance signing key registry for PAD signature verification.",
+    "keys": [
+        {
+            "keyId": "prism-governance-pad-2026-07",
+            "algorithm": "ed25519",
+            "label": "PRISM Governance PAD Signing Key",
+            "publicKeyBase64": "MCowBQYDK2VwAyEAbJjLy1ZnvqnVBkBMz9QlsD+H8u7GiDFilM5qhqAGzLE=",
+            "addedAt": "2026-07-13T23:30:20.767Z",
+            "expiresAt": null
+        }
+    ]
+}

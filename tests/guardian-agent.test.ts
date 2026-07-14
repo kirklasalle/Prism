@@ -278,6 +278,13 @@ describe("GuardianAgent", () => {
         assert.match(String(result!.lastDetail), /skipped|not attached/i);
     });
 
+    it("directive_integrity validates both hash and signature", async () => {
+        const result = await guardian.runTask("directive_integrity");
+        assert.ok(result, "directive task must exist");
+        assert.equal(result!.lastResult, "success");
+        assert.match(String(result!.lastDetail), /integrity\+signature verified/i);
+    });
+
     it("mcp_health_recovery reports all-healthy when adapter has no down servers", async () => {
         guardian.setMcpAdapterFn(() => ({
             getServerStates: () => [

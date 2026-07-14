@@ -1,4 +1,5 @@
 import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
+import { validateEgressUrl } from "../../core/security/network-egress-guard.js";
 
 export class HttpRequestTool implements Tool {
     readonly name = "http_request";
@@ -25,6 +26,25 @@ export class HttpRequestTool implements Tool {
 
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             return { ok: false, output: { error: "URL must use http:// or https://" } };
+        }
+
+        const allowPrivate = (process.env.PRISM_ALLOW_PRIVATE_EGRESS ?? "").toLowerCase() === "true";
+        const allowMetadata = (process.env.PRISM_ALLOW_METADATA_EGRESS ?? "").toLowerCase() === "true";
+        const egressCheck = validateEgressUrl(url, {
+            allowLoopback: allowPrivate,
+            allowPrivate,
+            allowLinkLocal: allowPrivate,
+            allowMetadata,
+        });
+        if (!egressCheck.ok) {
+            return {
+                ok: false,
+                output: {
+                    error: egressCheck.reason ?? "URL blocked by egress policy.",
+                    url,
+                    method,
+                },
+            };
         }
 
         try {

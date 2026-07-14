@@ -12,6 +12,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { IncomingMessage } from "node:http";
 import type { IamPrincipal } from "../iam/rbac.js";
+import { readPreferences } from "../config/workspace-resolver.js";
 
 export interface AuthConfig {
     /** Path to token file on disk */
@@ -20,6 +21,10 @@ export interface AuthConfig {
     publicRoutes?: string[];
     /** Route prefixes that bypass auth */
     publicPrefixes?: string[];
+    /** Setup/bootstrap-only routes that bypass auth until setup completes */
+    bootstrapRoutes?: string[];
+    /** Setup/bootstrap-only route prefixes that bypass auth until setup completes */
+    bootstrapPrefixes?: string[];
     /** If true, auth is disabled (dev mode) */
     disabled?: boolean;
 }
@@ -44,12 +49,16 @@ export class AuthGate {
     private token: string;
     private readonly publicRoutes: Set<string>;
     private readonly publicPrefixes: string[];
+    private readonly bootstrapRoutes: Set<string>;
+    private readonly bootstrapPrefixes: string[];
     private readonly disabled: boolean;
 
     constructor(private readonly config: AuthConfig) {
         this.disabled = config.disabled ?? false;
         this.publicRoutes = new Set([...DEFAULT_PUBLIC_ROUTES, ...(config.publicRoutes ?? [])]);
         this.publicPrefixes = [...DEFAULT_PUBLIC_PREFIXES, ...(config.publicPrefixes ?? [])];
+        this.bootstrapRoutes = new Set(config.bootstrapRoutes ?? []);
+        this.bootstrapPrefixes = [...(config.bootstrapPrefixes ?? [])];
         this.token = this.loadOrCreateToken();
     }
 
@@ -77,6 +86,18 @@ export class AuthGate {
         for (const prefix of this.publicPrefixes) {
             if (checkPath.startsWith(prefix) || urlPath.startsWith(prefix)) {
                 return { authenticated: true };
+            }
+        }
+
+        // Setup/bootstrap routes bypass auth only until setup is complete.
+        if (this.isBootstrapAuthBypassEnabled()) {
+            if (this.bootstrapRoutes.has(checkPath) || this.bootstrapRoutes.has(urlPath)) {
+                return { authenticated: true };
+            }
+            for (const prefix of this.bootstrapPrefixes) {
+                if (checkPath.startsWith(prefix) || urlPath.startsWith(prefix)) {
+                    return { authenticated: true };
+                }
             }
         }
 
@@ -158,5 +179,10 @@ export class AuthGate {
             return false;
         }
         return timingSafeEqual(bufA, bufB);
+    }
+
+    private isBootstrapAuthBypassEnabled(): boolean {
+        const prefs = readPreferences();
+        return !prefs?.setupComplete;
     }
 }

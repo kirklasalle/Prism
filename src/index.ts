@@ -79,12 +79,27 @@ import { SkillsEngine } from "./core/skills/skills-engine.js";
 import { TabToolAdapter } from "./core/skills/tab-tool-adapter.js";
 import { SkillsDbAdapter } from "./core/skills/db-adapter.js";
 import { loadAddons } from "./core/addons/index.js";
+import { enforceDirectiveIntegrityBootGate } from "./core/security/directive-integrity.js";
+import { enforceDirectiveSignatureBootGate } from "./core/security/directive-signature.js";
 
 async function main(): Promise<void> {
     // Auto-create .env from .env.example on first run
     ensureEnvFile();
     // Load environment variables from .env into process.env
     loadEnvFile();
+
+    const directiveBootCheck = enforceDirectiveIntegrityBootGate();
+    if (directiveBootCheck.valid) {
+        console.log(
+            `[PRISM][boot-gate] Directive integrity verified (${directiveBootCheck.currentHash.slice(0, 16)}...).`,
+        );
+    }
+    const directiveSignatureBootCheck = enforceDirectiveSignatureBootGate();
+    if (directiveSignatureBootCheck.valid) {
+        console.log(
+            `[PRISM][boot-gate] Directive signature verified (keyId=${directiveSignatureBootCheck.keyId ?? "unknown"}).`,
+        );
+    }
 
     // Assign mock credentials in dev mode if they are not configured, so OAuth is connectable
     if (process.env.NODE_ENV !== "production") {

@@ -36,10 +36,16 @@ let service: DashboardService;
 let port: number;
 let tmpDir: string;
 let chatStore: ChatSessionStore;
+let authToken = "";
+const assignmentOperatorEmail = new Map<string, string>();
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return authToken ? { Authorization: `Bearer ${authToken}`, ...extra } : { ...extra };
+}
 
 function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
-        http.get({ hostname: "127.0.0.1", port, path }, (res) => {
+        http.get({ hostname: "127.0.0.1", port, path, headers: authHeaders() }, (res) => {
             let data = "";
             res.on("data", (chunk: Buffer) => {
                 data += chunk;
@@ -63,7 +69,7 @@ function requestJson(method: string, path: string, body?: unknown): Promise<{ st
                 port,
                 path,
                 method,
-                headers: body == null ? {} : { "Content-Type": "application/json" },
+                headers: body == null ? authHeaders() : authHeaders({ "Content-Type": "application/json" }),
             },
             (res) => {
                 let payload = "";
@@ -87,23 +93,40 @@ function requestJson(method: string, path: string, body?: unknown): Promise<{ st
 
 /** Create a fresh character assignment and return its ID */
 async function createAssignment(suffix: string): Promise<string> {
-    const { body } = await requestJson("POST", "/api/workspace/character-assign", {
-        characterId: "sm-agent",
-        prismUserId: `prism-sm-${suffix}`,
-        prismUserEmail: `sm-${suffix}@prism.local`,
-        operatorId: `op-sm-${suffix}`,
-        operatorEmail: `op-sm-${suffix}@prism.local`,
-        executionProfile: "individual",
-    });
-    return body.assignment.assignmentId;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        const uniqueSuffix = `${suffix}-${attempt}`;
+        const operatorEmail = `op-sm-${uniqueSuffix}@prism.local`;
+        const { status, body } = await requestJson("POST", "/api/workspace/character-assign", {
+            characterId: "sm-agent",
+            prismUserId: `prism-sm-${uniqueSuffix}`,
+            prismUserEmail: `sm-${uniqueSuffix}@prism.local`,
+            operatorId: `op-sm-${uniqueSuffix}`,
+            operatorEmail,
+            executionProfile: "individual",
+        });
+        const assignmentId = String(body?.assignment?.assignmentId ?? "");
+        if (status === 200 && assignmentId) {
+            assignmentOperatorEmail.set(assignmentId, operatorEmail);
+            return assignmentId;
+        }
+    }
+    throw new Error(`Failed to create assignment for suffix '${suffix}'`);
 }
 
 /** Get audit events for a specific assignment */
 async function getAuditForAssignment(assignmentId: string): Promise<any[]> {
-    const { body } = await fetchJson(
-        `/api/workspace/character-audit?assignmentId=${encodeURIComponent(assignmentId)}&limit=100`,
-    );
-    return body.events || [];
+    const operatorEmail = assignmentOperatorEmail.get(assignmentId) ?? "";
+    const query =
+        `/api/workspace/character-audit?assignmentId=${encodeURIComponent(assignmentId)}` +
+        `&operatorEmail=${encodeURIComponent(operatorEmail)}&limit=100`;
+    const { body } = await fetchJson(query);
+    const events = Array.isArray(body?.events) ? body.events : [];
+    return events.filter((e: any) => {
+        const direct = String(e?.assignmentId ?? "");
+        const entityId = String(e?.entityId ?? "");
+        const detailsId = String(e?.details?.assignmentId ?? "");
+        return direct === assignmentId || entityId === assignmentId || detailsId === assignmentId;
+    });
 }
 
 /* ── State Machine Definition ─────────────────────────────────────────
@@ -237,13 +260,21 @@ describe("Character Assignment State Machine — Formal Verification", function 
         const addr = (service as unknown as { server: { address(): { port: number } | null } }).server.address();
         port = addr ? addr.port : 0;
         assert.ok(port > 0, "DashboardService should bind to an ephemeral port");
+
+        // Capture admin token so all route calls pass AuthGate.
+        authToken = service.getAuthGate().getToken();
+        assert.ok(authToken.length > 0, "AuthGate should expose an admin token");
     });
 
     after(async () => {
         await service.stop();
         chatStore.close();
         _resetWorkspaceRootCache();
-        rmSync(tmpDir, { recursive: true, force: true });
+        try {
+            rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+            // Windows can transiently hold handles during shutdown; ignore cleanup race.
+        }
     });
 
     /* ── Valid Transitions ─────────────────────────────────────────────── */

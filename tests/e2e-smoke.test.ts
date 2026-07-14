@@ -9,7 +9,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { readFileSync, existsSync, unlinkSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, unlinkSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuthGate } from "../src/core/security/auth.js";
 import { RateLimiter } from "../src/core/security/rate-limiter.js";
@@ -20,6 +20,7 @@ import { RateLimiter } from "../src/core/security/rate-limiter.js";
 
 describe("AuthGate", () => {
     const tokenPath = join(process.cwd(), ".prism-test-token");
+    const prefsPath = join(process.cwd(), ".prism-test-preferences.json");
 
     after(() => {
         try {
@@ -27,6 +28,12 @@ describe("AuthGate", () => {
         } catch {
             /* ok */
         }
+        try {
+            unlinkSync(prefsPath);
+        } catch {
+            /* ok */
+        }
+        delete process.env.PRISM_PREFERENCES_PATH;
     });
 
     it("generates and persists a token on first create", () => {
@@ -92,6 +99,38 @@ describe("AuthGate", () => {
         assert.equal(gate.check(reqPrefix).authenticated, true);
     });
 
+    it("allows bootstrap routes before setup is complete", () => {
+        process.env.PRISM_PREFERENCES_PATH = prefsPath;
+        writeFileSync(
+            prefsPath,
+            JSON.stringify({ setupComplete: false, lastModified: new Date().toISOString() }, null, 2) + "\n",
+            "utf-8",
+        );
+
+        const gate = new AuthGate({
+            tokenFilePath: tokenPath,
+            bootstrapRoutes: ["/api/llm/provider-secret"],
+        });
+        const req = { headers: {}, url: "/api/llm/provider-secret" } as any;
+        assert.equal(gate.check(req).authenticated, true);
+    });
+
+    it("requires auth for bootstrap routes after setup is complete", () => {
+        process.env.PRISM_PREFERENCES_PATH = prefsPath;
+        writeFileSync(
+            prefsPath,
+            JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }, null, 2) + "\n",
+            "utf-8",
+        );
+
+        const gate = new AuthGate({
+            tokenFilePath: tokenPath,
+            bootstrapRoutes: ["/api/llm/provider-secret"],
+        });
+        const req = { headers: {}, url: "/api/llm/provider-secret" } as any;
+        assert.equal(gate.check(req).authenticated, false);
+    });
+
     it("rejects missing auth header on protected routes", () => {
         const gate = new AuthGate({ tokenFilePath: tokenPath });
         const req = { headers: {}, url: "/api/chat/message" } as any;
@@ -100,11 +139,13 @@ describe("AuthGate", () => {
     });
 
     it("accepts token via query param", () => {
+        process.env.PRISM_ALLOW_QUERY_TOKEN = "1";
         const gate = new AuthGate({ tokenFilePath: tokenPath });
         const token = gate.getToken();
         const req = { headers: {}, url: `/dashboard?token=${token}` } as any;
         const result = gate.check(req);
         assert.equal(result.authenticated, true);
+        delete process.env.PRISM_ALLOW_QUERY_TOKEN;
     });
 
     it("bypasses all checks when disabled", () => {

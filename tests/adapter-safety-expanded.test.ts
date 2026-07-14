@@ -174,6 +174,19 @@ async function testHttpToolEdgeCases(): Promise<void> {
         assert.match(String((r.output as { error?: string }).error ?? ""), /URL must use http/i);
     }
 
+    // SSRF guard: deny loopback/private/metadata targets by default.
+    const loopbackBlocked = await http.execute(
+        makeRequest("http_request", { url: "http://127.0.0.1:8080/" }, false, "low"),
+    );
+    assert.strictEqual(loopbackBlocked.ok, false);
+    assert.match(String((loopbackBlocked.output as { error?: string }).error ?? ""), /blocked/i);
+
+    const metadataBlocked = await http.execute(
+        makeRequest("http_request", { url: "http://169.254.169.254/latest/meta-data" }, false, "low"),
+    );
+    assert.strictEqual(metadataBlocked.ok, false);
+    assert.match(String((metadataBlocked.output as { error?: string }).error ?? ""), /metadata|blocked/i);
+
     // Spin up a controllable HTTP server to exercise non-2xx, headers, and timeout
     const server = createServer(async (req, res) => {
         if (req.url === "/server-error") {
@@ -213,6 +226,8 @@ async function testHttpToolEdgeCases(): Promise<void> {
     const baseUrl = `http://127.0.0.1:${addr.port}`;
 
     try {
+        process.env.PRISM_ALLOW_PRIVATE_EGRESS = "true";
+
         // Non-2xx must surface ok=false but preserve the status code in output.
         const err = await http.execute(makeRequest("http_request", { url: `${baseUrl}/server-error` }, false, "low"));
         assert.strictEqual(err.ok, false, "5xx response must mark ToolResult.ok=false");
@@ -239,6 +254,7 @@ async function testHttpToolEdgeCases(): Promise<void> {
         assert.strictEqual(typeof (txt.output as { body?: unknown }).body, "string");
         assert.match(String((txt.output as { body?: unknown }).body), /not json/);
     } finally {
+        delete process.env.PRISM_ALLOW_PRIVATE_EGRESS;
         server.close();
         await once(server, "close");
     }

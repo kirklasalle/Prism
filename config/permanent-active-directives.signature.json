@@ -1,0 +1,9 @@
+{
+  "keyId": "prism-governance-pad-2026-07",
+  "algorithm": "ed25519",
+  "signedAt": "2026-07-13T23:30:20.762Z",
+  "file": "Permanent_Active_Directives.txt",
+  "sha256": "a8d594d70d50286a55a490dfdabef4e4b20dcb09495178a7c4d2b3314d0600df",
+  "signatureBase64": "0UcX/DeATvw50pMKXCFsLGhkJtX1BGFKQAYEAab6zbjngHFt3nHaTa6t7aRC9aOJsdw1yMnxdKhb9IU+NI2fBQ==",
+  "formatVersion": 1
+}

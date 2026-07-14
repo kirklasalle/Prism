@@ -59,6 +59,13 @@ export interface DirectiveIntegrityResult {
     error?: string;
 }
 
+export interface DirectiveBootGateOptions {
+    /** Optional absolute path to workspace root (test and tooling override). */
+    workspaceRoot?: string;
+    /** Env var name to allow non-production boot gate bypass. */
+    bypassEnvVar?: string;
+}
+
 /* ── Core Functions ──────────────────────────────────────────────────── */
 
 /**
@@ -150,4 +157,41 @@ export function verifyDirectiveIntegrity(workspaceRoot?: string): DirectiveInteg
  */
 export function getDirectiveHash(workspaceRoot?: string): string {
     return computeDirectiveHash(workspaceRoot) ?? "UNAVAILABLE";
+}
+
+function isTruthy(value: string | undefined): boolean {
+    return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+/**
+ * Enforce PAD integrity at process boot.
+ *
+ * Default behavior is fail-closed: throws when directive integrity is invalid.
+ * A temporary bypass is allowed only outside production via
+ * `PRISM_SKIP_DIRECTIVE_BOOT_GATE=true`.
+ */
+export function enforceDirectiveIntegrityBootGate(options: DirectiveBootGateOptions = {}): DirectiveIntegrityResult {
+    const bypassEnvVar = options.bypassEnvVar ?? "PRISM_SKIP_DIRECTIVE_BOOT_GATE";
+    const bypassRequested = isTruthy(process.env[bypassEnvVar]?.toLowerCase());
+    const isProduction = process.env.NODE_ENV === "production";
+    const result = verifyDirectiveIntegrity(options.workspaceRoot);
+
+    if (bypassRequested && isProduction) {
+        throw new Error(`[PRISM][boot-gate] ${bypassEnvVar}=true is not permitted in production. Refusing startup.`);
+    }
+
+    if (!result.valid && !bypassRequested) {
+        const reason = result.error
+            ? result.error
+            : `hash mismatch (expected=${result.expectedHash}, current=${result.currentHash})`;
+        throw new Error(`[PRISM][boot-gate] Directive integrity check failed: ${reason}`);
+    }
+
+    if (!result.valid && bypassRequested) {
+        console.warn(
+            `[PRISM][boot-gate] Directive integrity check failed but bypassed via ${bypassEnvVar}=true (non-production).`,
+        );
+    }
+
+    return result;
 }

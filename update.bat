@@ -4,8 +4,8 @@ setlocal
 cd /d "%~dp0"
 
 echo ================================================
-2: echo PRISM One-Click Update Utility
-3: echo ================================================
+echo PRISM One-Click Update Utility
+echo ================================================
 
 where node >nul 2>nul
 if errorlevel 1 (

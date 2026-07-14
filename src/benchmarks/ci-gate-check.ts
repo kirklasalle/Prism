@@ -34,6 +34,9 @@ function run(): void {
     const stage2Path = path.join(outputDir, "e-stage2-qualification-summary.json");
     const releaseValidationPath = path.join(outputDir, "release-validation.json");
     const cuBgValidationPath = path.join(outputDir, "computer-use-business-gate-validation.json");
+    const sbomCveSummaryPath = path.join(outputDir, "security", "sbom-cve-gate-summary.json");
+    const directiveIntegritySummaryPath = path.join(outputDir, "security", "directive-integrity-gate-summary.json");
+    const secretsScanSummaryPath = path.join(outputDir, "secrets-scan-summary.json");
 
     checks.push({
         id: "artifact-perf",
@@ -75,6 +78,30 @@ function run(): void {
         details: cuBgValidationPath,
     });
 
+    checks.push({
+        id: "artifact-sbom-cve-gate",
+        description: "SBOM/CVE gate summary artifact exists",
+        required: true,
+        passed: exists(sbomCveSummaryPath),
+        details: sbomCveSummaryPath,
+    });
+
+    checks.push({
+        id: "artifact-directive-integrity-gate",
+        description: "Directive integrity gate summary artifact exists",
+        required: true,
+        passed: exists(directiveIntegritySummaryPath),
+        details: directiveIntegritySummaryPath,
+    });
+
+    checks.push({
+        id: "artifact-secrets-scan",
+        description: "Secrets scan summary artifact exists",
+        required: true,
+        passed: exists(secretsScanSummaryPath),
+        details: secretsScanSummaryPath,
+    });
+
     if (exists(perfPath)) {
         const perf = readJson<{ passed?: boolean }>(perfPath);
         checks.push({
@@ -112,6 +139,47 @@ function run(): void {
             description: "Computer-use Business gate validation passed",
             required: true,
             passed: cuBgValidation.passed === true,
+        });
+    }
+
+    if (exists(sbomCveSummaryPath)) {
+        const sbomCveSummary = readJson<{
+            passed?: boolean;
+            threshold?: { failOn?: string };
+            audit?: { summary?: { high?: number; critical?: number } };
+        }>(sbomCveSummaryPath);
+        checks.push({
+            id: "gate-sbom-cve",
+            description: "SBOM generation and CVE threshold gate passed",
+            required: true,
+            passed: sbomCveSummary.passed === true,
+            details: `failOn=${sbomCveSummary.threshold?.failOn ?? "high"}, high=${sbomCveSummary.audit?.summary?.high ?? 0}, critical=${sbomCveSummary.audit?.summary?.critical ?? 0}`,
+        });
+    }
+
+    if (exists(directiveIntegritySummaryPath)) {
+        const directiveIntegritySummary = readJson<{
+            passed?: boolean;
+            checks?: { hashMatches?: boolean; signatureVerified?: boolean };
+            details?: { currentHash?: string; expectedHash?: string; keyId?: string | null };
+        }>(directiveIntegritySummaryPath);
+        checks.push({
+            id: "gate-directive-integrity",
+            description: "Directive integrity gate passed",
+            required: true,
+            passed: directiveIntegritySummary.passed === true,
+            details: `hashMatches=${directiveIntegritySummary.checks?.hashMatches === true}, signatureVerified=${directiveIntegritySummary.checks?.signatureVerified === true}, keyId=${directiveIntegritySummary.details?.keyId ?? "unknown"}, current=${directiveIntegritySummary.details?.currentHash ?? "unknown"}, expected=${directiveIntegritySummary.details?.expectedHash ?? "unknown"}`,
+        });
+    }
+
+    if (exists(secretsScanSummaryPath)) {
+        const secretsScanSummary = readJson<{ clean?: boolean; findingsCount?: number }>(secretsScanSummaryPath);
+        checks.push({
+            id: "gate-secrets-scan",
+            description: "Workspace secrets scan passed",
+            required: true,
+            passed: secretsScanSummary.clean === true,
+            details: `clean=${secretsScanSummary.clean === true}, findings=${secretsScanSummary.findingsCount ?? 0}`,
         });
     }
 
