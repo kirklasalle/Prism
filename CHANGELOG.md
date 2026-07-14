@@ -9,12 +9,12 @@ Improves the test harness cleanup path and aligns the claims/audit documentation
 ### Changed
 
 - **TUI smoke test cleanup (`tests/tui-e2e.test.ts`)**:
-    - The smoke test now launches `tsx` through `node --import tsx` instead of a shell-wrapped `npx` spawn, and its timers are cleanup-aware so the process exits cleanly after assertions complete.
-    - Verified directly via `node --test dist/tests/tui-e2e.test.js`, which now finishes with `2 passing` and no lingering handle shutdown error.
+  - The smoke test now launches `tsx` through `node --import tsx` instead of a shell-wrapped `npx` spawn, and its timers are cleanup-aware so the process exits cleanly after assertions complete.
+  - Verified directly via `node --test dist/tests/tui-e2e.test.js`, which now finishes with `2 passing` and no lingering handle shutdown error.
 - **Claims register alignment (`docs/CLAIMS_REGISTER.md`)**:
-    - Added a note that the 195-discovered-suite claim now includes a clean-exit TUI smoke test under direct execution.
+  - Added a note that the 195-discovered-suite claim now includes a clean-exit TUI smoke test under direct execution.
 - **Audit note alignment (`docs/PRISM_CRITICAL_AUDIT_2026.md`)**:
-    - Updated the E12 implementation note to reflect the clean-exit TUI smoke test and the deterministic coverage gate.
+  - Updated the E12 implementation note to reflect the clean-exit TUI smoke test and the deterministic coverage gate.
 
 ## v0.22.4 — 2026-07-12 — Add-on Management Panel & UI Visibility Improvements
 
@@ -38,15 +38,15 @@ Introduces the world-class VRGC Robotics Add-on system for managing physical, vi
 ### Added
 
 - **VRGC Robotics Subsystem Dashboard Tab (`src/core/operator/public/tab-robotics.html`)**: Added a dedicated, highly responsive, cyberpunk glassmorphic operator interface featuring four panels:
-    - **Entity Registry**: Register, transition, and monitor robotic and cognitive entities.
-    - **Workshop**: Build characters, view learning lifecycle milestones, monitor skill acquisition, and configure graduation gates.
-    - **Integration Bridges**: Live validation status and latency monitoring for UKS (Universal Knowledge Store), BrainSim III spiking neural networks, ROS 2 middleware, Physical I/O endpoints, and the built-in VRGC MCP server.
-    - **Telemetry & Governance**: Real-time activity telemetry and policy validation log stream.
+  - **Entity Registry**: Register, transition, and monitor robotic and cognitive entities.
+  - **Workshop**: Build characters, view learning lifecycle milestones, monitor skill acquisition, and configure graduation gates.
+  - **Integration Bridges**: Live validation status and latency monitoring for UKS (Universal Knowledge Store), BrainSim III spiking neural networks, ROS 2 middleware, Physical I/O endpoints, and the built-in VRGC MCP server.
+  - **Telemetry & Governance**: Real-time activity telemetry and policy validation log stream.
 - **REST Add-on Endpoints (`src/core/operator/routes/robotics-handler.ts`)**:
-    - `GET /api/addons/vrgc-robotics/entities` to retrieve active registered entities.
-    - `POST /api/addons/vrgc-robotics/entities` to register new cognitive/robotic entities.
-    - `POST /api/addons/vrgc-robotics/entities/:id/transition` to transition entity lifecycle states.
-    - `GET /api/addons/vrgc-robotics/integrations` to fetch connection status for UKS, BrainSim III, ROS 2, Physical I/O, and the MCP Server.
+  - `GET /api/addons/vrgc-robotics/entities` to retrieve active registered entities.
+  - `POST /api/addons/vrgc-robotics/entities` to register new cognitive/robotic entities.
+  - `POST /api/addons/vrgc-robotics/entities/:id/transition` to transition entity lifecycle states.
+  - `GET /api/addons/vrgc-robotics/integrations` to fetch connection status for UKS, BrainSim III, ROS 2, Physical I/O, and the MCP Server.
 - **Unified Add-on Loading Framework (`src/core/addons/`)**: Introduces a modular, typed add-on loader, validator, and registry structure allowing future expansions to be plugged into the core.
 - **Robotics Integration Tests (`tests/robotics-addon.test.ts`)**: Added integration test suite verifying entity registration, lifecycle state changes, and bridge check operations.
 - **Visual Indication for Add-on Tabs (`src/core/operator/public/dashboard.css`, `src/core/operator/templates/dashboard.ts`)**: Introduced visual distinction for Add-on tabs (e.g. Robotics Entity) using a dedicated `.addon-tab` class with purple/magenta glassmorphic styling in default dark theme and soft lavender/pink gradients in daylight theme.
@@ -93,14 +93,14 @@ oduces the secure, automated, and operator-controlled PRISM update orchestration
 - **Update Orchestrator Backend (`scripts/prism-update.cjs`)**: Executing secure updates from `origin/main` branch with pre-flight stability doctor runs, local automated backups (of configurations, keys, databases), cryptographic signature checks, config migration helper, dependency updates, and post-update compilation verification with automated fallback rollbacks.
 - **Root Entrypoint Wrappers (`update.bat` / `update.sh`)**: Quick shell launch wrappers executing the update orchestrator out-of-process.
 - **REST update endpoints (`src/core/operator/routes/api-handler.ts`)**:
-    - `GET /api/update/check` providing current version, latest version, and auto-update preference status.
-    - `POST /api/update/run` spawning the update orchestrator asynchronously.
-    - `POST /api/update/auto-update` saving the preference for automatic updates.
+  - `GET /api/update/check` providing current version, latest version, and auto-update preference status.
+  - `POST /api/update/run` spawning the update orchestrator asynchronously.
+  - `POST /api/update/auto-update` saving the preference for automatic updates.
 - **Guardian Agent Integration (`src/core/agents/guardian-agent.ts`)**: Schedules a periodic `update_version_check` task to poll git remote repository for updates, alert operators, and optionally trigger autonomous execution when configured.
 - **Operator Console UI (`src/core/operator/public/tab-chat.js`)**:
-    - Adds a dynamic glowing **UPDATE AVAILABLE** button next to the localhost link on the Brand sidebar panel.
-    - Adds an **Auto-update** checkbox persisting preference status.
-    - Adds a blur-effect full-screen installation overlay displaying execution progress, installation steps, and an auto-reconnecting reload loop.
+  - Adds a dynamic glowing **UPDATE AVAILABLE** button next to the localhost link on the Brand sidebar panel.
+  - Adds an **Auto-update** checkbox persisting preference status.
+  - Adds a blur-effect full-screen installation overlay displaying execution progress, installation steps, and an auto-reconnecting reload loop.
 - **Integration Test Suite (`tests/prism-update-system.test.ts`)**: Verifies status endpoint versioning, update check states, and auto-update preference APIs.
 
 ## v0.21.3 — 2026-07-07 — Guardian Agent IDS MCP Integration
@@ -212,9 +212,9 @@ Lands the headline operator-facing autonomous experience. The autonomy loop itse
 ### Verified unchanged
 
 - Existing `/api/chat`, `/api/agentic/action`, `/api/health`, `/api/health/extended`, `/api/status` routes return byte-identical payloads.
-  genticChatExecutor` budgets and tool allow-lists unchanged.
+  genticChatExecutor`budgets and tool allow-lists unchanged.
 l 27 pre-existing PTAC scenarios continue to register and run.
-l other dashboard tabs (`chat`, `settings`, `tools`, `agentic`, `computer`, `browser`, `workspace`, `network`, `telemetry`, `logs`, `scheduler`) and their HTML fragments and JS modules are byte-for-byte unchanged.
+l other dashboard tabs (`chat`,`settings`,`tools`,`agentic`,`computer`,`browser`,`workspace`,`network`,`telemetry`,`logs`,`scheduler`) and their HTML fragments and JS modules are byte-for-byte unchanged.
 
 ## v0.20.4 — 2026-05-09 — Tools for all media modalities (video + audio: speech, music, SFX)
 
@@ -225,24 +225,24 @@ ontend Protection Guarantee preserved.\*\* No frontend code was removed or alter
 New (additive only)
 
 - **`video_generate`** ([src/adapters/application/media-tools.ts](src/adapters/application/media-tools.ts)) — text→video. Modality: `video-generation`.
-    - `openai` / `openrouter` → POST `/videos/generations` (Sora shape). Accepts inline b64, downloadable URL, or async job id (returns `{ pending: true, job_id, status }` for jobs).
+  - `openai` / `openrouter` → POST `/videos/generations` (Sora shape). Accepts inline b64, downloadable URL, or async job id (returns `{ pending: true, job_id, status }` for jobs).
 - `gemini` → `:generateContent` with `responseModalities: ["VIDEO"]` (Veo shape).
 - Output written to `${workspace}/videos/prism-video-<UTC>.<ext>`.
 - Structured failure: `{ ok:false, reason:"no_video_capable_model", advisory }`.
 
 - **`audio_generate`** — text→audio with `kind: "speech" | "music" | "sfx"`.
-    - **Speech (default).** Modality chain: `tts → voice-output`. OpenAI `/audio/speech` returns binary mp3/wav/etc.; Gemini returns inline-data audio.
-    - **Music.** Modality chain: `music-generation → sound-effects → voice-output`. Covers full compositions, single-instrument loops, riffs.
-    - **SFX.** Modality chain: `sound-effects → music-generation → voice-output`. Non-speech sound effects (e.g. thunder, footsteps).
-    - Two new modality types added to the matrix: `music-generation` and `sound-effects` (additive — no existing model declarations changed). Once a Suno / Udio / MusicGen / Stable Audio / ElevenLabs SFX provider is configured, the same tool routes to it automatically.
-    - Output written to `${workspace}/audio/prism-{audio,music,sfx}-<UTC>.<ext>`.
-    - Structured failures: `no_tts_capable_model`, `no_music_capable_model`, `no_sfx_capable_model`, each with a precise advisory pointing at Settings → Providers.
+  - **Speech (default).** Modality chain: `tts → voice-output`. OpenAI `/audio/speech` returns binary mp3/wav/etc.; Gemini returns inline-data audio.
+  - **Music.** Modality chain: `music-generation → sound-effects → voice-output`. Covers full compositions, single-instrument loops, riffs.
+  - **SFX.** Modality chain: `sound-effects → music-generation → voice-output`. Non-speech sound effects (e.g. thunder, footsteps).
+  - Two new modality types added to the matrix: `music-generation` and `sound-effects` (additive — no existing model declarations changed). Once a Suno / Udio / MusicGen / Stable Audio / ElevenLabs SFX provider is configured, the same tool routes to it automatically.
+  - Output written to `${workspace}/audio/prism-{audio,music,sfx}-<UTC>.<ext>`.
+  - Structured failures: `no_tts_capable_model`, `no_music_capable_model`, `no_sfx_capable_model`, each with a precise advisory pointing at Settings → Providers.
 
 - **`audio_transcribe`** — speech→text. Modality chain: `stt → voice-input`.
-    - `openai` / `openrouter` → POST `/audio/transcriptions` with manually-encoded multipart body (Whisper shape). Returns `{ text }`.
-    - `gemini` → `:generateContent` with audio `inlineData` part.
-    - Reads input audio from disk (path-traversal-safe — must reside inside the workspace root).
-    - Structured failures: `no_stt_capable_model`, `read_failed`, `invalid_args`.
+  - `openai` / `openrouter` → POST `/audio/transcriptions` with manually-encoded multipart body (Whisper shape). Returns `{ text }`.
+  - `gemini` → `:generateContent` with audio `inlineData` part.
+  - Reads input audio from disk (path-traversal-safe — must reside inside the workspace root).
+  - Structured failures: `no_stt_capable_model`, `read_failed`, `invalid_args`.
 
 - All three tools wired in [dashboard-service.ts](src/core/operator/dashboard-service.ts) immediately after `ImageGenerateTool` so they receive the runtime `LlmProviderManager` and `ProviderSecretStore`.
 
@@ -278,10 +278,10 @@ Closes two operator-facing bugs reported during v0.20.2 dogfooding: chat attachm
 ### New (additive only)
 
 - **Image generation as a default capability.** New `image_generate` Tier-2 built-in tool ([src/adapters/application/image-generate-tool.ts](src/adapters/application/image-generate-tool.ts)) routes through `LlmProviderManager.suggestRoutingForAllModalities()` to pick an `image-generation`-capable model from the matrix and dispatches to the matching provider's image API:
-    - `openai` and `openrouter` → POST `/images/generations` with `response_format: "b64_json"` (OpenAI Images shape).
-    - `gemini` → `:generateContent` with `responseModalities: ["IMAGE"]` (Imagen shape).
-    - When no image-capable provider is configured, the tool returns a structured `{ ok:false, reason:"no_image_capable_model", advisory:"..." }` so the orchestrator surfaces a precise advisory pointing the operator at Settings → Providers.
-    - Decoded bytes are written to `${workspace}/images/prism-image-<UTC>.png`. Optional `savePath` is path-traversal-safe (rejected if it escapes the workspace).
+  - `openai` and `openrouter` → POST `/images/generations` with `response_format: "b64_json"` (OpenAI Images shape).
+  - `gemini` → `:generateContent` with `responseModalities: ["IMAGE"]` (Imagen shape).
+  - When no image-capable provider is configured, the tool returns a structured `{ ok:false, reason:"no_image_capable_model", advisory:"..." }` so the orchestrator surfaces a precise advisory pointing the operator at Settings → Providers.
+  - Decoded bytes are written to `${workspace}/images/prism-image-<UTC>.png`. Optional `savePath` is path-traversal-safe (rejected if it escapes the workspace).
 - Tool is registered in [dashboard-service.ts](src/core/operator/dashboard-service.ts) (alongside `ComputerUseTool`) so it can receive the runtime `LlmProviderManager` + `ProviderSecretStore`.
 - **Chat attachment chips on user message bubbles.** `GET /api/chat/sessions/:sid/messages` now enriches each message with its persisted `attachments[]` array. Client-side [tab-chat.js](src/core/operator/public/tab-chat.js) `renderMessages()` renders an additive `.message-attachments` strip on user bubbles when attachments are present (image thumbnails for `image/*`, document chip otherwise), wired to the existing `GET /api/attachments/:aid` byte route. Optimistic local user-message bubble also mirrors `pendingAttachments` so the operator sees their attachments before the upload roundtrip completes.
 - **Paste-from-clipboard text fallback.** `pasteFromClipboard()` now falls back to `navigator.clipboard.readText()` when the clipboard contains no image, inserting text at the composer caret position. When the browser blocks clipboard access entirely, a precise notice is shown ("Use Ctrl+V to paste directly").
@@ -315,9 +315,9 @@ Closes the remaining Phase R Readiness Runbook items needed for a strict-ready 1
 ### New (additive only)
 
 - **R5-1 — Backup / restore scripts.** Cross-platform helpers under [scripts/](scripts/):
-    - [scripts/backup.ps1](scripts/backup.ps1) / [scripts/backup.sh](scripts/backup.sh) — archive `$PRISM_WORKSPACE_ROOT` (or `~/Prism_Refraction`) to `prism-backup-<UTC>.zip` / `.tgz`.
-    - [scripts/restore.ps1](scripts/restore.ps1) / [scripts/restore.sh](scripts/restore.sh) — restore an archive into an empty workspace; refuses to overwrite a non-empty workspace unless `-Force` / `--force` is passed.
-    - Designed to be invoked directly without needing the Node toolchain present (paired with the existing `npm run backup` / `npm run restore` thin Node wrappers).
+  - [scripts/backup.ps1](scripts/backup.ps1) / [scripts/backup.sh](scripts/backup.sh) — archive `$PRISM_WORKSPACE_ROOT` (or `~/Prism_Refraction`) to `prism-backup-<UTC>.zip` / `.tgz`.
+  - [scripts/restore.ps1](scripts/restore.ps1) / [scripts/restore.sh](scripts/restore.sh) — restore an archive into an empty workspace; refuses to overwrite a non-empty workspace unless `-Force` / `--force` is passed.
+  - Designed to be invoked directly without needing the Node toolchain present (paired with the existing `npm run backup` / `npm run restore` thin Node wrappers).
 
 - **R5-3 — Log rotation.** New zero-dep rotator at [src/core/observability/log-rotator.ts](src/core/observability/log-rotator.ts). Exports: `dateStamp`, `rotateActiveLog`, `pruneOldArchives`, `resolveRetentionDays`, `rotateAndPrune`, `DEFAULT_LOG_RETENTION_DAYS=30`. Idempotent — duplicate archive returns `{ skipped: true }` without touching the active file. Retention clamped to 1..365 days via `PRISM_LOG_RETENTION_DAYS`.
 
@@ -465,10 +465,10 @@ w modules.\*\*
 **Tests.**
 
 - New gated suite [tests/docker-container-adapter.test.ts](tests/docker-container-adapter.test.ts). Probes the Docker socket at startup; **skips with a clear log line** when unreachable, and runs a full alpine round-trip when present:
-    - `engine.ping()` → image pull → create + start
-    - `echo` round-trip with stdout assertion
-    - filesystem mutation → snapshot → second mutation → `revertSnapshot` → state restored to v1
-    - `stopContainer` + `destroyContainer` with snapshot-image pruning.
+  - `engine.ping()` → image pull → create + start
+  - `echo` round-trip with stdout assertion
+  - filesystem mutation → snapshot → second mutation → `revertSnapshot` → state restored to v1
+  - `stopContainer` + `destroyContainer` with snapshot-image pruning.
 - Registered in both [tests/index.ts](tests/index.ts) (`DockerContainerAdapter` suite) and the mocha CLI in [package.json](package.json).
 
 **Verification.** `npm run build` clean. `node dist/tests/index.js` reports `Tests: 76 | Passed: 76 | Failed: 0` (existing `ContainerSandboxAdapter` suite untouched). New Docker suite logs `⤳ Docker container adapter tests skipped: Docker Engine API not reachable at \\.\pipe\docker_engine` on the Windows dev host (no Docker Desktop installed) and is set to run the full alpine round-trip on Linux CI runners with `docker.sock` present. Pure-additive: zero edits to existing adapters, dashboard, or UI; Frontend Protection Guarantee preserved.
