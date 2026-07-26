@@ -1,4 +1,4 @@
-/* eslint-disable */
+ 
 /**
  * AUTO-GENERATED — DO NOT EDIT BY HAND.
  *
@@ -9,8 +9,8 @@
  *
  * Source file:  Permanent_Active_Directives.txt
  * Hashed bytes: 6335
- * Generated at: 2026-07-26T15:47:15.490Z
+ * Generated at: 2026-07-26T16:45:10.284Z
  */
 export const DIRECTIVE_SHA256_GENERATED = "a8d594d70d50286a55a490dfdabef4e4b20dcb09495178a7c4d2b3314d0600df";
-export const DIRECTIVE_HASH_GENERATED_AT = "2026-07-26T15:47:15.490Z";
+export const DIRECTIVE_HASH_GENERATED_AT = "2026-07-26T16:45:10.284Z";
 export const DIRECTIVE_HASH_SOURCE_BYTES = 6335;

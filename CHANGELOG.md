@@ -22,6 +22,7 @@ Remediates all 26 security vulnerabilities (0 remaining in npm audit), cleans up
 
 ### Fixed
 
+- **ESLint v9 Flat Config Migration (`eslint.config.js`, `.eslintrc.json`, `package.json`)**: Migrated linting toolchain from legacy `.eslintrc.json` to ESLint v9 Flat Config (`eslint.config.js`), eliminating `eslint@8.57.1`, `@humanwhocodes/*`, and `rimraf@3` npm deprecation warnings.
 - **Sharp 0.35 Type Compatibility (`src/core/operator/framebuffer-capture.ts`, `src/core/operator/sshp-interceptor.ts`)**: Updated Sharp lazy-loader typing to `SharpConstructor` compatible with `sharp@0.35`.
 - **LLM Provider Preference Order (`src/core/operator/llm-provider-manager.ts`)**: Ensured runtime environment variable `PRISM_LLM_PROVIDER` takes precedence over stale disk preference files.
 - **Headless Desktop Screen Capture Tests (`tests/computer-api-routes.test.ts`, `tests/computer-control.test.ts`)**: Handled non-interactive Windows sessions gracefully when GDI display context handles are unattached.
