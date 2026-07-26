@@ -57,6 +57,7 @@ The following matrix organizes the suggested durable skills needed to maximize P
 To help the **Skill Wizard (`prism.skill.skill_wizard`)** dynamically construct the matrix above, here are two foundational templates conforming to PRISM's world-class standard.
 
 ### 3.1. Business-Facing: `prism.skill.covenant_guard`
+
 ```json
 {
   "id": "prism.skill.covenant_guard",
@@ -136,6 +137,7 @@ To help the **Skill Wizard (`prism.skill.skill_wizard`)** dynamically construct 
 ```
 
 ### 3.2. Individual-Facing: `prism.skill.tui_conductor`
+
 ```json
 {
   "id": "prism.skill.tui_conductor",

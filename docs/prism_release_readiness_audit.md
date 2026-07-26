@@ -31,6 +31,7 @@ PRISM's **architecture, documentation depth, test coverage (~185 test files), CI
 | No `trufflehog` or `gitleaks` scan has been run | ⚠️ WARN | Your own checklist in `PRISM_PUBLIC_LAUNCH_ROADMAP_AND_CHECKLIST_2026.md` lists this as required but unchecked |
 
 **Action required:**
+
 1. Guard default creds behind `NODE_ENV !== 'production'` or remove the autofill buttons for public release, and document them clearly as **evaluation-only** defaults.
 2. Run `gitleaks detect --source .` over the full history before going public.
 
@@ -53,6 +54,7 @@ PRISM's **architecture, documentation depth, test coverage (~185 test files), CI
 > The `.mcp/` directory alone contributes ~250 tracked files including `__pycache__`, backup copies named `*_broken.py`, `*_corrupted.py`, `*_fixed.py`, debug test scripts, and a SQLite database. This is the single biggest hygiene problem.
 
 **Action required:**
+
 ```bash
 # Remove tracked debris
 git rm --cached -r .mcp/ids-mcp/ai_enhanced.db
@@ -87,6 +89,7 @@ echo "*.pyc" >> .gitignore
 > Without a `LICENSE` file, the repository is **"all rights reserved" by default** under copyright law. No one can legally use, modify, or distribute the code. This is the **#1 blocker** for any public open-source release.
 
 **Action required:**
+
 1. Choose a license (your doc recommends Apache-2.0 for the open core) and create `LICENSE` at root.
 2. Create `CONTRIBUTING.md` with PR guidelines, code style, and CLA expectations.
 3. Optionally add `CODE_OF_CONDUCT.md` (Contributor Covenant is standard).

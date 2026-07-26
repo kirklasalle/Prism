@@ -2,6 +2,60 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.7 — 2026-07-26 — Deprecation Cleanup, Security Remediation & Google API Promotion
+
+Remediates all 26 security vulnerabilities (0 remaining in npm audit), cleans up npm deprecation warnings, promotes `googleapis` to a mandatory core dependency for full Google OAuth & Calendar support, updates Sharp 0.35 type contracts, and achieves 100% pass rate across the full 195-test-file discovery suite.
+
+### Added
+
+- **Google APIs Core Promotion (`package.json`)**: Promoted `googleapis` (`^173.0.0`) from `optionalDependencies` to `dependencies`, ensuring Gmail and Google Calendar OAuth integration are available out-of-box in every PRISM installation.
+
+### Changed
+
+- **Security Vulnerability Remediation (`package.json`)**:
+  - Upgraded `uuid` to `^14.0.1` to eliminate buffer bounds-check vulnerability (GHSA-w5hq-g745-h8pq).
+  - Upgraded `sharp` to `^0.35.3` to remediate 4 high-severity libvips CVEs (CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591).
+  - Upgraded `nyc` to `^18.0.0` (upgrading internal `glob` to `^13` and `rimraf` to `^6`).
+  - Upgraded `mocha` to `^11.7.6` and `markdownlint-cli2` to `^0.23.1`.
+  - Added targeted package overrides for `brace-expansion`, `diff`, `esbuild`, `glob`, `ip-address`, `qs`, `tar`, and `uuid`.
+  - Audited via `npm audit` — **0 vulnerabilities**.
+
+### Fixed
+
+- **Sharp 0.35 Type Compatibility (`src/core/operator/framebuffer-capture.ts`, `src/core/operator/sshp-interceptor.ts`)**: Updated Sharp lazy-loader typing to `SharpConstructor` compatible with `sharp@0.35`.
+- **LLM Provider Preference Order (`src/core/operator/llm-provider-manager.ts`)**: Ensured runtime environment variable `PRISM_LLM_PROVIDER` takes precedence over stale disk preference files.
+- **Headless Desktop Screen Capture Tests (`tests/computer-api-routes.test.ts`, `tests/computer-control.test.ts`)**: Handled non-interactive Windows sessions gracefully when GDI display context handles are unattached.
+- **Full Test Discovery Suite (`npm run test:discover`)**: Verified 100% pass rate across all 195 test files (51 Node tests, 144 Mocha tests).
+
+## v0.22.6 — 2026-07-20 — Session Governance Hardening & Boot Gate
+
+Enforces administrator-only session deletion, protects the first certified session (Initialization Certificate) as a semi-permanent governance record, introduces a mandatory system initialization gate that blocks all dashboard activity until core subsystems are verified, and performs a startup performance audit removing a duplicate runtime banner.
+
+### Added
+
+- **Boot Gate Overlay (`src/core/operator/public/dashboard-app.js`)**:
+  - A full-screen "System Initialization" overlay blocks all operator interaction until the chat interface, certified sessions, IAM identity, and real-time streams have loaded and been verified.
+  - Displays step-by-step progress with a gradient progress bar (IAM → Chat Interface → Sessions → Model Profiles → Streams → Guardian Agent → All Systems Operational).
+  - Overlay dismisses with a 0.6s fade-out after a 400ms hold so the operator can see the "All systems operational" confirmation.
+  - Ensures trace logging, session provenance, and WebSocket tunnel are fully initialized before any user interaction begins.
+
+### Changed
+
+- **Admin-Only Session Deletion (`src/core/operator/routes/chat-handler.ts`)**:
+  - `DELETE /api/chat/sessions/:id` now returns `403 Forbidden` for non-administrator users with a descriptive message directing them to contact their system administrator.
+  - Initialization Certificate sessions receive additional protection: even administrators must provide an explicit `X-Prism-Confirm-Delete: true` header; without it, the API returns `409 Conflict` with a `protected_session` error code.
+  - Protection is layered: database triggers (prevent_cert_session_delete) → API route guard (403/409) → UI guard (hidden button / lock icon).
+- **Session Card UI (`src/core/operator/public/tab-chat.js`)**:
+  - The Delete button is now only rendered for admin users or when authentication is disabled (dev mode).
+  - Initialization Certificate sessions display a "🔒 Protected" badge in place of the Delete button with a tooltip explaining the governance policy.
+  - The Rename button is disabled for certified sessions to preserve provenance integrity.
+  - The `deleteSession()` function enforces client-side admin checks and blocks deletion of Initialization Certificate sessions with descriptive notices.
+  - Error handling for deletion failures now distinguishes between permission errors (`forbidden`), governance protection (`protected_session`), and general failures.
+
+### Fixed
+
+- **Duplicate Runtime Banner (`src/index.ts`)**: Removed a second identical runtime info banner (session ID, environment profile, mode, dashboard URL, self-review intervals) that was being printed twice during server startup, cleaning up boot log output.
+
 ## v0.22.5 — 2026-07-14 — TUI Smoke-Test Cleanup & Claims Register Alignment
 
 Improves the test harness cleanup path and aligns the claims/audit documentation with the clean-exit TUI smoke test.

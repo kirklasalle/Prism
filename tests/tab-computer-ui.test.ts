@@ -126,20 +126,20 @@ describe("tab-computer.js — Frontend Unit Tests", function () {
         (global as any).fetch = () => Promise.reject(new Error("fetch not mocked"));
         (global as any).setInterval = originalSetInterval;
         (global as any).clearInterval = originalClearInterval;
-        (global as any).alert = () => { };
+        (global as any).alert = () => {};
 
         // Stub canvas getContext for jsdom (no native canvas)
         const origGetContext = dom.window.HTMLCanvasElement.prototype.getContext;
         dom.window.HTMLCanvasElement.prototype.getContext = function (type: string) {
             if (type === "2d") {
                 return {
-                    clearRect() { },
-                    beginPath() { },
-                    moveTo() { },
-                    lineTo() { },
-                    stroke() { },
-                    closePath() { },
-                    fill() { },
+                    clearRect() {},
+                    beginPath() {},
+                    moveTo() {},
+                    lineTo() {},
+                    stroke() {},
+                    closePath() {},
+                    fill() {},
                     strokeStyle: "",
                     lineWidth: 0,
                     lineJoin: "",

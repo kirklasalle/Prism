@@ -207,8 +207,7 @@ export class SettingsHandler implements IRouteHandler {
                     .captureSingle()
                     .catch(() => {});
                 const browserTool = service.tools.find((t) => t.name === "browser_control") as
-                    | BrowserControlTool
-                    | undefined;
+                    BrowserControlTool | undefined;
                 if (browserTool) {
                     try {
                         const profMgr = browserTool.getProfileManager();
@@ -309,8 +308,7 @@ export class SettingsHandler implements IRouteHandler {
                     .captureSingle()
                     .catch(() => {});
                 const browserTool = service.tools.find((t) => t.name === "browser_control") as
-                    | BrowserControlTool
-                    | undefined;
+                    BrowserControlTool | undefined;
                 if (browserTool) {
                     try {
                         const profMgr = browserTool.getProfileManager();

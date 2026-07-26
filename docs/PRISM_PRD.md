@@ -128,16 +128,16 @@ Implemented today:
 - workflow retries/timeouts/fallbacks
 - integration tests for approval success, denial, and timeout paths
 - **Character Accountability Control (CAC)**:
-    - character-to-operator identity binding with full accountability chain
-    - lifecycle management (assign, dispatch, suspend, resume, revoke)
-    - profile-aware email domain validation (business enforces matching domains; individual is permissive)
-    - execution profile segment normalization (`enterprise`/`corporate` → canonical `business`)
-    - accountability chain propagated into activity events and SHA-256 integrity hashes
+  - character-to-operator identity binding with full accountability chain
+  - lifecycle management (assign, dispatch, suspend, resume, revoke)
+  - profile-aware email domain validation (business enforces matching domains; individual is permissive)
+  - execution profile segment normalization (`enterprise`/`corporate` → canonical `business`)
+  - accountability chain propagated into activity events and SHA-256 integrity hashes
 - **LLRE Cognitive Economics Engine**:
-    - Prompt AST Compiler (`src/core/llre/ast.ts`) checking prompt objective/constraint densities
-    - Unified effectiveness analytics calculating TCA, RSI, CSR, and TEQ performance indexes
-    - Background SQLite data layer persistence with query/aggregation endpoints
-    - Real-time Cognitive Economics operator settings dashboard panel
+  - Prompt AST Compiler (`src/core/llre/ast.ts`) checking prompt objective/constraint densities
+  - Unified effectiveness analytics calculating TCA, RSI, CSR, and TEQ performance indexes
+  - Background SQLite data layer persistence with query/aggregation endpoints
+  - Real-time Cognitive Economics operator settings dashboard panel
 
 ## 7. Novelty Roadmap (PRISM-specific)
 
@@ -270,20 +270,20 @@ The platform must implement a fully configurable, operator-controlled routing pl
 - **AI-Assisted Allocation**: The orchestrator must support AI-assisted model allocation, suggesting optimal model-to-role configurations during setup or task planning.
 - **Role-Based Overrides**: Operators must be able to assign specific model/provider overrides to individual task roles (`chat`, `code-generation`, `summarization`, `research`, `memory-indexing`, etc.), subject to minimum capability tier validation.
 - **Power-Aware Routing Modes**: The system must enforce routing priorities based on the operator's active power profile:
-    - `eco`: Prioritizes local models over cloud API routes to eliminate external charges.
-    - `performance`: Routes to the highest available capability tier for each role.
-    - `adaptive`: Discovers free hardware VRAM and dynamically routes high-VRAM models to cloud fallbacks if local capacity is exceeded, eliminating Out-Of-Memory (OOM) failures.
+  - `eco`: Prioritizes local models over cloud API routes to eliminate external charges.
+  - `performance`: Routes to the highest available capability tier for each role.
+  - `adaptive`: Discovers free hardware VRAM and dynamically routes high-VRAM models to cloud fallbacks if local capacity is exceeded, eliminating Out-Of-Memory (OOM) failures.
 
 #### 8.4B.2 Advanced Model Matrix (Exclusive Core)
 
 - **Dynamic Runtime Profile Management**: The matrix must support runtime APIs to register, update, and remove model capability profiles (`registerModelProfile`, `updateModelProfile`, `removeModelProfile`).
 - **Local Model Auto-Discovery**: The system must actively query the local environment (e.g., Ollama `/api/ps` endpoint) to discover running instances, calculating estimated VRAM footprints, context limits, and parameter sizes.
 - **Deprecation and Sunset Lifecycles**: The matrix must track deprecation metadata fields, including:
-    - `deprecated` (boolean flag)
-    - `deprecatedAt` (ISO date when deprecation began)
-    - `sunsetDate` (ISO date when full sunset occurs)
-    - `successor` (recommended successor model pattern)
-    - `deprecationReason` (reason description)
+  - `deprecated` (boolean flag)
+  - `deprecatedAt` (ISO date when deprecation began)
+  - `sunsetDate` (ISO date when full sunset occurs)
+  - `successor` (recommended successor model pattern)
+  - `deprecationReason` (reason description)
 - **Legacy Retention & Warnings**: Deprecated and sunset models must be retained in the matrix registry for historic telemetry aggregation and backward-compatibility execution. The router must de-prioritize these models in selection hierarchies and emit warning events to the ActivityBus when a deprecated model is selected.
 
 Acceptance criteria:
@@ -323,9 +323,9 @@ Functional requirements:
 1. Notes and extraction
 
 - Support capture of unstructured note content and extraction of:
-    - action items,
-    - deadlines,
-    - follow-up entities.
+  - action items,
+  - deadlines,
+  - follow-up entities.
 - Require extracted outputs to link back to originating note context.
 
 1. Chronological tasks/events
@@ -343,9 +343,9 @@ Tooling requirements:
 Workflow requirements:
 
 - Each capability must expose at least one workflow template with:
-    - retries,
-    - timeout policy,
-    - fallback branch.
+  - retries,
+  - timeout policy,
+  - fallback branch.
 - Each mutation-capable workflow must define deterministic deny/timeout outcomes.
 
 Memory requirements:
@@ -478,20 +478,20 @@ Functional requirements:
 1. Dual-profile parity contract
 
 - `PRISM Individual` and `PRISM Business` must expose equivalent capability surfaces for:
-    - tool invocation,
-    - terminal session operations,
-    - container sandbox lifecycle,
-    - dynamic staged tool execution,
-    - adapter/plugin pack usage.
+  - tool invocation,
+  - terminal session operations,
+  - container sandbox lifecycle,
+  - dynamic staged tool execution,
+  - adapter/plugin pack usage.
 - Business profile adds governance rigor and must not reduce capability availability.
 
 1. Terminal virtualization
 
 - Support persistent terminal channels with lifecycle controls:
-    - start,
-    - stop,
-    - timeout,
-    - revoke.
+  - start,
+  - stop,
+  - timeout,
+  - revoke.
 - Persist session lineage and policy decisions for mutating commands.
 
 1. Container orchestration
@@ -565,10 +565,10 @@ Acceptance criteria:
 #### 8.8.4 Swarm orchestration
 
 - Support four swarm topologies:
-    - **Mesh**: all agents work sub-tasks in parallel, results merged.
-    - **Star**: coordinator agent delegates to worker agents, collects/merges results.
-    - **Pipeline**: sequential handoff — output of agent A becomes input of agent B.
-    - **Broadcast**: same prompt to all agents, best result selected.
+  - **Mesh**: all agents work sub-tasks in parallel, results merged.
+  - **Star**: coordinator agent delegates to worker agents, collects/merges results.
+  - **Pipeline**: sequential handoff — output of agent A becomes input of agent B.
+  - **Broadcast**: same prompt to all agents, best result selected.
 - Swarm creation specifies goal, topology, agent count, and optional role distribution.
 - Swarm agents default to ephemeral lifecycle; dissolved when swarm completes.
 - All swarm operations emit ActivityBus events for governance and telemetry.
@@ -614,9 +614,9 @@ PRISM must deliver a novel multi-model parallel generation system where three di
 #### 8.9.1 Tri-model fan-out architecture
 
 - Three hemispheres generate in parallel on the same user prompt:
-    - **Left (Logic)**: analytical reasoning, structured analysis, factual precision
-    - **Right (Creative)**: creative synthesis, lateral thinking, multimedia generation
-    - **Main (Coordination)**: coordination, aggregation, and unified response synthesis
+  - **Left (Logic)**: analytical reasoning, structured analysis, factual precision
+  - **Right (Creative)**: creative synthesis, lateral thinking, multimedia generation
+  - **Main (Coordination)**: coordination, aggregation, and unified response synthesis
 - Fan-out must be truly parallel (concurrent API calls), not sequential.
 - Each hemisphere receives a role-specific system prompt from `SR_SYSTEM_PROMPTS`.
 
@@ -633,9 +633,9 @@ Acceptance criteria:
     2. **Activation gate**: `/api/sr/activate` re-validates before enabling SR mode.
     3. **Runtime gate**: `generateSR()` pre-flight guard before fan-out.
 - Three isolation quality levels:
-    - `full`: different providers (strongest — separate API keys, infrastructure, rate limits)
-    - `model`: same provider, different models (separate capabilities, shared key)
-    - `insufficient`: same provider + same model (REJECTED)
+  - `full`: different providers (strongest — separate API keys, infrastructure, rate limits)
+  - `model`: same provider, different models (separate capabilities, shared key)
+  - `insufficient`: same provider + same model (REJECTED)
 - Main is permitted to overlap Left or Right (it serves a distinct coordinator role).
 
 Acceptance criteria:
@@ -704,14 +704,14 @@ Acceptance criteria:
 #### 8.9.7 SR dashboard integration
 
 - SR panel in Provider & Settings tab:
-    - Model selection dropdowns for Left (Logic), Right (Creative), Main
-    - Isolation badge reflecting current level
-    - Cost advisory based on model pricing
-    - Activate/Deactivate controls (Activate disabled when isolation insufficient)
+  - Model selection dropdowns for Left (Logic), Right (Creative), Main
+  - Isolation badge reflecting current level
+  - Cost advisory based on model pricing
+  - Activate/Deactivate controls (Activate disabled when isolation insufficient)
 - SR response badge in Chat Interface tab:
-    - Visual indicator that response was SR-generated
-    - Isolation level pill
-    - Hemisphere attribution metadata
+  - Visual indicator that response was SR-generated
+  - Isolation level pill
+  - Hemisphere attribution metadata
 
 Acceptance criteria:
 
@@ -769,10 +769,10 @@ PRISM supports an intermediate integration tier called **Add-ons** for deep, dom
 #### 8.11.2 Robotics Add-on Integration (v0.22.3)
 
 - **Dedicated Tab**: The Robotics Entity Add-on must render a custom console tab containing:
-    - **Entity Registry**: Status monitoring and lifecycle state machine for physical/virtual entities.
-    - **Workshop**: Safety thresholds, skill metrics, and graduation gates.
-    - **Integrations**: Latency and connection telemetry for UKS, BrainSim III, ROS 2, and the MCP server.
-    - **Telemetry & Governance**: Active CAC session logging and policy validation logs.
+  - **Entity Registry**: Status monitoring and lifecycle state machine for physical/virtual entities.
+  - **Workshop**: Safety thresholds, skill metrics, and graduation gates.
+  - **Integrations**: Latency and connection telemetry for UKS, BrainSim III, ROS 2, and the MCP server.
+  - **Telemetry & Governance**: Active CAC session logging and policy validation logs.
 
 ## 9-continued. Quality Gates (SLO/SLA Targets)
 

@@ -171,17 +171,17 @@ CCC, DLMA, SHWS, SSO/RBAC, Kubernetes, compliance packs, Python SDK.
 
 ### Technical
 
-7. Add Content Security Policy headers
-8. Comprehensive health check for all subsystems
-9. Structured JSON logging (replace console.log)
-10. Request tracing IDs through activity bus
+1. Add Content Security Policy headers
+2. Comprehensive health check for all subsystems
+3. Structured JSON logging (replace console.log)
+4. Request tracing IDs through activity bus
 
 ### Business
 
-11. Own "Governed Autonomy" as a category
-12. Target EU AI Act compliance explicitly
-13. Secure 1-3 enterprise design partners in Phase F
-14. Consider SR as standalone API product
+ 1. Own "Governed Autonomy" as a category
+ 2. Target EU AI Act compliance explicitly
+ 3. Secure 1-3 enterprise design partners in Phase F
+ 4. Consider SR as standalone API product
 
 ---
 

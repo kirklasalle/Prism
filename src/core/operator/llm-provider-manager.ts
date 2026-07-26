@@ -745,18 +745,16 @@ export class LlmProviderManager {
 
         this.setPersistedProviderSettings(settings);
 
-        let configuredProvider = "";
-        let configuredModel: string | null = null;
-        try {
-            const prefs = readPreferences();
-            if (prefs?.activeLlmProviderId) {
-                configuredProvider = prefs.activeLlmProviderId;
-                configuredModel = prefs.activeLlmModel || null;
-            }
-        } catch (_) {}
-
+        let configuredProvider = (this.env.PRISM_LLM_PROVIDER ?? "").trim().toLowerCase();
+        let configuredModel: string | null = (this.env.PRISM_LLM_MODEL ?? "").trim() || null;
         if (!configuredProvider) {
-            configuredProvider = (this.env.PRISM_LLM_PROVIDER ?? "").trim().toLowerCase();
+            try {
+                const prefs = readPreferences();
+                if (prefs?.activeLlmProviderId) {
+                    configuredProvider = prefs.activeLlmProviderId;
+                    configuredModel = prefs.activeLlmModel || null;
+                }
+            } catch (_) {}
         }
 
         const selected = this.resolveProvider(configuredProvider) ?? this.findFirstEnabledProvider();

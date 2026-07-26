@@ -750,10 +750,28 @@ export
     const timeEl = document.createElement('span'); timeEl.textContent = formatRelativeTime(session.updatedAt);
     meta.appendChild(msgCount); meta.appendChild(timeEl); card.appendChild(meta);
     const actions = document.createElement('div'); actions.className = 'action-buttons';
-    const delBtn = document.createElement('button'); delBtn.className = 'danger-button'; delBtn.textContent = 'Delete'; delBtn.onclick = (e) => { e.stopPropagation(); deleteSession(e, session.sessionId); };
-    const renBtn = document.createElement('button'); renBtn.className = 'secondary-button'; renBtn.textContent = 'Rename'; renBtn.onclick = (e) => { e.stopPropagation(); renameSession(e, session.sessionId); };
+    const isInitCert = /Initialization Certificate/i.test(session.title || '');
+    const isUserAdmin = state.principal && state.principal.roles && state.principal.roles.includes('admin');
+    const authDisabled = !state.principal; // No IAM principal = auth disabled = treat as admin
+    const canDelete = isUserAdmin || authDisabled;
+    if (canDelete) {
+      const delBtn = document.createElement('button'); delBtn.className = 'danger-button';
+      if (isInitCert) {
+        delBtn.textContent = '🔒 Protected';
+        delBtn.title = 'This Initialization Certificate is a semi-permanent certified session';
+        delBtn.style.opacity = '0.6'; delBtn.style.cursor = 'not-allowed';
+        delBtn.onclick = (e) => { e.stopPropagation(); showTransientNotice('The Initialization Certificate is a semi-permanent session protected by governance policy.', 'warn'); };
+      } else {
+        delBtn.textContent = 'Delete';
+        delBtn.onclick = (e) => { e.stopPropagation(); deleteSession(e, session.sessionId); };
+      }
+      actions.appendChild(delBtn);
+    }
+    const renBtn = document.createElement('button'); renBtn.className = 'secondary-button'; renBtn.textContent = 'Rename';
+    if (isInitCert) { renBtn.disabled = true; renBtn.title = 'Certified session cannot be renamed'; renBtn.style.opacity = '0.5'; }
+    renBtn.onclick = (e) => { e.stopPropagation(); renameSession(e, session.sessionId); };
     const copyBtn = document.createElement('button'); copyBtn.className = 'secondary-button'; copyBtn.textContent = 'Copy Session'; copyBtn.onclick = (e) => { e.stopPropagation(); copySession(e, session.sessionId); };
-    actions.appendChild(delBtn); actions.appendChild(renBtn); actions.appendChild(copyBtn); card.appendChild(actions);
+    actions.appendChild(renBtn); actions.appendChild(copyBtn); card.appendChild(actions);
     card.onclick = (e) => { if (e.target.tagName === 'BUTTON') return; if (isChapter) e.stopPropagation(); selectSession(session.sessionId); };
     return card;
   };
@@ -1221,6 +1239,27 @@ export
 
   if (state.principal && state.principal.email) {
     html += '<div class="brand-profile-email" style="font-size: 10px; color: var(--fg-muted); margin-top: 4px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + escapeHtml(state.principal.email) + '</div>';
+  } else {
+    // Fallback: extract operator email from the active session or any recent session
+    var opEmail = '';
+    if (state.selectedSessionId && state.sessions && state.sessions.length) {
+      var activeSess = state.sessions.find(function(ss) { return ss.sessionId === state.selectedSessionId; });
+      if (activeSess && activeSess.operatorEmail && activeSess.operatorEmail !== 'not set' && !/@prism\.local$/i.test(activeSess.operatorEmail)) {
+        opEmail = activeSess.operatorEmail;
+      }
+    }
+    if (!opEmail && state.sessions && state.sessions.length) {
+      for (var si = 0; si < state.sessions.length; si++) {
+        var se = state.sessions[si];
+        if (se.operatorEmail && se.operatorEmail !== 'not set' && !/@prism\.local$/i.test(se.operatorEmail) && !/@placeholder$/i.test(se.operatorEmail)) {
+          opEmail = se.operatorEmail;
+          break;
+        }
+      }
+    }
+    if (opEmail) {
+      html += '<div class="brand-profile-email" style="font-size: 10px; color: var(--fg-muted); margin-top: 4px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + escapeHtml(opEmail) + '</div>';
+    }
   }
 
   var upInfo = state.updateInfo || { currentVersion: s.version || '0.0.1', latestVersion: s.version || '0.0.1', updateAvailable: false, autoUpdate: false };
@@ -1320,7 +1359,23 @@ export
   if (!existing) {
     return;
   }
-  const confirmed = await showConfirm('Delete session "' + existing.title + '"? This will remove all messages in this session.');
+
+  // Admin-only deletion guard (client-side)
+  const isUserAdmin = state.principal && state.principal.roles && state.principal.roles.includes('admin');
+  const authDisabled = !state.principal;
+  if (!isUserAdmin && !authDisabled) {
+    showTransientNotice('Only administrators may delete sessions. Contact your system administrator.', 'error');
+    return;
+  }
+
+  // Protect Initialization Certificate (semi-permanent certified session)
+  const isInitCert = /Initialization Certificate/i.test(existing.title || '');
+  if (isInitCert) {
+    showTransientNotice('The Initialization Certificate is a semi-permanent certified session and cannot be deleted from the dashboard.', 'warn');
+    return;
+  }
+
+  const confirmed = await showConfirm('Delete session "' + existing.title + '"? This will remove all messages in this session.\n\nThis action requires administrator privileges.');
   if (!confirmed) {
     return;
   }
@@ -1341,7 +1396,14 @@ export
       await refreshChrome();
     }
   } catch (error) {
-    showTransientNotice('Delete failed: ' + (error.message || String(error)), 'error');
+    var errMsg = (error.message || String(error));
+    if (/forbidden/i.test(errMsg) || /administrator/i.test(errMsg)) {
+      showTransientNotice('Session deletion requires administrator privileges.', 'error');
+    } else if (/protected_session/i.test(errMsg)) {
+      showTransientNotice('This session is protected by governance policy and cannot be deleted.', 'error');
+    } else {
+      showTransientNotice('Delete failed: ' + errMsg, 'error');
+    }
   }
 
   render();

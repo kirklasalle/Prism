@@ -1,6 +1,7 @@
 # 📋 Refactoring Plan: Constructor & Route Decomposition
 
 This plan outlines the steps for executing the remaining refactoring tasks for the PRISM Dashboard:
+
 1. **PowerShell Script Extraction** — ✅ **COMPLETED**
 2. **Phase 3: Constructor Decomposition** — ✅ **COMPLETED**
 3. **Phase 4: Route Service Decomposition & DI** — ✅ **COMPLETED**
@@ -18,6 +19,7 @@ This plan outlines the steps for executing the remaining refactoring tasks for t
 ## ⚙️ Step 2: Phase 3 — Constructor Decomposition [COMPLETED]
 
 Decomposed the constructor of `DashboardService` using dedicated helper modules:
+
 * `iam-security.ts`
 * `observability.ts`
 * `tools.ts`

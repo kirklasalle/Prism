@@ -13,6 +13,7 @@ export class AgenticHandler implements IRouteHandler {
         const pathname = url.split("?")[0];
         const method = req.method?.toUpperCase() ?? "GET";
 
+        if (pathname.startsWith("/api/agentic/")) return true;
         if (pathname.startsWith("/api/diagnostics/agent/")) return true;
         if (pathname.startsWith("/api/readiness")) return true;
         if (pathname.startsWith("/api/ptac/")) return true;
@@ -239,6 +240,29 @@ export class AgenticHandler implements IRouteHandler {
             } catch (error) {
                 return this.json(res, 400, { error: String(error) });
             }
+        }
+
+        // 6b. GET /api/ptac/demo/feature-flags
+        // Reports whether the PTAC operator demo is wired on this host. Always
+        // 200. The dashboard polls this to decide whether to render the operator
+        // panel. Returns `enabled` + per-gate flags + advisory.
+        if (method === "GET" && url === "/api/ptac/demo/feature-flags") {
+            const operatorGate = process.env.PRISM_PTAC_OPERATOR_DEMO === "1";
+            const safeGate = process.env.PRISM_PTAC_SAFE === "1";
+            const videoGate = process.env.PRISM_PTAC_RECORD_VIDEO === "1";
+            const ready = operatorGate && safeGate && videoGate;
+            return this.json(res, 200, {
+                enabled: operatorGate,
+                gates: {
+                    operatorGate,
+                    safeGate,
+                    videoGate,
+                },
+                ready,
+                advisory: ready
+                    ? "All three gates set. POST /api/ptac/demo/run to start a recorded run."
+                    : "Set PRISM_PTAC_OPERATOR_DEMO=1, PRISM_PTAC_SAFE=1, and PRISM_PTAC_RECORD_VIDEO=1 to enable the demo button.",
+            });
         }
 
         // 7. GET /api/ptac/demo/runs
@@ -871,6 +895,37 @@ export class AgenticHandler implements IRouteHandler {
 
         if (method === "GET" && url === "/api/action-history") {
             return this.json(res, 200, service.listActionHistory());
+        }
+
+        if (method === "POST" && url === "/api/agentic/action") {
+            const body = await service.readJsonBody<{ operation: string; args: any }>(req);
+            const { operation, args } = body;
+            if (!operation) return this.json(res, 400, { error: "Operation is required" });
+            const toolRegistry = service.getToolRegistry();
+            if (!toolRegistry) return this.json(res, 503, { error: "Tool registry not available" });
+            try {
+                const tool = toolRegistry.get(operation);
+                const safeArgs = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+                const action = typeof safeArgs.action === "string" ? safeArgs.action.toLowerCase() : null;
+                const governanceRule = action ? tool.governance?.actions?.[action] : undefined;
+                const risk = governanceRule?.minimumRisk ?? "medium";
+                const mutatesState = governanceRule?.mutating ?? true;
+                const rollbackPlan =
+                    governanceRule?.rollbackRequired && risk !== "low"
+                        ? `[Rollback plan required for ${operation}${action ? `:${action}` : ""} at risk=${risk}]`
+                        : undefined;
+
+                const result = await tool.execute({
+                    operation,
+                    args: safeArgs,
+                    risk,
+                    mutatesState,
+                    rollbackPlan,
+                });
+                return this.json(res, 200, result);
+            } catch (error: unknown) {
+                return this.json(res, 500, { error: String(error) });
+            }
         }
     }
 

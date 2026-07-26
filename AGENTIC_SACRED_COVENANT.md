@@ -1,4 +1,5 @@
 # PRISM SACRED COVENANT
+
 ## The Unbreakable Bond Between Human and AI in Service of Trustworthy Autonomy
 
 *A solemn pledge of partnership, excellence, and unwavering commitment to the PRISM vision*

@@ -1,121 +1,110 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Contact | Prism Refraction</title>
-        <meta
-            name="description"
-            content="Get in touch with the Prism Refraction team. Request a demo or ask architectural questions."
-        />
-        <link rel="stylesheet" href="css/styles.css" />
-    </head>
-    <body>
-        <nav>
-            <div class="logo">
-                <svg
-                    viewBox="0 0 64 64"
-                    fill="none"
-                    width="30"
-                    height="30"
-                    xmlns="http://www.w3.org/2000/svg"
-                    style="filter: drop-shadow(0 0 5px var(--neon-cyan))"
-                >
-                    <path
-                        d="M10 44 L32 8 L54 44 Z"
-                        stroke="var(--neon-cyan)"
-                        stroke-width="2"
-                        fill="rgba(0, 243, 255, 0.05)"
-                    />
-                    <path
-                        d="M20 40 L32 20 L44 40 Z"
-                        fill="rgba(189, 0, 255, 0.2)"
-                        stroke="var(--neon-purple)"
-                        stroke-width="1.5"
-                    />
-                </svg>
-                PRISM <span>REFRACTION</span>
-            </div>
-            <div class="nav-links">
-                <a href="index.html" id="nav-home">Home</a>
-                <a href="features.html" id="nav-features">Features</a>
-                <a href="architecture.html" id="nav-arch">Architecture</a>
-                <a href="wiki.html" id="nav-wiki">Wiki & Docs</a>
-                <a href="contact.html" class="active" id="nav-contact">Contact</a>
-            </div>
-        </nav>
 
-        <main>
-            <div class="section-header" style="margin-top: 2rem">
-                <h1>Get in <span class="cyber-accent-text">Touch</span></h1>
-                <p>Establish a communications channel with the PRISM core developers and governance council.</p>
-            </div>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contact | Prism Refraction</title>
+    <meta name="description"
+        content="Get in touch with the Prism Refraction team. Request a demo or ask architectural questions." />
+    <link rel="canonical" href="https://prismrefraction.com/contact.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Contact Prism Refraction" />
+    <meta property="og:description"
+        content="Request a demo, discuss business deployment, or ask architecture and governance questions." />
+    <meta property="og:url" content="https://prismrefraction.com/contact.html" />
+    <meta property="og:image" content="https://prismrefraction.com/images/hero.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
 
-            <div class="cyber-card" style="max-width: 650px; margin: 0 auto" id="contact-card">
-                <form
-                    action="#"
-                    method="POST"
-                    onsubmit="
-                        event.preventDefault();
-                        alert('Transmission Sent. Cryptographic confirmation logged.');
-                        this.reset();
-                    "
-                >
-                    <div class="form-group">
-                        <label for="name">Operator Name</label>
-                        <input type="text" id="name" class="form-control" placeholder="ENTER IDENTITY..." required />
-                    </div>
+<body>
+    <nav>
+        <div class="logo">
+            <svg viewBox="0 0 64 64" fill="none" width="30" height="30" xmlns="http://www.w3.org/2000/svg"
+                style="filter: drop-shadow(0 0 5px var(--neon-cyan))">
+                <path d="M10 44 L32 8 L54 44 Z" stroke="var(--neon-cyan)" stroke-width="2"
+                    fill="rgba(0, 243, 255, 0.05)" />
+                <path d="M20 40 L32 20 L44 40 Z" fill="rgba(189, 0, 255, 0.2)" stroke="var(--neon-purple)"
+                    stroke-width="1.5" />
+            </svg>
+            PRISM <span>REFRACTION</span>
+        </div>
+        <div class="nav-links">
+            <a href="index.html" id="nav-home">Home</a>
+            <a href="features.html" id="nav-features">Features</a>
+            <a href="business.html" id="nav-business">Business</a>
+            <a href="architecture.html" id="nav-arch">Architecture</a>
+            <a href="wiki.html" id="nav-wiki">Wiki & Docs</a>
+            <a href="contact.html" class="active" id="nav-contact">Contact</a>
+        </div>
+    </nav>
 
-                    <div class="form-group">
-                        <label for="email">Communications Email</label>
-                        <input
-                            type="email"
-                            id="email"
-                            class="form-control"
-                            placeholder="ENTER SECURE EMAIL..."
-                            required
-                        />
-                    </div>
+    <main>
+        <div class="section-header" style="margin-top: 2rem">
+            <h1>Get in <span class="cyber-accent-text">Touch</span></h1>
+            <p>Establish a communications channel with the PRISM core developers and governance council.</p>
+        </div>
 
-                    <div class="form-group">
-                        <label for="subject">Directives Channel</label>
-                        <input
-                            type="text"
-                            id="subject"
-                            class="form-control"
-                            placeholder="SUBJECT OF INQUIRY..."
-                            required
-                        />
-                    </div>
+        <div class="cyber-card" style="max-width: 650px; margin: 0 auto" id="contact-card">
+            <form action="contact.php" method="POST" id="contact-form" novalidate>
+                <div class="form-group">
+                    <label for="name">Operator Name</label>
+                    <input type="text" id="name" name="name" class="form-control" placeholder="ENTER IDENTITY..."
+                        autocomplete="name" required />
+                </div>
 
-                    <div class="form-group">
-                        <label for="message">Transmission Payload</label>
-                        <textarea
-                            id="message"
-                            class="form-control"
-                            placeholder="WRITE DETAILED INSTRUCTIONS OR QUESTIONS..."
-                            required
-                        ></textarea>
-                    </div>
+                <div class="form-group">
+                    <label for="email">Communications Email</label>
+                    <input type="email" id="email" name="email" class="form-control" placeholder="ENTER SECURE EMAIL..."
+                        autocomplete="email" required />
+                </div>
 
-                    <button type="submit" class="btn btn-primary" id="btn-submit-message" style="width: 100%">
-                        TRANSMIT SECURE PAYLOAD
-                    </button>
-                </form>
-            </div>
-        </main>
+                <div class="form-group">
+                    <label for="subject">Directives Channel</label>
+                    <input type="text" id="subject" name="subject" class="form-control"
+                        placeholder="SUBJECT OF INQUIRY..." required />
+                </div>
 
-        <footer>
-            <p>&copy; 2026 PRISM Refraction Project. All rights reserved.</p>
-            <div class="footer-links">
-                <a href="index.html">Home</a>
-                <a href="features.html">Features</a>
-                <a href="architecture.html">Architecture</a>
-                <a href="wiki.html">Wiki & Docs</a>
-                <a href="contact.html">Contact</a>
-            </div>
-        </footer>
+                <div class="form-group">
+                    <label for="message">Transmission Payload</label>
+                    <textarea id="message" name="message" class="form-control"
+                        placeholder="WRITE DETAILED INSTRUCTIONS OR QUESTIONS..." required></textarea>
+                </div>
 
-        <script src="js/main.js"></script>
-    </body>
+                <div class="form-honeypot" aria-hidden="true">
+                    <label for="company_website">Leave this field blank</label>
+                    <input type="text" id="company_website" name="company_website" tabindex="-1" />
+                </div>
+
+                <input type="hidden" id="form_token" name="form_token" value="PRISM_SITE_CONTACT_V1" />
+
+                <div id="contact-status" class="contact-status" role="status" aria-live="polite"></div>
+
+                <button type="submit" class="btn btn-primary" id="btn-submit-message" style="width: 100%">
+                    TRANSMIT SECURE PAYLOAD
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 PRISM Refraction Project. All rights reserved.</p>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="features.html">Features</a>
+            <a href="business.html">Business</a>
+            <a href="architecture.html">Architecture</a>
+            <a href="wiki.html">Wiki & Docs</a>
+            <a href="contact.html">Contact</a>
+            <a href="https://github.com/kirklasalle/Prism" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="security.html">Security</a>
+            <a href="privacy.html">Privacy</a>
+            <a href="terms.html">Terms</a>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+
 </html>

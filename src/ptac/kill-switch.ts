@@ -29,12 +29,7 @@
 import { EventEmitter } from "node:events";
 
 export type AbortReason =
-    | "panic-chord"
-    | "http-abort"
-    | "idle-watchdog"
-    | "step-timeout"
-    | "operator-cancel"
-    | "scenario-failure";
+    "panic-chord" | "http-abort" | "idle-watchdog" | "step-timeout" | "operator-cancel" | "scenario-failure";
 
 export interface KillSwitchOptions {
     readonly profile: "sandbox" | "host";

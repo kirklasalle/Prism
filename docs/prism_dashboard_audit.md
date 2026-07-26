@@ -50,18 +50,21 @@ During the Phase 2 route migration, the following routes were successfully extra
 ## Remaining Risks & Recommendations
 
 ### Finding 1: Circular Dependency / Tight Coupling
+
 * **Status**: In-Progress.
 * **Risk**: High.
 * The route handlers in `routes/` still receive the full `DashboardService` instance in their `handle(req, res, service)` method. This means they are tightly coupled to the service's public API.
 * **Recommendation**: Proceed to **Phase 4: Service Decomposition** by extracting narrow interfaces or injecting targeted domain services (like `LlmService`, `DiagnosticsService`, etc.) into the router.
 
 ### Finding 2: Monolithic Constructor (~600 lines)
+
 * **Status**: Unchanged.
 * **Risk**: Medium.
 * The constructor still initializes rate limiters, IAM seeding, tool registration, and agent loop wiring.
 * **Recommendation**: Proceed to **Phase 3: Constructor Decomposition** by creating dedicated bootstrap classes (e.g. `IamBootstrap.init(service)`).
 
 ### Finding 3: Embedded PowerShell / System Commands
+
 * **Status**: Unchanged.
 * **Risk**: Medium.
 * The 300-line inline PowerShell script for hardware device enumeration remains inside `dashboard-service.ts`.

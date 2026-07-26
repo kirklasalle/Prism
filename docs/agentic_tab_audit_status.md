@@ -25,7 +25,7 @@ All 10 critical UX, security, and integration items identified during the audit 
 
 ## 🧪 Unit and Integration Testing
 
-- **Frontend UI Unit Tests (`tests/tab-agentic-ui.test.ts`):** 
+- **Frontend UI Unit Tests (`tests/tab-agentic-ui.test.ts`):**
   - Added missing mock helper functions (`showForm`, `showPrompt`, and `safeRenderStep`) to `MOCK_DASHBOARD_CORE` to allow tests to compile and run.
   - Updated assertions for action buttons to look for the new secure `data-agent-action` attributes instead of deprecated `onclick` handlers (`stopAgent`, etc.).
   - **Result:** All 19 frontend unit tests run and pass.

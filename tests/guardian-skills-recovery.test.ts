@@ -150,8 +150,18 @@ describe("Guardian Agent Self-Healing with Skills Engine", () => {
 describe("Guardian Agent Self-Healing Tasks & Logging Integration", () => {
     it("successfully routes self_heal_check and self_improve_check tasks", async () => {
         const bus = new ActivityBus();
-        const guardian = new GuardianAgent(bus, { getSnapshot() { return []; }, async loadModel() {} } as any, [], { modelPath: "models/test.gguf" });
-        
+        const guardian = new GuardianAgent(
+            bus,
+            {
+                getSnapshot() {
+                    return [];
+                },
+                async loadModel() {},
+            } as any,
+            [],
+            { modelPath: "models/test.gguf" },
+        );
+
         let routedQuery = "";
         const mockSkillsEngine = {
             async routeQuery(query: string) {
@@ -160,7 +170,7 @@ describe("Guardian Agent Self-Healing Tasks & Logging Integration", () => {
                     id: "skill.custodian.self-heal",
                     name: "Custodian Self-Heal Skill",
                     tags: ["self-heal"],
-                    workflow: { steps: [{ id: "step1" }] }
+                    workflow: { steps: [{ id: "step1" }] },
                 };
             },
             async createSession(opts: any) {
@@ -176,14 +186,14 @@ describe("Guardian Agent Self-Healing Tasks & Logging Integration", () => {
                     skillId: "skill.custodian.self-heal",
                     status: "completed",
                 };
-            }
+            },
         };
 
         guardian.setSkillsEngine(mockSkillsEngine);
 
         const task = (guardian as any).tasks.find((t: any) => t.id === "self_heal_check");
         assert.ok(task, "self_heal_check task exists in catalog");
-        
+
         await (guardian as any).executeTask(task);
         assert.equal(routedQuery, "skill.custodian.self-heal");
     });

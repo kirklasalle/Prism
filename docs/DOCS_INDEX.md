@@ -6,6 +6,9 @@
 ## Quick Links — Start Here
 
 - **[STATUS.md](STATUS.md)** — Authoritative status: what's shipped, pending, gated
+- **[PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md](PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md)** — Master SAP approval package (code, docs, market, critical audit)
+- **[PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md](PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md)** — Single three-state matrix (Accomplished/In Progress/Not Yet)
+- **[MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md](MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md)** — MCP IDS runtime awareness operating model
 - **[../audit.md](../audit.md)** — World-Class Complete Codebase Audit (2026-06-17)
 - **[AUDIT_TASK_LIST.md](AUDIT_TASK_LIST.md)** — Prioritized remediation task list
 - **[ROADMAP.md](ROADMAP.md)** — Updated with Phase R (Readiness) + Phase S (Skills)
@@ -88,6 +91,12 @@
 - PHASE_D2_RELEASE_PACKET_TEMPLATE.md: release packet template
 - PHASE_E3b_SESSION_GOVERNANCE.md: session governance
 
+## World-Class Audit Program (SAP)
+
+- PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md: consolidated approval package and execution phases
+- PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md: authoritative three-state implementation matrix by domain
+- MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md: IDS-centered runtime awareness, drift governance, and telemetry model
+
 ## Integration & Tooling
 
 - A2A_OCI_INTEGRATION_SPEC.md: A2A Protocol Server + OCI integration
@@ -101,6 +110,9 @@
 
 ## Reference
 
+- reference/mcp_server/MCP_IDS_API_REFERENCE.md: IDS MCP tool contracts and error model
+- reference/mcp_server/MCP_IDS_OPERATIONAL_RUNBOOK.md: IDS operations and incident procedures
+- reference/mcp_server/MCP_IDS_SAP_ALIGNMENT.md: IDS alignment to SAP approval gates
 - EXECUTION_PROFILES_GUIDE.md: execution profiles guide
 - EXECUTION_PROFILE_ENVIRONMENT_CONFIG.md: environment config
 - EXECUTION_PROFILE_IMPLEMENTATION.md: profile implementation

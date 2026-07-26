@@ -103,8 +103,7 @@ export function getSchemaVersion(db: DatabaseSync): { current: number; migration
         migrations: number;
     };
     const latestRow = db.prepare(`SELECT applied_at FROM ${SCHEMA_TABLE} ORDER BY id DESC LIMIT 1`).get() as
-        | { applied_at: string }
-        | undefined;
+        { applied_at: string } | undefined;
 
     return {
         current: maxRow.current ?? 0,

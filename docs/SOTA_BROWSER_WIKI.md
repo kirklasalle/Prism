@@ -186,8 +186,8 @@ SSHP is fully operator-controlled. It is enabled by default to secure the worksp
 - **Settings Tab Control**: Toggled directly via the _Sovereign Sentinel Shielding_ card.
 - **Live Status Indicator**: A live dynamic badge (`🛡️ SSHP ACTIVE` / `🛡️ SSHP OFF`) is rendered in the Browser Control header to give operators immediate feedback.
 - **Direct REST API Endpoints**:
-    - **Path**: `POST /api/preferences/sshp-redaction`
-    - **Payload**:
+  - **Path**: `POST /api/preferences/sshp-redaction`
+  - **Payload**:
 
         ```json
         { "enabled": false }
@@ -369,9 +369,9 @@ PRISM introduces a certified **Add-on Layer** designed for deep system integrati
 The **Virtually Robotic GitHub Copilot (VRGC)** Robotics Add-on provides an interface and cognitive middleware layer bridging PRISM to advanced intelligence simulators and physical hardware.
 
 - **Robotics Console Tab**: Mounted dynamically in the dashboard, featuring:
-    - **UKS & BrainSim III Integrations**: Real-time cognitive state tracking, semantic knowledge maps, and neural fire rates.
-    - **Entity Lifecycle Control**: Spawn, calibrate, suspend, and shut down simulated or physical robotic agents.
-    - **Safety Boundaries**: Real-time telemetry monitoring against the 10 Laws (Asimov-LaSalle directives).
+  - **UKS & BrainSim III Integrations**: Real-time cognitive state tracking, semantic knowledge maps, and neural fire rates.
+  - **Entity Lifecycle Control**: Spawn, calibrate, suspend, and shut down simulated or physical robotic agents.
+  - **Safety Boundaries**: Real-time telemetry monitoring against the 10 Laws (Asimov-LaSalle directives).
 - **Developer API**:
-    - `GET /api/robotics/status` — Live status of UKS/BrainSim link and active entities.
-    - `POST /api/robotics/control` — Dispatch calibration, emergency halt, or state synchronization commands.
+  - `GET /api/robotics/status` — Live status of UKS/BrainSim link and active entities.
+  - `POST /api/robotics/control` — Dispatch calibration, emergency halt, or state synchronization commands.

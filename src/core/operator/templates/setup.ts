@@ -460,12 +460,26 @@ export function setupWizardHtml(port: number): string {
         <div class="wizard-section" style="padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.015);">
           <h4 style="font-size: 13px; font-weight: 600; margin: 0 0 8px; display: flex; align-items: center; gap: 6px;">
             <span>🛡️ Guardian Agent</span>
+            <span style="font-size:10px;font-weight:600;background:rgba(239,68,68,0.18);color:#fca5a5;padding:2px 7px;border-radius:6px;margin-left:auto;">REQUIRED</span>
           </h4>
           <div class="wizard-field">
             <label>Guardian Model</label>
-            <select id="wizard-guardian-model"><option value="">Loading models...</option></select>
-            <span class="wizard-hint">Select a local GGUF model for the guardian to use.</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="wizard-guardian-model" style="flex:1;"><option value="">Loading models...</option></select>
+              <button type="button" id="wizard-guardian-download-btn" class="primary-button" style="font-size:11px;padding:8px 14px;white-space:nowrap;display:none;" onclick="downloadGuardianModel()">\u{1F4E5} Download</button>
+            </div>
+            <div id="wizard-guardian-download-progress" style="display:none;margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;">
+                  <div id="wizard-guardian-progress-bar" style="height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width 0.3s;"></div>
+                </div>
+                <span id="wizard-guardian-progress-text" style="color:var(--muted);min-width:40px;text-align:right;">0%</span>
+              </div>
+              <div id="wizard-guardian-download-status" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
+            </div>
+            <span class="wizard-hint">A Guardian model is required. Select a downloaded model or download one from the recommended list.</span>
           </div>
+          <div id="wizard-guardian-validation-error" style="display:none;padding:8px 12px;margin-bottom:10px;border-radius:8px;background:rgba(239,68,68,0.12);color:#ff8d8d;font-size:12px;"></div>
 
           <div class="wizard-field">
             <label>Authority Tier</label>

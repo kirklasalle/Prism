@@ -276,8 +276,7 @@ export async function runAdvancedInteractive(args: AdvancedCliArgs, client: Setu
     ];
     const defaultProfileIdx = state.profile === "business" ? 1 : 0;
     state.profile = (await select("Select execution profile:", profileOptions, defaultProfileIdx)) as
-        | "individual"
-        | "business";
+        "individual" | "business";
 
     // Apply profile-aware defaults
     if (state.profile === "business") {
@@ -427,9 +426,7 @@ export async function runAdvancedInteractive(args: AdvancedCliArgs, client: Setu
         { label: "Modality-Aware", value: "modality", description: "Route by content type (text, vision, code)" },
     ];
     state.routingStrategy = (await select("Select routing strategy:", strategyOptions, 0)) as
-        | "single"
-        | "multi"
-        | "modality";
+        "single" | "multi" | "modality";
 
     if (state.routingStrategy !== "single") {
         // Fetch AI-suggested routing if available

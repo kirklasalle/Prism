@@ -1,17 +1,22 @@
 # Login Session & Provider Fix — Summary
 
 ## Problem Statement
+
 After completing the setup wizard and logging in for the first time:
+
 1. **Wrong Provider** — The dashboard showed a provider that wasn't selected during wizard setup
 2. **"New Session" instead of Initialization Certificate** — The dashboard created a blank "New Session" instead of showing the Initialization Certificate that the wizard just created
 
 ## Root Causes
 
 ### Provider Not Applied
+
 The wizard saved the provider via `/api/llm/select` which calls `writePreferences({ activeLlmProviderId, activeLlmModel })`. However, after the login flow completed, **nothing restored these preferences** — the login handler just issued a cookie and returned a token without touching the LLM subsystem.
 
 ### Wrong Session Displayed
+
 Two interrelated issues:
+
 1. **Orphaned certificate session**: The wizard's `/api/setup/initialization-session` endpoint created the Initialization Certificate session with `operator_email: null` or `operator@prism.local` because the operator hadn't authenticated yet. When the user logged in as `kirk.assistant.nexus@gmail.com`, the session ownership filter (`s.operatorEmail === principal.email`) excluded the certificate session.
 2. **Auto-creation**: The dashboard frontend's `loadSessions()` auto-selected `sessions[0]` — a newly created "New Session" — with no logic to prefer the Initialization Certificate.
 
@@ -1568,6 +1573,7 @@ function randomShortId(): string {
 ```
 
 After successful authentication, the login handler now:
+
 - **Claims orphan Init Certificate sessions** — scans all sessions for Initialization Certificate titles with placeholder/null operator emails and updates them to the authenticated user's email
 - **Restores LLM provider preferences** — reads `activeLlmProviderId`/`activeLlmModel` from preferences and calls `setActiveSelection()` if they differ from the current state
 
@@ -25544,6 +25550,7 @@ function parseLimit(url: string, fallback: number): number {
 ```
 
 The `/api/setup/initialization-session` endpoint now:
+
 - **Extracts operator email more robustly** — checks `cac.operatorEmail` first, then `browserProfile.email` as fallback, filtering out placeholders like `@prism.local`
 - **Persists the LLM provider** from the certificate's `provider.primary` field to preferences, ensuring the wizard → login → dashboard chain has the correct provider saved
 
@@ -29431,4 +29438,5 @@ export function showThinkingTraceModal() {
 When `loadSessions()` auto-selects the initial session (on first dashboard load), it now **prefers an Initialization Certificate session** over a generic "New Session". The certificate is the provenance chain root and should be the operator's first view.
 
 ## Verification
+
 - TypeScript compilation: **✅ Clean (exit code 0, no errors)**

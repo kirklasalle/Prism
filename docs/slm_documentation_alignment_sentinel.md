@@ -82,3 +82,48 @@ Tests: 92 | Passed: 92 | Failed: 0
 ```
 
 All code changes have been staged, committed, and pushed to the `main` branch.
+
+---
+
+## 4. IDS Runtime Awareness Metrics
+
+The Sentinel is now also the execution point for IDS-centered runtime awareness
+tracking. This section defines the required metrics and release-impacting
+thresholds.
+
+### 4.1 Metrics
+
+- **Awareness Score**
+  - Weighted score derived from IDS status, validator integrity, file mapping
+    coverage, and remediation closure.
+- **Index Freshness**
+  - Time since last successful indexing cycle from IDS status.
+- **Requirement Coverage Integrity**
+  - Percentage of matrix-linked files that exist and are indexed.
+- **Drift Resolution Rate**
+  - Percentage of identified mismatches resolved within policy SLA.
+- **Validator Health**
+  - Percentage of successful `ids_run_system_validator` executions.
+
+### 4.2 Thresholds
+
+- Awareness score target: `>= 85`.
+- Warning band: `70-84`.
+- Critical band: `< 70`.
+- Critical release gate: unresolved critical validator findings must be `0`.
+
+### 4.3 Governance Actions
+
+When thresholds are violated:
+
+1. Emit `guardian.documentation_drift` alert.
+2. Create or update remediation work item.
+3. Trigger IDS validation and refresh workflow.
+4. Mark release readiness as blocked when critical thresholds are unmet.
+
+### 4.4 Companion Documents
+
+- `MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md`
+- `reference/mcp_server/MCP_IDS_API_REFERENCE.md`
+- `reference/mcp_server/MCP_IDS_OPERATIONAL_RUNBOOK.md`
+- `reference/mcp_server/MCP_IDS_SAP_ALIGNMENT.md`

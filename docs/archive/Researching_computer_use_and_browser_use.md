@@ -127,8 +127,11 @@ The system writes four distinct state structures to S3 to decouple execution fro
 import os
 
 # Clean the shared temporary directory to prevent cross-session leaks
+
 shutil.rmtree('/tmp/agent-workspace', ignore_errors=True)
+
 # Create a unique directory for the current session
+
 os.makedirs(f'/tmp/agent-workspace/{session_id}', exist_ok=True)
 LaVagueLaVague is an open-source Large Action Model (LAM) framework designed to build autonomous web agents. Its architecture is inspired by Yann LeCun's cognitive modules, dividing execution between a World Model and an Action Engine.The World Model: The planning engine. It takes the user's high-level objective and analyzes screenshots and HTML source code from the webdriver to generate the next logical text instruction.The Action Engine: The compiler and execution engine. It receives the text instruction from the World Model and generates executable web automation code (Selenium or Playwright) on the fly.The Driver: The execution interface. It runs the generated code, interacts with the active browser, and captures updated screenshots and DOM states to feed back to the World Model.By separating instruction planning from code generation, LaVague isolates web page variations from the planner, allowing the agent to dynamically adapt to UI changes. If a button's selector changes, the World Model continues to emit the same logical instruction (e.g., "click the submit button"), while the Action Engine evaluates the updated DOM to generate new, valid selector code.Telemetry and Analytics PipelineBy default, the framework collects a comprehensive set of telemetry and performance variables to help train open-source Large Action Models :Structural Context: The target viewport size, DOM observations, and interaction bounding box coordinates.Execution Logs: The active step number, generated automation code, and action success statuses.Cognitive Traces: The planned instructions, model details, token consumption rates, and step-by-step cognitive paths.Session Metadata: Anonymous user IDs, target URLs, and driver execution methods (such as CLI, Gradio, or Chrome Extension).Evaluation Topography and Benchmark PerformanceEvaluating computer and browser use agents requires execution-based benchmarks that measure success by analyzing final state changes in real operating systems and live web environments, rather than evaluating text outputs.The primary benchmarks in this domain are structured as follows:OSWorldThis benchmark contains 369 open-ended tasks across Ubuntu, Windows, and macOS, spanning single-app operations (such as LibreOffice, VLC, and GIMP) and multi-app workflows. It includes a small proportion ($\approx 8\%$) of infeasible tasks to test if an agent can recognize when a request cannot be completed.Tasks are initialized from reproducible VM states using snapshots, database seeding, and GUI manipulations. Success is verified using 134 unique execution-based evaluation scripts that inspect backend files, browser cookies, and system states directly.While human operators achieve a $72.4\%$ success rate, early monolithic agent baselines scored below $12.2\%$, highlighting difficulties with visual grounding and operational planning. Newer runtime platforms like Coasty have improved scores to $82\%$ by optimizing execution speeds and integrating display streaming instead of static screenshot polling.OSWorld-MCPAn extension of the OSWorld benchmark containing 158 validated Model Context Protocol (MCP) tools across 7 common applications. It evaluates an agent's ability to choose between direct GUI manipulation and API-based MCP tool calls.Adding MCP tools improves agent efficiency and accuracy; for example, OpenAI's o3 model success rate improved from $8.3\%$ to $17.6\%$ under a strict 15-step limitation when using MCP integrations.WebArenaFocuses on browser-based agents executing complex tasks (such as e-commerce shopping, forum moderation, and collaborative coding) on self-hosted instances of popular websites (such as GitLab and Magento). Success is verified programmatically by evaluating backend state changes (such as database writes, cookies, and repository commits) using deterministic assertion scripts.Leading architectures like OpAgent have achieved success rates of $71.6\%$ on WebArena by utilizing reinforcement learning with rule-based decision trees.WebChoreArenaAn extension of WebArena designed to test agents on tedious, labor-intensive tasks that humans avoid. It systematically evaluates three core challenges: massive information retrieval, precise mathematical calculations, and long-term memory across multi-platform workflows. It exposes a wide performance gap between model generations; while older models like GPT-4o struggle, newer reasoning models like Claude 3.7 Sonnet show significant improvements but still leave substantial room for progress.The following table summarizes agent performance and architectural configurations across these primary benchmarks:BenchmarkEvaluating AuthorityScope and ScalePerformance Metric (Humans)Model / Agent PerformancePrimary Architectural ChallengesOSWorldxLang Lab.369 Ubuntu tasks, 43 Windows tasks, covering web, desktop, and multi-app pipelines.$72.40\%$.Coasty Runtime: $82.00\%$.Monolithic baseline: $<12.20\%$.GUI grounding, high latency between screenshots, and system state drift.OSWorld-MCPICLR 2026.158 validated MCP tools across LibreOffice, VS Code, Chrome, and VLC.N/AOpenAI o3 (with MCP): $17.60\%$.OpenAI o3 (no MCP): $8.30\%$.Tool path selection, robust tool integration, and distractor tool rejection.WebArenaCarnegie Mellon University.Self-hosted e-commerce, forums, GitLab, and maps.$78.20\%$.OpAgent: $71.60\%$ (SOTA).Composed with memory: High success.Long-horizon planning, DOM extraction speed, and credit assignment in long tasks.WebChoreArenaWebChoreArena Consortium.532 complex, multi-site tasks spanning GitLab, Reddit, and shopping admins.HighGemini 2.5 Pro / Claude 3.7: Moderate.GPT-4o: Low.Large-scale memory retrieval, mathematical reasoning, and cross-site coordination.Online-Mind2WebOhio State University.300 tasks on 136 live websites.HighMicrosoft Fara1.5 (27B): $72.00\%$.OpenAI Operator: $58.30\%$.Gemini 2.5 Computer Use: $57.30\%$.Managing live web variations, pop-ups, and security verification challenges.Production Blueprint for Prism Project Computer Use IntegrationApplication Architecture contextThe Prism repository is an open-source, self-hosted AI assistant designed to automate code reviews and repository management via a GitHub App integration. It is written in TypeScript and runs on Node.js, ingesting pull request webhooks, applying custom code rules (defined in RULES.md or JSON formats), and writing comments directly onto GitHub PR lines.To extend Prism to a world-class level, we must implement an active Computer Use agent loop. Currently, Prism can only run static analysis on raw diff hunks. Adding computer use enables the agent to check out the PR branch, spin up a local development environment, build the code, execute test suites, run dynamic integration checks, and use a headless browser to perform visual layout audits.                               Prism Orchestrator Server
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -137,7 +140,7 @@ LaVagueLaVague is an open-source Large Action Model (LAM) framework designed to 
 │  - Level-2 Processor Engine (Orchestrates setup, evaluation, and cleanups)   │
 └──────────────────────────────────────┬───────────────────────────────────────┘
                                        │
-                                       │ AIP protocol (WebSockets over TLS) 
+                                       │ AIP protocol (WebSockets over TLS)
                                        ▼
                              Docker Execution Sandbox
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -149,9 +152,11 @@ This section provides the complete TypeScript implementation blueprint to integr
 FROM mcr.microsoft.com/playwright:v1.49.0-noble
 
 # Create non-privileged service user to run the environment safely
+
 RUN groupadd -r prismsandbox && useradd -r -g prismsandbox -d /home/prismsandbox -m prismsandbox
 
 # Install system utilities and Xvfb display configurations
+
 RUN apt-get update && apt-get install -y \
     xvfb \
     fluxbox \
@@ -162,10 +167,12 @@ USER prismsandbox
 WORKDIR /home/prismsandbox/app
 
 # Pre-install base dependencies for the local test runner
+
 COPY --chown=prismsandbox:prismsandbox package*.json./
 RUN npm ci
 
 # Copy sandbox runtime client
+
 COPY --chown=prismsandbox:prismsandbox..
 
 EXPOSE 4040
@@ -377,15 +384,15 @@ export interface Dimensions {
 
 export class CoordinateMapper {
     static toViewport(
-        xImg: number, 
-        yImg: number, 
-        imageSize: Dimensions, 
+        xImg: number,
+        yImg: number,
+        imageSize: Dimensions,
         viewportSize: Dimensions
     ): { x: number; y: number } {
         if (imageSize.width <= 0 || imageSize.height <= 0) {
             throw new Error("Invalid source image dimensions");
         }
-        
+
         const x = Math.floor(xImg * (viewportSize.width / imageSize.width));
         const y = Math.floor(yImg * (viewportSize.height / imageSize.height));
         
@@ -472,28 +479,39 @@ This systems blueprint integrates a visual and terminal execution engine directl
 PRISM's interactive dashboard supports a built-in web browser accessible to the Guardian agent, operating agents, and internal configuration modules. To ensure maximum safety, business traceability, and zero-trust credentials containment, PRISM integrates the Sovereign Sentinel Hyper-Proxy (SSHP) and the Cognitive Session Handoff (CSH) "Baton Pass" Human-in-the-Loop protocol.
 
 ### 4.1 How to Initiate Computer Control
+
 You can run automated browser or OS-level agent scenarios using two primary execution profiles:
+
 - **Sandbox Profile (Recommended & Zero-Risk)**: Runs fully contained inside an isolated container sandbox via fluxbox, Playwright, and xvfb.
+
   ```bash
   npm run ptac:sandbox
   ```
+
 - **Host Profile (Direct Input)**: Drives real mouse and keyboard inputs directly on your desktop host machine. Requires confirming acknowledgement of host-level takeover safety guardrails using the `--i-understand-host-control` flag.
+
   ```bash
   npm run ptac:host -- --i-understand-host-control
   ```
 
 ### 4.2 How to Run the OS World Benchmarks
+
 PRISM has a dedicated npm script for the SOTA OSWorld evaluation suite to verify GUI visual grounding and cross-application workflows:
+
 ```bash
 npm run ptac:osworld
 ```
 
 ### 4.3 How to Run Demos
+
 - **Isolated Run**: Execute the standard self-driving dashboard demonstration scenarios in the isolated sandbox:
+
   ```bash
   npm run ptac:demo
   ```
+
 - **Recorded Run (Evidence Capture)**: To compile a browser-playable video manifest slideshow of the run, set the dual safety recording gates in your environment and run:
+
   ```bash
   # Enable dual gates
   set PRISM_PTAC_SAFE=1
@@ -504,12 +522,14 @@ npm run ptac:osworld
   ```
 
 ### 4.4 The Zero-Trust Security Configuration (SSHP)
+
 The **Sovereign Sentinel Hyper-Proxy (SSHP)** operates inside the execution container boundary. It intercepts low-level page modifications, redacts visual screenshots, sanitizes text-level PII from DOM snapshots, and validates action integrity against the Prism Sacred Covenant.
 
 - **Visual PII Redaction**: Solid black SVG rectangles are layered on top of sensitive regions (such as passwords, credit cards, or key entries) dynamically.
 - **DOM Sanitizer**: Auto-scrubs email, card, and SSN formats from DOM text buffers.
 - **Sacred Covenant Audit**: Hooked into navigation, click, type, and evaluation endpoints to prevent internal dangerous protocols (e.g., `file:///etc/passwd`) or destructive scripts (e.g., `localStorage.clear()`).
 - **Security Toggle**: Enabled by default for business safety. Operators can configure or toggle redaction in their workspace preferences or via the REST API:
+
   ```http
   POST /api/preferences/sshp-redaction
   Content-Type: application/json
@@ -520,6 +540,7 @@ The **Sovereign Sentinel Hyper-Proxy (SSHP)** operates inside the execution cont
   ```
 
 ### 4.5 The CSH "Baton Pass" Protocol (Human-in-the-Loop)
+
 When an agent encounters a CAPTCHA, authorization wall, or security violation, it executes a Cognitive Session Handoff (CSH) "Baton Pass."
 
 - **State Serialization**: Automatically captures browser cookies, `localStorage`, `sessionStorage`, navigation history, planning DAG state, and memory contexts.
@@ -528,4 +549,4 @@ When an agent encounters a CAPTCHA, authorization wall, or security violation, i
 - **Developer REST Endpoints**:
   - `POST /api/autonomous/session/handoff`: Initiates the handoff and serializes page state.
   - `POST /api/autonomous/session/resume`: Deserializes saved states and resumes FSM loop.
-  - `GET /api/autonomous/session/pending`: Lists all active human-in-the-loop pending handoffs.
+  - `GET /api/autonomous/session/pending`: Lists all active human-in-the-loop pending handoffs.

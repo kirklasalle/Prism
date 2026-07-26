@@ -17,7 +17,7 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.22.5`                                       |
+| Current version  | `0.22.4`                                       |
 | Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
 | Doctor           | `npm run doctor`                               |
@@ -26,9 +26,9 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 Operators are expected to run `npm run doctor` before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.21.0 → v0.22.5)
+## What's Shipped (v0.21.0 → v0.22.4)
 
-### Guardian MSD & Self-Healing (v0.22.5)
+### Guardian MSD & Self-Healing (v0.22.4)
 
 - **Verbatim 10 Laws Public Publication**: Successfully published the verbatim 10 laws of the Permanent Active Directives (PAD) in the public wiki (`docs/prism_public/wiki.html`) and root `README.md`, highlighting their historical expansion from Asimov's Three Laws of Robotics.
 - **Guardian Self-Healing & Self-Improvement Skills**: Implemented `skill.custodian.self-heal` and `skill.custodian.self-improve` skill workflows, fully registered in the PRISM `SkillsEngine` database.
@@ -119,6 +119,39 @@ existing tracking task; none block the v0.21 demo.
 | `screenshotDiff` / `clickAt` / `typeText`   | deferred | Recorder primitives exist; PTAC step kinds pending. |
 | OSWorld benchmark integration               | not run  | See [OSWORLD_PUBLICATION_PLAN.md](OSWORLD_PUBLICATION_PLAN.md) for the conditions under which we'll publish. |
 | Python SDK PyPI release                     | partial  | v0.2.0 source-installable from `sdk/python`; PyPI publication pending license-boundary signoff. |
+
+## World-Class SAP Audit Implementation (2026-07-20)
+
+This section tracks implementation of the world-class SAP audit program
+(Software Application Programming discipline for ML) using a single
+three-state model across code, documentation, market placement, and critical
+security/governance findings.
+
+### Current State
+
+- **Accomplished**
+  - Baseline audit evidence corpus established from `STATUS.md`, `ROADMAP.md`,
+    `CHANGELOG.md`, `PRISM_CRITICAL_AUDIT_2026.md`,
+    `REQUIREMENTS_TRACEABILITY_MATRIX.md`, and
+    `prism_release_readiness_audit.md`.
+  - MCP IDS recognized as a core runtime awareness subsystem and aligned with
+    Guardian documentation drift checks.
+- **In Progress**
+  - Publication of SAP master approval package and single master matrix.
+  - MCP IDS runtime awareness metrics formalization (awareness, drift,
+    freshness, unresolved mismatch rates).
+  - Cross-document integration and operator gate criteria.
+- **Not Yet Accomplished**
+  - Full closure of all critical release blockers in
+    `prism_release_readiness_audit.md`.
+  - End-to-end evidence publication for compliance-grade external review
+    (SOC2-oriented artifacts, external pen-test evidence, buyer proof packets).
+
+### Program Principle
+
+When MCP IDS is actively integrated into runtime governance workflows, PRISM
+must demonstrate increased operational awareness through measurable indicators,
+not narrative-only claims.
 
 ## CI Gates
 

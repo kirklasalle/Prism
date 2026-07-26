@@ -28,7 +28,7 @@ Every state-changing transaction, shell execution, database query, and outbound 
 > **Phase**: Competitive Position | **Market Specs**  
 > **Cited**: [PRISM_PRD.md](file:///d:/Projects/Prism/docs/PRISM_PRD.md), [COMPETITIVE_ANALYSIS_2026.md](file:///d:/Projects/Prism/docs/COMPETITIVE_ANALYSIS_2026.md), [MARKET_REVIEW.md](file:///d:/Projects/Prism/docs/MARKET_REVIEW.md)
 
-A rigorous evaluation of the 2026 agentic landscape highlights a major gap in modern tools: they lack a logical connection between high-level reasoning and physical hardware management. While platforms like Claude Computer Use or Perplexity provide powerful browser controllers, they operate on raw API billing structures that drain capital, while local frameworks like OpenClaw lack strict safety guarantees. 
+A rigorous evaluation of the 2026 agentic landscape highlights a major gap in modern tools: they lack a logical connection between high-level reasoning and physical hardware management. While platforms like Claude Computer Use or Perplexity provide powerful browser controllers, they operate on raw API billing structures that drain capital, while local frameworks like OpenClaw lack strict safety guarantees.
 
 PRISM bridges this gap by combining world-class local edge model execution with frontier cloud routing, delivering an **Edge-First Cost Moat**. By utilizing a proprietary hybrid mapping framework, PRISM routes lightweight task utilities (classification, routing, telemetry summaries) to local 1.5B–3B parameter models while reserving complex reasoning for frontier cloud endpoints. This drops operational API overhead by up to **72%** while maintaining a **95% cognitive throughput index**.
 
@@ -42,6 +42,7 @@ graph TD
 ```
 
 PRISM's marketable enterprise-level features are divided into three commercial segments:
+
 * **Individual Tier**: Local-first privacy, file/shell utilities, secure personal browser autopilot.
 * **Professional/Corporate Tier**: Tenant isolation, structured OAuth credentials persistence, and Shared Model ports.
 * **Industrial/Sovereign Tier**: Custom OCI character packaging, compliance-audited SHA-256 telemetry chains, and multi-node swarm orchestration.
@@ -79,6 +80,7 @@ Furthermore, when using Playwright browser control, PRISM integrates **Visual PI
 > **Cited**: [SWARM_INTEL_SPEC_D3](file:///d:/Projects/Prism/docs/PHASE_D3_TASKS_MANIFEST.md), [USER_GUIDE.md](file:///d:/Projects/Prism/docs/USER_GUIDE.md)
 
 Complex industrial tasks cannot be solved by a single agent. PRISM introduces the **Swarm Coordinator**, a multi-agent orchestration layer that decomposes master goals into sub-tasks and assigns them across four unique structural topologies:
+
 1. **Star Topology**: A centralized supervisor agent orchestrates, validates, and collates output from subordinate workers. Ideal for structured audits and research.
 2. **Mesh Topology**: Decentralized peer-to-peer agent collaborations with distributed consensus logic. Ideal for self-healing code generation.
 3. **Pipeline Topology**: Sequential execution where specialised agents pass structured state outputs downstream (e.g., Web Researcher -> Analyst -> Code Writer -> Tester).
@@ -102,6 +104,7 @@ To guarantee multi-agent governance, every worker node is managed under **Charac
 **Spectrum Refraction (SR)** is the cognitive crown jewel of the PRISM architecture. Traditional single-model agents are prone to progressive hallucination: when a single model generates planning, writes code, and validates its own execution, it operates inside a closed echo chamber, inevitably validating its own errors.
 
 PRISM breaks this vulnerability by splitting logical planning and creative generation into specialized cognitive hemispheres, verified by a strict **Triad Isolation Engine**:
+
 * **Left Hemisphere (Logic & reasoning)**: Strictly handles tool compilation, code execution, mathematical calculations, and low-level parsing (restricted to T3+ logic models).
 * **Right Hemisphere (Creative & Synthesis)**: Focusing on fluid content generation, multimodal visual evaluation, and user-facing copy.
 * **Main Coordinator**: An isolated aggregator that receives outputs from both hemispheres, runs them through the PAD security engine, resolves contradictions, and delivers the final validated payload.
@@ -122,6 +125,7 @@ During configuration, the pre-flight isolation gate (`validateSRTriad`) enforces
 > **Cited**: [LLM_POWER_ROUTING_P4](file:///d:/Projects/Prism/docs/ROADMAP.md), [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts)
 
 To succeed in corporate and edge self-hosted deployments, an agent must behave like a battery-aware system, optimizing memory usage and computing energy. The PRISM **LLM Power Manager** solves this via real-time resource routing, featuring three active operating models:
+
 1. **Performance Mode**: Maximizes raw reasoning capability by routing all tasks to high-tier cloud endpoints (T5 frontier models).
 2. **Eco-Mode**: Forces the orchestrator to route basic tasks—such as intent classification, simple search token extraction, and telemetry parsing—to lightweight local edge models (T1/T2), preserving API quota.
 3. **Adaptive Mode**: Probes system VRAM capacity and local queue latency every 3 seconds. If local hardware memory is critically high (>85% load or less than 1500MB free capacity), it automatically triggers failovers to cloud endpoints to prevent desktop freezes.
@@ -131,6 +135,7 @@ This resource system is visually bound to the operator's dashboard Settings deck
 ### 5b. The Resource Mode Paradigm — Base · Frontier · Auto
 
 Complementing the internal LLM Power Battery engine, PRISM exposes a high-level **Resource Mode Paradigm** directly on the operator's sidebar console. This paradigm is the operator-facing control surface that governs *which class of intelligence* the system boots into:
+
 * **⚡ BASE Mode**: Activates local-only inference. The Guardian Agent and Planner run exclusively against lightweight GGUF models hosted on the operator's own hardware. This mode enforces **severe VRAM constraints (≤ 3GB)**, making it ideal for privacy-first, air-gapped, or edge devices. When BASE is active, **zero data leaves the operator's machine**.
 * **🌐 FRONTIER Mode**: Routes all cognitive tasks to high-tier cloud endpoints. The system activates the most capable T5-class frontier models available, maximizing reasoning depth and complex workflows.
 * **🔄 AUTO Mode**: The intelligent hybrid. AUTO dynamically evaluates each incoming task's complexity signature and the current system resource state (local VRAM load, API rate limits) to decide—in real time—whether to route locally or to the cloud.
@@ -167,6 +172,7 @@ graph TD
 The transition of PRISM from a research sandbox to a SOTA production platform was accomplished by addressing exactly **25 critical gaps (G-1 through G-25)** identified in the Q2 Audit.
 
 Key SRE integrations include:
+
 * **Prometheus Observability**: Exposing a standard `/metrics` endpoint serving real-time telemetry (token speeds, memory loads, task completion SLOs, and approval states) for Grafana/Datadog monitoring.
 * **Orchestration & Deployments**: Production multi-tenant templates leveraging secure Docker-Compose environments, PM2 process management, log rotations, and SQLite WAL database optimization.
 * **Security Hardening**: Explicit CORS configuration, CSRF protections on state mutation API routes, and strict token authentication variables avoiding weak dev defaults in production.
@@ -200,6 +206,7 @@ As autonomous Swarms scale across enterprise grids, cognitive overhead translate
 The system operates at the compiler and memory levels. First, the **System Prompt AST Compiler** tokenizes and analyzes prompt matrices, validating strict envelopes using `<objective>` and `<constraints>` structures. It calculates **Signal Density** (the ratio of core directives to contextual bloat), flagging linter warnings if prompt clarity is diluted.
 
 Second, the engine intercepts raw planning executions, dynamically measuring completion speed, token counts, and exact financial cost. These are compiled into four mathematical indices:
+
 * **Tool Call Accuracy (TCA)**: $\text{Valid Invocations} / \text{Attempted Invocations}$.
 * **Request Satisfaction Index (RSI)**: $\text{Passed Criteria} / \text{Total Criteria}$.
 * **Context Saturation Ratio (CSR)**: $\min(1.0, 500 / \text{Tokens Consumed})$.

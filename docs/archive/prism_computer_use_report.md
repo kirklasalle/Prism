@@ -31,21 +31,27 @@ Evaluating major entities (Anthropic, OpenAI, Open Source frameworks) against PR
 PRISM executes and governs Computer Use across three primary domains: Browser Automation, Terminal Virtualization, and Container Sandboxing.
 
 ### Browser Automation & Control
+
 Handles action-driven web interaction through governed tool paths.
+
 * **Session Lifecycle**: Manages persistent profile handling, ensuring isolation between agent sessions.
 * **Telemetry**: Real-time network and console capture.
 * **Core Components**: [browser-control-tool.ts](file:///d:/Projects/Prism/src/core/operator/tools/browser-control-tool.ts), `browser-session-manager.ts`, `browser-profile-manager.ts`.
 * **Methodology**: Operates via structured tool interfaces treated as strict contracts, enabling explicit risk classification before execution.
 
 ### Terminal Virtualization
+
 Provides deterministic control over shell environments with integrated governance.
+
 * **Session Commands**: `start`, `exec`, `stop`, `revoke`, `status`.
 * **Tiered Governance**: Commands are intercepted and routed through the policy engine. High-risk commands trigger mandatory approvals.
 * **Safety**: Built-in timeout and mid-execution revoke behavior.
 * **Core Components**: `terminal-session-tool.ts`, `terminal-session-adapter.ts`.
 
 ### Container Sandbox Orchestration
+
 The most isolated execution environment, featuring snapshot capabilities for deterministic replay.
+
 * **State Machine**: Full lifecycle control (IDLE &rarr; CREATED &rarr; RUNNING &rarr; EXECUTING &rarr; TIMEOUT &rarr; STOPPED &rarr; DESTROYED).
 * **Persistence**: 4 SQLite tables (`containers`, `container_snapshots`, `container_command_history`, `container_signal_log`).
 * **Resource Quotas**: CPU, memory, and disk limits enforced per container (currently via metadata tracking).
@@ -88,24 +94,29 @@ Unconstrained AI is a liability. PRISM transforms this into a secure asset throu
 Guidance on developing PRISM's Computer Use to its ultimate conclusion, addressing known gaps and achieving SOTA benchmark validation without compromising governance.
 
 ### 1️⃣ Replace Simulated Runtimes with Hardened Engines
+
 * **Gap**: Currently simulated in some environments using `spawn("sh", ["sleep infinity"])`.
 * **Action**: Implement direct Docker Engine API or `containerd` gRPC integrations.
 * **Reference**: `CONTAINER_VIRTUALIZATION_DESIGN.md` - Known Gaps
 
 ### 2️⃣ Enforce OS-Level Resource Quotas
+
 * **Gap**: Resource limits exist primarily in metadata and SQL tracking.
 * **Action**: Upgrade resource management to active OS-level enforcement using `cgroups v2`. Implement active `/proc` polling for CPU/RAM instead of immediate metadata returns.
 * **Reference**: `CONTAINER_VIRTUALIZATION_DESIGN.md` - Known Gaps
 
 ### 3️⃣ Activate True Tier 3 Approval Queues
+
 * **Gap**: Simplified `routeThroughPolicy()` paths in test hooks mock permission returns.
 * **Action**: Fully wire the container destroy and execute high-risk actions to the actual HTTP/WebSocket Approval Queue service.
 * **Reference**: `PRISM_PRD.md` & CU-BG-1
 
 ### 4️⃣ Execute OSWorld Benchmark Integrity Plan
+
 * **Gap**: OSWorld benchmarks are mentioned but need repeatable scaffold automation.
 * **Action**: Integrate the OSWorld scaffold as a PTAC suite (`ptac:osworld`). Run the full 369-task suite across all foundation model classes. Publish reproducibility artefacts (config, traces) alongside scores.
 * **Reference**: `OSWORLD_PUBLICATION_PLAN.md`
 
 ### 🚀 The Endgame: "Production-Only, No Stubs"
+
 To achieve world-class status, PRISM must strictly adhere to the **2026-Q3 Full Audit Plan**: Either a feature ships with a real I/O integration and tests, or its completion claim is removed. Expanding the 28-scenario PTAC harness to cover edge-cases in browser DOM mutations and terminal escape-character handling will bridge the gap between "good scaffold" and "SOTA application."

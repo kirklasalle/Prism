@@ -344,6 +344,10 @@ function initIdentityStep() {
 
 const PROVIDERS_NEEDING_KEY = ['custom', 'openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
 
+let guardianRecommendedCatalog = [];
+let guardianActiveDownloadId = null;
+let guardianDownloadPollTimer = null;
+
 async function initProviderGuardianStep() {
   await loadProviderCatalog();
   getProviderConfig(wizardState.provider);
@@ -356,16 +360,13 @@ async function initProviderGuardianStep() {
     wizardState.availableModels = data.models || data || [];
   } catch { wizardState.availableModels = []; }
 
-  const modelSelect = document.getElementById('wizard-guardian-model');
-  if (modelSelect) {
-    let html = '<option value="">None (skip guardian)</option>';
-    for (const m of wizardState.availableModels) {
-      html += `<option value="${escHtml(m.path)}">${escHtml(m.name)}</option>`;
-    }
-    modelSelect.innerHTML = html;
-    if (wizardState.guardianModel) modelSelect.value = wizardState.guardianModel;
-    modelSelect.onchange = () => { wizardState.guardianModel = modelSelect.value; };
-  }
+  // Load recommended model catalog
+  try {
+    const catalogData = await api('GET', '/api/models/recommended/catalog');
+    guardianRecommendedCatalog = catalogData.catalog || [];
+  } catch { guardianRecommendedCatalog = []; }
+
+  populateGuardianModelDropdown();
 
   // Set profile-aware defaults for tier
   const tierSelect = document.getElementById('wizard-guardian-tier');
@@ -389,6 +390,205 @@ async function initProviderGuardianStep() {
     autoUpdateCheckbox.checked = wizardState.guardianAutoUpdate;
     autoUpdateCheckbox.onchange = () => { wizardState.guardianAutoUpdate = autoUpdateCheckbox.checked; };
   }
+
+  // Hide validation error on init
+  const valErr = document.getElementById('wizard-guardian-validation-error');
+  if (valErr) valErr.style.display = 'none';
+}
+
+function populateGuardianModelDropdown() {
+  const modelSelect = document.getElementById('wizard-guardian-model');
+  const downloadBtn = document.getElementById('wizard-guardian-download-btn');
+  if (!modelSelect) return;
+
+  // Build a set of locally available model file names for dedup
+  const localFileNames = new Set();
+  for (const m of wizardState.availableModels) {
+    const fname = (m.name || m.path || '').split(/[\\/]/).pop().toLowerCase();
+    localFileNames.add(fname);
+  }
+
+  let html = '<option value="">— Select a Guardian model —</option>';
+
+  // Group 1: Locally available models
+  if (wizardState.availableModels.length > 0) {
+    html += '<optgroup label="\u2705 Downloaded Models (Ready to Use)">';
+    for (const m of wizardState.availableModels) {
+      html += `<option value="${escHtml(m.path)}">${escHtml(m.name)}</option>`;
+    }
+    html += '</optgroup>';
+  }
+
+  // Group 2: Recommended models not yet downloaded
+  const notDownloaded = guardianRecommendedCatalog.filter(rm => {
+    const fname = (rm.fileName || '').toLowerCase();
+    return !localFileNames.has(fname);
+  });
+  if (notDownloaded.length > 0) {
+    html += '<optgroup label="\u{1F4E5} Recommended (Download Required)">';
+    for (const rm of notDownloaded) {
+      html += `<option value="recommend:${escHtml(rm.fileName)}" data-url="${escHtml(rm.url)}" data-mmproj-url="${escHtml(rm.mmprojUrl || '')}" data-mmproj-name="${escHtml(rm.mmprojName || '')}">[${escHtml(rm.size)}] ${escHtml(rm.name)}</option>`;
+    }
+    html += '</optgroup>';
+  }
+
+  modelSelect.innerHTML = html;
+  if (wizardState.guardianModel) modelSelect.value = wizardState.guardianModel;
+
+  modelSelect.onchange = () => {
+    wizardState.guardianModel = modelSelect.value;
+    updateGuardianDownloadButton();
+    // Clear validation error when user selects
+    const valErr = document.getElementById('wizard-guardian-validation-error');
+    if (valErr) valErr.style.display = 'none';
+  };
+
+  updateGuardianDownloadButton();
+}
+
+function updateGuardianDownloadButton() {
+  const downloadBtn = document.getElementById('wizard-guardian-download-btn');
+  if (!downloadBtn) return;
+  const isRecommended = wizardState.guardianModel && wizardState.guardianModel.startsWith('recommend:');
+  downloadBtn.style.display = isRecommended ? '' : 'none';
+}
+
+window.downloadGuardianModel = async function downloadGuardianModel() {
+  const modelSelect = document.getElementById('wizard-guardian-model');
+  const downloadBtn = document.getElementById('wizard-guardian-download-btn');
+  const progressEl = document.getElementById('wizard-guardian-download-progress');
+  const statusEl = document.getElementById('wizard-guardian-download-status');
+  if (!modelSelect || !downloadBtn) return;
+
+  const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+  if (!selectedOption || !wizardState.guardianModel.startsWith('recommend:')) {
+    showToast('Please select a recommended model to download.', 'error');
+    return;
+  }
+
+  const fileName = wizardState.guardianModel.replace('recommend:', '');
+  const dlUrl = selectedOption.getAttribute('data-url');
+  const mmprojUrl = selectedOption.getAttribute('data-mmproj-url') || '';
+  const mmprojName = selectedOption.getAttribute('data-mmproj-name') || '';
+
+  if (!dlUrl) {
+    showToast('No download URL available for this model.', 'error');
+    return;
+  }
+
+  // Disable controls during download
+  downloadBtn.disabled = true;
+  downloadBtn.textContent = '\u23F3 Downloading...';
+  modelSelect.disabled = true;
+  if (progressEl) progressEl.style.display = '';
+  if (statusEl) statusEl.textContent = 'Starting download...';
+
+  try {
+    const res = await api('POST', '/api/models/download', {
+      url: dlUrl,
+      name: fileName,
+      mmprojUrl: mmprojUrl || undefined,
+      mmprojName: mmprojName || undefined,
+    });
+    guardianActiveDownloadId = res.modelId;
+    showToast(`Downloading ${fileName}...`, 'info');
+    pollGuardianDownload(fileName);
+  } catch (err) {
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = '\u{1F4E5} Download';
+    modelSelect.disabled = false;
+    if (progressEl) progressEl.style.display = 'none';
+    showToast(`Download failed: ${err.message || err}`, 'error');
+  }
+};
+
+function pollGuardianDownload(fileName) {
+  if (guardianDownloadPollTimer) clearInterval(guardianDownloadPollTimer);
+
+  guardianDownloadPollTimer = setInterval(async () => {
+    try {
+      const data = await api('GET', '/api/models/download/status');
+      const downloads = data.downloads || [];
+      const dl = downloads.find(d => d.id === guardianActiveDownloadId);
+      if (!dl) return;
+
+      const progressBar = document.getElementById('wizard-guardian-progress-bar');
+      const progressText = document.getElementById('wizard-guardian-progress-text');
+      const statusEl = document.getElementById('wizard-guardian-download-status');
+      const pct = Math.round(dl.progress || 0);
+
+      if (progressBar) progressBar.style.width = pct + '%';
+      if (progressText) progressText.textContent = pct + '%';
+
+      if (dl.status === 'downloading') {
+        const mb = ((dl.downloadedBytes || 0) / (1024 * 1024)).toFixed(1);
+        const totalMb = dl.totalBytes ? ((dl.totalBytes / (1024 * 1024)).toFixed(1) + ' MB') : '?';
+        if (statusEl) statusEl.textContent = `Downloading: ${mb} MB / ${totalMb}`;
+      }
+
+      if (dl.status === 'completed') {
+        clearInterval(guardianDownloadPollTimer);
+        guardianDownloadPollTimer = null;
+        guardianActiveDownloadId = null;
+
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressText) progressText.textContent = '100%';
+        if (statusEl) statusEl.textContent = '\u2705 Download complete!';
+        showToast(`${fileName} downloaded successfully!`, 'success');
+
+        // Re-scan local models and refresh the dropdown
+        try {
+          const ggufData = await api('GET', '/api/models/gguf');
+          wizardState.availableModels = ggufData.models || ggufData || [];
+        } catch { /* keep existing */ }
+
+        populateGuardianModelDropdown();
+
+        // Auto-select the newly downloaded model
+        const modelSelect = document.getElementById('wizard-guardian-model');
+        if (modelSelect) {
+          const matchOpt = Array.from(modelSelect.options).find(o =>
+            !o.value.startsWith('recommend:') && o.value && o.textContent.toLowerCase().includes(fileName.toLowerCase().replace('.gguf', ''))
+          );
+          if (matchOpt) {
+            modelSelect.value = matchOpt.value;
+            wizardState.guardianModel = matchOpt.value;
+          }
+        }
+
+        const downloadBtn = document.getElementById('wizard-guardian-download-btn');
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.textContent = '\u{1F4E5} Download';
+        }
+        if (modelSelect) modelSelect.disabled = false;
+        updateGuardianDownloadButton();
+
+        // Hide progress after short delay
+        setTimeout(() => {
+          const progressEl = document.getElementById('wizard-guardian-download-progress');
+          if (progressEl) progressEl.style.display = 'none';
+        }, 3000);
+      }
+
+      if (dl.status === 'error') {
+        clearInterval(guardianDownloadPollTimer);
+        guardianDownloadPollTimer = null;
+        guardianActiveDownloadId = null;
+
+        if (statusEl) statusEl.textContent = `\u274c Error: ${dl.error || 'Download failed'}`;
+        showToast(`Download failed: ${dl.error || 'Unknown error'}`, 'error');
+
+        const downloadBtn = document.getElementById('wizard-guardian-download-btn');
+        const modelSelect = document.getElementById('wizard-guardian-model');
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.textContent = '\u{1F4E5} Download';
+        }
+        if (modelSelect) modelSelect.disabled = false;
+      }
+    } catch { /* network error during poll, continue */ }
+  }, 1500);
 }
 
 async function applyGuardianTaskPreference(taskId, shouldEnable) {
@@ -703,7 +903,21 @@ window.wizardNext = async function wizardNext() {
       nextBtn.textContent = 'Continue';
     }
   } else {
-    // Step 5: Final launch step
+    // Step 5: Final launch step — Guardian model is REQUIRED
+    const valErr = document.getElementById('wizard-guardian-validation-error');
+
+    if (!wizardState.guardianModel || wizardState.guardianModel.startsWith('recommend:')) {
+      if (valErr) {
+        valErr.style.display = '';
+        valErr.textContent = wizardState.guardianModel && wizardState.guardianModel.startsWith('recommend:')
+          ? 'The selected Guardian model has not been downloaded yet. Click the Download button first.'
+          : 'A Guardian model is required to continue. Select or download a model above.';
+      }
+      showToast('Guardian model is required before completing setup.', 'error');
+      return;
+    }
+    if (valErr) valErr.style.display = 'none';
+
     nextBtn.disabled = true;
     nextBtn.textContent = 'Launching...';
 
@@ -730,18 +944,16 @@ window.wizardNext = async function wizardNext() {
       showToast("Model applied to system as ready.", "success");
       await delay(500);
 
-      // 3. Save Guardian config
-      if (wizardState.guardianModel) {
-        showToast("Configuring Guardian Agent...", "info");
-        await api('POST', '/api/guardian/configure', {
-          modelPath: wizardState.guardianModel,
-          authorityTier: wizardState.guardianTier,
-          autoStart: wizardState.guardianAutoStart,
-        });
-        await applyGuardianLearningAndUpdatePreferences();
-        showToast("Guardian Agent configured.", "success");
-        await delay(500);
-      }
+      // 3. Save Guardian config (always — Guardian is mandatory)
+      showToast("Configuring Guardian Agent...", "info");
+      await api('POST', '/api/guardian/configure', {
+        modelPath: wizardState.guardianModel,
+        authorityTier: wizardState.guardianTier,
+        autoStart: wizardState.guardianAutoStart,
+      });
+      await applyGuardianLearningAndUpdatePreferences();
+      showToast("Guardian Agent configured.", "success");
+      await delay(500);
 
       // 4. Create certificate
       showToast("Creating initialization certificate...", "info");
@@ -762,7 +974,7 @@ window.wizardNext = async function wizardNext() {
           roleOverrides: 'none',
         },
         guardian: {
-          model: wizardState.guardianModel || 'not configured',
+          model: wizardState.guardianModel,
           authorityTier: wizardState.guardianTier || (wizardState.profile === 'business' ? 'tier2_conditional' : 'tier1_autonomous'),
           autoStart: !!wizardState.guardianAutoStart,
           autoUpdate: !!wizardState.guardianAutoUpdate,

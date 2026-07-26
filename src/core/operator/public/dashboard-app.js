@@ -9,7 +9,7 @@ import { renderLocalSystemInfo, renderUsageMetrics, drawSparkline, runLocalComma
 import { getCurrentBrowserView, launchBrowserPreview, openBrowserDevTools, refreshBrowserInfo, setBrowserView, toggleBrowserDevTools, browserRefreshStorage, setStorageSubView, renderStorageContent, browserRefreshProfiles, renderBrowserProfiles, browserRefreshLaunchProfiles, browserCreateProfile, browserDeleteProfile, browserLaunchSession, browserCloseSession, browserNavigate, browserTakeScreenshot, browserClickElement, browserTypeText, browserEvaluate, browserRefreshNetwork, browserRefreshConsole, browserRefreshDom, browserRunDiagnostics, browserSessionChanged, populateBrowserSessionDropdowns, renderBrowserSessions, browserLogAction, initBrowserTab, refreshSessionsList, submitBrowserAutopilot, stopBrowserAutopilot, resumeActiveCsh, updateSshpShieldIndicator, cleanupBrowserTab, browserGoBack, browserGoForward, browserReload, browserScrollDown } from './tab-browser.js';
 import { renderSelfReview, renderRetrievalObservability, setTelemetryWindow, renderRuntimeExcellence, renderReleaseReadiness, renderWhatChanged, deltaLabel, pct, renderPackageHistory, renderChatTelemetry, renderUsagePanel, refreshUsagePanel, setUsageSort, saveUsageCaps, clearUsageCaps, refreshSloGauges, startSloAutoRefresh, stopSloAutoRefresh } from './tab-telemetry.js';
 import { initChannelsTab, onPresenceStatusChanged, toggleAutoAway, onAutoAwayTimeoutChanged, saveSmsGatewayConfig, sendTestSms, clearChannelLogs, connectChannel, disconnectChannel, startIdleTracker, stopIdleTracker } from './tab-channels.js';
-import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, copyActivityLogs, copyUnifiedTelemetry, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket } from './tab-logs.js';
+import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, copyActivityLogs, copyUnifiedTelemetry, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket, loadSupportTickets } from './tab-logs.js';
 import { initSchedulerTab, refreshSchedulerData, switchSchedulerView, renderSchedulerPanel, setCalMode, schedCalNav, daysInMonth, eventsForDate, formatDateStr, isToday, renderSchedulerCalendar, mondayOfWeek, renderMiniMonth, renderFullMonth, renderWeekView, renderDayView, renderSchedulerProjects, openProjectDetail, renderSchedulerBoard, initBoardDragDrop, renderSchedulerGantt, openSchedulerModal, closeSchedulerModal, saveSchedulerModal } from './tab-scheduler.js';
 import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWorkspaceFileTree, formatFileSize, filterWorkspaceFiles, openWorkspaceInExplorer, changeWorkspaceLocation, showImportStatus, triggerWorkspaceImport, triggerGeneralImport, triggerRegisteredImport, triggerFolderImport, readFileAsBase64, refreshImportHistory, renderImportHistory, initWorkspaceTab, downloadWorkspaceFile, renameWorkspaceFile, deleteWorkspaceFile } from './tab-workspace.js';
 import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick, showCustomCharacterModal, closeCustomCharacterModal, onCustomCharProfileChange, submitCustomCharacter } from './tab-characters.js';
@@ -70,22 +70,75 @@ window.addEventListener('error', function (ev) {
   } catch (e) { /* noop */ }
 });
 async function bootstrap() {
+  // ── PRISM Boot Gate: Block all activity until chat + session are loaded ──
+  // "Check yourself before you wreck yourself" — all systems must verify
+  // readiness before the operator can proceed. This ensures trace logging,
+  // IAM, session provenance, and the chat interface are fully operational.
+  const bootGate = document.createElement('div');
+  bootGate.id = 'prism-boot-gate';
+  bootGate.style.cssText = 'position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#0b0b14 0%,#111127 50%,#0b0b14 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Outfit,sans-serif;color:#c7d2fe;transition:opacity 0.6s cubic-bezier(0.16,1,0.3,1);';
+  bootGate.innerHTML =
+    '<div style="text-align:center;max-width:420px;width:90%;">' +
+    '<div style="font-size:32px;margin-bottom:8px;animation:pulse 2s infinite alternate;">◇</div>' +
+    '<h2 style="margin:0 0 4px;font-size:20px;font-weight:800;color:#fff;letter-spacing:-0.5px;">PRISM Refraction</h2>' +
+    '<div style="font-size:11px;font-weight:600;color:#7cf1c8;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:24px;">System Initialization</div>' +
+    '<div id="boot-gate-steps" style="text-align:left;font-size:12px;line-height:2;color:#8e8eb2;font-family:monospace;"></div>' +
+    '<div style="margin-top:20px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">' +
+    '<div id="boot-gate-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#7cf1c8,#4dabf7);border-radius:2px;transition:width 0.4s ease;"></div>' +
+    '</div>' +
+    '<div id="boot-gate-status" style="margin-top:8px;font-size:10px;color:#585b70;">Initializing subsystems…</div>' +
+    '</div>' +
+    '<style>@keyframes pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.15);opacity:1}}</style>';
+  document.body.appendChild(bootGate);
+
+  function bootStep(label, pct) {
+    var stepsEl = document.getElementById('boot-gate-steps');
+    var progressEl = document.getElementById('boot-gate-progress');
+    var statusEl = document.getElementById('boot-gate-status');
+    if (stepsEl) stepsEl.innerHTML += '<div style="color:#c7d2fe;">✓ ' + label + '</div>';
+    if (progressEl) progressEl.style.width = pct + '%';
+    if (statusEl) statusEl.textContent = label;
+  }
+
+  function dismissBootGate() {
+    var gate = document.getElementById('prism-boot-gate');
+    if (gate) {
+      gate.style.opacity = '0';
+      gate.style.pointerEvents = 'none';
+      setTimeout(function () { gate.remove(); }, 600);
+    }
+  }
+
   try {
+    // Step 1: IAM Identity Resolution
+    bootStep('Resolving operator identity…', 10);
     try {
       const me = await request('/api/iam/me');
       state.principal = me.principal;
+      bootStep('Operator identity verified', 20);
     } catch (e) {
       console.warn('Failed to fetch IAM principal during bootstrap', e);
+      bootStep('Identity fallback (dev mode)', 20);
     }
 
+    // Step 2: Initialize tooltip systems
+    bootStep('Loading tooltip subsystems…', 25);
     initPrismTooltips();
     registerShellTooltips();
     registerChatTooltips();
     registerTabTooltipCatalog();
+
+    // Step 3: Load Chat Interface (critical path)
+    bootStep('Loading Chat Interface…', 35);
     await loadTabHtml('chat');
     wireComposer();
+    bootStep('Chat Interface loaded', 50);
+
+    // Step 4: Load Certified Session(s)
+    bootStep('Loading certified session(s)…', 55);
     await loadSessions();
     if (state.sessions.length === 0) {
+      bootStep('Creating initial session…', 65);
       try {
         await createSession({ silent: true });
       } catch (_) {
@@ -93,24 +146,34 @@ async function bootstrap() {
         await refreshChrome().catch(() => null);
       }
     } else {
+      bootStep('Hydrating session data…', 65);
       await Promise.all([refreshChrome(), loadMessages()]);
     }
-    // Load model profiles and routing config in background
+    var initCertCount = (state.sessions || []).filter(function (s) { return /Initialization Certificate/i.test(s.title || ''); }).length;
+    bootStep('Sessions ready (' + state.sessions.length + ' loaded, ' + initCertCount + ' certified)', 75);
+
+    // Step 5: Background model + routing hydration
+    bootStep('Loading model profiles & routing…', 80);
     fetchModelProfiles();
     fetchRoutingState();
 
-    // Connect to streams for real-time progress and UI actions
+    // Step 6: Connect real-time streams
+    bootStep('Connecting real-time streams…', 90);
     connectAgenticStream();
     connectWebSocket();
 
-    // v0.20.5 — Auto-start the Guardian Agent on client load (when a local
-    // model is configured). Fire-and-forget; runs at most once per page session
-    // and respects the `prism.guardian.autostart=false` localStorage opt-out.
+    // Step 7: Guardian auto-start
+    bootStep('Checking Guardian Agent…', 95);
     autoStartGuardianIfConfigured().catch(function (e) { console.error('[bootstrap] guardian autostart:', e); });
+
+    bootStep('All systems operational', 100);
   } catch (error) {
     state.notice = String(error);
+    bootStep('⚠ Boot error: ' + String(error), 100);
   } finally {
     render();
+    // Dismiss the boot gate after a brief pause for the operator to see completion
+    setTimeout(dismissBootGate, 400);
     // Warm the fragment cache for the most-likely-next tabs during idle time so first-click feels instant.
     const prefetchNext = () => {
       prefetchTabHtml('settings');
@@ -588,6 +651,13 @@ function connectWebSocket() {
         if (state.activeTab === 'agentic') {
           refreshGuardianStatus();
           refreshGuardianTasks();
+        }
+      }
+      if (data.type === 'support:ticket-created' || data.type === 'support:ticket-updated' || data.type === 'support:ticket-deleted') {
+        dashboardLog('logs', 'support.ticket.realtime', data.type);
+        loadSupportTickets().catch(function () { /* best-effort */ });
+        if (state.activeTab === 'scheduler') {
+          refreshSchedulerData().catch(function () { /* best-effort */ });
         }
       }
       // Guardian-curated tooltip insights → Prism Tooltips dynamic line.

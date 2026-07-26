@@ -524,29 +524,29 @@ Computer use is now a frontier differentiator in agent platforms. It materially 
 While PRISM possesses a robust, industry-leading security and policy posture, a world-class architectural evaluation reveals critical engineering bottlenecks and structural risks that must be addressed before commercial scaling.
 
 #### 1. Vertical Monolith Hotspot: `dashboard-service.ts`
-*   **The Issue:** At over 528 KiB, `dashboard-service.ts` represents a severe architectural "hotspot." It concentrates HTTP REST API routing, WebSocket real-time connection management, static file serving, and core feature logic (such as session control and telemetry gathering) into a single, massive file.
-*   **The Risk:** Any small UI/UX or API change risks breaking the central WebSocket transport layer. It increases compile times, creates merge-conflict friction in multi-developer environments, and violates the Single Responsibility Principle.
-*   **Resolution Path:** Proactively split the server into modular routing directories:
-    *   `src/core/operator/routes/auth.ts`
-    *   `src/core/operator/routes/chat.ts`
-    *   `src/core/operator/routes/tools.ts`
-    *   `src/core/operator/routes/approval.ts`
-    *   Isolate the WebSocket broadcast logic into a standalone `src/core/operator/transports/websocket-manager.ts`.
+- **The Issue:** At over 528 KiB, `dashboard-service.ts` represents a severe architectural "hotspot." It concentrates HTTP REST API routing, WebSocket real-time connection management, static file serving, and core feature logic (such as session control and telemetry gathering) into a single, massive file.
+- **The Risk:** Any small UI/UX or API change risks breaking the central WebSocket transport layer. It increases compile times, creates merge-conflict friction in multi-developer environments, and violates the Single Responsibility Principle.
+- **Resolution Path:** Proactively split the server into modular routing directories:
+  - `src/core/operator/routes/auth.ts`
+  - `src/core/operator/routes/chat.ts`
+  - `src/core/operator/routes/tools.ts`
+  - `src/core/operator/routes/approval.ts`
+  - Isolate the WebSocket broadcast logic into a standalone `src/core/operator/transports/websocket-manager.ts`.
 
 #### 2. Single-Language Runtime Constraint (Node-only)
-*   **The Issue:** PRISM is written entirely in TypeScript/Node.js. While excellent for dashboard event handling, real-time WebSockets, and asynchronous event buses, Node.js is not the native language of AI. Approximately 70–80% of data scientists, ML engineers, and AI application developers work strictly in Python.
-*   **The Risk:** Forcing developers to integrate or orchestrate with PRISM by writing TypeScript adapters represents a massive adoption ceiling.
-*   **Resolution Path:** Immediately publish a thin, highly typed Python SDK (`prism-client`) that wraps PRISM's 41+ REST API endpoints. This enables Python-native pipelines (e.g., Jupyter Notebooks, FastAPI microservices) to programmatically register tools, request approvals, and configure Spectrum Refraction sessions.
+- **The Issue:** PRISM is written entirely in TypeScript/Node.js. While excellent for dashboard event handling, real-time WebSockets, and asynchronous event buses, Node.js is not the native language of AI. Approximately 70–80% of data scientists, ML engineers, and AI application developers work strictly in Python.
+- **The Risk:** Forcing developers to integrate or orchestrate with PRISM by writing TypeScript adapters represents a massive adoption ceiling.
+- **Resolution Path:** Immediately publish a thin, highly typed Python SDK (`prism-client`) that wraps PRISM's 41+ REST API endpoints. This enables Python-native pipelines (e.g., Jupyter Notebooks, FastAPI microservices) to programmatically register tools, request approvals, and configure Spectrum Refraction sessions.
 
 #### 3. In-Process Event Bus Scaling Limits
-*   **The Issue:** PRISM’s Activity Bus (`src/core/activity/bus.ts`) executes fully in-process. All event routing, SHA-256 event hashing, and DB persistence subscribers operate on the same Node.js event loop.
-*   **The Risk:** In high-throughput settings—such as a multi-agent swarm executing parallel browser automation—the event loop can become congested, leading to latency spikes and delayed policy evaluation. Furthermore, horizontal scaling is impossible; multiple PRISM server instances cannot share a unified activity trace.
-*   **Resolution Path:** Abstract the Activity Bus behind a standard interface. Introduce a configurable adapter pattern allowing production deployments to hot-swap the in-process bus for a highly available distributed broker (e.g., Redis Streams, NATS, or Apache Kafka).
+- **The Issue:** PRISM’s Activity Bus (`src/core/activity/bus.ts`) executes fully in-process. All event routing, SHA-256 event hashing, and DB persistence subscribers operate on the same Node.js event loop.
+- **The Risk:** In high-throughput settings—such as a multi-agent swarm executing parallel browser automation—the event loop can become congested, leading to latency spikes and delayed policy evaluation. Furthermore, horizontal scaling is impossible; multiple PRISM server instances cannot share a unified activity trace.
+- **Resolution Path:** Abstract the Activity Bus behind a standard interface. Introduce a configurable adapter pattern allowing production deployments to hot-swap the in-process bus for a highly available distributed broker (e.g., Redis Streams, NATS, or Apache Kafka).
 
 #### 4. SQLite High-Availability Limits
-*   **The Issue:** PRISM utilizes SQLite for persisting chat sessions, telemetry snapshots, and CAC identity logs.
-*   **The Risk:** SQLite is outstanding for local development, CLI-first workflows, and edge deployments. However, it lacks native support for concurrent high-volume writes, clustering, and active-active failover. 
-*   **Resolution Path:** Modify the persistence layer to support a PostgreSQL adapter for high-availability enterprise environments, while retaining SQLite as the default zero-config option for individuals.
+- **The Issue:** PRISM utilizes SQLite for persisting chat sessions, telemetry snapshots, and CAC identity logs.
+- **The Risk:** SQLite is outstanding for local development, CLI-first workflows, and edge deployments. However, it lacks native support for concurrent high-volume writes, clustering, and active-active failover.
+- **Resolution Path:** Modify the persistence layer to support a PostgreSQL adapter for high-availability enterprise environments, while retaining SQLite as the default zero-config option for individuals.
 
 ---
 
@@ -587,28 +587,28 @@ PRISM’s AI capability is dominated by the **Spectrum Refraction (SR)** tri-mod
 ```
 
 #### 1. Spectrum Refraction vs. Mixture-of-Agents (MoA)
-*   **Academic Contrast:** Standard Mixture-of-Agents (MoA) networks utilize sequential "debating" layers where multiple homogenous models iteratively review and refine each other's outputs. This is highly effective for mathematical and raw factual correctness but suffers from *homogenization* (models drift toward consensus, losing diverse perspectives) and massive latency overhead.
-*   **The SR Advantage:** Spectrum Refraction is structurally superior for complex decision-making. Instead of iterative consensus, it enforces **hemispheric specialization**. The Left model receives a prompt structured for logical, step-by-step analytical reasoning; the Right model receives a prompt tuned for creative, wide-context synthesis. The Main coordinator fuses these highly polarized inputs.
-*   **Enforced Moat:** The mandatory configuration and activation gates enforcing `Left !== Right` (model or provider level) mathematically prevent homogenization, guaranteeing distinct logical and creative lenses.
+- **Academic Contrast:** Standard Mixture-of-Agents (MoA) networks utilize sequential "debating" layers where multiple homogenous models iteratively review and refine each other's outputs. This is highly effective for mathematical and raw factual correctness but suffers from *homogenization* (models drift toward consensus, losing diverse perspectives) and massive latency overhead.
+- **The SR Advantage:** Spectrum Refraction is structurally superior for complex decision-making. Instead of iterative consensus, it enforces **hemispheric specialization**. The Left model receives a prompt structured for logical, step-by-step analytical reasoning; the Right model receives a prompt tuned for creative, wide-context synthesis. The Main coordinator fuses these highly polarized inputs.
+- **Enforced Moat:** The mandatory configuration and activation gates enforcing `Left !== Right` (model or provider level) mathematically prevent homogenization, guaranteeing distinct logical and creative lenses.
 
 #### 2. The Missing "Hard Budget Ceiling" Kill-Switch
-*   **The Issue:** Running three distinct LLM calls (Left, Right, Main) in parallel for every single user turn multiplies operational API costs by 300%.
-*   **The Gap:** While PRISM v0.4.2 added cost estimation, it lacks an enforceable **budget kill-switch**. A runaway agent loop or a highly active swarm utilizing SR can exhaust an organization's monthly OpenAI or Anthropic API budget in a matter of hours.
-*   **Resolution Path:** Implement a runtime cost-tracking middleware. If a session or a tenant exceeds a configurable dollar threshold (e.g., $10/hour or $100/day), the orchestrator must trigger a fail-safe circuit breaker, log a `budget_exhausted` event to the Activity Bus, and suspend all active agent lifecycles.
+- **The Issue:** Running three distinct LLM calls (Left, Right, Main) in parallel for every single user turn multiplies operational API costs by 300%.
+- **The Gap:** While PRISM v0.4.2 added cost estimation, it lacks an enforceable **budget kill-switch**. A runaway agent loop or a highly active swarm utilizing SR can exhaust an organization's monthly OpenAI or Anthropic API budget in a matter of hours.
+- **Resolution Path:** Implement a runtime cost-tracking middleware. If a session or a tenant exceeds a configurable dollar threshold (e.g., $10/hour or $100/day), the orchestrator must trigger a fail-safe circuit breaker, log a `budget_exhausted` event to the Activity Bus, and suspend all active agent lifecycles.
 
 ---
 
 ### 14.3 UI/UX & Telemetry Critique
 
 #### 1. Technical Ergonomics vs. "Simple Mode" Gaps
-*   **The Issue:** The PRISM Operator Dashboard is a powerful, highly technical command center containing 12 tabbed panels. It provides developer-level visibility into activity streams, SQLite tables, Neo4j graphs, and PTY processes.
-*   **The UX Gap:** For business operators, SREs, and compliance officers, this interface is overwhelming. "Simple Mode" (Phase E3a) remains scaffolded rather than end-to-end integrated.
-*   **Resolution Path:** Complete the Simple Mode wiring. When toggled, the dashboard should compress the 12 tabs into a clean 3-tab layout: **Chat (Interactive), Approval Queue (Governance), and Audit Log (Observability)**, keeping deep system diagnostics accessible only to power-users.
+- **The Issue:** The PRISM Operator Dashboard is a powerful, highly technical command center containing 12 tabbed panels. It provides developer-level visibility into activity streams, SQLite tables, Neo4j graphs, and PTY processes.
+- **The UX Gap:** For business operators, SREs, and compliance officers, this interface is overwhelming. "Simple Mode" (Phase E3a) remains scaffolded rather than end-to-end integrated.
+- **Resolution Path:** Complete the Simple Mode wiring. When toggled, the dashboard should compress the 12 tabs into a clean 3-tab layout: **Chat (Interactive), Approval Queue (Governance), and Audit Log (Observability)**, keeping deep system diagnostics accessible only to power-users.
 
 #### 2. Telemetry is "Write-Only"
-*   **The Issue:** PRISM gathers exceptional telemetry (retrieval cohorts, percentile latency, policy drift). However, this data remains localized within the SQLite database and the dashboard UI.
-*   **The Gap:** SRE teams in mature enterprises do not look at custom dashboard telemetry; they integrate all infrastructure logs and metrics into unified enterprise monitors (e.g., Datadog, Prometheus, Grafana, ELK).
-*   **Resolution Path:** Wire up a native Prometheus `/metrics` scraping endpoint and an OpenTelemetry (OTel) egress collector. This allows PRISM's latency, budget usage, and policy violations to be scraped directly by standard corporate observability pipelines.
+- **The Issue:** PRISM gathers exceptional telemetry (retrieval cohorts, percentile latency, policy drift). However, this data remains localized within the SQLite database and the dashboard UI.
+- **The Gap:** SRE teams in mature enterprises do not look at custom dashboard telemetry; they integrate all infrastructure logs and metrics into unified enterprise monitors (e.g., Datadog, Prometheus, Grafana, ELK).
+- **Resolution Path:** Wire up a native Prometheus `/metrics` scraping endpoint and an OpenTelemetry (OTel) egress collector. This allows PRISM's latency, budget usage, and policy violations to be scraped directly by standard corporate observability pipelines.
 
 ---
 
@@ -630,47 +630,47 @@ To provide a transparent, academic-level assessment of the PRISM project’s cur
 ```
 
 #### 1. App Idea & Thesis
-*   **Grade:** **A+**
-*   **Rationale:** The concept of **open-source, self-hostable, governance-native Agents-as-a-Service (AaaS)** combined with a decoupled security plane (GaaS) is structurally vacant in the market. Combining constitutional governance (PAD) with multi-model parallel orchestration (SR) creates a highly defensible, world-class competitive moat.
-*   **Parity Actions:** N/A (Perfect conceptual score).
+- **Grade:** **A+**
+- **Rationale:** The concept of **open-source, self-hostable, governance-native Agents-as-a-Service (AaaS)** combined with a decoupled security plane (GaaS) is structurally vacant in the market. Combining constitutional governance (PAD) with multi-model parallel orchestration (SR) creates a highly defensible, world-class competitive moat.
+- **Parity Actions:** N/A (Perfect conceptual score).
 
 #### 2. Core Engineering & Architecture
-*   **Grade:** **B+**
-*   **Rationale:** Outstanding modular design with clean abstractions for adapters, tools, and workflows. However, it suffers from vertical monolith coupling in `dashboard-service.ts`, an in-process activity bus that limits horizontal scaling, and a lack of native PostgreSQL support for high-volume enterprise HA databases.
-*   **A+ Parity Actions:**
-    *   [ ] Refactor and split `dashboard-service.ts` into isolated, domain-specific route controllers.
-    *   [ ] Extract `ActivityBus` into a configurable broker pattern supporting Redis Streams or Kafka.
-    *   [ ] Add native PostgreSQL driver and migration support for corporate database clustering.
+- **Grade:** **B+**
+- **Rationale:** Outstanding modular design with clean abstractions for adapters, tools, and workflows. However, it suffers from vertical monolith coupling in `dashboard-service.ts`, an in-process activity bus that limits horizontal scaling, and a lack of native PostgreSQL support for high-volume enterprise HA databases.
+- **A+ Parity Actions:**
+  - [ ] Refactor and split `dashboard-service.ts` into isolated, domain-specific route controllers.
+  - [ ] Extract `ActivityBus` into a configurable broker pattern supporting Redis Streams or Kafka.
+  - [ ] Add native PostgreSQL driver and migration support for corporate database clustering.
 
 #### 3. UI/UX & Operator Ergonomics
-*   **Grade:** **B**
-*   **Rationale:** The dashboard is visual, responsive, and packed with high-fidelity telemetry widgets. However, the 12 tabs are overly complex for non-developer operators, and "Simple Mode" is not wired end-to-end. There is no graphical interface to review pending approvals directly in the main stream.
-*   **A+ Parity Actions:**
-    *   [ ] Complete the Phase E3a Simple Mode toggle, dynamically collapsing technical tabs.
-    *   [ ] Build a dedicated, highly visible pending approval queue modal directly inside the Chat interface.
-    *   [ ] Add an interactive live log-tail component to the Log tab to stream active `.log` files in real-time.
+- **Grade:** **B**
+- **Rationale:** The dashboard is visual, responsive, and packed with high-fidelity telemetry widgets. However, the 12 tabs are overly complex for non-developer operators, and "Simple Mode" is not wired end-to-end. There is no graphical interface to review pending approvals directly in the main stream.
+- **A+ Parity Actions:**
+  - [ ] Complete the Phase E3a Simple Mode toggle, dynamically collapsing technical tabs.
+  - [ ] Build a dedicated, highly visible pending approval queue modal directly inside the Chat interface.
+  - [ ] Add an interactive live log-tail component to the Log tab to stream active `.log` files in real-time.
 
 #### 4. Codebase Quality & Test Discipline
-*   **Grade:** **A-**
-*   **Rationale:** Exceptional test density (~650 passing suites, 98% coverage). The gap lies in the transition from mock execution to live environment validation: both `terminal-session-adapter.ts` (PTY) and `container-sandbox-adapter.ts` (Docker Engine) use mock/simulated backends in the test suite.
-*   **A+ Parity Actions:**
-    *   [ ] Implement a real PTY integration test suite (`tests/terminal-session-pty.integration.test.ts`) that runs against the host shell.
-    *   [ ] Implement a real Docker API integration test (`tests/container-sandbox-docker.integration.test.ts`) that spawns an actual disposable Alpine Linux container.
-    *   [ ] Generate and rotate cryptographically signed plugin key pairs (Ed25519) instead of utilizing release placeholders.
+- **Grade:** **A-**
+- **Rationale:** Exceptional test density (~650 passing suites, 98% coverage). The gap lies in the transition from mock execution to live environment validation: both `terminal-session-adapter.ts` (PTY) and `container-sandbox-adapter.ts` (Docker Engine) use mock/simulated backends in the test suite.
+- **A+ Parity Actions:**
+  - [ ] Implement a real PTY integration test suite (`tests/terminal-session-pty.integration.test.ts`) that runs against the host shell.
+  - [ ] Implement a real Docker API integration test (`tests/container-sandbox-docker.integration.test.ts`) that spawns an actual disposable Alpine Linux container.
+  - [ ] Generate and rotate cryptographically signed plugin key pairs (Ed25519) instead of utilizing release placeholders.
 
 #### 5. Documentation Depth & Release Discipline
-*   **Grade:** **A**
-*   **Rationale:** Massive, world-class documentation footprint (53 markdown files) covering every strategic, architectural, and operational aspect of the runtime. The release process, though disciplined, remains heavily manual.
-*   **A+ Parity Actions:**
-    *   [ ] Automate the `DIRECTIVE_SHA256` boot-hash check by writing a pre-build script that auto-injects the current manifest hash.
-    *   [ ] Establish automated GitHub Action CI/CD workflows under `.github/workflows/` to automatically run all 9 CI gate checks on every commit.
+- **Grade:** **A**
+- **Rationale:** Massive, world-class documentation footprint (53 markdown files) covering every strategic, architectural, and operational aspect of the runtime. The release process, though disciplined, remains heavily manual.
+- **A+ Parity Actions:**
+  - [ ] Automate the `DIRECTIVE_SHA256` boot-hash check by writing a pre-build script that auto-injects the current manifest hash.
+  - [ ] Establish automated GitHub Action CI/CD workflows under `.github/workflows/` to automatically run all 9 CI gate checks on every commit.
 
 #### 6. AI/LLM/NLP/SR Implementation
-*   **Grade:** **A**
-*   **Rationale:** Spectrum Refraction is implemented with rigorous configuration, activation, and runtime gates that validate model isolation. The integration of local `llama.cpp` for the Guardian Agent provides a phenomenal local self-healing capability. Lacks cost-containment circuit breakers.
-*   **A+ Parity Actions:**
-    *   [ ] Write a runtime API budget controller middleware that suspends swarms upon reaching dollar-spend limits.
-    *   [ ] Build an automated evaluator-optimizer loop to benchmark prompt drift and quality metrics for SR outputs.
+- **Grade:** **A**
+- **Rationale:** Spectrum Refraction is implemented with rigorous configuration, activation, and runtime gates that validate model isolation. The integration of local `llama.cpp` for the Guardian Agent provides a phenomenal local self-healing capability. Lacks cost-containment circuit breakers.
+- **A+ Parity Actions:**
+  - [ ] Write a runtime API budget controller middleware that suspends swarms upon reaching dollar-spend limits.
+  - [ ] Build an automated evaluator-optimizer loop to benchmark prompt drift and quality metrics for SR outputs.
 
 ---
 

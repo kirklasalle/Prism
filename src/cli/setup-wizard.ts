@@ -457,8 +457,7 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
     ];
     const defaultProfileIdx = state.profile === "business" ? 1 : 0;
     state.profile = (await select("Select execution profile:", profileOptions, defaultProfileIdx)) as
-        | "individual"
-        | "business";
+        "individual" | "business";
 
     if (client) {
         try {

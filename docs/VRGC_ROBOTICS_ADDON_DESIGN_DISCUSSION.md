@@ -185,6 +185,7 @@ The bridge management console for external systems:
 | Physical I/O | Future | GPIO / Serial / USB | 📋 Roadmap |
 
 Each integration row expands to show:
+
 - Connection health and latency
 - Protocol version and compatibility
 - Data flow direction and volume
@@ -461,6 +462,7 @@ Development → Testing → Staging → Production
 ```
 
 Each promotion requires:
+
 - Automated test pass
 - Governance Council sign-off (for major versions)
 - Rollback plan documented

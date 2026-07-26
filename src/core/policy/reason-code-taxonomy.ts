@@ -18,14 +18,7 @@ import { POLICY_REASON_CODES, type PolicyReasonCode } from "./reason-codes.js";
  * ────────────────────────────────────────────────────── */
 
 export type ReasonCodeDomain =
-    | "governance"
-    | "directive"
-    | "trust"
-    | "identity"
-    | "spectrum_refraction"
-    | "agent"
-    | "computer_use"
-    | "workflow";
+    "governance" | "directive" | "trust" | "identity" | "spectrum_refraction" | "agent" | "computer_use" | "workflow";
 
 export type ReasonCodeSeverity = "info" | "warn" | "deny" | "critical";
 

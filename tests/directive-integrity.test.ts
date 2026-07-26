@@ -45,7 +45,7 @@ describe("Directive Integrity", function () {
     afterEach(() => {
         try {
             rmSync(tmpDir, { recursive: true, force: true });
-        } catch { }
+        } catch {}
     });
 
     /* ── Hash Computation ────────────────────────────────────────────── */
@@ -151,7 +151,7 @@ describe("Directive Integrity", function () {
                     hash,
                     DIRECTIVE_SHA256,
                     "DIRECTIVE_SHA256 constant does not match the PAD file on disk. " +
-                    "If the PAD was intentionally updated, update the constant in directive-integrity.ts.",
+                        "If the PAD was intentionally updated, update the constant in directive-integrity.ts.",
                 );
             }
         });
@@ -186,7 +186,10 @@ describe("Directive Integrity", function () {
             writeFileSync(join(tmpDir, DIRECTIVE_FILENAME), "TAMPERED CONTENT");
             delete process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE;
             process.env.NODE_ENV = "test";
-            assert.throws(() => enforceDirectiveIntegrityBootGate({ workspaceRoot: tmpDir }), /Directive integrity check failed/);
+            assert.throws(
+                () => enforceDirectiveIntegrityBootGate({ workspaceRoot: tmpDir }),
+                /Directive integrity check failed/,
+            );
         });
 
         it("allows invalid directive only when bypass is enabled in non-production", () => {
@@ -201,7 +204,10 @@ describe("Directive Integrity", function () {
             writeFileSync(join(tmpDir, DIRECTIVE_FILENAME), "TAMPERED CONTENT");
             process.env.PRISM_SKIP_DIRECTIVE_BOOT_GATE = "true";
             process.env.NODE_ENV = "production";
-            assert.throws(() => enforceDirectiveIntegrityBootGate({ workspaceRoot: tmpDir }), /not permitted in production/);
+            assert.throws(
+                () => enforceDirectiveIntegrityBootGate({ workspaceRoot: tmpDir }),
+                /not permitted in production/,
+            );
         });
     });
 });

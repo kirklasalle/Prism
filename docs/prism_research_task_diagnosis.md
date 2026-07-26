@@ -3,6 +3,7 @@
 ## The Symptom
 
 When asked "Find a 2020 Ford Explorer, 50-70K miles, $10-14K, Onondaga County NY", PRISM:
+
 1. Makes 1-2 tool calls (Google search, web search)
 2. Gets no/empty results
 3. **Immediately gives up** and returns suggestions for the user to try themselves
@@ -59,6 +60,7 @@ const toolChoice = (activeTools.length > 0 && isResearch && iteration === 0)
 ```
 
 **The failure sequence:**
+
 1. Iteration 0: `tool_choice: "required"` → LLM calls Google search → gets no results
 2. Iteration 1: `tool_choice: "auto"` → LLM writes "I couldn't find listings, here are suggestions..." → **no tool calls** → loop exits at line 188-190
 
@@ -77,11 +79,13 @@ There is **zero** logic to detect that the LLM gave up and should be pushed to c
 ## Root Cause #3: No "Gave Up" Detection
 
 When the LLM responds with text containing suggestions like:
+
 - "Here are some steps you can take..."
 - "Contact local dealerships..."  
 - "Continue checking platforms like Autotrader..."
 
 ...the executor treats this as a **successful completion**. There is no mechanism to:
+
 1. Detect that the response is advice/suggestions rather than actual results
 2. Inject a follow-up message saying "No — YOU do those steps. Call the next tool."
 3. Force the loop to continue with `tool_choice: "required"`
@@ -104,12 +108,15 @@ Previous fixes added prompt text to **both** paths but only fixed the **structur
 ## Fix Plan
 
 ### Fix 1: IntentClassifier — Route research tasks to autonomous loop
+
 Add a new `research` category to `autonomous_os_task` patterns that catches find/search/research + real-world objects (car, vehicle, listing, price, property, etc.).
 
 ### Fix 2: AgenticChatExecutor — Extend forced tool use for research tasks
+
 For research queries, keep `tool_choice: "required"` for the first 3 iterations (not just iteration 0), giving the LLM multiple chances to try different sources.
 
 ### Fix 3: AgenticChatExecutor — Add "gave up" detection and re-injection
+
 When the LLM responds with text-only (no tool calls) during a research task, check if the response contains suggestion patterns. If so, inject a follow-up user message telling it to execute those suggestions itself, and continue the loop.
 
 ---
@@ -119,9 +126,11 @@ When the LLM responds with text-only (no tool calls) during a research task, che
 All 3 fixes compiled and built cleanly (exit code 0).
 
 ### Fix 1 — IntentClassifier Research Routing
+
 **File:** [intent-classifier.ts](file:///d:/Projects/Prism/src/core/operator/intent-classifier.ts)
 
 Added a new `research` category as the **first** pattern checked in `autonomous_os_task`, with 5 regex patterns covering:
+
 - "find/search/look up/locate/research" + real-world objects (car, vehicle, listing, price, property, job, hotel, flight, etc.)
 - Reverse order (object + verb)
 - "help me find" / "I need to find" compound patterns
@@ -130,14 +139,17 @@ Added a new `research` category as the **first** pattern checked in `autonomous_
 **Effect:** "I need to help Kirk find a car" → now classified as `autonomous_os_task` with `requiresBrowser: true` → routed to `AutonomousPlanner` (50-100 iteration ReAct loop) instead of `AgenticChatExecutor` (25 iteration simple loop).
 
 ### Fix 2 — Extended Forced Tool Use
+
 **File:** [agentic-chat-executor.ts](file:///d:/Projects/Prism/src/core/operator/agentic-chat-executor.ts)
 
 `tool_choice: "required"` now applies for the first **3 iterations** of research queries (was: only iteration 0). This means the LLM must attempt at least 3 different tool calls before it's allowed to respond with text-only.
 
 ### Fix 3 — "Gave Up" Detection & Re-injection
+
 **File:** [agentic-chat-executor.ts](file:///d:/Projects/Prism/src/core/operator/agentic-chat-executor.ts)
 
 New `isGaveUpResponse()` function detects when the LLM's response matches 2+ patterns like:
+
 - "here are some steps/suggestions..."
 - "you can/should try/check/visit..."
 - "I couldn't find/locate..."
@@ -145,6 +157,7 @@ New `isGaveUpResponse()` function detects when the LLM's response matches 2+ pat
 - "continue checking platforms..."
 
 When detected during a research task (up to 3 times), the executor:
+
 1. Adds the assistant's "gave up" response to the conversation
 2. Injects a `user` role message: *"Do NOT suggest steps for me. YOU must execute those steps yourself using your tools..."*
 3. **Continues the loop** instead of exiting

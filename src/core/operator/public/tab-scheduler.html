@@ -41,6 +41,20 @@
                     + Cron Job
                 </button>
                 <button class="secondary-button sched-action-btn" onclick="refreshSchedulerData()">🔄 Refresh</button>
+                <button
+                    id="sched-live-sync-toggle"
+                    class="secondary-button sched-action-btn"
+                    onclick="toggleSchedulerLiveSync()"
+                >
+                    ⏸ Stop Live Updates
+                </button>
+                <button
+                    id="sched-direction-toggle"
+                    class="secondary-button sched-action-btn"
+                    onclick="cycleSchedulerDirectionMode()"
+                >
+                    ↪ Direction: Stay
+                </button>
             </div>
         </div>
 

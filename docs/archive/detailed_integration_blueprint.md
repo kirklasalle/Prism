@@ -1,4 +1,5 @@
 # Detailed Integration Blueprint
+
 ## PRISM-Native TypeScript Port of the LLRE Framework
 
 **Classification:** Software Architecture & Integration Engineering  
@@ -11,7 +12,7 @@
 
 ## 1. Architectural Architecture Overview
 
-This blueprint provides the exact codebase layout, interface definitions, SQL schemas, execution hooks, and front-end mockups to port the concepts of **Large Language Request Effectiveness (LLRE)** natively into **PRISM**. 
+This blueprint provides the exact codebase layout, interface definitions, SQL schemas, execution hooks, and front-end mockups to port the concepts of **Large Language Request Effectiveness (LLRE)** natively into **PRISM**.
 
 By porting the logic to native TypeScript, we keep PRISM completely self-contained (eliminating any Python sidecar or PostgreSQL dependencies).
 
@@ -63,6 +64,7 @@ d:\Projects\Prism\src\core\llre\
 ## 3. Class & Interface Definitions (TypeScript)
 
 ### 3.1 Declarative Request Envelope
+
 Defines the strict payload mapping intent, safety, and constraints before any LLM execution:
 
 ```typescript
@@ -104,6 +106,7 @@ export interface LLRERequestEnvelope {
 ```
 
 ### 3.2 Prompt AST Parser & Linter
+
 Separates imperative prompts into declarative structures and evaluates density:
 
 ```typescript
@@ -164,6 +167,7 @@ export class LLRECompiler {
 ```
 
 ### 3.3 Telemetry & Mathematics Calculations
+
 Natively implements the four metrics formulated in LLRE:
 
 ```typescript
@@ -217,9 +221,10 @@ export class LLRETelemetry {
 
 ## 4. SQLite Schema Extension & Data Access Layer
 
-To keep telemetry lightweight and aligned with your constraints, we will store the metrics directly in Prism's standard SQLite database `prism-activity.db`. 
+To keep telemetry lightweight and aligned with your constraints, we will store the metrics directly in Prism's standard SQLite database `prism-activity.db`.
 
 ### 4.1 SQL Schema Migration
+
 Add the `prism_llre_telemetry` table. This migration script is injected directly into the `migrate()` method inside `src/core/activity/sqlite-store.ts`:
 
 ```sql
@@ -246,6 +251,7 @@ CREATE INDEX IF NOT EXISTS idx_llre_teq        ON prism_llre_telemetry(teq_score
 ```
 
 ### 4.2 Database Sync Code Update (`sqlite-store.ts`)
+
 Prism utilizes Node.js's native `DatabaseSync` class. We will add a dedicated insertion statement to `SqliteActivityStore`:
 
 ```typescript
@@ -353,6 +359,7 @@ Add two lightweight endpoints to PRISM's server routers (`src/core/operator/rout
 To fulfill your request, the **Cognitive Economics & Efficacy** panel will be added to the top of the **Provider & Settings** tab, positioned directly above the provider settings panels.
 
 ### 7.1 HTML Integration (`tab-settings.html`)
+
 ```html
 <!-- src/core/operator/public/tab-settings.html -->
 
@@ -401,6 +408,7 @@ To fulfill your request, the **Cognitive Economics & Efficacy** panel will be ad
 ```
 
 ### 7.2 UI Rendering Code (`tab-settings.js`)
+
 We will add a dynamic load mechanism to query SQLite telemetry when the Provider & Settings tab is opened:
 
 ```javascript

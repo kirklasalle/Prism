@@ -7,6 +7,7 @@ An authoritative critique, 5-tier multi-dimensional comparison, gap analysis, an
 ## Slide 1: Title & Overview
 
 ### PRISM Audit Presentation
+
 * **Decoupled GaaS** | **Spectrum Refraction** | **v0.4.2 Hardy**
 
 An authoritative critique, 5-tier multi-dimensional comparison, gap analysis, and roadmap to world-class deployment readiness for the PRISM agent runtime.
@@ -83,11 +84,13 @@ Detailed comparison of the programming standards, architecture, UI, docs, and ma
 ## Slide 5: System Critique & Tech Debt
 
 ### Architectural Debt
+
 * **Dashboard Monolith**: `dashboard-service.ts` at 528 KiB consolidates WebSocket streaming, static routing, and system APIs, presenting major isolation risks.
 * **Node-bound Ecosystem**: Being written exclusively in Node.js limits integration surfaces for the 70%+ Python AI community.
 * **Network Latency**: Resolving parallel tri-model operations multiplies endpoint network times by 3x.
 
 ### Enhancement Suggestions
+
 * **Fragment Service**: Break the server codebase into discrete API route chunks (auth, sessions, system).
 * **Python REST SDK**: Build thin REST client bindings (`prism-client`) for quick Python pipeline deployments.
 * **OpenAI-Compatible Gateway**: Map standard `/v1/assistants` models inside PRISM so users can migrate with a simple base URL switch.

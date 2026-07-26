@@ -11,14 +11,17 @@
 To maximize organic discovery on GitHub:
 
 ### 1.1 Repository Metadata
-*   **Description:** "Governance-Native Agents-as-a-Service (AaaS) Runtime. Cryptographically enforced directives, tri-model cognitive orchestration, and full computer-use autonomy."
-*   **Website:** Set to your public website or the GitHub repository URL.
+
+* **Description:** "Governance-Native Agents-as-a-Service (AaaS) Runtime. Cryptographically enforced directives, tri-model cognitive orchestration, and full computer-use autonomy."
+* **Website:** Set to your public website or the GitHub repository URL.
 
 ### 1.2 Topics (Tags)
+
 Add these topics in the repository settings to appear in GitHub Explore pages:
 `agentic-ai`, `autonomous-agents`, `computer-use`, `mcp-server`, `llm`, `typescript`, `self-hosted`, `artificial-intelligence`, `developer-tools`
 
 ### 1.3 Social Preview Image
+
 Go to **Settings -> General -> Social preview** and upload a high-resolution 1280x640 banner showing the PRISM logo and a clean screenshot of the dashboard. This ensures links shared on social networks look premium.
 
 ---
@@ -26,26 +29,31 @@ Go to **Settings -> General -> Social preview** and upload a high-resolution 128
 ## 2. Community Launch Strategy
 
 ### 2.1 Hacker News (Show HN)
+
 Hacker News is the premier source of developer traffic.
-*   **Format:** Submit a link.
-*   **Title:** `Show HN: PRISM – An open-source, governance-native Agents-as-a-Service runtime`
-*   **Introduction Comment:** Write a short personal story of why you built PRISM, emphasizing:
-    *   No mock setups — real browser use, terminal virtualization, and docker sandboxes.
-    *   The **10 Laws** enforced at runtime via SHA-256 boot integrity checks.
-    *   **Spectrum Refraction** parallel tri-model cognitive fanning.
-    *   **Advanced Model Routing & Matrix**: Fully configurable & AI-assisted routing, local hardware auto-discovery, VRAM-aware OOM prevention, and sunset/deprecation lifecycle mapping for stable fallback execution.
+
+* **Format:** Submit a link.
+* **Title:** `Show HN: PRISM – An open-source, governance-native Agents-as-a-Service runtime`
+* **Introduction Comment:** Write a short personal story of why you built PRISM, emphasizing:
+  * No mock setups — real browser use, terminal virtualization, and docker sandboxes.
+  * The **10 Laws** enforced at runtime via SHA-256 boot integrity checks.
+  * **Spectrum Refraction** parallel tri-model cognitive fanning.
+  * **Advanced Model Routing & Matrix**: Fully configurable & AI-assisted routing, local hardware auto-discovery, VRAM-aware OOM prevention, and sunset/deprecation lifecycle mapping for stable fallback execution.
 
 ### 2.2 Reddit Subreddits
+
 Post a text description with links to the repo on the following subreddits:
-*   **`r/LocalLLaMA`:** Focus on the local integration of the `llama.cpp` Guardian Agent and how PRISM runs entirely self-hosted.
-*   **`r/selfhosted`:** Highlight the privacy aspect — no vendor lock-in, data remains on-premise, fully controllable.
-*   **`r/typescript`:** Focus on the clean TypeScript architecture and SDK.
+
+* **`r/LocalLLaMA`:** Focus on the local integration of the `llama.cpp` Guardian Agent and how PRISM runs entirely self-hosted.
+* **`r/selfhosted`:** Highlight the privacy aspect — no vendor lock-in, data remains on-premise, fully controllable.
+* **`r/typescript`:** Focus on the clean TypeScript architecture and SDK.
 
 ---
 
 ## 3. Social Media Copy Templates
 
 ### 3.1 Facebook & LinkedIn (General / Professional Network)
+>
 > 🚀 I am proud to announce the public open-source launch of **PRISM**!
 >
 > PRISM is a next-generation agent runtime. Unlike typical chatbots, PRISM runs autonomous agents capable of performing complex multi-step tasks across the browser, terminal, and container environments.
@@ -59,6 +67,7 @@ Post a text description with links to the repo on the following subreddits:
 > #OpenSource #AI #AgenticAI #TechLaunch #SoftwareEngineering
 
 ### 3.2 X / Twitter (Tech / Developer Network)
+>
 > We just launched PRISM — the first governance-native Agents-as-a-Service (AaaS) runtime.
 >
 > 🔒 Cryptographically enforced 10 Laws (SHA-256 boot check)

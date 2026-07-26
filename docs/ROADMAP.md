@@ -3,6 +3,19 @@
 **Date:** 2026-06-18 (updated — see Phase S: Skills)
 **Previous:** 2026-06-17
 
+## SAP Program Addendum (2026-07-20)
+
+- World-class SAP implementation has started with an IDS-first operating model.
+- IDS is treated as the runtime awareness core for documentation drift,
+  traceability verification, and release-time evidence checks.
+- Program artifacts:
+  - `PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md`
+  - `PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md`
+  - `MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md`
+  - `reference/mcp_server/MCP_IDS_API_REFERENCE.md`
+  - `reference/mcp_server/MCP_IDS_OPERATIONAL_RUNBOOK.md`
+  - `reference/mcp_server/MCP_IDS_SAP_ALIGNMENT.md`
+
 ## Phase A (Done)
 
 - Runtime scaffolding with TypeScript and tool registry

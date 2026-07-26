@@ -32,13 +32,7 @@ import type {
 export type SecureOperatorSessionType = "cac_only" | "computer_control" | "browser_control" | "full_control";
 
 export type SecureOperatorSessionStatus =
-    | "initializing"
-    | "authenticating"
-    | "active"
-    | "suspended"
-    | "terminating"
-    | "terminated"
-    | "expired";
+    "initializing" | "authenticating" | "active" | "suspended" | "terminating" | "terminated" | "expired";
 
 export interface SecureOperatorSession {
     /** Unique session identifier */

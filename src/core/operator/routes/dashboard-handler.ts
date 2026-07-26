@@ -89,7 +89,7 @@ export class DashboardHandler implements IRouteHandler {
         }
 
         if (!principal && isTokenValid) {
-            const adminUser = store.getUserByEmail("default", "admin@prism.ai");
+            const adminUser = store.getUserByEmail("default", "prism@prismrefraction.com");
             if (adminUser) {
                 const { cookie } = sessions.issue(adminUser.id, "default");
                 sessions.writeCookie(res, cookie);

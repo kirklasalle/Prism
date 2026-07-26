@@ -81,10 +81,10 @@ As the Prism project matures, additional Council members may be appointed:
 - **Nomination:** By existing Council members
 - **Confirmation:** By the Founder
 - **Requirements:**
-    - Demonstrated commitment to the 10 Laws
-    - Technical competence in AI governance
-    - No conflicts of interest with Prism's mission
-    - Agreement to this charter
+  - Demonstrated commitment to the 10 Laws
+  - Technical competence in AI governance
+  - No conflicts of interest with Prism's mission
+  - Agreement to this charter
 - **Term:** 2 years, renewable
 - **Removal:** For cause (violation of the 10 Laws, conflict of interest, inactivity), by Founder decision
 

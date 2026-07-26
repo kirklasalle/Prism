@@ -2,6 +2,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { workspaceFramebufferDir } from "../../config/workspace-resolver.js";
+import { Orchestrator } from "../../runtime/orchestrator.js";
+import { PolicyEngine } from "../../policy/engine.js";
+import { resolveExecutionProfile } from "../../policy/execution-profiles.js";
 import { IRouteHandler } from "./types.js";
 import type { DashboardService } from "../dashboard-service.js";
 
@@ -430,18 +433,76 @@ export class ComputerHandler implements IRouteHandler {
             const body = await service.readJsonBody<{ command: string }>(req);
             const cmd = (body.command || "").trim();
             if (!cmd) return this.json(res, 400, { error: "Command is required" });
-            const blocked = /rm\s+-rf|del\s+\/[sfq]|format\s+[a-z]:|shutdown|restart|reboot/i;
-            if (blocked.test(cmd)) return this.json(res, 403, { error: "Command blocked by safety policy" });
+
+            // Disallow shell metacharacters and explicit chaining/redirection paths.
+            if (/[|&;<>`$()]/.test(cmd)) {
+                return this.json(res, 403, { error: "Command blocked by safety policy" });
+            }
+
+            const tokens = cmd.split(/\s+/).filter(Boolean);
+            if (tokens.length === 0) return this.json(res, 400, { error: "Command is required" });
+            const binary = tokens[0]?.toLowerCase() ?? "";
+            const args = tokens.slice(1);
+
+            const allowedCommands =
+                process.platform === "win32"
+                    ? new Set(["whoami", "hostname", "ipconfig", "systeminfo", "tasklist", "where"])
+                    : new Set(["whoami", "hostname", "uname", "uptime", "ps", "ls", "pwd", "df", "free"]);
+
+            if (!allowedCommands.has(binary)) {
+                return this.json(res, 403, { error: "Command not allowed by policy" });
+            }
+
+            const safeArg = /^[a-zA-Z0-9_./:=,@+\-]+$/;
+            if (args.some((arg) => !safeArg.test(arg))) {
+                return this.json(res, 403, { error: "Command arguments blocked by safety policy" });
+            }
+
             try {
-                const { exec: execCb } = await import("node:child_process");
-                const { promisify } = await import("node:util");
-                const execAsync = promisify(execCb);
-                const result = await execAsync(cmd, { timeout: 15000, maxBuffer: 512 * 1024 });
+                const toolRegistry = service.getToolRegistry();
+                if (!toolRegistry) {
+                    return this.json(res, 503, { error: "Tool registry not available" });
+                }
+
+                const runtimeStatus = service.getRuntimeStatus();
+                const orchestrator = new Orchestrator(
+                    runtimeStatus.sessionId,
+                    service.getActivityBus(),
+                    new PolicyEngine(),
+                    toolRegistry,
+                    {
+                        approvalQueue: service.getApprovalQueue(),
+                        executionProfile: resolveExecutionProfile(runtimeStatus.executionProfileSegment),
+                    },
+                );
+
+                const governed = await orchestrator.run({
+                    operation: "shell_exec",
+                    args: { command: `${binary}${args.length ? ` ${args.join(" ")}` : ""}`, timeoutMs: 15_000 },
+                    risk: "medium",
+                    mutatesState: false,
+                });
+
+                if (!governed.ok) {
+                    const errorText = String((governed.output as { error?: unknown })?.error ?? "Execution failed");
+                    const statusCode = /denied|approval/i.test(errorText) ? 403 : 500;
+                    return this.json(res, statusCode, { error: errorText, output: governed.output });
+                }
+
                 service
                     .getFramebufferCapture()
                     .captureSingle()
                     .catch(() => {});
-                return this.json(res, 200, { stdout: result.stdout, stderr: result.stderr });
+                const output = (governed.output ?? {}) as {
+                    stdout?: unknown;
+                    stderr?: unknown;
+                    exitCode?: unknown;
+                };
+                return this.json(res, 200, {
+                    stdout: String(output.stdout ?? ""),
+                    stderr: String(output.stderr ?? ""),
+                    exitCode: output.exitCode ?? 0,
+                });
             } catch (error: unknown) {
                 const err = error as { stdout?: string; stderr?: string; message?: string };
                 return this.json(res, 200, {

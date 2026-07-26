@@ -8,12 +8,14 @@
 ## 1. Executive Summary & Routing Directives
 
 For robust, high-performance, and cost-efficient agentic workflows, PRISM prioritizes an orchestrator-centric multi-cloud routing policy:
+
 * **Google Gemini**: The primary worker loop target for interactive web-browsing, video modal parsing, and high-frequency tool queries due to near-zero latencies and massive Paid Tier TPM ceilings.
 * **OpenAI o-series**: Primary deep coding, algorithmic logic, and advanced task decomp planning engine.
 * **Anthropic Claude 4/Opus**: Primary production target for critical executive decisioning, complex reasoning, system architectures, and long-context processing with high instruction adherence.
 * **OpenRouter (Aggregator)**: Unified fallback for open-weights systems, advanced deep-reasoning (DeepSeek R1/V3), and cost-efficient scaling across alternative compute routes (Qwen 2.5, Llama 3.3).
 
-### Dynamic Routing Sequence (Self-Healing Fallbacks):
+### Dynamic Routing Sequence (Self-Healing Fallbacks)
+
 When executing interactive or high-volume agent loops, PRISM’s router applies the following resolution order to dynamically adjust during rate limits (HTTP 429) or model unavailability (HTTP 403/404):
 
 $$\text{gemini-3.5-flash} \longrightarrow \text{o4-mini} \longrightarrow \text{deepseek/deepseek-r1} \longrightarrow \text{claude-haiku-4-5} \longrightarrow \text{claude-sonnet-4-6} \longrightarrow \text{meta-llama/llama-3.3-70b-instruct} \longrightarrow \text{local-co-processing (llama3.2:3b)}$$
@@ -25,6 +27,7 @@ $$\text{gemini-3.5-flash} \longrightarrow \text{o4-mini} \longrightarrow \text{d
 Google AI Studio distributes throughput limits across four service tiers based on pay-as-you-go credit states.
 
 ### A. Free Tier (Developer Sandbox)
+
 | Model | Category | RPM | TPM | RPD |
 | :--- | :--- | :--- | :--- | :--- |
 | **Gemini 3.5 Flash** | Text-out models | 5 | 250K | 20 |
@@ -38,6 +41,7 @@ Google AI Studio distributes throughput limits across four service tiers based o
 | **Imagen 4 (Generate/Fast)**| Image generation | - | - | 25 |
 
 ### B. Tier 1 (Standard Paid Tier)
+
 | Model | Category | RPM | TPM | RPD |
 | :--- | :--- | :--- | :--- | :--- |
 | **Gemini 3.1 Pro** | Text-out models | 25 | 2M | 250 |
@@ -53,6 +57,7 @@ Google AI Studio distributes throughput limits across four service tiers based o
 | **Gemini Embedding 1** | Search/Embedding | 3K | 1M | Unlimited |
 
 ### C. Tier 2 (Advanced Paid Tier)
+
 | Model | Category | RPM | TPM | RPD |
 | :--- | :--- | :--- | :--- | :--- |
 | **Gemini 3.1 Pro** | Text-out models | 1K | 5M | 50K |
@@ -67,6 +72,7 @@ Google AI Studio distributes throughput limits across four service tiers based o
 | **Imagen 4 Generate** | Image generation | 15 | - | 1K |
 
 ### D. Tier 3 (Enterprise Scale Tier)
+
 | Model | Category | RPM | TPM | RPD |
 | :--- | :--- | :--- | :--- | :--- |
 | **Gemini 3.1 Pro** | Text-out models | 2K | 8M | Unlimited |
@@ -87,6 +93,7 @@ Google AI Studio distributes throughput limits across four service tiers based o
 OpenAI API accounts are organized into **Usage Tiers** representing the lifetime payments made to the account. Limits scale based on which tier is active.
 
 ### A. Lifetime Payment Tier Requirements
+
 * **Free Tier**: Qualification: Geography check | Spend Limit: **$100/mo**
 * **Tier 1**: Qualification: **$5 paid** | Spend Limit: **$100/mo**
 * **Tier 2**: Qualification: **$50 paid** | Spend Limit: **$500/mo**
@@ -95,9 +102,11 @@ OpenAI API accounts are organized into **Usage Tiers** representing the lifetime
 * **Tier 5**: Qualification: **$1,000 paid** | Spend Limit: **$200,000/mo**
 
 ### B. Current Organization Limits (Usage Tier 3 Profile)
+
 PRISM’s active organization belongs to **Usage Tier 3** (Lifetime spend > $100). The following table documents the active rate limits for the modern OpenAI models:
 
 #### 1. Reasoning Models (o-series)
+
 | Model | RPM | TPM | TPD (Tokens Per Day) |
 | :--- | :--- | :--- | :--- |
 | **o4-mini** | 5,000 | 4M | 40M |
@@ -108,6 +117,7 @@ PRISM’s active organization belongs to **Usage Tier 3** (Lifetime spend > $100
 | **o1** | 5,000 | 800K | 100M |
 
 #### 2. GPT-5 Series Models
+
 | Model | RPM | TPM | TPD |
 | :--- | :--- | :--- | :--- |
 | **gpt-5-mini** | 5,000 | 4M | 40M |
@@ -120,6 +130,7 @@ PRISM’s active organization belongs to **Usage Tier 3** (Lifetime spend > $100
 | **gpt-5.5-pro** | 500 | 500K | 10M |
 
 #### 3. GPT-4.1 & Legacy Models
+
 | Model | RPM | TPM | TPD |
 | :--- | :--- | :--- | :--- |
 | **gpt-4.1-mini** / **gpt-4.1-nano** | 5,000 | 4M | 40M |
@@ -128,6 +139,7 @@ PRISM’s active organization belongs to **Usage Tier 3** (Lifetime spend > $100
 | **gpt-4o-mini** | 5,000 | 4M | 40M |
 
 #### 4. Specialized Modalities & Media
+
 | Model | Modality | Limit |
 | :--- | :--- | :--- |
 | **gpt-audio** / **gpt-audio-mini** | Speech generation & voice | 3,000 RPM / 250K TPM |
@@ -144,6 +156,7 @@ PRISM’s active organization belongs to **Usage Tier 3** (Lifetime spend > $100
 Anthropic distributes API keys across 5 Lifetime Spend Tiers. PRISM's active organization belongs to **Tier 2** (Lifetime spend > $40).
 
 ### A. Lifetime Payment Tier Requirements
+
 * **Tier 0 (Free)**: Lifetime spend: **$0** (Allowed geos only)
 * **Tier 1**: Lifetime spend: **$5+**
 * **Tier 2 (Active Org Level)**: Lifetime spend: **$40+**
@@ -153,6 +166,7 @@ Anthropic distributes API keys across 5 Lifetime Spend Tiers. PRISM's active org
 ### B. Rate Limits by Tier
 
 #### 1. Tier 0 (Free Tier)
+
 | Model | API ID | RPM | Input TPM | Output TPM |
 | :--- | :--- | :--- | :--- | :--- |
 | **Claude Opus 4.8** | `claude-opus-4-8` | 5 | 10K | 4K |
@@ -160,6 +174,7 @@ Anthropic distributes API keys across 5 Lifetime Spend Tiers. PRISM's active org
 | **Claude Haiku 4.5** | `claude-haiku-4-5` | 5 | 10K | 4K |
 
 #### 2. Tier 1
+
 | Model | API ID | RPM | Input TPM | Output TPM |
 | :--- | :--- | :--- | :--- | :--- |
 | **Claude Opus 4.8** | `claude-opus-4-8` | 50 | 500K | 80K |
@@ -167,6 +182,7 @@ Anthropic distributes API keys across 5 Lifetime Spend Tiers. PRISM's active org
 | **Claude Haiku 4.5** | `claude-haiku-4-5` | 50 | 50K | 10K |
 
 #### 3. Tier 2 (Current Organization Active Level)
+
 | Model | API ID | RPM | Input TPM | Output TPM |
 | :--- | :--- | :--- | :--- | :--- |
 | **Claude Opus 4.8** | `claude-opus-4-8` | 1,000 | 2M | 200K |
@@ -174,6 +190,7 @@ Anthropic distributes API keys across 5 Lifetime Spend Tiers. PRISM's active org
 | **Claude Haiku 4.5** | `claude-haiku-4-5` | 1,000 | 450K | 90K |
 
 #### 4. Tier 3
+
 | Model | API ID | RPM | Input TPM | Output TPM |
 | :--- | :--- | :--- | :--- | :--- |
 | **Claude Opus 4.8** | `claude-opus-4-8` | 2,000 | 5M | 400K |
@@ -181,6 +198,7 @@ Anthropic distributes API keys across 5 Lifetime Spend Tiers. PRISM's active org
 | **Claude Haiku 4.5** | `claude-haiku-4-5` | 2,000 | 1M | 200K |
 
 #### 5. Tier 4
+
 | Model | API ID | RPM | Input TPM | Output TPM |
 | :--- | :--- | :--- | :--- | :--- |
 | **Claude Opus 4.8** | `claude-opus-4-8` | 4,000 | 10M | 800K |
@@ -194,22 +212,26 @@ Anthropic distributes API keys across 5 Lifetime Spend Tiers. PRISM's active org
 OpenRouter operates as a model aggregator, distributing standard and open-weights models through a single API interface. Rate limits are handled dynamically depending on the model's cost and the developer's credit balance.
 
 ### A. Free Accounts & Free Model Limits
+
 For all endpoints suffixed with `:free` (e.g. `meta-llama/llama-3.3-70b-instruct:free`):
-- **Requests Per Minute (RPM)**: Hard capped at **20 RPM** globally.
-- **Daily Request Allowances**:
-  - **Unfunded Keys (< $10 purchased)**: Limited to **50 requests per day**.
-  - **Funded Keys (>= $10 purchased)**: Promoted to **1,000 requests per day**.
-- *Note*: If your prepaid account balance drops to or below zero, all free model queries return an HTTP `402 Payment Required` code until top-up is completed.
+* **Requests Per Minute (RPM)**: Hard capped at **20 RPM** globally.
+* **Daily Request Allowances**:
+  * **Unfunded Keys (< $10 purchased)**: Limited to **50 requests per day**.
+  * **Funded Keys (>= $10 purchased)**: Promoted to **1,000 requests per day**.
+* *Note*: If your prepaid account balance drops to or below zero, all free model queries return an HTTP `402 Payment Required` code until top-up is completed.
 
 ### B. Paid Keys & Paid Model Limits
-- **Prepaid Balance Billing**: Paid models have no rigid, platform-level RPM or TPM caps. High-throughput keys scale dynamically based on total prepaid deposits.
-- **Dynamic Policy Inspection**: Developers can programmatically inspect the exact active rate limit for their current API key by querying:
+* **Prepaid Balance Billing**: Paid models have no rigid, platform-level RPM or TPM caps. High-throughput keys scale dynamically based on total prepaid deposits.
+* **Dynamic Policy Inspection**: Developers can programmatically inspect the exact active rate limit for their current API key by querying:
+
   ```bash
   GET https://openrouter.ai/api/v1/key
   ```
+
   The response schema provides a dynamic `rate_limit` object showing `requests` and the active refresh `interval` (e.g. per second/minute) assigned to that key.
 
 ### C. OpenRouter Aggregated SOTA Model Profiles
+
 PRISM dynamically routes open-weights or alternative cloud targets to the following premium aggregated endpoints:
 
 | Model Name | OpenRouter API ID | Context Window | Input / MTok | Output / MTok | Core Features |
@@ -229,26 +251,29 @@ PRISM dynamically routes open-weights or alternative cloud targets to the follow
 Prism operates an autonomous router (`selectModelForRole`) that safeguards agent loops from mid-flight rate limits or provider failures.
 
 ### A. HTTP 429 (Rate Limit / Resource Exhausted) Mitigation
+
 When a cloud provider returns an HTTP 429 status code, PRISM applies a multi-tier resilience protocol:
+
 1. **Exponential Backoff with Jitter**:
-   - Initial pause: `2.0 seconds`
-   - Backoff multiplier: `2.0x`
-   - Jitter factor: `+/- 25%` random variance to prevent thundering herd problems.
-   - Max attempts: `3 retries` per endpoint before triggering provider fallback.
+   * Initial pause: `2.0 seconds`
+   * Backoff multiplier: `2.0x`
+   * Jitter factor: `+/- 25%` random variance to prevent thundering herd problems.
+   * Max attempts: `3 retries` per endpoint before triggering provider fallback.
 2. **Provider Failover (Self-Healing)**:
-   - If a provider endpoint exhausts its TPM or RPD, the router temporarily marks the model offline for the current session.
-   - It routes immediately to the next available model in the sequence:
+   * If a provider endpoint exhausts its TPM or RPD, the router temporarily marks the model offline for the current session.
+   * It routes immediately to the next available model in the sequence:
      $$\text{gemini-3.5-flash} \longrightarrow \text{o4-mini} \longrightarrow \text{deepseek/deepseek-r1} \longrightarrow \text{claude-haiku-4-5} \longrightarrow \text{claude-sonnet-4-6} \longrightarrow \text{meta-llama/llama-3.3-70b-instruct} \longrightarrow \text{local-co-processing (llama3.2:3b)}$$
 
 ### B. HTTP 403 / 404 (Auth / Missing Model) Handling
-- If a route returns `model_not_found` or `forbidden` (commonly due to API key configurations or regional availability constraints):
-  - PRISM **removes the model from the session's active inventory**.
-  - Retries the current generation step *instantly* with the fallback target model.
-  - Generates a warning in the **Live Trace console** alerting the operator of the configuration degradation.
+* If a route returns `model_not_found` or `forbidden` (commonly due to API key configurations or regional availability constraints):
+  * PRISM **removes the model from the session's active inventory**.
+  * Retries the current generation step *instantly* with the fallback target model.
+  * Generates a warning in the **Live Trace console** alerting the operator of the configuration degradation.
 
 ### C. Web Search Tool Fallback Logic
+
 For agents executing Google Search or DuckDuckGo Search MCP tools:
-- If a web query yields 0 results, the agent performs up to **2 automated fallback search queries** before declaring failure:
+* If a web query yields 0 results, the agent performs up to **2 automated fallback search queries** before declaring failure:
   1. Broadens keywords (removes precise quotes, shifts to high-level concept words).
   2. Strips URL-specific operators (`site:example.com`) to search open indexing spaces.
 
@@ -258,10 +283,10 @@ For agents executing Google Search or DuckDuckGo Search MCP tools:
 
 To configure PRISM’s Settings Panel for optimal price-to-performance stability, deploy the following preferences:
 
-- **Default Primary Model (Tool loops)**: `gemini-3.5-flash` or `o4-mini` (based on provider preferences).
-- **Fallback Chain**: `gemini-3.5-flash` $\rightarrow$ `o4-mini` $\rightarrow$ `deepseek/deepseek-r1` $\rightarrow$ `claude-haiku-4-5` $\rightarrow$ `gemini-3.1-pro` $\rightarrow$ `claude-sonnet-4-6` $\rightarrow$ `meta-llama/llama-3.3-70b-instruct` $\rightarrow$ `local (llama3.1:8b)`
-- **Enable Provider Fallback**: Checked/On (Default)
-- **Automatic High-VRAM Eviction**: Checked/On (Prevents local Ollama models from overloading host GPUs when cloud models fail).
+* **Default Primary Model (Tool loops)**: `gemini-3.5-flash` or `o4-mini` (based on provider preferences).
+* **Fallback Chain**: `gemini-3.5-flash` $\rightarrow$ `o4-mini` $\rightarrow$ `deepseek/deepseek-r1` $\rightarrow$ `claude-haiku-4-5` $\rightarrow$ `gemini-3.1-pro` $\rightarrow$ `claude-sonnet-4-6` $\rightarrow$ `meta-llama/llama-3.3-70b-instruct` $\rightarrow$ `local (llama3.1:8b)`
+* **Enable Provider Fallback**: Checked/On (Default)
+* **Automatic High-VRAM Eviction**: Checked/On (Prevents local Ollama models from overloading host GPUs when cloud models fail).
 
 ---
 
@@ -270,20 +295,21 @@ To configure PRISM’s Settings Panel for optimal price-to-performance stability
 Unlike static configuration files, the PRISM Model Matrix is a **dynamically updated capability store** running in memory and persisted via runtime configurations. This matrix is exclusive to the PRISM platform and its operators.
 
 ### A. Dynamic Model Registration
-- **Runtime Profiles**: In addition to the static `KNOWN_PROFILES` database, operators can register, edit, or evict custom model capability profiles at runtime. This allows immediate support for new fine-tuned models, private APIs, or proprietary endpoints.
-- **API and Code Hooks**: Dynamic edits are managed via `registerModelProfile()`, `updateModelProfile()`, and `removeModelProfile()`.
+* **Runtime Profiles**: In addition to the static `KNOWN_PROFILES` database, operators can register, edit, or evict custom model capability profiles at runtime. This allows immediate support for new fine-tuned models, private APIs, or proprietary endpoints.
+* **API and Code Hooks**: Dynamic edits are managed via `registerModelProfile()`, `updateModelProfile()`, and `removeModelProfile()`.
 
 ### B. Local Model Auto-Discovery
-- **Hardware & VRAM Awareness**: PRISM periodically queries the local Ollama instance (using `/api/ps`) to discover active models and estimate their VRAM consumption.
-- **Proactive Eviction & Routing**: In `adaptive` routing mode, the model matrix flags local models that present an OOM risk based on current hardware overhead. The routing engine uses this flag to deprioritize local models and route tasks to cloud fallbacks, avoiding host GPU exhaustion.
+* **Hardware & VRAM Awareness**: PRISM periodically queries the local Ollama instance (using `/api/ps`) to discover active models and estimate their VRAM consumption.
+* **Proactive Eviction & Routing**: In `adaptive` routing mode, the model matrix flags local models that present an OOM risk based on current hardware overhead. The routing engine uses this flag to deprioritize local models and route tasks to cloud fallbacks, avoiding host GPU exhaustion.
 
 ### C. Deprecation & Sunset Lifecycles
+
 To maintain historical telemetry consistency and regression checks, models are never silently deleted from the matrix when sunset.
-- **Lifecycle Tracking**: Models are classified using fields for `deprecated`, `deprecatedAt`, `sunsetDate`, `successor` (recommended replacement), and `deprecationReason`.
-- **Status Evaluation**:
-  - `Active`: Normal operation.
-  - `Deprecated`: Approaching sunset. Eligible for fallback/historical execution, but de-prioritized in active routing. Generates warning traces in the ActivityBus.
-  - `Sunset`: Pass-through warning or blocked.
+* **Lifecycle Tracking**: Models are classified using fields for `deprecated`, `deprecatedAt`, `sunsetDate`, `successor` (recommended replacement), and `deprecationReason`.
+* **Status Evaluation**:
+  * `Active`: Normal operation.
+  * `Deprecated`: Approaching sunset. Eligible for fallback/historical execution, but de-prioritized in active routing. Generates warning traces in the ActivityBus.
+  * `Sunset`: Pass-through warning or blocked.
 
 ---
 *Document Version: 6.4.0 (SOTA Gemini, OpenAI, Claude, OpenRouter, and Dynamic Operator Matrix Rollout)*

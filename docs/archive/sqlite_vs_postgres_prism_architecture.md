@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-Prism Refraction currently operates on an **embedded SQLite** storage architecture across its core subsystems: the Identity & Access Management store (`iam.db`), the chat session history ledger (`chat-session-store.ts`), the causal activity bus ledger (`SqliteActivityStore`), and the character accountability repository (`CharacterAccountabilityStore`). 
+Prism Refraction currently operates on an **embedded SQLite** storage architecture across its core subsystems: the Identity & Access Management store (`iam.db`), the chat session history ledger (`chat-session-store.ts`), the causal activity bus ledger (`SqliteActivityStore`), and the character accountability repository (`CharacterAccountabilityStore`).
 
 This document provides a rigorous architectural comparison between embedded SQLite and client-server PostgreSQL, critiquing Prism’s current deployment model under the stress of high-concurrency autonomous swarms (`SwarmCoordinator`, `AgentPool`), multi-operator enterprise scaling, and vector embedding RAG retrieval. Finally, it outlines strategic recommendations and a hybrid architectural roadmap to maximize performance without sacrificing local-first portability.
 
@@ -28,12 +28,16 @@ graph TD
 ```
 
 ### Embedded Library (SQLite)
-SQLite is not an independent database server daemon; it is a **compact C library linked directly into the host application process** (accessed in Prism via native bindings like `better-sqlite3` or `sqlite3`). 
+
+SQLite is not an independent database server daemon; it is a **compact C library linked directly into the host application process** (accessed in Prism via native bindings like `better-sqlite3` or `sqlite3`).
+
 - **The Zero-Hop Advantage**: All SQL statement parsing, B-Tree traversal, and data retrieval execute within the host process's memory space, completely bypassing network stacks, socket serialization, and inter-process communication (IPC) overhead.
 - **File-Backed Persistence**: Database files are standard, cross-platform disk files, granting unmatchable ease of backup, zero-configuration local deployment, and immediate portability.
 
 ### Client-Server Daemon (PostgreSQL)
+
 PostgreSQL is a **robust, multi-process database server daemon** designed for enterprise-grade concurrency, high availability, and horizontal scaling across network boundaries.
+
 - **Network Protocol & Connection Overhead**: Every query requires assembling a wire protocol packet, transmitting it over a UNIX domain socket or TCP connection, authenticating against backend worker processes, and parsing the response back across the socket.
 - **Dedicated Resource Management**: PostgreSQL maintains its own shared buffer cache, background write-ahead logging workers (`walwriter`), vacuum cleaners (`autovacuum`), and complex query optimization engines independently of the client application.
 
@@ -54,11 +58,13 @@ PostgreSQL is a **robust, multi-process database server daemon** designed for en
 ## 3. Critique of Prism's Current SQLite Implementation
 
 ### Strengths & Triumphs of the Current Architecture
+
 1. **Local-First & Air-Gapped Superiority**: Prism’s mandate as an autonomous desktop agent (`ComputerUseTool`, `BrowserControlTool`) requires immediate zero-configuration startup. A user downloading Prism can run `start_web.bat` or `npm start` instantly without installing or configuring a database server.
 2. **Deterministic File Portability**: Because workspaces and IAM profiles reside in clean SQLite databases (`.prism/iam.db`), users can zip up a workspace directory, transfer it between devices, or commit state snapshots directly to git repositories seamlessly.
 3. **Microsecond Read Throughput**: Fetching character configurations, active covenants, and prompt templates takes microseconds, preventing UI stutter in the React frontend or TUI interface.
 
 ### Identified Bottlenecks & Scaling Friction Points
+
 ```mermaid
 graph LR
     subgraph "Prism Swarm Contention Point"
@@ -80,12 +86,14 @@ graph LR
 Migrating Prism entirely to PostgreSQL involves significant architectural trade-offs. We analyze two primary migration scenarios:
 
 ### Scenario A: Full PostgreSQL Replacement (Monolithic Server Mode)
+
 In this scenario, SQLite is completely excised, and Prism requires a running PostgreSQL instance (either local Docker container or remote RDS/Cloud DB).
 
 - **Feasibility**: High technical feasibility if using an abstraction layer (e.g., Drizzle ORM, Prisma, or Knex.js). The SQL dialect differences between SQLite and Postgres (e.g., `AUTOINCREMENT` vs `SERIAL`/`BIGSERIAL`, `DATETIME` vs `TIMESTAMPTZ`, `JSON` functions vs `JSONB` operators) must be normalized.
 - **The Core Trade-off**: **Loss of Zero-Config Portability**. Installing Prism would now require `docker compose up -d postgres` or manual database provisioning. For enterprise server deployments, this is perfectly acceptable; for individual developers running Prism as a local pair-programming CLI/TUI, this introduces massive friction.
 
 ### Scenario B: The Dual-Engine Dynamic Repository (Recommended)
+
 Rather than forcing a hard switch, Prism can adopt a **Repository Interface Pattern** that dynamically binds to either SQLite or PostgreSQL based on the runtime configuration profile (`PRISM_MODE`).
 
 ```mermaid
@@ -106,9 +114,11 @@ graph TD
 To maximize system performance and future-proof Prism without sacrificing its local-first ethos, we propose a three-tiered architectural enhancement roadmap:
 
 ### Near-Term: SQLite Performance & Concurrency Hardening
+
 Before attempting any migration to Postgres, Prism’s existing SQLite implementation should be tuned to its absolute limit:
 
 1. **Enforce Pragmatic PRAGMA Execution**: During SQLite connection initialization, enforce the following high-concurrency PRAGMA directives:
+
    ```sql
    PRAGMA journal_mode = WAL;         -- Enable Write-Ahead Logging
    PRAGMA synchronous = NORMAL;       -- Safe WAL sync speed without fsync bottlenecks
@@ -117,16 +127,21 @@ Before attempting any migration to Postgres, Prism’s existing SQLite implement
    PRAGMA temp_store = MEMORY;        -- Store temporary tables and indexes in RAM
    PRAGMA mmap_size = 3000000000;     -- Memory-map up to 3GB of the DB file for lightning reads
    ```
+
 2. **Dedicated Background Writer Queue**: To prevent `SQLITE_BUSY` errors during massive swarm telemetry bursts, wrap the `SqliteActivityStore` in an in-memory asynchronous ring buffer (e.g., batching `INSERT` statements in memory and executing them inside a single SQLite transaction every 100ms or 1,000 events). This reduces disk I/O operations by 90% and completely eliminates write lock contention.
 3. **Adopt Strict Typing & WAL2**: Transition all SQLite table definitions to `STRICT` mode (SQLite 3.37+) to enforce data integrity matching PostgreSQL standard schemas.
 
 ### Mid-Term: Abstracting Storage via ORM / Query Builder
+
 To prepare for dual-engine compatibility, migrate raw SQL query strings (`this.db.prepare(...)`) to a lightweight, highly performant TypeScript query builder such as **Drizzle ORM** or **Kysely**.
+
 - Both engines provide 100% type-safe SQL query generation.
 - Both engines support seamless swapping between `better-sqlite3` drivers and PostgreSQL `pg` connection pools without altering core business logic.
 
 ### Long-Term: Distributed Edge SQLite (libSQL / Turso) vs. Enterprise Postgres Hub
+
 If Prism expands into a distributed team collaboration tool:
+
 - **For Edge & Multi-Device Sync**: Evaluate **libSQL** (an open-source fork of SQLite by Turso) or **LiteFS**. This allows Prism to run local SQLite databases on the operator's machine while automatically streaming WAL replication logs over HTTP to a centralized cloud hub, achieving local microsecond reads with global data synchronization.
 - **For Centralized Enterprise Hubs**: For dedicated enterprise servers managing hundreds of simultaneous autonomous agents and terabytes of accountability ledgers, activate the PostgreSQL driver profile. Leverage `pgvector` HNSW indexes for enterprise-wide codebase semantic searching and partitioned tables for causal audit logs.
 
@@ -134,12 +149,13 @@ If Prism expands into a distributed team collaboration tool:
 
 ## Summary Conclusion
 
-**SQLite is not a "toy" database; it is an industrial-strength embedded data engine.** In 2026, the performance delta between SQLite and PostgreSQL is driven entirely by deployment topology. 
+**SQLite is not a "toy" database; it is an industrial-strength embedded data engine.** In 2026, the performance delta between SQLite and PostgreSQL is driven entirely by deployment topology.
 
 For Prism’s primary mission as an autonomous, local-first coding assistant and desktop automation harness, **SQLite remains the superior architectural choice** due to zero network latency, effortless file portability, and zero operational overhead. By implementing aggressive PRAGMA tuning, asynchronous write batching, and an abstract Repository Pattern interface, Prism can maintain flawless local execution while unlocking seamless PostgreSQL scalability for enterprise server environments.
 
 ---
 **References & Citations**:
+
 1. *SQLite Documentation: Write-Ahead Logging (WAL) & Memory-Mapped I/O* (https://www.sqlite.org/wal.html)
 2. *PostgreSQL Concurrency & MVCC Architecture* (https://www.postgresql.org/docs/current/mvcc.html)
 3. *sqlite-vec vs. pgvector: Architectural Trade-offs in Vector Embeddings* (https://github.com/asg017/sqlite-vec)

@@ -346,9 +346,36 @@ export class ChatHandler implements IRouteHandler {
         }
 
         // 9. DELETE /api/chat/sessions/:id
+        // Governance: Only administrators may delete sessions. The first certified
+        // session (Initialization Certificate) is semi-permanent — it requires an
+        // explicit confirmation header even from admins.
         if (chatSessionMatch && method === "DELETE") {
+            if (!isAdmin) {
+                return this.json(res, 403, {
+                    error: "forbidden",
+                    message: "Only administrators may delete sessions. Contact your system administrator.",
+                });
+            }
             try {
                 const sessionId = decodeURIComponent(chatSessionMatch[1]!);
+                const session = service.getChatStore().getSession(sessionId);
+
+                // Protect the first certified session (Initialization Certificate)
+                if (session && /Initialization Certificate/i.test(session.title || "")) {
+                    const confirmHeader = req.headers["x-prism-confirm-delete"]?.toString().toLowerCase();
+                    if (confirmHeader !== "true") {
+                        return this.json(res, 409, {
+                            error: "protected_session",
+                            message:
+                                "The Initialization Certificate is a semi-permanent certified session. " +
+                                "Deletion requires administrator privileges and explicit confirmation. " +
+                                "Set the X-Prism-Confirm-Delete header to 'true' to proceed.",
+                            sessionId,
+                            sessionTitle: session.title,
+                        });
+                    }
+                }
+
                 service.deleteChatSession(sessionId);
                 return this.json(res, 200, { deleted: true });
             } catch (error) {
@@ -441,6 +468,7 @@ export class ChatHandler implements IRouteHandler {
                     status: (body.status as any) || "open",
                     metadata: body.metadata,
                 });
+                service.broadcastEvent({ type: "support:ticket-created", ticket });
                 return this.json(res, 201, ticket);
             } catch (err) {
                 return this.json(res, 500, { error: String(err) });
@@ -456,6 +484,14 @@ export class ChatHandler implements IRouteHandler {
                     return this.json(res, 400, { error: "Missing status field" });
                 }
                 const ok = service.getChatStore().updateSupportTicket(ticketId, body.status, body.resolutionLog);
+                if (ok) {
+                    service.broadcastEvent({
+                        type: "support:ticket-updated",
+                        ticketId,
+                        status: body.status,
+                        resolutionLog: body.resolutionLog ?? null,
+                    });
+                }
                 return this.json(res, ok ? 200 : 404, { ok });
             } catch (err) {
                 return this.json(res, 500, { error: String(err) });
@@ -467,6 +503,9 @@ export class ChatHandler implements IRouteHandler {
             try {
                 const ticketId = url.split("/")[4] ?? "";
                 const ok = service.getChatStore().deleteSupportTicket(ticketId);
+                if (ok) {
+                    service.broadcastEvent({ type: "support:ticket-deleted", ticketId });
+                }
                 return this.json(res, ok ? 200 : 404, { ok });
             } catch (err) {
                 return this.json(res, 500, { error: String(err) });

@@ -296,19 +296,19 @@ This section incorporates recent 2026 market evolutions, including the **NIST AI
 The February 2026 NIST initiative establishes rigorous guidelines for autonomous agent deployments. PRISM’s architectural design maps directly to these standards, but significant gaps remain before formal compliance can be certified.
 
 #### 1. Real-Time Security Boundaries (Guardrails)
-*   **NIST Guideline:** Autonomous agents must operate within real-time boundary enforcements that prevent escalation of privilege and unmonitored environment mutations.
-*   **PRISM Posture:** The 3-Tier Policy Engine enforces hard tier caps (e.g., `tier3_approval` for mutations) at runtime via `src/core/policy/engine.ts`.
-*   **Critique & Gap:** While policy is checked before tool execution, PRISM lacks active process sandboxing in its standard Node-only deployment. High-risk shell commands are executed directly in the host OS unless explicitly routed through the simulated `container-sandbox-adapter.ts`. Real cgroups v2/Docker sandboxing must be fully hardened to secure this boundary.
+- **NIST Guideline:** Autonomous agents must operate within real-time boundary enforcements that prevent escalation of privilege and unmonitored environment mutations.
+- **PRISM Posture:** The 3-Tier Policy Engine enforces hard tier caps (e.g., `tier3_approval` for mutations) at runtime via `src/core/policy/engine.ts`.
+- **Critique & Gap:** While policy is checked before tool execution, PRISM lacks active process sandboxing in its standard Node-only deployment. High-risk shell commands are executed directly in the host OS unless explicitly routed through the simulated `container-sandbox-adapter.ts`. Real cgroups v2/Docker sandboxing must be fully hardened to secure this boundary.
 
 #### 2. Identity and Attribution (Accountability)
-*   **NIST Guideline:** Every action executed by an agent must be structurally or cryptographically tied to a verified human operator, a system-level client context, and a persistent agent identity.
-*   **PRISM Posture:** Handled via the **Character Accountability Control (CAC)** framework. Every action propagates `characterId`, `prismUserEmail`, `operatorEmail`, and `assignmentId` into the SHA-256 event bus hash.
-*   **Critique & Gap:** Lacks OAuth-based operator email verification and multi-factor authorization. In a high-trust production environment, an operator's identity could be spoofed in the `.env` or session configuration since email domain checks rely on self-reported inputs without active directory/OAuth handshakes.
+- **NIST Guideline:** Every action executed by an agent must be structurally or cryptographically tied to a verified human operator, a system-level client context, and a persistent agent identity.
+- **PRISM Posture:** Handled via the **Character Accountability Control (CAC)** framework. Every action propagates `characterId`, `prismUserEmail`, `operatorEmail`, and `assignmentId` into the SHA-256 event bus hash.
+- **Critique & Gap:** Lacks OAuth-based operator email verification and multi-factor authorization. In a high-trust production environment, an operator's identity could be spoofed in the `.env` or session configuration since email domain checks rely on self-reported inputs without active directory/OAuth handshakes.
 
 #### 3. Epistemic Traceability (Auditability)
-*   **NIST Guideline:** Platforms must record complete operational logs that enable deterministic reconstruction of agent reasoning, tool call inputs, and intermediate world states.
-*   **PRISM Posture:** High-fidelity SQLite event-sourcing with SHA-256 hash chains.
-*   **Critique & Gap:** The SQLite database has no native cryptographic signature or distributed logging egress (e.g., OTel or syslog). An administrator with database access could theoretically alter historical events and recalculate hashes, compromising forensic integrity.
+- **NIST Guideline:** Platforms must record complete operational logs that enable deterministic reconstruction of agent reasoning, tool call inputs, and intermediate world states.
+- **PRISM Posture:** High-fidelity SQLite event-sourcing with SHA-256 hash chains.
+- **Critique & Gap:** The SQLite database has no native cryptographic signature or distributed logging egress (e.g., OTel or syslog). An administrator with database access could theoretically alter historical events and recalculate hashes, compromising forensic integrity.
 
 ---
 

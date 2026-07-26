@@ -15,9 +15,9 @@ This document outlines the design and implementation plan to add an operator-fac
 ## 2. Taxonomy & Standards
 
 Add-ons follow the PRISM standard defined in `VRGC_ROBOTICS_ADDON_DESIGN_DISCUSSION.md`:
-* **Trust Tier:** Must declare `"trust": "certified"`.
-* **Council Approval:** If `governanceCouncilSignoff` is missing, the Add-on is flagged as **Unsigned / Dev Mode**.
-* **Integration Schema:** Scans `addon.manifest.json` for validation using the built-in validator (`validateAddonManifest`).
+- **Trust Tier:** Must declare `"trust": "certified"`.
+- **Council Approval:** If `governanceCouncilSignoff` is missing, the Add-on is flagged as **Unsigned / Dev Mode**.
+- **Integration Schema:** Scans `addon.manifest.json` for validation using the built-in validator (`validateAddonManifest`).
 
 ---
 
@@ -26,8 +26,10 @@ Add-ons follow the PRISM standard defined in `VRGC_ROBOTICS_ADDON_DESIGN_DISCUSS
 We will introduce a new API route handler `AddonsHandler` (`src/core/operator/routes/addons-handler.ts`) supporting the following routes:
 
 ### 3.1 `GET /api/addons/status`
+
 Returns the status of all Add-ons, combining in-memory boot states with live disk states to detect pending changes.
-* **Response Schema:**
+- **Response Schema:**
+
 ```json
 {
   "addons": [
@@ -47,29 +49,33 @@ Returns the status of all Add-ons, combining in-memory boot states with live dis
 ```
 
 ### 3.2 `POST /api/addons/install`
+
 Installs an Add-on from a Local Path, Git Repository, or ZIP URL.
-* **Payload:**
+- **Payload:**
+
 ```json
 {
   "sourceType": "git" | "zip" | "local",
   "pathOrUrl": "https://github.com/..."
 }
 ```
-* **Process:**
+- **Process:**
   1. Downloads/clones/copies files to a temporary location.
   2. Parses and validates `addon.manifest.json`.
   3. Moves/copies the validated files to `addons/<addon-id>`.
   4. Returns `201 Created` with a status indicating restart is required.
 
 ### 3.3 `POST /api/addons/delete`
+
 Uninstalls an Add-on by removing its folder or moving it to a backup directory.
-* **Payload:**
+- **Payload:**
+
 ```json
 {
   "id": "prism.addon.vrgc-robotics"
 }
 ```
-* **Process:**
+- **Process:**
   1. Locates the folder corresponding to the ID under `addons/`.
   2. Moves the folder to `addons/.backup/<id>` (or deletes it permanently).
   3. Returns `200 OK` indicating restart is required.
@@ -81,7 +87,9 @@ Uninstalls an Add-on by removing its folder or moving it to a backup directory.
 We will update the operator dashboard files to display the **Add-ons** panel at the top of the "Tools & Plugins" tab.
 
 ### 4.1 Collapsible Panel (HTML)
+
 Located in `src/core/operator/public/tab-tools.html`:
+
 ```html
 <section class="rail-section panel">
     <div class="collapsible-header" onclick="togglePanelCollapse('addonsPanel')">
@@ -96,7 +104,9 @@ Located in `src/core/operator/public/tab-tools.html`:
 ```
 
 ### 4.2 Interactive Logic (JS)
+
 Located in `src/core/operator/public/tab-tools.js`:
+
 - `renderAddonsPanel()`: Dynamically renders the list of Add-ons.
 - Displays state badges (`Active`, `Error`, `Pending Restart`, `Pending Deletion`).
 - Displays trust badges (`Certified`, `Unsigned / Dev`).

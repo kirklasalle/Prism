@@ -12,17 +12,20 @@ Production-ready Model Context Protocol server for accessing ImpressionCore Docu
 ## Quick Start
 
 ### Prerequisites
+
 - Python 3.8+
 - VS Code with MCP support
 
 ### Installation
 
 1. Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Configure VS Code settings:
+1. Configure VS Code settings:
+
 ```json
 {
   "mcp.servers": {
@@ -35,7 +38,7 @@ pip install -r requirements.txt
 }
 ```
 
-3. Restart VS Code
+1. Restart VS Code
 
 ## Server Files
 
@@ -46,6 +49,7 @@ pip install -r requirements.txt
 ## Development
 
 Development files are organized in subdirectories:
+
 - `development/servers/` - Server version archive
 - `development/tests/` - Test suite
 - `development/utilities/` - Utility scripts
@@ -54,9 +58,11 @@ Development files are organized in subdirectories:
 ## Documentation
 
 Complete documentation has been moved to the main docs directory:
-- **User Guide**: `docs/reference/mcp_server/mcp_server_user_guide.md`
-- **Developer Guide**: `docs/reference/mcp_server/mcp_server_developer_guide.md`
-- **Tool Reference**: `docs/reference/mcp_server/mcp_server_tool_reference.md`
+
+- **API Reference**: `docs/reference/mcp_server/MCP_IDS_API_REFERENCE.md`
+- **Operational Runbook**: `docs/reference/mcp_server/MCP_IDS_OPERATIONAL_RUNBOOK.md`
+- **SAP Alignment**: `docs/reference/mcp_server/MCP_IDS_SAP_ALIGNMENT.md`
+- **Runtime Awareness Framework**: `docs/MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md`
 
 ## Features
 
@@ -68,7 +74,8 @@ Complete documentation has been moved to the main docs directory:
 
 ## Support
 
-See troubleshooting guide: `docs/reference/mcp_server/mcp_server_troubleshooting.md`
+See operational runbook: `docs/reference/mcp_server/MCP_IDS_OPERATIONAL_RUNBOOK.md`
+
    ```bash
    python -c "import yaml; print('Config OK')"
    ```
@@ -78,11 +85,13 @@ See troubleshooting guide: `docs/reference/mcp_server/mcp_server_troubleshooting
 ### Starting the Server
 
 #### Standalone Mode
+
 ```bash
 python server.py
 ```
 
 #### MCP Client Integration
+
 The server implements the MCP protocol and can be integrated with any MCP-compatible client:
 
 ```json
@@ -100,14 +109,17 @@ The server implements the MCP protocol and can be integrated with any MCP-compat
 ### Available Tools
 
 #### 1. `ids_search`
+
 Search through ImpressionCore documentation using the IDS tagging system.
 
 **Parameters**:
+
 - `query` (required): Search query string
 - `tags` (optional): Array of tags to filter results
 - `max_results` (optional): Maximum number of results (default: 10)
 
 **Example**:
+
 ```json
 {
   "name": "ids_search",
@@ -120,12 +132,15 @@ Search through ImpressionCore documentation using the IDS tagging system.
 ```
 
 #### 2. `ids_get_file_info`
+
 Get detailed information about a specific file.
 
 **Parameters**:
+
 - `file_path` (required): Path to the file
 
 **Example**:
+
 ```json
 {
   "name": "ids_get_file_info",
@@ -136,13 +151,16 @@ Get detailed information about a specific file.
 ```
 
 #### 3. `ids_list_tags`
+
 List all available tags in the IDS system.
 
 **Parameters**:
+
 - `category` (optional): Category to filter tags
 - `pattern` (optional): Pattern to match tag names
 
 **Example**:
+
 ```json
 {
   "name": "ids_list_tags",
@@ -154,9 +172,11 @@ List all available tags in the IDS system.
 ```
 
 #### 4. `ids_get_system_status`
+
 Get current status and statistics of the IDS system.
 
 **Example**:
+
 ```json
 {
   "name": "ids_get_system_status",
@@ -164,23 +184,27 @@ Get current status and statistics of the IDS system.
 }
 ```
 
-#### 5. `ids_find_by_tag`
-Find all files associated with specific tags.
+#### 5. `ids_get_documentation_stats`
 
-**Parameters**:
-- `tags` (required): Array of tags to search for
-- `match_all` (optional): Whether to match all tags (AND) or any tag (OR)
+Get aggregate documentation and index statistics for operational visibility.
 
 **Example**:
+
 ```json
 {
-  "name": "ids_find_by_tag",
-  "arguments": {
-    "tags": ["architecture", "core"],
-    "match_all": true
-  }
+  "name": "ids_get_documentation_stats",
+  "arguments": {}
 }
 ```
+
+#### B3 Enhanced automation tools
+
+- `ids_run_header_updater`
+- `ids_run_documentation_indexer`
+- `ids_run_system_validator`
+
+These tools are intended for governed operational workflows and should be
+approval-gated in higher-trust execution profiles.
 
 ## Configuration
 
@@ -222,6 +246,7 @@ The MCP server integrates with the main IDS system:
 - **Reverse Index**: Utilizes `docs/reverse_tag_index.yaml`
 
 ### File Structure
+
 ```
 .mcp/ids-mcp/
 ├── server.py              # Main MCP server implementation
@@ -235,7 +260,7 @@ The MCP server integrates with the main IDS system:
     └── integration_test.py
 ```
 
-## Development
+## Development Architecture & Workflow
 
 ### Project Structure and Development Workflow
 
@@ -254,12 +279,14 @@ The IDS MCP Server follows a modular architecture designed for maintainability a
 ### Testing Framework
 
 #### 1. **MCP Protocol Compliance**
+
 ```bash
 # Test core MCP protocol implementation
 python test_mcp_protocol.py
 ```
 
 **Sample Output**:
+
 ```
 ✅ MCP Protocol Compliance Test Results:
 ┌─────────────────────────────────────────┬────────┐
@@ -274,12 +301,14 @@ python test_mcp_protocol.py
 ```
 
 #### 2. **VS Code Integration Testing**
+
 ```bash
 # Simulate VS Code MCP client behavior
 python test_vscode_integration.py
 ```
 
 **Expected Results**:
+
 ```
 🔧 VS Code Integration Test Results:
 ────────────────────────────────────────────
@@ -300,12 +329,14 @@ python test_vscode_integration.py
 ```
 
 #### 3. **Comprehensive Demonstration**
+
 ```bash
-# Run complete demonstration of all 5 tools
+# Run complete demonstration of core IDS tools
 python comprehensive_demo.py
 ```
 
 This script exercises every tool with real examples and produces detailed output showing:
+
 - Document search with various parameters
 - File metadata retrieval
 - Tag listing and filtering
@@ -317,6 +348,7 @@ This script exercises every tool with real examples and produces detailed output
 #### Adding New Tools
 
 1. **Define the tool** in `handle_list_tools()`:
+
    ```python
    {
        "name": "ids_analyze_content",
@@ -333,12 +365,14 @@ This script exercises every tool with real examples and produces detailed output
    ```
 
 2. **Implement the handler** in `handle_call_tool()`:
+
    ```python
    elif name == "ids_analyze_content":
        return await self.handle_content_analysis(arguments)
    ```
 
 3. **Create the handler method**:
+
    ```python
    async def handle_content_analysis(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
        """Analyze content structure and quality metrics"""
@@ -399,6 +433,7 @@ async def test_new_tool():
 ### Debugging and Diagnostics
 
 #### Enable Debug Logging
+
 ```bash
 # Windows
 set LOG_LEVEL=DEBUG
@@ -410,12 +445,14 @@ python server.py
 ```
 
 #### System Diagnostics
+
 ```bash
 # Run system check script
 python check_system.py
 ```
 
 **Diagnostic Output**:
+
 ```
 🔍 IDS MCP Server System Check
 ════════════════════════════════
@@ -431,6 +468,7 @@ python check_system.py
 ```
 
 #### Performance Monitoring
+
 ```python
 # Built-in performance metrics
 import time
@@ -461,6 +499,7 @@ class PerformanceMonitor:
 ### Integration Testing
 
 #### VS Code Simulation
+
 ```python
 # test_vscode_simulation.py - Complete VS Code workflow test
 async def test_complete_vscode_workflow():
@@ -491,12 +530,14 @@ async def test_complete_vscode_workflow():
 ## Performance
 
 ### Current Metrics
+
 - **Index Size**: 1,667 files indexed
 - **Tag Count**: 2,900+ unique tags
 - **Search Speed**: < 100ms for typical queries
 - **Memory Usage**: ~50MB base memory footprint
 
 ### Optimization Tips
+
 - Use specific tags to filter large result sets
 - Limit `max_results` for faster responses
 - Cache frequently accessed file metadata
@@ -506,16 +547,19 @@ async def test_complete_vscode_workflow():
 ### Common Issues
 
 #### 1. "Enhanced IDS not available"
+
 - Ensure `docs/enhanced_ids.py` exists and is importable
 - Check Python path includes project root
 - Verify all dependencies are installed
 
 #### 2. "Index files not found"
+
 - Confirm IDS indices exist in `docs/` directory
 - Run IDS system to regenerate indices if needed
 - Check file permissions
 
 #### 3. "Import errors"
+
 - Verify virtual environment is activated
 - Install missing dependencies: `pip install -r requirements.txt`
 - Check Python version compatibility (3.8+)
@@ -523,6 +567,7 @@ async def test_complete_vscode_workflow():
 ### Log Analysis
 
 Check `ids_mcp.log` for detailed error information:
+
 ```bash
 tail -f ids_mcp.log
 ```
@@ -568,6 +613,7 @@ This MCP server is part of the ImpressionCore project and follows the same licen
 ## Changelog
 
 ### v1.0.0 (2025-06-05)
+
 - Initial release
 - Full IDS integration
 - Five core tools implemented
@@ -584,6 +630,7 @@ This MCP server is part of the ImpressionCore project and follows the same licen
 ## 🚀 Quick Start
 
 ### One-Command Setup
+
 ```bash
 # Unix/Linux/Mac
 ./quick_start.sh
@@ -593,6 +640,7 @@ quick_start.bat
 ```
 
 ### Essential Commands
+
 ```bash
 # Health check
 python health_check.py
@@ -610,22 +658,26 @@ python test_vscode_integration.py
 ## 🔧 Maintenance and Monitoring
 
 ### Health Monitoring
+
 - **Health Check**: `health_check.py` - Validates server and tool functionality
 - **Performance Monitor**: `performance_monitor.py` - Tracks response times and resource usage
 - **System Status**: Built-in tool provides real-time statistics
 
 ### Log Files
+
 - **Server Logs**: Check terminal output during operation
 - **Performance Metrics**: `performance_metrics.json`
 - **Health Reports**: `health_report.json`
 
 ### Troubleshooting Quick Reference
+
 1. **Server won't start**: Run `python check_system.py`
 2. **Tools not working**: Run `python test_mcp_protocol.py`
 3. **VS Code integration issues**: See `vscode_troubleshooting.md`
 4. **Performance problems**: Run `python performance_monitor.py`
 
 ## 📊 System Statistics (Live)
+
 - **Files Indexed**: 1,667
 - **Metadata Records**: 1,690
 - **Tags Available**: 2,462

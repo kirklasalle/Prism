@@ -50,8 +50,7 @@ export class PluginsHandler implements IRouteHandler {
                 if (body.manifest) {
                     const prefs = readPreferences();
                     const profile = (prefs?.executionProfileSegment === "business" ? "business" : "individual") as
-                        | "individual"
-                        | "business";
+                        "individual" | "business";
                     const result = loadPluginPack(body.manifest, body.packPath ?? ".", service.getActivityBus(), {
                         executionProfile: profile,
                     });

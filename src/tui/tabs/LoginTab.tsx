@@ -72,9 +72,9 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
                 handleLogin();
             }
         } else if (activeIndex === 2) {
-            setEmail("admin@prism.ai");
+            setEmail("prism@prismrefraction.com");
             setPassword("admin");
-            handleLogin("admin@prism.ai", "admin");
+            handleLogin("prism@prismrefraction.com", "admin");
         } else if (activeIndex === 3) {
             setEmail("testing@prism.ai");
             setPassword("testing");
@@ -113,9 +113,9 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
         // Quick profile shortcuts (only if not typing in text fields)
         if (activeIndex !== 0 && activeIndex !== 1) {
             if (input === "a" || input === "A") {
-                setEmail("admin@prism.ai");
+                setEmail("prism@prismrefraction.com");
                 setPassword("admin");
-                handleLogin("admin@prism.ai", "admin");
+                handleLogin("prism@prismrefraction.com", "admin");
             } else if (input === "t" || input === "T") {
                 setEmail("testing@prism.ai");
                 setPassword("testing");
@@ -211,7 +211,7 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
 
                 <Box>
                     <Text color={activeIndex === 2 ? colors.brand : colors.text}>
-                        {activeIndex === 2 ? `${symbols.bullet} ` : "  "}Autofill Admin Profile (admin@prism.ai)
+                        {activeIndex === 2 ? `${symbols.bullet} ` : "  "}Autofill Admin Profile (prism@prismrefraction.com)
                     </Text>
                 </Box>
                 <Box>

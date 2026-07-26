@@ -3,10 +3,11 @@ import { readPreferences } from "../config/workspace-resolver.js";
 import type { PrismCovenant } from "../governance/prism-covenant.js";
 
 // Lazy-load sharp to prevent startup lag
-let sharpModule: typeof import("sharp") | null = null;
-async function getSharp(): Promise<typeof import("sharp")> {
+type SharpFn = import("sharp").SharpConstructor;
+let sharpModule: SharpFn | null = null;
+async function getSharp(): Promise<SharpFn> {
     if (!sharpModule) {
-        sharpModule = (await import("sharp")).default as any;
+        sharpModule = (await import("sharp")).default;
     }
     return sharpModule!;
 }

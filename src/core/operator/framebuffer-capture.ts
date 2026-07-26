@@ -17,8 +17,9 @@ const execFileAsync = promisify(execFile);
 
 // ── Sharp lazy loader (optional dependency) ──────────────────────────────────
 
-let _sharp: typeof import("sharp") | null | undefined;
-async function getSharp(): Promise<typeof import("sharp") | null> {
+type SharpFn = import("sharp").SharpConstructor;
+let _sharp: SharpFn | null | undefined;
+async function getSharp(): Promise<SharpFn | null> {
     if (_sharp !== undefined) return _sharp;
     try {
         _sharp = (await import("sharp")).default;

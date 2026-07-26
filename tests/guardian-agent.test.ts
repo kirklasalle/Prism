@@ -379,7 +379,7 @@ describe("GuardianAgent", () => {
                 fileInfoCalled = true;
                 assert.ok(req.args.file_path);
                 return { ok: true, output: { exists: true } };
-            }
+            },
         } as any;
 
         const mockValidatorTool: Tool = {
@@ -389,7 +389,7 @@ describe("GuardianAgent", () => {
                 validatorCalled = true;
                 assert.equal(req.args.validation_scope, "full");
                 return { ok: true, output: { success: true } };
-            }
+            },
         } as any;
 
         const mockStatusTool: Tool = {
@@ -398,7 +398,7 @@ describe("GuardianAgent", () => {
             async execute(_req: ToolRequest): Promise<ToolResult> {
                 statusCalled = true;
                 return { ok: true, output: { indices_loaded: { file_metadata: 42 } } };
-            }
+            },
         } as any;
 
         const guardianWithMcp = new GuardianAgent(
@@ -410,7 +410,7 @@ describe("GuardianAgent", () => {
                 modelAlias: "test-guardian",
                 autoStart: false,
                 healthCheckIntervalMs: 999999,
-            }
+            },
         );
 
         const result = await guardianWithMcp.runTask("doc_alignment_sentinel");

@@ -1,4 +1,27 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const trackEvent = (eventName, detail = {}) => {
+        const payload = {
+            event: eventName,
+            page: window.location.pathname,
+            ts: new Date().toISOString(),
+            ...detail,
+        };
+
+        if (Array.isArray(window.dataLayer)) {
+            window.dataLayer.push(payload);
+        }
+
+        try {
+            const existing = JSON.parse(sessionStorage.getItem("prism_site_events") || "[]");
+            existing.push(payload);
+            sessionStorage.setItem("prism_site_events", JSON.stringify(existing.slice(-200)));
+        } catch {
+            // No-op if session storage is unavailable.
+        }
+    };
+
     // -------------------------------------------------------------
     // Nav Navigation Active State
     // -------------------------------------------------------------
@@ -33,6 +56,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }, observerOptions);
 
     document.querySelectorAll(".cyber-card").forEach((card) => {
+        if (reducedMotion) {
+            card.style.opacity = "1";
+            card.style.transform = "none";
+            return;
+        }
+
         card.style.opacity = "0";
         card.style.transform = "translateY(15px)";
         card.style.transition =
@@ -58,7 +87,93 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (executeBtn && consoleOutput) {
         executeBtn.addEventListener("click", () => {
+            trackEvent("sim_execute_click", {
+                id: executeBtn.id || "run-sim-btn",
+            });
             runSimulation();
+        });
+    }
+
+    document.querySelectorAll("[data-track]").forEach((element) => {
+        element.addEventListener("click", () => {
+            trackEvent("cta_click", {
+                id: element.id || null,
+                key: element.getAttribute("data-track"),
+                href: element.getAttribute("href") || null,
+            });
+        });
+    });
+
+    const contactForm = document.getElementById("contact-form");
+    const contactStatus = document.getElementById("contact-status");
+    const submitButton = document.getElementById("btn-submit-message");
+
+    if (contactForm) {
+        contactForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!contactForm.checkValidity()) {
+                contactForm.reportValidity();
+                if (contactStatus) {
+                    contactStatus.className = "contact-status error";
+                    contactStatus.textContent = "Please complete all required fields.";
+                }
+                trackEvent("contact_submit_invalid");
+                return;
+            }
+
+            const formData = new FormData(contactForm);
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.textContent = "TRANSMITTING...";
+            }
+
+            if (contactStatus) {
+                contactStatus.className = "contact-status";
+                contactStatus.textContent = "Submitting request...";
+            }
+
+            trackEvent("contact_submit_attempt");
+
+            try {
+                const response = await fetch(contactForm.action || "contact.php", {
+                    method: "POST",
+                    body: formData,
+                    headers: {
+                        Accept: "application/json",
+                    },
+                });
+
+                const data = await response.json().catch(() => ({
+                    ok: false,
+                    message: "Unexpected response from server.",
+                }));
+
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.message || "Unable to submit request.");
+                }
+
+                if (contactStatus) {
+                    contactStatus.className = "contact-status success";
+                    contactStatus.textContent = data.message || "Transmission received.";
+                }
+
+                contactForm.reset();
+                trackEvent("contact_submit_success");
+            } catch (error) {
+                if (contactStatus) {
+                    contactStatus.className = "contact-status error";
+                    contactStatus.textContent = error.message || "Submission failed. Please try again.";
+                }
+                trackEvent("contact_submit_error", {
+                    message: error.message || "unknown",
+                });
+            } finally {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = "TRANSMIT SECURE PAYLOAD";
+                }
+            }
         });
     }
 

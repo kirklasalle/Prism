@@ -430,8 +430,7 @@ export class IamStore {
 
     getUserByEmail(tenantId: string, email: string): IamUser | null {
         const row = this.stmts.getUserByEmail.get({ tenant_id: tenantId, email }) as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
         return row ? this.rowToUser(row) : null;
     }
 

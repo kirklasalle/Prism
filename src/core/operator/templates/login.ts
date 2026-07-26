@@ -309,7 +309,7 @@ export function loginHtml(port: number): string {
         ⚠️ Local evaluation only — do not use these credentials in production or internet-facing deployments. Run the Setup Wizard to create secure operator accounts.
       </div>
       <div class="quick-buttons">
-        <button type="button" class="badge-btn admin" onclick="fillCreds('admin@prism.ai', 'admin')" title="Autofill admin evaluation credentials (local dev only)">
+        <button type="button" class="badge-btn admin" onclick="fillCreds('prism@prismrefraction.com', 'admin')" title="Autofill admin evaluation credentials (local dev only)">
           <span>Admin Profile</span>
         </button>
         <button type="button" class="badge-btn testing" onclick="fillCreds('testing@prism.ai', 'testing')" title="Autofill testing operator credentials (local dev only)">

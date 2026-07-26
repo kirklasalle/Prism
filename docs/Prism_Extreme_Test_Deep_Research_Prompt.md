@@ -1,11 +1,13 @@
 # PRISM Architectural Blueprint & Gemini Deep Research Prompt
+
 ## Extreme Resource-Constrained Agent Systems: The PRISM Base Mode Configuration
 
 This comprehensive document serves as the master blueprint for deploying PRISM in a hardware-constrained edge environment. It integrates your deep hardware profile analysis, subsystem bottlenecks, model candidate evaluations, task degradation protocols, and dynamic routing architectures with our existing PRISM codebase references.
 
 This document is divided into two primary sections:
-*   **PART 1**: The fully-engineered prompt ready to copy and paste directly into **Google Gemini Deep Research** to initiate an exhaustive research and engineering session.
-*   **PART 2**: The core PRISM codebase integrations, subsystem bottleneck telemetry, and architectural blueprints for your local developer reference and repository documentation.
+
+* **PART 1**: The fully-engineered prompt ready to copy and paste directly into **Google Gemini Deep Research** to initiate an exhaustive research and engineering session.
+* **PART 2**: The core PRISM codebase integrations, subsystem bottleneck telemetry, and architectural blueprints for your local developer reference and repository documentation.
 
 ---
 
@@ -117,6 +119,7 @@ This blueprint maps your deep hardware analysis, subsystem bottlenecks, model ca
 ```
 
 ### Critical Bottleneck Analysis Matrix
+
 The following matrix analyzes the physical hardware constraints of your target platform and dictates the strict engineering rules required for PRISM's Base Mode:
 
 | Subsystem Component | Physical Ceiling | Practical Bottleneck | Architectural Engineering Mandate |
@@ -149,7 +152,7 @@ For a model to successfully run within a 2.5GB-3.0GB VRAM envelope while driving
 
 ## 3. The PRISM Base Mode Task Degradation Protocol
 
-When Base Mode is engaged, PRISM enforces strict task pruning. 
+When Base Mode is engaged, PRISM enforces strict task pruning.
 
 ```mermaid
 graph TD
@@ -167,6 +170,7 @@ graph TD
 ```
 
 ### System Prompt Compression Blueprint
+
 Massive system prompts are highly detrimental to small models. Under Base Mode, prompts are compressed to `<500 tokens` using the following structural patterns:
 
 ```
@@ -269,6 +273,7 @@ int_arg    ::= [0-9]+
 ```
 
 ### Native Llama-Server Execution Configuration
+
 When launching the native `llama-server` process under Base Mode constraints, spawn the command using these highly-optimized runtime flags:
 
 ```bash
@@ -286,7 +291,8 @@ llama-server \
 ```
 
 > [!IMPORTANT]
-> - `--threads 4`: Hard-clamped to match the 4 physical CPU cores of the Haswell i5 CPU, eliminating OS scheduling stalls.
-> - `--batch-size 64`: Minimizes CPU L3 cache misses during the prefill validation phase.
-> - `--n-gpu-layers 99`: Forces all layers of the 1.5B model directly into the 1050 Ti VRAM.
-> - Speculative decoding parameters (`--model-draft`) are strictly omitted to prevent VRAM over-allocation.
+>
+> * `--threads 4`: Hard-clamped to match the 4 physical CPU cores of the Haswell i5 CPU, eliminating OS scheduling stalls.
+> * `--batch-size 64`: Minimizes CPU L3 cache misses during the prefill validation phase.
+> * `--n-gpu-layers 99`: Forces all layers of the 1.5B model directly into the 1050 Ti VRAM.
+> * Speculative decoding parameters (`--model-draft`) are strictly omitted to prevent VRAM over-allocation.

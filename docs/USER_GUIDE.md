@@ -252,9 +252,9 @@ Use the **Save** button to persist non-secret settings. Use the **Store API Key*
 - **Routing Topologies**: Switch between Single-Provider, Multi-Provider, and Modality-Based routing.
 - **AI-Assisted Routing**: Enable AI suggestions to auto-assign the most qualified available model to specific task roles (e.g. Chat, Code-generation, Summarization, Research).
 - **Power Profile Modes**: Set system-wide performance targets:
-    - `performance` — Routes to the highest capability tier models available.
-    - `eco` — Prioritizes local open-source models over paid cloud APIs, minimizing outbound API costs.
-    - `adaptive` — Inspects your local hardware VRAM. If local memory is sufficient, it routes tasks locally. If a model threatens to cause an Out-Of-Memory (OOM) crash, it dynamically routes the task to a cloud fallback.
+  - `performance` — Routes to the highest capability tier models available.
+  - `eco` — Prioritizes local open-source models over paid cloud APIs, minimizing outbound API costs.
+  - `adaptive` — Inspects your local hardware VRAM. If local memory is sufficient, it routes tasks locally. If a model threatens to cause an Out-Of-Memory (OOM) crash, it dynamically routes the task to a cloud fallback.
 
 **Settings** — Displays runtime system configuration:
 
@@ -280,9 +280,9 @@ SR panel controls:
 - **Right (Creative) Model**: Select a model qualified for creative synthesis and multimedia. The dropdown filters to creative-modality models via `filterSRCreativeModels()`.
 - **Main (Coordination) Model**: Select the model that will aggregate Left + Right outputs into a unified response.
 - **Isolation Badge**: Displays the current isolation quality level:
-    - 🔒 **Full** — Different providers (strongest isolation: separate API keys, infrastructure, rate limits)
-    - 🔏 **Model** — Same provider, different models (separate capabilities, shared key)
-    - ⛔ **Insufficient** — Same provider + same model (REJECTED — Activate button disabled)
+  - 🔒 **Full** — Different providers (strongest isolation: separate API keys, infrastructure, rate limits)
+  - 🔏 **Model** — Same provider, different models (separate capabilities, shared key)
+  - ⛔ **Insufficient** — Same provider + same model (REJECTED — Activate button disabled)
 - **Cost Advisory**: Estimates per-generation cost based on model pricing.
 - **Activate / Deactivate**: Enable or disable SR mode. Activation re-validates isolation before enabling.
 

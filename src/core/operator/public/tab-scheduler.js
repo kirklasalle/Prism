@@ -9,6 +9,7 @@ let cachedEvents = [];
 let cachedProjects = [];
 let cachedTasks = [];
 let cachedCronJobs = [];
+let cachedSupportTickets = [];
 let modalType = null; // 'event' | 'task' | 'project' | 'cron' | 'project-detail'
 let modalEditId = null;
 
@@ -43,6 +44,13 @@ export function eventsForDate(dateStr) {
     const eStart = (e.start || e.startDate || '').substring(0, 10);
     const eEnd = (e.end || e.endDate || e.start || e.startDate || '').substring(0, 10);
     return dateStr >= eStart && dateStr <= eEnd;
+  });
+}
+
+function incidentTicketsForTask(taskId, projectId) {
+  return cachedSupportTickets.filter((ticket) => {
+    const meta = ticket && ticket.metadata && typeof ticket.metadata === 'object' ? ticket.metadata : {};
+    return String(meta.taskId || '') === String(taskId || '') && String(meta.projectId || '') === String(projectId || '');
   });
 }
 
@@ -92,6 +100,14 @@ export async function refreshSchedulerData() {
   } catch (err) {
     dashboardLog('scheduler', 'scheduler.error', `Failed to load cron jobs: ${err.message}`);
     cachedCronJobs = [];
+  }
+
+  try {
+    const supportData = await request('/api/support/tickets');
+    cachedSupportTickets = Array.isArray(supportData) ? supportData : [];
+  } catch (err) {
+    dashboardLog('scheduler', 'scheduler.error', `Failed to load support tickets: ${err.message}`);
+    cachedSupportTickets = [];
   }
 
   if (indicator) indicator.style.display = 'none';
@@ -437,14 +453,22 @@ export function renderSchedulerBoard() {
     let html = '';
     for (const t of laneTasks) {
       const tid = t.id || t.taskId || '';
+      const incidents = incidentTicketsForTask(tid, t.projectId || '');
+      const openIncidents = incidents.filter((inc) => inc.status !== 'resolved').length;
       html += `<div class="sched-kanban-card" draggable="true" data-task-id="${escapeHtml(tid)}" data-project-id="${escapeHtml(t.projectId || '')}">
         <div class="sched-kanban-card-title">${escapeHtml(t.title || t.name || 'Task')}</div>`;
       if (t.projectName || t.projectId) {
         html += `<div class="sched-kanban-card-project muted">${escapeHtml(t.projectName || t.projectId)}</div>`;
       }
+      if (incidents.length > 0) {
+        html += `<div class="muted" style="font-size:10px;margin-top:5px;">🎫 Incidents: ${incidents.length} total${openIncidents > 0 ? ` · ${openIncidents} open` : ''}</div>`;
+      }
       if (t.assignee) {
         html += `<div class="sched-kanban-card-assignee">👤 ${escapeHtml(t.assignee)}</div>`;
       }
+      html += `<div style="margin-top:8px;display:flex;justify-content:flex-end;">
+        <button class="secondary-button" style="font-size:10px;padding:2px 8px;" onclick="createSupportTicketForTask('${escapeHtml(tid)}','${escapeHtml(t.projectId || '')}','${escapeHtml((t.title || t.name || 'Task'))}')">+ Incident</button>
+      </div>`;
       html += '</div>';
     }
     laneEl.innerHTML = html;
@@ -462,6 +486,37 @@ export function initBoardDragDrop() {
     card.addEventListener('dragend', function () {
       this.style.opacity = '1';
     });
+  }
+}
+
+export async function createSupportTicketForTask(taskId, projectId, taskTitle) {
+  if (!taskId || !projectId) {
+    dashboardLog('scheduler', 'scheduler.error', 'Task/project reference missing for incident creation');
+    return;
+  }
+  try {
+    const ticketTitle = `[Scheduler] ${taskTitle || 'Task incident'}`;
+    const ticketDescription = `Incident created from Scheduler board for task ${taskId} in project ${projectId}.`;
+    await request('/api/support/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: ticketTitle,
+        description: ticketDescription,
+        source: 'scheduler',
+        severity: 'medium',
+        status: 'open',
+        metadata: {
+          linkedFrom: 'scheduler-board',
+          taskId,
+          projectId,
+        },
+      }),
+    });
+    dashboardLog('scheduler', 'scheduler.incident.created', `Created support ticket for task ${taskId}`);
+    await refreshSchedulerData();
+  } catch (err) {
+    dashboardLog('scheduler', 'scheduler.error', `Failed to create support incident: ${err.message}`);
   }
 }
 
@@ -863,6 +918,7 @@ export async function initSchedulerTab() {
   window.schedCalNav = schedCalNav;
   window.setCalMode = setCalMode;
   window.ganttNav = ganttNav;
+  window.createSupportTicketForTask = createSupportTicketForTask;
 
   // Single delegated drag-and-drop listener setup on Kanban board container to prevent memory leaks
   const boardViewEl = document.getElementById('sched-view-board');

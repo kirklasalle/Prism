@@ -154,18 +154,26 @@ describe("Robotics Add-on Integration", function () {
     });
 
     it("POST /api/addons/vrgc-robotics/entities/vrgc-arm-test/transition updates entity status", async () => {
-        const { status, body } = await requestJson("POST", "/api/addons/vrgc-robotics/entities/vrgc-arm-test/transition", {
-            status: "provisioned",
-        });
+        const { status, body } = await requestJson(
+            "POST",
+            "/api/addons/vrgc-robotics/entities/vrgc-arm-test/transition",
+            {
+                status: "provisioned",
+            },
+        );
         assert.strictEqual(status, 200);
         assert.ok(body.entity);
         assert.strictEqual(body.entity.status, "provisioned");
     });
 
     it("POST /api/addons/vrgc-robotics/entities/vrgc-arm-test/transition rejects invalid transition", async () => {
-        const { status, body } = await requestJson("POST", "/api/addons/vrgc-robotics/entities/vrgc-arm-test/transition", {
-            status: "operational", // registered -> provisioned is okay, but provisioned -> operational is not allowed (must go to training first)
-        });
+        const { status, body } = await requestJson(
+            "POST",
+            "/api/addons/vrgc-robotics/entities/vrgc-arm-test/transition",
+            {
+                status: "operational", // registered -> provisioned is okay, but provisioned -> operational is not allowed (must go to training first)
+            },
+        );
         assert.strictEqual(status, 400);
         assert.ok(body.error);
         assert.ok(body.error.includes("Invalid transition"));

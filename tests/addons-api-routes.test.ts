@@ -46,13 +46,13 @@ const VALID_MANIFEST_1 = {
         guardianSkills: [],
         policyExtensions: [],
         skillDefinitions: [],
-        adapterBridges: []
+        adapterBridges: [],
     },
     dependencies: {
         addons: [],
         plugins: [],
-        systemCapabilities: []
-    }
+        systemCapabilities: [],
+    },
 };
 
 const VALID_MANIFEST_2 = {
@@ -73,13 +73,13 @@ const VALID_MANIFEST_2 = {
         guardianSkills: [],
         policyExtensions: [],
         skillDefinitions: [],
-        adapterBridges: []
+        adapterBridges: [],
     },
     dependencies: {
         addons: [],
         plugins: [],
-        systemCapabilities: []
-    }
+        systemCapabilities: [],
+    },
 };
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -191,18 +191,18 @@ describe("Add-ons API Routes (/api/addons/*)", function () {
                         governance: {
                             min_policy_tier: "tier-2",
                             required_approvals: [],
-                            covenant_rules: ["Rule 1"]
+                            covenant_rules: ["Rule 1"],
                         },
                         triad_templates: {
                             left_hemisphere: "left template",
                             right_hemisphere: "right template",
-                            main_hemisphere: "main template"
+                            main_hemisphere: "main template",
                         },
                         workflow: {
-                            steps: []
-                        }
-                    }
-                })
+                            steps: [],
+                        },
+                    },
+                }),
             } as any;
         };
 
@@ -240,10 +240,7 @@ describe("Add-ons API Routes (/api/addons/*)", function () {
         // Create a fake addon on disk with a valid manifest
         const fakeAddonPath = join(tmpDir, "addons", "prism.addon.testaddon");
         fs.mkdirSync(fakeAddonPath, { recursive: true });
-        fs.writeFileSync(
-            join(fakeAddonPath, "addon.manifest.json"),
-            JSON.stringify(VALID_MANIFEST_1)
-        );
+        fs.writeFileSync(join(fakeAddonPath, "addon.manifest.json"), JSON.stringify(VALID_MANIFEST_1));
 
         const { status, body } = await fetchJson("/api/addons/status");
         assert.strictEqual(status, 200);
@@ -257,7 +254,10 @@ describe("Add-ons API Routes (/api/addons/*)", function () {
 
     it("POST /api/addons/toggle disables and enables an addon", async () => {
         // Toggle disable
-        const toggleRes1 = await requestJson("POST", "/api/addons/toggle", { id: "prism.addon.testaddon", enabled: false });
+        const toggleRes1 = await requestJson("POST", "/api/addons/toggle", {
+            id: "prism.addon.testaddon",
+            enabled: false,
+        });
         assert.strictEqual(toggleRes1.status, 200);
         assert.strictEqual(toggleRes1.body.success, true);
         assert.strictEqual(toggleRes1.body.enabled, false);
@@ -268,7 +268,10 @@ describe("Add-ons API Routes (/api/addons/*)", function () {
         assert.strictEqual(addon1.enabled, false);
 
         // Toggle enable
-        const toggleRes2 = await requestJson("POST", "/api/addons/toggle", { id: "prism.addon.testaddon", enabled: true });
+        const toggleRes2 = await requestJson("POST", "/api/addons/toggle", {
+            id: "prism.addon.testaddon",
+            enabled: true,
+        });
         assert.strictEqual(toggleRes2.status, 200);
         assert.strictEqual(toggleRes2.body.enabled, true);
 
@@ -281,14 +284,11 @@ describe("Add-ons API Routes (/api/addons/*)", function () {
     it("POST /api/addons/install copies a local addon", async () => {
         // Create an external addon to install
         const extDir = fs.mkdtempSync(join(tmpdir(), "prism-addon-ext-"));
-        fs.writeFileSync(
-            join(extDir, "addon.manifest.json"),
-            JSON.stringify(VALID_MANIFEST_2)
-        );
+        fs.writeFileSync(join(extDir, "addon.manifest.json"), JSON.stringify(VALID_MANIFEST_2));
 
         const { status, body } = await requestJson("POST", "/api/addons/install", {
             sourceType: "local",
-            pathOrUrl: extDir
+            pathOrUrl: extDir,
         });
 
         assert.strictEqual(status, 201, `Failed to install local addon: ${JSON.stringify(body)}`);
@@ -336,11 +336,11 @@ describe("Add-ons API Routes (/api/addons/*)", function () {
             logLevel: "debug",
             threadMode: "child_process",
             mcpPort: 9001,
-            customEnvironment: { "TEST_VAR": "hello" }
+            customEnvironment: { TEST_VAR: "hello" },
         };
         const postRes = await requestJson("POST", "/api/addons/settings", {
             id: "prism.addon.installedaddon",
-            settings: updatedSettings
+            settings: updatedSettings,
         });
         assert.strictEqual(postRes.status, 200);
         assert.strictEqual(postRes.body.success, true);
@@ -369,7 +369,7 @@ describe("Add-ons API Routes (/api/addons/*)", function () {
         const backupParentDir = join(tmpDir, "addons", ".backup");
         assert.ok(fs.existsSync(backupParentDir), "backup directory should exist");
         const backups = fs.readdirSync(backupParentDir);
-        const hasBackup = backups.some(name => name.startsWith("prism.addon.testaddon-"));
+        const hasBackup = backups.some((name) => name.startsWith("prism.addon.testaddon-"));
         assert.ok(hasBackup, "backup of deleted addon should exist");
     });
 });

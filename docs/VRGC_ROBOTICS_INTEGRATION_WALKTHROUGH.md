@@ -8,31 +8,31 @@ The VRGC Robotics Add-on has been integrated into the PRISM Operator Console. Th
 
 - **File:** [dashboard-core.js](file:///d:/Projects/Prism/src/core/operator/public/dashboard-core.js)
 - **Changes:**
-    - Appended `roboticsMainCollapsed`, `roboticsEntities`, `roboticsStats`, and `roboticsIntegrations` to the global `state` object.
-    - Added the `{ id: "robotics", label: "Robotics Entity" }` entry to the main `tabs` array between "Network" and "Telemetry".
+  - Appended `roboticsMainCollapsed`, `roboticsEntities`, `roboticsStats`, and `roboticsIntegrations` to the global `state` object.
+  - Added the `{ id: "robotics", label: "Robotics Entity" }` entry to the main `tabs` array between "Network" and "Telemetry".
 
 ### 2. Main Operator Console Template
 
 - **File:** [dashboard.ts](file:///d:/Projects/Prism/src/core/operator/templates/dashboard.ts)
 - **Changes:**
-    - Inserted the tab-button `<button id="tab-button-robotics" ...>` into the `#tabs` list.
-    - Inserted the tab-panel container `<section id="tab-robotics" ...>` into the workspace layout.
-    - Loaded the additive client controller: `<script type="module" src="/public/tab-robotics.js"></script>`.
+  - Inserted the tab-button `<button id="tab-button-robotics" ...>` into the `#tabs` list.
+  - Inserted the tab-panel container `<section id="tab-robotics" ...>` into the workspace layout.
+  - Loaded the additive client controller: `<script type="module" src="/public/tab-robotics.js"></script>`.
 
 ### 3. Application Lifecycle Wires
 
 - **File:** [dashboard-app.js](file:///d:/Projects/Prism/src/core/operator/public/dashboard-app.js)
 - **Changes:**
-    - Imported `initRoboticsTab` and `renderRobotics` from `./tab-robotics.js`.
-    - Hooked `safeRenderStep('robotics', renderRobotics)` into the global `render()` sequence.
-    - Added tab initialization hook to `setActiveTab()` to lazily invoke `initRoboticsTab()` upon entering the Robotics tab.
+  - Imported `initRoboticsTab` and `renderRobotics` from `./tab-robotics.js`.
+  - Hooked `safeRenderStep('robotics', renderRobotics)` into the global `render()` sequence.
+  - Added tab initialization hook to `setActiveTab()` to lazily invoke `initRoboticsTab()` upon entering the Robotics tab.
 
 ### 4. Core Addon Path & Type Corrections
 
 - **File:** [robotics-entity-registry.ts](file:///d:/Projects/Prism/addons/prism-addon-vrgc-robotics/src/adapter/robotics-entity-registry.ts)
 - **Changes:**
-    - Fixed relative path import: changed `../../src/core/addons/types.js` to `../../../../src/core/addons/types.js` to match project structure.
-    - Explicitly typed `byStatus` and `byType` mappings as `Record<RoboticsEntityStatus, number>` and `Record<RoboticsEntityType, number>` respectively to satisfy type-checking indexing constraints.
+  - Fixed relative path import: changed `../../src/core/addons/types.js` to `../../../../src/core/addons/types.js` to match project structure.
+  - Explicitly typed `byStatus` and `byType` mappings as `Record<RoboticsEntityStatus, number>` and `Record<RoboticsEntityType, number>` respectively to satisfy type-checking indexing constraints.
 
 ---
 

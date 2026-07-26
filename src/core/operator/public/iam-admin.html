@@ -1783,6 +1783,9 @@
                                     <button class="btn-action-small" onclick="viewCacChain('${a.assignmentId}', '${escapeHtml(a.characterId)}')">
                                         Audit Chain
                                     </button>
+                                    <button class="btn-action-small danger" onclick="deleteCacAssignment('${a.assignmentId}', '${escapeHtml(a.characterId)}')" title="Delete Assignment">
+                                        <svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                    </button>
                                 </td>
                             </tr>
                         `;
@@ -1862,6 +1865,21 @@
                 } catch (err) {
                     toast("Failed to load CAC chain: " + err.message, "error");
                     closeModal("cac-timeline-modal");
+                }
+            }
+
+            window.deleteCacAssignment = async function(assignmentId, characterId) {
+                if (confirm(`CRITICAL DELETION: Are you sure you want to permanently delete the character assignment for "${characterId}"? This action is irreversible.`)) {
+                    try {
+                        await api("/api/workspace/character-assignment-delete", {
+                            method: "POST",
+                            body: JSON.stringify({ assignmentId })
+                        });
+                        toast("Character assignment permanently deleted.", "success");
+                        await refreshCacList();
+                    } catch (err) {
+                        toast("Delete failed: " + err.message, "error");
+                    }
                 }
             }
 

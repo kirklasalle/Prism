@@ -541,21 +541,6 @@ async function main(): Promise<void> {
     // Late-bind the dashboard service into the workflow-demo action's hooks so
     // the demo can broadcast a UI tour and fire real BUA/CUA probes.
     resolveDashboardService!(dashboardService);
-    console.log("=".repeat(60));
-    console.log("  PRISM RUNTIME -- Session:", sessionId);
-    console.log("  Environment profile:", environmentProfile);
-    console.log("  Execution profile:", describeExecutionProfileResolution(executionProfile, environmentProfile));
-    console.log("  Mode:", runtimeMode);
-    console.log("  Dashboard:", `http://localhost:${dashboardPort}`);
-    console.log(
-        "  Self-review intervals:",
-        `daily=${selfReviewConfiguration.intervalsMs.daily}ms weekly=${selfReviewConfiguration.intervalsMs.weekly}ms monthly=${selfReviewConfiguration.intervalsMs.monthly}ms`,
-    );
-    console.log("=".repeat(60));
-
-    for (const warning of selfReviewConfiguration.warnings) {
-        console.warn("[PRISM][self-review]", warning);
-    }
 
     // ── Build AppContext for mode dispatch ────────────────────────────────────
     const ctx: AppContext = {

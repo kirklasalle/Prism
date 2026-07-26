@@ -248,22 +248,28 @@ graph TD
     G --> G2[Fallback: Spawn low-thread llama-server with --flash-attn]
 ```
 
-## A. Enhancements to Research & Implement:
+## A. Enhancements to Research & Implement
 
 ### 1. Dynamic Routing & Context-Passing ("Co-existence")
+
 Rather than maintaining two active `llama-server` instances in memory (which easily breaches 2GB VRAM due to duplicate runtime libraries and KV caches), PRISM's "Base Mode" should implement a **Single-Slot Sequential Runner (SSSR)**:
-- **Concept**: A single running slot in `llama-cpp-supervisor` serves both the Guardian and the Main LLM. 
+
+- **Concept**: A single running slot in `llama-cpp-supervisor` serves both the Guardian and the Main LLM.
 - **Mechanism**: The supervisor hosts the model (e.g., `Qwen-2.5-Coder-1.5B-Q4_K_M` or `Gemma-3-1B`). When the Guardian needs to run a health check, its context is swapped into the KV cache. Once complete, the main agent loop context is loaded.
 - **Optimization**: This requires high-performance **KV Cache swapping** or aggressive **Prompt Caching** (prefix caching) in `llama.cpp` to ensure context swaps do not trigger massive time-to-first-token (TTFT) delays.
 
 ### 2. Intelligent Ollama / Llama.cpp Autonomic Integration
+
 PRISM must dynamically query Ollama first. If Ollama is running and has the target model resident in memory, PRISM routes requests to the local Ollama API to conserve local compute processes. If Ollama is absent or cold:
+
 - Spawns `llama-server` natively with thread count mapped to CPU physical cores (`-t`).
 - Uses `--flash-attn` and `--n-gpu-layers` to offload exactly as much of the model to VRAM as fits under the threshold.
 - Employs quantization formats like **IQ4_XS** or **IQ3_XXS** for the main model, and potentially a **100M draft model** (e.g., mobiley-100m) for speculative decoding.
 
 ### 3. Radical Prompt Slicing & Task Pruning
+
 In Base Mode, the Guardian cannot run 17 distinct diagnostics tasks every few minutes. PRISM must automatically engage a **Task-Degradation Protocol**:
+
 - **Critical Tasks Retained**:
   - `directive_integrity` (Security: ensuring directives are not tampered with).
   - `mcp_health_recovery` (Connectivity: keeping tools accessible).
@@ -278,6 +284,7 @@ In Base Mode, the Guardian cannot run 17 distinct diagnostics tasks every few mi
 # PART 4: RECOMMENDED DEEP RESEARCH STRATEGIES
 
 When reviewing the output of Gemini's Deep Research, pay close attention to:
+
 1. **Model IQ vs Size**: Which 1.5B model scores highest on tool-calling under constrained quantizations? (Typically Qwen 2.5 Coder 1.5B, but Gemma 3 1B/4B should be researched closely).
 2. **Speculative Decoding Overhead**: Does speculative decoding actually save time when VRAM is tight, or does loading the draft model's weights push the VRAM footprint past the critical 2GB barrier?
 3. **KV Cache Compression**: Research techniques like grouped-query attention (GQA) and Multi-Query Attention (MQA) which are native to these tiny models, and how context size constraints (e.g. capping `num_ctx` to `2048`) saves hundreds of megabytes of VRAM.

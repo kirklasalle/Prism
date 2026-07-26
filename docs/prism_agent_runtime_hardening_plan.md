@@ -75,38 +75,38 @@ graph TD
 ### Phase 1: Cryptographic Runtime Enforcement (Active Memory Protection)
 
 - **Task 1.1: Millisecond-level Prompt Hashing**
-    - _Implementation:_ Inject a SHA-256 verification step directly inside `LlmProviderManager.generate` in [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts).
-    - _Details:_ Recompute the SHA-256 hash of the active directives string in memory at runtime and compare it against the frozen `DIRECTIVE_SHA256` constant. Throw a blocking error if a mismatch is detected.
+  - _Implementation:_ Inject a SHA-256 verification step directly inside `LlmProviderManager.generate` in [llm-provider-manager.ts](file:///d:/Projects/Prism/src/core/operator/llm-provider-manager.ts).
+  - _Details:_ Recompute the SHA-256 hash of the active directives string in memory at runtime and compare it against the frozen `DIRECTIVE_SHA256` constant. Throw a blocking error if a mismatch is detected.
 - **Task 1.2: Software-based RAM Protection**
-    - _Implementation:_ Freeze directive constants using `Object.freeze` in [directive-integrity.ts](file:///d:/Projects/Prism/src/core/security/directive-integrity.ts).
-    - _Details:_ Ensure the loaded directives string, the expected hash, and the metadata results are immutable.
+  - _Implementation:_ Freeze directive constants using `Object.freeze` in [directive-integrity.ts](file:///d:/Projects/Prism/src/core/security/directive-integrity.ts).
+  - _Details:_ Ensure the loaded directives string, the expected hash, and the metadata results are immutable.
 
 ### Phase 2: CCC Suspended State Rehydration
 
 - **Task 2.1: Pre-flight Environmental Snapshots**
-    - _Implementation:_ Modify `CausalCompiler` in [compiler.ts](file:///d:/Projects/Prism/src/core/incubation/ccc/compiler.ts).
-    - _Details:_ Take a state/environment snapshot (filesystem flags, database connections, active files) before suspending a Tier 3 action.
+  - _Implementation:_ Modify `CausalCompiler` in [compiler.ts](file:///d:/Projects/Prism/src/core/incubation/ccc/compiler.ts).
+  - _Details:_ Take a state/environment snapshot (filesystem flags, database connections, active files) before suspending a Tier 3 action.
 - **Task 2.2: Rehydration & Revalidation Sequence**
-    - _Implementation:_ Update execution logic in [enforcer.ts](file:///d:/Projects/Prism/src/core/incubation/ccc/enforcer.ts).
-    - _Details:_ Upon operator approval, compare the current environment with the snapshot. If the environment has drifted beyond acceptable thresholds, force a recompile of the remaining execution graph.
+  - _Implementation:_ Update execution logic in [enforcer.ts](file:///d:/Projects/Prism/src/core/incubation/ccc/enforcer.ts).
+  - _Details:_ Upon operator approval, compare the current environment with the snapshot. If the environment has drifted beyond acceptable thresholds, force a recompile of the remaining execution graph.
 
 ### Phase 3: Spectrum Refraction Cognitive Isolation
 
 - **Task 3.1: Antagonistic Prompt Enforcement**
-    - _Implementation:_ Update specialization profiles in [sr-hemisphere-profiles.ts](file:///d:/Projects/Prism/src/core/operator/sr-hemisphere-profiles.ts) and [model-capability-matrix.ts](file:///d:/Projects/Prism/src/core/operator/model-capability-matrix.ts).
-    - _Details:_ Refine the left hemisphere system prompt to mandate step-by-step logical proofs and formal deduction. Refine the right hemisphere prompt to explicitly bar deductive/code patterns, forcing lateral, associative reasoning.
+  - _Implementation:_ Update specialization profiles in [sr-hemisphere-profiles.ts](file:///d:/Projects/Prism/src/core/operator/sr-hemisphere-profiles.ts) and [model-capability-matrix.ts](file:///d:/Projects/Prism/src/core/operator/model-capability-matrix.ts).
+  - _Details:_ Refine the left hemisphere system prompt to mandate step-by-step logical proofs and formal deduction. Refine the right hemisphere prompt to explicitly bar deductive/code patterns, forcing lateral, associative reasoning.
 - **Task 3.2: Taxonomy Distance & Architecture Warning**
-    - _Implementation:_ Update `normalizeSRConfig` in [model-capability-matrix.ts](file:///d:/Projects/Prism/src/core/operator/model-capability-matrix.ts).
-    - _Details:_ Add an architectural kinship matrix (mapping model families like GPT, Claude, Gemini, Llama). If selected models have a kinship score > 0.8, generate a warning event to the activity bus alerting the operator of potential correlation.
+  - _Implementation:_ Update `normalizeSRConfig` in [model-capability-matrix.ts](file:///d:/Projects/Prism/src/core/operator/model-capability-matrix.ts).
+  - _Details:_ Add an architectural kinship matrix (mapping model families like GPT, Claude, Gemini, Llama). If selected models have a kinship score > 0.8, generate a warning event to the activity bus alerting the operator of potential correlation.
 
 ### Phase 4: Self-Healing Bounded Recovery & Risk Escalation
 
 - **Task 4.1: Bounded Repair Depth Limit**
-    - _Implementation:_ Modify `SelfHealingWorkflowSynthesizer` in [synthesizer.ts](file:///d:/Projects/Prism/src/core/incubation/shws/synthesizer.ts).
-    - _Details:_ Track execution retry depth in the context. Throw a hard failure once depth exceeds 3 recursive repair attempts.
+  - _Implementation:_ Modify `SelfHealingWorkflowSynthesizer` in [synthesizer.ts](file:///d:/Projects/Prism/src/core/incubation/shws/synthesizer.ts).
+  - _Details:_ Track execution retry depth in the context. Throw a hard failure once depth exceeds 3 recursive repair attempts.
 - **Task 4.2: Aggregate Risk Scoring & Upgrade Gate**
-    - _Implementation:_ Update `PolicyValidator` in [policy-validator.ts](file:///d:/Projects/Prism/src/core/incubation/shws/policy-validator.ts).
-    - _Details:_ Evaluate the cumulative risk of all actions in the repair chain. If the combined actions match the signature of a protected Tier 3 resource deletion/alteration, upgrade the plan's security tier to Tier 3.
+  - _Implementation:_ Update `PolicyValidator` in [policy-validator.ts](file:///d:/Projects/Prism/src/core/incubation/shws/policy-validator.ts).
+  - _Details:_ Evaluate the cumulative risk of all actions in the repair chain. If the combined actions match the signature of a protected Tier 3 resource deletion/alteration, upgrade the plan's security tier to Tier 3.
 
 ---
 
@@ -126,21 +126,21 @@ To ensure the highest standard of verification, we will construct new Scenario t
 ## 5. Implementation Todos & Action Items Checklist
 
 - [ ] **Pillar 1: Cryptographic Runtime Enforcement**
-    - [ ] Implement `Object.freeze` on directive parameters.
-    - [ ] Inject `verifyDirectiveIntegrity` inside `LlmProviderManager.generate`.
-    - [ ] Write and verify PTAC Scenario `s30-continuous-pad-verify`.
+  - [ ] Implement `Object.freeze` on directive parameters.
+  - [ ] Inject `verifyDirectiveIntegrity` inside `LlmProviderManager.generate`.
+  - [ ] Write and verify PTAC Scenario `s30-continuous-pad-verify`.
 - [ ] **Pillar 2: CCC Suspended State Rehydration**
-    - [ ] Add pre-flight snapshots to the causal graph.
-    - [ ] Build drift checking logic in the enforcer.
-    - [ ] Write and verify PTAC Scenario `s31-ccc-state-rehydration`.
+  - [ ] Add pre-flight snapshots to the causal graph.
+  - [ ] Build drift checking logic in the enforcer.
+  - [ ] Write and verify PTAC Scenario `s31-ccc-state-rehydration`.
 - [ ] **Pillar 3: Spectrum Refraction Isolation**
-    - [ ] Restructure left/right prompts to enforce antagonistic deduction limits.
-    - [ ] Build model family kinship mapping and add warnings.
-    - [ ] Write and verify PTAC Scenario `s32-sr-antagonistic-prompts`.
+  - [ ] Restructure left/right prompts to enforce antagonistic deduction limits.
+  - [ ] Build model family kinship mapping and add warnings.
+  - [ ] Write and verify PTAC Scenario `s32-sr-antagonistic-prompts`.
 - [ ] **Pillar 4: Self-Healing Workflow Synthesis**
-    - [ ] Cap recursive recovery cycles at 3 attempts.
-    - [ ] Add aggregate risk scoring to the policy validator.
-    - [ ] Write and verify PTAC Scenario `s33-self-healing-escalation`.
+  - [ ] Cap recursive recovery cycles at 3 attempts.
+  - [ ] Add aggregate risk scoring to the policy validator.
+  - [ ] Write and verify PTAC Scenario `s33-self-healing-escalation`.
 
 ---
 
