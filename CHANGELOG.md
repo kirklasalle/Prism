@@ -17,8 +17,8 @@ Remediates all 26 security vulnerabilities (0 remaining in npm audit), cleans up
   - Upgraded `sharp` to `^0.35.3` to remediate 4 high-severity libvips CVEs (CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591).
   - Upgraded `nyc` to `^18.0.0` (upgrading internal `glob` to `^13` and `rimraf` to `^6`).
   - Upgraded `mocha` to `^11.7.6` and `markdownlint-cli2` to `^0.23.1`.
-  - Added targeted package overrides for `brace-expansion`, `diff`, `esbuild`, `glob`, `ip-address`, `qs`, `tar`, and `uuid`.
-  - Audited via `npm audit` — **0 vulnerabilities**.
+  - Added targeted package overrides for `brace-expansion`, `diff`, `esbuild`, `glob`, `ip-address`, `js-yaml` (^5.2.2), `node-domexception`, `prebuild-install`, `qs`, `tar`, and `uuid`.
+  - Audited via `npm audit` — **0 vulnerabilities**, **0 deprecation warnings**.
 
 ### Fixed
 
