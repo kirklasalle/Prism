@@ -95,8 +95,13 @@ echo [INFO] Spawning server in a separate window. If it crashes or has errors, t
 start "PRISM Individual Server" cmd /c npm start
 
 echo [WAIT] Waiting for server on port %PRISM_DASHBOARD_PORT%...
-REM ── Wait for startup ──────────────────────────────────────────────────
+set WAIT_COUNT=0
 :wait_loop
+set /a WAIT_COUNT+=1
+if %WAIT_COUNT% gtr 30 (
+  echo [ERROR] Server failed to start on port %PRISM_DASHBOARD_PORT% within 30 seconds.
+  goto :fail
+)
 timeout /t 1 /nobreak >nul
 powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %PRISM_DASHBOARD_PORT% -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
 if %errorlevel% equ 0 goto :server_ready

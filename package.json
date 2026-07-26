@@ -99,7 +99,7 @@
         "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
         "format": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
         "format:fix": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
-        "prepare": "husky"
+        "prepare": "node -e \"if (require('fs').existsSync('.git')) require('child_process').execSync('husky')\""
     },
     "dependencies": {
         "@types/react": "^18.3.28",
@@ -164,9 +164,7 @@
         "esbuild": "^0.28.1",
         "glob": "^13.0.0",
         "ip-address": "^10.3.1",
-        "js-yaml": "^5.2.2",
-        "node-domexception": "npm:null@*",
-        "prebuild-install": "npm:null@*",
+        "js-yaml": "^4.1.0",
         "protobufjs": "^7.6.3",
         "qs": "^6.15.3",
         "serialize-javascript": "^7.0.5",

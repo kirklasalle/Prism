@@ -17,11 +17,13 @@ Remediates all 26 security vulnerabilities (0 remaining in npm audit), cleans up
   - Upgraded `sharp` to `^0.35.3` to remediate 4 high-severity libvips CVEs (CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591).
   - Upgraded `nyc` to `^18.0.0` (upgrading internal `glob` to `^13` and `rimraf` to `^6`).
   - Upgraded `mocha` to `^11.7.6` and `markdownlint-cli2` to `^0.23.1`.
-  - Added targeted package overrides for `brace-expansion`, `diff`, `esbuild`, `glob`, `ip-address`, `js-yaml` (^5.2.2), `node-domexception`, `prebuild-install`, `qs`, `tar`, and `uuid`.
-  - Audited via `npm audit` — **0 vulnerabilities**, **0 deprecation warnings**.
+  - Added targeted package overrides for `brace-expansion`, `diff`, `esbuild`, `glob`, `ip-address`, `js-yaml` (^4.1.0), `qs`, `tar`, and `uuid`.
+  - Audited via `npm audit` — **0 vulnerabilities**.
 
 ### Fixed
 
+- **Server Launch Hang & Gray-Matter Compatibility (`package.json`)**: Configured `"js-yaml": "^4.1.0"` override to preserve `yaml.safeLoad` required by `gray-matter@4.0.3`, eliminating runtime startup crashes. Added 30-second bounded timeouts to launcher scripts (`start_individual.bat`, `start_enterprise.bat`).
+- **Non-Git Installation Guard (`package.json`)**: Updated `"prepare"` script to guard `husky` execution with a `.git` directory check, preventing `fatal: not in a git directory` when installing from zip/tarball exports.
 - **ESLint v9 Flat Config Migration (`eslint.config.js`, `.eslintrc.json`, `package.json`)**: Migrated linting toolchain from legacy `.eslintrc.json` to ESLint v9 Flat Config (`eslint.config.js`), eliminating `eslint@8.57.1`, `@humanwhocodes/*`, and `rimraf@3` npm deprecation warnings.
 - **Sharp 0.35 Type Compatibility (`src/core/operator/framebuffer-capture.ts`, `src/core/operator/sshp-interceptor.ts`)**: Updated Sharp lazy-loader typing to `SharpConstructor` compatible with `sharp@0.35`.
 - **LLM Provider Preference Order (`src/core/operator/llm-provider-manager.ts`)**: Ensured runtime environment variable `PRISM_LLM_PROVIDER` takes precedence over stale disk preference files.
