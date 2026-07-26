@@ -2,7 +2,7 @@
   <img src="https://img.shields.io/badge/version-0.22.4-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
-  <img src="https://img.shields.io/badge/tests-195_discovered_suites_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-195_discovered_suites-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
   <img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&labelColor=0a0a0f" alt="CI" />
 </p>
 <p align="center">
@@ -208,10 +208,10 @@ PRISM features a secure, operator-controlled, and autonomously monitored update 
 - **Guardian-Assisted Update Detection**: The Guardian Agent schedules periodic remote checks to query for update availability and alerts the operator on the console in real-time.
 - **One-Click Secure Execution**: Operators can invoke updating via a single click in the sidebar, which spawns the out-of-process update orchestrator (`scripts/prism-update.cjs`).
 - **Safety First (Backup, Auditing, & Fallback)**:
-  - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
-  - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.
-  - Automatically verifies download signature integrity and compile validity post-update.
-  - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
+    - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
+    - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.
+    - Automatically verifies download signature integrity and compile validity post-update.
+    - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
 
 ### 12. Add-on Architecture — Deep System Integrations
 
@@ -331,7 +331,7 @@ Provider/model choice is persisted per chat session. Secure API key storage uses
 
 PRISM maintains one of the most comprehensive test suites in the agentic software ecosystem:
 
-- **195 auto-discovered test suites passing** covering unit, integration, E2E, security, and governance scenarios
+- **195 auto-discovered test suites** covering unit, integration, E2E, security, and governance scenarios
 - **7 GitHub Actions workflows**: CI, CodeQL, Docker publish, Helm publish, nightly, quality gates, release
 - **Multi-platform CI matrix**: Ubuntu + Windows, Node.js 22 + 23
 - **9 CI qualification gates** including PAD integrity, plugin signing, directive tests, security tests, governance tests
@@ -399,20 +399,20 @@ Override with `PRISM_WORKSPACE_ROOT`. Your data never touches the source directo
 
 PRISM ships with **90+ documentation files** covering every aspect of the platform:
 
-| Document                                     | Purpose                                           |
-| :------------------------------------------- | :------------------------------------------------ |
-| [Product Requirements](docs/PRISM_PRD.md)    | Full PRD with feature specifications              |
-| [Developer Guide](docs/DEVELOPER_GUIDE.md)   | Development workflows and implementation guidance |
-| [User Guide](docs/USER_GUIDE.md)             | Operator-facing usage and controls                |
-| [Getting Started](docs/GETTING_STARTED.md)   | First-time setup walkthrough                      |
-| [Roadmap](docs/ROADMAP.md)                   | Milestones and delivery sequence                  |
-| [Test Strategy](docs/TEST_STRATEGY.md)       | Testing philosophy and coverage                   |
-| [Security](SECURITY.md)                      | Vulnerability reporting and security policy       |
-| [Contributing](CONTRIBUTING.md)              | Contribution guidelines                           |
-| [FAQ](docs/PRISM_FAQ.md)                     | Frequently asked questions                        |
-| [Glossary](docs/PRISM_GLOSSARY.md)           | Terminology reference                             |
-| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Production deployment options                     |
-| [Docs Index](docs/DOCS_INDEX.md)             | Complete catalog with reading order               |
+| Document                                            | Purpose                                                              |
+| :-------------------------------------------------- | :------------------------------------------------------------------- |
+| [Product Requirements](docs/PRISM_PRD.md)           | Full PRD with feature specifications                                 |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md)          | Development workflows and implementation guidance                    |
+| [User Guide](docs/USER_GUIDE.md)                    | Operator-facing usage and controls                                   |
+| [Getting Started](docs/GETTING_STARTED.md)          | First-time setup walkthrough                                         |
+| [Roadmap](docs/ROADMAP.md)                          | Milestones and delivery sequence                                     |
+| [Test Strategy](docs/TEST_STRATEGY.md)              | Testing philosophy and coverage                                      |
+| [Security](SECURITY.md)                             | Vulnerability reporting and security policy                          |
+| [Contributing](CONTRIBUTING.md)                     | Contribution guidelines                                              |
+| [FAQ](docs/PRISM_FAQ.md)                            | Frequently asked questions                                           |
+| [Glossary](docs/PRISM_GLOSSARY.md)                  | Terminology reference                                                |
+| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)        | Production deployment options                                        |
+| [Docs Index](docs/DOCS_INDEX.md)                    | Complete catalog with reading order                                  |
 | [Public Portal & Wiki](docs/prism_public/README.md) | Interactive Tron portal, control deck simulator, and directives wiki |
 
 ---

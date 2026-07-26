@@ -171,6 +171,8 @@ async function bootstrap() {
     state.notice = String(error);
     bootStep('⚠ Boot error: ' + String(error), 100);
   } finally {
+    // Hide dashboard tabs for disabled addons before first render
+    await hideDisabledAddonTabs().catch(function (e) { console.error('[bootstrap] addon tab visibility:', e); });
     render();
     // Dismiss the boot gate after a brief pause for the operator to see completion
     setTimeout(dismissBootGate, 400);
@@ -324,6 +326,40 @@ if (typeof window !== 'undefined' && !window.__prismDeepLinkDelegate) {
       if (anchor) scrollAndFlashAnchor(anchor);
     });
   }, false);
+}
+
+// ── Addon tab visibility ─────────────────────────────────────────────────────
+// Maps addon manifest IDs to their dashboard tab IDs.
+const ADDON_TAB_MAP = {
+  'prism.addon.vrgc-robotics': 'robotics',
+};
+
+/**
+ * Query /api/addons/status and hide dashboard tabs for any addon that is
+ * disabled (suspended). This is called once during boot before the first render.
+ */
+async function hideDisabledAddonTabs() {
+  try {
+    const data = await request('/api/addons/status');
+    const addons = data.addons || data || [];
+    for (const addon of addons) {
+      const tabId = ADDON_TAB_MAP[addon.id];
+      if (!tabId) continue;
+      const shouldHide = addon.enabled === false || addon.state === 'suspended' || addon.state === 'error';
+      const tabButton = document.getElementById('tab-button-' + tabId);
+      const tabPanel = document.getElementById('tab-' + tabId);
+      if (shouldHide) {
+        if (tabButton) tabButton.style.display = 'none';
+        if (tabPanel) tabPanel.style.display = 'none';
+      } else {
+        if (tabButton) tabButton.style.display = '';
+        if (tabPanel) tabPanel.style.display = '';
+      }
+    }
+  } catch (e) {
+    // Best-effort: if the API fails, leave tabs visible
+    console.warn('[addon-tabs] Could not determine addon status:', e);
+  }
 }
 
 async function setActiveTab(tabId) {

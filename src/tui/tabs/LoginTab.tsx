@@ -72,13 +72,13 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
                 handleLogin();
             }
         } else if (activeIndex === 2) {
-            setEmail("prism@prismrefraction.com");
+            setEmail("admin@prismrefraction.com");
             setPassword("admin");
-            handleLogin("prism@prismrefraction.com", "admin");
+            handleLogin("admin@prismrefraction.com", "admin");
         } else if (activeIndex === 3) {
-            setEmail("testing@prism.ai");
+            setEmail("testing@prismrefraction.com");
             setPassword("testing");
-            handleLogin("testing@prism.ai", "testing");
+            handleLogin("testing@prismrefraction.com", "testing");
         } else if (activeIndex === 4) {
             onLaunchWizard();
         } else if (activeIndex === 5) {
@@ -113,13 +113,13 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
         // Quick profile shortcuts (only if not typing in text fields)
         if (activeIndex !== 0 && activeIndex !== 1) {
             if (input === "a" || input === "A") {
-                setEmail("prism@prismrefraction.com");
+                setEmail("admin@prismrefraction.com");
                 setPassword("admin");
-                handleLogin("prism@prismrefraction.com", "admin");
+                handleLogin("admin@prismrefraction.com", "admin");
             } else if (input === "t" || input === "T") {
-                setEmail("testing@prism.ai");
+                setEmail("testing@prismrefraction.com");
                 setPassword("testing");
-                handleLogin("testing@prism.ai", "testing");
+                handleLogin("testing@prismrefraction.com", "testing");
             } else if (input === "w" || input === "W") {
                 onLaunchWizard();
             } else if (input === "q" || input === "Q") {
@@ -211,12 +211,12 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
 
                 <Box>
                     <Text color={activeIndex === 2 ? colors.brand : colors.text}>
-                        {activeIndex === 2 ? `${symbols.bullet} ` : "  "}Autofill Admin Profile (prism@prismrefraction.com)
+                        {activeIndex === 2 ? `${symbols.bullet} ` : "  "}Autofill Admin Profile (admin@prismrefraction.com)
                     </Text>
                 </Box>
                 <Box>
                     <Text color={activeIndex === 3 ? colors.brand : colors.text}>
-                        {activeIndex === 3 ? `${symbols.bullet} ` : "  "}Autofill Testing Operator (testing@prism.ai)
+                        {activeIndex === 3 ? `${symbols.bullet} ` : "  "}Autofill Testing Operator (testing@prismrefraction.com)
                     </Text>
                 </Box>
                 <Box>

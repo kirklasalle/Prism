@@ -354,7 +354,7 @@ describe("LoginTab", () => {
         await new Promise((r) => setTimeout(r, 100));
         const frame = inst.lastFrame() ?? "";
         // Check if testing operator email is now present in the frame
-        assert.ok(frame.includes("testing@prism.ai"), "should autofill testing@prism.ai");
+        assert.ok(frame.includes("testing@prismrefraction.com"), "should autofill testing@prismrefraction.com");
         inst.unmount();
     });
 

@@ -488,7 +488,7 @@ export class DashboardService {
 
             const adminUser = this.iamStore.createUser({
                 tenantId: "default",
-                email: "prism@prismrefraction.com",
+                email: "admin@prismrefraction.com",
                 displayName: "Administrator",
                 status: "active",
                 attrs: { passwordHash: hashPassword(adminPassword) },
@@ -499,7 +499,7 @@ export class DashboardService {
             if (allowDefaultCredentials) {
                 const testUser = this.iamStore.createUser({
                     tenantId: "default",
-                    email: "testing@prism.ai",
+                    email: "testing@prismrefraction.com",
                     displayName: "Test Operator",
                     status: "active",
                     attrs: { passwordHash: hashPassword(testPassword) },
@@ -516,7 +516,7 @@ export class DashboardService {
                 const payload = {
                     createdAt: new Date().toISOString(),
                     note: "Delete this file after first successful IAM login.",
-                    users: [{ email: "prism@prismrefraction.com", password: adminPassword, role: "admin" }],
+                    users: [{ email: "admin@prismrefraction.com", password: adminPassword, role: "admin" }],
                 };
                 writeFileSync(bootstrapPath, JSON.stringify(payload, null, 2), { mode: 0o600 });
             }

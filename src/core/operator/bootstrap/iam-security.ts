@@ -50,13 +50,13 @@ export function bootstrapIamSecurity(port: number, activityBus: ActivityBus): Ia
             // ⚠️  These credentials are for local evaluation only and must not be
             //     used in any internet-facing or production deployment.
             console.warn(
-                "[IAM] ⚠️  Seeding default evaluation accounts (prism@prismrefraction.com / admin, " +
-                    "testing@prism.ai / testing). These are for LOCAL EVALUATION ONLY. " +
+                "[IAM] ⚠️  Seeding default evaluation accounts (admin@prismrefraction.com / admin, " +
+                    "testing@prismrefraction.com / testing). These are for LOCAL EVALUATION ONLY. " +
                     "Run the setup wizard (/setup) to create production-grade credentials.",
             );
             const adminUser = iamStore.createUser({
                 tenantId: "default",
-                email: "prism@prismrefraction.com",
+                email: "admin@prismrefraction.com",
                 displayName: "Administrator",
                 status: "active",
                 attrs: { passwordHash: createHash("sha256").update("admin", "utf-8").digest("hex") },
@@ -66,7 +66,7 @@ export function bootstrapIamSecurity(port: number, activityBus: ActivityBus): Ia
 
             const testUser = iamStore.createUser({
                 tenantId: "default",
-                email: "testing@prism.ai",
+                email: "testing@prismrefraction.com",
                 displayName: "Test Operator",
                 status: "active",
                 attrs: { passwordHash: createHash("sha256").update("testing", "utf-8").digest("hex") },

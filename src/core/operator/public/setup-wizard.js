@@ -343,8 +343,6 @@ function initIdentityStep() {
 
 // ── Step 5: Provider & Model Setup + Guardian Setup ─────────────────────────
 
-const PROVIDERS_NEEDING_KEY = ['custom', 'openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
-
 let guardianRecommendedCatalog = [];
 let guardianActiveDownloadId = null;
 let guardianDownloadPollTimer = null;
