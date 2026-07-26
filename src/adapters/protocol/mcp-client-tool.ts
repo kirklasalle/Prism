@@ -13,7 +13,8 @@
  */
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import type { Tool, ToolRequest, ToolResult } from "../../core/tools/types.js";
 import type { ToolRegistry } from "../../core/tools/registry.js";
 
@@ -156,6 +157,31 @@ export class McpConnection {
      * and discover available tools via tools/list.
      */
     async connect(): Promise<void> {
+        // Pre-flight validation: ensure working directory exists if specified
+        if (this.config.cwd && !existsSync(this.config.cwd)) {
+            throw new Error(`[MCP:${this.serverName}] Working directory does not exist: "${this.config.cwd}"`);
+        }
+
+        // Pre-flight validation: ensure command executable exists if absolute/relative file path
+        let commandPath = this.config.command;
+        if (isAbsolute(commandPath) || commandPath.startsWith(".")) {
+            if (!existsSync(commandPath)) {
+                if (commandPath.toLowerCase().endsWith("python.exe") || commandPath.toLowerCase().endsWith("python")) {
+                    commandPath = "python";
+                } else {
+                    throw new Error(
+                        `[MCP:${this.serverName}] Command executable does not exist: "${this.config.command}"`,
+                    );
+                }
+            }
+        }
+
+        // Pre-flight validation: if first argument is a file script, ensure it exists
+        const firstArg = this.config.args?.[0];
+        if (firstArg && (isAbsolute(firstArg) || firstArg.startsWith(".")) && !existsSync(firstArg)) {
+            throw new Error(`[MCP:${this.serverName}] Script file does not exist: "${firstArg}"`);
+        }
+
         const env: Record<string, string> = {};
         for (const [k, v] of Object.entries(process.env)) {
             if (v !== undefined) env[k] = v;
@@ -164,7 +190,7 @@ export class McpConnection {
             env[k] = v;
         }
 
-        this.proc = spawn(this.config.command, this.config.args ?? [], {
+        this.proc = spawn(commandPath, this.config.args ?? [], {
             cwd: this.config.cwd,
             env,
             stdio: ["pipe", "pipe", "pipe"],
@@ -537,46 +563,48 @@ export class McpClientAdapter {
             serverEntries = serverEntries.filter(([name]) => allowlist.has(name));
         }
 
-        for (const [name, config] of serverEntries) {
-            const entry: McpAdapterEntry = this.entries.get(name) ?? {
-                name,
-                config,
-                conn: null,
-                state: "down",
-                retryCount: 0,
-                nextRetryAt: null,
-                lastError: null,
-                registeredToolNames: [],
-                retryTimer: null,
-            };
-            this.entries.set(name, entry);
-            entry.config = config;
-            try {
-                const result = await this.connectAndRegister(entry);
-                registered.push(...result.registeredNames);
-                serverToolCounts[name] = result.toolCount;
-            } catch (err: unknown) {
-                const conn = entry.conn;
-                const stderrHint = conn?.firstStderrHint() ?? "";
-                const baseMsg = String(err);
-                const hint = stderrHint && !baseMsg.includes(stderrHint) ? ` — ${stderrHint}` : "";
-                const fullMsg = `${baseMsg}${hint}`;
-                entry.lastError = fullMsg;
-                entry.state = "down";
-                errors.push({ server: name, error: fullMsg });
-                // Surface the FULL stderr (no truncation) so operators see the
-                // complete Python traceback that explains the failure.
-                if (conn) {
-                    const tail = conn.stderrTail(20);
-                    if (tail.length > 0) {
-                        console.error(
-                            `[MCP:${name}] full stderr at startup failure (${tail.length} line(s)):\n` +
-                                tail.map((l) => `  ${l}`).join("\n"),
-                        );
+        await Promise.allSettled(
+            serverEntries.map(async ([name, config]) => {
+                const entry: McpAdapterEntry = this.entries.get(name) ?? {
+                    name,
+                    config,
+                    conn: null,
+                    state: "down",
+                    retryCount: 0,
+                    nextRetryAt: null,
+                    lastError: null,
+                    registeredToolNames: [],
+                    retryTimer: null,
+                };
+                this.entries.set(name, entry);
+                entry.config = config;
+                try {
+                    const result = await this.connectAndRegister(entry);
+                    registered.push(...result.registeredNames);
+                    serverToolCounts[name] = result.toolCount;
+                } catch (err: unknown) {
+                    const conn = entry.conn;
+                    const stderrHint = conn?.firstStderrHint() ?? "";
+                    const baseMsg = String(err);
+                    const hint = stderrHint && !baseMsg.includes(stderrHint) ? ` — ${stderrHint}` : "";
+                    const fullMsg = `${baseMsg}${hint}`;
+                    entry.lastError = fullMsg;
+                    entry.state = "down";
+                    errors.push({ server: name, error: fullMsg });
+                    // Surface the FULL stderr (no truncation) so operators see the
+                    // complete Python traceback that explains the failure.
+                    if (conn) {
+                        const tail = conn.stderrTail(20);
+                        if (tail.length > 0) {
+                            console.error(
+                                `[MCP:${name}] full stderr at startup failure (${tail.length} line(s)):\n` +
+                                    tail.map((l) => `  ${l}`).join("\n"),
+                            );
+                        }
                     }
                 }
-            }
-        }
+            }),
+        );
 
         return { registered, errors, serverToolCounts };
     }
