@@ -23,7 +23,7 @@ export function setupWizardHtml(port: number): string {
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      max-width: 520px;
+      max-width: 780px;
       width: 100%;
       padding: 40px 36px 32px;
       position: relative;
@@ -81,6 +81,12 @@ export function setupWizardHtml(port: number): string {
       margin: 0 0 20px;
       line-height: 1.5;
     }
+    .wizard-provider-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
     .wizard-option {
       display: flex;
       gap: 14px;
@@ -88,13 +94,14 @@ export function setupWizardHtml(port: number): string {
       border: 2px solid var(--border);
       border-radius: 14px;
       cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-      margin-bottom: 8px;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+      margin-bottom: 0;
       align-items: flex-start;
     }
     .wizard-option:hover {
       border-color: rgba(105, 210, 255, 0.3);
       background: rgba(105, 210, 255, 0.04);
+      transform: translateY(-1px);
     }
     .wizard-option.selected {
       border-color: var(--accent);
@@ -246,30 +253,61 @@ export function setupWizardHtml(port: number): string {
     .password-toggle-btn:hover {
       color: var(--text);
     }
+    .primary-button, .secondary-button {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+    .primary-button:hover, .secondary-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(105, 210, 255, 0.15);
+    }
+    .primary-button:active, .secondary-button:active, .button-clicked-state {
+      transform: scale(0.97) translateY(0);
+    }
+    .primary-button[aria-busy="true"], .secondary-button[aria-busy="true"] {
+      opacity: 0.85;
+      cursor: wait;
+    }
+    #provider-config-summary {
+      max-height: 220px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.2) transparent;
+    }
+    #provider-config-summary::-webkit-scrollbar {
+      width: 6px;
+    }
+    #provider-config-summary::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.2);
+      border-radius: 3px;
+    }
     #wizard-toast-container {
       position: fixed;
-      top: 20px;
-      right: 20px;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
       z-index: 9999;
       display: flex;
       flex-direction: column;
+      align-items: center;
       gap: 10px;
       pointer-events: none;
     }
     .wizard-toast {
-      background: rgba(30, 30, 40, 0.9);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 12px 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      background: rgba(30, 30, 40, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 12px 22px;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
       color: #fff;
       font-size: 13px;
+      font-weight: 500;
       display: flex;
       align-items: center;
       gap: 10px;
-      min-width: 250px;
-      max-width: 350px;
+      min-width: 280px;
+      max-width: 480px;
       pointer-events: auto;
       animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       transition: opacity 0.3s, transform 0.3s;
@@ -290,7 +328,7 @@ export function setupWizardHtml(port: number): string {
     @keyframes toast-slide-in {
       from {
         opacity: 0;
-        transform: translateY(20px) scale(0.9);
+        transform: translateY(-20px) scale(0.95);
       }
       to {
         opacity: 1;
@@ -397,81 +435,83 @@ export function setupWizardHtml(port: number): string {
           <h4 style="font-size: 13px; font-weight: 600; margin: 0 0 8px; display: flex; align-items: center; gap: 6px;">
             <span>🤖 Primary LLM Provider</span>
           </h4>
-          <div class="wizard-option selected" data-provider="ollama" onclick="selectProvider(this, 'ollama')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>\u{1F5A5} Ollama (Local)</h3>
-              <p class="desc">Run open-source models locally. No API key needed. Requires Ollama installed and running.</p>
+          <div class="wizard-provider-grid">
+            <div class="wizard-option selected" data-provider="ollama" onclick="selectProvider(this, 'ollama')" title="Select Ollama for local open-source models without an API key">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>\u{1F5A5} Ollama (Local)</h3>
+                <p class="desc">Run open-source models locally. No API key needed. Requires Ollama installed and running.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="custom" onclick="selectProvider(this, 'custom')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>\u{1F527} Custom Provider</h3>
-              <p class="desc">Use a custom configured provider if PRISM has one available. API key required when configured.</p>
+            <div class="wizard-option" data-provider="custom" onclick="selectProvider(this, 'custom')" title="Configure a custom API endpoint provider">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>\u{1F527} Custom Provider</h3>
+                <p class="desc">Use a custom configured provider if PRISM has one available. API key required when configured.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="lmstudio" onclick="selectProvider(this, 'lmstudio')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>\u{1F4BB} LM Server</h3>
-              <p class="desc">Connect to a local LM Studio / LM Server endpoint. No API key needed by default.</p>
+            <div class="wizard-option" data-provider="lmstudio" onclick="selectProvider(this, 'lmstudio')" title="Connect to local LM Studio or LM Server instance">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>\u{1F4BB} LM Server</h3>
+                <p class="desc">Connect to a local LM Studio / LM Server endpoint. No API key needed by default.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="openrouter" onclick="selectProvider(this, 'openrouter')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>🌐 OpenRouter</h3>
-              <p class="desc">Unified gateway for Claude, Llama 3, DeepSeek, GPT-4o, and hundreds of models. Requires API key.</p>
+            <div class="wizard-option" data-provider="openrouter" onclick="selectProvider(this, 'openrouter')" title="Connect to OpenRouter gateway for Claude, Llama 3, DeepSeek, GPT-4o and hundreds of models">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>🌐 OpenRouter</h3>
+                <p class="desc">Unified gateway for Claude, Llama 3, DeepSeek, GPT-4o, and hundreds of models. Requires API key.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>🤖 OpenAI</h3>
-              <p class="desc">GPT-4o, GPT-4o-mini, and other OpenAI models. Requires API key.</p>
+            <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')" title="Connect directly to OpenAI API for GPT-4o models">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>🤖 OpenAI</h3>
+                <p class="desc">GPT-4o, GPT-4o-mini, and other OpenAI models. Requires API key.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="anthropic" onclick="selectProvider(this, 'anthropic')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>✨ Anthropic</h3>
-              <p class="desc">Claude models. Requires API key.</p>
+            <div class="wizard-option" data-provider="anthropic" onclick="selectProvider(this, 'anthropic')" title="Connect directly to Anthropic API for Claude 3.5 Sonnet and Haiku models">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>✨ Anthropic</h3>
+                <p class="desc">Claude models. Requires API key.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="google" onclick="selectProvider(this, 'google')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>🔍 Google AI</h3>
-              <p class="desc">Gemini models. Requires API key.</p>
+            <div class="wizard-option" data-provider="google" onclick="selectProvider(this, 'google')" title="Connect directly to Google AI API for Gemini models">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>🔍 Google AI</h3>
+                <p class="desc">Gemini models. Requires API key.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="deepseek" onclick="selectProvider(this, 'deepseek')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>🚀 DeepSeek</h3>
-              <p class="desc">DeepSeek-V3 and DeepSeek-R1 reasoning models. Requires API key.</p>
+            <div class="wizard-option" data-provider="deepseek" onclick="selectProvider(this, 'deepseek')" title="Connect to DeepSeek API for V3 and R1 reasoning models">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>🚀 DeepSeek</h3>
+                <p class="desc">DeepSeek-V3 and DeepSeek-R1 reasoning models. Requires API key.</p>
+              </div>
             </div>
-          </div>
-          <div class="wizard-option" data-provider="groq" onclick="selectProvider(this, 'groq')">
-            <div class="wizard-option-radio"></div>
-            <div class="wizard-option-body">
-              <h3>⚡ Groq</h3>
-              <p class="desc">Ultra-fast LPU inference for open-source models. Requires API key.</p>
+            <div class="wizard-option" data-provider="groq" onclick="selectProvider(this, 'groq')" title="Connect to Groq API for ultra-fast LPU inference">
+              <div class="wizard-option-radio"></div>
+              <div class="wizard-option-body">
+                <h3>⚡ Groq</h3>
+                <p class="desc">Ultra-fast LPU inference for open-source models. Requires API key.</p>
+              </div>
             </div>
           </div>
           <div id="provider-key-field" class="wizard-field" style="display:none;margin-top:16px;">
             <label id="provider-key-label">API Key</label>
             <div class="password-input-wrapper">
-              <input type="password" id="provider-api-key" placeholder="sk-..." autocomplete="off" />
-              <button type="button" class="password-toggle-btn" onclick="toggleApiKeyVisibility('provider-api-key', this)">
+              <input type="password" id="provider-api-key" placeholder="sk-..." autocomplete="off" title="Enter your API secret key for the selected provider" />
+              <button type="button" class="password-toggle-btn" onclick="toggleApiKeyVisibility('provider-api-key', this)" title="Toggle API key plain text visibility">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon-visible"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               </button>
             </div>
           </div>
-          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-            <button type="button" class="secondary-button" style="font-size:12px;padding:6px 12px;" onclick="testProviderConnection()">Test Connection</button>
-            <button type="button" class="primary-button" style="font-size:12px;padding:6px 12px;" onclick="saveProviderConfiguration()">Save Provider</button>
+          <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <button id="wiz-test-provider-btn" type="button" class="secondary-button" style="font-size:12px;padding:8px 16px;" onclick="testProviderConnection()" title="Test API key and network connectivity for the selected provider">Test Connection</button>
+            <button id="wiz-save-provider-btn" type="button" class="primary-button" style="font-size:12px;padding:8px 16px;" onclick="saveProviderConfiguration()" title="Save provider API credentials and discover available models">Save Provider</button>
           </div>
           <div id="provider-test-result" style="margin-top:8px;font-size:12px;"></div>
           <div id="provider-save-result" style="margin-top:6px;font-size:12px;"></div>

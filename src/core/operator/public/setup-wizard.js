@@ -68,6 +68,17 @@ function formatProviderLabel(providerId) {
   return providerMeta?.label || providerId.charAt(0).toUpperCase() + providerId.slice(1);
 }
 
+let expandedSummaryProviders = new Set();
+
+window.toggleProviderModelInspector = function toggleProviderModelInspector(providerId) {
+  if (expandedSummaryProviders.has(providerId)) {
+    expandedSummaryProviders.delete(providerId);
+  } else {
+    expandedSummaryProviders.add(providerId);
+  }
+  renderConfiguredProvidersSummary();
+};
+
 function renderConfiguredProvidersSummary() {
   const summary = document.getElementById('provider-config-summary');
   if (!summary) return;
@@ -83,14 +94,41 @@ function renderConfiguredProvidersSummary() {
 
   summary.innerHTML = entries
     .map(([providerId, cfg]) => {
-      const modelCount = Array.isArray(cfg.models) ? cfg.models.length : 0;
+      const models = Array.isArray(cfg.models) ? cfg.models : [];
+      const modelCount = models.length;
       const stateText = cfg.reachable ? 'reachable' : 'saved';
-      return `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.08);">
-        <span><strong>${escHtml(formatProviderLabel(providerId))}</strong>${providerId === wizardState.provider ? ' (primary)' : ''}</span>
-        <span style="opacity:0.8;">${modelCount} models · ${stateText}</span>
+      const isExpanded = expandedSummaryProviders.has(providerId);
+      const isPrimary = providerId === wizardState.provider;
+
+      let modelListHtml = '';
+      if (isExpanded) {
+        if (modelCount === 0) {
+          modelListHtml = '<div style="margin-top:6px;padding:6px 10px;background:rgba(0,0,0,0.3);border-radius:6px;font-size:11px;opacity:0.7;">No models discovered for this provider.</div>';
+        } else {
+          const items = models.slice(0, 100).map(m => {
+            const mId = typeof m === 'string' ? m : m.id || m.name || JSON.stringify(m);
+            return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(mId)}">${escHtml(mId)}</div>`;
+          }).join('');
+          const moreCount = modelCount > 100 ? `<div style="padding-top:4px;font-size:10px;opacity:0.6;">...and ${modelCount - 100} more models</div>` : '';
+          modelListHtml = `<div style="margin-top:6px;padding:8px 10px;background:rgba(0,0,0,0.35);border-radius:6px;font-size:11px;max-height:140px;overflow-y:auto;scrollbar-width:thin;font-family:monospace;">${items}${moreCount}</div>`;
+        }
+      }
+
+      return `<div style="padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.08);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <span><strong>${escHtml(formatProviderLabel(providerId))}</strong>${isPrimary ? ' <span style="font-size:10px;background:rgba(105,210,255,0.2);color:var(--accent);padding:2px 6px;border-radius:4px;">primary</span>' : ''}</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="secondary-button" style="font-size:10px;padding:2px 8px;border-radius:6px;opacity:0.9;" onclick="toggleProviderModelInspector('${escHtml(providerId)}')" title="Click to view discovered models for ${escHtml(providerId)}">
+              ${modelCount} models ${isExpanded ? '▴' : '▾'}
+            </button>
+            <span style="opacity:0.8;font-size:11px;">· ${stateText}</span>
+          </div>
+        </div>
+        ${modelListHtml}
       </div>`;
     })
     .join('');
+  applyWizardHoverTooltips();
 }
 
 window.toggleApiKeyVisibility = function toggleApiKeyVisibility(inputId, btnEl) {
@@ -665,9 +703,15 @@ function updateProviderKeyField() {
 }
 
 window.testProviderConnection = async function testProviderConnection() {
+  const testBtn = document.getElementById('wiz-test-provider-btn');
   const testResult = document.getElementById('provider-test-result');
-  if (!testResult) return false;
-  testResult.innerHTML = '<span style="color:var(--muted);">Testing connection...</span>';
+  if (testBtn) {
+    testBtn.disabled = true;
+    testBtn.setAttribute('aria-busy', 'true');
+    testBtn.textContent = '⏳ Testing...';
+  }
+  if (testResult) testResult.innerHTML = '<span style="color:var(--muted);">Testing connection...</span>';
+  let success = false;
   try {
     const providerCfg = getProviderConfig(wizardState.provider);
     const data = await api('POST', '/api/llm/provider-test', {
@@ -681,23 +725,31 @@ window.testProviderConnection = async function testProviderConnection() {
     providerCfg.defaultModel = providerCfg.models[0] || providerCfg.defaultModel || null;
     providerCfg.touched = true;
     if (data.ok || data.reachable) {
-      testResult.innerHTML = '<span style="color:var(--accent-2);">✓ Provider is reachable.</span>';
-      renderConfiguredProvidersSummary();
-      return true;
+      if (testResult) testResult.innerHTML = '<span style="color:var(--accent-2);">✓ Provider is reachable.</span>';
+      success = true;
+    } else {
+      providerCfg.lastError = data.error || data.reason || 'Could not reach provider.';
+      if (testResult) testResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(data.error || data.reason || 'Could not reach provider.')}</span>`;
     }
-    providerCfg.lastError = data.error || data.reason || 'Could not reach provider.';
-    testResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(data.error || data.reason || 'Could not reach provider.')}</span>`;
     renderConfiguredProvidersSummary();
-    return false;
   } catch {
     const providerCfg = getProviderConfig(wizardState.provider);
     providerCfg.tested = true;
     providerCfg.reachable = false;
     providerCfg.lastError = 'Connection test failed.';
-    testResult.innerHTML = '<span style="color:var(--danger);">✗ Connection test failed.</span>';
+    if (testResult) testResult.innerHTML = '<span style="color:var(--danger);">✗ Connection test failed.</span>';
     renderConfiguredProvidersSummary();
-    return false;
+  } finally {
+    if (testBtn) {
+      testBtn.removeAttribute('aria-busy');
+      testBtn.textContent = success ? '✓ Connected!' : '✗ Failed';
+      setTimeout(() => {
+        testBtn.textContent = 'Test Connection';
+        testBtn.disabled = false;
+      }, 1500);
+    }
   }
+  return success;
 };
 
 async function saveProviderConfiguration(providerId = wizardState.provider, opts = {}) {
@@ -765,15 +817,31 @@ async function saveProviderConfiguration(providerId = wizardState.provider, opts
 }
 
 window.saveProviderConfiguration = async function saveProviderConfigurationHandler() {
+  const saveBtn = document.getElementById('wiz-save-provider-btn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.setAttribute('aria-busy', 'true');
+    saveBtn.textContent = '⏳ Saving...';
+  }
   try {
     await saveProviderConfiguration(wizardState.provider, { refreshModels: true, quiet: false });
     showToast('Provider configuration saved.', 'success');
+    if (saveBtn) saveBtn.textContent = '✓ Saved!';
   } catch (error) {
     const saveResult = document.getElementById('provider-save-result');
     if (saveResult) {
       saveResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(String(error?.message || error || 'Save failed.'))}</span>`;
     }
     showToast('Provider configuration save failed.', 'error');
+    if (saveBtn) saveBtn.textContent = '✗ Failed';
+  } finally {
+    if (saveBtn) {
+      saveBtn.removeAttribute('aria-busy');
+      setTimeout(() => {
+        saveBtn.textContent = 'Save Provider';
+        saveBtn.disabled = false;
+      }, 1500);
+    }
   }
 };
 
