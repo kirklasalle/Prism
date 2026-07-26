@@ -418,25 +418,46 @@ export function setupWizardHtml(port: number): string {
               <p class="desc">Connect to a local LM Studio / LM Server endpoint. No API key needed by default.</p>
             </div>
           </div>
+          <div class="wizard-option" data-provider="openrouter" onclick="selectProvider(this, 'openrouter')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>🌐 OpenRouter</h3>
+              <p class="desc">Unified gateway for Claude, Llama 3, DeepSeek, GPT-4o, and hundreds of models. Requires API key.</p>
+            </div>
+          </div>
           <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')">
             <div class="wizard-option-radio"></div>
             <div class="wizard-option-body">
-              <h3>\u{1F916} OpenAI</h3>
+              <h3>🤖 OpenAI</h3>
               <p class="desc">GPT-4o, GPT-4o-mini, and other OpenAI models. Requires API key.</p>
             </div>
           </div>
           <div class="wizard-option" data-provider="anthropic" onclick="selectProvider(this, 'anthropic')">
             <div class="wizard-option-radio"></div>
             <div class="wizard-option-body">
-              <h3>\u2728 Anthropic</h3>
+              <h3>✨ Anthropic</h3>
               <p class="desc">Claude models. Requires API key.</p>
             </div>
           </div>
           <div class="wizard-option" data-provider="google" onclick="selectProvider(this, 'google')">
             <div class="wizard-option-radio"></div>
             <div class="wizard-option-body">
-              <h3>\u{1F50D} Google AI</h3>
+              <h3>🔍 Google AI</h3>
               <p class="desc">Gemini models. Requires API key.</p>
+            </div>
+          </div>
+          <div class="wizard-option" data-provider="deepseek" onclick="selectProvider(this, 'deepseek')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>🚀 DeepSeek</h3>
+              <p class="desc">DeepSeek-V3 and DeepSeek-R1 reasoning models. Requires API key.</p>
+            </div>
+          </div>
+          <div class="wizard-option" data-provider="groq" onclick="selectProvider(this, 'groq')">
+            <div class="wizard-option-radio"></div>
+            <div class="wizard-option-body">
+              <h3>⚡ Groq</h3>
+              <p class="desc">Ultra-fast LPU inference for open-source models. Requires API key.</p>
             </div>
           </div>
           <div id="provider-key-field" class="wizard-field" style="display:none;margin-top:16px;">

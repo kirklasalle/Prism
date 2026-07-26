@@ -22,6 +22,7 @@ Remediates all 26 security vulnerabilities (0 remaining in npm audit), cleans up
 
 ### Fixed
 
+- **OpenRouter Setup Wizard Option (`src/core/operator/templates/setup.ts`, `src/core/operator/public/setup-wizard.js`)**: Added OpenRouter (along with DeepSeek and Groq) to Step 5 (Provider, Model & Guardian Setup) in the basic Setup Wizard UI, enabling direct key input and connection testing for OpenRouter out-of-box.
 - **Server Launch Hang & Gray-Matter Compatibility (`package.json`)**: Configured `"js-yaml": "^4.1.0"` override to preserve `yaml.safeLoad` required by `gray-matter@4.0.3`, eliminating runtime startup crashes. Added 30-second bounded timeouts to launcher scripts (`start_individual.bat`, `start_enterprise.bat`).
 - **Non-Git Installation Guard (`package.json`)**: Updated `"prepare"` script to guard `husky` execution with a `.git` directory check, preventing `fatal: not in a git directory` when installing from zip/tarball exports.
 - **ESLint v9 Flat Config Migration (`eslint.config.js`, `.eslintrc.json`, `package.json`)**: Migrated linting toolchain from legacy `.eslintrc.json` to ESLint v9 Flat Config (`eslint.config.js`), eliminating `eslint@8.57.1`, `@humanwhocodes/*`, and `rimraf@3` npm deprecation warnings.

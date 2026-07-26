@@ -27,6 +27,7 @@ let wizardState = {
   cacAssignmentId: null,
 };
 let providerCatalog = null;
+const PROVIDERS_NEEDING_KEY = ['openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter', 'custom'];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
