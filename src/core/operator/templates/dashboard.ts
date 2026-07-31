@@ -1,5 +1,5 @@
 export function dashboardHtml(port: number, authToken?: string): string {
-    return `<!doctype html>
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -174,10 +174,6 @@ export function dashboardHtml(port: number, authToken?: string): string {
 
   <!-- Additive (v0.21): Prism Wiki - serves dynamic docs directory and custom SVG diagrams -->
   <script src="/public/tab-wiki.js"></script>
-
-  <!-- Additive (v0.22): VRGC Robotics Add-on client controller -->
-  <script type="module" src="/public/tab-robotics.js"></script>
-
 
   <!-- Demonstration Mode: Interactive showcase with Mad Libs prompts,
        9 demos (3 self-control, 3 browser, 3 computer), tab tour,
@@ -524,8 +520,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
 }
 
 export function simpleModeHtml(port: number, authToken?: string): string {
-    void port;
-    return `<!doctype html>
+  void port;
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />

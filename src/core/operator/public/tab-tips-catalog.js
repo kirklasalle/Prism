@@ -41,6 +41,9 @@ const CATALOG = {
     'settings:model-routing': {
         kind: 'settings', icon: '🔀', label: 'Model Routing',
         summary: 'Decide whether requests go Direct, Role-Based, or Modality-Based.',
+        guardian: [
+            'Guardian suggests role-based or modality-based routing when you need security review, planning, and execution to stay separated by capability.',
+        ],
         lore: [
             'Direct: one model for everything.',
             'Role-Based: different models per role (planner, coder, reviewer).',
@@ -108,6 +111,9 @@ const CATALOG = {
     'tools:diagnostics': {
         kind: 'tools', icon: '🧪', label: 'Diagnostics',
         summary: 'Run the full diagnostics suite — agent, computer, workspace, network, telemetry, logs, scheduler.',
+        guardian: [
+            'Guardian suggests starting diagnostics here when a subsystem feels stale before restarting the whole console.',
+        ],
         lore: [
             'Each suite runs independently and live-streams results.',
             'Pass/fail history is retained for trend analysis.',
@@ -132,6 +138,9 @@ const CATALOG = {
     'agentic:guardian': {
         kind: 'agentic', icon: '🛡️', label: 'Guardian Agent',
         summary: 'Local llama.cpp supervisor — enforces policy, redacts PII, surfaces tips.',
+        guardian: [
+            'Guardian suggests treating this panel as the first stop for live policy, subsystem, and operational hints.',
+        ],
         lore: [
             'Guardian runs entirely local; no agent telemetry leaves the machine.',
             'Guardian-pushed tooltips appear here in real time (look for the shield glyph).',
@@ -187,6 +196,9 @@ const CATALOG = {
     'computer:framebuffer': {
         kind: 'computer', icon: '📸', label: 'Vision Framebuffer',
         summary: 'Capture single screenshots or 8 FPS bursts for vision-grounded reasoning.',
+        guardian: [
+            'Guardian suggests burst capture for short visual state changes and single capture for static verification or audit evidence.',
+        ],
         lore: [
             'Bursts are 2 seconds at 8 FPS — useful for capturing motion.',
             'Auto-Refresh updates the viewer every 2 seconds.',

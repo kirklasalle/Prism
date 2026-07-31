@@ -103,7 +103,14 @@ export class IamAdminRouteHandler implements IRouteHandler {
             }
             const userM = /^\/api\/iam\/admin\/users\/([^/]+)$/.exec(path);
             if (userM && method === "DELETE") {
-                return this.deleteUser(decodeURIComponent(userM[1]), tenantId, res);
+                return await this.deleteUser(
+                    req,
+                    decodeURIComponent(userM[1]),
+                    tenantId,
+                    res,
+                    service,
+                    url.searchParams.get("certificateDisposition"),
+                );
             }
             const userRolesM = /^\/api\/iam\/admin\/users\/([^/]+)\/roles$/.exec(path);
             if (userRolesM && method === "POST") {
@@ -202,13 +209,93 @@ export class IamAdminRouteHandler implements IRouteHandler {
         return this.json(res, 200, { ok: true });
     }
 
-    private deleteUser(userId: string, tenantId: string, res: ServerResponse): void {
+    private async deleteUser(
+        req: IncomingMessage,
+        userId: string,
+        tenantId: string,
+        res: ServerResponse,
+        service: DashboardService,
+        certificateDispositionParam?: string | null,
+    ): Promise<void> {
         const user = this.store.getUser(userId);
         if (!user || user.tenantId !== tenantId) {
             return this.json(res, 404, { error: { code: "not_found", message: `user ${userId}` } });
         }
+
+        let requestedDisposition = (certificateDispositionParam ?? "").trim().toLowerCase();
+        if (!requestedDisposition) {
+            try {
+                const body = await this.readJson(req, service);
+                if (body && typeof body["certificateDisposition"] === "string") {
+                    requestedDisposition = String(body["certificateDisposition"]).trim().toLowerCase();
+                }
+            } catch {
+                // No body is a valid DELETE request shape.
+            }
+        }
+        // IC-03 Phase 0: Certificate deletion is unconditionally disabled.
+        // All certificate disposition requests are forced to "archive".
+        if (requestedDisposition === "delete") {
+            console.warn(
+                `[PRISM][security] Certificate deletion requested for user ${userId} but ` +
+                "blocked by IC-03 security policy. Forcing archive disposition.",
+            );
+        }
+        const certificateDisposition = "archive" as const;
+
+        const userEmail = user.email.trim().toLowerCase();
+        const chatStore = service.getChatStore();
+        const ownedSessions = chatStore
+            .listSessions()
+            .filter((s) => s.operatorEmail?.trim().toLowerCase() === userEmail);
+
+        const initCertSessions = ownedSessions.filter((s) => /Initialization Certificate/i.test(s.title || ""));
+        const nonCertSessions = ownedSessions.filter((s) => !/Initialization Certificate/i.test(s.title || ""));
+
+        let deletedSessionCount = 0;
+        let archivedCertificateCount = 0;
+        const deletedCertificateCount = 0; // IC-03: always zero — deletion is disabled
+        const deletedSessionIds = new Set<string>();
+
+        for (const s of nonCertSessions) {
+            try {
+                chatStore.deleteSession(s.sessionId);
+                deletedSessionCount += 1;
+                deletedSessionIds.add(s.sessionId);
+            } catch {
+                // Best-effort cleanup; account deletion should proceed.
+            }
+        }
+
+        // IC-03: Certificates are always archived, never deleted.
+        const archiveTag = `archived:${new Date().toISOString()}:${userEmail}`.toLowerCase();
+        for (const s of initCertSessions) {
+            try {
+                chatStore.updateSessionOperatorEmail(s.sessionId, archiveTag);
+                archivedCertificateCount += 1;
+            } catch {
+                // Best-effort cleanup; account deletion should proceed.
+            }
+        }
+
+        for (const pkg of service.listSessionPackages()) {
+            if (pkg.sessionIds.some((sid) => deletedSessionIds.has(sid))) {
+                try {
+                    service.deleteSessionPackage(pkg.packageId, "iam_admin_user_delete");
+                } catch {
+                    // Keep user deletion robust even if package cleanup fails.
+                }
+            }
+        }
+
         this.store.deleteUser(userId);
-        return this.json(res, 200, { ok: true });
+        return this.json(res, 200, {
+            ok: true,
+            certificateDisposition,
+            deletedSessionCount,
+            deletedCertificateCount,
+            archivedCertificateCount,
+        });
     }
 
     private async addUserRole(

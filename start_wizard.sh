@@ -45,24 +45,63 @@ if [ ! -d "node_modules" ]; then
     npm install || exit 1
 fi
 
-if [ ! -d "dist" ]; then
-    echo "[BUILD] Building PRISM..."
+if [ "${PRISM_WIZARD_SKIP_BUILD:-0}" != "1" ] || [ ! -d "dist" ]; then
+    echo "[BUILD] Building PRISM wizard assets..."
     npm run build || exit 1
 fi
 
 PRISM_DASHBOARD_PORT="${PRISM_DASHBOARD_PORT:-7070}"
+export PRISM_ALLOW_QUERY_TOKEN="${PRISM_ALLOW_QUERY_TOKEN:-1}"
+
+if [ -z "${PRISM_WORKSPACE_ROOT:-}" ] && [ -f ".prism-preferences.json" ]; then
+    PRISM_WORKSPACE_ROOT="$(node -e "try{const fs=require('fs');const p=JSON.parse(fs.readFileSync('.prism-preferences.json','utf8'));if(p.workspaceRoot)process.stdout.write(String(p.workspaceRoot));}catch{}")"
+fi
+PRISM_WORKSPACE_ROOT="${PRISM_WORKSPACE_ROOT:-$HOME/Documents/Prism_Refraction}"
+
+PRISM_TOKEN_FILE="${PRISM_WORKSPACE_ROOT}/state/admin-token"
+PRISM_AUTH_TOKEN=""
+if [ -f "$PRISM_TOKEN_FILE" ]; then
+    PRISM_AUTH_TOKEN="$(cat "$PRISM_TOKEN_FILE" 2>/dev/null || true)"
+fi
+
+PRISM_SETUP_URL="http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true"
+if [ -n "$PRISM_AUTH_TOKEN" ]; then
+    PRISM_SETUP_URL="http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true&token=${PRISM_AUTH_TOKEN}"
+fi
+
+wizard_selftest() {
+    echo "[SELFTEST] Verifying wizard auth/token readiness..."
+    if [ -z "$PRISM_AUTH_TOKEN" ]; then
+        echo "[SELFTEST][WARN] Admin token not found at ${PRISM_TOKEN_FILE}."
+        echo "[SELFTEST][WARN] Wizard will open; login may be required."
+        return 0
+    fi
+
+    local code
+    code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "${PRISM_SETUP_URL}" || true)"
+    if [ "$code" = "200" ] || [ "$code" = "302" ]; then
+        echo "[SELFTEST][OK] Wizard endpoint responded with ${code}."
+        return 0
+    fi
+
+    echo "[SELFTEST][WARN] Wizard endpoint returned ${code:-unknown}."
+    echo "[SELFTEST][WARN] Opening login page fallback."
+    PRISM_SETUP_URL="http://localhost:${PRISM_DASHBOARD_PORT}/login"
+    return 0
+}
 
 # Check if server is already running
 if curl -sf "http://localhost:${PRISM_DASHBOARD_PORT}/api/health" -o /dev/null --connect-timeout 2 2>/dev/null; then
     echo "[OK] PRISM server already running on port ${PRISM_DASHBOARD_PORT}."
     echo "[WIZARD] Launching Setup Wizard..."
+    wizard_selftest
     # Try to open browser (platform-aware)
     if command -v xdg-open &>/dev/null; then
-        xdg-open "http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true"
+        xdg-open "${PRISM_SETUP_URL}"
     elif command -v open &>/dev/null; then
-        open "http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true"
+        open "${PRISM_SETUP_URL}"
     else
-        echo "[INFO] Open http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true in your browser."
+        echo "[INFO] Open ${PRISM_SETUP_URL} in your browser."
     fi
     exit 0
 fi
@@ -85,13 +124,30 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+if [ -z "$PRISM_AUTH_TOKEN" ]; then
+    for i in $(seq 1 5); do
+        if [ -f "$PRISM_TOKEN_FILE" ]; then
+            PRISM_AUTH_TOKEN="$(cat "$PRISM_TOKEN_FILE" 2>/dev/null || true)"
+            [ -n "$PRISM_AUTH_TOKEN" ] && break
+        fi
+        sleep 1
+    done
+fi
+
+PRISM_SETUP_URL="http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true"
+if [ -n "$PRISM_AUTH_TOKEN" ]; then
+    PRISM_SETUP_URL="http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true&token=${PRISM_AUTH_TOKEN}"
+fi
+
+wizard_selftest
+
 echo "[WIZARD] Launching Setup Wizard at http://localhost:${PRISM_DASHBOARD_PORT}/setup"
 if command -v xdg-open &>/dev/null; then
-    xdg-open "http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true"
+    xdg-open "${PRISM_SETUP_URL}"
 elif command -v open &>/dev/null; then
-    open "http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true"
+    open "${PRISM_SETUP_URL}"
 else
-    echo "[INFO] Open http://localhost:${PRISM_DASHBOARD_PORT}/setup?rerun=true in your browser."
+    echo "[INFO] Open ${PRISM_SETUP_URL} in your browser."
 fi
 
 # Wait for the server process

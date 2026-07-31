@@ -63,7 +63,7 @@ interface ProviderDef {
 const PROVIDERS: ProviderDef[] = [
     { id: "llamacpp", label: "Llama.cpp", needsKey: false, description: "Local GGUF CPU/GPU acceleration" },
     { id: "ollama", label: "Ollama", needsKey: false, description: "Local inference server" },
-    { id: "openai", label: "OpenAI", needsKey: true, description: "GPT-4o, GPT-4.1, o3" },
+    { id: "openai", label: "OpenAI", needsKey: true, description: "GPT-5, GPT-5 mini, o-series" },
     { id: "anthropic", label: "Anthropic", needsKey: true, description: "Claude 4, Sonnet, Haiku" },
     { id: "google", label: "Google AI", needsKey: true, description: "Gemini 2.5 Pro/Flash" },
     { id: "mistral", label: "Mistral", needsKey: true, description: "Mistral Large, Codestral" },
@@ -224,7 +224,7 @@ function getLocalCharacters(profile: string) {
                     displayName: content.displayName || content.name || id,
                     persona: content.persona || "",
                 });
-            } catch {}
+            } catch { }
         }
         return list.length > 0 ? list : getFallbackCharacters(profile);
     } catch {
@@ -692,29 +692,78 @@ async function runInteractive(args: CliArgs, client: SetupApiClient | null): Pro
 
     // Guardian
     let availableModels: Array<{ name: string; path: string }> = [];
+    let recommendedCatalog: Array<{ name: string; fileName: string; size: string; url: string; mmprojUrl?: string; mmprojName?: string }> = [];
     if (client) {
-        const spin = spinner("Loading available GGUF models...");
+        const spin = spinner("Loading Guardian models & recommended catalog...");
         try {
             const data = await client.getGgufModels();
             availableModels = data.models || [];
-            spin.stop(color(`${sym.check} Found ${availableModels.length} GGUF model(s)`, ansi.green));
+            const catalogData = await client.getRecommendedCatalog();
+            recommendedCatalog = catalogData.catalog || [];
+            spin.stop(color(`${sym.check} Found ${availableModels.length} downloaded model(s), ${recommendedCatalog.length} recommended`, ansi.green));
         } catch {
-            spin.stop(color(`${sym.cross} Could not load GGUF models`, ansi.yellow));
+            spin.stop(color(`${sym.cross} Could not load GGUF models or catalog`, ansi.yellow));
         }
     }
 
-    if (availableModels.length > 0) {
-        const modelOptions = [
-            { label: "None (skip guardian)", value: "", description: "Configure later" },
-            ...availableModels.map((m) => ({
-                label: m.name,
-                value: m.path,
-                description: m.path.split(/[/\\]/).pop() || "",
-            })),
-        ];
-        state.guardianModel = await select("Select guardian model:", modelOptions, 0);
+    const modelOptions: Array<{ label: string; value: string; description: string }> = [
+        { label: "None (skip guardian)", value: "", description: "Configure later" },
+    ];
+
+    // Downloaded models
+    for (const m of availableModels) {
+        modelOptions.push({
+            label: `[Downloaded] ${m.name}`,
+            value: m.path,
+            description: m.path,
+        });
+    }
+
+    // Recommended catalog models
+    const localFileNames = new Set(availableModels.map((m) => (m.name || m.path).split(/[/\\]/).pop()?.toLowerCase()));
+    for (const rm of recommendedCatalog) {
+        if (!localFileNames.has(rm.fileName.toLowerCase())) {
+            modelOptions.push({
+                label: `[Recommended] ${rm.name} (${rm.size})`,
+                value: `recommend:${rm.fileName}`,
+                description: `Download required: ${rm.fileName}`,
+            });
+        }
+    }
+
+    modelOptions.push({
+        label: "[Custom] Enter custom GGUF model path",
+        value: "custom",
+        description: "Specify a custom local file path",
+    });
+
+    const chosenModel = await select("Select guardian model:", modelOptions, 0);
+    if (chosenModel === "custom") {
+        state.guardianModel = await prompt("Custom GGUF model path", "");
+    } else if (chosenModel.startsWith("recommend:")) {
+        const fileName = chosenModel.replace("recommend:", "");
+        const rec = recommendedCatalog.find((r) => r.fileName === fileName);
+        if (rec && client) {
+            const spin = spinner(`Initiating download for ${rec.name} (${rec.size})...`);
+            try {
+                await client.postModelDownload({
+                    url: rec.url,
+                    name: rec.fileName,
+                    mmprojUrl: rec.mmprojUrl || undefined,
+                    mmprojName: rec.mmprojName || undefined,
+                });
+                spin.stop(color(`${sym.check} Download initiated for ${rec.fileName}. It will download in the background.`, ansi.green));
+                state.guardianModel = join(process.cwd(), "models", rec.fileName);
+            } catch (err: unknown) {
+                spin.stop(color(`${sym.cross} Download initiation failed`, ansi.red));
+                printError(err instanceof Error ? err.message : String(err));
+                state.guardianModel = "";
+            }
+        } else {
+            state.guardianModel = join(process.cwd(), "models", fileName);
+        }
     } else {
-        state.guardianModel = "";
+        state.guardianModel = chosenModel;
     }
 
     if (state.guardianModel) {

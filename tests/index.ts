@@ -5,7 +5,11 @@ import { testAdapterSafetyRegressionExpanded } from "./adapter-safety-expanded.t
 import { testNetworkAdapterSafety } from "./network-adapter-safety.test.js";
 import { testApprovalContentionMixedOutcomes } from "./approval-contention-mixed-outcomes.test.js";
 import { testDashboardService } from "./dashboard-service.test.js";
-import { testCharacterAccountability, testCharacterAccountabilityPhaseE3 } from "./character-accountability.test.js";
+import {
+    testCharacterAccountability,
+    testCharacterAccountabilityPhaseE3,
+    testCharacterAccountabilityReconciliation,
+} from "./character-accountability.test.js";
 import { testD2SystemTools } from "./d2-system-tools.test.js";
 import { testD2GovernancePaths } from "./d2-governance-paths.test.js";
 import { testPolicyPathMutatingOps } from "./policy-path-mutating-ops.test.js";
@@ -158,6 +162,7 @@ async function runTests(): Promise<void> {
         { name: "DashboardService", fn: testDashboardService },
         { name: "CharacterAccountability", fn: testCharacterAccountability },
         { name: "CharacterAccountabilityPhaseE3", fn: testCharacterAccountabilityPhaseE3 },
+        { name: "CharacterAccountabilityReconciliation", fn: testCharacterAccountabilityReconciliation },
         { name: "D2SystemTools", fn: testD2SystemTools },
         { name: "LlmProviderManager", fn: testLlmProviderManager },
         { name: "SessionTraceExplorer", fn: testSessionTraceExplorer },

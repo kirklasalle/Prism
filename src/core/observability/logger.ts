@@ -7,15 +7,21 @@
  *   - `text`  (default) — `[ISO] LEVEL msg key=value …`
  *   - `json`            — `{"ts":..., "level":..., "msg":..., op?, ...ctx}`
  *
- * The default level is `info`; `PRISM_LOG_LEVEL=debug` opens it up. All
- * existing `console.*` call sites in the codebase continue to work — this
+ * The default level is `info`; `PRISM_LOG_LEVEL=debug` opens it up.
+ * `PRISM_LOG_LEVEL=trace` opens full diagnostics including wizard model
+ * population and Guardian configuration tracing.
+ *
+ * All existing `console.*` call sites in the codebase continue to work — this
  * module is **opt-in**: subsystems that want machine-parseable logs
  * import `logger` from here.
  */
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+import { join } from "node:path";
+import { existsSync, mkdirSync, appendFileSync } from "node:fs";
 
-const LEVEL_RANK: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
+
+const LEVEL_RANK: Record<LogLevel, number> = { trace: 5, debug: 10, info: 20, warn: 30, error: 40 };
 
 export type LogFormat = "text" | "json";
 
@@ -48,8 +54,13 @@ function readEnvFormat(env: NodeJS.ProcessEnv): LogFormat {
 
 function readEnvLevel(env: NodeJS.ProcessEnv): LogLevel {
     const raw = (env.PRISM_LOG_LEVEL ?? "").toLowerCase();
-    if (raw === "debug" || raw === "info" || raw === "warn" || raw === "error") return raw;
+    if (raw === "trace" || raw === "debug" || raw === "info" || raw === "warn" || raw === "error") return raw;
     return "info";
+}
+
+/** Resolve the logs directory for file-based trace output. */
+function resolveLogDir(): string {
+    return join(process.cwd(), "logs");
 }
 
 /** Resolve config from current `process.env`. Re-reads on each call. */
@@ -120,9 +131,26 @@ export class Logger {
             msg,
             ...(ctx ?? {}),
         };
-        this.cfg.sink(formatRecord(record, this.cfg.format));
+        const formatted = formatRecord(record, this.cfg.format);
+        this.cfg.sink(formatted);
+        this.writeToTraceFile(formatted);
     }
 
+    /** Append a line to trace/log files in logs/ directory. */
+    private writeToTraceFile(line: string): void {
+        try {
+            const dir = resolveLogDir();
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+            appendFileSync(join(dir, "prism-trace.log"), line + "\n", "utf-8");
+            appendFileSync(join(dir, "prism.log"), line + "\n", "utf-8");
+        } catch {
+            /* never break operations for logging */
+        }
+    }
+
+    trace(msg: string, ctx?: LogContext): void {
+        this.emit("trace", msg, ctx);
+    }
     debug(msg: string, ctx?: LogContext): void {
         this.emit("debug", msg, ctx);
     }

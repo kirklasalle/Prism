@@ -1,58 +1,61 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ActivityEvent, ActivitySubscriber } from "./types.js";
+import { type ExecutionAuthorityContext } from "../security/execution-authority-context.js";
+import {
+    type HashChainedEvent,
+    GENESIS_PREVIOUS_HASH,
+    computeChainedEventHash,
+} from "./hash-chained-audit.js";
 
 export class ActivityBus {
     private readonly subscribers = new Set<ActivitySubscriber>();
-    private readonly events: ActivityEvent[] = [];
+    private readonly events: HashChainedEvent[] = [];
+    private lastHash: string = GENESIS_PREVIOUS_HASH;
 
     subscribe(subscriber: ActivitySubscriber): () => void {
         this.subscribers.add(subscriber);
         return () => this.subscribers.delete(subscriber);
     }
 
-    emit(event: Omit<ActivityEvent, "id" | "timestamp" | "hash">): ActivityEvent {
-        const fullEvent: ActivityEvent = {
+    emit(event: Omit<ActivityEvent, "id" | "timestamp" | "hash">, authorityContext?: ExecutionAuthorityContext): HashChainedEvent {
+        const id = randomUUID();
+        const timestamp = new Date().toISOString();
+        const sequenceNumber = this.events.length + 1;
+        const previousHash = this.lastHash;
+
+        const baseEvent: Omit<ActivityEvent, "hash"> = {
             ...event,
-            id: randomUUID(),
-            timestamp: new Date().toISOString(),
+            id,
+            timestamp,
+            operatorEmail: event.operatorEmail || authorityContext?.operatorEmail || undefined,
+            assignmentId: event.assignmentId || authorityContext?.assignmentId || undefined,
         };
 
-        fullEvent.hash = this.hashEvent(fullEvent);
-        this.events.push(fullEvent);
+        // IC-11 Phase 4: Compute blockchain-style chained hash
+        const hash = computeChainedEventHash(previousHash, baseEvent);
+
+        const chainedEvent: HashChainedEvent = {
+            ...baseEvent,
+            hash,
+            previousHash,
+            sequenceNumber,
+        };
+
+        this.lastHash = hash;
+        this.events.push(chainedEvent);
 
         for (const subscriber of this.subscribers) {
-            subscriber.onEvent(fullEvent);
+            subscriber.onEvent(chainedEvent);
         }
 
-        return fullEvent;
+        return chainedEvent;
     }
 
-    listEvents(): readonly ActivityEvent[] {
+    listEvents(): readonly HashChainedEvent[] {
         return this.events;
     }
 
-    private hashEvent(event: ActivityEvent): string {
-        const payload = JSON.stringify({
-            sessionId: event.sessionId,
-            layer: event.layer,
-            operation: event.operation,
-            status: event.status,
-            details: event.details,
-            characterId: event.characterId,
-            prismUserId: event.prismUserId,
-            prismUserEmail: event.prismUserEmail,
-            operatorId: event.operatorId,
-            operatorEmail: event.operatorEmail,
-            clientId: event.clientId,
-            assignmentId: event.assignmentId,
-            accountabilityChain: event.accountabilityChain,
-            authorityTier: event.authorityTier,
-            policyDecision: event.policyDecision,
-            sideEffects: event.sideEffects,
-            rollbackPlan: event.rollbackPlan,
-            workspaceHub: event.accountabilityChain?.workspaceHub,
-        });
-
-        return createHash("sha256").update(payload).digest("hex");
+    getLastHash(): string {
+        return this.lastHash;
     }
 }

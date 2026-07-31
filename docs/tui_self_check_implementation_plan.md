@@ -39,7 +39,7 @@ sequenceDiagram
     CAC-->>SC: Identity Bound & Verified
 
     SC->>LLM: Verify Primary Provider & Model
-    LLM-->>SC: Provider: OpenAI (gpt-4o), Keys masked, Modalities matching
+    LLM-->>SC: Provider: OpenAI (gpt-5), Keys masked, Modalities matching
 
     SC->>GUA: Verify Guardian (Custodian) Status
     GUA-->>SC: State: running, Slot: ready (llama.cpp)
@@ -137,18 +137,22 @@ When the runner uncovers health degradations, the system doesn't just display wa
 ## 6. Implementation Plan & Milestones
 
 ### Phase 1: Self-Check Core Engine
+
 * Create the core test coordinator file: [self-check-coordinator.ts](file:///d:/Projects/Prism/src/core/diagnostics/self-check-coordinator.ts).
 * Integrate it into the existing `DiagnosticsHandler` at `/api/diagnostics/system/run`.
 * Implement CLI command: `npm run doctor` to output JSON self-check reports.
 
 ### Phase 2: Tab API Integration
+
 * Map check-loops to every endpoint listed in the **Tab Verification Matrix**.
 * Build mock navigators in Ink to verify tab renders without throwing React hooks errors.
 
 ### Phase 3: Guardian Integration & Self-Healing
+
 * Hook up the `SelfCheckCoordinator` to the Guardian Agent so that it runs automatically at boot and every 10 minutes.
 * Implement the self-improvement/remediation actions inside `src/core/agents/guardian-agent.ts`.
 
 ### Phase 4: Verification & Release
+
 * Integrate the self-check runner into the release validation suite (`npm run release:validate`).
 * Verify that a tamper warning or missing character config correctly blocks release.

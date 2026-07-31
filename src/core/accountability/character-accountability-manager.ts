@@ -30,6 +30,12 @@ export interface CharacterAccountabilityManagerOptions {
     businessEmailValidation?: BusinessEmailValidationPolicy;
 }
 
+/**
+ * Persists the operator's CAC Main Agent identity. The CAC is the operator-facing
+ * assistant, not a per-session audit object; every later session reuses it.
+ * Guardian is the separate permanent secondary agent that supports this agent
+ * and the wider platform.
+ */
 export class CharacterAccountabilityManager {
     private readonly options: CharacterAccountabilityManagerOptions;
 
@@ -55,6 +61,27 @@ export class CharacterAccountabilityManager {
             this.assertBusinessEmailPolicy(prismUserEmail, operatorEmail);
         }
 
+        const existing = this.store.list({ operatorEmail })[0];
+        if (existing) {
+            const now = new Date().toISOString();
+            const reused: CharacterAssignment = {
+                ...existing,
+                state: "active",
+                suspendReason: undefined,
+                revocationReason: undefined,
+                dispatchCount: existing.dispatchCount + 1,
+                updatedAt: now,
+                lastActiveAt: now,
+            };
+            this.store.save(reused);
+            this.emitLifecycleEvent("character_accountability.reused", reused, "succeeded", {
+                requestedCharacterId: input.characterId,
+                requestedSessionId: input.sessionId,
+                dispatchCount: reused.dispatchCount,
+            });
+            return reused;
+        }
+
         const now = new Date().toISOString();
         const assignment: CharacterAssignment = {
             assignmentId: randomUUID(),
@@ -73,14 +100,6 @@ export class CharacterAccountabilityManager {
             updatedAt: now,
             lastActiveAt: now,
         };
-
-        // Suspend any other active main agents to enforce single main agent policy
-        const activeAssignments = this.store.list({ state: "active" });
-        for (const act of activeAssignments) {
-            if (act.assignmentId !== assignment.assignmentId) {
-                this.suspend(act.assignmentId, "Single main agent policy: suspended to allow new main agent dispatch.");
-            }
-        }
 
         this.store.save(assignment);
         this.emitLifecycleEvent("character_accountability.assign", assignment, "succeeded", {
@@ -104,17 +123,6 @@ export class CharacterAccountabilityManager {
         const existing = this.store.get(assignmentId);
         if (!existing || existing.state === "revoked") {
             return null;
-        }
-
-        // Suspend all other active assignments before resuming this one to enforce single main agent policy
-        const activeAssignments = this.store.list({ state: "active" });
-        for (const act of activeAssignments) {
-            if (act.assignmentId !== assignmentId) {
-                this.suspend(
-                    act.assignmentId,
-                    "Single main agent policy: suspended to allow other main agent resumption.",
-                );
-            }
         }
 
         const updated = {
@@ -578,7 +586,7 @@ function assertNotPlaceholderEmail(email: string, field: string): void {
     if (isPlaceholderEmailDomain(domain)) {
         throw new Error(
             `Business profile rejects placeholder ${field}: "${email}" uses a non-production domain (` +
-                `"${domain}"). Use a real, routable domain (e.g. your corporate or SSO provider domain).`,
+            `"${domain}"). Use a real, routable domain (e.g. your corporate or SSO provider domain).`,
         );
     }
 }

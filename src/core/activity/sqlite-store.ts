@@ -14,8 +14,10 @@ export class SqliteActivityStore implements IActivityStore {
         this.db = new DatabaseSync(dbPath);
         this.migrate();
 
+        // IC-11 Phase 0: INSERT OR IGNORE prevents overwriting existing audit events.
+        // UUID-based IDs make collisions astronomically unlikely.
         this.insertStmt = this.db.prepare(`
-      INSERT OR REPLACE INTO activity_events
+      INSERT OR IGNORE INTO activity_events
         (id, timestamp, session_id, layer, operation, status,
          confidence, duration_ms, details,
          authority_tier, policy_decision, side_effects,
@@ -37,8 +39,9 @@ export class SqliteActivityStore implements IActivityStore {
       LIMIT 1000
     `);
 
+        // IC-11 Phase 0: INSERT OR IGNORE for telemetry as well.
         this.insertLlreStmt = this.db.prepare(`
-      INSERT OR REPLACE INTO prism_llre_telemetry
+      INSERT OR IGNORE INTO prism_llre_telemetry
         (id, timestamp, session_id, correlation_id, model_name,
          tokens_consumed, latency_ms, cost_usd, rsi_score, csr_score, tca_score, teq_score, details)
       VALUES

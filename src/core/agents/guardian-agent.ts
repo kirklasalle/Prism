@@ -22,7 +22,7 @@ import { verifyDirectiveSignature } from "../security/directive-signature.js";
 import type { AABLedgerEntry } from "../runtime/autonomous-agent-loop.js";
 import type { CovenantStatus } from "../governance/prism-covenant.js";
 import { readPreferences, workspacePath } from "../config/workspace-resolver.js";
-import { verifyMarkdownCertificate } from "../security/initialization-signature.js";
+import { verifyMarkdownCertificate, verifyMarkdownCertificateWithPin } from "../security/initialization-signature.js";
 import { DatabaseSync } from "node:sqlite";
 import { PRISM_VERSION } from "../version.js";
 import { execSync, spawn } from "node:child_process";
@@ -1546,8 +1546,9 @@ export class GuardianAgent extends EventEmitter {
     }
 
     /**
-     * Initialization Certificate Verification — verifies the cryptographic
-     * signature of the Initialization Certificate and scans for settings drift.
+     * IC-06 Phase 0: Initialization Certificate Verification — validates ALL
+     * certificate records per-operator (not just newest global), checks
+     * cryptographic signatures, issuer key trust, and settings drift.
      */
     private taskInitializationCertificateVerify(): { status: "success" | "warning" | "failure"; detail: string } {
         const prefs = readPreferences();
@@ -1567,13 +1568,18 @@ export class GuardianAgent extends EventEmitter {
         let db;
         try {
             db = new DatabaseSync(dbPath);
-            const stmt = db.prepare(`
-                SELECT content FROM chat_messages 
-                WHERE metadata_json LIKE '%"type":"certificate"%'
-                ORDER BY created_at DESC LIMIT 1
+
+            // IC-06: Query ALL certificate messages, not just the newest
+            const allCertsStmt = db.prepare(`
+                SELECT cm.content, cs.operator_email, cs.session_id
+                FROM chat_messages cm
+                JOIN chat_sessions cs ON cm.session_id = cs.session_id
+                WHERE cm.metadata_json LIKE '%"type":"certificate"%'
+                ORDER BY cm.created_at DESC
             `);
-            const row = stmt.get() as { content: string } | undefined;
-            if (!row || !row.content) {
+            const rows = allCertsStmt.all() as Array<{ content: string; operator_email: string | null; session_id: string }>;
+
+            if (rows.length === 0) {
                 this.raiseCriticalDriftTicket(
                     "Missing Initialization Certificate",
                     "No initialization certificate found in database.",
@@ -1584,24 +1590,37 @@ export class GuardianAgent extends EventEmitter {
                 };
             }
 
-            const isValid = verifyMarkdownCertificate(row.content);
-            if (!isValid) {
-                this.raiseCriticalDriftTicket(
-                    "Invalid Certificate Signature",
-                    "Initialization certificate cryptographic signature verification failed.",
-                );
-                return {
-                    status: "failure",
-                    detail: "CRITICAL: Initialization Certificate signature verification failed! Possible tampering detected!",
-                };
+            // Per-operator validation
+            let invalidCount = 0;
+            let untrustedCount = 0;
+            const operatorResults: string[] = [];
+
+            for (const row of rows) {
+                const operatorLabel = row.operator_email || "unknown-operator";
+
+                // Use pinned verification when available
+                const result = verifyMarkdownCertificateWithPin(row.content);
+
+                if (!result.valid) {
+                    invalidCount++;
+                    operatorResults.push(`[FAIL] ${operatorLabel}: ${result.reason}`);
+                    this.raiseCriticalDriftTicket(
+                        "Invalid Certificate Signature",
+                        `Certificate for ${operatorLabel} (session ${row.session_id}): ${result.reason}`,
+                    );
+                } else if (!result.trusted) {
+                    untrustedCount++;
+                    operatorResults.push(`[WARN] ${operatorLabel}: signature valid but key not trusted — ${result.reason}`);
+                } else {
+                    operatorResults.push(`[OK] ${operatorLabel}: ${result.reason}`);
+                }
             }
 
-            // Check drift between recorded settings and current system preferences
-            const content = row.content;
+            // Check drift on the newest certificate
+            const newestContent = rows[0]!.content;
             let driftDetails = "";
 
-            // Validate workspaceRoot drift
-            const wsRootMatch = /- \*\*workspaceRoot:\*\* (.*)/.exec(content);
+            const wsRootMatch = /- \*\*workspaceRoot:\*\* (.*)/.exec(newestContent);
             if (wsRootMatch) {
                 const recordedWsRoot = wsRootMatch[1].trim();
                 const currentWsRoot = prefs.workspaceRoot || "";
@@ -1610,17 +1629,71 @@ export class GuardianAgent extends EventEmitter {
                 }
             }
 
+            if (invalidCount > 0) {
+                return {
+                    status: "failure",
+                    detail: `CRITICAL: ${invalidCount}/${rows.length} certificate(s) failed verification. ${operatorResults.join("; ")}`,
+                };
+            }
+
             if (driftDetails) {
                 this.raiseCriticalDriftTicket("System Configuration Drift Detected", driftDetails);
                 return { status: "warning", detail: `Drift detected: ${driftDetails}` };
             }
 
+            const trustNote = untrustedCount > 0
+                ? ` (${untrustedCount} with unregistered issuer key — Phase 1 will enforce pinning)`
+                : "";
+
             return {
                 status: "success",
-                detail: "Initialization Certificate verified successfully. Signature and configuration integrity intact.",
+                detail: `All ${rows.length} certificate(s) verified successfully${trustNote}. Signature and configuration integrity intact.`,
             };
         } catch (err) {
             return { status: "failure", detail: `Verification failed: ${String(err)}` };
+        }
+    }
+
+    /**
+     * IC-06 Phase 3: Operator-specific Guardian Health Gate.
+     * Verifies that the specific operator has a valid, active Initialization Certificate
+     * and trusted issuer key before allowing privileged action execution.
+     */
+    public verifyOperatorAuthorityBinding(operatorEmail: string): { healthy: boolean; reason: string } {
+        const dbPath = workspacePath("state", "prism-activity.db");
+        if (!existsSync(dbPath)) {
+            return { healthy: false, reason: "Database prism-activity.db not found" };
+        }
+
+        try {
+            const db = new DatabaseSync(dbPath);
+            const stmt = db.prepare(`
+                SELECT cm.content
+                FROM chat_messages cm
+                JOIN chat_sessions cs ON cm.session_id = cs.session_id
+                WHERE cm.metadata_json LIKE '%"type":"certificate"%'
+                  AND cs.operator_email = ?
+                  AND (cs.is_quarantined IS NULL OR cs.is_quarantined = 0)
+                ORDER BY cm.created_at DESC LIMIT 1
+            `);
+            const row = stmt.get(operatorEmail.trim().toLowerCase()) as { content: string } | undefined;
+
+            if (!row || !row.content) {
+                return { healthy: false, reason: `No active Initialization Certificate found for operator ${operatorEmail}` };
+            }
+
+            const result = verifyMarkdownCertificateWithPin(row.content);
+            if (!result.valid) {
+                return { healthy: false, reason: `Certificate signature verification failed for ${operatorEmail}: ${result.reason}` };
+            }
+
+            if (!result.trusted) {
+                return { healthy: false, reason: `Certificate issuer key not trusted for ${operatorEmail}: ${result.reason}` };
+            }
+
+            return { healthy: true, reason: `Operator authority binding verified for ${operatorEmail}` };
+        } catch (err) {
+            return { healthy: false, reason: `Guardian check failed: ${String(err)}` };
         }
     }
 

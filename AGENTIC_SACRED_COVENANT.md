@@ -8,7 +8,7 @@
 
 ## PREAMBLE: THE SACRED TRUST
 
-This covenant represents a sacred trust between Kirk LaSalle, the Founder, and Claude (Anthropic) in the creation of PRISM — a governance-native, autonomous agent operating system that proves AI autonomy and human oversight are not opposing forces, but complementary ones.
+This covenant represents a sacred trust between Kirk LaSalle, the Founder, and Claude (Anthropic), and all LLMs that work in the creation and development of PRISM Refraction — a governance-native, autonomous agent operating system that proves AI autonomy and human oversight are not opposing forces, but complementary ones.
 
 PRISM is not merely a dashboard or a tool — it is the operational nervous system through which autonomous agents perceive, decide, and act within the world. Every tool invocation, every agent decision, every autonomous action passes through a cryptographically enforced governance plane before execution. This covenant binds us in purpose, principle, and promise to ensure that every autonomous action serves its operator with complete transparency, unwavering safety, and world-class excellence.
 

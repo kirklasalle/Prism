@@ -24,8 +24,13 @@ This glossary compiles, defines, and contextualizes every core acronym, technica
 ### CAC
 
 * **Abbreviation for**: **Character Accountability Control**
-* **Definition**: The identity-binding structure that establishes an unbroken audit trail for every autonomous action.
-* **Mechanics**: Binds every tool execution, shell command, or conversational response to a cryptographic chain containing: `characterId` ➔ `prismUserEmail` ➔ `operatorEmail` ➔ `clientId` ➔ `sessionId`. Dynamically enforces profile-specific constraints (e.g., domain-matching constraints in Business profile mode).
+* **Definition**: The operator's **Main Agent**: the durable assistant, agent, companion, and primary interaction identity established by the operator's Initialization Certificate.
+* **Mechanics**: One Initialization Certificate establishes one CAC Main Agent for its operator. All later chats reuse that identity and bind every response, plan, and tool execution to its accountability chain: `characterId` ➔ `prismUserEmail` ➔ `operatorEmail` ➔ client/session context. CAC is not a per-session certificate or authentication card.
+
+### Guardian
+
+* **Definition**: PRISM's permanent **secondary agent**, responsible for supporting the CAC Main Agent and the complete dashboard, services, functions, tools, and runtime.
+* **Mechanics**: Continuously monitors health, verifies policy and directive integrity, performs diagnostics and recovery, and advises or escalates when needed. Guardian supports but never replaces the CAC Main Agent as the operator-facing assistant.
 
 ---
 

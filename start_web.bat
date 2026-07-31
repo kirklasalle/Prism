@@ -1,6 +1,19 @@
 @echo off
 setlocal
 
+if /i "%~1"=="--legacy-direct" (
+  shift
+  goto :legacy_entry
+)
+if not "%~1"=="" goto :legacy_entry
+
+echo [DEPRECATION] start_web.bat is now a compatibility shim.
+echo [DEPRECATION] Forwarding to PrismRefraction.bat web
+call "%~dp0PrismRefraction.bat" web
+exit /b %ERRORLEVEL%
+
+:legacy_entry
+
 cd /d "%~dp0"
 
 set "PRISM_PREFLIGHT_MODE=%~1"

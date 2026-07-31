@@ -8,6 +8,7 @@
 - **[STATUS.md](STATUS.md)** — Authoritative status: what's shipped, pending, gated
 - **[PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md](PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md)** — Master SAP approval package (code, docs, market, critical audit)
 - **[PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md](PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md)** — Single three-state matrix (Accomplished/In Progress/Not Yet)
+- **[INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md](INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md)** — Initialization Certificate v1.0 trust-root audit and release gates
 - **[MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md](MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md)** — MCP IDS runtime awareness operating model
 - **[../audit.md](../audit.md)** — World-Class Complete Codebase Audit (2026-06-17)
 - **[AUDIT_TASK_LIST.md](AUDIT_TASK_LIST.md)** — Prioritized remediation task list
@@ -55,6 +56,7 @@
 
 ## Architecture & Design
 
+- CAC_GUARDIAN_AGENT_ARCHITECTURE.md: canonical roles for the operator-facing CAC Main Agent and permanent secondary Guardian
 - COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md: canonical computer-use architecture
 - COMPUTER_USE_BUSINESS_GATE_STATUS_SCHEMA.json: business gate schema
 - COMPUTER_USE_BUSINESS_GATE_STATUS_TEMPLATE.json: business gate template

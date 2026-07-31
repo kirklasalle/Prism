@@ -228,7 +228,11 @@ Acceptance criteria:
 
 ### 8.4A Character Accountability Control (CAC)
 
-Every agent action must be linked to an immutable identity chain comprising a character, a Prism user, an operator, and a client/session context. This identity chain is propagated into activity events and included in SHA-256 integrity hashes.
+The CAC is the operator's **Main Agent**: the assistant, agent, companion, and primary interaction identity established by an Initialization Certificate. Each operator has exactly one CAC Main Agent per Initialization Certificate. New chats and sessions must reuse it rather than create another CAC.
+
+Every action by or on behalf of the CAC Main Agent must be linked to its durable identity chain comprising a character, a Prism user, an operator, and the current client/session context. This identity chain is propagated into activity events and included in SHA-256 integrity hashes.
+
+Guardian is the permanent **secondary agent**. It supports the CAC Main Agent and continuously protects the dashboard and all services, functions, tools, and runtime components. Guardian must not replace the CAC as the operator-facing assistant.
 
 Required identity fields:
 
@@ -253,6 +257,9 @@ Profile-aware email validation:
 
 Acceptance criteria:
 
+- exactly one CAC Main Agent exists per operator per Initialization Certificate,
+- all later sessions reuse the certificate-bound CAC Main Agent,
+- Guardian remains a distinct secondary support agent with platform-wide coverage,
 - accountability chain present on all activity events emitted during governed operations,
 - lifecycle transitions (assign, dispatch, suspend, resume, revoke) each emit auditable activity events,
 - business-profile domain mismatch is rejected with structured error before assignment completes,
@@ -468,7 +475,7 @@ PRISM must provide a dedicated, secure operator and identity management dashboar
 
 - **Authentication Bypass Mitigation**: Support for developer/admin tokens for direct system administration when external OIDC/SSO services are offline.
 - **Operator Lifecycle Directory**: Full CRUD options for operators, including creation, suspending, activating, resetting passwords, and role assignment.
-- **Character Accountability Certificates (CAC)**: Table for monitoring all active operator-agent session bindings, audit trail exploration for provenance validation, dynamic CSV/JSON export actions, and manual email verification gates.
+- **CAC Main Agents**: Registry of each operator's single Initialization Certificate-bound primary assistant identity, with provenance audit exploration, CSV/JSON export actions, and manual email verification gates.
 - **SCIM Directory Sync Integration**: Direct interface to generate and rotate SCIM provisioning bearer tokens.
 - **Emergency Platform Actions**: Single-button trigger for immediate system-wide shutdown.
 - **Unified Navigation Integration**: Rerouting legacy login flows to the secure operator console when query or configuration gates mandate management access.

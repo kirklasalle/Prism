@@ -1,4 +1,5 @@
 import { state, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, metricRow, healthDot, timeAgo, renderStars, approvalBadge, safeRenderStep, dashboardLog, togglePanelCollapse, formatUptime, toCsvValue, showConfirm, authHeaders, showPrompt, showTransientNotice } from './dashboard-core.js';
+import { applyTooltipRuntimeSettings, getTooltipHelperVariants } from './prism-tooltips.js';
 
 // renderNotice() removed — use showTransientNotice() from dashboard-core.js instead.
 // All state.notice usages in this file route through showTransientNotice().
@@ -827,7 +828,7 @@ export
     + (state.matrixEditingPattern ? 'Edit Matrix Entry' : 'Create Matrix Entry')
     + '</div>';
   html += '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 2fr auto auto;gap:6px;align-items:center;">';
-  html += '<input type="text" placeholder="pattern (example: gpt-4o* or llama3.1:8b)" value="' + escapeHtml(state.matrixDraftPattern || '') + '" oninput="setMatrixDraftField(&#39;pattern&#39;, this.value)" style="' + filterStyle + 'width:100%;" />';
+  html += '<input type="text" placeholder="pattern (example: gpt-5* or llama3.1:8b)" value="' + escapeHtml(state.matrixDraftPattern || '') + '" oninput="setMatrixDraftField(&#39;pattern&#39;, this.value)" style="' + filterStyle + 'width:100%;" />';
   html += '<select onchange="setMatrixDraftField(&#39;tier&#39;, this.value)" style="' + filterStyle + '">';
   html += '<option value=""' + (!state.matrixDraftTier ? ' selected' : '') + '>Tier</option>';
   for (var mt = 1; mt <= 5; mt++) {
@@ -2327,8 +2328,43 @@ export
     html += '</select>';
     html += '</div>';
 
+    var helperOptions = getTooltipHelperVariants();
+    var helperVariant = String((state.runtimeSettings && state.runtimeSettings.tooltipHelperVariant) || 'glass-prism');
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Tooltip Helper Persona';
+    html += ' <span class="stg-hint">Select the Prism helper style shown in rich tooltips</span>';
+    html += '</span>';
+    html += '<select class="stg-select" id="stg-tooltipHelperVariant" onchange="markSettingDirty(\'tooltipHelperVariant\');previewTooltipPreferences()" style="width:240px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:4px;color:var(--fg);padding:4px 8px;font-size:12px;cursor:pointer;">';
+    for (var h = 0; h < helperOptions.length; h++) {
+      var opt = helperOptions[h];
+      html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === helperVariant ? ' selected' : '') + '>' + escapeHtml(opt.label) + '</option>';
+    }
+    html += '</select>';
+    html += '</div>';
+
+    var helperVisible = state.runtimeSettings ? (state.runtimeSettings.tooltipHelperVisible !== false) : true;
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Tooltip Helper Visibility';
+    html += ' <span class="stg-hint">Show helper companion panel inside rich Prism tooltips</span>';
+    html += '</span>';
+    html += '<span style="display:flex;align-items:center;">';
+    html += '<input type="checkbox" id="stg-tooltipHelperVisible"' + (helperVisible ? ' checked' : '') + ' onchange="markSettingDirty(\'tooltipHelperVisible\');previewTooltipPreferences()" style="width:16px;height:16px;cursor:pointer;" />';
+    html += '</span>';
+    html += '</div>';
+
+    var helperMotion = state.runtimeSettings ? (state.runtimeSettings.tooltipHelperMotionEnabled !== false) : true;
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Tooltip Helper Motion';
+    html += ' <span class="stg-hint">Enable avatar orbit and bob animations for helper companions</span>';
+    html += '</span>';
+    html += '<span style="display:flex;align-items:center;">';
+    html += '<input type="checkbox" id="stg-tooltipHelperMotionEnabled"' + (helperMotion ? ' checked' : '') + ' onchange="markSettingDirty(\'tooltipHelperMotionEnabled\');previewTooltipPreferences()" style="width:16px;height:16px;cursor:pointer;" />';
+    html += '</span>';
+    html += '</div>';
+
     html += '<div style="margin-top:8px;text-align:right;">';
-    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\', \'' + 'verboseLogging' + '\'])">Save</button>';
+    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\', \'' + 'verboseLogging' + '\', \'' + 'tooltipHelperVariant' + '\', \'' + 'tooltipHelperVisible' + '\', \'' + 'tooltipHelperMotionEnabled' + '\'])">Save</button>';
+    html += '<button class="secondary-button" style="margin-left:8px;" onclick="resetTooltipPreferences()">Reset Tooltip Defaults</button>';
     html += '</div>';
   });
 
@@ -2775,6 +2811,53 @@ export
 }
 
 export
+  function previewTooltipPreferences() {
+  var variantEl = document.getElementById('stg-tooltipHelperVariant');
+  var visibleEl = document.getElementById('stg-tooltipHelperVisible');
+  var motionEl = document.getElementById('stg-tooltipHelperMotionEnabled');
+  if (!variantEl && !visibleEl && !motionEl) return;
+  applyTooltipRuntimeSettings({
+    tooltipHelperVariant: variantEl ? variantEl.value : undefined,
+    tooltipHelperVisible: visibleEl ? !!visibleEl.checked : undefined,
+    tooltipHelperMotionEnabled: motionEl ? !!motionEl.checked : undefined,
+  });
+}
+
+export
+  async function resetTooltipPreferences() {
+  var defaults = {
+    tooltipHelperVariant: 'glass-prism',
+    tooltipHelperVisible: true,
+    tooltipHelperMotionEnabled: true,
+  };
+
+  var variantEl = document.getElementById('stg-tooltipHelperVariant');
+  var visibleEl = document.getElementById('stg-tooltipHelperVisible');
+  var motionEl = document.getElementById('stg-tooltipHelperMotionEnabled');
+  if (variantEl) variantEl.value = defaults.tooltipHelperVariant;
+  if (visibleEl) visibleEl.checked = defaults.tooltipHelperVisible;
+  if (motionEl) motionEl.checked = defaults.tooltipHelperMotionEnabled;
+  applyTooltipRuntimeSettings(defaults);
+
+  try {
+    var saved = await request('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(defaults)
+    });
+    if (saved && saved.settings) {
+      state.runtimeSettings = saved.settings;
+      applyTooltipRuntimeSettings(saved.settings);
+    }
+    showTransientNotice('Tooltip preferences reset to defaults.', 'success');
+    await refreshChrome();
+  } catch (e) {
+    console.error('[settings] tooltip reset failed', e);
+    showTransientNotice('Failed to reset tooltip defaults: ' + String(e), 'error');
+  }
+}
+
+export
   async function saveSettings(keys) {
   dashboardLog('settings', 'settings.save', 'Saving: ' + keys.join(', '));
   var payload = {};
@@ -2789,7 +2872,11 @@ export
   state.settingsSaving = true;
   render();
   try {
-    await request('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    var saved = await request('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (saved && saved.settings) {
+      state.runtimeSettings = saved.settings;
+      applyTooltipRuntimeSettings(saved.settings);
+    }
     await refreshChrome();
   } catch (e) {
     console.error('[settings] save failed', e);
@@ -3640,7 +3727,7 @@ export async function toggleLlrePreference(checked) {
     state.notice = 'LLRE Cognitive Economics is now ' + (checked ? 'ENABLED' : 'DISABLED') + '.';
     showTransientNotice(state.notice, 'success');
     state.notice = null;
-    
+
     // Dynamically refresh LLRE Telemetry UI
     refreshLlreTelemetry();
   } catch (e) {
@@ -3784,31 +3871,31 @@ export async function toggleSshpPreference(checked) {
 export function applyTheme(theme) {
   dashboardLog('settings', 'theme.apply', 'Applying theme preference: ' + theme);
   localStorage.setItem('prism-theme', theme);
-  
+
   if (window.__prismThemeMediaListener) {
     try {
       window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', window.__prismThemeMediaListener);
-    } catch(e) {}
+    } catch (e) { }
     window.__prismThemeMediaListener = null;
   }
-  
+
   function applyThemeClass(t) {
     document.body.classList.remove('theme-day', 'theme-night', 'theme-tron');
     document.body.classList.add('theme-' + t);
   }
-  
+
   if (theme === 'auto') {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     applyThemeClass(media.matches ? 'night' : 'day');
-    
-    window.__prismThemeMediaListener = function(e) {
+
+    window.__prismThemeMediaListener = function (e) {
       applyThemeClass(e.matches ? 'night' : 'day');
     };
     media.addEventListener('change', window.__prismThemeMediaListener);
   } else {
     applyThemeClass(theme);
   }
-  
+
   const select = document.getElementById('stg-prism-theme-select');
   if (select) {
     select.value = theme;

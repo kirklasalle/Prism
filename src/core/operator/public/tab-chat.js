@@ -1,5 +1,6 @@
 import { state, tabs, request, escapeHtml, renderMarkdown, formatRelativeTime, safeIso, statusBadge, dashboardLog, safeRenderStep, renderStars, approvalBadge, metricRow, healthDot, timeAgo, formatUptime, authHeaders, createReconnector, trimAgenticEvent, showConfirm, showPrompt, showForm, showTransientNotice } from './dashboard-core.js';
 import { renderToolCallLog } from './tab-logs.js';
+import { applyTooltipRuntimeSettings } from './prism-tooltips.js';
 
 // Holds files staged for upload prior to server ACK. Ensure initialized.
 let pendingAttachments = [];
@@ -704,6 +705,7 @@ export
     state.packageReleaseSnapshot = packagePayload ? (packagePayload.releaseSnapshot || null) : null;
     state.sessionPackageHistory = packageHistoryPayload ? (Array.isArray(packageHistoryPayload.history) ? packageHistoryPayload.history : []) : [];
     state.runtimeSettings = settingsPayload ? (settingsPayload.settings || null) : null;
+    applyTooltipRuntimeSettings(state.runtimeSettings);
     state.characterAssignments = characterAssignmentsPayload ? (characterAssignmentsPayload.assignments || []) : [];
     reconcileExpandedSessionPackages();
     if (state.selectedTraceId && (!traceData || !traceData.traces || !traceData.traces.some(trace => trace.correlationId === state.selectedTraceId))) {
@@ -1198,7 +1200,7 @@ export
   var s = state.status;
   if (!s) return;
 
-  var activeTabObj = tabs.find(function(t) { return t.id === state.activeTab; });
+  var activeTabObj = tabs.find(function (t) { return t.id === state.activeTab; });
   var activeTabName = activeTabObj ? activeTabObj.label : 'Chat Interface';
 
   var segment = (s.executionProfileSegment || 'individual').toLowerCase();
@@ -1243,7 +1245,7 @@ export
     // Fallback: extract operator email from the active session or any recent session
     var opEmail = '';
     if (state.selectedSessionId && state.sessions && state.sessions.length) {
-      var activeSess = state.sessions.find(function(ss) { return ss.sessionId === state.selectedSessionId; });
+      var activeSess = state.sessions.find(function (ss) { return ss.sessionId === state.selectedSessionId; });
       if (activeSess && activeSess.operatorEmail && activeSess.operatorEmail !== 'not set' && !/@prism\.local$/i.test(activeSess.operatorEmail)) {
         opEmail = activeSess.operatorEmail;
       }
@@ -1264,7 +1266,7 @@ export
 
   var upInfo = state.updateInfo || { currentVersion: s.version || '0.0.1', latestVersion: s.version || '0.0.1', updateAvailable: false, autoUpdate: false };
   var btnText = upInfo.updateAvailable ? '⚡ Update Available (' + upInfo.latestVersion + ')' : '🔄 Check for Updates';
-  var btnStyle = upInfo.updateAvailable 
+  var btnStyle = upInfo.updateAvailable
     ? 'background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.5); color: #fbbf24; box-shadow: 0 0 10px rgba(245, 158, 11, 0.2); animation: pulse-border 2s infinite;'
     : 'background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); color: #94a3b8;';
 
@@ -2171,7 +2173,7 @@ export function showThinkingTraceModal(messageIdOrTrace) {
 }
 
 if (typeof window !== 'undefined') {
-  window.triggerPrismUpdate = async function() {
+  window.triggerPrismUpdate = async function () {
     if (!confirm("Are you sure you want to update PRISM? This will stop the server, apply updates from origin/main, execute supply-chain security verification gates, and restart the gateway.")) {
       return;
     }
@@ -2208,7 +2210,7 @@ if (typeof window !== 'undefined') {
       const progressBar = document.getElementById('update-progress-bar');
       const reconnectCountdown = document.getElementById('reconnect-countdown');
       const countdownSecs = document.getElementById('countdown-secs');
-      
+
       const interval = setInterval(async () => {
         progress = Math.min(95, progress + 2);
         if (progressBar) progressBar.style.width = progress + '%';
@@ -2229,11 +2231,11 @@ if (typeof window !== 'undefined') {
             }, 1000);
             return;
           }
-        } catch (_) {}
+        } catch (_) { }
 
         attempt++;
         if (reconnectCountdown) reconnectCountdown.style.display = 'block';
-        
+
         let countdown = 5;
         const tick = () => {
           if (countdownSecs) countdownSecs.textContent = countdown;
@@ -2256,7 +2258,7 @@ if (typeof window !== 'undefined') {
     }
   };
 
-  window.toggleAutoUpdate = async function(enabled) {
+  window.toggleAutoUpdate = async function (enabled) {
     try {
       await request('/api/update/auto-update', {
         method: 'POST',

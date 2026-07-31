@@ -46,6 +46,20 @@ export interface CharacterAssignmentFilter {
     state?: CharacterAssignmentState;
 }
 
+export interface CacOperatorIdentity {
+    operatorId: string;
+    operatorEmail: string;
+    preferredAssignmentId?: string | null;
+}
+
+export interface CacReconciliationResult {
+    operators: number;
+    assignmentsBefore: number;
+    assignmentsAfter: number;
+    assignmentsDeleted: number;
+    sessionsRebound: number;
+}
+
 export class CharacterAccountabilityStore {
     private readonly db: DatabaseSync;
 
@@ -186,6 +200,93 @@ export class CharacterAccountabilityStore {
         `,
             )
             .run({ assignmentId });
+    }
+
+    reconcileOperators(operators: CacOperatorIdentity[]): CacReconciliationResult {
+        const normalizedOperators = operators.map((operator) => ({
+            ...operator,
+            operatorEmail: operator.operatorEmail.trim().toLowerCase(),
+        }));
+        const assignmentsBefore = Number(
+            (this.db.prepare("SELECT COUNT(*) AS count FROM character_assignments").get() as { count: number }).count,
+        );
+        let sessionsRebound = 0;
+
+        this.db.exec("BEGIN IMMEDIATE");
+        try {
+            const keepIds: string[] = [];
+            for (const operator of normalizedOperators) {
+                const candidates = this.db
+                    .prepare(
+                        `SELECT assignment_id FROM character_assignments
+                         WHERE lower(operator_email) = :operatorEmail
+                         ORDER BY assigned_at ASC, assignment_id ASC`,
+                    )
+                    .all({ operatorEmail: operator.operatorEmail }) as Array<{ assignment_id: string }>;
+                if (candidates.length === 0) continue;
+
+                const preferred = candidates.find(
+                    (candidate) => candidate.assignment_id === operator.preferredAssignmentId,
+                );
+                const keepId = preferred?.assignment_id ?? candidates[0]!.assignment_id;
+                keepIds.push(keepId);
+
+                const rebound = this.db
+                    .prepare(
+                        `UPDATE chat_sessions
+                         SET cac_assignment_id = :keepId
+                         WHERE lower(operator_email) = :operatorEmail
+                           AND (cac_assignment_id IS NULL OR cac_assignment_id <> :keepId)`,
+                    )
+                    .run({ keepId, operatorEmail: operator.operatorEmail });
+                sessionsRebound += Number(rebound.changes);
+
+                this.db
+                    .prepare(
+                        `UPDATE character_assignments
+                         SET operator_id = :operatorId,
+                             operator_email = :operatorEmail,
+                             state = 'active',
+                             suspend_reason = NULL,
+                             revocation_reason = NULL,
+                             updated_at = :updatedAt
+                         WHERE assignment_id = :keepId`,
+                    )
+                    .run({
+                        keepId,
+                        operatorId: operator.operatorId,
+                        operatorEmail: operator.operatorEmail,
+                        updatedAt: new Date().toISOString(),
+                    });
+            }
+
+            if (keepIds.length > 0) {
+                const placeholders = keepIds.map(() => "?").join(", ");
+                this.db.prepare(`DELETE FROM character_assignments WHERE assignment_id NOT IN (${placeholders})`).run(...keepIds);
+            } else {
+                this.db.exec("DELETE FROM character_assignments");
+            }
+
+            this.db.exec(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_character_assignments_operator_email_unique
+                ON character_assignments (lower(operator_email));
+            `);
+            this.db.exec("COMMIT");
+        } catch (error) {
+            this.db.exec("ROLLBACK");
+            throw error;
+        }
+
+        const assignmentsAfter = Number(
+            (this.db.prepare("SELECT COUNT(*) AS count FROM character_assignments").get() as { count: number }).count,
+        );
+        return {
+            operators: normalizedOperators.length,
+            assignmentsBefore,
+            assignmentsAfter,
+            assignmentsDeleted: assignmentsBefore - assignmentsAfter,
+            sessionsRebound,
+        };
     }
 
     list(filter: CharacterAssignmentFilter = {}): CharacterAssignment[] {

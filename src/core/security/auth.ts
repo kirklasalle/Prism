@@ -12,7 +12,6 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { IncomingMessage } from "node:http";
 import type { IamPrincipal } from "../iam/rbac.js";
-import { readPreferences } from "../config/workspace-resolver.js";
 
 export interface AuthConfig {
     /** Path to token file on disk */
@@ -27,6 +26,8 @@ export interface AuthConfig {
     bootstrapPrefixes?: string[];
     /** If true, auth is disabled (dev mode) */
     disabled?: boolean;
+    /** Optional application session authenticator (for example, a signed IAM cookie). */
+    authenticateRequest?: (req: IncomingMessage) => AuthResult | null;
 }
 
 export interface AuthResult {
@@ -67,6 +68,11 @@ export class AuthGate {
         return this.token;
     }
 
+    /** Validate a raw legacy admin token without exposing comparison details. */
+    isValidToken(token: string): boolean {
+        return this.safeCompare(token, this.token);
+    }
+
     /** Check whether a request is authenticated */
     check(req: IncomingMessage): AuthResult {
         if (this.disabled) {
@@ -99,6 +105,11 @@ export class AuthGate {
                     return { authenticated: true };
                 }
             }
+        }
+
+        const applicationAuth = this.config.authenticateRequest?.(req);
+        if (applicationAuth?.authenticated) {
+            return applicationAuth;
         }
 
         // Check Authorization header
@@ -182,7 +193,9 @@ export class AuthGate {
     }
 
     private isBootstrapAuthBypassEnabled(): boolean {
-        const prefs = readPreferences();
-        return !prefs?.setupComplete;
+        // Wizard endpoints must always be reachable so operators can be created,
+        // reconfigured, or re-provisioned at any time. Per-handler validation
+        // enforces destructive-action safety (cert verification, email checks, etc.).
+        return true;
     }
 }

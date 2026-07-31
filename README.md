@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.22.4-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.22.8-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
-  <img src="https://img.shields.io/badge/tests-195_discovered_suites-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-196_discovered_suites-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
   <img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&labelColor=0a0a0f" alt="CI" />
 </p>
 <p align="center">
@@ -116,7 +116,7 @@ PRISM's novel **compounding parallel fan-out architecture** simultaneously engag
 | Hemisphere             | Role                                      | Example     |
 | :--------------------- | :---------------------------------------- | :---------- |
 | **Left** (Logic)       | Analytical reasoning, structured analysis | Claude Opus |
-| **Right** (Creative)   | Creative generation, lateral thinking     | GPT-4o      |
+| **Right** (Creative)   | Creative generation, lateral thinking     | GPT-5       |
 | **Main** (Coordinator) | Synthesis, arbitration, final response    | Gemini Pro  |
 
 - **Mandatory instance isolation**: Left ≠ Right enforced at configuration, activation, and runtime gates
@@ -154,7 +154,8 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 - **Four swarm topologies**: mesh, star, pipeline, broadcast
 - **Task decomposition** with dependency-aware parallel batch execution
 - **Intelligent telemetry**: pattern detection, role hotspot analysis, lifecycle promotion recommendations
-- **Guardian Agent**: permanent autonomous system agent powered by local `llama.cpp` inference — monitors runtime health, self-heals crashed model slots, enforces policy boundaries
+- **CAC Main Agent**: each operator's certificate-bound primary assistant, agent, and interaction identity; one CAC Main Agent per operator per Initialization Certificate, reused across sessions
+- **Guardian Agent**: permanent secondary system agent powered by local `llama.cpp` inference; supports the CAC Main Agent and monitors, protects, and heals the complete dashboard and all platform services
 
 ### 6. Advanced Model Routing
 
@@ -173,7 +174,7 @@ PRISM treats computer use as a **first-class governed capability**, not an auxil
 - **IAM Store** with RBAC, multi-tenant support, and user lifecycle management
 - **SSO**: OIDC and SAML integration for enterprise identity providers
 - **SCIM v2**: Automated user provisioning and deprovisioning
-- **Character Accountability Control (CAC)**: every agent action linked to a character identity, a Prism user, and an operator via an immutable accountability chain
+- **Character Accountability Control (CAC)**: the operator's Main Agent and durable assistant identity; every action is linked to its character, Prism user, operator, and immutable accountability chain. See [CAC Main Agent and Guardian Architecture](docs/CAC_GUARDIAN_AGENT_ARCHITECTURE.md).
 - **Session management** with cryptographic session tokens and cookie-based auth
 
 ### 9. Skills Engine — Autonomous Agent Capabilities
@@ -208,10 +209,10 @@ PRISM features a secure, operator-controlled, and autonomously monitored update 
 - **Guardian-Assisted Update Detection**: The Guardian Agent schedules periodic remote checks to query for update availability and alerts the operator on the console in real-time.
 - **One-Click Secure Execution**: Operators can invoke updating via a single click in the sidebar, which spawns the out-of-process update orchestrator (`scripts/prism-update.cjs`).
 - **Safety First (Backup, Auditing, & Fallback)**:
-    - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
-    - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.
-    - Automatically verifies download signature integrity and compile validity post-update.
-    - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
+  - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
+  - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.
+  - Automatically verifies download signature integrity and compile validity post-update.
+  - Auto-rolls back to the stashed backup if any compilation or startup test fails, protecting the instance from code corruption or dependency breakage.
 
 ### 12. Add-on Architecture — Deep System Integrations
 
@@ -331,7 +332,7 @@ Provider/model choice is persisted per chat session. Secure API key storage uses
 
 PRISM maintains one of the most comprehensive test suites in the agentic software ecosystem:
 
-- **195 auto-discovered test suites** covering unit, integration, E2E, security, and governance scenarios
+- **196 auto-discovered test suites** covering unit, integration, E2E, security, and governance scenarios
 - **7 GitHub Actions workflows**: CI, CodeQL, Docker publish, Helm publish, nightly, quality gates, release
 - **Multi-platform CI matrix**: Ubuntu + Windows, Node.js 22 + 23
 - **9 CI qualification gates** including PAD integrity, plugin signing, directive tests, security tests, governance tests

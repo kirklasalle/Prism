@@ -1,9 +1,19 @@
-export function setupWizardHtml(port: number): string {
-    return `<!doctype html>
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function setupWizardHtml(port: number, authToken = ""): string {
+  const safeToken = escapeHtmlAttr(authToken);
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="prism-auth-token" content="${safeToken}" />
   <title>PRISM \u2014 Setup Wizard</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/public/dashboard.css">
@@ -457,18 +467,18 @@ export function setupWizardHtml(port: number): string {
                 <p class="desc">Connect to a local LM Studio / LM Server endpoint. No API key needed by default.</p>
               </div>
             </div>
-            <div class="wizard-option" data-provider="openrouter" onclick="selectProvider(this, 'openrouter')" title="Connect to OpenRouter gateway for Claude, Llama 3, DeepSeek, GPT-4o and hundreds of models">
+            <div class="wizard-option" data-provider="openrouter" onclick="selectProvider(this, 'openrouter')" title="Connect to OpenRouter gateway for Claude, Llama 3, DeepSeek, GPT-5 and hundreds of models">
               <div class="wizard-option-radio"></div>
               <div class="wizard-option-body">
                 <h3>🌐 OpenRouter</h3>
-                <p class="desc">Unified gateway for Claude, Llama 3, DeepSeek, GPT-4o, and hundreds of models. Requires API key.</p>
+                <p class="desc">Unified gateway for Claude, Llama 3, DeepSeek, GPT-5, and hundreds of models. Requires API key.</p>
               </div>
             </div>
-            <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')" title="Connect directly to OpenAI API for GPT-4o models">
+            <div class="wizard-option" data-provider="openai" onclick="selectProvider(this, 'openai')" title="Connect directly to OpenAI API for GPT-5-class models">
               <div class="wizard-option-radio"></div>
               <div class="wizard-option-body">
                 <h3>🤖 OpenAI</h3>
-                <p class="desc">GPT-4o, GPT-4o-mini, and other OpenAI models. Requires API key.</p>
+                <p class="desc">GPT-5, GPT-5 mini, and other OpenAI models. Requires API key.</p>
               </div>
             </div>
             <div class="wizard-option" data-provider="anthropic" onclick="selectProvider(this, 'anthropic')" title="Connect directly to Anthropic API for Claude 3.5 Sonnet and Haiku models">
@@ -511,11 +521,13 @@ export function setupWizardHtml(port: number): string {
           </div>
           <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <button id="wiz-test-provider-btn" type="button" class="secondary-button" style="font-size:12px;padding:8px 16px;" onclick="testProviderConnection()" title="Test API key and network connectivity for the selected provider">Test Connection</button>
-            <button id="wiz-save-provider-btn" type="button" class="primary-button" style="font-size:12px;padding:8px 16px;" onclick="saveProviderConfiguration()" title="Save provider API credentials and discover available models">Save Provider</button>
           </div>
           <div id="provider-test-result" style="margin-top:8px;font-size:12px;"></div>
-          <div id="provider-save-result" style="margin-top:6px;font-size:12px;"></div>
           <div id="provider-config-summary" style="margin-top:10px;font-size:12px;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;background:rgba(255,255,255,0.02);"></div>
+          <div style="margin-top:12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;">
+            <div id="provider-save-result" style="font-size:12px;"></div>
+            <button id="wiz-save-provider-btn" type="button" class="primary-button" style="font-size:12px;padding:8px 18px;" onclick="saveProviderConfiguration()" title="Save provider API credentials and selected default model">Save Provider</button>
+          </div>
         </div>
 
         <div class="wizard-section" style="padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.015);">
@@ -529,6 +541,11 @@ export function setupWizardHtml(port: number): string {
               <select id="wizard-guardian-model" style="flex:1;"><option value="">Loading models...</option></select>
               <button type="button" id="wizard-guardian-download-btn" class="primary-button" style="font-size:11px;padding:8px 14px;white-space:nowrap;display:none;" onclick="downloadGuardianModel()">\u{1F4E5} Download</button>
             </div>
+            <div id="wizard-guardian-custom-container" style="display:none;margin-top:8px;">
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Custom GGUF Model Path</label>
+              <input type="text" id="wizard-guardian-custom-path" placeholder="C:\\\\path\\\\to\\\\your-model.gguf" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace;" />
+              <div style="font-size:10px;color:var(--muted);margin-top:4px;opacity:0.8;">Enter the full path to a local .gguf model file on your system.</div>
+            </div>
             <div id="wizard-guardian-download-progress" style="display:none;margin-top:8px;">
               <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
                 <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;">
@@ -538,7 +555,10 @@ export function setupWizardHtml(port: number): string {
               </div>
               <div id="wizard-guardian-download-status" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
             </div>
-            <span class="wizard-hint">A Guardian model is required. Select a downloaded model or download one from the recommended list.</span>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="wizard-hint" style="margin:0;">A Guardian model is required. Select a downloaded model, download one from the recommended list, or enter a custom path.</span>
+              <span style="font-size:9px;background:rgba(105,210,255,0.15);color:var(--accent);padding:2px 6px;border-radius:4px;white-space:nowrap;" title="Hardware profile detected: GTX 1050 Ti 4GB VRAM, 16GB System RAM">\u{1F3AE} 4GB VRAM</span>
+            </div>
           </div>
           <div id="wizard-guardian-validation-error" style="display:none;padding:8px 12px;margin-bottom:10px;border-radius:8px;background:rgba(239,68,68,0.12);color:#ff8d8d;font-size:12px;"></div>
 
@@ -563,6 +583,16 @@ export function setupWizardHtml(port: number): string {
             When enabled, Guardian runs update tracking and self-improvement checks to learn from operations.
           </div>
         </div>
+
+        <div class="wizard-cert-box" id="wizard-cert-box" style="margin-top:14px; text-align:left;">
+          <div class="wizard-cert-icon" style="font-size:30px;margin-bottom:6px;">📜</div>
+          <div class="wizard-cert-title">Initialization Certificate Summary</div>
+          <div class="wizard-cert-detail" id="wizard-cert-detail" style="margin-top:4px;">
+            Review this immutable provenance snapshot before launch. It will be sealed as a dedicated session.
+          </div>
+          <div id="wizard-cert-preview" style="margin-top:10px;font-size:12px;color:var(--text);"></div>
+        </div>
+
         <div id="wizard-launch-error" style="color:var(--danger);font-size:12px;margin-top:12px;display:none;"></div>
       </div>
 
@@ -602,12 +632,14 @@ export function setupWizardHtml(port: number): string {
 </html>`;
 }
 
-export function setupWizardAdvancedHtml(port: number): string {
-    return `<!doctype html>
+export function setupWizardAdvancedHtml(port: number, authToken = ""): string {
+  const safeToken = escapeHtmlAttr(authToken);
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="prism-auth-token" content="${safeToken}" />
   <title>PRISM \u2014 Advanced Setup Wizard</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/public/dashboard.css">
@@ -1107,7 +1139,7 @@ export function setupWizardAdvancedHtml(port: number): string {
           <div class="wizard-option-radio"></div>
           <div class="wizard-option-body">
             <h3>\u{1F916} OpenAI</h3>
-            <p class="desc">GPT-4o, GPT-4o-mini, and more. Requires API key.</p>
+            <p class="desc">GPT-5, GPT-5 mini, and more. Requires API key.</p>
           </div>
         </div>
         <div class="wizard-option" data-provider="anthropic" onclick="advSelectProvider(this, 'anthropic')">
@@ -1225,12 +1257,32 @@ export function setupWizardAdvancedHtml(port: number): string {
         <p>Configure the Guardian agent and set defaults for the agent pool.</p>
 
         <div class="wizard-section">
-          <h4>\u{1F6E1} Guardian Agent</h4>
+          <h4>🛡️ Guardian Agent <span style="font-size:10px;font-weight:600;background:rgba(239,68,68,0.18);color:#fca5a5;padding:2px 7px;border-radius:6px;margin-left:auto;">REQUIRED</span></h4>
           <div class="wizard-field">
             <label>Guardian Model</label>
-            <select id="adv-guardian-model"><option value="">Loading models...</option></select>
-            <span class="wizard-hint">Select a local GGUF model for the guardian to use.</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="adv-guardian-model" style="flex:1;"><option value="">Loading models...</option></select>
+              <button type="button" id="adv-guardian-download-btn" class="primary-button" style="font-size:11px;padding:8px 14px;white-space:nowrap;display:none;" onclick="downloadAdvGuardianModel()">\u{1F4E5} Download</button>
+            </div>
+            <div id="adv-guardian-custom-container" style="display:none;margin-top:8px;">
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Custom GGUF Model Path</label>
+              <input type="text" id="adv-guardian-custom-path" placeholder="C:\\\\path\\\\to\\\\your-model.gguf" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace;" />
+              <div style="font-size:10px;color:var(--muted);margin-top:4px;opacity:0.8;">Enter the full path to a local .gguf model file on your system.</div>
+            </div>
+            <div id="adv-guardian-download-progress" style="display:none;margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;">
+                  <div id="adv-guardian-progress-bar" style="height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width 0.3s;"></div>
+                </div>
+                <span id="adv-guardian-progress-text" style="color:var(--muted);min-width:40px;text-align:right;">0%</span>
+              </div>
+              <div id="adv-guardian-download-status" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
+            </div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="wizard-hint" style="margin:0;">A Guardian model is required. Select a downloaded model, download one from the recommended list, or enter a custom path.</span>
+            </div>
           </div>
+          <div id="adv-guardian-validation-error" style="display:none;padding:8px 12px;margin-bottom:10px;border-radius:8px;background:rgba(239,68,68,0.12);color:#ff8d8d;font-size:12px;"></div>
 
           <div class="wizard-field">
             <label>Authority Tier</label>

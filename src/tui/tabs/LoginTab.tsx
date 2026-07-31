@@ -18,7 +18,8 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
-    // 0: Email field, 1: Password field, 2: Autofill Admin, 3: Autofill Testing, 4: Launch Wizard, 5: Quit
+    // 0: Email field, 1: Password field, 2: Autofill Admin, 3: Autofill Testing,
+    // 4: Autofill Business, 5: Launch Wizard, 6: Quit
     const [activeIndex, setActiveIndex] = useState(0);
     const { exit } = useApp();
 
@@ -80,8 +81,12 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
             setPassword("testing");
             handleLogin("testing@prismrefraction.com", "testing");
         } else if (activeIndex === 4) {
-            onLaunchWizard();
+            setEmail("business@prismrefraction.com");
+            setPassword("business");
+            handleLogin("business@prismrefraction.com", "business");
         } else if (activeIndex === 5) {
+            onLaunchWizard();
+        } else if (activeIndex === 6) {
             handleQuit();
         }
     }, [activeIndex, email, password, handleLogin, onLaunchWizard, handleQuit]);
@@ -90,11 +95,11 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
         if (!focused || submitting) return;
 
         if (key.downArrow || (key.tab && !key.shift)) {
-            setActiveIndex((i) => (i + 1) % 6);
+            setActiveIndex((i) => (i + 1) % 7);
             return;
         }
         if (key.upArrow || (key.tab && key.shift)) {
-            setActiveIndex((i) => (i - 1 + 6) % 6);
+            setActiveIndex((i) => (i - 1 + 7) % 7);
             return;
         }
 
@@ -120,6 +125,10 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
                 setEmail("testing@prismrefraction.com");
                 setPassword("testing");
                 handleLogin("testing@prismrefraction.com", "testing");
+            } else if (input === "b" || input === "B") {
+                setEmail("business@prismrefraction.com");
+                setPassword("business");
+                handleLogin("business@prismrefraction.com", "business");
             } else if (input === "w" || input === "W") {
                 onLaunchWizard();
             } else if (input === "q" || input === "Q") {
@@ -221,12 +230,17 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
                 </Box>
                 <Box>
                     <Text color={activeIndex === 4 ? colors.brand : colors.text}>
-                        {activeIndex === 4 ? `${symbols.bullet} ` : "  "}Launch Onboarding Setup Wizard
+                        {activeIndex === 4 ? `${symbols.bullet} ` : "  "}Autofill Business Operator (business@prismrefraction.com)
                     </Text>
                 </Box>
                 <Box>
                     <Text color={activeIndex === 5 ? colors.brand : colors.text}>
-                        {activeIndex === 5 ? `${symbols.bullet} ` : "  "}Quit PRISM TUI
+                        {activeIndex === 5 ? `${symbols.bullet} ` : "  "}Launch Onboarding Setup Wizard
+                    </Text>
+                </Box>
+                <Box>
+                    <Text color={activeIndex === 6 ? colors.brand : colors.text}>
+                        {activeIndex === 6 ? `${symbols.bullet} ` : "  "}Quit PRISM TUI
                     </Text>
                 </Box>
             </Box>
@@ -238,7 +252,7 @@ export function LoginTab({ client, focused, onSuccess, onLaunchWizard }: LoginTa
             )}
 
             <Box marginTop={1}>
-                <Text color={colors.muted}>Use Tab/Arrows to navigate | Enter to select | Esc to quit</Text>
+                <Text color={colors.muted}>Use Tab/Arrows to navigate | A/T/B quick login | Enter to select | Esc to quit</Text>
             </Box>
         </Box>
     );

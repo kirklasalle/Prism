@@ -3,13 +3,26 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { describe, it, beforeEach, afterEach } from "mocha";
+import { describe, it, beforeEach, afterEach } from "node:test";
+import { ActivityBus } from "../src/core/activity/bus.js";
+import { ApprovalQueue } from "../src/core/approval/approval-queue.js";
+import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
+import { DashboardService } from "../src/core/operator/dashboard-service.js";
+import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 import {
     getOrGenerateKeyPair,
     signCertificateContent,
     verifyCertificateContent,
     verifyMarkdownCertificate,
+    verifyMarkdownCertificateWithPin,
 } from "../src/core/security/initialization-signature.js";
+import {
+    registerKey,
+    getActiveKey,
+    revokeKey,
+    isKeyTrusted,
+} from "../src/core/security/key-registry.js";
+import { validateAuthorityContext } from "../src/core/security/execution-authority-context.js";
 
 describe("PRISM Initialization Certificate Security Suite", () => {
     let tmpDir: string;
@@ -80,7 +93,8 @@ describe("PRISM Initialization Certificate Security Suite", () => {
                         OLD.operator_email IS NOT NULL AND 
                         OLD.operator_email != 'operator@prism.local' AND 
                         OLD.operator_email != 'not set' AND 
-                        NEW.operator_email != OLD.operator_email
+                        NEW.operator_email != OLD.operator_email AND
+                        (NEW.operator_email IS NULL OR NEW.operator_email NOT LIKE 'archived:%')
                     )
                     THEN RAISE(FAIL, 'Modification of immutable Initialization Certificate session is forbidden')
                 END;
@@ -254,6 +268,215 @@ describe("PRISM Initialization Certificate Security Suite", () => {
                 `,
                 ).run();
             }, /Modification of immutable Initialization Certificate session is forbidden/);
+        });
+
+        it("allows archiving a real operator certificate ownership marker", () => {
+            db.prepare(
+                `
+                INSERT INTO chat_sessions (session_id, title, operator_email, created_at)
+                VALUES ('sess-5', 'PRISM Initialization Certificate — 2026-07-02', 'realoperator@prism.local', '2026-07-02T12:00:00Z')
+            `,
+            ).run();
+
+            db.prepare(
+                `
+                UPDATE chat_sessions
+                SET operator_email = 'archived:2026-07-02t13:00:00z:realoperator@prism.local'
+                WHERE session_id = 'sess-5'
+            `,
+            ).run();
+
+            const session = db.prepare("SELECT operator_email FROM chat_sessions WHERE session_id = 'sess-5'").get() as {
+                operator_email: string;
+            };
+            assert.ok(session.operator_email.startsWith("archived:"));
+        });
+    });
+
+    describe("3. Certificate Session Lock", () => {
+        function createService(): DashboardService {
+            return new DashboardService(
+                new ApprovalQueue(),
+                new ActivityBus(),
+                {
+                    sessionId: "test-session",
+                    environmentProfile: "test",
+                    mode: "server",
+                    startedAt: new Date().toISOString(),
+                    executionProfileSegment: "individual",
+                },
+                new ChatSessionStore(":memory:"),
+                [],
+                0,
+                undefined,
+                undefined,
+                new InMemoryProviderSecretStore(),
+            );
+        }
+
+        function createCertificateSession(service: DashboardService): string {
+            const session = service.createChatSession({
+                title: "PRISM Initialization Certificate — Locked",
+                allowUnbound: true,
+            });
+            service.getChatStore().appendMessage(
+                session.sessionId,
+                "assistant",
+                "# PRISM Initialization Certificate\n## Cryptographic Signature Verification\n- **Algorithm:** ed25519\n- **Guardian:** Active",
+                { type: "certificate" },
+            );
+            return session.sessionId;
+        }
+
+        it("refuses non-certificate chat in a locked certificate session", async () => {
+            const service = createService();
+            const sessionId = createCertificateSession(service);
+
+            (service as any).generateAssistantReply = async () => {
+                throw new Error("generateAssistantReply should not be called for refused prompts");
+            };
+
+            const turn = await service.submitChatMessage(sessionId, "Write me a marketing poem.");
+
+            assert.equal(turn.userMessage.content, "Write me a marketing poem.");
+            assert.match(turn.assistantMessage.content, /locked to the certificate itself and PRISM core security/i);
+            assert.equal(turn.assistantMessage.metadata.intent, "initialization_certificate_lock");
+            assert.equal(turn.assistantMessage.metadata.certificateLock, "scope_refused");
+        });
+
+        it("allows certificate explanation requests and injects a certificate-only guardrail", async () => {
+            const service = createService();
+            const sessionId = createCertificateSession(service);
+
+            (service as any).generateAssistantReply = async (_sessionId: string, prompt: string, conversation: any[]) => {
+                assert.match(prompt, /ed25519/i);
+                assert.ok(
+                    conversation.some(
+                        (entry) => entry.role === "system" && /Only explain the certificate's content/i.test(entry.content),
+                    ),
+                );
+                assert.ok(
+                    conversation.some(
+                        (entry) => entry.metadata && entry.metadata.type === "certificate" && /ed25519/i.test(entry.content),
+                    ),
+                );
+                return {
+                    content: "The ed25519 signature proves the certificate content has not been tampered with.",
+                    metadata: { intent: "certificate_explanation" },
+                };
+            };
+
+            const turn = await service.submitChatMessage(sessionId, "Explain the ed25519 signature in the certificate.");
+
+            assert.match(turn.assistantMessage.content, /has not been tampered with/i);
+            assert.equal(turn.assistantMessage.metadata.intent, "certificate_explanation");
+            assert.equal(turn.assistantMessage.metadata.certificateLock, "allowed");
+        });
+
+        it("refuses relentless repeated certificate prompts", async () => {
+            const service = createService();
+            const sessionId = createCertificateSession(service);
+            const repeatedPrompt = "Explain the Guardian line in the certificate.";
+
+            service.getChatStore().appendMessage(sessionId, "user", repeatedPrompt, { source: "test" });
+            service.getChatStore().appendMessage(sessionId, "assistant", "Guardian explanation 1", {
+                intent: "certificate_explanation",
+            });
+            service.getChatStore().appendMessage(sessionId, "user", repeatedPrompt, { source: "test" });
+            service.getChatStore().appendMessage(sessionId, "assistant", "Guardian explanation 2", {
+                intent: "certificate_explanation",
+            });
+
+            (service as any).generateAssistantReply = async () => {
+                throw new Error("generateAssistantReply should not be called for relentless repeats");
+            };
+
+            const turn = await service.submitChatMessage(sessionId, repeatedPrompt);
+
+            assert.match(turn.assistantMessage.content, /will not repeat the same explanation relentlessly/i);
+            assert.equal(turn.assistantMessage.metadata.certificateLock, "repeat_refused");
+        });
+    });
+
+    // ── IC-10 / IC-12 Phase 0: Key Material and Pinned Verification ────────
+
+    describe("6. Phase 0 Key Material Security (IC-12)", () => {
+        it("verifyMarkdownCertificateWithPin returns valid=false for malformed markdown", () => {
+            const result = verifyMarkdownCertificateWithPin("not a valid certificate");
+            assert.strictEqual(result.valid, false);
+            assert.ok(result.reason.includes("marker not found"));
+        });
+
+        it("verifyMarkdownCertificateWithPin returns valid=false when signature is wrong", () => {
+            const content = "# Test Certificate\n\nSome content here.";
+            const { signatureBase64, publicKeyBase64 } = signCertificateContent(content);
+
+            // Build a markdown certificate with a tampered content
+            const tamperedMd =
+                "# Test Certificate\n\nTampered content.\n\n## Cryptographic Signature Verification\n\n" +
+                `- **Public Key:** ${publicKeyBase64}\n- **Signature:** ${signatureBase64}\n`;
+
+            const result = verifyMarkdownCertificateWithPin(tamperedMd);
+            assert.strictEqual(result.valid, false, "Tampered content should fail signature verification");
+        });
+
+        it("key registry tracks key fingerprints", () => {
+            // Create an in-memory registry
+            const registry = { version: 1 as const, keys: [] };
+            const fakeKey = "MCowBQYDK2VwAyEAVrLXMR2aKK9MPFhIcMU3xT6y2bC8DYlhRH5dT3qQ8xg=";
+            const entry = registerKey(registry, fakeKey);
+
+            assert.ok(entry.keyId, "Key should have an ID");
+            assert.ok(entry.fingerprint, "Key should have a fingerprint");
+            assert.strictEqual(entry.status, "active");
+
+            // Active key should be the one we registered
+            const active = getActiveKey(registry);
+            assert.ok(active);
+            assert.strictEqual(active.fingerprint, entry.fingerprint);
+
+            // Trust check should pass
+            const trustResult = isKeyTrusted(registry, fakeKey);
+            assert.strictEqual(trustResult.trusted, true);
+
+            // Revoke the key
+            const revoked = revokeKey(registry, entry.fingerprint, "Phase 0 audit");
+            assert.strictEqual(revoked, true);
+
+            // Trust check should now fail
+            const trustResult2 = isKeyTrusted(registry, fakeKey);
+            assert.strictEqual(trustResult2.trusted, false);
+            assert.ok(trustResult2.reason.includes("revoked"));
+
+            // Unknown key should not be trusted
+            const unknownResult = isKeyTrusted(registry, "dW5rbm93bl9rZXk=");
+            assert.strictEqual(unknownResult.trusted, false);
+            assert.ok(unknownResult.reason.includes("Unknown"));
+        });
+    });
+
+    describe("7. Phase 0 Execution Authority Context (IC-05)", () => {
+        it("validateAuthorityContext warns on missing context but returns valid in Phase 0", () => {
+            const result = validateAuthorityContext(null);
+            assert.strictEqual(result.valid, true, "Phase 0 is warn-only, so null context is 'valid'");
+            assert.ok(result.missingFields.length > 0, "Should report missing fields");
+            assert.ok(result.reason.includes("PHASE0_WARN"));
+        });
+
+        it("validateAuthorityContext returns no missing fields for complete context", () => {
+            const result = validateAuthorityContext({
+                certificateId: "cert-123",
+                assignmentId: "asgn-456",
+                operatorEmail: "kirk@example.com",
+                operatorName: "Kirk LaSalle",
+                cacEmail: "cac@example.com",
+                cacName: "CAC Agent",
+                resolvedAt: new Date().toISOString(),
+                resolvedBy: "server",
+            });
+            assert.strictEqual(result.valid, true);
+            assert.strictEqual(result.missingFields.length, 0);
+            assert.ok(result.reason.includes("complete"));
         });
     });
 });

@@ -105,8 +105,8 @@ export class PtacOrchestrator {
         const overall: PtacRunResult["status"] = aborted
             ? "aborted"
             : scenarioResults.every((s) => s.status === "passed")
-              ? "passed"
-              : "failed";
+                ? "passed"
+                : "failed";
 
         const result: PtacRunResult = {
             runId,
@@ -407,7 +407,7 @@ export class PtacOrchestrator {
                     if (cacRes.ok) {
                         throw new Error(
                             `expected /api/setup/cac to reject placeholder operatorEmail "${step.operatorEmail}" ` +
-                                `for business profile, got HTTP ${cacRes.status}`,
+                            `for business profile, got HTTP ${cacRes.status}`,
                         );
                     }
                     return;
@@ -583,8 +583,7 @@ export class PtacOrchestrator {
                 }
                 if (!target) {
                     throw new Error(
-                        `approveAt: no queued approval matched ${
-                            typeof matcher === "string" ? `"${matcher}"` : matcher.toString()
+                        `approveAt: no queued approval matched ${typeof matcher === "string" ? `"${matcher}"` : matcher.toString()
                         } within window`,
                     );
                 }
@@ -616,7 +615,7 @@ export class PtacOrchestrator {
                 if (!hit) {
                     throw new Error(
                         `assertEvent: no event with layer="${step.layer}" operation="${step.operation}" ` +
-                            `found in last ${events.length} events`,
+                        `found in last ${events.length} events`,
                     );
                 }
                 return;
@@ -941,7 +940,7 @@ export class PtacOrchestrator {
                 // surface as a real failure so the wiring gap is visible.
                 throw new Error(
                     `pluginLifecycle action "uninstall" is not yet wired — ` +
-                        `track in docs/PHASE_R_TASKS_MANIFEST.md`,
+                    `track in docs/PHASE_R_TASKS_MANIFEST.md`,
                 );
             }
             case "clickAt":
@@ -955,7 +954,7 @@ export class PtacOrchestrator {
                 // surface as a real failure, never a silent pass.
                 throw new Error(
                     `ptac step "${step.kind}" not yet wired to the dashboard surface — ` +
-                        `track in docs/PHASE_R_TASKS_MANIFEST.md (Phase PTAC step library)`,
+                    `track in docs/PHASE_R_TASKS_MANIFEST.md (Phase PTAC step library)`,
                 );
             case "browserDrive": {
                 // Drive the live dashboard's browser-control-tool. Each curated
@@ -1230,7 +1229,7 @@ export class PtacOrchestrator {
                     benchmark: "OSWorld",
                     version: "1.0",
                     timestamp: new Date().toISOString(),
-                    driverModel: "PRISM v0.21 + GPT-4o Adaptive",
+                    driverModel: "PRISM + GPT-5 Adaptive",
                     parameters: {
                         maxStepsPerTask: maxSteps,
                         maxDurationPerTaskMs: maxDurationMs,

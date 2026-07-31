@@ -56,6 +56,39 @@ const TOOLTIP_ID = 'prism-tooltip';
 const SHOW_DELAY_MS = 3000;
 const HIDE_GRACE_MS = 100;
 const SERVER_FETCH_TTL_MS = 60_000;
+const HELPER_STORAGE_KEY = 'prism.tooltip.helper.variant';
+const HELPER_VARIANTS = {
+    'glass-prism': {
+        label: 'Glass Prism',
+        glyph: '◇',
+        accentClass: 'glass-prism',
+        blurb: 'Faceted guide for subsystem hints and Guardian watchpoints.',
+    },
+    'signal-shard': {
+        label: 'Signal Shard',
+        glyph: '◈',
+        accentClass: 'signal-shard',
+        blurb: 'Sharper, telemetry-forward callouts for fast operational reads.',
+    },
+    'luma-kite': {
+        label: 'Luma Kite',
+        glyph: '✦',
+        accentClass: 'luma-kite',
+        blurb: 'Softer guide for exploration, docs, and workflow onboarding.',
+    },
+    'aegis-bloom': {
+        label: 'Aegis Bloom',
+        glyph: '⬢',
+        accentClass: 'aegis-bloom',
+        blurb: 'Defensive helper focused on policy-safe next steps and guardrails.',
+    },
+    'vector-ember': {
+        label: 'Vector Ember',
+        glyph: '◉',
+        accentClass: 'vector-ember',
+        blurb: 'Fast tactical helper for triage, diagnostics, and incident pivots.',
+    },
+};
 
 // State (module-private)
 const descriptorsById = new Map();        // tipId -> descriptor
@@ -82,14 +115,21 @@ let currentTarget = null;
 let showTimer = null;
 let hideTimer = null;
 let prefersReducedMotion = false;
+let helperVariant = 'glass-prism';
+let helperVisible = true;
+let helperMotionEnabled = true;
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 export function initPrismTooltips() {
     if (initialized) return;
     if (typeof document === 'undefined') return;
     initialized = true;
+    helperVariant = loadHelperVariant();
 
     ensureOverlay();
+    applyTooltipRuntimeSettings((typeof window !== 'undefined' && window.state && window.state.runtimeSettings)
+        ? window.state.runtimeSettings
+        : null);
 
     // Event delegation — one listener set, regardless of element count.
     document.addEventListener('mouseover', onPointerEnter, true);
@@ -99,6 +139,7 @@ export function initPrismTooltips() {
     document.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('scroll', hideTooltipImmediate, true);
     window.addEventListener('resize', hideTooltipImmediate, true);
+    overlayEl && overlayEl.addEventListener('click', onOverlayClick, true);
 
     if (window.matchMedia) {
         const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -109,12 +150,41 @@ export function initPrismTooltips() {
     }
 }
 
+export function getTooltipHelperVariants() {
+    return Object.entries(HELPER_VARIANTS).map(([value, meta]) => ({
+        value,
+        label: meta.label,
+    }));
+}
+
+export function applyTooltipRuntimeSettings(settings) {
+    const cfg = settings && typeof settings === 'object' ? settings : {};
+    const requestedVariant = typeof cfg.tooltipHelperVariant === 'string' ? String(cfg.tooltipHelperVariant) : '';
+    if (requestedVariant && HELPER_VARIANTS[requestedVariant]) {
+        helperVariant = requestedVariant;
+        persistHelperVariant(requestedVariant);
+    } else if (!requestedVariant) {
+        helperVariant = loadHelperVariant();
+    }
+    if (Object.prototype.hasOwnProperty.call(cfg, 'tooltipHelperVisible')) {
+        helperVisible = cfg.tooltipHelperVisible !== false;
+    }
+    if (Object.prototype.hasOwnProperty.call(cfg, 'tooltipHelperMotionEnabled')) {
+        helperMotionEnabled = cfg.tooltipHelperMotionEnabled !== false;
+    }
+    applyOverlayPreferenceClasses();
+    if (currentTarget) {
+        void showTooltip(currentTarget);
+    }
+}
+
 function ensureOverlay() {
     let el = document.getElementById(TOOLTIP_ID);
     if (el) {
         overlayEl = el;
         arrowEl = el.querySelector('.prism-tip-arrow');
         bodyEl = el.querySelector('.prism-tip-body');
+        applyOverlayPreferenceClasses();
         return;
     }
     el = document.createElement('div');
@@ -134,6 +204,7 @@ function ensureOverlay() {
     overlayEl = el;
     arrowEl = el.querySelector('.prism-tip-arrow');
     bodyEl = el.querySelector('.prism-tip-body');
+    applyOverlayPreferenceClasses();
 }
 
 // ── Descriptor registry ──────────────────────────────────────────────────────
@@ -343,8 +414,9 @@ async function showTooltip(target) {
     const descriptor = resolveDescriptor(target);
     if (!descriptor) { hideTooltipImmediate(); return; }
 
-    const dynamic = await pickDynamicLine(descriptor, target);
-    bodyEl.innerHTML = renderTooltipHtml(descriptor, dynamic);
+    const guardian = pickGuardianSuggestion(descriptor);
+    const dynamic = await pickDynamicLine(descriptor, target, !!guardian);
+    bodyEl.innerHTML = renderTooltipHtml(descriptor, { guardian, dynamic });
     overlayEl.dataset.tipId = descriptor.id || '';
     overlayEl.classList.add('visible');
     overlayEl.setAttribute('aria-hidden', 'false');
@@ -362,15 +434,36 @@ function resolveDescriptor(target) {
     return null;
 }
 
-async function pickDynamicLine(descriptor, target) {
+function pickGuardianSuggestion(descriptor) {
+    if (!descriptor) return null;
+    if (descriptor.id) {
+        const live = guardianTips.get(descriptor.id);
+        if (live && Date.now() - live.ts <= 10 * 60 * 1000 && live.message) {
+            return { kind: 'guardian-live', text: String(live.message).trim() };
+        }
+    }
+    const hints = Array.isArray(descriptor.guardian)
+        ? descriptor.guardian.filter(Boolean)
+        : descriptor.guardian
+            ? [descriptor.guardian]
+            : [];
+    if (!hints.length) return null;
+    const tipId = (descriptor.id || 'anon') + '::guardian';
+    const cursor = (rotationCursors.get(tipId) || 0) % hints.length;
+    rotationCursors.set(tipId, (cursor + 1) % hints.length);
+    return { kind: 'guardian-curated', text: String(hints[cursor]).trim() };
+}
+
+async function pickDynamicLine(descriptor, target, guardianAlreadyShown) {
     const tipId = descriptor.id || '';
+    const order = guardianAlreadyShown ? ROTATION_ORDER.filter((kind) => kind !== 'guardian') : ROTATION_ORDER;
     // Advance rotation cursor (per tipId).
-    const cursor = (rotationCursors.get(tipId) || 0) % ROTATION_ORDER.length;
-    rotationCursors.set(tipId, (cursor + 1) % ROTATION_ORDER.length);
+    const cursor = (rotationCursors.get(tipId) || 0) % order.length;
+    rotationCursors.set(tipId, (cursor + 1) % order.length);
 
     // Attempt providers starting at cursor; first non-empty wins.
-    for (let i = 0; i < ROTATION_ORDER.length; i++) {
-        const kind = ROTATION_ORDER[(cursor + i) % ROTATION_ORDER.length];
+    for (let i = 0; i < order.length; i++) {
+        const kind = order[(cursor + i) % order.length];
         const provider = dynamicProviders[kind];
         if (!provider) continue;
         try {
@@ -383,17 +476,28 @@ async function pickDynamicLine(descriptor, target) {
     return null;
 }
 
-function renderTooltipHtml(descriptor, dynamic) {
+function renderTooltipHtml(descriptor, content) {
+    const guardian = content && content.guardian ? content.guardian : null;
+    const dynamic = content && content.dynamic ? content.dynamic : null;
     const label = descriptor.label || descriptor.summary || '';
     const icon = descriptor.icon || '';
     const summary = descriptor.summary || '';
+    const helper = HELPER_VARIANTS[helperVariant] || HELPER_VARIANTS['glass-prism'];
     let html = '';
+    html += '<div class="prism-tip-shell">';
+    html += '<div class="prism-tip-copy">';
     html += '<div class="prism-tip-header">';
     if (icon) html += '<span class="prism-tip-icon">' + escapeHtml(icon) + '</span>';
     html += '<span class="prism-tip-label">' + escapeHtml(label) + '</span>';
     html += '</div>';
     if (summary && summary !== label) {
         html += '<div class="prism-tip-summary">' + escapeHtml(summary) + '</div>';
+    }
+    if (guardian && guardian.text) {
+        html += '<div class="prism-tip-guardian">';
+        html += '<div class="prism-tip-guardian-title"><span aria-hidden="true">🛡️</span><span>Guardian suggests</span></div>';
+        html += '<div class="prism-tip-guardian-text">' + escapeHtml(guardian.text) + '</div>';
+        html += '</div>';
     }
     if (dynamic && dynamic.text) {
         html += '<div class="prism-tip-dynamic prism-tip-dynamic-' + escapeHtml(dynamic.kind) + '">';
@@ -425,17 +529,84 @@ function renderTooltipHtml(descriptor, dynamic) {
         }
         html += '</div>';
     }
+    html += '</div>';
+    if (helperVisible) {
+        html += renderHelperHtml(helper);
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderHelperHtml(helper) {
+    let html = '';
+    html += '<aside class="prism-tip-helper prism-tip-helper-' + escapeHtml(helper.accentClass) + '">';
+    html += '<div class="prism-tip-helper-stage" aria-hidden="true">';
+    html += '<div class="prism-tip-helper-avatar">';
+    html += '<span class="prism-tip-helper-core">' + escapeHtml(helper.glyph) + '</span>';
+    html += '<span class="prism-tip-helper-shard prism-tip-helper-shard-a"></span>';
+    html += '<span class="prism-tip-helper-shard prism-tip-helper-shard-b"></span>';
+    html += '<span class="prism-tip-helper-shard prism-tip-helper-shard-c"></span>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div class="prism-tip-helper-name">' + escapeHtml(helper.label) + '</div>';
+    html += '<div class="prism-tip-helper-blurb">' + escapeHtml(helper.blurb) + '</div>';
+    html += '<div class="prism-tip-helper-chooser" role="group" aria-label="Tooltip helper style">';
+    for (const [key, value] of Object.entries(HELPER_VARIANTS)) {
+        const selected = key === helperVariant ? ' is-selected' : '';
+        html += '<button type="button" class="prism-tip-helper-chip' + selected + '" data-prism-helper="' + escapeAttr(key) + '">' + escapeHtml(value.label) + '</button>';
+    }
+    html += '</div>';
+    html += '</aside>';
     return html;
 }
 
 function dynamicGlyph(kind) {
     switch (kind) {
         case 'guardian': return '\u{1F6E1}\uFE0F';
+        case 'guardian-live': return '\u{1F6E1}\uFE0F';
+        case 'guardian-curated': return '\u{1F6E1}\uFE0F';
         case 'telemetry': return '\u{1F4CA}';
         case 'server': return '\u{1F4DA}';
         case 'lore': return '\u2728';
         default: return '\u00B7';
     }
+}
+
+function onOverlayClick(event) {
+    const button = event.target && event.target.closest ? event.target.closest('[data-prism-helper]') : null;
+    if (!button) return;
+    const variant = button.getAttribute('data-prism-helper') || '';
+    if (!HELPER_VARIANTS[variant]) return;
+    helperVariant = variant;
+    persistHelperVariant(variant);
+    applyOverlayPreferenceClasses();
+    if (currentTarget) {
+        void showTooltip(currentTarget);
+    }
+}
+
+function applyOverlayPreferenceClasses() {
+    if (!overlayEl) return;
+    overlayEl.classList.toggle('prism-tip-no-helper', !helperVisible);
+    overlayEl.classList.toggle('prism-tip-motion-off', !helperMotionEnabled);
+}
+
+function loadHelperVariant() {
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            const stored = window.localStorage.getItem(HELPER_STORAGE_KEY) || '';
+            if (stored && HELPER_VARIANTS[stored]) return stored;
+        }
+    } catch (_) { /* ignore */ }
+    return 'glass-prism';
+}
+
+function persistHelperVariant(variant) {
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(HELPER_STORAGE_KEY, variant);
+        }
+    } catch (_) { /* ignore */ }
 }
 
 // ── Positioning ──────────────────────────────────────────────────────────────
@@ -580,6 +751,9 @@ export const __TEST__ = {
         if (showTimer) clearTimeout(showTimer);
         if (hideTimer) clearTimeout(hideTimer);
         showTimer = null; hideTimer = null;
+        helperVariant = 'glass-prism';
+        helperVisible = true;
+        helperMotionEnabled = true;
     },
     get state() {
         return { descriptorsById, guardianTips, serverTipCache, rotationCursors, currentTarget, overlayEl };

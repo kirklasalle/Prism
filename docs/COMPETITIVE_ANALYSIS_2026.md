@@ -59,7 +59,7 @@ Docker Agent is a declarative YAML-configured multi-agent orchestration runtime 
 ```yaml
 agents:
   root:
-    model: openai/gpt-4o
+    model: openai/gpt-5
     description: Technical lead
     sub_agents: [developer, reviewer, tester]
     toolsets:

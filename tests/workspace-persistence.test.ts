@@ -17,17 +17,26 @@ import {
 
 describe("Workspace Persistence", () => {
     const originalEnv = process.env.PRISM_WORKSPACE_ROOT;
+    const originalPrefsPath = process.env.PRISM_PREFERENCES_PATH;
     let tempDir: string | undefined;
+    let tempPrefsFile: string | undefined;
 
     afterEach(() => {
         _resetWorkspaceRootCache();
-        // Restore env
         if (originalEnv !== undefined) {
             process.env.PRISM_WORKSPACE_ROOT = originalEnv;
         } else {
             delete process.env.PRISM_WORKSPACE_ROOT;
         }
-        // Clean temp
+        if (originalPrefsPath !== undefined) {
+            process.env.PRISM_PREFERENCES_PATH = originalPrefsPath;
+        } else {
+            delete process.env.PRISM_PREFERENCES_PATH;
+        }
+        if (tempPrefsFile && existsSync(tempPrefsFile)) {
+            try { rmSync(tempPrefsFile, { force: true }); } catch {}
+            tempPrefsFile = undefined;
+        }
         if (tempDir && existsSync(tempDir)) {
             try {
                 rmSync(tempDir, { recursive: true, force: true });

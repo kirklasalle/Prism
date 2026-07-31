@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { executeCertificateMigration } from "../security/certificate-migration-manifest.js";
+import {
+    createServerAuthorityContext,
+    type ExecutionAuthorityContext,
+} from "../security/execution-authority-context.js";
 import type { PersistedProviderSettings, PrismLlmProviderId, RoutingConfig } from "./llm-provider-manager.js";
 import type { ModelCapabilityProfile } from "./model-capability-matrix.js";
 
@@ -231,6 +236,10 @@ export class ChatSessionStore implements ISessionStore {
         this.ensureColumn("chat_sessions", "operator_email", "TEXT");
         this.ensureColumn("chat_sessions", "assistant_email", "TEXT");
 
+        // Phase 2 (IC-13): Quarantine flag for historical placeholder certificates
+        this.ensureColumn("chat_sessions", "is_quarantined", "INTEGER DEFAULT 0");
+        this.ensureColumn("chat_messages", "is_quarantined", "INTEGER DEFAULT 0");
+
         // Attachment storage table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS chat_attachments (
@@ -350,6 +359,8 @@ export class ChatSessionStore implements ISessionStore {
         this.ensureColumn("sr_config", "show_hemispheres", "INTEGER DEFAULT 0");
 
         // Database Write Protection triggers for Initialization Certificate
+        // IC-03 Phase 0: Unconditional immutability — deletion is NEVER permitted
+        // regardless of how many certificate records exist.
         this.db.exec(`
             DROP TRIGGER IF EXISTS prevent_cert_message_delete;
             DROP TRIGGER IF EXISTS prevent_cert_session_delete;
@@ -366,7 +377,6 @@ export class ChatSessionStore implements ISessionStore {
             BEFORE DELETE ON chat_messages
             FOR EACH ROW
             WHEN OLD.metadata_json LIKE '%"type":"certificate"%'
-              AND (SELECT COUNT(*) FROM chat_messages WHERE metadata_json LIKE '%"type":"certificate"%') <= 1
             BEGIN
                 SELECT RAISE(FAIL, 'Deletion of immutable Initialization Certificate is forbidden');
             END;
@@ -381,7 +391,8 @@ export class ChatSessionStore implements ISessionStore {
                         OLD.operator_email IS NOT NULL AND 
                         OLD.operator_email != 'operator@prism.local' AND 
                         OLD.operator_email != 'not set' AND 
-                        NEW.operator_email != OLD.operator_email
+                        NEW.operator_email != OLD.operator_email AND
+                        (NEW.operator_email IS NULL OR NEW.operator_email NOT LIKE 'archived:%')
                     )
                     THEN RAISE(FAIL, 'Modification of immutable Initialization Certificate session is forbidden')
                 END;
@@ -391,11 +402,23 @@ export class ChatSessionStore implements ISessionStore {
             BEFORE DELETE ON chat_sessions
             FOR EACH ROW
             WHEN OLD.title LIKE '%Initialization Certificate%'
-              AND (SELECT COUNT(*) FROM chat_sessions WHERE title LIKE '%Initialization Certificate%') <= 1
             BEGIN
                 SELECT RAISE(FAIL, 'Deletion of immutable Initialization Certificate session is forbidden');
             END;
+
+            -- Phase 2 (IC-13): Enforce exactly 1 active Initialization Certificate per operator
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_operator_cert
+            ON chat_sessions (operator_email)
+            WHERE title LIKE '%Initialization Certificate%'
+              AND (operator_email IS NOT NULL AND operator_email NOT LIKE 'archived:%' AND is_quarantined = 0);
         `);
+
+        // Phase 2 (IC-13): Execute legacy developer placeholder quarantine migration
+        try {
+            executeCertificateMigration(this.db);
+        } catch (err) {
+            console.warn("[PRISM][security] Certificate migration notice:", (err as Error).message);
+        }
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {
@@ -421,14 +444,14 @@ export class ChatSessionStore implements ISessionStore {
             opts.cacAssignmentId !== undefined
                 ? opts.cacAssignmentId
                 : lastSession
-                  ? lastSession.cacAssignmentId
-                  : null;
+                    ? lastSession.cacAssignmentId
+                    : null;
         const executionProfile =
             opts.executionProfile !== undefined
                 ? opts.executionProfile
                 : lastSession
-                  ? lastSession.executionProfile
-                  : null;
+                    ? lastSession.executionProfile
+                    : null;
         const operatorEmail =
             opts.operatorEmail !== undefined ? opts.operatorEmail : lastSession ? lastSession.operatorEmail : null;
         const assistantEmail =
@@ -489,6 +512,34 @@ export class ChatSessionStore implements ISessionStore {
         }
 
         return this.getSession(sessionId)!;
+    }
+
+    /**
+     * IC-05 Phase 3: Server-side resolution of ExecutionAuthorityContext for a chat session.
+     * Supports both Individual and Business execution profiles.
+     */
+    resolveAuthorityContextForSession(sessionId: string): ExecutionAuthorityContext {
+        const session = this.getSession(sessionId);
+        const operatorEmail = session?.operatorEmail?.trim().toLowerCase() || "operator@prismrefraction.com";
+        const cacAssignmentId = session?.cacAssignmentId || `asgn-${sessionId.slice(0, 8)}`;
+        const executionProfile = (session?.executionProfile as "individual" | "business") || "individual";
+
+        // Find active certificate session for operator
+        const certSessions = this.listSessions().filter(
+            (s) => /Initialization Certificate/i.test(s.title || "") && s.operatorEmail?.trim().toLowerCase() === operatorEmail,
+        );
+        const certificateId = certSessions.length > 0 ? certSessions[0]!.sessionId : `cert-${sessionId.slice(0, 8)}`;
+
+        return createServerAuthorityContext({
+            certificateId,
+            assignmentId: cacAssignmentId,
+            operatorEmail,
+            operatorName: "Operator",
+            cacEmail: session?.assistantEmail || "cac@prismrefraction.com",
+            cacName: "CAC Main Agent",
+            executionProfile,
+            tenantId: "default",
+        });
     }
 
     /**
@@ -579,21 +630,21 @@ export class ChatSessionStore implements ISessionStore {
         `,
             )
             .all() as Array<{
-            session_id: string;
-            title: string;
-            created_at: string;
-            updated_at: string;
-            llm_provider_id: string | null;
-            llm_model: string | null;
-            character_id: string | null;
-            cac_assignment_id: string | null;
-            execution_profile: string | null;
-            operator_email: string | null;
-            assistant_email: string | null;
-            message_count: number;
-            last_message_preview: string | null;
-            last_message_role: "user" | "assistant" | "system" | null;
-        }>;
+                session_id: string;
+                title: string;
+                created_at: string;
+                updated_at: string;
+                llm_provider_id: string | null;
+                llm_model: string | null;
+                character_id: string | null;
+                cac_assignment_id: string | null;
+                execution_profile: string | null;
+                operator_email: string | null;
+                assistant_email: string | null;
+                message_count: number;
+                last_message_preview: string | null;
+                last_message_role: "user" | "assistant" | "system" | null;
+            }>;
 
         return rows.map((row) => ({
             sessionId: row.session_id,
@@ -629,13 +680,13 @@ export class ChatSessionStore implements ISessionStore {
         `,
             )
             .all({ sessionId }) as Array<{
-            message_id: string;
-            session_id: string;
-            role: "user" | "assistant" | "system" | "tool";
-            content: string;
-            created_at: string;
-            metadata_json: string;
-        }>;
+                message_id: string;
+                session_id: string;
+                role: "user" | "assistant" | "system" | "tool";
+                content: string;
+                created_at: string;
+                metadata_json: string;
+            }>;
 
         return rows.map((row) => ({
             messageId: row.message_id,
@@ -743,12 +794,12 @@ export class ChatSessionStore implements ISessionStore {
             )
             .get({ sessionId }) as
             | {
-                  session_id: string;
-                  provider_id: string | null;
-                  model: string | null;
-                  updated_at: string;
-                  source: string;
-              }
+                session_id: string;
+                provider_id: string | null;
+                model: string | null;
+                updated_at: string;
+                source: string;
+            }
             | undefined;
 
         if (!row) {
@@ -895,16 +946,16 @@ export class ChatSessionStore implements ISessionStore {
         `,
             )
             .all({ sessionId, limit: safeLimit }) as Array<{
-            history_id: string;
-            session_id: string;
-            previous_provider_id: string | null;
-            previous_model: string | null;
-            next_provider_id: string | null;
-            next_model: string | null;
-            changed_fields_json: string;
-            applied_at: string;
-            source: string;
-        }>;
+                history_id: string;
+                session_id: string;
+                previous_provider_id: string | null;
+                previous_model: string | null;
+                next_provider_id: string | null;
+                next_model: string | null;
+                changed_fields_json: string;
+                applied_at: string;
+                source: string;
+            }>;
 
         return rows.map((row) => ({
             historyId: row.history_id,
@@ -930,15 +981,15 @@ export class ChatSessionStore implements ISessionStore {
             )
             .get({ providerId }) as
             | {
-                  provider_id: PrismLlmProviderId;
-                  base_url: string | null;
-                  api_key_header: string | null;
-                  models_json: string;
-                  default_model: string | null;
-                  updated_at: string;
-                  source: string;
-                  use_oauth: number;
-              }
+                provider_id: PrismLlmProviderId;
+                base_url: string | null;
+                api_key_header: string | null;
+                models_json: string;
+                default_model: string | null;
+                updated_at: string;
+                source: string;
+                use_oauth: number;
+            }
             | undefined;
 
         if (!row) {
@@ -967,15 +1018,15 @@ export class ChatSessionStore implements ISessionStore {
         `,
             )
             .all() as Array<{
-            provider_id: PrismLlmProviderId;
-            base_url: string | null;
-            api_key_header: string | null;
-            models_json: string;
-            default_model: string | null;
-            updated_at: string;
-            source: string;
-            use_oauth: number;
-        }>;
+                provider_id: PrismLlmProviderId;
+                base_url: string | null;
+                api_key_header: string | null;
+                models_json: string;
+                default_model: string | null;
+                updated_at: string;
+                source: string;
+                use_oauth: number;
+            }>;
 
         return rows.map((row) => ({
             providerId: row.provider_id,
@@ -1094,12 +1145,12 @@ export class ChatSessionStore implements ISessionStore {
             )
             .get() as
             | {
-                  strategy: string;
-                  role_overrides_json: string;
-                  agent_overrides_json: string;
-                  modality_overrides_json: string;
-                  preferred_modality: string | null;
-              }
+                strategy: string;
+                role_overrides_json: string;
+                agent_overrides_json: string;
+                modality_overrides_json: string;
+                preferred_modality: string | null;
+            }
             | undefined;
 
         if (!row) return null;
@@ -1129,25 +1180,25 @@ export class ChatSessionStore implements ISessionStore {
         `,
             )
             .all() as Array<{
-            pattern: string;
-            label: string;
-            tier: number;
-            parameter_size: string;
-            parameters_billions: number;
-            context_window: number;
-            estimated_vram_mb: number;
-            max_output_tokens: number;
-            adaptive_prompt_budget: number;
-            strengths_json: string;
-            modalities_json: string;
-            locality: string;
-            version_constraint: string | null;
-            deprecated: number | null;
-            deprecated_at: string | null;
-            sunset_date: string | null;
-            successor: string | null;
-            deprecation_reason: string | null;
-        }>;
+                pattern: string;
+                label: string;
+                tier: number;
+                parameter_size: string;
+                parameters_billions: number;
+                context_window: number;
+                estimated_vram_mb: number;
+                max_output_tokens: number;
+                adaptive_prompt_budget: number;
+                strengths_json: string;
+                modalities_json: string;
+                locality: string;
+                version_constraint: string | null;
+                deprecated: number | null;
+                deprecated_at: string | null;
+                sunset_date: string | null;
+                successor: string | null;
+                deprecation_reason: string | null;
+            }>;
 
         return rows.map(
             (row) =>
@@ -1307,17 +1358,17 @@ export class ChatSessionStore implements ISessionStore {
         `,
             )
             .all({ messageId }) as Array<{
-            attachment_id: string;
-            message_id: string;
-            session_id: string;
-            file_name: string;
-            mime_type: string;
-            size_bytes: number;
-            storage_path: string;
-            thumbnail_path: string | null;
-            include_in_context: number;
-            created_at: string;
-        }>;
+                attachment_id: string;
+                message_id: string;
+                session_id: string;
+                file_name: string;
+                mime_type: string;
+                size_bytes: number;
+                storage_path: string;
+                thumbnail_path: string | null;
+                include_in_context: number;
+                created_at: string;
+            }>;
 
         return rows.map((row) => ({
             attachmentId: row.attachment_id,
@@ -1344,17 +1395,17 @@ export class ChatSessionStore implements ISessionStore {
         `,
             )
             .all({ sessionId }) as Array<{
-            attachment_id: string;
-            message_id: string;
-            session_id: string;
-            file_name: string;
-            mime_type: string;
-            size_bytes: number;
-            storage_path: string;
-            thumbnail_path: string | null;
-            include_in_context: number;
-            created_at: string;
-        }>;
+                attachment_id: string;
+                message_id: string;
+                session_id: string;
+                file_name: string;
+                mime_type: string;
+                size_bytes: number;
+                storage_path: string;
+                thumbnail_path: string | null;
+                include_in_context: number;
+                created_at: string;
+            }>;
 
         return rows.map((row) => ({
             attachmentId: row.attachment_id,
@@ -1382,17 +1433,17 @@ export class ChatSessionStore implements ISessionStore {
             )
             .get({ attachmentId }) as
             | {
-                  attachment_id: string;
-                  message_id: string;
-                  session_id: string;
-                  file_name: string;
-                  mime_type: string;
-                  size_bytes: number;
-                  storage_path: string;
-                  thumbnail_path: string | null;
-                  include_in_context: number;
-                  created_at: string;
-              }
+                attachment_id: string;
+                message_id: string;
+                session_id: string;
+                file_name: string;
+                mime_type: string;
+                size_bytes: number;
+                storage_path: string;
+                thumbnail_path: string | null;
+                include_in_context: number;
+                created_at: string;
+            }
             | undefined;
 
         if (!row) {
@@ -1451,18 +1502,18 @@ export class ChatSessionStore implements ISessionStore {
             )
             .get({ sessionId }) as
             | {
-                  enabled: number;
-                  left_provider_id: string | null;
-                  left_model: string | null;
-                  right_provider_id: string | null;
-                  right_model: string | null;
-                  left_slot: string | null;
-                  right_slot: string | null;
-                  left_timeout_ms: number | null;
-                  right_timeout_ms: number | null;
-                  circuit_breaker_enabled: number | null;
-                  show_hemispheres: number | null;
-              }
+                enabled: number;
+                left_provider_id: string | null;
+                left_model: string | null;
+                right_provider_id: string | null;
+                right_model: string | null;
+                left_slot: string | null;
+                right_slot: string | null;
+                left_timeout_ms: number | null;
+                right_timeout_ms: number | null;
+                circuit_breaker_enabled: number | null;
+                show_hemispheres: number | null;
+            }
             | undefined;
 
         if (!row) return null;
@@ -1569,13 +1620,13 @@ export class ChatSessionStore implements ISessionStore {
         const rows =
             scope === "global"
                 ? (this.db
-                      .prepare(`SELECT * FROM sr_presets WHERE scope = 'global' ORDER BY updated_at DESC`)
-                      .all() as any[])
+                    .prepare(`SELECT * FROM sr_presets WHERE scope = 'global' ORDER BY updated_at DESC`)
+                    .all() as any[])
                 : (this.db
-                      .prepare(
-                          `SELECT * FROM sr_presets WHERE scope = 'session' AND scope_id = :scopeId ORDER BY updated_at DESC`,
-                      )
-                      .all({ scopeId: scopeId ?? "" }) as any[]);
+                    .prepare(
+                        `SELECT * FROM sr_presets WHERE scope = 'session' AND scope_id = :scopeId ORDER BY updated_at DESC`,
+                    )
+                    .all({ scopeId: scopeId ?? "" }) as any[]);
         return rows.map((r) => ({
             id: r.id,
             name: r.name,

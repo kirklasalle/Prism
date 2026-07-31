@@ -2,6 +2,23 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.22.8 — 2026-07-28 — Setup Wizard Auth Gate & Model Download Stabilization
+
+Remediates first-run setup authentication blocks (`401 Unauthorized`), stabilizes Guardian model download pipelines with TLS SNI and 60s socket timeouts, adds trace logging to `logs/prism.log` and `logs/prism-trace.log`, guarantees default workspace path resolution to OS Documents, fixes Setup Wizard UI button responsiveness, and wires the Shutdown Server button.
+
+### Added
+
+- **Trace Logging for Model Downloads (`src/core/observability/logger.ts`, `src/core/operator/dashboard-service.ts`)**: Added structured trace and file-based logging (`logger.info`, `logger.trace`, `logger.error`) for all model downloads, redirects, and network transfers, recording events to `logs/prism.log` and `logs/prism-trace.log`.
+- **System Shutdown API Route (`src/core/operator/routes/api-handler.ts`)**: Implemented `POST /api/system/shutdown` in `ApiHandler` to handle graceful server process termination requests initiated from the setup wizard or dashboard.
+- **Provider Connection Test & Save Handlers (`src/core/operator/public/setup-wizard.js`)**: Implemented `window.testProviderConnection()` and `window.saveProviderConfiguration()` in `setup-wizard.js` with auto-expanding model listings, latency benchmarks, and default model selection.
+
+### Fixed
+
+- **Setup Wizard Auth Gate Bypasses (`src/core/operator/dashboard-service.ts`)**: Added `/api/models/`, `/api/llm/`, `/api/guardian/`, `/api/workspace/`, and `/api/system/` prefixes to `bootstrapPrefixes` in `AuthGate`. Prevents `401 Unauthorized` HTTP status errors during initial first-run setup when an admin bearer token does not yet exist.
+- **Guardian Model Download Redirects & TLS SNI (`src/core/operator/dashboard-service.ts`)**: Updated `downloadFile` in `DashboardService` with TLS SNI (`servername`), `Host` headers, `User-Agent`, 10-redirect guard, and 60-second connection socket timeouts to prevent HuggingFace CDN downloads from hanging at 0%.
+- **Workspace Location Test Isolation (`src/core/config/workspace-resolver.ts`, `tests/workspace-persistence.test.ts`)**: Added `isTempWorkspaceDir` filtering in `resolveWorkspaceRoot()` to ignore temporary test directories (`prism-ws-test-...`), ensuring default workspace paths on Windows always resolve to `C:\Users\[USER]\Documents\Prism_Refraction`. Isolated test preferences via `PRISM_PREFERENCES_PATH` so running unit test suites no longer pollutes the root `.prism-preferences.json`.
+- **Setup Wizard Layout & Syntax Fix (`src/core/operator/templates/setup.ts`, `src/core/operator/public/setup-wizard.js`)**: Repositioned the **Save Provider** button to the bottom-right below the discovered models summary container. Fixed duplicate function declaration syntax error in `setup-wizard.js` to ensure 100% click responsiveness across all setup steps.
+
 ## v0.22.7 — 2026-07-26 — Deprecation Cleanup, Security Remediation & Google API Promotion
 
 Remediates all 26 security vulnerabilities (0 remaining in npm audit), cleans up npm deprecation warnings, promotes `googleapis` to a mandatory core dependency for full Google OAuth & Calendar support, updates Sharp 0.35 type contracts, and achieves 100% pass rate across the full 195-test-file discovery suite.

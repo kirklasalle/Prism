@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { IRouteHandler } from "./types.js";
 import type { DashboardService } from "../dashboard-service.js";
+import { adminTokenPrincipal, principalHasRole, type IamPrincipal } from "../../iam/rbac.js";
 
 export class CacHandler implements IRouteHandler {
     match(req: IncomingMessage): boolean {
@@ -14,9 +15,17 @@ export class CacHandler implements IRouteHandler {
         const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
         const method = req.method?.toUpperCase() ?? "GET";
         const manager = service.getCharacterAccountabilityManager();
+        const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
+        const principal = this.resolvePrincipal(req, service);
+        const isAdmin = authDisabled || principalHasRole(principal, "admin");
+
+        if (!authDisabled && !principal) {
+            return this.json(res, 401, { error: "Authentication required" });
+        }
 
         // 1. GET /api/cac/assignments
         if (method === "GET" && url === "/api/cac/assignments") {
+            if (!isAdmin) return this.adminRequired(res);
             try {
                 const audit = manager.exportAudit({});
                 return this.json(res, 200, { assignments: audit });
@@ -32,11 +41,15 @@ export class CacHandler implements IRouteHandler {
             if (!chain) {
                 return this.json(res, 404, { error: "Unknown assignment", assignmentId });
             }
+            if (!isAdmin && chain.assignment.operatorEmail !== principal?.email) {
+                return this.json(res, 403, { error: "Assignment access denied" });
+            }
             return this.json(res, 200, chain);
         }
 
         // 3. GET /api/cac/export
         if (method === "GET" && url.startsWith("/api/cac/export")) {
+            if (!isAdmin) return this.adminRequired(res);
             try {
                 const isCsv = /[?&]format=csv\b/.test(rawUrl);
                 const audit = manager.exportAudit({});
@@ -80,6 +93,7 @@ export class CacHandler implements IRouteHandler {
 
         // 4. POST /api/cac/:id/verify-email
         if (method === "POST" && /^\/api\/cac\/[^/]+\/verify-email$/.test(url)) {
+            if (!isAdmin) return this.adminRequired(res);
             const assignmentId = decodeURIComponent(url.split("/")[3]!);
             try {
                 const body = await service.readJsonBody<{ provider?: "gmail" | "outlook"; verifiedEmail?: string }>(
@@ -124,14 +138,10 @@ export class CacHandler implements IRouteHandler {
                     }
                 }
 
-                const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
-                const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
-                const isAdmin =
-                    authDisabled ||
-                    (principal ? principal.roles.includes("admin") || principal.roles.includes("root") : true);
-
-                if (!isAdmin && principal && principal.email) {
-                    assignments = assignments.filter((a) => a.operatorEmail === principal.email);
+                if (!isAdmin) {
+                    assignments = principal?.email
+                        ? assignments.filter((assignment) => assignment.operatorEmail === principal.email)
+                        : [];
                 }
 
                 // Include events for the assignments
@@ -159,6 +169,22 @@ export class CacHandler implements IRouteHandler {
         }
 
         return this.json(res, 404, { error: "Not found", path: url });
+    }
+
+    private resolvePrincipal(req: IncomingMessage, service: DashboardService): IamPrincipal | null {
+        const iam = service.getIamHandler();
+        const cookiePrincipal = iam.resolvePrincipalFromCookie(req);
+        if (cookiePrincipal) return cookiePrincipal;
+
+        const authorization = req.headers.authorization;
+        const bearer = typeof authorization === "string" ? /^Bearer\s+(.+)$/i.exec(authorization)?.[1] : null;
+        if (!bearer) return null;
+        return iam.resolvePrincipalFromApiKey(bearer) ??
+            (service.getAuthGate().isValidToken(bearer) ? adminTokenPrincipal() : null);
+    }
+
+    private adminRequired(res: ServerResponse): void {
+        return this.json(res, 403, { error: "Admin role required" });
     }
 
     private json(res: ServerResponse, status: number, data: any): void {

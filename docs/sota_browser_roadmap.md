@@ -206,18 +206,21 @@ export type SSHPInterceptionResponse = z.infer<typeof SSHPInterceptionResponseSc
 This checklist acts as a living implementation document. It maps out sequential development checkpoints to integrate these systems into PRISM.
 
 ### Phase A: Cloud LLM Resolution & Integration Stability (Immediate Priority)
-* [ ] **Task A.1**: Re-verify OpenAI access logs. Ensure `gpt-3.5-turbo` and `gpt-4o` configuration in `src/core/operator/llm-provider-manager.ts` handles project-specific scopes correctly.
+
+* [ ] **Task A.1**: Re-verify OpenAI access logs. Ensure `gpt-5` and `o4-mini` configuration in `src/core/operator/llm-provider-manager.ts` handles project-specific scopes correctly.
 * [ ] **Task A.2**: Run `smoke-test.mjs` synchronously. Ensure the test transitions from `planning` to `succeeded` using the `file_list` mock.
 * [ ] **Task A.3**: Add automatic fallback routing in `LLMProviderManager` to switch from Cloud LLM to local GGUF models on a llama.cpp slot if network limits or API limits are hit.
 * [ ] **Task A.4**: Verify the **Character Access Control (CAC)** startup sequence, ensuring character selections (Aria, Sentinel, Phoenix) propagate correctly during the WebSocket session handshake.
 
 ### Phase B: The Sovereign Sentinel Hyper-Proxy (SSHP) Core Engine
+
 * [ ] **Task B.1**: Implement `SSHPInterceptor` class inside `src/core/operator/` that hooks directly into the browser control routers (`/api/browser/click`, `/api/browser/type`, etc.).
 * [ ] **Task B.2**: Build the PII Sanitization Engine. Create HTML parse trees to scan the DOM snapshot for sensitive input types (`type="password"`, `autocomplete="cc-number"`, email/SSN regexes) and redact them before serializing the payload.
 * [ ] **Task B.3**: Build the Screenshot Visual Redactor. Use visual bounding boxes from the parsed DOM nodes to draw filled black rectangles on the viewport screenshots in Node.js before saving/sending.
 * [ ] **Task B.4**: Hook the `PrismCovenant` check loop into the `SSHPInterceptor` execution path to evaluate every navigate, click, and evaluate action against the Sacred Covenant rules.
 
 ### Phase C: Cognitive Session Handoff (CSH) "Baton Pass" Protocol
+
 * [ ] **Task C.1**: Implement the `CSHManager` to handle browser-state serialization. Write handlers that extract page cookies, sessionStorage, and localStorage via Playwright APIs.
 * [ ] **Task C.2**: Add the `/api/v1/autonomous/session/handoff` and `/api/v1/autonomous/session/resume` POST endpoints to allow seamless state handoffs.
 * [ ] **Task C.3**: Update the Level-1 FSM `AgentStateManager`. Add support for a `baton_pass` transaction where the active developer agent serializes context and relinquishes control.
@@ -228,6 +231,7 @@ This checklist acts as a living implementation document. It maps out sequential 
   * Provide a prominent "Resume Task" button that executes the context deserialization.
 
 ### Phase D: Dynamic Semantic-Visual Anchor Resolver (DSVAR)
+
 * [ ] **Task D.1**: Build the DSVAR visually grounded locator. Fuses scaled image coordinates with parsed accessibility tree landmarks to generate resilient, dynamic selectors.
 * [ ] **Task D.2**: Implement a visual-grounding coordinate validation check that maps coordinates $(x,y)$ between the scaled visual viewport and native resolutions using:
   $$x_{\text{viewport}} = \left\lfloor x_{\text{image}} \cdot \frac{W_{\text{viewport}}}{W_{\text{image}}} \right\rfloor$$

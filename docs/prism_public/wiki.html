@@ -58,7 +58,7 @@
                     <li class="wiki-nav-item active" data-target="wiki-overview"><button>1. Overview</button></li>
                     <li class="wiki-nav-item" data-target="wiki-triad"><button>2. Triad & Kinship</button></li>
                     <li class="wiki-nav-item" data-target="wiki-policy"><button>3. Policy & 10 Laws</button></li>
-                    <li class="wiki-nav-item" data-target="wiki-cac"><button>4. CAC Accountability</button></li>
+                    <li class="wiki-nav-item" data-target="wiki-cac"><button>4. CAC Main Agent</button></li>
                     <li class="wiki-nav-item" data-target="wiki-memory"><button>5. Causal Memory</button></li>
                     <li class="wiki-nav-item" data-target="wiki-dashboard">
                         <button>6. Operator Dashboard</button>
@@ -181,8 +181,8 @@
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>GPT-4o</td>
-                                    <td>GPT-4o</td>
+                                    <td>GPT-5</td>
+                                    <td>GPT-5</td>
                                     <td>1.00</td>
                                     <td class="u-status-red">Rejected (Bypasses Isolation)</td>
                                 </tr>
@@ -316,22 +316,56 @@
                     </ul>
                 </article>
 
-                <!-- ARTICLE: CAC ACCOUNTABILITY -->
+                <!-- ARTICLE: CAC MAIN AGENT AND GUARDIAN -->
                 <article class="wiki-article" id="wiki-cac">
-                    <h2>4. Character Accountability Control (CAC)</h2>
+                    <h2>4. CAC Main Agent &amp; Guardian</h2>
                     <p>
-                        In autonomous development, assigning responsibility is a critical challenge. PRISM addresses
-                        this via the <strong>Character Accountability Control (CAC)</strong> layer, establishing
-                        absolute identity bindings.
+                        The <strong>Character Accountability Control (CAC) agent is the operator's Main
+                            Agent</strong>. It is the assistant, agent, companion, and primary interaction identity
+                        presented to the operator throughout PRISM. CAC is not merely an authentication card,
+                        certificate, or audit row.
                     </p>
 
-                    <h3>Cryptographic Sign-off</h3>
+                    <h3>One Durable Main Agent</h3>
                     <p>
-                        Every codebase edit or system-level write is signed using an Ed25519 keypair mapped to the
-                        active Character (e.g. <em>Antigravity</em>, <em>Aria</em>, <em>Sentinel</em>). This
-                        signature ties the specific session ID, operator ID, and character profile to the
-                        modification, recording the proof on an immutable SQLite-backed ledger
-                        (`prism-activity.db`).
+                        Each operator has exactly one CAC Main Agent for each Initialization Certificate. The
+                        certificate establishes its durable character and assistant identity. New chats reuse that
+                        same Main Agent and add session context to its history; they never create another CAC agent.
+                        All operator requests, responses, planning, tool use, and service interactions execute
+                        through or on behalf of this identity.
+                    </p>
+
+                    <h3>Guardian: Permanent Secondary Agent</h3>
+                    <p>
+                        <strong>Guardian is the permanent secondary support agent.</strong> It monitors and assists
+                        the CAC Main Agent while protecting the complete Dashboard and every PRISM service,
+                        function, tool, integration, and runtime component. Guardian performs health monitoring,
+                        policy and directive verification, diagnostics, recovery, and self-healing. It may advise,
+                        warn, pause, or escalate according to policy, but it never replaces the CAC Main Agent as
+                        the operator-facing assistant.
+                    </p>
+
+                    <div class="wiki-spec-grid">
+                        <div class="wiki-spec-card">
+                            <div class="val">PRIMARY</div>
+                            <div class="lbl">CAC Main Agent</div>
+                        </div>
+                        <div class="wiki-spec-card">
+                            <div class="val">SECONDARY</div>
+                            <div class="lbl">Guardian Support</div>
+                        </div>
+                        <div class="wiki-spec-card">
+                            <div class="val">1 : 1</div>
+                            <div class="lbl">Operator Certificate Binding</div>
+                        </div>
+                    </div>
+
+                    <h3>Identity and Accountability</h3>
+                    <p>
+                        The CAC assignment persisted in <code>prism-activity.db</code> is the identity and
+                        accountability record of the Main Agent. Every governed action carries its character,
+                        assistant, operator, and current client/session context into the Activity Bus so the system
+                        can reconstruct who acted, for whom, and under which authority.
                     </p>
 
                     <div class="u-console-snippet">
@@ -343,10 +377,10 @@
 
                     <h3>Audit Trail Specs</h3>
                     <p>
-                        PRISM records file checksums (pre-and-post edit) alongside full unified diffs. If an
-                        unauthorized agent attempts to run scripts, or if code drift occurs, the system logs the
-                        discrepancy to the Activity Bus, allowing SREs to rollback workspace directories to a signed
-                        state.
+                        PRISM records checksums and causal evidence alongside governed operations. If an unauthorized
+                        agent attempts to act, or if identity or code drift occurs, the system logs the discrepancy
+                        to the Activity Bus. Guardian monitors that evidence as the secondary platform agent while
+                        the CAC remains the operator's Main Agent.
                     </p>
                 </article>
 

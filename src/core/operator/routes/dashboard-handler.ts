@@ -28,6 +28,7 @@ export class DashboardHandler implements IRouteHandler {
 
         const qIdx = url.indexOf("?");
         const params = qIdx >= 0 ? new URLSearchParams(url.slice(qIdx + 1)) : null;
+        const setupToken = params?.get("setupToken") ?? "";
 
         // Query-token auth is a dev-only bypass (start_web.bat sets PRISM_ALLOW_QUERY_TOKEN=1).
         // Production startup scripts do NOT set this flag, so operators must use the login page.
@@ -46,14 +47,15 @@ export class DashboardHandler implements IRouteHandler {
         const principal = iam.resolvePrincipalFromCookie(req);
         const isTokenValid = clientToken
             ? service.getAuthGate().check({ headers: { authorization: `Bearer ${clientToken}` }, url: "/" } as any)
-                  .authenticated
+                .authenticated
             : false;
 
         const authDisabled = (process.env.PRISM_AUTH_DISABLED ?? "").toLowerCase() === "true";
         const isAdmin =
             authDisabled || (principal ? principal.roles.includes("admin") || principal.roles.includes("root") : true);
         if (!principal && !isTokenValid && !authDisabled) {
-            res.writeHead(302, { Location: "/login" });
+            const loginTarget = setupToken ? `/login?setupToken=${encodeURIComponent(setupToken)}` : "/login";
+            res.writeHead(302, { Location: loginTarget });
             res.end();
             return;
         }
@@ -68,9 +70,7 @@ export class DashboardHandler implements IRouteHandler {
                 service
                     .getChatStore()
                     .listSessions()
-                    .filter(
-                        (s) => s.operatorEmail === principal.email || /Initialization Certificate/i.test(s.title || ""),
-                    )
+                    .filter((s) => s.operatorEmail === principal.email)
                     .map((s) => s.sessionId),
             );
             packages = packages.filter((pkg) => pkg.sessionIds.some((sid) => operatorSessionIds.has(sid)));

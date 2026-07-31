@@ -43,11 +43,79 @@ let advState = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function upsertAuthRecoveryBanner(payload = {}) {
+  const reason = payload?.reason || payload?.error || 'Authentication is required to continue setup.';
+  const requestId = payload?.requestId || '';
+  const tokenFromMeta = document.querySelector('meta[name="prism-auth-token"]')?.getAttribute('content') || '';
+  const tokenFromQuery = new URL(window.location.href).searchParams.get('token') || '';
+  const token = tokenFromMeta || tokenFromQuery;
+  const retryUrl = token
+    ? `/setup/advanced?rerun=true&token=${encodeURIComponent(token)}`
+    : '/setup/advanced?rerun=true';
+
+  let banner = document.getElementById('wizard-auth-recovery');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'wizard-auth-recovery';
+    banner.style.cssText = [
+      'margin:10px 0 14px 0',
+      'padding:12px 14px',
+      'border:1px solid rgba(239,68,68,0.45)',
+      'background:rgba(239,68,68,0.12)',
+      'border-radius:10px',
+      'font-size:12px',
+      'line-height:1.45'
+    ].join(';');
+    const target = document.querySelector('.wizard-card') || document.body;
+    target.insertBefore(banner, target.firstChild);
+  }
+
+  banner.innerHTML =
+    `<div style="font-weight:700;color:#fecaca;">Authentication session expired or missing.</div>` +
+    `<div style="margin-top:4px;color:#fee2e2;">${escHtml(String(reason))}</div>` +
+    (requestId
+      ? `<div style="margin-top:4px;color:#fecaca;opacity:0.9;">requestId: <span style="font-family:monospace;">${escHtml(String(requestId))}</span></div>`
+      : '') +
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">` +
+    `<button type="button" class="secondary-button" onclick="window.location.href='/login'">Go to Login</button>` +
+    `<button type="button" class="primary-button" onclick="window.location.href='${retryUrl}'">Retry Advanced Wizard</button>` +
+    `</div>`;
+}
+
+function clearAuthRecoveryBanner() {
+  const banner = document.getElementById('wizard-auth-recovery');
+  if (banner) banner.remove();
+}
+
 async function api(method, path, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  const tokenFromMeta = document.querySelector('meta[name="prism-auth-token"]')?.getAttribute('content') || '';
+  const tokenFromQuery = new URL(window.location.href).searchParams.get('token') || '';
+  const token = tokenFromMeta || tokenFromQuery;
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const opts = { method, headers, credentials: 'same-origin' };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
-  return res.json();
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  let payload = null;
+  if (contentType.includes('application/json')) {
+    payload = await res.json().catch(() => null);
+  } else {
+    const text = await res.text().catch(() => '');
+    payload = text ? { error: text } : null;
+  }
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      upsertAuthRecoveryBanner(payload || { reason: 'Unauthorized' });
+    }
+    const reason = payload?.reason || payload?.error || payload?.message || `Request failed (${res.status})`;
+    const reqId = payload?.requestId ? ` [requestId: ${payload.requestId}]` : '';
+    throw new Error(String(reason) + reqId);
+  }
+
+  clearAuthRecoveryBanner();
+  return payload || {};
 }
 
 function escHtml(str) {
@@ -418,27 +486,66 @@ window.advAcceptSuggestions = function advAcceptSuggestions() {
 
 // ── Step 5: Guardian & Agents ────────────────────────────────────────────────
 
+const ADV_DEFAULT_RECOMMENDED_MODELS = [
+  { name: "Qwen2.5 3B Q4 (Highly Recommended)", fileName: "qwen-2.5-3b-instruct-q4_k_m.gguf", size: "1.9 GB", url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf" },
+  { name: "Qwen2.5-VL 3B Q8 (Vision, High Quality)", fileName: "Qwen2.5-VL-3B-Instruct-Q8_0.gguf", size: "3.3 GB", url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q8_0.gguf", mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf", mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf" },
+  { name: "Qwen2.5-VL 3B Q4 (Vision, Efficient)", fileName: "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf", size: "1.9 GB", url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf", mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf", mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf" },
+  { name: "Gemma 3 1B (Low VRAM ≤4 GB)", fileName: "google_gemma-3-1b-it-Q4_K_M.gguf", size: "0.8 GB", url: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf" },
+  { name: "Gemma 3 4B (Balanced)", fileName: "google_gemma-3-4b-it-Q4_K_M.gguf", size: "2.8 GB", url: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf" },
+  { name: "Gemma 2 2B Q4 (Agentic, 6 GB VRAM)", fileName: "gemma-2-2b-it-Q4_K_M.gguf", size: "1.6 GB", url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf" },
+  { name: "Gemma 2 2B Q8 (Agentic, High Quality)", fileName: "gemma-2-2b-it-Q8_0.gguf", size: "2.9 GB", url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf" },
+  { name: "Phi-3.5 Mini 3.8B Q4 (Reasoning)", fileName: "Phi-3.5-mini-instruct-Q4_K_M.gguf", size: "2.4 GB", url: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf" },
+  { name: "Llama 3.2 3B Q4 (General)", fileName: "llama-3.2-3b-instruct-q4_k_m.gguf", size: "2.2 GB", url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf" },
+  { name: "Qwen2.5 1.5B Q4 (Compact Agent)", fileName: "qwen-2.5-1.5b-instruct-q4_k_m.gguf", size: "1.1 GB", url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf" },
+  { name: "Ministral 3B Q4 (128k Context)", fileName: "mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf", size: "2.1 GB", url: "https://huggingface.co/bartowski/mistralai_Ministral-3-3B-Instruct-2512-GGUF/resolve/main/mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf" }
+];
+
+let advGuardianRecommendedCatalog = [...ADV_DEFAULT_RECOMMENDED_MODELS];
+let advGuardianActiveDownloadId = null;
+let advGuardianDownloadPollTimer = null;
+
+function classifyAdvVramFit(sizeStr) {
+  const match = (sizeStr || '').match(/([\d.]+)\s*(GB|MB)/i);
+  if (!match) return { label: '', cls: '' };
+  const val = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  const gb = unit === 'MB' ? val / 1024 : val;
+
+  if (gb <= 2.0) return { label: '✅ Ideal for 4GB VRAM', cls: 'vram-ideal' };
+  if (gb <= 3.0) return { label: '✅ Good fit', cls: 'vram-good' };
+  if (gb <= 4.0) return { label: '⚠️ Tight fit', cls: 'vram-tight' };
+  return { label: '❌ Too large for 4GB VRAM', cls: 'vram-over' };
+}
+
 async function initGuardianStep() {
+  console.debug('[adv-wizard][trace] initGuardianStep — begin');
+
   // Load GGUF models for guardian
   try {
     const data = await api('GET', '/api/models/gguf');
     advState.availableModels = data.models || data || [];
-  } catch { advState.availableModels = []; }
-
-  const modelSelect = document.getElementById('adv-guardian-model');
-  if (modelSelect) {
-    let html = '<option value="">None (skip guardian)</option>';
-    for (const m of advState.availableModels) {
-      html += `<option value="${escHtml(m.path)}">${escHtml(m.name)}</option>`;
-    }
-    modelSelect.innerHTML = html;
-    if (advState.guardianModel) modelSelect.value = advState.guardianModel;
-    modelSelect.onchange = () => { advState.guardianModel = modelSelect.value; };
+  } catch (err) {
+    console.error('[adv-wizard] GGUF fetch failed:', err);
+    advState.availableModels = [];
   }
+
+  // Load recommended catalog
+  try {
+    const catalogData = await api('GET', '/api/models/recommended/catalog');
+    advGuardianRecommendedCatalog = catalogData.catalog || [];
+  } catch (err) {
+    console.error('[adv-wizard] Recommended catalog fetch failed:', err);
+    advGuardianRecommendedCatalog = [];
+  }
+
+  populateAdvGuardianModelDropdown();
 
   // Set profile-aware defaults
   const tierSelect = document.getElementById('adv-guardian-tier');
   if (tierSelect) {
+    if (!advState.guardianTier) {
+      advState.guardianTier = advState.profile === 'business' ? 'tier2_conditional' : 'tier1_autonomous';
+    }
     tierSelect.value = advState.guardianTier;
     tierSelect.onchange = () => { advState.guardianTier = tierSelect.value; };
   }
@@ -454,6 +561,281 @@ async function initGuardianStep() {
   if (autoToggle) {
     autoToggle.classList.toggle('on', advState.guardianAutoStart);
   }
+
+  // Custom model path toggle
+  const customInput = document.getElementById('adv-guardian-custom-path');
+  if (customInput) {
+    customInput.oninput = () => {
+      if (customInput.value.trim()) {
+        advState.guardianModel = customInput.value.trim();
+        const modelSelect = document.getElementById('adv-guardian-model');
+        if (modelSelect) modelSelect.value = '';
+        const valErr = document.getElementById('adv-guardian-validation-error');
+        if (valErr) valErr.style.display = 'none';
+      }
+    };
+  }
+}
+
+function populateAdvGuardianModelDropdown() {
+  const modelSelect = document.getElementById('adv-guardian-model');
+  if (!modelSelect) return;
+
+  const localFileNames = new Set();
+  for (const m of advState.availableModels) {
+    const fname = (m.name || m.path || '').split(/[\\/]/).pop().toLowerCase();
+    localFileNames.add(fname);
+  }
+
+  let html = '<option value="">— Select a Guardian model —</option>';
+
+  // Group 1: Downloaded Models
+  if (advState.availableModels.length > 0) {
+    html += '<optgroup label="\u2705 Downloaded Models (Ready to Use)">';
+    for (const m of advState.availableModels) {
+      html += `<option value="${escHtml(m.path)}">${escHtml(m.name)}</option>`;
+    }
+    html += '</optgroup>';
+    if (!advState.guardianModel) {
+      advState.guardianModel = advState.availableModels[0].path;
+    }
+  }
+
+  // Group 2: Recommended Models (Download Required)
+  const notDownloaded = advGuardianRecommendedCatalog.filter(rm => {
+    const fname = (rm.fileName || '').toLowerCase();
+    return !localFileNames.has(fname);
+  });
+
+  const vramOrder = { 'vram-ideal': 0, 'vram-good': 1, 'vram-tight': 2, 'vram-over': 3 };
+  notDownloaded.sort((a, b) => {
+    const fitA = classifyAdvVramFit(a.size);
+    const fitB = classifyAdvVramFit(b.size);
+    return (vramOrder[fitA.cls] ?? 9) - (vramOrder[fitB.cls] ?? 9);
+  });
+
+  if (notDownloaded.length > 0) {
+    html += '<optgroup label="\u{1F4E5} Recommended (Download Required) — Sorted by VRAM fit">';
+    for (const rm of notDownloaded) {
+      const fit = classifyAdvVramFit(rm.size);
+      const fitTag = fit.label ? ` [${fit.label}]` : '';
+      html += `<option value="recommend:${escHtml(rm.fileName)}" data-url="${escHtml(rm.url)}" data-mmproj-url="${escHtml(rm.mmprojUrl || '')}" data-mmproj-name="${escHtml(rm.mmprojName || '')}">[${escHtml(rm.size)}] ${escHtml(rm.name)}${fitTag}</option>`;
+    }
+    html += '</optgroup>';
+  }
+
+  // Group 3: Custom
+  html += '<optgroup label="\u{1F527} Custom">';
+  html += '<option value="custom">Enter custom model path...</option>';
+  html += '</optgroup>';
+
+  modelSelect.innerHTML = html;
+  if (advState.guardianModel && advState.guardianModel !== 'custom') {
+    modelSelect.value = advState.guardianModel;
+  }
+
+  modelSelect.onchange = () => {
+    const val = modelSelect.value;
+    const customContainer = document.getElementById('adv-guardian-custom-container');
+    if (val === 'custom') {
+      if (customContainer) customContainer.style.display = '';
+      const customInput = document.getElementById('adv-guardian-custom-path');
+      advState.guardianModel = customInput && customInput.value.trim() ? customInput.value.trim() : '';
+    } else {
+      if (customContainer) customContainer.style.display = 'none';
+      advState.guardianModel = val;
+    }
+    updateAdvGuardianDownloadButton();
+    const valErr = document.getElementById('adv-guardian-validation-error');
+    if (valErr) valErr.style.display = 'none';
+  };
+
+  updateAdvGuardianDownloadButton();
+}
+
+function updateAdvGuardianDownloadButton() {
+  const downloadBtn = document.getElementById('adv-guardian-download-btn');
+  if (!downloadBtn) return;
+  const isRecommended = advState.guardianModel && advState.guardianModel.startsWith('recommend:');
+  downloadBtn.style.display = isRecommended ? '' : 'none';
+}
+
+function formatAdvDownloadDuration(totalSeconds) {
+  const safe = Math.max(0, Math.floor(totalSeconds || 0));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatAdvDownloadRate(bytesPerSecond) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return 'calculating…';
+  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`;
+  if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  return `${Math.round(bytesPerSecond)} B/s`;
+}
+
+function buildAdvGuardianTransferSummary(dl) {
+  const downloaded = Number(dl.downloadedBytes || 0);
+  const total = Number(dl.totalBytes || 0);
+  const mb = (downloaded / (1024 * 1024)).toFixed(1);
+  const totalMb = total > 0 ? `${(total / (1024 * 1024)).toFixed(1)} MB` : '?';
+
+  const startedAt = Date.parse(dl.startTime || '');
+  const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(1, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+  const bytesPerSecond = elapsedSeconds > 0 ? downloaded / elapsedSeconds : 0;
+
+  const etaSeconds = total > downloaded && bytesPerSecond > 0
+    ? Math.max(0, Math.floor((total - downloaded) / bytesPerSecond))
+    : 0;
+  const etaText = total > downloaded && bytesPerSecond > 0 ? formatAdvDownloadDuration(etaSeconds) : '--:--';
+  const elapsedText = elapsedSeconds > 0 ? formatAdvDownloadDuration(elapsedSeconds) : '--:--';
+
+  return `Downloading: ${mb} MB / ${totalMb} • ${formatAdvDownloadRate(bytesPerSecond)} • ETA ${etaText} • Elapsed ${elapsedText}`;
+}
+
+window.downloadAdvGuardianModel = async function downloadAdvGuardianModel() {
+  const modelSelect = document.getElementById('adv-guardian-model');
+  const downloadBtn = document.getElementById('adv-guardian-download-btn');
+  const progressEl = document.getElementById('adv-guardian-download-progress');
+  const statusEl = document.getElementById('adv-guardian-download-status');
+  if (!modelSelect || !downloadBtn) return;
+
+  const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+  if (!selectedOption || !advState.guardianModel.startsWith('recommend:')) {
+    showToast('Please select a recommended model to download.', 'error');
+    return;
+  }
+
+  const fileName = advState.guardianModel.replace('recommend:', '');
+  const dlUrl = selectedOption.getAttribute('data-url');
+  const mmprojUrl = selectedOption.getAttribute('data-mmproj-url') || '';
+  const mmprojName = selectedOption.getAttribute('data-mmproj-name') || '';
+
+  if (!dlUrl) {
+    showToast('No download URL available for this model.', 'error');
+    return;
+  }
+
+  downloadBtn.disabled = true;
+  downloadBtn.textContent = '⏳ Downloading...';
+  modelSelect.disabled = true;
+  if (progressEl) progressEl.style.display = '';
+  if (statusEl) statusEl.textContent = 'Starting download...';
+
+  try {
+    const res = await api('POST', '/api/models/download', {
+      url: dlUrl,
+      name: fileName,
+      mmprojUrl: mmprojUrl || undefined,
+      mmprojName: mmprojName || undefined,
+    });
+    advGuardianActiveDownloadId = res.modelId;
+    showToast(`Downloading ${fileName}...`, 'info');
+    pollAdvGuardianDownload(fileName);
+  } catch (err) {
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = '📥 Download';
+    modelSelect.disabled = false;
+    if (progressEl) progressEl.style.display = 'none';
+    showToast(`Download failed: ${err.message || err}`, 'error');
+  }
+};
+
+function pollAdvGuardianDownload(fileName) {
+  if (advGuardianDownloadPollTimer) clearInterval(advGuardianDownloadPollTimer);
+
+  advGuardianDownloadPollTimer = setInterval(async () => {
+    try {
+      const data = await api('GET', '/api/models/download/status');
+      const downloads = data.downloads || [];
+      const dl = downloads.find(d => d.id === advGuardianActiveDownloadId);
+      if (!dl) return;
+
+      const progressBar = document.getElementById('adv-guardian-progress-bar');
+      const progressText = document.getElementById('adv-guardian-progress-text');
+      const statusEl = document.getElementById('adv-guardian-download-status');
+      const pct = Math.round(dl.progress || 0);
+
+      if (progressBar) progressBar.style.width = pct + '%';
+      if (progressText) progressText.textContent = pct + '%';
+
+      if (dl.status === 'downloading') {
+        if (statusEl) statusEl.textContent = buildAdvGuardianTransferSummary(dl);
+      }
+
+      if (dl.status === 'pending') {
+        if (statusEl) {
+          const startedAt = Date.parse(dl.startTime || '');
+          const elapsedSeconds = Number.isFinite(startedAt)
+            ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+            : 0;
+          const elapsedText = elapsedSeconds > 0 ? formatAdvDownloadDuration(elapsedSeconds) : '--:--';
+          statusEl.textContent = `Reconnecting… ${dl.error || 'Waiting for next transfer attempt'} • Elapsed ${elapsedText}`;
+        }
+      }
+
+      if (dl.status === 'completed') {
+        clearInterval(advGuardianDownloadPollTimer);
+        advGuardianDownloadPollTimer = null;
+        advGuardianActiveDownloadId = null;
+
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressText) progressText.textContent = '100%';
+        if (statusEl) statusEl.textContent = '✅ Download complete!';
+        showToast(`${fileName} downloaded successfully!`, 'success');
+
+        try {
+          const ggufData = await api('GET', '/api/models/gguf');
+          advState.availableModels = ggufData.models || ggufData || [];
+        } catch { /* keep existing */ }
+
+        populateAdvGuardianModelDropdown();
+
+        const modelSelect = document.getElementById('adv-guardian-model');
+        if (modelSelect) {
+          const matchOpt = Array.from(modelSelect.options).find(o =>
+            !o.value.startsWith('recommend:') && o.value && o.textContent.toLowerCase().includes(fileName.toLowerCase().replace('.gguf', ''))
+          );
+          if (matchOpt) {
+            modelSelect.value = matchOpt.value;
+            advState.guardianModel = matchOpt.value;
+          }
+        }
+
+        const downloadBtn = document.getElementById('adv-guardian-download-btn');
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.textContent = '📥 Download';
+        }
+        if (modelSelect) modelSelect.disabled = false;
+        updateAdvGuardianDownloadButton();
+
+        setTimeout(() => {
+          const progressEl = document.getElementById('adv-guardian-download-progress');
+          if (progressEl) progressEl.style.display = 'none';
+        }, 3000);
+      }
+
+      if (dl.status === 'error') {
+        clearInterval(advGuardianDownloadPollTimer);
+        advGuardianDownloadPollTimer = null;
+        advGuardianActiveDownloadId = null;
+
+        if (statusEl) statusEl.textContent = `❌ Error: ${dl.error || 'Download failed'}`;
+        showToast(`Download failed: ${dl.error || 'Unknown error'}`, 'error');
+
+        const downloadBtn = document.getElementById('adv-guardian-download-btn');
+        const modelSelect = document.getElementById('adv-guardian-model');
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.textContent = '📥 Download';
+        }
+        if (modelSelect) modelSelect.disabled = false;
+      }
+    } catch { /* retry */ }
+  }, 1500);
 }
 
 // ── Step 6: CAC ──────────────────────────────────────────────────────────────
@@ -824,31 +1206,43 @@ window.advWizardNext = async function advWizardNext() {
       }
       if (currentStep === 5) {
         const errEl = document.getElementById('adv-guardian-error');
+        const valErr = document.getElementById('adv-guardian-validation-error');
         if (errEl) {
           errEl.style.display = 'none';
           errEl.textContent = '';
         }
-        if (advState.guardianModel) {
-          try {
-            const res = await api('POST', '/api/guardian/configure', {
-              modelPath: advState.guardianModel,
-              authorityTier: advState.guardianTier,
-              autoStart: advState.guardianAutoStart,
-            });
-            if (res.error) {
-              if (errEl) {
-                errEl.textContent = "Failed to configure guardian: " + res.error;
-                errEl.style.display = 'block';
-              }
-              return;
-            }
-          } catch (e) {
+        if (valErr) valErr.style.display = 'none';
+
+        if (!advState.guardianModel || advState.guardianModel.startsWith('recommend:')) {
+          if (valErr) {
+            valErr.style.display = '';
+            valErr.textContent = advState.guardianModel && advState.guardianModel.startsWith('recommend:')
+              ? 'The selected Guardian model has not been downloaded yet. Click the Download button first.'
+              : 'A Guardian model is required to continue. Select or download a model above.';
+          }
+          showToast('Guardian model is required before completing setup.', 'error');
+          return;
+        }
+
+        try {
+          const res = await api('POST', '/api/guardian/configure', {
+            modelPath: advState.guardianModel,
+            authorityTier: advState.guardianTier,
+            autoStart: advState.guardianAutoStart,
+          });
+          if (res.error) {
             if (errEl) {
-              errEl.textContent = "Failed to configure guardian: " + (e.message || e);
+              errEl.textContent = "Failed to configure guardian: " + res.error;
               errEl.style.display = 'block';
             }
             return;
           }
+        } catch (e) {
+          if (errEl) {
+            errEl.textContent = "Failed to configure guardian: " + (e.message || e);
+            errEl.style.display = 'block';
+          }
+          return;
         }
       }
       if (currentStep === 6) {
@@ -1050,7 +1444,10 @@ window.advWizardNext = async function advWizardNext() {
       nextBtn.disabled = false;
       nextBtn.textContent = 'Operator Login';
       nextBtn.onclick = () => {
-        const url = completeResult.token ? `/dashboard?token=${completeResult.token}` : '/dashboard';
+        const params = new URLSearchParams();
+        if (completeResult.token) params.set('token', completeResult.token);
+        if (certResult && certResult.setupToken) params.set('setupToken', certResult.setupToken);
+        const url = params.toString() ? `/dashboard?${params.toString()}` : '/dashboard';
         window.location.href = url;
       };
     } catch (err) {

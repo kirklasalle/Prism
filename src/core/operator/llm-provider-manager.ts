@@ -299,7 +299,7 @@ export type LlmStreamChunk =
     | { type: "tool_call_delta"; id: string; arguments: string }
     | { type: "done"; stopReason: string };
 
-const OPENAI_DEFAULT_MODELS = ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "gpt-4-turbo"];
+const OPENAI_DEFAULT_MODELS = ["gpt-5", "gpt-5-mini", "o4-mini", "o3-mini", "gpt-4.1"];
 
 const ANTHROPIC_DEFAULT_MODELS = [
     "claude-sonnet-4-5-20251022",
@@ -329,7 +329,13 @@ const FIREWORKS_DEFAULT_MODELS = [
     "accounts/fireworks/models/llama-v3p1-70b-instruct",
     "accounts/fireworks/models/mixtral-8x7b-instruct",
 ];
-const OPENROUTER_DEFAULT_MODELS = ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "meta-llama/llama-3.1-70b-instruct"];
+const OPENROUTER_DEFAULT_MODELS = [
+    "openrouter/auto",
+    "deepseek/deepseek-r1:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "openai/gpt-5",
+    "anthropic/claude-3.5-sonnet",
+];
 
 const OLLAMA_CLOUD_DEFAULT_MODELS = [
     "gpt-oss:120b",
@@ -371,6 +377,61 @@ function normalizeModels(models: string[]): string[] {
         normalized.push(trimmed);
     }
     return normalized;
+}
+
+/**
+ * Sorts OpenRouter models into a structured order:
+ * 1. openrouter/auto is #1 at the top
+ * 2. All :free models (deepseek-r1:free, llama-3.3-70b:free, etc.) next
+ * 3. Featured high-tier models (claude-3.5-sonnet, gpt-5, deepseek-r1, etc.) next
+ * 4. All remaining models alphabetically
+ */
+export function sortOpenRouterModels(models: string[]): string[] {
+    const list = Array.from(new Set(models.map((m) => m.trim()).filter(Boolean)));
+
+    if (!list.includes("openrouter/auto")) {
+        list.unshift("openrouter/auto");
+    }
+
+    const featuredPrefixes = [
+        "openrouter/auto",
+        "anthropic/claude-3.7-sonnet",
+        "anthropic/claude-3.5-sonnet",
+        "openai/gpt-5",
+        "openai/gpt-5-mini",
+        "deepseek/deepseek-r1",
+        "deepseek/deepseek-chat",
+        "meta-llama/llama-3.3-70b-instruct",
+        "google/gemini-2.0-flash-001",
+    ];
+
+    return list.sort((a, b) => {
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+
+        // 1. openrouter/auto is always #1
+        if (aLower === "openrouter/auto") return -1;
+        if (bLower === "openrouter/auto") return 1;
+
+        // 2. Free models (:free) come right after Auto
+        const aIsFree = aLower.includes(":free");
+        const bIsFree = bLower.includes(":free");
+        if (aIsFree && !bIsFree) return -1;
+        if (!aIsFree && bIsFree) return 1;
+
+        // 3. Featured models
+        const aFeaturedIdx = featuredPrefixes.findIndex((p) => aLower.startsWith(p));
+        const bFeaturedIdx = featuredPrefixes.findIndex((p) => bLower.startsWith(p));
+
+        if (aFeaturedIdx !== -1 && bFeaturedIdx !== -1) {
+            return aFeaturedIdx - bFeaturedIdx;
+        }
+        if (aFeaturedIdx !== -1) return -1;
+        if (bFeaturedIdx !== -1) return 1;
+
+        // 4. Alphabetical for everything else
+        return aLower.localeCompare(bLower);
+    });
 }
 
 function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null {
@@ -754,7 +815,7 @@ export class LlmProviderManager {
                     configuredProvider = prefs.activeLlmProviderId;
                     configuredModel = prefs.activeLlmModel || null;
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
 
         const selected = this.resolveProvider(configuredProvider) ?? this.findFirstEnabledProvider();
@@ -812,15 +873,15 @@ export class LlmProviderManager {
                 lmstudio: this.getResolvedSettings("lmstudio").defaultModels,
                 llamacpp: this.llamaSupervisor
                     ? this.llamaSupervisor
-                          .getSnapshot()
-                          .filter((s) => s.status === "ready")
-                          .map((s) => s.modelAlias!)
+                        .getSnapshot()
+                        .filter((s) => s.status === "ready")
+                        .map((s) => s.modelAlias!)
                     : this.getResolvedSettings("llamacpp").defaultModels,
                 bitnetcpp: this.bitnetSupervisor
                     ? this.bitnetSupervisor
-                          .getSnapshot()
-                          .filter((s) => s.status === "ready")
-                          .map((s) => s.modelAlias!)
+                        .getSnapshot()
+                        .filter((s) => s.status === "ready")
+                        .map((s) => s.modelAlias!)
                     : [],
                 expiresAt: Date.now() + LlmProviderManager.CATALOG_CACHE_TTL_MS,
             };
@@ -834,19 +895,19 @@ export class LlmProviderManager {
                     this.fetchLmStudioModels(this.getResolvedSettings("lmstudio")).catch(() => [] as string[]),
                     this.llamaSupervisor
                         ? Promise.resolve(
-                              this.llamaSupervisor
-                                  .getSnapshot()
-                                  .filter((s) => s.status === "ready")
-                                  .map((s) => s.modelAlias!),
-                          )
+                            this.llamaSupervisor
+                                .getSnapshot()
+                                .filter((s) => s.status === "ready")
+                                .map((s) => s.modelAlias!),
+                        )
                         : this.fetchLmStudioModels(this.getResolvedSettings("llamacpp")).catch(() => [] as string[]),
                     this.bitnetSupervisor
                         ? Promise.resolve(
-                              this.bitnetSupervisor
-                                  .getSnapshot()
-                                  .filter((s) => s.status === "ready")
-                                  .map((s) => s.modelAlias!),
-                          )
+                            this.bitnetSupervisor
+                                .getSnapshot()
+                                .filter((s) => s.status === "ready")
+                                .map((s) => s.modelAlias!),
+                        )
                         : Promise.resolve([] as string[]),
                 ],
             );
@@ -855,7 +916,7 @@ export class LlmProviderManager {
                 console.log(
                     `[PERF] Provider discovery probe completed in ${probeDur}ms — ollama=${ollamaModels.length}, ollama-cloud=${ollamaCloudModels.length}, lmstudio=${lmStudioModels.length}, llamacpp_running=${llamacppRunning.length}, bitnet_running=${bitnetRunning.length}`,
                 );
-            } catch {}
+            } catch { }
 
             // Merge discovered local GGUF models with running models (deduplicated)
             const llamacppDiscovered = this.llamaSupervisor?.discoverLocalModels() ?? [];
@@ -925,7 +986,7 @@ export class LlmProviderManager {
                     if (!effectiveModel || !selectedProvider.models.includes(effectiveModel)) {
                         effectiveModel =
                             selectedProvider.defaultModel &&
-                            selectedProvider.models.includes(selectedProvider.defaultModel)
+                                selectedProvider.models.includes(selectedProvider.defaultModel)
                                 ? selectedProvider.defaultModel
                                 : (selectedProvider.models[0] ?? null);
                     }
@@ -1511,22 +1572,22 @@ export class LlmProviderManager {
         const leftGen = leftCbOpen
             ? Promise.resolve(null)
             : withTimeout(
-                  this.generate(leftInput, { providerId: leftProviderId, model: srConfig.leftModel.model }),
-                  leftTimeoutMs,
-              ).then((result) => {
-                  if (cbEnabled) this.recordCBOutcome(leftCbKey, result !== null);
-                  return result;
-              });
+                this.generate(leftInput, { providerId: leftProviderId, model: srConfig.leftModel.model }),
+                leftTimeoutMs,
+            ).then((result) => {
+                if (cbEnabled) this.recordCBOutcome(leftCbKey, result !== null);
+                return result;
+            });
 
         const rightGen = rightCbOpen
             ? Promise.resolve(null)
             : withTimeout(
-                  this.generate(rightInput, { providerId: rightProviderId, model: srConfig.rightModel.model }),
-                  rightTimeoutMs,
-              ).then((result) => {
-                  if (cbEnabled) this.recordCBOutcome(rightCbKey, result !== null);
-                  return result;
-              });
+                this.generate(rightInput, { providerId: rightProviderId, model: srConfig.rightModel.model }),
+                rightTimeoutMs,
+            ).then((result) => {
+                if (cbEnabled) this.recordCBOutcome(rightCbKey, result !== null);
+                return result;
+            });
 
         const mainGen = withTimeout(this.generate(mainInput, mainSelection), 60_000);
 
@@ -1556,13 +1617,13 @@ export class LlmProviderManager {
         const leftAdvisory = leftCbOpen
             ? `(Logic Hemisphere skipped — circuit breaker open for provider: ${leftProviderId})`
             : leftTimedOut
-              ? `(Logic Hemisphere timed out after ${leftTimeoutMs}ms)`
-              : null;
+                ? `(Logic Hemisphere timed out after ${leftTimeoutMs}ms)`
+                : null;
         const rightAdvisory = rightCbOpen
             ? `(Creative Hemisphere skipped — circuit breaker open for provider: ${rightProviderId})`
             : rightTimedOut
-              ? `(Creative Hemisphere timed out after ${rightTimeoutMs}ms)`
-              : null;
+                ? `(Creative Hemisphere timed out after ${rightTimeoutMs}ms)`
+                : null;
 
         const leftOutput = leftResult?.content ?? leftAdvisory ?? "(Logic Hemisphere did not respond)";
         const rightOutput = rightResult?.content ?? rightAdvisory ?? "(Creative Hemisphere did not respond)";
@@ -1822,12 +1883,12 @@ export class LlmProviderManager {
             const sel = selectModelForRole(role, availableModels);
             result[role] = sel
                 ? {
-                      providerId: sel.providerId,
-                      model: sel.model,
-                      tier: sel.profile.tier,
-                      degraded: sel.degraded,
-                      reason: sel.reason,
-                  }
+                    providerId: sel.providerId,
+                    model: sel.model,
+                    tier: sel.profile.tier,
+                    degraded: sel.degraded,
+                    reason: sel.reason,
+                }
                 : null;
         }
         return result;
@@ -1899,12 +1960,12 @@ export class LlmProviderManager {
             const sel = selectModelForModality([modality.id], availableModels);
             result[modality.id] = sel
                 ? {
-                      providerId: sel.providerId,
-                      model: sel.model,
-                      tier: sel.profile.tier,
-                      degraded: sel.degraded,
-                      reason: sel.reason,
-                  }
+                    providerId: sel.providerId,
+                    model: sel.model,
+                    tier: sel.profile.tier,
+                    degraded: sel.degraded,
+                    reason: sel.reason,
+                }
                 : null;
         }
         return result;
@@ -2262,7 +2323,7 @@ export class LlmProviderManager {
         const startTime = Date.now();
         try {
             if (resolved === "ollama") {
-                const response = await fetch(`${settings.baseUrl}/api/tags`, { method: "GET" });
+                const response = await fetch(`${settings.baseUrl}/api/tags`, { method: "GET", signal: AbortSignal.timeout(10000) });
                 if (!response.ok) {
                     return {
                         ok: false,
@@ -2293,6 +2354,7 @@ export class LlmProviderManager {
                 const response = await fetch(`${settings.baseUrl}/api/tags`, {
                     method: "GET",
                     headers: { Accept: "application/json", Authorization: `Bearer ${settings.apiKey}` },
+                    signal: AbortSignal.timeout(10000),
                 });
                 if (!response.ok) {
                     return {
@@ -2316,6 +2378,7 @@ export class LlmProviderManager {
                 const response = await fetch(`${settings.baseUrl}/v1/models`, {
                     method: "GET",
                     headers: { Accept: "application/json" },
+                    signal: AbortSignal.timeout(10000),
                 });
                 if (!response.ok) {
                     return {
@@ -2339,6 +2402,7 @@ export class LlmProviderManager {
                 const response = await fetch(`${settings.baseUrl}/models`, {
                     method: "GET",
                     headers: { Accept: "application/json" },
+                    signal: AbortSignal.timeout(10000),
                 });
                 if (!response.ok) {
                     return {
@@ -2367,6 +2431,7 @@ export class LlmProviderManager {
                         "anthropic-version": "2023-06-01",
                         Accept: "application/json",
                     },
+                    signal: AbortSignal.timeout(10000),
                 });
                 if (listResp.ok) {
                     const payload = (await listResp.json()) as { data?: Array<{ id?: string }> };
@@ -2392,20 +2457,21 @@ export class LlmProviderManager {
                         max_tokens: 1,
                         messages: [{ role: "user", content: "hi" }],
                     }),
+                    signal: AbortSignal.timeout(10000),
                 });
                 return probeResp.ok || probeResp.status === 400
                     ? {
-                          ok: true,
-                          message: "Connected to Anthropic.",
-                          models: settings.defaultModels,
-                          latencyMs: Date.now() - startTime,
-                      }
+                        ok: true,
+                        message: "Connected to Anthropic.",
+                        models: settings.defaultModels,
+                        latencyMs: Date.now() - startTime,
+                    }
                     : {
-                          ok: false,
-                          message: `Anthropic returned ${probeResp.status}.`,
-                          models: [],
-                          latencyMs: Date.now() - startTime,
-                      };
+                        ok: false,
+                        message: `Anthropic returned ${probeResp.status}.`,
+                        models: [],
+                        latencyMs: Date.now() - startTime,
+                    };
             }
             // OpenAI-compatible: fetch model list
             const authHeader: Record<string, string> =
@@ -2415,6 +2481,7 @@ export class LlmProviderManager {
             const response = await fetch(`${settings.baseUrl}/models`, {
                 method: "GET",
                 headers: { ...authHeader, Accept: "application/json" },
+                signal: AbortSignal.timeout(10000),
             });
             if (!response.ok) {
                 return {
@@ -2425,7 +2492,10 @@ export class LlmProviderManager {
                 };
             }
             const payload = (await response.json()) as { data?: Array<{ id?: string }> };
-            const models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
+            let models = (payload.data ?? []).map((m) => m.id?.trim() ?? "").filter(Boolean);
+            if (resolved === "openrouter") {
+                models = sortOpenRouterModels(models);
+            }
             const final = models.length > 0 ? models : settings.defaultModels;
             return {
                 ok: true,
@@ -2451,11 +2521,11 @@ export class LlmProviderManager {
             r.status === "fulfilled"
                 ? r.value
                 : {
-                      providerId: ALL_PROVIDER_IDS[i],
-                      ok: false,
-                      message: String((r as PromiseRejectedResult).reason),
-                      models: [],
-                  },
+                    providerId: ALL_PROVIDER_IDS[i],
+                    ok: false,
+                    message: String((r as PromiseRejectedResult).reason),
+                    models: [],
+                },
         );
     }
 
@@ -2619,8 +2689,8 @@ export class LlmProviderManager {
         const firstTcSig =
             rawToolCalls && rawToolCalls.length > 0
                 ? (rawToolCalls[0] as any).extra_content?.google?.thought_signature ||
-                  (rawToolCalls[0] as any).thought_signature ||
-                  (rawToolCalls[0] as any).google?.thought_signature
+                (rawToolCalls[0] as any).thought_signature ||
+                (rawToolCalls[0] as any).google?.thought_signature
                 : undefined;
 
         const thoughtSignature =
@@ -2677,10 +2747,10 @@ export class LlmProviderManager {
             finishReason === "tool_calls" || finishReason === "function_call"
                 ? ("tool_use" as const)
                 : finishReason === "length"
-                  ? ("max_tokens" as const)
-                  : finishReason === "stop"
-                    ? ("end_turn" as const)
-                    : ("end_turn" as const);
+                    ? ("max_tokens" as const)
+                    : finishReason === "stop"
+                        ? ("end_turn" as const)
+                        : ("end_turn" as const);
 
         if (!content && !toolCalls?.length) {
             llmTraceLog(`EMPTY_RESPONSE_DEBUG ← ${settings.id}/${model}`, payload);
@@ -2836,8 +2906,8 @@ export class LlmProviderManager {
             payload.stop_reason === "tool_use"
                 ? ("tool_use" as const)
                 : payload.stop_reason === "max_tokens"
-                  ? ("max_tokens" as const)
-                  : ("end_turn" as const);
+                    ? ("max_tokens" as const)
+                    : ("end_turn" as const);
 
         if (!textContent && !toolCalls.length) {
             throw new Error("Provider returned an empty response.");

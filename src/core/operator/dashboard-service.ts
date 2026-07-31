@@ -18,6 +18,7 @@ import { homedir } from "node:os";
 import { get as httpGet } from "node:http";
 import https from "node:https";
 import { spawnSync } from "node:child_process";
+import { logger } from "../observability/logger.js";
 import type { ActivityBus } from "../activity/bus.js";
 import type { ActivityEvent } from "../activity/types.js";
 import { SqliteActivityStore } from "../activity/sqlite-store.js";
@@ -30,6 +31,7 @@ import type { AgentPool } from "../agents/agent-pool.js";
 import type { AgentRouter } from "../agents/agent-router.js";
 import { verifyDirectiveIntegrity } from "../security/directive-integrity.js";
 import { hashPassword } from "../security/password-util.js";
+import { signCertificateContent } from "../security/initialization-signature.js";
 import {
     ChatSessionStore,
     type ProviderSettingsInput,
@@ -122,12 +124,14 @@ import sqlite3 from "sqlite3";
 
 import { ToolContractExtractor, type ExtractionRequest } from "../tools/tool-contract-extractor.js";
 import { PolicyEngine } from "../policy/engine.js";
+import { LLRETelemetry } from "../llre/telemetry.js";
 import { A2ATaskAdapter } from "../../adapters/application/a2a-task-adapter.js";
 import { GovernanceHooksAdapter } from "../../adapters/application/governance-hooks-adapter.js";
 import { MetricsStore } from "../activity/metrics-store.js";
 import { OtelExporter } from "../activity/otel-exporter.js";
 import { ActivityRetentionPolicy, resolveRetentionConfigFromEnv } from "../activity/retention-policy.js";
 import { Soc2EvidenceExporter } from "../compliance/soc2-exporter.js";
+import { isPlaceholderEmail } from "../policy/cac-placeholder.js";
 import { GmailOAuthAdapter } from "../../adapters/application/email-oauth-adapter.js";
 import { OutlookOAuthAdapter } from "../../adapters/application/outlook-oauth-adapter.js";
 import { createOAuthTokenStore, OAuthTokenStore } from "../operator/oauth-token-store.js";
@@ -136,6 +140,12 @@ import { ContainerSandboxAdapter } from "../../adapters/application/container-sa
 import { UtilityRegistry, registerBuiltInUtilities } from "./utility-registry.js";
 import { RiskOverrideStore } from "./risk-override-store.js";
 import { IncidentTrendStore } from "../memory/incident-trend-store.js";
+
+const INITIALIZATION_CERTIFICATE_TITLE_RE = /Initialization Certificate/i;
+const CERTIFICATE_EXPLANATION_INTENT_RE =
+    /\b(explain|what|why|how|meaning|mean|define|definition|clarify|clarification|describe|description|detail|details|purpose|need|engineering|engineer|word|part|portion)\b/i;
+const CERTIFICATE_SCOPE_HINT_RE =
+    /\b(certificate|initialization|guardian|security|cryptographic|cryptography|signature|signed|signing|provenance|directive|covenant|integrity|ed25519)\b/i;
 
 // ── Canonical type definitions live in ./types/dashboard-types.ts (Phase 1 extraction).
 // Imported for internal use and re-exported below to preserve the public API surface.
@@ -347,6 +357,9 @@ export class DashboardService {
         autoRunApprovedTier2: true,
         llreEnabled: true,
         verboseLogging: false,
+        tooltipHelperVariant: "glass-prism",
+        tooltipHelperVisible: true,
+        tooltipHelperMotionEnabled: true,
     };
     private readonly downloadStatus = new Map<string, DownloadProgress>();
     private readonly iamStore: IamStore;
@@ -476,63 +489,27 @@ export class DashboardService {
         this.router = new Router(this.iamHandler);
 
         this.iamStore.seedDefaultRoles("default");
-        const existingUsers = this.iamStore.listUsers("default");
-        if (existingUsers.length === 0) {
-            const env = (process.env.NODE_ENV ?? "").toLowerCase();
-            const allowDefaultCredentials =
-                (process.env.PRISM_ALLOW_DEFAULT_CREDENTIALS ?? "") === "1" || env === "test" || env === "development";
-
-            const randomPassword = () => `${randomUUID().replace(/-/g, "")}${randomUUID().slice(0, 8)}`;
-            const adminPassword = allowDefaultCredentials ? "admin" : randomPassword();
-            const testPassword = allowDefaultCredentials ? "testing" : randomPassword();
-
-            const adminUser = this.iamStore.createUser({
-                tenantId: "default",
-                email: "admin@prismrefraction.com",
-                displayName: "Administrator",
-                status: "active",
-                attrs: { passwordHash: hashPassword(adminPassword) },
-            });
-            const adminRole = this.iamStore.getRoleByName("default", "admin");
-            if (adminRole) this.iamStore.addMembership(adminUser.id, "default", adminRole.id);
-
-            if (allowDefaultCredentials) {
-                const testUser = this.iamStore.createUser({
-                    tenantId: "default",
-                    email: "testing@prismrefraction.com",
-                    displayName: "Test Operator",
-                    status: "active",
-                    attrs: { passwordHash: hashPassword(testPassword) },
-                });
-                const operatorRole = this.iamStore.getRoleByName("default", "operator");
-                if (operatorRole) this.iamStore.addMembership(testUser.id, "default", operatorRole.id);
-            }
-
-            // In non-dev/test environments, persist one-time bootstrap credentials
-            // to a protected workspace file so operators can complete first login.
-            if (!allowDefaultCredentials) {
-                const bootstrapPath = workspacePath("state", "iam-bootstrap-credentials.json");
-                mkdirSync(dirname(bootstrapPath), { recursive: true });
-                const payload = {
-                    createdAt: new Date().toISOString(),
-                    note: "Delete this file after first successful IAM login.",
-                    users: [{ email: "admin@prismrefraction.com", password: adminPassword, role: "admin" }],
-                };
-                writeFileSync(bootstrapPath, JSON.stringify(payload, null, 2), { mode: 0o600 });
-            }
-        }
+        const evalAccountAudit = this.ensureEvaluationAccounts();
 
         // ── Security: Auth gate & rate limiter ──────────────────────────────
         const authDisabled = process.env.PRISM_AUTH_DISABLED === "true";
         if (authDisabled && process.env.NODE_ENV === "production") {
             throw new Error(
                 "[SECURITY] PRISM_AUTH_DISABLED=true is not permitted when NODE_ENV=production. " +
-                    "Remove this environment variable before deploying.",
+                "Remove this environment variable before deploying.",
             );
         }
         this.authGate = new AuthGate({
             tokenFilePath: workspacePath("state", "admin-token"),
             disabled: authDisabled,
+            authenticateRequest: (req) => {
+                const authorization = req.headers.authorization;
+                const bearer = typeof authorization === "string" ? /^Bearer\s+(.+)$/i.exec(authorization)?.[1] : null;
+                const principal =
+                    this.iamHandler.resolvePrincipalFromCookie(req) ??
+                    (bearer ? this.iamHandler.resolvePrincipalFromApiKey(bearer) : null);
+                return principal ? { authenticated: true, principal } : null;
+            },
             publicRoutes: [
                 "/health",
                 "/api/health",
@@ -541,6 +518,8 @@ export class DashboardService {
                 "/metrics",
                 "/api/v1/openapi.json",
                 "/api/openapi.json",
+                // Login/setup screen graceful shutdown control.
+                "/api/system/shutdown",
                 // Dashboard pages — DashboardHandler has its own cookie+token auth
                 // that gracefully redirects to /login; let it handle auth, not the gate.
                 "/",
@@ -560,6 +539,8 @@ export class DashboardService {
                 // Dashboard pages — DashboardHandler does its own auth (cookie/token → 302 /login)
                 "/dashboard",
                 "/simple",
+                // Setup pages — SetupHandler does cookie/token auth like dashboard.
+                "/setup",
             ],
             bootstrapRoutes: [
                 // Setup wizard (step 4/6): character listing + import
@@ -588,6 +569,21 @@ export class DashboardService {
                 // Setup wizard API — all /api/setup/* endpoints (profile, workspace, character, cac, complete)
                 "/api/setup/",
                 "/api/v1/setup/",
+                // Model scanning, catalog, downloads & status
+                "/api/models/",
+                "/api/v1/models/",
+                // LLM provider settings, secrets & testing
+                "/api/llm/",
+                "/api/v1/llm/",
+                // Guardian agent configuration
+                "/api/guardian/",
+                "/api/v1/guardian/",
+                // Workspace & characters
+                "/api/workspace/",
+                "/api/v1/workspace/",
+                // System controls (shutdown, health, status) during setup
+                "/api/system/",
+                "/api/v1/system/",
             ],
         });
         this.rateLimiter = new RateLimiter({
@@ -715,11 +711,35 @@ export class DashboardService {
             console.warn("[PRISM][startup] Failed to hydrate powerMode preference:", err);
         }
 
-        this.characterAccountabilityStore = new CharacterAccountabilityStore(workspaceDbPath());
+        this.characterAccountabilityStore = new CharacterAccountabilityStore(activityStore?.dbPath ?? workspaceDbPath());
         this.characterAccountabilityManager = new CharacterAccountabilityManager(
             this.characterAccountabilityStore,
             this.activityBus,
         );
+        const certificateAssignments = new Map<string, string>();
+        for (const session of this.chatStore
+            .listSessions()
+            .filter((candidate) => /Initialization Certificate/i.test(candidate.title || ""))
+            .sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+            const email = session.operatorEmail?.trim().toLowerCase();
+            if (email && session.cacAssignmentId && !certificateAssignments.has(email)) {
+                certificateAssignments.set(email, session.cacAssignmentId);
+            }
+        }
+        const cacReconciliation = this.characterAccountabilityStore.reconcileOperators(
+            this.iamStore.listUsers("default").map((user) => ({
+                operatorId: user.id,
+                operatorEmail: user.email,
+                preferredAssignmentId: certificateAssignments.get(user.email.trim().toLowerCase()),
+            })),
+        );
+        if (cacReconciliation.assignmentsDeleted > 0 || cacReconciliation.sessionsRebound > 0) {
+            console.log(
+                `[PRISM][accountability] Reconciled CAC registry: ${cacReconciliation.assignmentsBefore} -> ` +
+                `${cacReconciliation.assignmentsAfter} assignments; deleted=${cacReconciliation.assignmentsDeleted}; ` +
+                `sessionsRebound=${cacReconciliation.sessionsRebound}.`,
+            );
+        }
         this.sessionPackageStorePath = sessionPackageStorePath;
         this.sessionPackageExportDir = sessionPackageExportDir;
         this.traceExplorer = activityStore ? new SessionTraceExplorer(activityStore) : undefined;
@@ -1047,11 +1067,48 @@ export class DashboardService {
         }
         this.loadSessionPackageStore();
         this.loadCustomRecommendedModels();
+        let evalCertAudit:
+            | {
+                profiles: number;
+                certificatesCreated: number;
+                certificatesReused: number;
+                packagesCreated: number;
+                skippedNoCharacters: boolean;
+            }
+            | null = null;
         try {
-            this.seedTestingCacChain();
+            evalCertAudit = this.seedEvaluationCertificateChains();
         } catch (err) {
-            console.warn("[PRISM][seeding] Failed to seed testing operator CAC chain:", err);
+            console.warn("[PRISM][seeding] Failed to seed evaluation initialization certificate chain:", err);
         }
+
+        const certAudit =
+            evalCertAudit ??
+            ({
+                profiles: 3,
+                certificatesCreated: 0,
+                certificatesReused: 0,
+                packagesCreated: 0,
+                skippedNoCharacters: true,
+            } as const);
+        const evalAuditLine =
+            `[PRISM][startup][evaluation-audit] accounts=${evalAccountAudit.total} ` +
+            `(created:${evalAccountAudit.created},updated:${evalAccountAudit.updated},reactivated:${evalAccountAudit.reactivated},` +
+            `roles_granted:${evalAccountAudit.rolesGranted},passwords_reset:${evalAccountAudit.passwordsReset}); ` +
+            `certificates=${certAudit.profiles} (created:${certAudit.certificatesCreated},reused:${certAudit.certificatesReused},` +
+            `packages_created:${certAudit.packagesCreated},skipped_no_characters:${certAudit.skippedNoCharacters})`;
+        console.log(evalAuditLine);
+        this.activityBus.emit({
+            sessionId: this.status.sessionId,
+            layer: "causal",
+            operation: "prism.startup.evaluation_audit",
+            status: "succeeded",
+            details: {
+                accounts: evalAccountAudit,
+                certificates: certAudit,
+                message: evalAuditLine,
+            },
+        });
 
         // ── A2A Protocol adapters (Phase F) ──────────────────────────────────
         // Use the workspace's persistent SQLite DB so A2A tasks survive restarts.
@@ -1218,97 +1275,283 @@ export class DashboardService {
         });
     }
 
-    public seedTestingCacChain(): void {
-        const packages = this.listSessionPackages();
-        const hasTestingCert = packages.some((pkg) => /testing@prism\.ai/i.test(pkg.title || ""));
-        if (hasTestingCert) {
-            return;
+    private ensureEvaluationAccounts(): {
+        total: number;
+        created: number;
+        updated: number;
+        reactivated: number;
+        rolesGranted: number;
+        passwordsReset: number;
+    } {
+        const profiles: Array<{
+            email: string;
+            password: string;
+            displayName: string;
+            roleNames: string[];
+            executionProfile: "individual" | "business";
+        }> = [
+                {
+                    email: "admin@prismrefraction.com",
+                    password: "admin",
+                    displayName: "Administrator",
+                    roleNames: ["root", "admin"],
+                    executionProfile: "business",
+                },
+                {
+                    email: "testing@prismrefraction.com",
+                    password: "testing",
+                    displayName: "Testing Operator",
+                    roleNames: ["operator"],
+                    executionProfile: "individual",
+                },
+                {
+                    email: "business@prismrefraction.com",
+                    password: "business",
+                    displayName: "Business Operator",
+                    roleNames: ["operator"],
+                    executionProfile: "business",
+                },
+            ];
+
+        const stats = {
+            total: profiles.length,
+            created: 0,
+            updated: 0,
+            reactivated: 0,
+            rolesGranted: 0,
+            passwordsReset: 0,
+        };
+
+        for (const profile of profiles) {
+            const email = profile.email.trim().toLowerCase();
+            const existing = this.iamStore.getUserByEmail("default", email);
+            const passwordHash = hashPassword(profile.password);
+
+            if (!existing) {
+                const created = this.iamStore.createUser({
+                    tenantId: "default",
+                    email,
+                    displayName: profile.displayName,
+                    status: "active",
+                    attrs: {
+                        passwordHash,
+                        executionProfileSegment: profile.executionProfile,
+                        evaluationProfile: true,
+                    },
+                });
+                for (const roleName of profile.roleNames) {
+                    const role = this.iamStore.getRoleByName("default", roleName);
+                    if (role) {
+                        this.iamStore.addMembership(created.id, "default", role.id);
+                        stats.rolesGranted += 1;
+                    }
+                }
+                stats.created += 1;
+                stats.passwordsReset += 1;
+                continue;
+            }
+
+            if (existing.status !== "active") {
+                stats.reactivated += 1;
+            }
+            this.iamStore.setUserStatus(existing.id, "active");
+            this.iamStore.updateUserAttrs(existing.id, {
+                ...(existing.attrs || {}),
+                passwordHash,
+                executionProfileSegment: profile.executionProfile,
+                evaluationProfile: true,
+            });
+            stats.updated += 1;
+            stats.passwordsReset += 1;
+
+            for (const roleName of profile.roleNames) {
+                const role = this.iamStore.getRoleByName("default", roleName);
+                if (role) {
+                    this.iamStore.addMembership(existing.id, "default", role.id);
+                    stats.rolesGranted += 1;
+                }
+            }
         }
+
+        return stats;
+    }
+
+    private seedEvaluationCertificateChains(): {
+        profiles: number;
+        certificatesCreated: number;
+        certificatesReused: number;
+        packagesCreated: number;
+        skippedNoCharacters: boolean;
+    } {
+        const profiles: Array<{
+            email: string;
+            label: string;
+            executionProfile: "individual" | "business";
+            preferredCharacters: string[];
+        }> = [
+                {
+                    email: "admin@prismrefraction.com",
+                    label: "ADMIN",
+                    executionProfile: "business",
+                    preferredCharacters: ["sentinel-business", "phoenix-business", "aria-business"],
+                },
+                {
+                    email: "testing@prismrefraction.com",
+                    label: "TESTING",
+                    executionProfile: "individual",
+                    preferredCharacters: ["aria-individual", "phoenix-individual", "sentinel-individual"],
+                },
+                {
+                    email: "business@prismrefraction.com",
+                    label: "BUSINESS",
+                    executionProfile: "business",
+                    preferredCharacters: ["phoenix-business", "sentinel-business", "aria-business"],
+                },
+            ];
+
+        const stats = {
+            profiles: profiles.length,
+            certificatesCreated: 0,
+            certificatesReused: 0,
+            packagesCreated: 0,
+            skippedNoCharacters: false,
+        };
 
         const characters = this.listWorkspaceCharacters();
         if (characters.length === 0) {
-            console.log("[PRISM][seeding] No workspace characters found; skipping testing operator CAC chain seed.");
-            return;
+            console.log("[PRISM][seeding] No workspace characters found; skipping evaluation certificate chain seed.");
+            stats.skippedNoCharacters = true;
+            return stats;
         }
 
-        const character = characters[0]!;
-        const timestamp = new Date().toISOString();
-        const operatorEmail = "testing@prism.ai";
-        const assistantEmail = character.defaultEmail || `${character.id}@prism.ai`;
+        for (const profile of profiles) {
+            const operatorEmail = profile.email.trim().toLowerCase();
+            const existingInitCertSession = this.chatStore
+                .listSessions()
+                .find(
+                    (s) =>
+                        s.operatorEmail?.trim().toLowerCase() === operatorEmail &&
+                        /Initialization Certificate/i.test(s.title || ""),
+                );
 
-        // 1. Create a session package
-        console.log(`[PRISM][seeding] Seeding testing operator CAC session chain for ${operatorEmail}...`);
+            const selectedCharacter =
+                profile.preferredCharacters
+                    .map((id) => characters.find((c) => c.id === id))
+                    .find(Boolean) ??
+                characters.find((c) => (c.executionProfile || "").toLowerCase() === profile.executionProfile) ??
+                characters[0]!;
 
-        // 2. Create the dedicated chat session
-        const session = this.createChatSession({
-            title: "PRISM Initialization Certificate \u2014 TESTING \u2014 " + timestamp,
-            operatorEmail,
-            assistantEmail,
-            characterId: character.id,
-            allowUnbound: false,
-        });
+            const assistantEmail = selectedCharacter.defaultEmail || `${selectedCharacter.id}@prismrefraction.com`;
 
-        // 3. Create CAC assignment
-        const assignment = this.characterAccountabilityManager.assign({
-            characterId: character.id,
-            prismUserId: "prism-user",
-            prismUserEmail: operatorEmail,
-            operatorId: "operator-testing",
-            operatorEmail,
-            clientId: "dashboard",
-            sessionId: session.sessionId,
-            executionProfile: "individual",
-            workspaceHub: getWorkspaceHub(),
-        });
+            if (!existingInitCertSession) {
+                const timestamp = new Date().toISOString();
+                console.log(
+                    `[PRISM][seeding] Seeding ${profile.label.toLowerCase()} operator CAC session chain for ${operatorEmail}...`,
+                );
 
-        // 4. Mark assignment verified
-        this.characterAccountabilityManager.markEmailVerified(assignment.assignmentId, operatorEmail, "mock_oauth");
-        this.characterAccountabilityManager.recordDispatch(assignment.assignmentId);
+                const session = this.createChatSession({
+                    title: `PRISM Initialization Certificate — ${profile.label} — ${timestamp}`,
+                    operatorEmail,
+                    assistantEmail,
+                    characterId: selectedCharacter.id,
+                    allowUnbound: false,
+                });
 
-        // 5. Bind session to CAC assignment
-        this.chatStore.bindSessionCharacter(session.sessionId, {
-            characterId: character.id,
-            cacAssignmentId: assignment.assignmentId,
-            executionProfile: "individual",
-            operatorEmail,
-            assistantEmail,
-        });
+                const assignment = this.characterAccountabilityManager.assign({
+                    characterId: selectedCharacter.id,
+                    prismUserId: `prism-user-${profile.label.toLowerCase()}`,
+                    prismUserEmail: assistantEmail,
+                    operatorId: `operator-${profile.label.toLowerCase()}`,
+                    operatorEmail,
+                    clientId: "dashboard",
+                    sessionId: session.sessionId,
+                    executionProfile: profile.executionProfile,
+                    workspaceHub: getWorkspaceHub(),
+                });
 
-        // 6. Build cert content
-        const certLines = [
-            "# PRISM Initialization Certificate (Seeded Testing Chain)",
-            "**Generated:** " + timestamp,
-            "**Session:** " + session.sessionId,
-            "**Operator Email:** " + operatorEmail,
-            "**Assignment ID:** " + assignment.assignmentId,
-            "",
-            "## Configuration Summary",
-            "- **Execution Profile:** individual",
-            "- **Workspace:** " + resolveWorkspaceRoot(),
-            "- **Primary LLM Provider:** mock-provider",
-            "- **Model Routing:** default-routing",
-            "- **Guardian Agent:** active",
-            "- **Agentic Control:** active",
-            "- **Character Accountability (CAC):** active",
-        ];
+                this.characterAccountabilityManager.markEmailVerified(
+                    assignment.assignmentId,
+                    operatorEmail,
+                    "mock_oauth",
+                );
+                this.characterAccountabilityManager.recordDispatch(assignment.assignmentId);
 
-        this.chatStore.appendMessage(session.sessionId, "assistant", certLines.join("\n"), {
-            source: "initialization_certificate",
-            type: "certificate",
-        });
+                this.chatStore.bindSessionCharacter(session.sessionId, {
+                    characterId: selectedCharacter.id,
+                    cacAssignmentId: assignment.assignmentId,
+                    executionProfile: profile.executionProfile,
+                    operatorEmail,
+                    assistantEmail,
+                });
 
-        // 7. Create Session Package
-        this.createSessionPackage({
-            title: "Initialization Certificate v1.0 \u2014 testing@prism.ai",
-            areaOfInterest: "System Initialization",
-            objective: "Immutable provenance record of seeded testing PRISM configuration",
-            successCriteria: "Testing operator setup initialized automatically",
-            sessionIds: [session.sessionId],
-            status: "complete" as SessionPackageStatus,
-            source: "setup_wizard_advanced",
-        });
+                const certLines = [
+                    "# PRISM Initialization Certificate (Seeded Evaluation Chain)",
+                    "**Generated:** " + timestamp,
+                    "**Session:** " + session.sessionId,
+                    "**Operator Email:** " + operatorEmail,
+                    "**Assignment ID:** " + assignment.assignmentId,
+                    "",
+                    "## Configuration Summary",
+                    `- **Execution Profile:** ${profile.executionProfile}`,
+                    "- **Workspace:** " + resolveWorkspaceRoot(),
+                    `- **Character:** ${selectedCharacter.id}`,
+                    `- **Assistant Email:** ${assistantEmail}`,
+                    "- **Seed Source:** dashboard_startup_evaluation_profile",
+                ];
 
-        console.log("[PRISM][seeding] Testing operator CAC session chain successfully seeded.");
+                const certContentToSign = certLines.join("\n");
+                const { signatureBase64, publicKeyBase64 } = signCertificateContent(certContentToSign);
+                certLines.push("");
+                certLines.push("## Cryptographic Signature Verification");
+                certLines.push("- **Public Key:** " + publicKeyBase64);
+                certLines.push("- **Signature:** " + signatureBase64);
+                certLines.push("- **Algorithm:** ed25519");
+                certLines.push("");
+                certLines.push("---");
+                certLines.push(
+                    "*This certificate is an immutable provenance record of the initial PRISM system configuration.*",
+                );
+
+                this.chatStore.appendMessage(session.sessionId, "assistant", certLines.join("\n"), {
+                    source: "initialization_certificate",
+                    type: "certificate",
+                });
+                stats.certificatesCreated += 1;
+            } else {
+                stats.certificatesReused += 1;
+            }
+
+            const certSession = existingInitCertSession ||
+                this.chatStore
+                    .listSessions()
+                    .find(
+                        (s) =>
+                            s.operatorEmail?.trim().toLowerCase() === operatorEmail &&
+                            /Initialization Certificate/i.test(s.title || ""),
+                    );
+            if (!certSession) {
+                continue;
+            }
+
+            const alreadyPackaged = this
+                .listSessionPackages()
+                .some((pkg) => pkg.sessionIds.includes(certSession.sessionId));
+
+            if (!alreadyPackaged) {
+                this.createSessionPackage({
+                    title: `Initialization Certificate v1.0 — ${operatorEmail}`,
+                    areaOfInterest: "System Initialization",
+                    objective: "Immutable provenance record of seeded PRISM evaluation configuration",
+                    successCriteria: "Evaluation profile setup initialized automatically",
+                    sessionIds: [certSession.sessionId],
+                    status: "complete" as SessionPackageStatus,
+                    source: "dashboard_startup_evaluation_profile",
+                });
+                stats.packagesCreated += 1;
+            }
+        }
+
+        return stats;
     }
 
     private resolvePluginName(mcpToolName: string): string {
@@ -1435,8 +1678,8 @@ export class DashboardService {
                 lower.includes("memory") || lower.includes("semantic") || lower.includes("neo4j")
                     ? "Knowledge"
                     : lower.includes("http") || lower.includes("mcp") || lower.includes("nexus")
-                      ? "Integration"
-                      : "System";
+                        ? "Integration"
+                        : "System";
             return {
                 name: tool.name,
                 cat: category,
@@ -1958,13 +2201,13 @@ export class DashboardService {
         const action = entry.action;
         const validAction: SessionPackageHistoryEntry["action"] =
             action === "created" ||
-            action === "status_changed" ||
-            action === "workflow_started" ||
-            action === "workflow_paused" ||
-            action === "workflow_blocked" ||
-            action === "workflow_completed" ||
-            action === "exported" ||
-            action === "unpackaged"
+                action === "status_changed" ||
+                action === "workflow_started" ||
+                action === "workflow_paused" ||
+                action === "workflow_blocked" ||
+                action === "workflow_completed" ||
+                action === "exported" ||
+                action === "unpackaged"
                 ? action
                 : "status_changed";
         return {
@@ -2048,13 +2291,13 @@ export class DashboardService {
         input?:
             | string
             | {
-                  title?: string;
-                  characterId?: string | null;
-                  cacAssignmentId?: string | null;
-                  operatorEmail?: string | null;
-                  assistantEmail?: string | null;
-                  allowUnbound?: boolean;
-              },
+                title?: string;
+                characterId?: string | null;
+                cacAssignmentId?: string | null;
+                operatorEmail?: string | null;
+                assistantEmail?: string | null;
+                allowUnbound?: boolean;
+            },
     ): ChatSessionSummary {
         const opts =
             typeof input === "string" || input === undefined
@@ -2065,6 +2308,7 @@ export class DashboardService {
         const lastSession = sessions.length > 0 ? sessions[0] : null;
 
         const prevCharacterId = lastSession ? lastSession.characterId : null;
+        const prevCacAssignmentId = lastSession ? lastSession.cacAssignmentId : null;
         const prevExecutionProfile = lastSession ? lastSession.executionProfile : null;
         const prevOperatorEmail = lastSession ? lastSession.operatorEmail : null;
         const prevAssistantEmail = lastSession ? lastSession.assistantEmail : null;
@@ -2131,6 +2375,16 @@ export class DashboardService {
         let operatorEmailFinal = opts.operatorEmail ?? prevOperatorEmail ?? null;
         let assistantEmailFinal = opts.assistantEmail ?? prevAssistantEmail ?? null;
 
+        if (!assistantEmailFinal || isPlaceholderEmail(assistantEmailFinal)) {
+            assistantEmailFinal =
+                this.resolveCertificateDerivedAssistantEmail({
+                    operatorEmail: operatorEmailFinal,
+                    characterId: characterId ?? null,
+                    fallbackAssignmentId: cacAssignmentId ?? prevCacAssignmentId,
+                    excludeSessionId: session.sessionId,
+                }) ?? assistantEmailFinal;
+        }
+
         if (!cacAssignmentId && characterId) {
             const operatorEmail = (operatorEmailFinal ?? `operator@prism.local`).toString().trim();
             const assistantEmail = (assistantEmailFinal ?? `${characterId}@prism.local`).toString().trim();
@@ -2138,7 +2392,7 @@ export class DashboardService {
                 const assignment = this.characterAccountabilityManager.assign({
                     characterId,
                     prismUserId: "prism-user",
-                    prismUserEmail: operatorEmail,
+                    prismUserEmail: assistantEmail,
                     operatorId: "operator",
                     operatorEmail,
                     clientId: "dashboard",
@@ -2179,6 +2433,39 @@ export class DashboardService {
         }
 
         return session;
+    }
+
+    private resolveCertificateDerivedAssistantEmail(input: {
+        operatorEmail: string | null;
+        characterId: string | null;
+        fallbackAssignmentId: string | null;
+        excludeSessionId: string;
+    }): string | null {
+        const assignmentEmail = input.fallbackAssignmentId
+            ? this.characterAccountabilityManager.getAssignmentChain(input.fallbackAssignmentId)?.assignment.prismUserEmail ?? null
+            : null;
+        if (assignmentEmail && !isPlaceholderEmail(assignmentEmail)) {
+            return assignmentEmail.trim();
+        }
+
+        const normalizedOperatorEmail = input.operatorEmail?.trim().toLowerCase() ?? "";
+        if (!normalizedOperatorEmail) {
+            return null;
+        }
+
+        const certificateSession = this.chatStore
+            .listSessions()
+            .filter(
+                (candidate) =>
+                    candidate.sessionId !== input.excludeSessionId &&
+                    INITIALIZATION_CERTIFICATE_TITLE_RE.test(candidate.title || "") &&
+                    (candidate.operatorEmail ?? "").trim().toLowerCase() === normalizedOperatorEmail &&
+                    (!input.characterId || !candidate.characterId || candidate.characterId === input.characterId) &&
+                    !isPlaceholderEmail(candidate.assistantEmail),
+            )
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+        return certificateSession?.assistantEmail?.trim() ?? null;
     }
 
     deleteChatSession(sessionId: string): void {
@@ -2619,6 +2906,9 @@ export class DashboardService {
         }
 
         const previousMessages = this.chatStore.getMessages(sessionId);
+        const certificateMessage = this.isInitializationCertificateSession(existingSession)
+            ? this.getInitializationCertificateMessage(previousMessages)
+            : null;
         if (previousMessages.length === 0 && existingSession.title === "New Session") {
             this.chatStore.updateSessionTitle(sessionId, deriveSessionTitle(trimmedContent));
         }
@@ -2639,11 +2929,15 @@ export class DashboardService {
             },
         });
 
-        const assistantReply = await this.generateAssistantReply(
-            sessionId,
-            trimmedContent,
-            this.chatStore.getMessages(sessionId).slice(-20),
-        );
+        const assistantReply = certificateMessage
+            ? await this.resolveInitializationCertificateReply(
+                sessionId,
+                trimmedContent,
+                previousMessages,
+                userMessage,
+                certificateMessage,
+            )
+            : await this.generateAssistantReply(sessionId, trimmedContent, this.chatStore.getMessages(sessionId).slice(-20));
         const assistantMessage = this.chatStore.appendMessage(
             sessionId,
             "assistant",
@@ -2683,10 +2977,147 @@ export class DashboardService {
             });
         }
 
+        const llre = assistantReply.metadata.llre as
+            | {
+                sessionId: string;
+                modelName: string;
+                tokensConsumed: number;
+                latencyMs: number;
+                costUsd: number;
+                rsi: number;
+                csr: number;
+                tca: number;
+                teq: number;
+                details?: Record<string, unknown>;
+            }
+            | undefined;
+
+        if (llre) {
+            this.activityBus.emit({
+                sessionId: this.status.sessionId,
+                layer: "performance",
+                operation: "llre.telemetry.recorded",
+                status: "succeeded",
+                details: {
+                    ...llre,
+                    correlationId,
+                    chatSessionId: sessionId,
+                    assistantMessageId: assistantMessage.messageId,
+                },
+            });
+        }
+
         return {
             session: this.chatStore.getSession(sessionId)!,
             userMessage,
             assistantMessage,
+        };
+    }
+
+    private isInitializationCertificateSession(session: ChatSessionSummary): boolean {
+        return INITIALIZATION_CERTIFICATE_TITLE_RE.test(session.title || "");
+    }
+
+    private getInitializationCertificateMessage(messages: ChatMessage[]): ChatMessage | null {
+        return messages.find((message) => message.metadata?.type === "certificate") ?? null;
+    }
+
+    private hasExcessiveCertificateRepeat(messages: ChatMessage[], prompt: string): boolean {
+        const normalizedPrompt = normalizePrompt(prompt);
+        if (!normalizedPrompt) {
+            return false;
+        }
+        const duplicateCount = messages.filter(
+            (message) => message.role === "user" && normalizePrompt(message.content) === normalizedPrompt,
+        ).length;
+        return duplicateCount >= 2;
+    }
+
+    private isCertificateExplanationRequest(prompt: string, certificateContent: string): boolean {
+        const normalizedPrompt = normalizePrompt(prompt);
+        if (!normalizedPrompt) {
+            return false;
+        }
+
+        const hasExplanationIntent = CERTIFICATE_EXPLANATION_INTENT_RE.test(normalizedPrompt);
+        const hasCertificateScopeHint = CERTIFICATE_SCOPE_HINT_RE.test(normalizedPrompt);
+        if (hasExplanationIntent && hasCertificateScopeHint) {
+            return true;
+        }
+
+        if (!hasExplanationIntent) {
+            return false;
+        }
+
+        const certificateTokens = new Set(
+            (certificateContent.toLowerCase().match(/[a-z0-9][a-z0-9._:-]{2,}/g) ?? []).filter((token) => token.length >= 4),
+        );
+        const promptTokens = normalizedPrompt.match(/[a-z0-9][a-z0-9._:-]{2,}/g) ?? [];
+        return promptTokens.some((token) => certificateTokens.has(token));
+    }
+
+    private async resolveInitializationCertificateReply(
+        sessionId: string,
+        prompt: string,
+        previousMessages: ChatMessage[],
+        userMessage: ChatMessage,
+        certificateMessage: ChatMessage,
+    ): Promise<{
+        content: string;
+        metadata: Record<string, unknown>;
+    }> {
+        if (this.hasExcessiveCertificateRepeat(previousMessages, prompt)) {
+            return {
+                content:
+                    "This Initialization Certificate session will not repeat the same explanation relentlessly. " +
+                    "Ask about a different line, term, or security control from the certificate.",
+                metadata: {
+                    intent: "initialization_certificate_lock",
+                    certificateSession: true,
+                    certificateLock: "repeat_refused",
+                },
+            };
+        }
+
+        if (!this.isCertificateExplanationRequest(prompt, certificateMessage.content)) {
+            return {
+                content:
+                    "This Initialization Certificate session is locked to the certificate itself and PRISM core security. " +
+                    "I can explain its wording, sections, signatures, Guardian relationship, or the engineering need for those controls.",
+                metadata: {
+                    intent: "initialization_certificate_lock",
+                    certificateSession: true,
+                    certificateLock: "scope_refused",
+                },
+            };
+        }
+
+        const guardrailMessage: ChatMessage = {
+            messageId: `policy-${randomUUID()}`,
+            sessionId,
+            role: "system",
+            content:
+                "This Initialization Certificate session is locked. Only explain the certificate's content, wording, cryptographic verification, Guardian/security role, and the engineering need for those controls. Refuse unrelated requests and keep answers grounded in the certificate.",
+            createdAt: new Date().toISOString(),
+            metadata: {
+                synthetic: true,
+                policy: "initialization_certificate_lock",
+            },
+        };
+
+        const assistantReply = await this.generateAssistantReply(sessionId, prompt, [
+            ...previousMessages,
+            guardrailMessage,
+            userMessage,
+        ].slice(-20));
+
+        return {
+            content: assistantReply.content,
+            metadata: {
+                ...assistantReply.metadata,
+                certificateSession: true,
+                certificateLock: "allowed",
+            },
         };
     }
 
@@ -3253,67 +3684,296 @@ export class DashboardService {
         });
     }
 
-    public async downloadFile(id: string, url: string, targetPath: string): Promise<void> {
+    public async downloadFile(
+        id: string,
+        url: string,
+        targetPath: string,
+        redirectCount = 0,
+        retryCount = 0,
+    ): Promise<void> {
         const status = this.downloadStatus.get(id);
         if (!status) return;
 
+        const parseEnvInt = (value: string | undefined, fallback: number): number => {
+            const parsed = Number.parseInt(value ?? "", 10);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+        };
+
+        const maxRedirects = parseEnvInt(process.env.PRISM_MODEL_DOWNLOAD_MAX_REDIRECTS, 10);
+        const maxRetries = parseEnvInt(process.env.PRISM_MODEL_DOWNLOAD_MAX_RETRIES, 6);
+        const requestTimeoutMs = parseEnvInt(process.env.PRISM_MODEL_DOWNLOAD_TIMEOUT_MS, 300000);
+        const retryBaseDelayMs = parseEnvInt(process.env.PRISM_MODEL_DOWNLOAD_RETRY_BASE_MS, 1500);
+        const retryMaxDelayMs = parseEnvInt(process.env.PRISM_MODEL_DOWNLOAD_RETRY_MAX_MS, 15000);
+
+        if (redirectCount > maxRedirects) {
+            status.status = "error";
+            status.error = `Too many redirects (>${maxRedirects})`;
+            logger.error(`[model-download] Too many redirects`, { op: "download_file_error", id, url, targetPath });
+            return Promise.reject(new Error(status.error));
+        }
+
+        if (retryCount > maxRetries) {
+            status.status = "error";
+            status.error = `Download failed after ${maxRetries} retries`;
+            logger.error(`[model-download] Retry budget exhausted`, {
+                op: "download_file_error",
+                id,
+                url,
+                targetPath,
+                retryCount,
+                maxRetries,
+            });
+            return Promise.reject(new Error(status.error));
+        }
+
+        logger.info(`[model-download] Starting file download`, {
+            op: "download_file_start",
+            id,
+            url,
+            targetPath,
+            redirectCount,
+            retryCount,
+        });
+        console.log(`[PRISM][models] Downloading file (id=${id}): ${url} -> ${targetPath}`);
+
         return new Promise((resolve, reject) => {
-            const parsed = new URL(url);
+            let parsed: URL;
+            try {
+                parsed = new URL(url);
+            } catch (err: any) {
+                status.status = "error";
+                status.error = `Invalid URL: ${err.message}`;
+                logger.error(`[model-download] Invalid URL`, { op: "download_file_error", id, url, error: err.message });
+                return reject(err);
+            }
+
             const isHttps = parsed.protocol === "https:";
+            const resumeBytes = (() => {
+                try {
+                    if (!existsSync(targetPath)) return 0;
+                    const stat = statSync(targetPath);
+                    return stat.isFile() ? stat.size : 0;
+                } catch {
+                    return 0;
+                }
+            })();
+
+            status.downloadedBytes = resumeBytes;
+
+            const headers: Record<string, string> = {
+                "User-Agent": "PRISM-Operator/1.0",
+                Accept: "*/*",
+                Host: parsed.hostname,
+            };
+            if (resumeBytes > 0) {
+                headers.Range = `bytes=${resumeBytes}-`;
+            }
+
             const options = {
                 hostname: parsed.hostname,
                 port: parsed.port || (isHttps ? 443 : 80),
                 path: parsed.pathname + parsed.search,
-                headers: {
-                    "User-Agent": "prism/1.0",
-                    Accept: "*/*",
-                },
+                servername: parsed.hostname,
+                headers,
             };
+
             const client = isHttps ? https : { get: httpGet };
-            client
-                .get(options, (res) => {
-                    if ([301, 302, 307, 308].includes(res.statusCode ?? 0)) {
-                        const nextUrl = new URL(res.headers.location!, url).href;
-                        return this.downloadFile(id, nextUrl, targetPath).then(resolve).catch(reject);
-                    }
-                    if (res.statusCode !== 200) {
+            const req = client.get(options, (res) => {
+                logger.trace(`[model-download] HTTP response received`, {
+                    op: "download_file_response",
+                    id,
+                    statusCode: res.statusCode,
+                    location: res.headers.location,
+                    contentLength: res.headers["content-length"],
+                });
+
+                if ([301, 302, 307, 308].includes(res.statusCode ?? 0)) {
+                    if (!res.headers.location) {
                         status.status = "error";
-                        status.error = `HTTP ${res.statusCode}`;
+                        status.error = `Redirect ${res.statusCode} missing Location header`;
+                        logger.error(`[model-download] Redirect missing Location header`, { op: "download_file_error", id, statusCode: res.statusCode });
                         return reject(new Error(status.error));
                     }
+                    const nextUrl = new URL(res.headers.location, url).href;
+                    logger.info(`[model-download] Redirecting (${res.statusCode})`, { op: "download_file_redirect", id, fromUrl: url, toUrl: nextUrl });
+                    return this.downloadFile(id, nextUrl, targetPath, redirectCount + 1, retryCount)
+                        .then(resolve)
+                        .catch(reject);
+                }
 
-                    const total = parseInt(res.headers["content-length"] || "0", 10);
-                    status.totalBytes = total;
-                    status.status = "downloading";
+                const statusCode = res.statusCode ?? 0;
+                if (statusCode !== 200 && statusCode !== 206) {
+                    const err = new Error(`HTTP ${statusCode}`);
+                    const nextRetry = retryCount + 1;
+                    if (nextRetry <= maxRetries) {
+                        const jitter = Math.floor(Math.random() * 400);
+                        const delayMs = Math.min(retryBaseDelayMs * 2 ** retryCount + jitter, retryMaxDelayMs);
+                        status.status = "pending";
+                        status.error = `HTTP ${statusCode}; retrying (${nextRetry}/${maxRetries}) in ${delayMs}ms`;
+                        logger.warn(`[model-download] Server returned retryable status`, {
+                            op: "download_file_retry",
+                            id,
+                            url,
+                            statusCode,
+                            retryCount: nextRetry,
+                            maxRetries,
+                            delayMs,
+                        });
+                        return setTimeout(() => {
+                            this.downloadFile(id, url, targetPath, redirectCount, nextRetry)
+                                .then(resolve)
+                                .catch(reject);
+                        }, delayMs);
+                    }
 
-                    const file = createWriteStream(targetPath);
-                    res.pipe(file);
-
-                    let dl = 0;
-                    res.on("data", (chunk) => {
-                        dl += chunk.length;
-                        status.downloadedBytes = dl;
-                        status.progress = total > 0 ? (dl / total) * 100 : 0;
-                    });
-
-                    file.on("finish", () => {
-                        file.close();
-                        status.status = "completed";
-                        status.progress = 100;
-                        resolve();
-                    });
-
-                    file.on("error", (err) => {
-                        status.status = "error";
-                        status.error = err.message;
-                        reject(err);
-                    });
-                })
-                .on("error", (err) => {
                     status.status = "error";
                     status.error = err.message;
+                    logger.error(`[model-download] Server returned non-success status`, {
+                        op: "download_file_error",
+                        id,
+                        statusCode,
+                        url,
+                        retryCount,
+                    });
+                    return reject(err);
+                }
+
+                const isPartialResponse = statusCode === 206;
+                const initialBytes = resumeBytes > 0 && isPartialResponse ? resumeBytes : 0;
+                if (resumeBytes > 0 && !isPartialResponse) {
+                    logger.warn(`[model-download] Resume not supported by origin, restarting from zero`, {
+                        op: "download_file_resume_unsupported",
+                        id,
+                        url,
+                        resumeBytes,
+                    });
+                }
+
+                const responseBytes = parseInt(res.headers["content-length"] || "0", 10);
+                const total = responseBytes > 0 ? initialBytes + responseBytes : 0;
+                status.totalBytes = total;
+                status.status = "downloading";
+                status.error = undefined;
+                status.downloadedBytes = initialBytes;
+                status.progress = total > 0 ? (initialBytes / total) * 100 : 0;
+                logger.info(`[model-download] Downloading content`, { op: "download_file_progress", id, totalBytes: total, targetPath });
+
+                const file = createWriteStream(targetPath, { flags: initialBytes > 0 ? "a" : "w" });
+                res.pipe(file);
+
+                let dl = 0;
+                let lastLoggedPct = -1;
+                res.on("data", (chunk: Buffer) => {
+                    dl += chunk.length;
+                    status.downloadedBytes = initialBytes + dl;
+                    status.progress = total > 0 ? ((initialBytes + dl) / total) * 100 : 0;
+                    const pct = Math.floor(status.progress);
+                    if (pct % 10 === 0 && pct !== lastLoggedPct) {
+                        lastLoggedPct = pct;
+                        logger.trace(`[model-download] Download progress: ${pct}%`, {
+                            op: "download_file_chunk",
+                            id,
+                            dlBytes: initialBytes + dl,
+                            totalBytes: total,
+                        });
+                    }
+                });
+
+                file.on("finish", () => {
+                    file.close();
+                    status.status = "completed";
+                    status.progress = 100;
+                    logger.info(`[model-download] File download completed successfully`, {
+                        op: "download_file_complete",
+                        id,
+                        targetPath,
+                        totalBytes: initialBytes + dl,
+                    });
+                    console.log(`[PRISM][models] Download complete: ${targetPath} (${initialBytes + dl} bytes)`);
+                    resolve();
+                });
+
+                file.on("error", (err) => {
+                    status.status = "error";
+                    status.error = err.message;
+                    logger.error(`[model-download] File write stream error`, { op: "download_file_error", id, targetPath, error: err.message });
                     reject(err);
                 });
+
+                res.on("error", (err) => {
+                    const nextRetry = retryCount + 1;
+                    if (nextRetry <= maxRetries) {
+                        const jitter = Math.floor(Math.random() * 400);
+                        const delayMs = Math.min(retryBaseDelayMs * 2 ** retryCount + jitter, retryMaxDelayMs);
+                        status.status = "pending";
+                        status.error = `${err.message}; retrying (${nextRetry}/${maxRetries}) in ${delayMs}ms`;
+                        logger.warn(`[model-download] Response stream error, retrying`, {
+                            op: "download_file_retry",
+                            id,
+                            url,
+                            error: err.message,
+                            retryCount: nextRetry,
+                            maxRetries,
+                            delayMs,
+                        });
+                        return setTimeout(() => {
+                            this.downloadFile(id, url, targetPath, redirectCount, nextRetry)
+                                .then(resolve)
+                                .catch(reject);
+                        }, delayMs);
+                    }
+
+                    status.status = "error";
+                    status.error = err.message;
+                    logger.error(`[model-download] Response stream error`, {
+                        op: "download_file_error",
+                        id,
+                        url,
+                        error: err.message,
+                        retryCount,
+                    });
+                    reject(err);
+                });
+            });
+
+            req.on("error", (err) => {
+                const nextRetry = retryCount + 1;
+                if (nextRetry <= maxRetries) {
+                    const jitter = Math.floor(Math.random() * 400);
+                    const delayMs = Math.min(retryBaseDelayMs * 2 ** retryCount + jitter, retryMaxDelayMs);
+                    status.status = "pending";
+                    status.error = `${err.message}; retrying (${nextRetry}/${maxRetries}) in ${delayMs}ms`;
+                    logger.warn(`[model-download] Network request error, retrying`, {
+                        op: "download_file_retry",
+                        id,
+                        url,
+                        error: err.message,
+                        retryCount: nextRetry,
+                        maxRetries,
+                        delayMs,
+                    });
+                    return setTimeout(() => {
+                        this.downloadFile(id, url, targetPath, redirectCount, nextRetry)
+                            .then(resolve)
+                            .catch(reject);
+                    }, delayMs);
+                }
+
+                status.status = "error";
+                status.error = err.message;
+                logger.error(`[model-download] Network request error`, {
+                    op: "download_file_error",
+                    id,
+                    url,
+                    error: err.message,
+                    retryCount,
+                });
+                reject(err);
+            });
+
+            req.setTimeout(requestTimeoutMs, () => {
+                req.destroy(new Error(`Connection timeout after ${requestTimeoutMs}ms`));
+            });
         });
     }
 
@@ -3707,7 +4367,7 @@ export class DashboardService {
             if (!safeFile) {
                 return this.json(res, 404, { error: "Not found" });
             }
-            const devPublicDir = "D:\\Projects\\Prism\\src\\core\\operator\\public";
+            const devPublicDir = join(process.cwd(), "src", "core", "operator", "public");
             const publicRoot = existsSync(devPublicDir)
                 ? resolvePath(devPublicDir)
                 : resolvePath(DashboardService.publicDir);
@@ -3723,8 +4383,8 @@ export class DashboardService {
             const contentType = url.endsWith(".css")
                 ? "text/css; charset=utf-8"
                 : url.endsWith(".html")
-                  ? "text/html; charset=utf-8"
-                  : "application/javascript; charset=utf-8";
+                    ? "text/html; charset=utf-8"
+                    : "application/javascript; charset=utf-8";
             res.writeHead(200, {
                 "Content-Type": contentType,
                 "Cache-Control": "no-store",
@@ -3921,11 +4581,11 @@ export class DashboardService {
                 const triad =
                     config?.leftProviderId && config?.leftModel && config?.rightProviderId && config?.rightModel
                         ? this.llmProviders.validateSRTriadConfig(
-                              config.leftProviderId,
-                              config.leftModel,
-                              config.rightProviderId,
-                              config.rightModel,
-                          )
+                            config.leftProviderId,
+                            config.leftModel,
+                            config.rightProviderId,
+                            config.rightModel,
+                        )
                         : null;
 
                 const leftLatency = Math.round(150 + Math.random() * 80);
@@ -4061,8 +4721,8 @@ export class DashboardService {
                         side.pid === "llamacpp"
                             ? this.llamaSupervisor
                             : side.pid === "bitnetcpp"
-                              ? this.bitnetSupervisor
-                              : null;
+                                ? this.bitnetSupervisor
+                                : null;
                     if (supervisor && side.model) {
                         const running = supervisor
                             .getSnapshot()
@@ -4223,11 +4883,11 @@ export class DashboardService {
                 const triad =
                     preset.leftProviderId && preset.leftModel && preset.rightProviderId && preset.rightModel
                         ? this.llmProviders.validateSRTriadConfig(
-                              preset.leftProviderId,
-                              preset.leftModel,
-                              preset.rightProviderId,
-                              preset.rightModel,
-                          )
+                            preset.leftProviderId,
+                            preset.leftModel,
+                            preset.rightProviderId,
+                            preset.rightModel,
+                        )
                         : null;
                 return this.json(res, 200, {
                     config,
@@ -4455,8 +5115,8 @@ export class DashboardService {
                                     const decision: "approved" | "denied" | "timeout" = approved
                                         ? "approved"
                                         : elapsed >= 295_000
-                                          ? "timeout"
-                                          : "denied";
+                                            ? "timeout"
+                                            : "denied";
                                     try {
                                         await extractor.consumeApprovalDecision(toolId, decision, {
                                             decisionSource: "approval_queue",
@@ -4966,6 +5626,7 @@ export class DashboardService {
         metadata: Record<string, unknown>;
     }> {
         const normalized = normalizePrompt(content);
+        const llreEnabled = (readPreferences()?.runtimeSettings?.llreEnabled ?? true) !== false;
         if (!normalized) {
             return {
                 content: this.helpResponse(),
@@ -5197,30 +5858,30 @@ export class DashboardService {
                                 hemispheres: {
                                     left: srResult.hemispheres.left
                                         ? {
-                                              provider: srResult.hemispheres.left.providerId,
-                                              model: srResult.hemispheres.left.model,
-                                              content: srConfig.showHemispheres
-                                                  ? srResult.hemispheres.left.content
-                                                  : undefined,
-                                          }
+                                            provider: srResult.hemispheres.left.providerId,
+                                            model: srResult.hemispheres.left.model,
+                                            content: srConfig.showHemispheres
+                                                ? srResult.hemispheres.left.content
+                                                : undefined,
+                                        }
                                         : null,
                                     right: srResult.hemispheres.right
                                         ? {
-                                              provider: srResult.hemispheres.right.providerId,
-                                              model: srResult.hemispheres.right.model,
-                                              content: srConfig.showHemispheres
-                                                  ? srResult.hemispheres.right.content
-                                                  : undefined,
-                                          }
+                                            provider: srResult.hemispheres.right.providerId,
+                                            model: srResult.hemispheres.right.model,
+                                            content: srConfig.showHemispheres
+                                                ? srResult.hemispheres.right.content
+                                                : undefined,
+                                        }
                                         : null,
                                     main: srResult.hemispheres.main
                                         ? {
-                                              provider: srResult.hemispheres.main.providerId,
-                                              model: srResult.hemispheres.main.model,
-                                              content: srConfig.showHemispheres
-                                                  ? srResult.hemispheres.main.content
-                                                  : undefined,
-                                          }
+                                            provider: srResult.hemispheres.main.providerId,
+                                            model: srResult.hemispheres.main.model,
+                                            content: srConfig.showHemispheres
+                                                ? srResult.hemispheres.main.content
+                                                : undefined,
+                                        }
                                         : null,
                                 },
                             },
@@ -5231,6 +5892,7 @@ export class DashboardService {
 
             // Use agentic executor if available — enables tool calling loop
             if (this.agenticExecutor) {
+                const agenticStart = Date.now();
                 const agenticResult = await this.agenticExecutor.execute(
                     content,
                     conversationHistory,
@@ -5365,8 +6027,8 @@ export class DashboardService {
                                     ts.invocations === 1
                                         ? latencyMs
                                         : Math.round(
-                                              (ts.avgLatencyMs * (ts.invocations - 1) + latencyMs) / ts.invocations,
-                                          );
+                                            (ts.avgLatencyMs * (ts.invocations - 1) + latencyMs) / ts.invocations,
+                                        );
                                 ts.lastInvoked = new Date().toISOString();
                             }
                         }
@@ -5374,12 +6036,60 @@ export class DashboardService {
                 );
 
                 if (agenticResult.finalContent?.trim()) {
+                    const llreMetadata = (() => {
+                        if (!llreEnabled) return undefined;
+                        const stepEvents = agenticResult.events.filter((e) => e.type === "tool_result");
+                        const steps =
+                            stepEvents.length > 0
+                                ? stepEvents.map((e) => ({
+                                    tool: e.toolResult?.name || "unknown_tool",
+                                    success: e.toolResult?.ok !== false,
+                                    summary:
+                                        typeof e.toolResult?.output === "string"
+                                            ? e.toolResult.output.slice(0, 120)
+                                            : undefined,
+                                }))
+                                : [{ tool: "chat_generation", success: true }];
+
+                        const latencyMs = Math.max(1, Date.now() - agenticStart);
+                        const tokenEstimateBase = Math.max(
+                            1,
+                            Math.ceil((content.length + (agenticResult.finalContent?.length || 0)) / 4),
+                        );
+                        const tokensConsumed = tokenEstimateBase + Math.max(0, agenticResult.toolCallsExecuted * 120);
+                        const costUsd = tokensConsumed * 0.0000025;
+                        const metrics = LLRETelemetry.calculate({
+                            objective: { successCriteria: [] },
+                            steps,
+                            latencyMs,
+                            tokensConsumed,
+                            costUsd,
+                        });
+                        return {
+                            sessionId,
+                            modelName: activeModelName || "agentic-orchestrator",
+                            tokensConsumed,
+                            latencyMs,
+                            costUsd,
+                            rsi: metrics.rsi,
+                            csr: metrics.csr,
+                            tca: metrics.tca,
+                            teq: metrics.teq,
+                            details: {
+                                source: "chat_agentic",
+                                iterations: agenticResult.iterations,
+                                toolCallsExecuted: agenticResult.toolCallsExecuted,
+                            },
+                        };
+                    })();
+
                     return {
                         content: agenticResult.finalContent,
                         metadata: {
                             intent: "llm_agentic",
                             toolCallsExecuted: agenticResult.toolCallsExecuted,
                             iterations: agenticResult.iterations,
+                            llre: llreMetadata,
                             events: agenticResult.events
                                 .filter((e) => e.type === "tool_call" || e.type === "tool_result" || e.type === "text")
                                 .map((e) => ({
@@ -5427,6 +6137,7 @@ export class DashboardService {
             }
 
             let generated;
+            const generationStart = Date.now();
             if (hasSessionOverride) {
                 generated = await this.llmProviders.generate(
                     {
@@ -5462,6 +6173,39 @@ export class DashboardService {
                     provider: generated.providerId,
                     model: generated.model,
                 };
+
+                if (llreEnabled) {
+                    const latencyMs = Math.max(1, Date.now() - generationStart);
+                    const inputTokens = generated.tokensUsed?.input ?? Math.max(1, Math.ceil(content.length / 4));
+                    const outputTokens = generated.tokensUsed?.output ?? Math.max(1, Math.ceil(generated.content.length / 4));
+                    const tokensConsumed = inputTokens + outputTokens;
+                    const costUsd = generated.tokensUsed?.costUsd ?? tokensConsumed * 0.0000025;
+                    const metrics = LLRETelemetry.calculate({
+                        objective: { successCriteria: [] },
+                        steps: [{ tool: "chat_generation", success: true }],
+                        latencyMs,
+                        tokensConsumed,
+                        costUsd,
+                    });
+                    meta.llre = {
+                        sessionId,
+                        modelName: generated.model || "unknown-model",
+                        tokensConsumed,
+                        latencyMs,
+                        costUsd,
+                        rsi: metrics.rsi,
+                        csr: metrics.csr,
+                        tca: metrics.tca,
+                        teq: metrics.teq,
+                        details: {
+                            source: "chat_direct",
+                            provider: generated.providerId,
+                            inputTokens,
+                            outputTokens,
+                        },
+                    };
+                }
+
                 if ("routing" in generated) {
                     const r = generated as {
                         routing: { profile: { tier: number }; degraded: boolean; reason: string };

@@ -31,11 +31,79 @@ const PROVIDERS_NEEDING_KEY = ['openai', 'anthropic', 'google', 'mistral', 'cohe
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function upsertAuthRecoveryBanner(payload = {}) {
+  const reason = payload?.reason || payload?.error || 'Authentication is required to continue setup.';
+  const requestId = payload?.requestId || '';
+  const tokenFromMeta = document.querySelector('meta[name="prism-auth-token"]')?.getAttribute('content') || '';
+  const tokenFromQuery = new URL(window.location.href).searchParams.get('token') || '';
+  const token = tokenFromMeta || tokenFromQuery;
+  const retryUrl = token
+    ? `/setup?rerun=true&token=${encodeURIComponent(token)}`
+    : '/setup?rerun=true';
+
+  let banner = document.getElementById('wizard-auth-recovery');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'wizard-auth-recovery';
+    banner.style.cssText = [
+      'margin:10px 0 14px 0',
+      'padding:12px 14px',
+      'border:1px solid rgba(239,68,68,0.45)',
+      'background:rgba(239,68,68,0.12)',
+      'border-radius:10px',
+      'font-size:12px',
+      'line-height:1.45'
+    ].join(';');
+    const target = document.querySelector('.wizard-card') || document.body;
+    target.insertBefore(banner, target.firstChild);
+  }
+
+  banner.innerHTML =
+    `<div style="font-weight:700;color:#fecaca;">Authentication session expired or missing.</div>` +
+    `<div style="margin-top:4px;color:#fee2e2;">${escHtml(String(reason))}</div>` +
+    (requestId
+      ? `<div style="margin-top:4px;color:#fecaca;opacity:0.9;">requestId: <span style="font-family:monospace;">${escHtml(String(requestId))}</span></div>`
+      : '') +
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">` +
+    `<button type="button" class="secondary-button" onclick="window.location.href='/login'">Go to Login</button>` +
+    `<button type="button" class="primary-button" onclick="window.location.href='${retryUrl}'">Retry Wizard</button>` +
+    `</div>`;
+}
+
+function clearAuthRecoveryBanner() {
+  const banner = document.getElementById('wizard-auth-recovery');
+  if (banner) banner.remove();
+}
+
 async function api(method, path, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  const tokenFromMeta = document.querySelector('meta[name="prism-auth-token"]')?.getAttribute('content') || '';
+  const tokenFromQuery = new URL(window.location.href).searchParams.get('token') || '';
+  const token = tokenFromMeta || tokenFromQuery;
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const opts = { method, headers, credentials: 'same-origin' };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
-  return res.json();
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  let payload = null;
+  if (contentType.includes('application/json')) {
+    payload = await res.json().catch(() => null);
+  } else {
+    const text = await res.text().catch(() => '');
+    payload = text ? { error: text } : null;
+  }
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      upsertAuthRecoveryBanner(payload || { reason: 'Unauthorized' });
+    }
+    const reason = payload?.reason || payload?.error || payload?.message || `Request failed (${res.status})`;
+    const reqId = payload?.requestId ? ` [requestId: ${payload.requestId}]` : '';
+    throw new Error(String(reason) + reqId);
+  }
+
+  clearAuthRecoveryBanner();
+  return payload || {};
 }
 
 function escHtml(str) {
@@ -66,6 +134,95 @@ function getProviderConfig(providerId) {
 function formatProviderLabel(providerId) {
   const providerMeta = providerCatalog?.find((p) => p.id === providerId);
   return providerMeta?.label || providerId.charAt(0).toUpperCase() + providerId.slice(1);
+}
+
+function buildInitializationCertificatePayload() {
+  const primaryCfg = getProviderConfig(wizardState.provider);
+  return {
+    profile: {
+      segment: wizardState.profile,
+      governance: wizardState.profile === 'business' ? 'strict' : 'minimal',
+    },
+    workspace: {
+      path: wizardState.workspaceRoot || 'default',
+    },
+    provider: {
+      primary: wizardState.provider,
+      model: primaryCfg.defaultModel || (primaryCfg.models?.[0] ?? 'not selected'),
+      hasApiKey: !!wizardState.apiKey,
+    },
+    routing: {
+      strategy: 'single',
+      roleOverrides: 'none',
+    },
+    guardian: {
+      model: wizardState.guardianModel || 'not configured',
+      authorityTier: wizardState.guardianTier || (wizardState.profile === 'business' ? 'tier2_conditional' : 'tier1_autonomous'),
+      autoStart: !!wizardState.guardianAutoStart,
+      autoUpdate: !!wizardState.guardianAutoUpdate,
+    },
+    agents: {
+      defaultSwarmTopology: wizardState.profile === 'business' ? 'star' : 'mesh',
+    },
+    cac: {
+      character: wizardState.characterId || 'not assigned',
+      operatorEmail: wizardState.operatorEmail || 'not set',
+      prismUserEmail: wizardState.assistantEmail || 'not set',
+      assignmentId: wizardState.cacAssignmentId || 'pending',
+      workspaceHub: 'default',
+    },
+    browserProfile: {
+      email: wizardState.operatorEmail || 'not set',
+      segment: wizardState.profile,
+      profileId: 'pending',
+    },
+    scheduler: {
+      enabledTasks: wizardState.profile === 'business' ? 'daily-review, daily-backup, weekly-compliance, weekly-telemetry' : 'daily-review',
+    },
+    readiness: {
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
+function renderCertificatePreviewSummary(mode = 'preview', certResult = null) {
+  const certPreview = document.getElementById('wizard-cert-preview');
+  const certDetail = document.getElementById('wizard-cert-detail');
+  if (!certPreview || !certDetail) return;
+
+  const cert = buildInitializationCertificatePayload();
+  const primaryLabel = formatProviderLabel(cert.provider.primary || 'unknown');
+  const rows = [
+    ['Execution Profile', `${cert.profile.segment} (${cert.profile.governance})`],
+    ['Workspace', cert.workspace.path],
+    ['Primary Provider', `${primaryLabel} · ${cert.provider.model}`],
+    ['Guardian', `${cert.guardian.authorityTier} · ${cert.guardian.model}`],
+    ['CAC', `${cert.cac.character} · ${cert.cac.operatorEmail}`],
+    ['Browser Profile', `${cert.browserProfile.email} (${cert.browserProfile.segment})`],
+    ['Scheduler', cert.scheduler.enabledTasks],
+  ];
+
+  certPreview.innerHTML = rows.map(([label, value]) =>
+    `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed rgba(255,255,255,0.08);">` +
+    `<span style="color:var(--muted);font-size:11px;">${escHtml(label)}</span>` +
+    `<span style="font-size:11px;text-align:right;max-width:70%;word-break:break-word;">${escHtml(String(value ?? 'n/a'))}</span>` +
+    `</div>`
+  ).join('');
+
+  if (mode === 'created' && certResult) {
+    certDetail.innerHTML = `<div style="color:var(--accent-2);font-weight:600;">✓ Certificate Created and Sealed</div>` +
+      `<div style="margin-top:3px;">Session: <span style="font-family:monospace;font-size:11px;">${escHtml(certResult.sessionId || 'n/a')}</span></div>` +
+      `<div>Package: <span style="font-family:monospace;font-size:11px;">${escHtml(certResult.packageId || 'n/a')}</span></div>` +
+      `<div style="margin-top:3px;font-size:11px;color:var(--muted);">Use Operator Login to continue with this provenance chain.</div>`;
+  } else if (mode === 'creating') {
+    certDetail.innerHTML = `<div style="color:var(--accent-2);font-weight:600;">Creating Initialization Certificate...</div>` +
+      `<div style="margin-top:3px;">The session package is being signed and archived.</div>`;
+  } else if (mode === 'error') {
+    certDetail.innerHTML = `<div style="color:#fca5a5;font-weight:600;">Certificate creation encountered an issue.</div>` +
+      `<div style="margin-top:3px;">Review the error below and retry launch.</div>`;
+  } else {
+    certDetail.innerHTML = 'Review this immutable provenance snapshot before launch. It will be sealed as a dedicated session.';
+  }
 }
 
 let expandedSummaryProviders = new Set();
@@ -105,12 +262,38 @@ function renderConfiguredProvidersSummary() {
         if (modelCount === 0) {
           modelListHtml = '<div style="margin-top:6px;padding:6px 10px;background:rgba(0,0,0,0.3);border-radius:6px;font-size:11px;opacity:0.7;">No models discovered for this provider.</div>';
         } else {
-          const items = models.slice(0, 100).map(m => {
+          // Default model selector dropdown with search
+          const currentDefault = cfg.defaultModel || '';
+          const selectId = `provider-default-model-${escHtml(providerId)}`;
+          const filterId = `provider-model-filter-${escHtml(providerId)}`;
+
+          let defaultSelectHtml = `
+            <div style="margin-top:8px;padding:8px 10px;background:rgba(0,0,0,0.3);border-radius:8px;">
+              <label style="font-size:10px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Default Model for ${escHtml(formatProviderLabel(providerId))}</label>
+              <input type="text" id="${filterId}" placeholder="Search ${modelCount} models..." 
+                style="width:100%;padding:6px 10px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:monospace;margin-bottom:4px;outline:none;"
+                oninput="wizardFilterProviderModels('${escHtml(providerId)}')" />
+              <select id="${selectId}" size="8"
+                style="width:100%;background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:monospace;scrollbar-width:thin;padding:2px;"
+                onchange="wizardSelectProviderDefaultModel('${escHtml(providerId)}', this.value)">`;
+
+          for (const m of models) {
             const mId = typeof m === 'string' ? m : m.id || m.name || JSON.stringify(m);
-            return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(mId)}">${escHtml(mId)}</div>`;
-          }).join('');
-          const moreCount = modelCount > 100 ? `<div style="padding-top:4px;font-size:10px;opacity:0.6;">...and ${modelCount - 100} more models</div>` : '';
-          modelListHtml = `<div style="margin-top:6px;padding:8px 10px;background:rgba(0,0,0,0.35);border-radius:6px;font-size:11px;max-height:140px;overflow-y:auto;scrollbar-width:thin;font-family:monospace;">${items}${moreCount}</div>`;
+            const isSelected = mId === currentDefault;
+            const mLower = mId.toLowerCase();
+            const isAuto = mLower === 'openrouter/auto' || mLower === 'auto';
+            const isFree = mLower.includes(':free');
+            const badge = isAuto ? ' ⚡ [AUTO]' : isFree ? ' 🎁 [FREE]' : '';
+            defaultSelectHtml += `<option value="${escHtml(mId)}"${isSelected ? ' selected' : ''} title="${escHtml(mId)}">${escHtml(mId)}${badge}</option>`;
+          }
+
+          defaultSelectHtml += `</select>
+              <div style="margin-top:4px;font-size:10px;opacity:0.6;">
+                ${currentDefault ? `✓ Default: <strong>${escHtml(currentDefault)}</strong>` : 'Select a model to set as default'}
+              </div>
+            </div>`;
+
+          modelListHtml = defaultSelectHtml;
         }
       }
 
@@ -118,7 +301,7 @@ function renderConfiguredProvidersSummary() {
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
           <span><strong>${escHtml(formatProviderLabel(providerId))}</strong>${isPrimary ? ' <span style="font-size:10px;background:rgba(105,210,255,0.2);color:var(--accent);padding:2px 6px;border-radius:4px;">primary</span>' : ''}</span>
           <div style="display:flex;align-items:center;gap:8px;">
-            <button type="button" class="secondary-button" style="font-size:10px;padding:2px 8px;border-radius:6px;opacity:0.9;" onclick="toggleProviderModelInspector('${escHtml(providerId)}')" title="Click to view discovered models for ${escHtml(providerId)}">
+            <button type="button" class="secondary-button" style="font-size:10px;padding:2px 8px;border-radius:6px;opacity:0.9;" onclick="toggleProviderModelInspector('${escHtml(providerId)}')" title="Click to select a default model for ${escHtml(providerId)}">
               ${modelCount} models ${isExpanded ? '▴' : '▾'}
             </button>
             <span style="opacity:0.8;font-size:11px;">· ${stateText}</span>
@@ -130,6 +313,27 @@ function renderConfiguredProvidersSummary() {
     .join('');
   applyWizardHoverTooltips();
 }
+
+window.wizardSelectProviderDefaultModel = function wizardSelectProviderDefaultModel(providerId, modelId) {
+  const cfg = getProviderConfig(providerId);
+  cfg.defaultModel = modelId;
+  cfg.touched = true;
+  console.debug(`[wizard][trace] Default model set for ${providerId}: ${modelId}`);
+  renderConfiguredProvidersSummary();
+  renderCertificatePreviewSummary('preview');
+};
+
+window.wizardFilterProviderModels = function wizardFilterProviderModels(providerId) {
+  const filterId = `provider-model-filter-${providerId}`;
+  const selectId = `provider-default-model-${providerId}`;
+  const filterInput = document.getElementById(filterId);
+  const selectEl = document.getElementById(selectId);
+  if (!filterInput || !selectEl) return;
+  const query = filterInput.value.toLowerCase();
+  for (const opt of selectEl.options) {
+    opt.style.display = opt.value.toLowerCase().includes(query) ? '' : 'none';
+  }
+};
 
 window.toggleApiKeyVisibility = function toggleApiKeyVisibility(inputId, btnEl) {
   const input = document.getElementById(inputId);
@@ -225,6 +429,7 @@ function showStep(n) {
   if (n === 3) initCharacterStep();
   if (n === 4) initIdentityStep();
   if (n === 5) initProviderGuardianStep();
+  if (n === 5) renderCertificatePreviewSummary('preview');
   applyWizardHoverTooltips();
 }
 
@@ -381,27 +586,187 @@ function initIdentityStep() {
 
 // ── Step 5: Provider & Model Setup + Guardian Setup ─────────────────────────
 
-let guardianRecommendedCatalog = [];
+const DEFAULT_RECOMMENDED_MODELS = [
+  { name: "Qwen2.5 3B Q4 (Highly Recommended)", fileName: "qwen-2.5-3b-instruct-q4_k_m.gguf", size: "1.9 GB", url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf" },
+  { name: "Qwen2.5-VL 3B Q8 (Vision, High Quality)", fileName: "Qwen2.5-VL-3B-Instruct-Q8_0.gguf", size: "3.3 GB", url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q8_0.gguf", mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf", mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf" },
+  { name: "Qwen2.5-VL 3B Q4 (Vision, Efficient)", fileName: "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf", size: "1.9 GB", url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf", mmprojUrl: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf", mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf" },
+  { name: "Gemma 3 1B (Low VRAM ≤4 GB)", fileName: "google_gemma-3-1b-it-Q4_K_M.gguf", size: "0.8 GB", url: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf" },
+  { name: "Gemma 3 4B (Balanced)", fileName: "google_gemma-3-4b-it-Q4_K_M.gguf", size: "2.8 GB", url: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf" },
+  { name: "Gemma 2 2B Q4 (Agentic, 6 GB VRAM)", fileName: "gemma-2-2b-it-Q4_K_M.gguf", size: "1.6 GB", url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf" },
+  { name: "Gemma 2 2B Q8 (Agentic, High Quality)", fileName: "gemma-2-2b-it-Q8_0.gguf", size: "2.9 GB", url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf" },
+  { name: "Phi-3.5 Mini 3.8B Q4 (Reasoning)", fileName: "Phi-3.5-mini-instruct-Q4_K_M.gguf", size: "2.4 GB", url: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf" },
+  { name: "Llama 3.2 3B Q4 (General)", fileName: "llama-3.2-3b-instruct-q4_k_m.gguf", size: "2.2 GB", url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf" },
+  { name: "Qwen2.5 1.5B Q4 (Compact Agent)", fileName: "qwen-2.5-1.5b-instruct-q4_k_m.gguf", size: "1.1 GB", url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf" },
+  { name: "Ministral 3B Q4 (128k Context)", fileName: "mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf", size: "2.1 GB", url: "https://huggingface.co/bartowski/mistralai_Ministral-3-3B-Instruct-2512-GGUF/resolve/main/mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf" }
+];
+
+let guardianRecommendedCatalog = [...DEFAULT_RECOMMENDED_MODELS];
 let guardianActiveDownloadId = null;
 let guardianDownloadPollTimer = null;
 
+window.testProviderConnection = async function testProviderConnection() {
+  const btn = document.getElementById('wiz-test-provider-btn');
+  const resultEl = document.getElementById('provider-test-result');
+  const keyInput = document.getElementById('provider-api-key');
+  const providerId = wizardState.provider;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⌛ Testing...';
+  }
+  if (resultEl) {
+    resultEl.innerHTML = '<span style="opacity:0.7;">Testing connection to ' + escHtml(formatProviderLabel(providerId)) + '...</span>';
+  }
+
+  const apiKey = keyInput ? keyInput.value.trim() : '';
+
+  console.debug(`[wizard][trace] Testing provider connection: ${providerId}`);
+  try {
+    const res = await api('POST', '/api/llm/provider-test', {
+      providerId: providerId,
+      apiKey: apiKey
+    });
+
+    const cfg = getProviderConfig(providerId);
+    cfg.apiKey = apiKey;
+    cfg.tested = true;
+    cfg.reachable = Boolean(res && (res.ok || res.reachable));
+
+    if (res && (res.ok || res.reachable)) {
+      cfg.models = Array.isArray(res.models) ? res.models : [];
+      cfg.saved = true;
+      expandedSummaryProviders.add(providerId);
+      if (!cfg.defaultModel && cfg.models.length > 0) {
+        cfg.defaultModel = cfg.models[0];
+      }
+      if (resultEl) {
+        resultEl.innerHTML = `<span style="color:var(--success);">✓ ${escHtml(res.message || 'Connection successful!')} (${cfg.models.length} models found, ${res.latencyMs || 0}ms)</span>`;
+      }
+      showToast(`Connected to ${formatProviderLabel(providerId)} (${cfg.models.length} models)`, 'success');
+    } else {
+      cfg.lastError = res?.message || res?.error || 'Connection failed';
+      if (resultEl) {
+        resultEl.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(res?.message || res?.error || 'Connection test failed.')}</span>`;
+      }
+      showToast(`Provider test failed: ${res?.message || res?.error || 'Connection error'}`, 'error');
+    }
+    renderConfiguredProvidersSummary();
+    renderCertificatePreviewSummary('preview');
+  } catch (err) {
+    console.error('[wizard] testProviderConnection FAILED:', err);
+    if (resultEl) {
+      resultEl.innerHTML = `<span style="color:var(--danger);">✗ Network error: ${escHtml(String(err))}</span>`;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = 'Test Connection';
+    }
+  }
+};
+
+window.saveProviderConfiguration = async function saveProviderConfiguration() {
+  const btn = document.getElementById('wiz-save-provider-btn');
+  const resultEl = document.getElementById('provider-save-result');
+  const keyInput = document.getElementById('provider-api-key');
+  const providerId = wizardState.provider;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⌛ Saving...';
+  }
+  if (resultEl) {
+    resultEl.innerHTML = '<span style="opacity:0.7;">Saving provider configuration...</span>';
+  }
+
+  const apiKey = keyInput ? keyInput.value.trim() : (wizardState.providerConfigs[providerId]?.apiKey || '');
+  const cfg = getProviderConfig(providerId);
+
+  try {
+    if (apiKey) {
+      await api('POST', '/api/llm/provider-secret', {
+        providerId: providerId,
+        apiKey: apiKey
+      });
+      cfg.apiKey = apiKey;
+    }
+
+    await api('POST', '/api/llm/provider-settings', {
+      providerId: providerId,
+      models: cfg.models || [],
+      defaultModel: cfg.defaultModel || (cfg.models && cfg.models[0]) || null
+    });
+
+    cfg.saved = true;
+    cfg.savedAt = new Date().toISOString();
+    wizardState.apiKey = apiKey;
+
+    if (resultEl) {
+      resultEl.innerHTML = `<span style="color:var(--success);">✓ ${escHtml(formatProviderLabel(providerId))} configuration saved!</span>`;
+    }
+    showToast(`Saved ${formatProviderLabel(providerId)} configuration`, 'success');
+    renderConfiguredProvidersSummary();
+    renderCertificatePreviewSummary('preview');
+  } catch (err) {
+    console.error('[wizard] saveProviderConfiguration FAILED:', err);
+    if (resultEl) {
+      resultEl.innerHTML = `<span style="color:var(--danger);">✗ Save failed: ${escHtml(String(err))}</span>`;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = 'Save Provider';
+    }
+  }
+};
+
+async function saveAllConfiguredProviders() {
+  for (const [pId, cfg] of Object.entries(wizardState.providerConfigs)) {
+    if (cfg.saved || cfg.tested) {
+      try {
+        if (cfg.apiKey) {
+          await api('POST', '/api/llm/provider-secret', { providerId: pId, apiKey: cfg.apiKey });
+        }
+        await api('POST', '/api/llm/provider-settings', {
+          providerId: pId,
+          models: cfg.models || [],
+          defaultModel: cfg.defaultModel || (cfg.models && cfg.models[0]) || null
+        });
+      } catch (err) {
+        console.warn(`[wizard] Failed to persist provider config for ${pId}:`, err);
+      }
+    }
+  }
+}
 async function initProviderGuardianStep() {
+  console.debug('[wizard][trace] initProviderGuardianStep — begin');
   await loadProviderCatalog();
   getProviderConfig(wizardState.provider);
   updateProviderKeyField();
   renderConfiguredProvidersSummary();
 
   // Load GGUF models for guardian
+  console.debug('[wizard][trace] Fetching GGUF models from /api/models/gguf');
   try {
     const data = await api('GET', '/api/models/gguf');
     wizardState.availableModels = data.models || data || [];
-  } catch { wizardState.availableModels = []; }
+    console.debug(`[wizard][trace] GGUF models loaded: ${wizardState.availableModels.length} models`, wizardState.availableModels);
+  } catch (err) {
+    console.error('[wizard][trace] GGUF model fetch FAILED:', err);
+    wizardState.availableModels = [];
+  }
 
   // Load recommended model catalog
+  console.debug('[wizard][trace] Fetching recommended catalog from /api/models/recommended/catalog');
   try {
     const catalogData = await api('GET', '/api/models/recommended/catalog');
-    guardianRecommendedCatalog = catalogData.catalog || [];
-  } catch { guardianRecommendedCatalog = []; }
+    if (Array.isArray(catalogData.catalog) && catalogData.catalog.length > 0) {
+      guardianRecommendedCatalog = catalogData.catalog;
+    }
+    console.debug(`[wizard][trace] Recommended catalog loaded: ${guardianRecommendedCatalog.length} entries`, guardianRecommendedCatalog);
+  } catch (err) {
+    console.error('[wizard][trace] Recommended catalog fetch FAILED:', err);
+  }
 
   populateGuardianModelDropdown();
 
@@ -412,25 +777,76 @@ async function initProviderGuardianStep() {
       wizardState.guardianTier = wizardState.profile === 'business' ? 'tier2_conditional' : 'tier1_autonomous';
     }
     tierSelect.value = wizardState.guardianTier;
-    tierSelect.onchange = () => { wizardState.guardianTier = tierSelect.value; };
+    tierSelect.onchange = () => {
+      wizardState.guardianTier = tierSelect.value;
+      renderCertificatePreviewSummary('preview');
+    };
   }
 
   // Auto-start checkbox
   const autoCheckbox = document.getElementById('wizard-guardian-autostart');
   if (autoCheckbox) {
     autoCheckbox.checked = wizardState.guardianAutoStart;
-    autoCheckbox.onchange = () => { wizardState.guardianAutoStart = autoCheckbox.checked; };
+    autoCheckbox.onchange = () => {
+      wizardState.guardianAutoStart = autoCheckbox.checked;
+      renderCertificatePreviewSummary('preview');
+    };
   }
 
   const autoUpdateCheckbox = document.getElementById('wizard-guardian-autoupdate');
   if (autoUpdateCheckbox) {
     autoUpdateCheckbox.checked = wizardState.guardianAutoUpdate;
-    autoUpdateCheckbox.onchange = () => { wizardState.guardianAutoUpdate = autoUpdateCheckbox.checked; };
+    autoUpdateCheckbox.onchange = () => {
+      wizardState.guardianAutoUpdate = autoUpdateCheckbox.checked;
+      renderCertificatePreviewSummary('preview');
+    };
   }
 
   // Hide validation error on init
   const valErr = document.getElementById('wizard-guardian-validation-error');
   if (valErr) valErr.style.display = 'none';
+
+  // Custom model path toggle
+  const customInput = document.getElementById('wizard-guardian-custom-path');
+  if (customInput) {
+    customInput.oninput = () => {
+      if (customInput.value.trim()) {
+        wizardState.guardianModel = customInput.value.trim();
+        const modelSelect = document.getElementById('wizard-guardian-model');
+        if (modelSelect) modelSelect.value = '';
+        const valErr2 = document.getElementById('wizard-guardian-validation-error');
+        if (valErr2) valErr2.style.display = 'none';
+        renderCertificatePreviewSummary('preview');
+      }
+    };
+  }
+
+  console.debug('[wizard][trace] initProviderGuardianStep — complete');
+}
+
+renderCertificatePreviewSummary('preview');
+/**
+ * Classifies a model's VRAM fit for the current hardware.
+ * Returns { label, class } for display in the dropdown.
+ *
+ * Hardware profile: GeForce GTX 1050 Ti — 4 GB VRAM, 16 GB system RAM, SSD.
+ * Categories:
+ *   - "Ideal"    ≤ 2.0 GB  — runs fully in VRAM, room for OS overhead
+ *   - "Good"     ≤ 3.0 GB  — fits with some VRAM pressure
+ *   - "Tight"    ≤ 4.0 GB  — barely fits, may use system RAM fallback
+ *   - "Too Large" > 4.0 GB — does not fit in VRAM
+ */
+function classifyVramFit(sizeStr) {
+  const match = (sizeStr || '').match(/([\d.]+)\s*(GB|MB)/i);
+  if (!match) return { label: '', cls: '' };
+  const val = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  const gb = unit === 'MB' ? val / 1024 : val;
+
+  if (gb <= 2.0) return { label: '✅ Ideal for 4GB VRAM', cls: 'vram-ideal' };
+  if (gb <= 3.0) return { label: '✅ Good fit', cls: 'vram-good' };
+  if (gb <= 4.0) return { label: '⚠️ Tight fit', cls: 'vram-tight' };
+  return { label: '❌ Too large for 4GB VRAM', cls: 'vram-over' };
 }
 
 function populateGuardianModelDropdown() {
@@ -438,11 +854,16 @@ function populateGuardianModelDropdown() {
   const downloadBtn = document.getElementById('wizard-guardian-download-btn');
   if (!modelSelect) return;
 
+  console.debug('[wizard][trace] populateGuardianModelDropdown — begin');
+  console.debug(`[wizard][trace]   availableModels count: ${wizardState.availableModels.length}`);
+  console.debug(`[wizard][trace]   recommendedCatalog count: ${guardianRecommendedCatalog.length}`);
+
   // Build a set of locally available model file names for dedup
   const localFileNames = new Set();
   for (const m of wizardState.availableModels) {
     const fname = (m.name || m.path || '').split(/[\\/]/).pop().toLowerCase();
     localFileNames.add(fname);
+    console.debug(`[wizard][trace]   local model: ${fname}`);
   }
 
   let html = '<option value="">— Select a Guardian model —</option>';
@@ -454,33 +875,77 @@ function populateGuardianModelDropdown() {
       html += `<option value="${escHtml(m.path)}">${escHtml(m.name)}</option>`;
     }
     html += '</optgroup>';
+    if (!wizardState.guardianModel) {
+      wizardState.guardianModel = wizardState.availableModels[0].path;
+    }
+    console.debug(`[wizard][trace]   Group 1 (Downloaded): ${wizardState.availableModels.length} models`);
   }
 
-  // Group 2: Recommended models not yet downloaded
+  // Group 2: Recommended models not yet downloaded — sorted by VRAM suitability
   const notDownloaded = guardianRecommendedCatalog.filter(rm => {
     const fname = (rm.fileName || '').toLowerCase();
     return !localFileNames.has(fname);
   });
+
+  // Sort: ideal VRAM fit first, then good, then tight, then too large
+  const vramOrder = { 'vram-ideal': 0, 'vram-good': 1, 'vram-tight': 2, 'vram-over': 3 };
+  notDownloaded.sort((a, b) => {
+    const fitA = classifyVramFit(a.size);
+    const fitB = classifyVramFit(b.size);
+    return (vramOrder[fitA.cls] ?? 9) - (vramOrder[fitB.cls] ?? 9);
+  });
+
   if (notDownloaded.length > 0) {
-    html += '<optgroup label="\u{1F4E5} Recommended (Download Required)">';
+    html += '<optgroup label="\u{1F4E5} Recommended (Download Required) — Sorted by 4GB VRAM fit">';
     for (const rm of notDownloaded) {
-      html += `<option value="recommend:${escHtml(rm.fileName)}" data-url="${escHtml(rm.url)}" data-mmproj-url="${escHtml(rm.mmprojUrl || '')}" data-mmproj-name="${escHtml(rm.mmprojName || '')}">[${escHtml(rm.size)}] ${escHtml(rm.name)}</option>`;
+      const fit = classifyVramFit(rm.size);
+      const fitTag = fit.label ? ` [${fit.label}]` : '';
+      html += `<option value="recommend:${escHtml(rm.fileName)}" data-url="${escHtml(rm.url)}" data-mmproj-url="${escHtml(rm.mmprojUrl || '')}" data-mmproj-name="${escHtml(rm.mmprojName || '')}">[${escHtml(rm.size)}] ${escHtml(rm.name)}${fitTag}</option>`;
     }
     html += '</optgroup>';
+    console.debug(`[wizard][trace]   Group 2 (Recommended download): ${notDownloaded.length} models`);
   }
 
+  // Group 3: Custom model path (user-supplied local GGUF)
+  html += '<optgroup label="\u{1F527} Custom">';
+  html += '<option value="custom">Enter custom model path...</option>';
+  html += '</optgroup>';
+  console.debug('[wizard][trace]   Group 3 (Custom) added');
+
   modelSelect.innerHTML = html;
-  if (wizardState.guardianModel) modelSelect.value = wizardState.guardianModel;
+  if (wizardState.guardianModel && wizardState.guardianModel !== 'custom') {
+    modelSelect.value = wizardState.guardianModel;
+  }
 
   modelSelect.onchange = () => {
-    wizardState.guardianModel = modelSelect.value;
+    const val = modelSelect.value;
+    console.debug(`[wizard][trace] Guardian model selected: ${val}`);
+
+    const customPathContainer = document.getElementById('wizard-guardian-custom-container');
+    if (val === 'custom') {
+      // Show custom path input
+      if (customPathContainer) customPathContainer.style.display = '';
+      const customInput = document.getElementById('wizard-guardian-custom-path');
+      if (customInput && customInput.value.trim()) {
+        wizardState.guardianModel = customInput.value.trim();
+      } else {
+        wizardState.guardianModel = '';
+      }
+    } else {
+      if (customPathContainer) customPathContainer.style.display = 'none';
+      wizardState.guardianModel = val;
+    }
+
     updateGuardianDownloadButton();
+    renderCertificatePreviewSummary('preview');
     // Clear validation error when user selects
     const valErr = document.getElementById('wizard-guardian-validation-error');
     if (valErr) valErr.style.display = 'none';
   };
 
   updateGuardianDownloadButton();
+  renderCertificatePreviewSummary('preview');
+  console.debug('[wizard][trace] populateGuardianModelDropdown — complete');
 }
 
 function updateGuardianDownloadButton() {
@@ -488,6 +953,41 @@ function updateGuardianDownloadButton() {
   if (!downloadBtn) return;
   const isRecommended = wizardState.guardianModel && wizardState.guardianModel.startsWith('recommend:');
   downloadBtn.style.display = isRecommended ? '' : 'none';
+}
+
+function formatDownloadDuration(totalSeconds) {
+  const safe = Math.max(0, Math.floor(totalSeconds || 0));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatDownloadRate(bytesPerSecond) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return 'calculating…';
+  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`;
+  if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  return `${Math.round(bytesPerSecond)} B/s`;
+}
+
+function buildGuardianTransferSummary(dl) {
+  const downloaded = Number(dl.downloadedBytes || 0);
+  const total = Number(dl.totalBytes || 0);
+  const mb = (downloaded / (1024 * 1024)).toFixed(1);
+  const totalMb = total > 0 ? `${(total / (1024 * 1024)).toFixed(1)} MB` : '?';
+
+  const startedAt = Date.parse(dl.startTime || '');
+  const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(1, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+  const bytesPerSecond = elapsedSeconds > 0 ? downloaded / elapsedSeconds : 0;
+
+  const etaSeconds = total > downloaded && bytesPerSecond > 0
+    ? Math.max(0, Math.floor((total - downloaded) / bytesPerSecond))
+    : 0;
+  const etaText = total > downloaded && bytesPerSecond > 0 ? formatDownloadDuration(etaSeconds) : '--:--';
+  const elapsedText = elapsedSeconds > 0 ? formatDownloadDuration(elapsedSeconds) : '--:--';
+
+  return `Downloading: ${mb} MB / ${totalMb} • ${formatDownloadRate(bytesPerSecond)} • ETA ${etaText} • Elapsed ${elapsedText}`;
 }
 
 window.downloadGuardianModel = async function downloadGuardianModel() {
@@ -558,9 +1058,18 @@ function pollGuardianDownload(fileName) {
       if (progressText) progressText.textContent = pct + '%';
 
       if (dl.status === 'downloading') {
-        const mb = ((dl.downloadedBytes || 0) / (1024 * 1024)).toFixed(1);
-        const totalMb = dl.totalBytes ? ((dl.totalBytes / (1024 * 1024)).toFixed(1) + ' MB') : '?';
-        if (statusEl) statusEl.textContent = `Downloading: ${mb} MB / ${totalMb}`;
+        if (statusEl) statusEl.textContent = buildGuardianTransferSummary(dl);
+      }
+
+      if (dl.status === 'pending') {
+        if (statusEl) {
+          const startedAt = Date.parse(dl.startTime || '');
+          const elapsedSeconds = Number.isFinite(startedAt)
+            ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+            : 0;
+          const elapsedText = elapsedSeconds > 0 ? formatDownloadDuration(elapsedSeconds) : '--:--';
+          statusEl.textContent = `Reconnecting… ${dl.error || 'Waiting for next transfer attempt'} • Elapsed ${elapsedText}`;
+        }
       }
 
       if (dl.status === 'completed') {
@@ -658,6 +1167,7 @@ window.selectProvider = function selectProvider(el, value) {
   wizardState.apiKey = nextCfg.apiKey || '';
   updateProviderKeyField();
   renderConfiguredProvidersSummary();
+  renderCertificatePreviewSummary('preview');
 };
 
 async function loadProviderCatalog() {
@@ -698,166 +1208,8 @@ function updateProviderKeyField() {
       updated.saved = false;
       wizardState.apiKey = keyInput.value;
       renderConfiguredProvidersSummary();
+      renderCertificatePreviewSummary('preview');
     };
-  }
-}
-
-window.testProviderConnection = async function testProviderConnection() {
-  const testBtn = document.getElementById('wiz-test-provider-btn');
-  const testResult = document.getElementById('provider-test-result');
-  if (testBtn) {
-    testBtn.disabled = true;
-    testBtn.setAttribute('aria-busy', 'true');
-    testBtn.textContent = '⏳ Testing...';
-  }
-  if (testResult) testResult.innerHTML = '<span style="color:var(--muted);">Testing connection...</span>';
-  let success = false;
-  try {
-    const providerCfg = getProviderConfig(wizardState.provider);
-    const data = await api('POST', '/api/llm/provider-test', {
-      providerId: wizardState.provider,
-      apiKey: wizardState.apiKey || undefined,
-    });
-    providerCfg.tested = true;
-    providerCfg.reachable = Boolean(data.ok || data.reachable);
-    providerCfg.lastError = '';
-    providerCfg.models = Array.isArray(data.models) ? data.models : providerCfg.models;
-    providerCfg.defaultModel = providerCfg.models[0] || providerCfg.defaultModel || null;
-    providerCfg.touched = true;
-    if (data.ok || data.reachable) {
-      if (testResult) testResult.innerHTML = '<span style="color:var(--accent-2);">✓ Provider is reachable.</span>';
-      success = true;
-    } else {
-      providerCfg.lastError = data.error || data.reason || 'Could not reach provider.';
-      if (testResult) testResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(data.error || data.reason || 'Could not reach provider.')}</span>`;
-    }
-    renderConfiguredProvidersSummary();
-  } catch {
-    const providerCfg = getProviderConfig(wizardState.provider);
-    providerCfg.tested = true;
-    providerCfg.reachable = false;
-    providerCfg.lastError = 'Connection test failed.';
-    if (testResult) testResult.innerHTML = '<span style="color:var(--danger);">✗ Connection test failed.</span>';
-    renderConfiguredProvidersSummary();
-  } finally {
-    if (testBtn) {
-      testBtn.removeAttribute('aria-busy');
-      testBtn.textContent = success ? '✓ Connected!' : '✗ Failed';
-      setTimeout(() => {
-        testBtn.textContent = 'Test Connection';
-        testBtn.disabled = false;
-      }, 1500);
-    }
-  }
-  return success;
-};
-
-async function saveProviderConfiguration(providerId = wizardState.provider, opts = {}) {
-  const { refreshModels = true, quiet = false } = opts;
-  const providerCfg = getProviderConfig(providerId);
-  const providerMeta = providerCatalog?.find((p) => p.id === providerId);
-  const needsKey = providerMeta?.requiresApiKey ?? PROVIDERS_NEEDING_KEY.includes(providerId);
-  const saveResult = document.getElementById('provider-save-result');
-
-  if (!quiet && saveResult) {
-    saveResult.innerHTML = '<span style="color:var(--muted);">Saving provider configuration...</span>';
-  }
-
-  let models = Array.isArray(providerCfg.models) ? providerCfg.models : [];
-
-  if (refreshModels) {
-    try {
-      const testRes = await api('POST', '/api/llm/provider-test', {
-        providerId,
-        apiKey: providerCfg.apiKey || undefined,
-      });
-      providerCfg.tested = true;
-      providerCfg.reachable = Boolean(testRes.ok || testRes.reachable);
-      providerCfg.lastError = '';
-      if (Array.isArray(testRes.models)) {
-        models = testRes.models;
-      }
-    } catch {
-      providerCfg.reachable = false;
-      providerCfg.lastError = 'Provider test failed during save.';
-    }
-  }
-
-  if (providerCfg.apiKey && needsKey) {
-    await api('POST', '/api/llm/provider-secret', {
-      providerId,
-      apiKey: providerCfg.apiKey,
-    });
-  }
-
-  const defaultModel = models[0] || null;
-  await api('POST', '/api/llm/provider-settings', {
-    providerId,
-    models,
-    defaultModel,
-  });
-
-  providerCfg.models = models;
-  providerCfg.defaultModel = defaultModel;
-  providerCfg.saved = true;
-  providerCfg.savedAt = new Date().toISOString();
-  providerCfg.touched = true;
-
-  if (providerId === wizardState.provider) {
-    wizardState.apiKey = providerCfg.apiKey || '';
-  }
-
-  renderConfiguredProvidersSummary();
-
-  if (!quiet && saveResult) {
-    saveResult.innerHTML = `<span style="color:var(--accent-2);">✓ ${escHtml(formatProviderLabel(providerId))} configuration saved.</span>`;
-  }
-
-  return providerCfg;
-}
-
-window.saveProviderConfiguration = async function saveProviderConfigurationHandler() {
-  const saveBtn = document.getElementById('wiz-save-provider-btn');
-  if (saveBtn) {
-    saveBtn.disabled = true;
-    saveBtn.setAttribute('aria-busy', 'true');
-    saveBtn.textContent = '⏳ Saving...';
-  }
-  try {
-    await saveProviderConfiguration(wizardState.provider, { refreshModels: true, quiet: false });
-    showToast('Provider configuration saved.', 'success');
-    if (saveBtn) saveBtn.textContent = '✓ Saved!';
-  } catch (error) {
-    const saveResult = document.getElementById('provider-save-result');
-    if (saveResult) {
-      saveResult.innerHTML = `<span style="color:var(--danger);">✗ ${escHtml(String(error?.message || error || 'Save failed.'))}</span>`;
-    }
-    showToast('Provider configuration save failed.', 'error');
-    if (saveBtn) saveBtn.textContent = '✗ Failed';
-  } finally {
-    if (saveBtn) {
-      saveBtn.removeAttribute('aria-busy');
-      setTimeout(() => {
-        saveBtn.textContent = 'Save Provider';
-        saveBtn.disabled = false;
-      }, 1500);
-    }
-  }
-};
-
-async function saveAllConfiguredProviders() {
-  const configured = Object.keys(wizardState.providerConfigs)
-    .filter((providerId) => {
-      const cfg = wizardState.providerConfigs[providerId];
-      return cfg && (cfg.touched || cfg.saved || cfg.apiKey || providerId === wizardState.provider);
-    });
-
-  if (!configured.includes(wizardState.provider)) {
-    configured.push(wizardState.provider);
-  }
-
-  for (const providerId of configured) {
-    await saveProviderConfiguration(providerId, { refreshModels: true, quiet: true });
   }
 }
 
@@ -989,12 +1341,19 @@ window.wizardNext = async function wizardNext() {
     nextBtn.textContent = 'Launching...';
 
     const launchErr = document.getElementById('wizard-launch-error');
+    let launchReady = false;
     if (launchErr) {
       launchErr.style.display = 'none';
       launchErr.textContent = '';
+      launchErr.style.background = '';
+      launchErr.style.border = '';
+      launchErr.style.padding = '';
+      launchErr.style.borderRadius = '';
+      launchErr.style.color = '';
     }
 
     try {
+      let setupToken = '';
       showToast("Saving provider configurations...", "info");
       await saveAllConfiguredProviders();
       showToast("Provider configurations saved.", "success");
@@ -1024,74 +1383,48 @@ window.wizardNext = async function wizardNext() {
 
       // 4. Create certificate
       showToast("Creating initialization certificate...", "info");
-      const certificate = {
-        profile: {
-          segment: wizardState.profile,
-          governance: wizardState.profile === 'business' ? 'strict' : 'minimal',
-        },
-        workspace: {
-          path: wizardState.workspaceRoot || 'default',
-        },
-        provider: {
-          primary: wizardState.provider,
-          hasApiKey: !!wizardState.apiKey,
-        },
-        routing: {
-          strategy: 'single',
-          roleOverrides: 'none',
-        },
-        guardian: {
-          model: wizardState.guardianModel,
-          authorityTier: wizardState.guardianTier || (wizardState.profile === 'business' ? 'tier2_conditional' : 'tier1_autonomous'),
-          autoStart: !!wizardState.guardianAutoStart,
-          autoUpdate: !!wizardState.guardianAutoUpdate,
-        },
-        agents: {
-          defaultSwarmTopology: wizardState.profile === 'business' ? 'star' : 'mesh',
-        },
-        cac: {
-          character: wizardState.characterId || 'not assigned',
-          operatorEmail: wizardState.operatorEmail || 'not set',
-          prismUserEmail: wizardState.assistantEmail || 'not set',
-          assignmentId: wizardState.cacAssignmentId || 'pending',
-          workspaceHub: 'default',
-        },
-        browserProfile: {
-          email: wizardState.operatorEmail || 'not set',
-          segment: wizardState.profile,
-          profileId: 'pending',
-        },
-        scheduler: {
-          enabledTasks: wizardState.profile === 'business' ? 'daily-review, daily-backup, weekly-compliance, weekly-telemetry' : 'daily-review',
-        },
-        readiness: {
-          timestamp: new Date().toISOString(),
-        },
-      };
+      renderCertificatePreviewSummary('creating');
+      const certificate = buildInitializationCertificatePayload();
 
       const certResult = await api('POST', '/api/setup/initialization-session', { certificate });
       if (!certResult || !certResult.sessionId) {
         throw new Error("Failed to create system initialization certificate.");
       }
+      wizardState.certificateResult = certResult;
+      setupToken = certResult.setupToken || '';
       showToast("Certificate generated.", "success");
+      renderCertificatePreviewSummary('created', certResult);
       await delay(500);
 
       // 5. Complete setup
       showToast("Completing setup and launching PRISM...", "info");
       const completeResult = await api('POST', '/api/setup/complete');
-      showToast("Setup complete! Redirecting...", "success");
+      showToast("Setup complete! Continue to Operator Login.", "success");
       await delay(500);
 
-      const url = completeResult.token ? `/dashboard?token=${completeResult.token}` : '/dashboard';
-      window.location.href = url;
+      const params = new URLSearchParams();
+      if (completeResult.token) params.set('token', completeResult.token);
+      if (setupToken) params.set('setupToken', setupToken);
+      const url = params.toString() ? `/dashboard?${params.toString()}` : '/dashboard';
+
+      nextBtn.textContent = 'Operator Login';
+      nextBtn.disabled = false;
+      nextBtn.onclick = () => {
+        window.location.href = url;
+      };
+      launchReady = true;
+      return;
     } catch (err) {
+      renderCertificatePreviewSummary('error');
       if (launchErr) {
         launchErr.textContent = `Launch failed: ${err.message || String(err)}`;
         launchErr.style.display = 'block';
       }
     } finally {
-      nextBtn.disabled = false;
-      nextBtn.textContent = 'Continue';
+      if (!launchReady) {
+        nextBtn.disabled = false;
+        nextBtn.textContent = 'Continue';
+      }
     }
   }
 };

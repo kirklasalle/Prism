@@ -205,7 +205,7 @@ export class SettingsHandler implements IRouteHandler {
                 service
                     .getFramebufferCapture()
                     .captureSingle()
-                    .catch(() => {});
+                    .catch(() => { });
                 const browserTool = service.tools.find((t) => t.name === "browser_control") as
                     BrowserControlTool | undefined;
                 if (browserTool) {
@@ -219,7 +219,7 @@ export class SettingsHandler implements IRouteHandler {
                         }
                         const mgr = browserTool.getManager();
                         if (mgr && mgr.listSessions().length === 0) {
-                            mgr.launch({ headless: true }).catch(() => {});
+                            mgr.launch({ headless: true }).catch(() => { });
                         }
                     } catch {
                         /* best-effort non-blocking */
@@ -252,11 +252,7 @@ export class SettingsHandler implements IRouteHandler {
                         service
                             .getChatStore()
                             .listSessions()
-                            .filter(
-                                (s) =>
-                                    s.operatorEmail === principal.email ||
-                                    /Initialization Certificate/i.test(s.title || ""),
-                            )
+                            .filter((s) => s.operatorEmail === principal.email)
                             .map((s) => s.sessionId),
                     );
                     packages = packages.filter((pkg) => pkg.sessionIds.some((sid) => operatorSessionIds.has(sid)));
@@ -306,7 +302,7 @@ export class SettingsHandler implements IRouteHandler {
                 service
                     .getFramebufferCapture()
                     .captureSingle()
-                    .catch(() => {});
+                    .catch(() => { });
                 const browserTool = service.tools.find((t) => t.name === "browser_control") as
                     BrowserControlTool | undefined;
                 if (browserTool) {
@@ -320,7 +316,7 @@ export class SettingsHandler implements IRouteHandler {
                         }
                         const mgr = browserTool.getManager();
                         if (mgr && mgr.listSessions().length === 0) {
-                            mgr.launch({ headless: true }).catch(() => {});
+                            mgr.launch({ headless: true }).catch(() => { });
                         }
                     } catch {
                         /* best-effort non-blocking */
@@ -436,18 +432,85 @@ export class SettingsHandler implements IRouteHandler {
                 const body = await service.readJsonBody<{ certificate: Record<string, unknown> }>(req);
                 const cert = body.certificate ?? {};
                 const cac = (cert.cac || {}) as Record<string, unknown>;
+                const characterId =
+                    typeof cac.character === "string" &&
+                        cac.character !== "not assigned" &&
+                        cac.character !== "not configured"
+                        ? cac.character.trim()
+                        : undefined;
                 const operatorEmail =
                     typeof cac.operatorEmail === "string" &&
-                    cac.operatorEmail !== "not set" &&
-                    cac.operatorEmail !== "not configured"
+                        cac.operatorEmail !== "not set" &&
+                        cac.operatorEmail !== "not configured"
                         ? cac.operatorEmail.trim().toLowerCase()
+                        : undefined;
+                const assistantEmail =
+                    typeof cac.prismUserEmail === "string" &&
+                        cac.prismUserEmail !== "not set" &&
+                        cac.prismUserEmail !== "not configured"
+                        ? cac.prismUserEmail.trim().toLowerCase()
+                        : undefined;
+                const cacAssignmentId =
+                    typeof cac.assignmentId === "string" &&
+                        cac.assignmentId !== "pending" &&
+                        cac.assignmentId !== "not set" &&
+                        cac.assignmentId !== "not configured"
+                        ? cac.assignmentId.trim()
                         : undefined;
                 const timestamp = new Date().toISOString();
 
+                // Enforce a single Initialization Certificate per operator.
+                // If one already exists, return it instead of creating a duplicate.
+                if (operatorEmail) {
+                    const existingInitSession = service
+                        .getChatStore()
+                        .listSessions()
+                        .filter(
+                            (s) =>
+                                s.operatorEmail?.trim().toLowerCase() === operatorEmail &&
+                                /Initialization Certificate/i.test(s.title || ""),
+                        )
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+                    if (existingInitSession) {
+                        const existingPkg = service
+                            .listSessionPackages()
+                            .find((pkg) => pkg.sessionIds.includes(existingInitSession.sessionId));
+
+                        const { randomUUID } = await import("node:crypto");
+                        const setupToken = randomUUID();
+                        writePreferences({ setupToken });
+
+                        service.getActivityBus().emit({
+                            sessionId: existingInitSession.sessionId,
+                            layer: "causal",
+                            operation: "prism.initialization_certificate.reused",
+                            status: "succeeded",
+                            details: {
+                                sessionId: existingInitSession.sessionId,
+                                operatorEmail,
+                                timestamp,
+                            },
+                        });
+
+                        return this.json(res, 200, {
+                            sessionId: existingInitSession.sessionId,
+                            packageId: existingPkg?.packageId ?? null,
+                            title: existingInitSession.title,
+                            timestamp,
+                            setupToken,
+                            reused: true,
+                        });
+                    }
+                }
+
                 const session = service.createChatSession({
                     title: "PRISM Initialization Certificate \u2014 " + timestamp,
-                    allowUnbound: true,
+                    characterId: characterId || null,
+                    cacAssignmentId: cacAssignmentId || null,
+                    allowUnbound: !characterId,
                     operatorEmail: operatorEmail || null,
+                    assistantEmail: assistantEmail || null,
                 });
 
                 const certLines: string[] = [

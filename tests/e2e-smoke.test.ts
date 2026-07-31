@@ -13,6 +13,7 @@ import { readFileSync, existsSync, unlinkSync, mkdirSync, writeFileSync } from "
 import { join } from "node:path";
 import { AuthGate } from "../src/core/security/auth.js";
 import { RateLimiter } from "../src/core/security/rate-limiter.js";
+import type { IamPrincipal } from "../src/core/iam/rbac.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Unit tests for AuthGate
@@ -136,6 +137,25 @@ describe("AuthGate", () => {
         const req = { headers: {}, url: "/api/chat/message" } as any;
         const result = gate.check(req);
         assert.equal(result.authenticated, false);
+    });
+
+    it("accepts a verified application session on protected routes", () => {
+        const principal: IamPrincipal = {
+            userId: "operator-1",
+            tenantId: "default",
+            roles: ["admin"],
+            source: "sso_session",
+            email: "operator@example.com",
+        };
+        const gate = new AuthGate({
+            tokenFilePath: tokenPath,
+            authenticateRequest: (req) =>
+                req.headers.cookie === "prism_sso=valid" ? { authenticated: true, principal } : null,
+        });
+        const req = { headers: { cookie: "prism_sso=valid" }, url: "/api/cac/assignments" } as any;
+        const result = gate.check(req);
+        assert.equal(result.authenticated, true);
+        assert.equal(result.principal?.email, principal.email);
     });
 
     it("accepts token via query param", () => {

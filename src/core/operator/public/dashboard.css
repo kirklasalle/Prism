@@ -305,13 +305,13 @@ body.theme-day .pkg-status-badge.complete {
 }
 
 /* Chat Message Bubbles */
-body.theme-day .message.user > div:nth-child(2) {
+body.theme-day .message.user>div:nth-child(2) {
     background: #e2e8f0 !important;
     color: #0f172a !important;
     border: 1px solid #cbd5e1 !important;
 }
 
-body.theme-day .message.assistant > div:nth-child(2) {
+body.theme-day .message.assistant>div:nth-child(2) {
     color: #0f172a !important;
 }
 
@@ -556,7 +556,7 @@ select {
 
 .app {
     display: grid;
-    grid-template-columns: var(--sidebar-width, 340px) auto minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width, 376px) auto minmax(0, 1fr);
     gap: 0;
     padding: 18px;
     min-height: 100vh;
@@ -1049,7 +1049,7 @@ body.theme-day .danger-button:hover {
     align-items: flex-end;
 }
 
-.message.user > div:nth-child(2) {
+.message.user>div:nth-child(2) {
     background: rgba(255, 255, 255, 0.08);
     padding: 12px 20px;
     border-radius: 24px;
@@ -1063,7 +1063,7 @@ body.theme-day .danger-button:hover {
     align-items: flex-start;
 }
 
-.message.assistant > div:nth-child(2) {
+.message.assistant>div:nth-child(2) {
     width: 100%;
     color: #cbd5e1;
 }
@@ -1125,7 +1125,7 @@ body.theme-day .danger-button:hover {
     /* Let clicks pass through gradient */
 }
 
-.composer > * {
+.composer>* {
     pointer-events: auto;
     /* Re-enable clicks for composer children */
 }
@@ -1403,6 +1403,7 @@ body.theme-day .danger-button:hover {
 }
 
 @keyframes pulse {
+
     0%,
     100% {
         opacity: 0.3;
@@ -2588,7 +2589,7 @@ select optgroup {
 
 @media (max-width: 1280px) {
     .app {
-        grid-template-columns: var(--sidebar-width, 310px) auto minmax(0, 1fr);
+        grid-template-columns: var(--sidebar-width, 343px) auto minmax(0, 1fr);
     }
 
     .tab-grid {
@@ -2787,7 +2788,7 @@ select optgroup {
     flex-shrink: 0;
 }
 
-.tp-toggle input:checked + .tp-toggle-track {
+.tp-toggle input:checked+.tp-toggle-track {
     background: var(--accent);
 }
 
@@ -2803,7 +2804,7 @@ select optgroup {
     transition: transform 0.2s ease;
 }
 
-.tp-toggle input:checked + .tp-toggle-track::after {
+.tp-toggle input:checked+.tp-toggle-track::after {
     transform: translateX(16px);
 }
 
@@ -2812,7 +2813,7 @@ select optgroup {
     opacity: 0.4;
 }
 
-.tp-toggle input:disabled + .tp-toggle-track {
+.tp-toggle input:disabled+.tp-toggle-track {
     background: rgba(148, 163, 184, 0.15);
     cursor: not-allowed;
 }
@@ -3488,6 +3489,7 @@ select optgroup {
 }
 
 @keyframes dot-bounce {
+
     0%,
     60%,
     100% {
@@ -3502,6 +3504,7 @@ select optgroup {
 }
 
 @keyframes thinking-fade {
+
     0%,
     100% {
         opacity: 0.45;
@@ -4135,6 +4138,7 @@ select optgroup {
     margin-bottom: 8px;
     flex-wrap: wrap;
 }
+
 /* -----------------------------------------------------------------------
  * PRISM Tooltips ("Prism Tips")
  * Single-overlay rich tooltip, additive � never overrides existing styles.
@@ -4216,6 +4220,48 @@ select optgroup {
 .prism-tip-summary {
     color: #cbd5e1;
     margin-bottom: 6px;
+}
+
+.prism-tip-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: 12px;
+    align-items: start;
+}
+
+.prism-tip.prism-tip-no-helper .prism-tip-shell {
+    grid-template-columns: 1fr;
+}
+
+.prism-tip-copy {
+    min-width: 0;
+}
+
+.prism-tip-guardian {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(34, 197, 94, 0.08));
+    border: 1px solid rgba(52, 211, 153, 0.24);
+    box-shadow: inset 0 1px 0 rgba(167, 243, 208, 0.08);
+}
+
+.prism-tip-guardian-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #bbf7d0;
+}
+
+.prism-tip-guardian-text {
+    color: #ecfdf5;
+    font-size: 11.5px;
+    line-height: 1.45;
 }
 
 .prism-tip-dynamic {
@@ -4317,6 +4363,243 @@ select optgroup {
     outline: none;
 }
 
+.prism-tip-helper {
+    position: relative;
+    padding: 8px 8px 6px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(15, 23, 42, 0.22));
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    overflow: hidden;
+}
+
+.prism-tip-helper::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top, rgba(255, 255, 255, 0.15), transparent 55%);
+    pointer-events: none;
+}
+
+.prism-tip-helper-stage {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 70px;
+    margin-bottom: 6px;
+}
+
+.prism-tip-helper-avatar {
+    position: relative;
+    width: 54px;
+    height: 54px;
+    border-radius: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(145deg, rgba(148, 163, 184, 0.18), rgba(15, 23, 42, 0.7));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        0 12px 22px rgba(2, 8, 23, 0.32);
+    animation: prism-helper-bob 2.2s ease-in-out infinite;
+}
+
+.prism-tip-helper-core {
+    font-size: 28px;
+    line-height: 1;
+    color: #e0f2fe;
+    text-shadow: 0 0 16px rgba(125, 211, 252, 0.35);
+}
+
+.prism-tip-helper-shard {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(125, 211, 252, 0.2));
+    box-shadow: 0 0 14px rgba(125, 211, 252, 0.25);
+}
+
+.prism-tip-helper-shard-a {
+    top: 2px;
+    right: 6px;
+    animation: prism-helper-orbit-a 2.1s ease-in-out infinite;
+}
+
+.prism-tip-helper-shard-b {
+    bottom: 4px;
+    right: -1px;
+    animation: prism-helper-orbit-b 1.9s ease-in-out infinite;
+}
+
+.prism-tip-helper-shard-c {
+    left: 2px;
+    bottom: 8px;
+    animation: prism-helper-orbit-c 2.3s ease-in-out infinite;
+}
+
+.prism-tip-helper-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: #f8fafc;
+    text-align: center;
+}
+
+.prism-tip-helper-blurb {
+    margin-top: 4px;
+    font-size: 10px;
+    line-height: 1.35;
+    color: #cbd5e1;
+    text-align: center;
+}
+
+.prism-tip-helper-chooser {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.prism-tip-helper-chip {
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: rgba(15, 23, 42, 0.45);
+    color: #cbd5e1;
+    border-radius: 999px;
+    font-size: 9px;
+    line-height: 1;
+    padding: 4px 6px;
+    cursor: pointer;
+    transition:
+        border-color 120ms ease,
+        color 120ms ease,
+        background 120ms ease,
+        transform 120ms ease;
+}
+
+.prism-tip-helper-chip:hover,
+.prism-tip-helper-chip:focus {
+    border-color: rgba(125, 211, 252, 0.55);
+    color: #f8fafc;
+    background: rgba(30, 41, 59, 0.7);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.prism-tip-helper-chip.is-selected {
+    border-color: rgba(125, 211, 252, 0.6);
+    background: rgba(14, 165, 233, 0.18);
+    color: #e0f2fe;
+}
+
+.prism-tip-helper-glass-prism .prism-tip-helper-avatar {
+    background: linear-gradient(145deg, rgba(224, 242, 254, 0.14), rgba(37, 99, 235, 0.18));
+}
+
+.prism-tip-helper-signal-shard .prism-tip-helper-avatar {
+    background: linear-gradient(145deg, rgba(250, 204, 21, 0.16), rgba(249, 115, 22, 0.14));
+}
+
+.prism-tip-helper-signal-shard .prism-tip-helper-core {
+    color: #fef08a;
+    text-shadow: 0 0 14px rgba(250, 204, 21, 0.35);
+}
+
+.prism-tip-helper-luma-kite .prism-tip-helper-avatar {
+    background: linear-gradient(145deg, rgba(217, 70, 239, 0.16), rgba(59, 130, 246, 0.16));
+}
+
+.prism-tip-helper-luma-kite .prism-tip-helper-core {
+    color: #f5d0fe;
+    text-shadow: 0 0 14px rgba(217, 70, 239, 0.32);
+}
+
+.prism-tip-helper-aegis-bloom .prism-tip-helper-avatar {
+    background: linear-gradient(145deg, rgba(74, 222, 128, 0.16), rgba(6, 95, 70, 0.2));
+}
+
+.prism-tip-helper-aegis-bloom .prism-tip-helper-core {
+    color: #bbf7d0;
+    text-shadow: 0 0 14px rgba(74, 222, 128, 0.35);
+}
+
+.prism-tip-helper-vector-ember .prism-tip-helper-avatar {
+    background: linear-gradient(145deg, rgba(251, 146, 60, 0.18), rgba(190, 24, 93, 0.16));
+}
+
+.prism-tip-helper-vector-ember .prism-tip-helper-core {
+    color: #fed7aa;
+    text-shadow: 0 0 14px rgba(251, 146, 60, 0.35);
+}
+
+.prism-tip.prism-tip-motion-off .prism-tip-helper-avatar,
+.prism-tip.prism-tip-motion-off .prism-tip-helper-shard {
+    animation: none !important;
+}
+
+@keyframes prism-helper-bob {
+
+    0%,
+    100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+        transform: translateY(-4px) rotate(2deg);
+    }
+}
+
+@keyframes prism-helper-orbit-a {
+
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+        opacity: 0.65;
+    }
+
+    50% {
+        transform: translate(4px, -4px) rotate(32deg);
+        opacity: 1;
+    }
+}
+
+@keyframes prism-helper-orbit-b {
+
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+        opacity: 0.55;
+    }
+
+    50% {
+        transform: translate(5px, 2px) rotate(-24deg);
+        opacity: 0.95;
+    }
+}
+
+@keyframes prism-helper-orbit-c {
+
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+        opacity: 0.55;
+    }
+
+    50% {
+        transform: translate(-4px, 3px) rotate(18deg);
+        opacity: 0.92;
+    }
+}
+
+@media (max-width: 720px) {
+    .prism-tip-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .prism-tip-helper {
+        order: -1;
+    }
+}
+
 /* -- Character chip strip (Workspace tab) ------------------------------- */
 .character-chip-strip {
     display: flex;
@@ -4359,6 +4642,7 @@ select optgroup {
     font-size: 13px;
     line-height: 1;
 }
+
 /* PRISM deep-link / UI-tour panel pulse. Briefly outlines a panel after a 
    tab switch so the operator's eye lands on the right card. Strictly cosmetic. */
 .prism-flash {
@@ -4367,6 +4651,7 @@ select optgroup {
         0 0 18px 2px rgba(34, 197, 94, 0.35);
     transition: box-shadow 0.6s ease;
 }
+
 a.prism-deep-link {
     color: var(--accent, #22c55e);
     text-decoration: underline;
@@ -4443,6 +4728,7 @@ button[aria-busy="true"]::after,
     0% {
         background-position: 200% 0;
     }
+
     100% {
         background-position: 0 0;
     }
@@ -4959,10 +5245,12 @@ button[aria-busy="true"]::after,
 }
 
 @keyframes sched-pulse {
+
     0%,
     100% {
         opacity: 0.4;
     }
+
     50% {
         opacity: 1;
     }
@@ -5318,9 +5606,11 @@ button[aria-busy="true"]::after,
     0% {
         box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
     }
+
     70% {
         box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
     }
+
     100% {
         box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
     }
@@ -5330,9 +5620,11 @@ button[aria-busy="true"]::after,
     0% {
         box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
     }
+
     70% {
         box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
     }
+
     100% {
         box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
     }
@@ -5342,9 +5634,11 @@ button[aria-busy="true"]::after,
     0% {
         box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
     }
+
     70% {
         box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
     }
+
     100% {
         box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
     }
@@ -5452,6 +5746,7 @@ button[aria-busy="true"]::after,
 .gmail-icon {
     color: #ef4444;
 }
+
 .outlook-icon {
     color: #3b82f6;
 }
@@ -5544,15 +5839,19 @@ button[aria-busy="true"]::after,
 .channels-log-entry-system {
     color: #94a3b8;
 }
+
 .channels-log-entry-inbound {
     color: #34d399;
 }
+
 .channels-log-entry-outbound {
     color: #60a5fa;
 }
+
 .channels-log-entry-presence {
     color: #a78bfa;
 }
+
 .channels-log-entry-error {
     color: #f87171;
 }
@@ -5571,11 +5870,13 @@ button[aria-busy="true"]::after,
 }
 
 @keyframes network-pulse-led {
+
     0%,
     100% {
         opacity: 0.6;
         transform: scale(0.9);
     }
+
     50% {
         opacity: 1;
         transform: scale(1.1);
@@ -5592,12 +5893,15 @@ button[aria-busy="true"]::after,
     color: #fff;
     display: inline-block;
 }
+
 .network-badge-win {
     background-color: #0078d4;
 }
+
 .network-badge-linux {
     background-color: #e95420;
 }
+
 .network-badge-cross {
     background-color: #64748b;
 }
@@ -5627,6 +5931,7 @@ button[aria-busy="true"]::after,
     cursor: pointer;
     transition: background 0.15s ease;
 }
+
 .network-history-item:hover {
     background: rgba(255, 255, 255, 0.04);
 }
@@ -5646,6 +5951,7 @@ button[aria-busy="true"]::after,
         box-shadow 0.2s,
         transform 0.2s;
 }
+
 .network-vrgc-widget:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     transform: translateY(-1px);
@@ -5657,12 +5963,15 @@ button[aria-busy="true"]::after,
     font-size: 12px;
     margin-top: 6px;
 }
+
 .network-table tr {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
+
 .network-table td {
     padding: 6px 8px;
 }
+
 .network-table tr:hover {
     background: rgba(255, 255, 255, 0.01);
 }
@@ -5677,6 +5986,7 @@ button[aria-busy="true"]::after,
     font-size: 11px;
     transition: all 0.2s;
 }
+
 .network-clear-btn:hover {
     border-color: #ef4444;
     color: #ef4444;

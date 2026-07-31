@@ -237,7 +237,7 @@ export class ChatHandler implements IRouteHandler {
                         const assignment = service.getCharacterAccountabilityManager().assign({
                             characterId,
                             prismUserId: "prism-user",
-                            prismUserEmail: operatorEmail,
+                            prismUserEmail: assistantEmail,
                             operatorId: "operator",
                             operatorEmail,
                             clientId: "dashboard",

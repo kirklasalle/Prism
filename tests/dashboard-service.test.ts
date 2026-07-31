@@ -154,6 +154,43 @@ async function _runDashboardServiceTests(): Promise<void> {
     const initialCatalog = await dashboardService.getSessionLlmCatalog(session.sessionId);
     assert.ok(initialCatalog.providers.length > 0);
 
+    const characters = dashboardService.listWorkspaceCharacters();
+    const certificateCharacter =
+        characters.find((character) => (character.executionProfile || "").toLowerCase() === "individual") ||
+        characters[0];
+    assert.ok(certificateCharacter, "expected at least one workspace character");
+
+    const certificateSession = dashboardService.createChatSession({
+        title: "PRISM Initialization Certificate — Identity Root",
+        characterId: certificateCharacter!.id,
+        operatorEmail: "operator@example.com",
+        assistantEmail: "assistant@example.com",
+    });
+    const certificateAssignment = dashboardService.getCharacterAccountabilityManager().queryBySession(
+        certificateSession.sessionId,
+    )[0];
+    assert.ok(certificateAssignment, "certificate session should create a CAC assignment");
+    assert.strictEqual(certificateAssignment!.prismUserEmail, "assistant@example.com");
+
+    dashboardService.getChatStore().createSession({
+        title: "Broken Placeholder Session",
+        characterId: certificateCharacter!.id,
+        executionProfile: "individual",
+        operatorEmail: "operator@example.com",
+        assistantEmail: `${certificateCharacter!.id}@prism.local`,
+    });
+
+    const forwardSession = dashboardService.createChatSession({
+        title: "Forward Session",
+        characterId: certificateCharacter!.id,
+        operatorEmail: "operator@example.com",
+    });
+    assert.strictEqual(forwardSession.assistantEmail, "assistant@example.com");
+
+    const forwardAssignment = dashboardService.getCharacterAccountabilityManager().queryBySession(forwardSession.sessionId)[0];
+    assert.ok(forwardAssignment, "forward session should create a CAC assignment");
+    assert.strictEqual(forwardAssignment!.prismUserEmail, "assistant@example.com");
+
     await dashboardService.saveProviderSettings(
         "ollama",
         {

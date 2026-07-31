@@ -586,11 +586,15 @@ Check:
 
 ## 12. Character Accountability & Identity
 
-PRISM enforces a Character Accountability Control (CAC) model that links every agent action to a verifiable identity chain.
+Your Character Accountability Control (CAC) agent is your **Main Agent** in PRISM. This is the assistant, agent, companion, and primary identity you interact with. Your Initialization Certificate establishes this durable relationship, and every new chat reuses the same CAC Main Agent.
+
+Guardian is the permanent **secondary agent**. It supports your CAC Main Agent while monitoring and protecting the complete dashboard and every PRISM service, function, tool, and integration. Guardian does not replace your CAC Main Agent in conversations or operator workflows.
+
+PRISM links every action by or on behalf of the CAC Main Agent to a verifiable identity chain. See [CAC Main Agent and Guardian Architecture](CAC_GUARDIAN_AGENT_ARCHITECTURE.md).
 
 ### 12.1 Identity fields you provide
 
-When assigning a character to an agent session, the following identity fields are required:
+When establishing the CAC Main Agent, the following identity fields are required. Client and session fields record each interaction context without creating another CAC agent:
 
 | Field              | Description                                                                                  |
 | ------------------ | -------------------------------------------------------------------------------------------- |
@@ -729,7 +733,7 @@ PRISM provides a world-class secure Operator Console and IAM Management dashboar
 ### 17.2 Core Management Features
 
 - **Operator Directory**: Manage operator accounts (Create accounts, Suspend/Activate status, Reset passwords, and Grant/Revoke the `admin` role). Self-deletion of the active admin account is restricted for safety.
-- **Character Accountability Certificates (CAC)**: Audit all active agent-operator session bindings. Click on any assignment to verify email links, review the full cryptographically signed chain verification timeline, or export the data as CSV/JSON.
+- **CAC Main Agents**: Review each operator's single Initialization Certificate-bound primary assistant identity. Click an agent to verify email links, inspect its accountability timeline, or export its audit data as CSV/JSON.
 - **SCIM Directory Sync**: Create, view, or revoke SCIM bearer tokens to integrate directory synchronization from identity providers like Okta or Azure AD.
 - **System Actions**: Trigger an immediate system-wide shutdown of the PRISM server using the red **Shutdown Server** button in the console header.
 

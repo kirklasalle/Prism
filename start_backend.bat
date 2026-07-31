@@ -1,6 +1,19 @@
 @echo off
 setlocal
 
+if /i "%~1"=="--legacy-direct" (
+  shift
+  goto :legacy_entry
+)
+if not "%~1"=="" goto :legacy_entry
+
+echo [DEPRECATION] start_backend.bat is now a compatibility shim.
+echo [DEPRECATION] Forwarding to PrismRefraction.bat backend
+call "%~dp0PrismRefraction.bat" backend
+exit /b %ERRORLEVEL%
+
+:legacy_entry
+
 cd /d "%~dp0"
 
 echo ================================================

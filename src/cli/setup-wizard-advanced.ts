@@ -52,7 +52,7 @@ interface ProviderDef {
 const PROVIDERS: ProviderDef[] = [
     { id: "llamacpp", label: "Llama.cpp", needsKey: false, description: "Local GGUF CPU/GPU acceleration" },
     { id: "ollama", label: "Ollama", needsKey: false, description: "Local inference server" },
-    { id: "openai", label: "OpenAI", needsKey: true, description: "GPT-4o, GPT-4.1, o3" },
+    { id: "openai", label: "OpenAI", needsKey: true, description: "GPT-5, GPT-5 mini, o-series" },
     { id: "anthropic", label: "Anthropic", needsKey: true, description: "Claude 4, Sonnet, Haiku" },
     { id: "google", label: "Google AI", needsKey: true, description: "Gemini 2.5 Pro/Flash" },
     { id: "mistral", label: "Mistral", needsKey: true, description: "Mistral Large, Codestral" },
@@ -609,10 +609,10 @@ export async function runAdvancedInteractive(args: AdvancedCliArgs, client: Setu
                 const icon = cid.startsWith("aria")
                     ? "\u{1F916}"
                     : cid.startsWith("phoenix")
-                      ? "\u{1F985}"
-                      : cid.startsWith("sentinel")
-                        ? "\u{1F6E1}"
-                        : "\u{1F464}";
+                        ? "\u{1F985}"
+                        : cid.startsWith("sentinel")
+                            ? "\u{1F6E1}"
+                            : "\u{1F464}";
                 return {
                     label: `${icon} ${c.displayName || c.name || cid || "Unknown"}`,
                     value: cid,

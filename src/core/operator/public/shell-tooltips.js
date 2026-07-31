@@ -76,6 +76,10 @@ const SHELL_TIPS = {
         icon: '✨',
         label: 'New Session',
         summary: 'Start a fresh PRISM chat session with a clean message history. Provider, character, and workspace settings are preserved.',
+        guardian: [
+            'Guardian suggests opening a fresh session when you are switching objectives, security posture, or audit context.',
+            'If the certified Initialization Certificate is active, Guardian keeps that root session scoped to certificate and core-security explanation only.',
+        ],
         lore: [
             'New sessions inherit your active character assignment.',
             'Old sessions are kept in the sidebar — nothing is deleted.',
@@ -86,6 +90,9 @@ const SHELL_TIPS = {
         icon: '✨',
         label: 'Setup Wizard',
         summary: 'Re-run the guided PRISM Setup Wizard — providers, profile, character, workspace, and policy in one walkthrough.',
+        guardian: [
+            'Guardian suggests re-running setup after identity, provider, or policy changes so the certified root chain stays current.',
+        ],
         lore: [
             'Safe to re-run any time; existing settings are preserved as defaults.',
             'The wizard performs preflight checks for each provider before saving.',
@@ -100,6 +107,9 @@ const SHELL_TIPS = {
         icon: '📡',
         label: 'Live connection',
         summary: 'Real-time WebSocket link between this console and the PRISM core. Green = healthy stream; red = reconnecting.',
+        guardian: [
+            'Guardian suggests checking this channel first when live hints, approvals, or subsystem deltas stop moving.',
+        ],
         lore: [
             'All live updates (chat stream, telemetry, Guardian events) flow over this channel.',
             'PRISM auto-reconnects with exponential backoff if the link drops.',
@@ -138,6 +148,9 @@ const TAB_TIPS = {
     agentic: {
         icon: '🛡️',
         summary: 'Guardian agent, agent management, sub-agents, swarms, and live agent telemetry.',
+        guardian: [
+            'Guardian surfaces fresh risk and subsystem suggestions here before they rotate into general lore.',
+        ],
         lore: [
             'Guardian (llama.cpp) provides local oversight and policy enforcement.',
             'Hardware swarm shows local model slots — load and unload models live.',

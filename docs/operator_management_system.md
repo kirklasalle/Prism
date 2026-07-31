@@ -38,8 +38,10 @@ graph TD
     - Account suspension/activation toggles.
     - Secure operator account deletion (preventing self-deletion).
 
-3. **Character Accountability Certificates (CAC)**:
-    - Dynamic binding table for all active agents.
+3. **CAC Main Agents**:
+    - One durable, Initialization Certificate-bound Main Agent for each operator.
+    - The CAC is the operator's assistant and primary interaction identity, not a per-session certificate.
+    - Guardian is the permanent secondary agent supporting each CAC Main Agent and the complete platform.
     - Interactive modal displaying the full provenance audit timeline (fetching `/api/cac/assignments/:id/chain`).
     - Manual verification controls for linking Gmail / Outlook emails.
     - Direct download links for audit log exports (CSV/JSON).

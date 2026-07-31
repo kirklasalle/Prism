@@ -144,7 +144,7 @@ Once deployed, a Docker Agent config can call PRISM as an A2A sub-agent:
 ```yaml
 agents:
   root:
-    model: openai/gpt-4o
+    model: openai/gpt-5
     description: Orchestrator
     toolsets:
       - type: a2a
@@ -242,7 +242,7 @@ A packaged PRISM character would be callable from Docker Agent as a sub-agent:
 ```yaml
 agents:
   root:
-    model: openai/gpt-4o
+    model: openai/gpt-5
     sub_agents: [governed_analyst]
   governed_analyst:
     uses: prism/aria-business:latest   # Pulls from Docker Hub

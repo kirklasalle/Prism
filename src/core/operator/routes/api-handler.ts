@@ -21,6 +21,51 @@ import {
 import { generateOpenApiSpec } from "../openapi-generator.js";
 
 export class ApiHandler implements IRouteHandler {
+    private isLoopbackAddress(address: string | undefined): boolean {
+        if (!address) return false;
+        const normalized = address.toLowerCase();
+        return (
+            normalized === "::1" ||
+            normalized === "127.0.0.1" ||
+            normalized === "::ffff:127.0.0.1" ||
+            normalized === "localhost"
+        );
+    }
+
+    private isTrustedLocalWebOrigin(value: string | string[] | undefined): boolean {
+        if (!value) return true;
+        const raw = Array.isArray(value) ? value[0] : value;
+        if (!raw) return true;
+        try {
+            const parsed = new URL(raw);
+            const host = parsed.hostname.toLowerCase();
+            return host === "localhost" || host === "127.0.0.1" || host === "::1";
+        } catch {
+            return false;
+        }
+    }
+
+    private canShutdownFromRequest(req: IncomingMessage): { allowed: boolean; reason?: string } {
+        const remote = req.socket?.remoteAddress;
+        if (!this.isLoopbackAddress(remote)) {
+            return {
+                allowed: false,
+                reason: `shutdown is restricted to local loopback clients (remote=${remote ?? "unknown"})`,
+            };
+        }
+
+        const originOk = this.isTrustedLocalWebOrigin(req.headers.origin);
+        const refererOk = this.isTrustedLocalWebOrigin(req.headers.referer);
+        if (!originOk || !refererOk) {
+            return {
+                allowed: false,
+                reason: "shutdown origin/referer must be localhost/127.0.0.1",
+            };
+        }
+
+        return { allowed: true };
+    }
+
     match(req: IncomingMessage): boolean {
         const rawUrl = req.url ?? "";
         const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
@@ -60,6 +105,15 @@ export class ApiHandler implements IRouteHandler {
         const method = req.method?.toUpperCase() ?? "GET";
 
         if (method === "POST" && url === "/api/system/shutdown") {
+            const guard = this.canShutdownFromRequest(req);
+            if (!guard.allowed) {
+                console.warn("[PRISM][system] [WARN] Rejected shutdown request:", guard.reason);
+                this.json(res, 403, {
+                    success: false,
+                    message: guard.reason || "Shutdown request rejected by policy.",
+                });
+                return;
+            }
             console.log(
                 "[PRISM][system] [INFO] Received shutdown signal from dashboard operator. Initiating graceful termination...",
             );
@@ -360,6 +414,16 @@ export class ApiHandler implements IRouteHandler {
             return;
         }
 
+        if (method === "POST" && (url === "/api/system/shutdown" || url === "/api/v1/system/shutdown")) {
+            console.log("[PRISM] System shutdown request received from setup wizard / API.");
+            this.json(res, 200, { success: true, message: "System shutdown initiated." });
+            setTimeout(() => {
+                console.log("[PRISM] Shutting down PRISM console server process.");
+                process.exit(0);
+            }, 500);
+            return;
+        }
+
         if (method === "GET" && url === "/api/system/adapters") {
             const terminal = service.getTerminalAdapter();
             const container = service.getContainerAdapter();
@@ -451,7 +515,7 @@ export class ApiHandler implements IRouteHandler {
                                     sizeBytes,
                                     vramBytes,
                                 });
-                            } catch (_) {}
+                            } catch (_) { }
                         }
                     }
                 }
@@ -486,7 +550,7 @@ export class ApiHandler implements IRouteHandler {
                                     sizeBytes,
                                     vramBytes,
                                 });
-                            } catch (_) {}
+                            } catch (_) { }
                         }
                     }
                 }
@@ -509,7 +573,7 @@ export class ApiHandler implements IRouteHandler {
                                     sizeBytes,
                                     vramBytes,
                                 });
-                            } catch (_) {}
+                            } catch (_) { }
                         }
                     }
                 }

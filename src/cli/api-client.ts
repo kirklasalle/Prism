@@ -165,6 +165,20 @@ export class SetupApiClient {
     }
 
     /**
+     * List built-in recommended models catalog.
+     */
+    async getRecommendedCatalog(): Promise<{ catalog: Array<{ name: string; fileName: string; size: string; url: string; mmprojUrl?: string; mmprojName?: string }> }> {
+        return this.get("/api/models/recommended/catalog");
+    }
+
+    /**
+     * Trigger model download.
+     */
+    async postModelDownload(payload: { url: string; name: string; mmprojUrl?: string; mmprojName?: string }): Promise<{ modelId: string }> {
+        return this.post("/api/models/download", payload);
+    }
+
+    /**
      * Configure guardian agent.
      */
     async postGuardianConfigure(config: {

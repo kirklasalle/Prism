@@ -51,6 +51,9 @@ const TIPS = {
         icon: '✏️',
         label: 'Message input',
         summary: 'Type a message to PRISM. Enter to send, Shift-Enter for a newline.',
+        guardian: [
+            'Guardian suggests separating unrelated tasks into fresh sessions so approvals, traces, and identity context stay clean.',
+        ],
         lore: [
             'The textarea auto-grows up to 240 px.',
             'Drag-drop files onto the page to attach them to your next message.',
@@ -81,6 +84,9 @@ const TIPS = {
         icon: '⬆️',
         label: 'Send message',
         summary: 'Send your message (Enter). Streaming responses begin immediately.',
+        guardian: [
+            'Guardian suggests reviewing the active character and session scope before sending high-risk or operationally sensitive prompts.',
+        ],
         lore: [
             'Tool calls run during streaming — no second round-trip needed.',
             'Tip: Esc cancels an in-flight stream.',

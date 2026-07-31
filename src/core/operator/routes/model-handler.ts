@@ -5,6 +5,7 @@ import { join, basename } from "node:path";
 import { existsSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
+import { logger } from "../../observability/logger.js";
 
 /**
  * Authoritative built-in recommended model catalog.
@@ -151,12 +152,14 @@ export class ModelHandler implements IRouteHandler {
 
     async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
         const rawUrl = req.url ?? "";
-        const url = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
+        const normalized = rawUrl.startsWith("/api/v1/") ? "/api/" + rawUrl.substring("/api/v1/".length) : rawUrl;
+        const url = normalized.split("?")[0];
         const method = req.method?.toUpperCase() ?? "GET";
 
         // ── Local GGUF Model Scanning ──────────────────────────────────────
         if (method === "GET" && url === "/api/models/gguf") {
             try {
+                logger.trace("[wizard][guardian] GGUF scan request initiated", { op: "gguf_scan_start" });
                 console.log(`[PRISM][models] GGUF request: scanning for local models...`);
                 const models: Array<{ name: string; path: string; source: string }> = [];
                 const searchPaths = [
@@ -165,18 +168,46 @@ export class ModelHandler implements IRouteHandler {
                 ];
 
                 for (const entry of searchPaths) {
-                    console.log(`[PRISM][models] Scanning path: ${entry.path}`);
-                    service.scanForGgufs(entry.path, entry.source, models);
+                    const pathExists = existsSync(entry.path);
+                    logger.trace(`[wizard][guardian] Scanning path: ${entry.path}`, {
+                        op: "gguf_scan_path",
+                        path: entry.path,
+                        source: entry.source,
+                        exists: pathExists,
+                    });
+                    console.log(`[PRISM][models] Scanning path: ${entry.path} (exists=${pathExists})`);
+                    if (pathExists) {
+                        service.scanForGgufs(entry.path, entry.source, models);
+                    }
                 }
 
+                logger.trace(`[wizard][guardian] Local GGUF scan complete`, {
+                    op: "gguf_scan_local_done",
+                    localModelCount: models.length,
+                    localModels: models.map(m => m.name),
+                });
+
                 // Add Ollama API results
+                logger.trace("[wizard][guardian] Fetching Ollama tags", { op: "gguf_ollama_fetch_start" });
                 const ollamaModels = await (service as any).fetchOllamaTags();
+                logger.trace(`[wizard][guardian] Ollama tags result`, {
+                    op: "gguf_ollama_fetch_done",
+                    ollamaModelCount: ollamaModels.length,
+                    ollamaModels: ollamaModels.map((m: any) => m.name),
+                });
                 for (const om of ollamaModels) {
                     models.push({ name: om.name, path: om.name, source: om.source });
                 }
 
+                logger.trace(`[wizard][guardian] Final GGUF model list`, {
+                    op: "gguf_scan_complete",
+                    totalModels: models.length,
+                    models: models.map(m => ({ name: m.name, source: m.source })),
+                });
+
                 return this.json(res, 200, { models });
             } catch (err: any) {
+                logger.error(`[wizard][guardian] GGUF scan failed`, { op: "gguf_scan_error", error: err.message });
                 return this.json(res, 500, { error: err.message });
             }
         }
@@ -188,43 +219,71 @@ export class ModelHandler implements IRouteHandler {
 
         // ── Initiate Download ──────────────────────────────────────────────
         if (method === "POST" && url === "/api/models/download") {
-            const body = await (service as any).readBody(req);
-            const { url: dlUrl, name, mmprojUrl, mmprojName } = JSON.parse(body);
-            if (!dlUrl || !name) return this.json(res, 400, { error: "Missing url or name" });
+            try {
+                const body = await service.readJsonBody<{
+                    url: string;
+                    name: string;
+                    mmprojUrl?: string;
+                    mmprojName?: string;
+                }>(req);
+                const { url: dlUrl, name, mmprojUrl, mmprojName } = body;
+                if (!dlUrl || !name) return this.json(res, 400, { error: "Missing url or name" });
 
-            const modelsDir = join(process.cwd(), "models");
-            if (!existsSync(modelsDir)) mkdirSync(modelsDir, { recursive: true });
+                const modelsDir = join(process.cwd(), "models");
+                if (!existsSync(modelsDir)) mkdirSync(modelsDir, { recursive: true });
 
-            const modelId = randomUUID();
-            service.getDownloadStatus().set(modelId, {
-                id: modelId,
-                url: dlUrl,
-                fileName: name,
-                status: "pending",
-                progress: 0,
-                downloadedBytes: 0,
-                totalBytes: 0,
-                startTime: new Date().toISOString(),
-            });
+                const modelId = randomUUID();
+                logger.info(`[wizard][download] Initiating model download`, {
+                    op: "model_download_init",
+                    modelId,
+                    url: dlUrl,
+                    fileName: name,
+                    targetPath: join(modelsDir, name),
+                });
 
-            (service as any).downloadFile(modelId, dlUrl, join(modelsDir, name)).catch(() => {});
-
-            if (mmprojUrl && mmprojName) {
-                const mmId = randomUUID();
-                service.getDownloadStatus().set(mmId, {
-                    id: mmId,
-                    url: mmprojUrl,
-                    fileName: mmprojName,
+                service.getDownloadStatus().set(modelId, {
+                    id: modelId,
+                    url: dlUrl,
+                    fileName: name,
                     status: "pending",
                     progress: 0,
                     downloadedBytes: 0,
                     totalBytes: 0,
                     startTime: new Date().toISOString(),
                 });
-                (service as any).downloadFile(mmId, mmprojUrl, join(modelsDir, mmprojName)).catch(() => {});
-            }
 
-            return this.json(res, 200, { message: "Downloads initiated", modelId });
+                service.downloadFile(modelId, dlUrl, join(modelsDir, name)).catch((err) => {
+                    logger.error(`[wizard][download] Background download failed`, { op: "model_download_error", modelId, error: err.message });
+                });
+
+                if (mmprojUrl && mmprojName) {
+                    const mmId = randomUUID();
+                    logger.info(`[wizard][download] Initiating vision mmproj download`, {
+                        op: "mmproj_download_init",
+                        mmId,
+                        url: mmprojUrl,
+                        fileName: mmprojName,
+                    });
+                    service.getDownloadStatus().set(mmId, {
+                        id: mmId,
+                        url: mmprojUrl,
+                        fileName: mmprojName,
+                        status: "pending",
+                        progress: 0,
+                        downloadedBytes: 0,
+                        totalBytes: 0,
+                        startTime: new Date().toISOString(),
+                    });
+                    service.downloadFile(mmId, mmprojUrl, join(modelsDir, mmprojName)).catch((err) => {
+                        logger.error(`[wizard][download] mmproj download failed`, { op: "mmproj_download_error", mmId, error: err.message });
+                    });
+                }
+
+                return this.json(res, 200, { message: "Downloads initiated", modelId });
+            } catch (err: any) {
+                logger.error(`[wizard][download] Failed to initiate download`, { op: "model_download_req_error", error: err.message });
+                return this.json(res, 500, { error: err.message || String(err) });
+            }
         }
 
         // ── Ollama Pull ────────────────────────────────────────────────────
@@ -302,7 +361,20 @@ export class ModelHandler implements IRouteHandler {
         // GET /api/models/recommended/catalog  — built-in catalog (served from backend so it's
         // updatable without a frontend deploy and free from double-encoding corruption)
         if (method === "GET" && url === "/api/models/recommended/catalog") {
-            return this.json(res, 200, { catalog: BUILTIN_RECOMMENDED_CATALOG });
+            const combinedCatalog = [...BUILTIN_RECOMMENDED_CATALOG];
+            if (Array.isArray(service.customRecommendedModels)) {
+                for (const cm of service.customRecommendedModels) {
+                    if (cm && cm.fileName && !combinedCatalog.some(m => m.fileName === cm.fileName)) {
+                        combinedCatalog.push(cm as any);
+                    }
+                }
+            }
+            logger.trace("[wizard][guardian] Recommended catalog request", {
+                op: "recommended_catalog",
+                catalogSize: combinedCatalog.length,
+                models: combinedCatalog.map(m => ({ name: m.name, size: m.size, fileName: m.fileName })),
+            });
+            return this.json(res, 200, { catalog: combinedCatalog });
         }
 
         if (method === "GET" && url === "/api/models/recommended") {

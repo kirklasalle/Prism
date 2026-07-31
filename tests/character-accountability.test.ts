@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { ActivityBus } from "../src/core/activity/bus.js";
 import { CharacterAccountabilityManager } from "../src/core/accountability/character-accountability-manager.js";
 import { CharacterAccountabilityStore } from "../src/core/accountability/character-accountability-store.js";
@@ -37,9 +38,22 @@ export async function testCharacterAccountability(): Promise<void> {
         assert.strictEqual(fromStore!.operatorId, "operator-kirk");
         assert.strictEqual(fromStore!.operatorEmail, "kirk@lasalle.io");
 
+        const reusedAssignment = manager.assign({
+            characterId: "different-character",
+            prismUserId: "different-prism-user",
+            prismUserEmail: "different@prism.local",
+            operatorId: "operator-kirk-new-session",
+            operatorEmail: "KIRK@LASALLE.IO",
+            clientId: "browser-client-b",
+            sessionId: "session-456",
+            executionProfile: "individual",
+        });
+        assert.strictEqual(reusedAssignment.assignmentId, assignment.assignmentId);
+        assert.strictEqual(store.list({ operatorEmail: "kirk@lasalle.io" }).length, 1);
+
         const afterDispatch = manager.recordDispatch(assignment.assignmentId);
         assert.ok(afterDispatch);
-        assert.strictEqual(afterDispatch!.dispatchCount, 2);
+        assert.strictEqual(afterDispatch!.dispatchCount, 3);
 
         const suspended = manager.suspend(assignment.assignmentId, "policy hold");
         assert.ok(suspended);
@@ -213,6 +227,76 @@ export async function testCharacterAccountability(): Promise<void> {
         assert.strictEqual(individualOk.executionProfileSegment, "individual");
 
         console.log("✓ CharacterAccountability tests passed");
+    } finally {
+        store.close();
+    }
+}
+
+export async function testCharacterAccountabilityReconciliation(): Promise<void> {
+    const tempDir = mkdtempSync(join(tmpdir(), "prism-cac-reconciliation-"));
+    const dbPath = join(tempDir, "activity.db");
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+        CREATE TABLE chat_sessions (
+            session_id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            operator_email TEXT,
+            cac_assignment_id TEXT
+        );
+    `);
+    db.close();
+
+    const store = new CharacterAccountabilityStore(dbPath);
+    const now = new Date().toISOString();
+    const base = {
+        characterId: "phoenix-individual",
+        prismUserId: "prism-user",
+        prismUserEmail: "phoenix@prism.local",
+        operatorId: "legacy-operator",
+        operatorEmail: "operator@company.com",
+        clientId: "dashboard",
+        sessionId: "certificate-session",
+        executionProfileSegment: "individual" as const,
+        workspaceHub: "test",
+        state: "suspended" as const,
+        dispatchCount: 1,
+        assignedAt: now,
+        updatedAt: now,
+        lastActiveAt: now,
+    };
+    store.save({ ...base, assignmentId: "certificate-cac" });
+    store.save({ ...base, assignmentId: "duplicate-cac", sessionId: "ordinary-session" });
+
+    const sessions = new DatabaseSync(dbPath);
+    sessions
+        .prepare("INSERT INTO chat_sessions VALUES (?, ?, ?, ?)")
+        .run("certificate-session", "Initialization Certificate", "operator@company.com", "certificate-cac");
+    sessions
+        .prepare("INSERT INTO chat_sessions VALUES (?, ?, ?, ?)")
+        .run("ordinary-session", "Ordinary chat", "operator@company.com", "duplicate-cac");
+    sessions.close();
+
+    try {
+        const result = store.reconcileOperators([
+            {
+                operatorId: "iam-operator",
+                operatorEmail: "OPERATOR@COMPANY.COM",
+                preferredAssignmentId: "certificate-cac",
+            },
+        ]);
+        assert.strictEqual(result.assignmentsBefore, 2);
+        assert.strictEqual(result.assignmentsAfter, 1);
+        assert.strictEqual(result.assignmentsDeleted, 1);
+        assert.strictEqual(result.sessionsRebound, 1);
+        assert.strictEqual(store.get("duplicate-cac"), null);
+        assert.strictEqual(store.get("certificate-cac")?.operatorId, "iam-operator");
+
+        const verify = new DatabaseSync(dbPath, { readOnly: true });
+        const rebound = verify
+            .prepare("SELECT cac_assignment_id FROM chat_sessions WHERE session_id = ?")
+            .get("ordinary-session") as { cac_assignment_id: string };
+        assert.strictEqual(rebound.cac_assignment_id, "certificate-cac");
+        verify.close();
     } finally {
         store.close();
     }

@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 
 describe("ChatSessionStore", () => {
@@ -70,6 +71,47 @@ describe("ChatSessionStore", () => {
         assert.equal(msgs[0].role, "user");
         assert.equal(msgs[0].content, "Hello");
         assert.equal(msgs[1].role, "assistant");
+    });
+
+    // ── IC-03 Phase 0: Unconditional certificate immutability ──────────────
+
+    it("certificate session deletion is unconditionally blocked regardless of count", () => {
+        const first = store.createSession("PRISM Initialization Certificate — First Operator");
+        const second = store.createSession("PRISM Initialization Certificate — Second Operator");
+        store.appendMessage(first.sessionId, "assistant", "First certificate", { type: "certificate" });
+        store.appendMessage(second.sessionId, "assistant", "Second certificate", { type: "certificate" });
+
+        // IC-03: BOTH deletions must be blocked — not just the last one
+        assert.throws(
+            () => store.deleteSession(first.sessionId),
+            /Deletion of immutable Initialization Certificate session is forbidden/,
+            "First certificate session deletion must be blocked",
+        );
+        assert.throws(
+            () => store.deleteSession(second.sessionId),
+            /Deletion of immutable Initialization Certificate session is forbidden/,
+            "Second certificate session deletion must be blocked",
+        );
+
+        // Verify both sessions still exist
+        assert.ok(store.getSession(first.sessionId), "First session still exists");
+        assert.ok(store.getSession(second.sessionId), "Second session still exists");
+    });
+
+    it("certificate message deletion is unconditionally blocked regardless of count", () => {
+        const session = store.createSession("PRISM Initialization Certificate — Delete Msg Test");
+        store.appendMessage(session.sessionId, "assistant", "Cert content A", { type: "certificate" });
+        store.appendMessage(session.sessionId, "assistant", "Cert content B", { type: "certificate" });
+
+        // ChatSessionStore does not expose deleteMessage — test the trigger
+        // via direct SQL, which is how an attacker would bypass the API.
+        const directDb = new DatabaseSync(dbPath);
+        assert.throws(
+            () => directDb.exec(`DELETE FROM chat_messages WHERE metadata_json LIKE '%"type":"certificate"%'`),
+            /Deletion of immutable Initialization Certificate is forbidden/,
+            "Direct SQL deletion of certificate messages must be blocked by trigger",
+        );
+        directDb.close();
     });
 
     // ── SR config — full D4c field set ────────────────────────────────────

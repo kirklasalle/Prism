@@ -53,7 +53,7 @@ print(prism.provider_health())
 # 4. Configure Spectrum Refraction (two hemispheres on different providers).
 prism.sr_configure({
     "hemispheres": [
-        {"role": "logic",    "providerId": "openai",   "model": "gpt-4o"},
+        {"role": "logic",    "providerId": "openai",   "model": "gpt-5"},
         {"role": "creative", "providerId": "anthropic", "model": "claude-sonnet-4-5"},
     ],
 })

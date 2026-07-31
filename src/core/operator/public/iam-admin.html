@@ -6,16 +6,19 @@
   operator CRUD, Role Assignments, SCIM token sync, and CAC accountability auditing.
 -->
 <html lang="en">
+
 <head>
     <meta charset="utf-8" />
     <title>PRISM Operator Console</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    
+
     <!-- Google Fonts: Outfit (modern UI) & Share Tech Mono (terminal font) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap"
+        rel="stylesheet">
+
     <style>
         :root {
             --bg-base: #030712;
@@ -24,7 +27,7 @@
             --panel-border: rgba(6, 182, 212, 0.15);
             --panel-border-hover: rgba(6, 182, 212, 0.35);
             --panel-shadow: rgba(0, 0, 0, 0.5);
-            
+
             --text-main: #f3f4f6;
             --text-muted: #9ca3af;
             --text-cyan: #06b6d4;
@@ -32,11 +35,11 @@
             --text-red: #ef4444;
             --text-yellow: #f59e0b;
             --text-purple: #a855f7;
-            
+
             --neon-glow: 0 0 15px rgba(6, 182, 212, 0.25);
             --neon-glow-strong: 0 0 25px rgba(6, 182, 212, 0.5);
             --neon-red-glow: 0 0 15px rgba(239, 68, 68, 0.25);
-            
+
             --font-ui: 'Outfit', sans-serif;
             --font-mono: 'Share Tech Mono', monospace;
         }
@@ -49,7 +52,7 @@
 
         body {
             background-color: var(--bg-base);
-            background-image: 
+            background-image:
                 linear-gradient(var(--bg-grid) 1px, transparent 1px),
                 linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
             background-size: 30px 30px;
@@ -89,7 +92,7 @@
             position: relative;
             margin-bottom: 24px;
         }
-        
+
         .loader-pulse::before {
             content: '';
             position: absolute;
@@ -105,12 +108,23 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
+
         @keyframes spin-reverse {
-            0% { transform: rotate(360deg); }
-            100% { transform: rotate(0deg); }
+            0% {
+                transform: rotate(360deg);
+            }
+
+            100% {
+                transform: rotate(0deg);
+            }
         }
 
         .loader-text {
@@ -123,8 +137,15 @@
         }
 
         @keyframes pulse-light {
-            0%, 100% { opacity: 0.5; }
-            50% { opacity: 1; }
+
+            0%,
+            100% {
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
+            }
         }
 
         /* Custom Scrollbar */
@@ -132,13 +153,16 @@
             width: 8px;
             height: 8px;
         }
+
         ::-webkit-scrollbar-track {
             background: rgba(0, 0, 0, 0.2);
         }
+
         ::-webkit-scrollbar-thumb {
             background: rgba(6, 182, 212, 0.2);
             border-radius: 4px;
         }
+
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(6, 182, 212, 0.4);
         }
@@ -157,12 +181,36 @@
             border: 1px solid currentColor;
             font-weight: 500;
         }
-        .badge.cyan { color: var(--text-cyan); background: rgba(6, 182, 212, 0.06); }
-        .badge.green { color: var(--text-green); background: rgba(16, 185, 129, 0.06); }
-        .badge.red { color: var(--text-red); background: rgba(239, 68, 68, 0.06); }
-        .badge.yellow { color: var(--text-yellow); background: rgba(245, 158, 11, 0.06); }
-        .badge.purple { color: var(--text-purple); background: rgba(168, 85, 247, 0.06); }
-        .badge.muted { color: var(--text-muted); background: rgba(255, 255, 255, 0.03); }
+
+        .badge.cyan {
+            color: var(--text-cyan);
+            background: rgba(6, 182, 212, 0.06);
+        }
+
+        .badge.green {
+            color: var(--text-green);
+            background: rgba(16, 185, 129, 0.06);
+        }
+
+        .badge.red {
+            color: var(--text-red);
+            background: rgba(239, 68, 68, 0.06);
+        }
+
+        .badge.yellow {
+            color: var(--text-yellow);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .badge.purple {
+            color: var(--text-purple);
+            background: rgba(168, 85, 247, 0.06);
+        }
+
+        .badge.muted {
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.03);
+        }
 
         /* Login Container styling */
         #login-container {
@@ -292,13 +340,20 @@
             text-transform: uppercase;
         }
 
-        .login-divider::before, .login-divider::after {
+        .login-divider::before,
+        .login-divider::after {
             content: '';
             flex: 1;
             border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
         }
-        .login-divider:not(:empty)::before { margin-right: 12px; }
-        .login-divider:not(:empty)::after { margin-left: 12px; }
+
+        .login-divider:not(:empty)::before {
+            margin-right: 12px;
+        }
+
+        .login-divider:not(:empty)::after {
+            margin-left: 12px;
+        }
 
         .developer-token-link {
             font-size: 12px;
@@ -307,6 +362,7 @@
             cursor: pointer;
             transition: color 0.2s;
         }
+
         .developer-token-link:hover {
             color: var(--text-cyan);
         }
@@ -335,7 +391,7 @@
             position: sticky;
             top: 0;
             z-index: 100;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
 
         .header-logo-section {
@@ -470,11 +526,13 @@
             align-items: center;
             gap: 4px;
         }
+
         button.btn-action-small:hover {
             background: rgba(6, 182, 212, 0.1);
             border-color: var(--text-cyan);
             color: #ffffff;
         }
+
         button.btn-action-small.danger:hover {
             background: rgba(239, 68, 68, 0.1);
             border-color: var(--text-red);
@@ -524,8 +582,8 @@
 
         .tab-btn:hover {
             color: #ffffff;
-            background: rgba(255,255,255,0.02);
-            border-color: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.02);
+            border-color: rgba(255, 255, 255, 0.05);
         }
 
         .tab-btn.active {
@@ -584,7 +642,7 @@
             overflow: hidden;
             transition: border-color 0.3s ease;
         }
-        
+
         .glass-panel:hover {
             border-color: var(--panel-border-hover);
         }
@@ -690,6 +748,7 @@
             margin-left: 2px;
             transition: transform 0.15s;
         }
+
         .role-pill-interactive .remove-btn:hover {
             transform: scale(1.3);
         }
@@ -709,6 +768,7 @@
             padding: 2px 6px;
             outline: none;
         }
+
         .select-mini option {
             background: var(--bg-base);
             color: #ffffff;
@@ -731,9 +791,9 @@
             background: rgba(15, 23, 42, 0.95);
             backdrop-filter: blur(12px);
             border-left: 4px solid var(--text-cyan);
-            border-top: 1px solid rgba(255,255,255,0.08);
-            border-right: 1px solid rgba(255,255,255,0.08);
-            border-bottom: 1px solid rgba(255,255,255,0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 6px;
             padding: 16px 20px;
             color: var(--text-main);
@@ -748,9 +808,11 @@
         .toast-notification.error {
             border-left-color: var(--text-red);
         }
+
         .toast-notification.success {
             border-left-color: var(--text-green);
         }
+
         .toast-notification.warning {
             border-left-color: var(--text-yellow);
         }
@@ -805,7 +867,7 @@
             font-family: var(--font-mono);
             font-size: 11px;
             color: var(--text-muted);
-            background: rgba(0,0,0,0.2);
+            background: rgba(0, 0, 0, 0.2);
             padding: 6px 10px;
             border-radius: 4px;
             margin-top: 4px;
@@ -836,7 +898,7 @@
             border-radius: 12px;
             width: 100%;
             max-width: 600px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -845,7 +907,7 @@
 
         .modal-header {
             padding: 18px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -863,6 +925,7 @@
             cursor: pointer;
             font-size: 18px;
         }
+
         .modal-close:hover {
             color: #ffffff;
         }
@@ -875,29 +938,58 @@
 
         .modal-footer {
             padding: 16px 24px;
-            border-top: 1px solid rgba(255,255,255,0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             justify-content: flex-end;
             gap: 12px;
-            background: rgba(0,0,0,0.1);
+            background: rgba(0, 0, 0, 0.1);
         }
 
         /* Animations */
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
         }
+
         @keyframes scaleIn {
-            from { transform: scale(0.95); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
+            from {
+                transform: scale(0.95);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
         }
+
         @keyframes slideInRight {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
+
         @keyframes slideDown {
-            from { transform: translateY(-10px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+            from {
+                transform: translateY(-10px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
 
         .empty-state {
@@ -906,7 +998,7 @@
             color: var(--text-muted);
             font-style: italic;
         }
-        
+
         .pulse-dot {
             width: 8px;
             height: 8px;
@@ -916,14 +1008,26 @@
             box-shadow: 0 0 8px var(--text-green);
             animation: pulse-green 2s infinite;
         }
-        
+
         @keyframes pulse-green {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
         }
     </style>
 </head>
+
 <body>
 
     <!-- Loading Overlay -->
@@ -937,22 +1041,27 @@
         <div class="login-card">
             <div class="login-logo">PRISM</div>
             <div class="login-subtitle">Secure Operator Console</div>
-            
+
             <form id="login-form">
                 <div class="input-group">
                     <label for="login-email">Operator Email</label>
                     <div class="input-wrapper">
-                        <input id="login-email" type="email" placeholder="operator@prism.local" required autocomplete="username" />
+                        <input id="login-email" type="email" placeholder="operator@prism.local" required
+                            autocomplete="username" />
                     </div>
                 </div>
                 <div class="input-group">
                     <label for="login-password">Console Password</label>
                     <div class="input-wrapper">
-                        <input id="login-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+                        <input id="login-password" type="password" placeholder="••••••••" required
+                            autocomplete="current-password" />
                     </div>
                 </div>
                 <button type="submit" class="login-button">
-                    <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                    <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                    </svg>
                     Authenticate Console
                 </button>
             </form>
@@ -960,7 +1069,8 @@
             <div class="login-divider">or</div>
 
             <div style="margin-bottom: 24px;">
-                <span class="developer-token-link" onclick="toggleTokenField()">Authenticate with Developer Bearer Token</span>
+                <span class="developer-token-link" onclick="toggleTokenField()">Authenticate with Developer Bearer
+                    Token</span>
                 <div id="token-fields-wrapper" class="token-fields">
                     <div class="input-group" style="margin-top: 15px;">
                         <label for="token-input">Bearer Admin Token</label>
@@ -968,13 +1078,15 @@
                             <input id="token-input" type="password" placeholder="Paste bearer token..." />
                         </div>
                     </div>
-                    <button type="button" id="token-login-btn" class="login-button" style="border-color: var(--text-purple); color: #ffffff;">
+                    <button type="button" id="token-login-btn" class="login-button"
+                        style="border-color: var(--text-purple); color: #ffffff;">
                         Load Token
                     </button>
                 </div>
             </div>
 
-            <button type="button" id="login-shutdown-btn" class="login-button btn-danger" style="margin-top:20px; font-size:11px; padding:8px;">
+            <button type="button" id="login-shutdown-btn" class="login-button btn-danger"
+                style="margin-top:20px; font-size:11px; padding:8px;">
                 Emergency Shutdown Console
             </button>
         </div>
@@ -996,7 +1108,10 @@
                     <span class="role" id="current-user-roles">...</span>
                 </div>
                 <button class="btn-primary" onclick="launchDashboard()">
-                    <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                    <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2"
+                        viewBox="0 0 24 24">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
                     Refraction Dashboard
                 </button>
                 <button class="btn-secondary" onclick="handleLogout()">
@@ -1009,22 +1124,38 @@
             <!-- Sidebar tabs -->
             <div class="sidebar-tabs">
                 <button class="tab-btn active" onclick="switchTab('operators-section')">
-                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <path
+                            d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
                     Operators & Roles
                 </button>
                 <button class="tab-btn" onclick="switchTab('cac-section')">
-                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                    CAC Accountability
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    CAC Main Agents
                 </button>
                 <button class="tab-btn" onclick="switchTab('scim-section')">
-                    <svg viewBox="0 0 24 24" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                        <line x1="6" y1="6" x2="6.01" y2="6" />
+                        <line x1="6" y1="18" x2="6.01" y2="18" />
+                    </svg>
                     SCIM Synced Keys
                 </button>
                 <button class="tab-btn" onclick="switchTab('policies-section')">
-                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                    </svg>
                     Security Reference
                 </button>
-                
+
                 <div style="flex:1"></div>
                 <button class="btn-danger" style="width:100%; justify-content:center;" onclick="triggerShutdown()">
                     Shutdown System
@@ -1033,7 +1164,7 @@
 
             <!-- Content Area -->
             <main class="main-content">
-                
+
                 <!-- Operators section -->
                 <section id="operators-section" class="content-section active">
                     <div class="section-header">
@@ -1069,8 +1200,8 @@
                 <section id="cac-section" class="content-section">
                     <div class="section-header">
                         <div class="section-title">
-                            <h2>Character Accountability Certificates</h2>
-                            <p>Verify dynamic context bindings between autonomous agents, active chat sessions, and operators.</p>
+                            <h2>CAC Main Agents</h2>
+                            <p>Manage each operator's Initialization Certificate-bound primary assistant identity.</p>
                         </div>
                         <div class="form-actions-inline">
                             <button class="btn-secondary" onclick="exportCac('json')">Export JSON</button>
@@ -1079,7 +1210,7 @@
                     </div>
 
                     <div class="glass-panel">
-                        <div class="panel-title">CAC Session Provenance Ledger</div>
+                        <div class="panel-title">CAC Main Agent Registry</div>
                         <table id="cac-table">
                             <thead>
                                 <tr>
@@ -1103,7 +1234,8 @@
                     <div class="section-header">
                         <div class="section-title">
                             <h2>SCIM Integrations & Directory Synced Keys</h2>
-                            <p>Provision cryptographic bearer tokens for automated identity management integrations (e.g., Okta, Azure AD).</p>
+                            <p>Provision cryptographic bearer tokens for automated identity management integrations
+                                (e.g., Okta, Azure AD).</p>
                         </div>
                     </div>
 
@@ -1169,13 +1301,16 @@
                     <div class="glass-panel">
                         <div class="panel-title">Covenant Compliance Audit</div>
                         <p style="font-size:13px; line-height:1.6; color:var(--text-muted); margin-bottom:12px;">
-                            PRISM operates under the Sacred Covenant (v1.0.0). All operator accounts, SCIM sync tokens, and agent character bindings are logged onto a read-only transactional audit trail which is verified on startup. Modifying core roles or overriding character accountability restrictions requires multiple digital signatures.
+                            PRISM operates under the Sacred Covenant (v1.0.0). All operator accounts, SCIM sync tokens,
+                            and agent character bindings are logged onto a read-only transactional audit trail which is
+                            verified on startup. Modifying core roles or overriding character accountability
+                            restrictions requires multiple digital signatures.
                         </p>
                         <div class="badge green">Covenant Verified</div>
                         <div class="badge cyan" id="directive-hash-badge">Directive Hash: ...</div>
                     </div>
                 </section>
-                
+
             </main>
         </div>
     </div>
@@ -1211,7 +1346,8 @@
                     <div class="input-group">
                         <label for="op-status">Initial Account Status</label>
                         <div class="input-wrapper">
-                            <select id="op-status" style="width:100%; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.1); color:#ffffff; padding:10px; border-radius:6px;">
+                            <select id="op-status"
+                                style="width:100%; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.1); color:#ffffff; padding:10px; border-radius:6px;">
                                 <option value="active">Active</option>
                                 <option value="suspended">Suspended</option>
                             </select>
@@ -1269,7 +1405,8 @@
                 <div class="input-group">
                     <label for="verify-cac-provider">Identity Provider</label>
                     <div class="input-wrapper">
-                        <select id="verify-cac-provider" style="width:100%; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.1); color:#ffffff; padding:10px; border-radius:6px;">
+                        <select id="verify-cac-provider"
+                            style="width:100%; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.1); color:#ffffff; padding:10px; border-radius:6px;">
                             <option value="gmail">Google Suite (Gmail)</option>
                             <option value="outlook">Microsoft 365 (Outlook)</option>
                         </select>
@@ -1305,7 +1442,8 @@
     <!-- SCIM Plaintext Token Modal -->
     <div id="scim-token-modal" class="modal-overlay">
         <div class="modal-card">
-            <div class="modal-header" style="background: rgba(16, 185, 129, 0.05); border-bottom-color: rgba(16, 185, 129, 0.2);">
+            <div class="modal-header"
+                style="background: rgba(16, 185, 129, 0.05); border-bottom-color: rgba(16, 185, 129, 0.2);">
                 <h3 style="color: var(--text-green)">SCIM Token Provisioned Successfully</h3>
                 <button class="modal-close" onclick="closeModal('scim-token-modal')">&times;</button>
             </div>
@@ -1316,12 +1454,16 @@
                 <div class="input-group">
                     <label>Plaintext Sync Token</label>
                     <div class="input-wrapper">
-                        <input id="scim-plaintext-val" type="text" readonly style="font-family: var(--font-mono); color: var(--text-green); font-size:13px;" onclick="this.select()" />
+                        <input id="scim-plaintext-val" type="text" readonly
+                            style="font-family: var(--font-mono); color: var(--text-green); font-size:13px;"
+                            onclick="this.select()" />
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-primary" style="border-color: var(--text-green); background: rgba(16, 185, 129, 0.1);" onclick="copyScimTokenText()">Copy Token & Close</button>
+                <button class="btn-primary"
+                    style="border-color: var(--text-green); background: rgba(16, 185, 129, 0.1);"
+                    onclick="copyScimTokenText()">Copy Token & Close</button>
             </div>
         </div>
     </div>
@@ -1342,9 +1484,9 @@
                 const host = $("#toast-host");
                 const el = document.createElement("div");
                 el.className = "toast-notification " + type;
-                
+
                 let title = type === "error" ? "SECURITY WARNING" : type === "success" ? "OPERATION SUCCESSFUL" : "SYSTEM MESSAGE";
-                
+
                 el.innerHTML = `
                     <div style="flex:1">
                         <div style="font-family: var(--font-mono); font-size:10px; letter-spacing:0.1em; color:var(--text-muted); margin-bottom:4px;">${title}</div>
@@ -1363,7 +1505,7 @@
                 }
             }
 
-            window.closeModal = function(id) {
+            window.closeModal = function (id) {
                 const modal = $("#" + id);
                 if (modal) {
                     modal.style.display = "none";
@@ -1383,7 +1525,7 @@
 
             // API wrapper
             async function api(path, init) {
-                const opts = Object.assign({ method: "GET", headers: {} }, init || {});
+                const opts = Object.assign({ method: "GET", headers: {}, credentials: "same-origin" }, init || {});
                 if (!opts.headers["Content-Type"] && opts.body) {
                     opts.headers["Content-Type"] = "application/json";
                 }
@@ -1410,14 +1552,14 @@
                 try {
                     const data = await api("/api/iam/me");
                     currentUser = data.principal;
-                    
+
                     if (currentUser) {
                         $("#current-user-name").textContent = currentUser.displayName || currentUser.email || currentUser.userId;
                         $("#current-user-roles").textContent = (currentUser.roles || []).join(", ");
-                        
+
                         $("#login-container").style.display = "none";
                         $("#dashboard-container").style.display = "flex";
-                        
+
                         await loadAllData();
                     } else {
                         showLogin();
@@ -1442,13 +1584,13 @@
                 e.preventDefault();
                 const email = $("#login-email").value.trim();
                 const password = $("#login-password").value.trim();
-                
+
                 try {
                     const res = await api("/api/iam/login", {
                         method: "POST",
                         body: JSON.stringify({ email, password })
                     });
-                    
+
                     if (res && res.ok) {
                         toast("Welcome back, console operator.", "success");
                         tokenStore.value = ""; // Use cookie session primarily
@@ -1482,10 +1624,10 @@
                 }
             }
 
-            window.handleLogout = async function() {
+            window.handleLogout = async function () {
                 try {
                     await api("/api/iam/logout", { method: "POST" });
-                } catch (e) {}
+                } catch (e) { }
                 tokenStore.value = "";
                 $("#login-email").value = "";
                 $("#login-password").value = "";
@@ -1494,11 +1636,11 @@
                 showLogin();
             }
 
-            window.launchDashboard = function() {
+            window.launchDashboard = function () {
                 window.location.href = "/dashboard";
             }
 
-            window.triggerShutdown = async function() {
+            window.triggerShutdown = async function () {
                 if (confirm("CRITICAL WARNING: Are you sure you want to trigger a graceful shutdown of the entire PRISM platform server? This will terminate all active agent loops and Refraction dashboards.")) {
                     try {
                         toast("Initiating emergency platform shutdown...", "warning");
@@ -1515,14 +1657,14 @@
             }
 
             // Tab Switching
-            window.switchTab = function(sectionId) {
+            window.switchTab = function (sectionId) {
                 document.querySelectorAll(".tab-btn").forEach((btn) => {
                     btn.classList.remove("active");
                 });
                 document.querySelectorAll(".content-section").forEach((sec) => {
                     sec.classList.remove("active");
                 });
-                
+
                 event.currentTarget.classList.add("active");
                 $("#" + sectionId).classList.add("active");
             }
@@ -1542,13 +1684,13 @@
                 try {
                     const data = await api("/api/iam/admin/roles");
                     allRoles = data.roles || [];
-                    
+
                     const tbody = $("#roles-reference-table tbody");
                     if (!allRoles.length) {
                         tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No roles configured</td></tr>';
                         return;
                     }
-                    
+
                     tbody.innerHTML = allRoles.map(r => `
                         <tr>
                             <td><code style="color:var(--text-purple); font-size:12px;">${escapeHtml(r.name)}</code></td>
@@ -1566,7 +1708,7 @@
                     const data = await api("/api/iam/admin/users");
                     const users = data.users || [];
                     const tbody = $("#operators-table tbody");
-                    
+
                     if (!users.length) {
                         tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No operator accounts registered</td></tr>';
                         return;
@@ -1581,8 +1723,8 @@
                         `).join("");
 
                         const isSelf = currentUser.id === u.id;
-                        const statusBadge = u.status === "active" 
-                            ? `<span class="badge green">Active</span>` 
+                        const statusBadge = u.status === "active"
+                            ? `<span class="badge green">Active</span>`
                             : `<span class="badge red">Suspended</span>`;
 
                         const toggleLabel = u.status === "active" ? "Suspend" : "Activate";
@@ -1632,7 +1774,7 @@
                 }
             }
 
-            window.openCreateOperatorModal = function() {
+            window.openCreateOperatorModal = function () {
                 $("#op-email").value = "";
                 $("#op-name").value = "";
                 $("#op-password").value = "";
@@ -1640,7 +1782,7 @@
                 openModal("create-operator-modal");
             }
 
-            window.submitCreateOperator = async function() {
+            window.submitCreateOperator = async function () {
                 const email = $("#op-email").value.trim();
                 const displayName = $("#op-name").value.trim();
                 const password = $("#op-password").value.trim();
@@ -1664,7 +1806,7 @@
                 }
             }
 
-            window.toggleOperatorStatus = async function(id, targetStatus) {
+            window.toggleOperatorStatus = async function (id, targetStatus) {
                 try {
                     await api(`/api/iam/admin/users/${encodeURIComponent(id)}/status`, {
                         method: "POST",
@@ -1677,17 +1819,17 @@
                 }
             }
 
-            window.openResetPasswordModal = function(id, email) {
+            window.openResetPasswordModal = function (id, email) {
                 $("#reset-pw-user-id").value = id;
                 $("#reset-pw-user-desc").textContent = `Setting new console password for operator: ${email}`;
                 $("#reset-pw-val").value = "";
                 openModal("reset-password-modal");
             }
 
-            window.submitResetPassword = async function() {
+            window.submitResetPassword = async function () {
                 const id = $("#reset-pw-user-id").value;
                 const password = $("#reset-pw-val").value.trim();
-                
+
                 if (!password) {
                     toast("Password cannot be empty.", "warning");
                     return;
@@ -1705,13 +1847,22 @@
                 }
             }
 
-            window.deleteOperator = async function(id, name) {
+            window.deleteOperator = async function (id, name) {
                 if (confirm(`CRITICAL DELETION: Are you sure you want to permanently delete the operator account: "${name}"? This action is irreversible.`)) {
+                    const dispositionInput = prompt(
+                        'Initialization Certificate disposition for this operator? Type "archive" (recommended) or "delete".',
+                        'archive'
+                    );
+                    if (dispositionInput === null) {
+                        return;
+                    }
+                    const disposition = dispositionInput.trim().toLowerCase() === 'delete' ? 'delete' : 'archive';
                     try {
-                        await api(`/api/iam/admin/users/${encodeURIComponent(id)}`, {
+                        const result = await api(`/api/iam/admin/users/${encodeURIComponent(id)}?certificateDisposition=${encodeURIComponent(disposition)}`, {
                             method: "DELETE"
                         });
-                        toast("Operator account purged from registry.", "success");
+                        const summary = `${result.deletedSessionCount || 0} sessions deleted, ${result.deletedCertificateCount || 0} certificates deleted, ${result.archivedCertificateCount || 0} certificates archived`;
+                        toast(`Operator account purged from registry (${summary}).`, "success");
                         await refreshOperators();
                     } catch (err) {
                         toast(err.message, "error");
@@ -1719,7 +1870,7 @@
                 }
             }
 
-            window.addRole = async function(userId, role) {
+            window.addRole = async function (userId, role) {
                 if (!role) return;
                 try {
                     await api(`/api/iam/admin/users/${encodeURIComponent(userId)}/roles`, {
@@ -1733,7 +1884,7 @@
                 }
             }
 
-            window.removeRole = async function(userId, role) {
+            window.removeRole = async function (userId, role) {
                 if (confirm(`Revoke role "${role}" from operator?`)) {
                     try {
                         await api(`/api/iam/admin/users/${encodeURIComponent(userId)}/roles/${encodeURIComponent(role)}`, {
@@ -1761,12 +1912,12 @@
                     }
 
                     tbody.innerHTML = assignments.map((a) => {
-                        const verifiedState = a.emailVerifiedAt 
-                            ? `<span class="badge green" title="Verified via ${a.emailVerifiedProvider} at ${a.emailVerifiedAt}">Verified</span>` 
+                        const verifiedState = a.emailVerifiedAt
+                            ? `<span class="badge green" title="Verified via ${a.emailVerifiedProvider} at ${a.emailVerifiedAt}">Verified</span>`
                             : `<span class="badge yellow">Unverified</span>`;
-                            
-                        const stateBadge = a.state === "active" 
-                            ? `<span class="badge green">Active</span>` 
+
+                        const stateBadge = a.state === "active"
+                            ? `<span class="badge green">Active</span>`
                             : a.state === "revoked" ? `<span class="badge red">Revoked</span>` : `<span class="badge muted">${a.state}</span>`;
 
                         return `
@@ -1795,7 +1946,7 @@
                 }
             }
 
-            window.openVerifyCacModal = function(id, charId, email) {
+            window.openVerifyCacModal = function (id, charId, email) {
                 $("#verify-cac-id").value = id;
                 $("#verify-cac-desc").textContent = `Configure identity binding verification for agent: "${charId}"`;
                 $("#verify-cac-email").value = email || "";
@@ -1803,7 +1954,7 @@
                 openModal("verify-cac-modal");
             }
 
-            window.submitVerifyCacEmail = async function() {
+            window.submitVerifyCacEmail = async function () {
                 const id = $("#verify-cac-id").value;
                 const email = $("#verify-cac-email").value.trim();
                 const provider = $("#verify-cac-provider").value;
@@ -1826,7 +1977,7 @@
                 }
             }
 
-            window.viewCacChain = async function(id, charId) {
+            window.viewCacChain = async function (id, charId) {
                 try {
                     $("#timeline-assignment-info").innerHTML = `
                         <strong>Character ID:</strong> <span style="color:var(--text-purple)">${escapeHtml(charId)}</span><br/>
@@ -1837,7 +1988,7 @@
 
                     const chain = await api(`/api/cac/assignments/${encodeURIComponent(id)}/chain`);
                     const events = chain.events || [];
-                    
+
                     if (!events.length) {
                         $("#timeline-container").innerHTML = '<div style="color:var(--text-muted); font-style:italic">No audit events logged for this assignment yet.</div>';
                         return;
@@ -1852,7 +2003,7 @@
                         } else if (e.metadata && Object.keys(e.metadata).length > 0) {
                             detailBlock = `<pre class="timeline-details">${escapeHtml(JSON.stringify(e.metadata, null, 2))}</pre>`;
                         }
-                        
+
                         return `
                             <div class="timeline-event">
                                 <div class="timeline-time">${dateStr}</div>
@@ -1868,7 +2019,7 @@
                 }
             }
 
-            window.deleteCacAssignment = async function(assignmentId, characterId) {
+            window.deleteCacAssignment = async function (assignmentId, characterId) {
                 if (confirm(`CRITICAL DELETION: Are you sure you want to permanently delete the character assignment for "${characterId}"? This action is irreversible.`)) {
                     try {
                         await api("/api/workspace/character-assignment-delete", {
@@ -1883,7 +2034,7 @@
                 }
             }
 
-            window.exportCac = function(format) {
+            window.exportCac = function (format) {
                 const url = `/api/cac/export?format=${format}` + (tokenStore.value ? `&token=${tokenStore.value}` : '');
                 window.open(url, "_blank");
             }
@@ -1902,14 +2053,14 @@
                     }
 
                     tbody.innerHTML = tokens.map((t) => {
-                        const status = t.revokedAt 
-                            ? `<span class="badge red">Revoked</span>` 
+                        const status = t.revokedAt
+                            ? `<span class="badge red">Revoked</span>`
                             : `<span class="badge green">Active</span>`;
-                        
-                        const action = t.revokedAt 
-                            ? `—` 
+
+                        const action = t.revokedAt
+                            ? `—`
                             : `<button class="btn-action-small danger" onclick="revokeScimToken('${t.id}')">Revoke key</button>`;
-                            
+
                         const dateStr = new Date(t.createdAt).toLocaleString();
 
                         return `
@@ -1927,7 +2078,7 @@
                 }
             }
 
-            window.createScimToken = async function() {
+            window.createScimToken = async function () {
                 const label = $("#scim-label").value.trim();
                 if (!label) {
                     toast("Label is required to generate integration tokens.", "warning");
@@ -1939,10 +2090,10 @@
                         method: "POST",
                         body: JSON.stringify({ label })
                     });
-                    
+
                     $("#scim-plaintext-val").value = r.token;
                     openModal("scim-token-modal");
-                    
+
                     $("#scim-label").value = "";
                     await refreshScim();
                 } catch (e) {
@@ -1950,7 +2101,7 @@
                 }
             }
 
-            window.copyScimTokenText = function() {
+            window.copyScimTokenText = function () {
                 const input = $("#scim-plaintext-val");
                 input.select();
                 document.execCommand("copy");
@@ -1958,7 +2109,7 @@
                 closeModal("scim-token-modal");
             }
 
-            window.revokeScimToken = async function(id) {
+            window.revokeScimToken = async function (id) {
                 if (confirm("Are you sure you want to permanently revoke this directory key? External SCIM synchronization calls from IdP (e.g. Okta) using this token will fail immediately.")) {
                     try {
                         await api(`/api/iam/admin/scim-tokens/${encodeURIComponent(id)}`, {
@@ -1996,15 +2147,15 @@
             // Document hash extraction for UI reference
             async function loadDirectiveHash() {
                 try {
-                    // Try to load current platform status info
-                    const res = await fetch("/api/v1/system/status").catch(() => null);
+                    const res = await fetch("/api/health", { credentials: "same-origin" }).catch(() => null);
                     if (res && res.ok) {
                         const status = await res.json();
-                        if (status.directiveHash) {
-                            $("#directive-hash-badge").textContent = `Directive Hash: ${status.directiveHash.substring(0, 16)}...`;
+                        const directiveHash = status.directive && status.directive.currentHash;
+                        if (directiveHash) {
+                            $("#directive-hash-badge").textContent = `Directive Hash: ${directiveHash.substring(0, 16)}...`;
                         }
                     }
-                } catch(e) {}
+                } catch (e) { }
             }
 
             // Init
@@ -2014,4 +2165,5 @@
         })();
     </script>
 </body>
+
 </html>

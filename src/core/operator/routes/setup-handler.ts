@@ -18,6 +18,17 @@ export class SetupHandler implements IRouteHandler {
 
     async handle(req: IncomingMessage, res: ServerResponse, service: DashboardService): Promise<void> {
         const url = req.url ?? "";
+        const parsedUrl = new URL(url, "http://localhost");
+        const queryToken = parsedUrl.searchParams.get("token") ?? "";
+        const authHeader = req.headers["authorization"];
+        const bearerToken =
+            typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+                ? authHeader.substring(7).trim()
+                : "";
+
+        const principal = service.getIamHandler().resolvePrincipalFromCookie(req);
+        const cookieToken = principal ? service.getAuthGate().getToken() : "";
+        const pageToken = bearerToken || queryToken || cookieToken;
         res.writeHead(200, {
             "Content-Type": "text/html; charset=utf-8",
             "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
@@ -26,9 +37,9 @@ export class SetupHandler implements IRouteHandler {
         });
 
         if (url.startsWith("/setup/advanced")) {
-            res.end(setupWizardAdvancedHtml(service.getPort()));
+            res.end(setupWizardAdvancedHtml(service.getPort(), pageToken));
         } else {
-            res.end(setupWizardHtml(service.getPort()));
+            res.end(setupWizardHtml(service.getPort(), pageToken));
         }
     }
 }

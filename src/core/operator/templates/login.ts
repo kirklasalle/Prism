@@ -1,5 +1,5 @@
 export function loginHtml(port: number): string {
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -315,10 +315,13 @@ export function loginHtml(port: number): string {
         <button type="button" class="badge-btn testing" onclick="fillCreds('testing@prismrefraction.com', 'testing')" title="Autofill testing operator credentials (local dev only)">
           <span>Testing Operator</span>
         </button>
+        <button type="button" class="badge-btn" onclick="fillCreds('business@prismrefraction.com', 'business')" title="Autofill business operator credentials (local dev only)">
+          <span>Business Operator</span>
+        </button>
       </div>
       <div style="margin-top:1rem; text-align:center;">
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">No operator account yet? Set up PRISM and create one.</p>
-        <button type="button" class="badge-btn" style="width:100%; justify-content:center;" onclick="window.location.href='/setup'" title="Open the guided setup wizard">
+        <button type="button" class="badge-btn" style="width:100%; justify-content:center;" onclick="runSetupWizard()" title="Open the guided setup wizard">
           <span>Run Setup Wizard</span>
         </button>
         <button type="button" class="badge-btn" style="width:100%; justify-content:center; margin-top:0.75rem;" onclick="window.location.href='/public/iam-admin.html'" title="Open operator account management">
@@ -353,6 +356,8 @@ export function loginHtml(port: number): string {
     let currentUser = null;
     const params = new URL(window.location.href).searchParams;
     const manageMode = params.get('manage') === 'true';
+    const setupToken = params.get('setupToken') || '';
+    const wizardToken = params.get('token') || '';
     const loginPanel = document.getElementById('loginPanel');
     const managePanel = document.getElementById('managePanel');
     const errorBanner = document.getElementById('errorBanner');
@@ -401,7 +406,7 @@ export function loginHtml(port: number): string {
         const res = await fetch('/api/iam/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ email, password, setupToken })
         });
         const data = await res.json();
         if (res.ok && data.ok) {
@@ -410,7 +415,8 @@ export function loginHtml(port: number): string {
           console.log('[PRISM][Auth] Login succeeded for', email);
           // The session cookie is already set by the server response.
           // Redirect to /dashboard — the cookie will authenticate the request.
-          const redirectTarget = manageMode ? '/login?manage=true' : '/dashboard';
+          const tokenQuery = setupToken ? ('?setupToken=' + encodeURIComponent(setupToken)) : '';
+          const redirectTarget = manageMode ? '/login?manage=true' : ('/dashboard' + tokenQuery);
           setTimeout(() => {
             window.location.href = redirectTarget;
           }, 300);
@@ -425,6 +431,14 @@ export function loginHtml(port: number): string {
         btn.disabled = false;
         btn.textContent = 'Authenticate Session';
       }
+    }
+
+    function runSetupWizard() {
+      const q = new URLSearchParams();
+      q.set('rerun', 'true');
+      if (setupToken) q.set('setupToken', setupToken);
+      if (wizardToken) q.set('token', wizardToken);
+      window.location.href = '/setup?' + q.toString();
     }
 
     async function fetchJson(path, options) {
