@@ -1,5 +1,5 @@
 /**
- * Swarm & Cognition Topology REST Endpoint Handler — Phase 4 (Option 4)
+ * Swarm & Cognition Topology REST Endpoint Handler — Option 2 & 4
  *
  * Exposes GET `/api/topology` returning live agent topology, active authority contexts,
  * key registry health, and Cognition Cycles plugin status.
@@ -8,6 +8,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IRouteHandler } from "./types.js";
+import type { DashboardService } from "../dashboard-service.js";
 import { loadOrCreateRegistry } from "../../security/key-registry.js";
 import { getCanonicalCovenantDigest } from "../../governance/canonical-covenant.js";
 
@@ -57,5 +59,16 @@ export function handleTopologyRoute(req: IncomingMessage, res: ServerResponse): 
     } catch (err: any) {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: `Failed to resolve topology: ${err.message}` }));
+    }
+}
+
+export class TopologyRouteHandler implements IRouteHandler {
+    match(req: IncomingMessage): boolean {
+        const url = req.url ?? "";
+        return url === "/api/topology" || url.startsWith("/api/topology?") || url === "/api/v1/topology";
+    }
+
+    async handle(req: IncomingMessage, res: ServerResponse, _service: DashboardService): Promise<void> {
+        handleTopologyRoute(req, res);
     }
 }

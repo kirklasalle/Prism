@@ -34,6 +34,7 @@ import { PluginsHandler } from "./plugins-handler.js";
 import { PresenceHandler } from "./presence-handler.js";
 import { RoboticsHandler } from "./robotics-handler.js";
 import { AddonsHandler } from "./addons-handler.js";
+import { TopologyRouteHandler } from "./topology-handler.js";
 
 export * from "./types.js";
 export * from "./dashboard-handler.js";
@@ -63,6 +64,7 @@ export * from "./plugins-handler.js";
 export * from "./presence-handler.js";
 export * from "./robotics-handler.js";
 export * from "./addons-handler.js";
+export * from "./topology-handler.js";
 
 export class Router {
     private handlers: IRouteHandler[] = [];
@@ -98,6 +100,7 @@ export class Router {
         this.handlers.push(new PresenceHandler());
         this.handlers.push(new RoboticsHandler());
         this.handlers.push(new AddonsHandler());
+        this.handlers.push(new TopologyRouteHandler());
 
         this.handlers.push(new IamAdminRouteHandler({ iam }));
         this.handlers.push(iam);

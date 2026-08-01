@@ -520,6 +520,7 @@ export class DashboardService {
                 "/api/openapi.json",
                 // Login/setup screen graceful shutdown control.
                 "/api/system/shutdown",
+                "/api/topology",
                 // Dashboard pages — DashboardHandler has its own cookie+token auth
                 // that gracefully redirects to /login; let it handle auth, not the gate.
                 "/",
