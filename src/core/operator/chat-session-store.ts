@@ -358,11 +358,25 @@ export class ChatSessionStore implements ISessionStore {
         this.ensureColumn("sr_config", "circuit_breaker_enabled", "INTEGER DEFAULT 1");
         this.ensureColumn("sr_config", "show_hemispheres", "INTEGER DEFAULT 0");
 
+        // Phase 2 (IC-13): Drop old triggers and execute legacy developer placeholder quarantine migration FIRST
+        // so duplicate legacy rows are quarantined before building the updated triggers and unique index.
+        try {
+            this.db.exec(`
+                DROP TRIGGER IF EXISTS prevent_cert_message_update;
+                DROP TRIGGER IF EXISTS prevent_cert_session_update;
+            `);
+            executeCertificateMigration(this.db);
+        } catch (err) {
+            console.warn("[PRISM][security] Certificate migration notice:", (err as Error).message);
+        }
+
         // Database Write Protection triggers for Initialization Certificate
         // IC-03 Phase 0: Unconditional immutability — deletion is NEVER permitted
         // regardless of how many certificate records exist.
         this.db.exec(`
+            DROP TRIGGER IF EXISTS prevent_cert_message_update;
             DROP TRIGGER IF EXISTS prevent_cert_message_delete;
+            DROP TRIGGER IF EXISTS prevent_cert_session_update;
             DROP TRIGGER IF EXISTS prevent_cert_session_delete;
 
             CREATE TRIGGER IF NOT EXISTS prevent_cert_message_update
@@ -385,6 +399,7 @@ export class ChatSessionStore implements ISessionStore {
             BEFORE UPDATE ON chat_sessions
             FOR EACH ROW
             WHEN OLD.title LIKE '%Initialization Certificate%'
+              AND NOT (NEW.is_quarantined = 1 AND OLD.is_quarantined = 0)
             BEGIN
                 SELECT CASE
                     WHEN NEW.title != OLD.title OR (
@@ -412,13 +427,6 @@ export class ChatSessionStore implements ISessionStore {
             WHERE title LIKE '%Initialization Certificate%'
               AND (operator_email IS NOT NULL AND operator_email NOT LIKE 'archived:%' AND is_quarantined = 0);
         `);
-
-        // Phase 2 (IC-13): Execute legacy developer placeholder quarantine migration
-        try {
-            executeCertificateMigration(this.db);
-        } catch (err) {
-            console.warn("[PRISM][security] Certificate migration notice:", (err as Error).message);
-        }
     }
 
     private ensureColumn(table: string, column: string, definition: string): void {

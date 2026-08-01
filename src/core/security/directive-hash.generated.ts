@@ -9,8 +9,8 @@
  *
  * Source file:  Permanent_Active_Directives.txt
  * Hashed bytes: 6335
- * Generated at: 2026-07-31T23:29:00.828Z
+ * Generated at: 2026-08-01T12:39:36.762Z
  */
 export const DIRECTIVE_SHA256_GENERATED = "a8d594d70d50286a55a490dfdabef4e4b20dcb09495178a7c4d2b3314d0600df";
-export const DIRECTIVE_HASH_GENERATED_AT = "2026-07-31T23:29:00.828Z";
+export const DIRECTIVE_HASH_GENERATED_AT = "2026-08-01T12:39:36.762Z";
 export const DIRECTIVE_HASH_SOURCE_BYTES = 6335;
