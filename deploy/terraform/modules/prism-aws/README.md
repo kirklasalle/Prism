@@ -20,7 +20,7 @@ What this module does **not** own (caller's responsibility):
 
 ```hcl
 module "prism" {
-  source = "github.com/kirklasalle/Prism//deploy/terraform/modules/prism-aws?ref=v0.13.0-cloud-trial"
+  source = "github.com/kirklasalle/PrismRefraction//deploy/terraform/modules/prism-aws?ref=v0.13.0-cloud-trial"
 
   name_prefix             = "acme-prod"
   eks_oidc_provider_arn   = data.aws_eks_cluster.this.identity[0].oidc[0].issuer_arn

@@ -2,6 +2,20 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## Unreleased — Prism Refraction Repository Reference Alignment
+
+Aligns public-facing repository and documentation references from the legacy `Prism` GitHub path to `PrismRefraction` while intentionally preserving compatible runtime namespaces and published image coordinates.
+
+### Changed
+
+- **Repository Reference Migration (docs, SDK, public site, CI metadata, operator help links)**: Updated external GitHub and raw-content URLs across the public website, SDK metadata, operator tooltip catalogs, security/contributor metadata, deployment docs, and related operator-facing help surfaces to point at `kirklasalle/PrismRefraction`.
+- **Rename Audit Tracking (`docs/rename_prism_refraction_checklist.json`)**: Added machine-readable progress tracking for the rename audit, including completed files, pending exceptions, and rationale.
+
+### Intentionally Preserved
+
+- **OCI / GHCR Image Namespace Compatibility**: References to `ghcr.io/kirklasalle/prism` remain in deployment defaults and OCI packaging documentation until a coordinated image-publishing migration is scheduled.
+- **Historical Release Record Integrity**: Older historical release text that references the prior project path is preserved where it serves as changelog history rather than live operator guidance.
+
 ## v0.22.8 — 2026-07-28 — Setup Wizard Auth Gate & Model Download Stabilization
 
 Remediates first-run setup authentication blocks (`401 Unauthorized`), stabilizes Guardian model download pipelines with TLS SNI and 60s socket timeouts, adds trace logging to `logs/prism.log` and `logs/prism-trace.log`, guarantees default workspace path resolution to OS Documents, fixes Setup Wizard UI button responsiveness, and wires the Shutdown Server button.

@@ -24,7 +24,7 @@ const SHELL_TIPS = {
         ],
         links: [
             { label: 'README', href: '/docs/../README.md' },
-            { label: 'Wiki', href: 'https://github.com/kirklasalle/Prism/wiki' },
+            { label: 'Wiki', href: 'https://github.com/kirklasalle/PrismRefraction/wiki' },
         ],
     },
     'shell:console-link': {
@@ -48,7 +48,7 @@ const SHELL_TIPS = {
         ],
         links: [
             { label: 'Session Export Guide', href: '/docs/DEPLOYMENT_GUIDE.md' },
-            { label: 'Wiki — Sessions', href: 'https://github.com/kirklasalle/Prism/wiki/Sessions' },
+            { label: 'Wiki — Sessions', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Sessions' },
         ],
     },
     'shell:import-session': {
@@ -99,7 +99,7 @@ const SHELL_TIPS = {
         ],
         links: [
             { label: 'Setup Guide', href: '/docs/DEPLOYMENT_GUIDE.md' },
-            { label: 'Wiki — Setup Wizard', href: 'https://github.com/kirklasalle/Prism/wiki/Setup-Wizard' },
+            { label: 'Wiki — Setup Wizard', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Setup-Wizard' },
         ],
     },
     'shell:ws-status': {
@@ -115,7 +115,7 @@ const SHELL_TIPS = {
             'PRISM auto-reconnects with exponential backoff if the link drops.',
         ],
         links: [
-            { label: 'Wiki — Realtime Channel', href: 'https://github.com/kirklasalle/Prism/wiki/Realtime' },
+            { label: 'Wiki — Realtime Channel', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Realtime' },
         ],
     },
 };
@@ -157,7 +157,7 @@ const TAB_TIPS = {
         ],
         links: [
             { label: 'PAD Whitepaper', href: '/docs/PAD_WHITEPAPER.md' },
-            { label: 'Wiki — Guardian', href: 'https://github.com/kirklasalle/Prism/wiki/Guardian-Agent' },
+            { label: 'Wiki — Guardian', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Guardian-Agent' },
         ],
     },
     computer: {
@@ -185,7 +185,7 @@ const TAB_TIPS = {
         ],
         links: [
             { label: 'Character Guide', href: '/docs/CHARACTER_SELECTION_GUIDE.md' },
-            { label: 'Wiki — Workspace', href: 'https://github.com/kirklasalle/Prism/wiki/Workspace' },
+            { label: 'Wiki — Workspace', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Workspace' },
         ],
     },
     network: {
@@ -205,7 +205,7 @@ const TAB_TIPS = {
         ],
         links: [
             { label: 'SRE Guide', href: '/docs/ADMIN_SRE_GUIDE.md' },
-            { label: 'Wiki — Telemetry', href: 'https://github.com/kirklasalle/Prism/wiki/Telemetry' },
+            { label: 'Wiki — Telemetry', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Telemetry' },
         ],
     },
     logs: {

@@ -9,7 +9,7 @@ import https from "node:https";
 import urllib from "node:url";
 
 const HEADERS = {
-    "User-Agent": "PrismOS-LocResearchPlugin/1.0 (https://github.com/kirklasalle/Prism; research-automation)"
+    "User-Agent": "PrismOS-LocResearchPlugin/1.0 (https://github.com/kirklasalle/PrismRefraction; research-automation)"
 };
 
 function fetchJson(url) {

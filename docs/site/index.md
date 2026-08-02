@@ -28,6 +28,6 @@ Open core under Apache-2.0. See [LICENSE_MODEL_RECOMMENDATION.md](../LICENSE_MOD
 
 ## Community
 
-- GitHub: [kirklasalle/Prism](https://github.com/kirklasalle/Prism)
+- GitHub: [kirklasalle/Prism](https://github.com/kirklasalle/PrismRefraction)
 - Discussions: GitHub Discussions (per repo)
 - Issues: bug reports + feature requests via GitHub Issues

@@ -62,7 +62,7 @@ class SimpleRateLimiter:
 limiter = SimpleRateLimiter()
 
 HEADERS = {
-    "User-Agent": "PrismOS-LoCMcpServer/1.0 (https://github.com/kirklasalle/Prism; research-automation)"
+    "User-Agent": "PrismOS-LoCMcpServer/1.0 (https://github.com/kirklasalle/PrismRefraction; research-automation)"
 }
 
 @mcp.tool()

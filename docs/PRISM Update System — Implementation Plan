@@ -20,6 +20,7 @@ Prism needs a **safe, zero-knowledge update mechanism** that any operator can ex
 | **Guardian-Initiated** | Autonomous | Guardian detects new version → notifies operator → optional auto-update |
 
 ### Core Principles
+
 1. **Never destroy user state.** Only append, merge, or migrate forward.
 2. **Main Branch Enforcement.** Strictly pull from `main` only.
 3. **Security-First Pipeline.** The update process itself is treated as an attack surface with full PAD, governance, and dependency verification gates.
@@ -77,12 +78,14 @@ A new task is added to the `GUARDIAN_TASK_CATALOG`:
 ```
 
 **Implementation:**
-- Fetches `https://raw.githubusercontent.com/kirklasalle/Prism/main/package.json` using Node's built-in `fetch()`.
+
+- Fetches `https://raw.githubusercontent.com/kirklasalle/PrismRefraction/main/package.json` using Node's built-in `fetch()`.
 - Parses the `version` field from the remote `package.json`.
 - Compares against the local `PRISM_VERSION`.
 - If a newer version is detected:
   - Emits `guardian.task.update_version_check` with status `"warning"` and detail containing the version diff.
   - Emits a dedicated `guardian.update_available` event to the Activity Bus:
+
     ```json
     {
       "sessionId": "guardian",
@@ -96,12 +99,14 @@ A new task is added to the `GUARDIAN_TASK_CATALOG`:
       }
     }
     ```
+
   - Sets an internal `updateAvailable` flag and stores the latest version string.
   - The dashboard's `/api/update/check` endpoint can read this cached result from the Guardian instead of making its own network call, reducing redundant fetches.
 
 ### 3.2 Guardian-Triggered Operator Notification
 
 When the Guardian detects an available update:
+
 1. The `guardian.update_available` event appears in the **Logs & Debug** tab.
 2. The `/api/update/check` endpoint returns `updateAvailable: true` with version details.
 3. The sidebar **UPDATE** button illuminates with a pulsing notification.
@@ -118,6 +123,7 @@ A new preference field is added to `.prism-preferences.json`:
 ```
 
 **When `autoUpdate` is `true`:**
+
 - After the Guardian's `update_version_check` task detects a new version, instead of only notifying the operator, it will:
   1. Emit `guardian.auto_update.initiated` to the Activity Bus.
   2. Wait for a configurable grace period (default: 60 seconds) to allow the operator to cancel.
@@ -125,6 +131,7 @@ A new preference field is added to `.prism-preferences.json`:
   4. The update script handles shutdown, pull, build, migrate, restart.
 
 **When `autoUpdate` is `false` (default):**
+
 - Guardian only notifies. The operator must click the UPDATE button or run the CLI command.
 
 > [!IMPORTANT]
@@ -158,11 +165,13 @@ A new preference field is added to `.prism-preferences.json`:
 ### 4.2 Security Gates
 
 #### Gate 1: PAD Integrity Verification
+
 - After `git pull`, compute `SHA-256(Permanent_Active_Directives.txt)`.
 - If PAD changed: run `verify-governance-signature.cjs --strict`.
 - If signature invalid → **ROLLBACK immediately**.
 
 #### Gate 2: Governance File Integrity Check
+
 - SHA-256 hash all governance documents before and after pull:
   - `Permanent_Active_Directives.txt`
   - `AGENTIC_SACRED_COVENANT.md`
@@ -171,14 +180,17 @@ A new preference field is added to `.prism-preferences.json`:
 - Emit `update.security.governance_modified` if any changed.
 
 #### Gate 3: Dependency Audit
+
 - After `npm install`, run `npm audit --omit=dev --audit-level=high`.
 - Warn on high/critical vulnerabilities.
 
 #### Gate 4: Script Self-Modification Detection
+
 - Check if `scripts/prism-update.cjs` or `scripts/prism-update-config.cjs` were modified by the pull.
 - Emit warning event for operator review.
 
 #### Gate 5: Post-Build PAD Re-Verification
+
 - After `npm run build`, call `verifyDirectiveIntegrity()`.
 - If diverged → **ROLLBACK**.
 
@@ -212,60 +224,75 @@ graph TD
 ```
 
 ### Phase 1: Pre-Flight Checks & Branch Verification
+
 - Verify Node.js ≥ 22, npm, git on PATH.
 - **Strict Main Branch Check.** Abort if not on `main`.
 - Record `oldVersion` from `package.json`.
 
 ### Phase 1b: Pre-Update Stability Check
+
 - Run `npm run doctor`. Abort if fatal issues exist pre-update.
 
 ### Phase 2: Detect & Shutdown Running Server
+
 - Check port `PRISM_DASHBOARD_PORT` (default `7070`).
 - Graceful `POST /api/system/shutdown`, then wait/force-kill.
 
 ### Phase 3: Automatic Backup
+
 - Backup all critical files (§2.2) to `backups/pre-update-<timestamp>/`.
 - Record SHA-256 hashes of governance files.
 
 ### Phase 4: Git Pull
+
 - Stash dirty working tree if needed.
 - `git pull --ff-only origin main`. Abort on conflict.
 - Pop stash. Record `newVersion`.
 
 ### Phase 4b: Security Gates 1, 2, 4
+
 - PAD integrity + governance signature verification.
 - Governance file hash audit.
 - Script self-modification detection.
 
 ### Phase 5: Dependency Install
+
 - `npm install` (incremental).
 
 ### Phase 5b: Security Gate 3
+
 - `npm audit --omit=dev --audit-level=high`.
 
 ### Phase 6: Configuration Migration
+
 - **6a.** `.env` append-merge (new keys only).
 - **6b.** `.prism-preferences.json` deep merge (add missing fields including `autoUpdate`).
 - **6c.** Workspace structure via `ensureWorkspaceStructure()`.
 
 ### Phase 7: Build
+
 - `npm run build` (includes `prebuild` PAD hash).
 
 ### Phase 7b: Security Gate 5
+
 - `verifyDirectiveIntegrity()`. Rollback on divergence.
 
 ### Phase 8: Run DB Migrations
+
 - `MigrationRunner` on all `*.db` files.
 
 ### Phase 9: Post-Update Verification
+
 - `npm run doctor`. Verify `dist/` artifacts.
 - Rollback on failure.
 
 ### Phase 10: Restart Server
+
 - If server was running: respawn.
 - If not: print completion message.
 
 ### Phase 11: Client Auto-Refresh
+
 - Browser polls `/api/health` every 1.5s.
 - On `200 OK` → `window.location.reload()`.
 
@@ -274,6 +301,7 @@ graph TD
 ## 6. Dashboard UI Integration
 
 ### 6.1 Fix Missing Version Number
+
 - Add `version: PRISM_VERSION` to `/api/status` response.
 
 ### 6.2 UPDATE Button & Auto-Update Checkbox
@@ -332,6 +360,7 @@ http://localhost:7070
 | `rollback.completed` | `system` | Rollback finished |
 
 ### 7.2 Console Interceptor
+
 - All output formatted with `[PRISM][update][phase]` prefixes.
 - Captured by `ConsoleInterceptor` → Logs & Debug tab in real time.
 
@@ -340,11 +369,13 @@ http://localhost:7070
 ## 8. Rollback Strategy
 
 ### 8.1 Update Rollback (Snapshot)
+
 - Restore critical files from `backups/`.
 - `git checkout .` if needed.
 - DB migrations are transactional — failed migrations auto-rollback.
 
 ### 8.2 Standardized Rollback Event Schema
+
 Both update rollbacks and runtime security rollbacks emit the same event format for unified Guardian/Operator visibility:
 
 ```json
@@ -439,8 +470,9 @@ The following is a rigorous, adversarial audit of the plan itself, identifying g
 
 > [!CAUTION]
 > This is the FINAL DRAFT. No code changes will be made until approved by Kirk LaSalle.
-> 
+>
 > Upon approval, implementation will proceed in this order:
+>
 > 1. `scripts/prism-update-config.cjs` (config migrator)
 > 2. `scripts/prism-update.cjs` (orchestrator with security gates)
 > 3. `update.bat` + `update.sh` (one-click scripts)

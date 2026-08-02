@@ -24,7 +24,7 @@ request. Pre-release branches (`feat/*`) are not officially supported.
 Please **do not** open a public GitHub issue for a suspected vulnerability.
 Instead, report it privately so it can be triaged before disclosure:
 
-1. Open a [GitHub private security advisory](https://github.com/kirklasalle/Prism/security/advisories/new)
+1. Open a [GitHub private security advisory](https://github.com/kirklasalle/PrismRefraction/security/advisories/new)
    (preferred — gives us a private discussion thread and a CVE pathway), or
 2. Email the maintainer at the address listed in the repository profile and
    include the word **"PRISM-SEC"** in the subject line.

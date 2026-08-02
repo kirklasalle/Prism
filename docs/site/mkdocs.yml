@@ -1,8 +1,8 @@
-site_name: PRISM
+site_name: Prism Refraction
 site_description: Agents-as-a-Service infrastructure with strong governance primitives.
 site_url: https://prism.example.com
-repo_url: https://github.com/kirklasalle/Prism
-repo_name: kirklasalle/Prism
+repo_url: https://github.com/kirklasalle/PrismRefractionRefraction
+repo_name: kirklasalle/PrismRefraction
 edit_uri: edit/main/docs/site/
 docs_dir: ..
 site_dir: ../../prism-output/docs-site

@@ -61,7 +61,7 @@ You will file under two key international classes (International Classes 9 and 4
 
 Since the PRISM repository is live and public on GitHub, you will file under **Section 1(a) - "Use in Commerce"**.
 
-* **Specimen Required:** You must upload a PDF screenshot of the public GitHub page (`github.com/kirklasalle/Prism`) and/or screenshots of the operating dashboard showing the PRISM logo and interface, showing that the product is available to the public.
+* **Specimen Required:** You must upload a PDF screenshot of the public GitHub page (`github.com/kirklasalle/PrismRefraction`) and/or screenshots of the operating dashboard showing the PRISM logo and interface, showing that the product is available to the public.
 
 ### Step 3.4: Submit and Pay
 

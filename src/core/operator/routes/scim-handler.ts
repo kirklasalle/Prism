@@ -341,7 +341,7 @@ export class ScimRouteHandler implements IRouteHandler {
     private serviceProviderConfig(): Record<string, unknown> {
         return {
             schemas: ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
-            documentationUri: "https://github.com/kirklasalle/Prism/blob/main/CHANGELOG.md",
+            documentationUri: "https://github.com/kirklasalle/PrismRefractionRefraction/blob/main/CHANGELOG.md",
             patch: { supported: true },
             bulk: { supported: false, maxOperations: 0, maxPayloadSize: 0 },
             filter: { supported: true, maxResults: 1000 },

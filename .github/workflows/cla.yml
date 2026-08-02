@@ -24,6 +24,6 @@ jobs:
           PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_BOT_PAT }}
         with:
           path-to-signatures: 'signatures/version1/cla.json'
-          path-to-document: 'https://github.com/kirklasalle/Prism/blob/main/CONTRIBUTING.md#contributor-license-agreement-cla'
+          path-to-document: 'https://github.com/kirklasalle/PrismRefractionRefraction/blob/main/CONTRIBUTING.md#contributor-license-agreement-cla'
           branch: 'main'
           allowlist: 'bot-prism,dependabot[bot],renovate[bot],kirklasalle'

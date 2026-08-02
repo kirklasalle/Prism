@@ -1,0 +1,79 @@
+{
+    "checklistVersion": "1.0",
+    "generatedDate": "2026-08-01",
+    "repository": "kirklasalle/PrismRefraction",
+    "objective": "Prism to Prism Refraction external reference migration",
+    "scope": "maintained files only (excluding dist, prism-output, node_modules, .git)",
+    "summary": {
+        "trackedFiles": 33,
+        "completedInPass1": 23,
+        "completedInPass2": 6,
+        "completedTotal": 29,
+        "pending": 4
+    },
+    "completedFiles": [
+        ".github/workflows/cla.yml",
+        "SECURITY.md",
+        "deploy/helm/prism/Chart.yaml",
+        "deploy/terraform/modules/prism-aws/README.md",
+        "docs/prism_public/architecture.html",
+        "docs/prism_public/business.html",
+        "docs/prism_public/contact.html",
+        "docs/prism_public/features.html",
+        "docs/prism_public/index.html",
+        "docs/prism_public/privacy.html",
+        "docs/prism_public/security.html",
+        "docs/prism_public/terms.html",
+        "docs/prism_public/wiki.html",
+        "docs/site/index.md",
+        "docs/site/mkdocs.yml",
+        "sdk/python/README.md",
+        "sdk/python/pyproject.toml",
+        ".mcp/loc-mcp-server/server.py",
+        "docs/DEPLOYMENT_GUIDE.md",
+        "docs/PRISM Update System \u2014 Implementation Plan",
+        "docs/PRISM_PROMOTION_GUIDE.md",
+        "docs/PRISM_TRADEMARK_GUIDE.md",
+        "docs/tooltips/links.json",
+        "src/core/operator/public/docs-ptac-operator-demo.html",
+        "src/core/operator/public/shell-tooltips.js",
+        "src/core/operator/public/tab-tips-catalog.js",
+        "src/core/operator/routes/scim-handler.ts",
+        "src/plugins/loc-research/index.js",
+        "src/plugins/loc-research/manifest.json"
+    ],
+    "pendingFiles": [
+        "CHANGELOG.md",
+        "deploy/helm/prism/values.yaml",
+        "deploy/terraform/modules/prism-aws/variables.tf",
+        "docs/A2A_OCI_INTEGRATION_SPEC.md"
+    ],
+    "statusLegend": {
+        "completedInPass1": "Updated from old Prism repo URL/path references to PrismRefraction references.",
+        "pending": "Still contains old Prism URL/registry references and requires migration decision or update."
+    },
+    "approvedExceptions": [
+        {
+            "file": "CHANGELOG.md",
+            "reason": "Historical release record is intentionally preserved except for the new alignment entry."
+        },
+        {
+            "file": "deploy/helm/prism/values.yaml",
+            "reason": "Default image repository remains ghcr.io/kirklasalle/prism until a coordinated image namespace migration is scheduled."
+        },
+        {
+            "file": "deploy/terraform/modules/prism-aws/variables.tf",
+            "reason": "Terraform default image repository intentionally matches the current published GHCR namespace."
+        },
+        {
+            "file": "docs/A2A_OCI_INTEGRATION_SPEC.md",
+            "reason": "OCI distribution examples intentionally retain prism image coordinates for compatibility and are documented as such."
+        }
+    ],
+    "notes": [
+        "Pass 1 intentionally avoided internal runtime env var/API namespace changes (for example PRISM_*), per compatibility scope.",
+        "Build outputs and generated artifacts are excluded from checklist scope.",
+        "Container image references (ghcr.io/kirklasalle/prism) remain pending because current publish workflows still target that registry path and changing defaults requires release-image naming coordination.",
+        "Historical references in CHANGELOG.md remain pending intentionally so released-history text is not silently rewritten."
+    ]
+}

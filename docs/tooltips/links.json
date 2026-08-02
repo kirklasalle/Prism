@@ -6,7 +6,7 @@
         },
         {
             "label": "Wiki: Workspaces",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Workspaces"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Workspaces"
         }
     ],
     "character:aria-individual": [
@@ -16,7 +16,7 @@
         },
         {
             "label": "Wiki: ARIA",
-            "href": "https://github.com/kirklasalle/Prism/wiki/ARIA"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/ARIA"
         }
     ],
     "character:aria-business": [
@@ -26,7 +26,7 @@
         },
         {
             "label": "Wiki: ARIA",
-            "href": "https://github.com/kirklasalle/Prism/wiki/ARIA"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/ARIA"
         }
     ],
     "character:phoenix-individual": [
@@ -36,7 +36,7 @@
         },
         {
             "label": "Wiki: PHOENIX",
-            "href": "https://github.com/kirklasalle/Prism/wiki/PHOENIX"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/PHOENIX"
         }
     ],
     "character:phoenix-business": [
@@ -46,7 +46,7 @@
         },
         {
             "label": "Wiki: PHOENIX",
-            "href": "https://github.com/kirklasalle/Prism/wiki/PHOENIX"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/PHOENIX"
         }
     ],
     "character:sentinel-individual": [
@@ -56,7 +56,7 @@
         },
         {
             "label": "Wiki: SENTINEL",
-            "href": "https://github.com/kirklasalle/Prism/wiki/SENTINEL"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/SENTINEL"
         }
     ],
     "character:sentinel-business": [
@@ -66,7 +66,7 @@
         },
         {
             "label": "Wiki: SENTINEL",
-            "href": "https://github.com/kirklasalle/Prism/wiki/SENTINEL"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/SENTINEL"
         }
     ],
     "character:example-analyst": [
@@ -82,7 +82,7 @@
         },
         {
             "label": "Wiki Home",
-            "href": "https://github.com/kirklasalle/Prism/wiki"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki"
         },
         {
             "label": "Quiet Release Master Plan (3D)",
@@ -110,55 +110,55 @@
         },
         {
             "label": "Wiki: Setup Wizard",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Setup-Wizard"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Setup-Wizard"
         }
     ],
     "shell:export-session": [
         {
             "label": "Wiki: Sessions",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Sessions"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Sessions"
         }
     ],
     "shell:import-session": [
         {
             "label": "Wiki: Sessions",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Sessions"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Sessions"
         }
     ],
     "shell:package-sessions": [
         {
             "label": "Wiki: Session Packaging",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Session-Packaging"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Session-Packaging"
         }
     ],
     "shell:new-session": [
         {
             "label": "Wiki: Sessions",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Sessions"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Sessions"
         }
     ],
     "shell:ws-status": [
         {
             "label": "Wiki: Realtime Channel",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Realtime"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Realtime"
         }
     ],
     "shell:tab:chat": [
         {
             "label": "Wiki: Chat",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Chat"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Chat"
         }
     ],
     "shell:tab:settings": [
         {
             "label": "Wiki: Providers & Settings",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Providers-and-Settings"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Providers-and-Settings"
         }
     ],
     "shell:tab:tools": [
         {
             "label": "Wiki: Tools & Plugins",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Tools-and-Plugins"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Tools-and-Plugins"
         }
     ],
     "shell:tab:agentic": [
@@ -168,19 +168,19 @@
         },
         {
             "label": "Wiki: Agentic Control",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Agentic-Control"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Agentic-Control"
         }
     ],
     "shell:tab:computer": [
         {
             "label": "Wiki: Computer Control",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Computer-Control"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Computer-Control"
         }
     ],
     "shell:tab:browser": [
         {
             "label": "Wiki: Browser Control",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Browser-Control"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Browser-Control"
         }
     ],
     "shell:tab:workspace": [
@@ -190,13 +190,13 @@
         },
         {
             "label": "Wiki: Workspace",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Workspace"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Workspace"
         }
     ],
     "shell:tab:network": [
         {
             "label": "Wiki: Network",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Network"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Network"
         }
     ],
     "shell:tab:telemetry": [
@@ -206,91 +206,91 @@
         },
         {
             "label": "Wiki: Telemetry",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Telemetry"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Telemetry"
         }
     ],
     "shell:tab:logs": [
         {
             "label": "Wiki: Logs & Debug",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Logs-and-Debug"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Logs-and-Debug"
         }
     ],
     "shell:tab:scheduler": [
         {
             "label": "Wiki: Scheduler",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Scheduler"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Scheduler"
         }
     ],
     "chat:send": [
         {
             "label": "Wiki: Chat",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Chat"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Chat"
         }
     ],
     "chat:composer": [
         {
             "label": "Wiki: Composer",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Chat#composer"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Chat#composer"
         }
     ],
     "chat:messages": [
         {
             "label": "Wiki: Messages",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Chat#messages"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Chat#messages"
         }
     ],
     "chat:attach": [
         {
             "label": "Wiki: Attachments",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Attachments"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Attachments"
         }
     ],
     "chat:paste": [
         {
             "label": "Wiki: Attachments",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Attachments"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Attachments"
         }
     ],
     "settings:sr-toggle": [
         {
             "label": "Wiki: Spectrum Refraction",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Spectrum-Refraction"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Spectrum-Refraction"
         }
     ],
     "settings:model-routing": [
         {
             "label": "Wiki: Model Routing",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Model-Routing"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Model-Routing"
         }
     ],
     "settings:provider-config": [
         {
             "label": "Wiki: Providers",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Providers"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Providers"
         }
     ],
     "settings:capability-matrix": [
         {
             "label": "Wiki: Capability Matrix",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Capability-Matrix"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Capability-Matrix"
         }
     ],
     "settings:llm-audit": [
         {
             "label": "Wiki: LLM Audit",
-            "href": "https://github.com/kirklasalle/Prism/wiki/LLM-Audit"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/LLM-Audit"
         }
     ],
     "tools:plugins": [
         {
             "label": "Wiki: Plugins",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Plugins"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Plugins"
         }
     ],
     "tools:diagnostics": [
         {
             "label": "Wiki: Diagnostics",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Diagnostics"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Diagnostics"
         }
     ],
     "agentic:guardian": [
@@ -300,79 +300,79 @@
         },
         {
             "label": "Wiki: Guardian",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Guardian-Agent"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Guardian-Agent"
         }
     ],
     "agentic:swarm": [
         {
             "label": "Wiki: Swarms",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Swarms"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Swarms"
         }
     ],
     "agentic:hardware-swarm": [
         {
             "label": "Wiki: Hardware Swarm",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Hardware-Swarm"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Hardware-Swarm"
         }
     ],
     "computer:framebuffer": [
         {
             "label": "Wiki: Vision",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Vision-Framebuffer"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Vision-Framebuffer"
         }
     ],
     "computer:devices": [
         {
             "label": "Wiki: Device Manager",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Device-Manager"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Device-Manager"
         }
     ],
     "browser:control": [
         {
             "label": "Wiki: Browser Control",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Browser-Control"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Browser-Control"
         }
     ],
     "workspace:location": [
         {
             "label": "Wiki: Workspaces",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Workspaces"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Workspaces"
         }
     ],
     "workspace:import-manager": [
         {
             "label": "Wiki: Import Manager",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Import-Manager"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Import-Manager"
         }
     ],
     "network:vrgc": [
         {
             "label": "Wiki: VRGC",
-            "href": "https://github.com/kirklasalle/Prism/wiki/VRGC"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/VRGC"
         }
     ],
     "telemetry:release-readiness": [
         {
             "label": "Wiki: Release Readiness",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Release-Readiness"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Release-Readiness"
         }
     ],
     "telemetry:slo-gauges": [
         {
             "label": "Wiki: SLOs",
-            "href": "https://github.com/kirklasalle/Prism/wiki/SLOs"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/SLOs"
         }
     ],
     "logs:approvals": [
         {
             "label": "Wiki: Approvals",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Approvals"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Approvals"
         }
     ],
     "scheduler:header": [
         {
             "label": "Wiki: Scheduler",
-            "href": "https://github.com/kirklasalle/Prism/wiki/Scheduler"
+            "href": "https://github.com/kirklasalle/PrismRefraction/wiki/Scheduler"
         }
     ]
 }

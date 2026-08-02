@@ -4,9 +4,9 @@ description: PRISM — Agents-as-a-Service control plane (dashboard + multi-prov
 type: application
 version: 0.1.0
 appVersion: "0.13.0-cloud-trial"
-home: https://github.com/kirklasalle/Prism
+home: https://github.com/kirklasalle/PrismRefraction
 sources:
-  - https://github.com/kirklasalle/Prism
+  - https://github.com/kirklasalle/PrismRefraction
 keywords:
   - prism
   - agents
@@ -16,4 +16,4 @@ keywords:
 maintainers:
   - name: Kirk LaSalle
     url: https://github.com/kirklasalle
-icon: https://raw.githubusercontent.com/kirklasalle/Prism/main/screengrab/icon.png
+icon: https://raw.githubusercontent.com/kirklasalle/PrismRefraction/main/screengrab/icon.png

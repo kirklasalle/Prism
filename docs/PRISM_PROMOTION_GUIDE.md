@@ -62,7 +62,7 @@ Post a text description with links to the repo on the following subreddits:
 >
 > If you are interested in AI engineering or want to run a secure agent harness on your own system, check us out on GitHub! We would love your feedback and support.
 >
-> 👉 GitHub: https://github.com/kirklasalle/Prism
+> 👉 GitHub: https://github.com/kirklasalle/PrismRefraction
 >
 > #OpenSource #AI #AgenticAI #TechLaunch #SoftwareEngineering
 

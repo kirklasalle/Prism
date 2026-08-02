@@ -28,7 +28,7 @@ const CATALOG = {
             'Trades a small latency cost for higher-quality outputs on hard prompts.',
             'Toggle off when you want a single-model deterministic response.',
         ],
-        links: [{ label: 'Wiki: Spectrum Refraction', href: 'https://github.com/kirklasalle/Prism/wiki/Spectrum-Refraction' }],
+        links: [{ label: 'Wiki: Spectrum Refraction', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Spectrum-Refraction' }],
     },
     'settings:session-provider': {
         kind: 'settings', icon: '🔌', label: 'Session Provider',
@@ -49,7 +49,7 @@ const CATALOG = {
             'Role-Based: different models per role (planner, coder, reviewer).',
             'Modality-Based: text/code/image are routed to specialised models.',
         ],
-        links: [{ label: 'Wiki: Model Routing', href: 'https://github.com/kirklasalle/Prism/wiki/Model-Routing' }],
+        links: [{ label: 'Wiki: Model Routing', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Model-Routing' }],
     },
     'settings:provider-config': {
         kind: 'settings', icon: '🔑', label: 'Provider Configuration',
@@ -97,7 +97,7 @@ const CATALOG = {
             'Signing keys live under config/plugin-signing-keys.json.',
             'Disabled plugins are isolated — they cannot be invoked even by mistake.',
         ],
-        links: [{ label: 'Wiki: Plugins', href: 'https://github.com/kirklasalle/Prism/wiki/Plugins' }],
+        links: [{ label: 'Wiki: Plugins', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Plugins' }],
     },
     'tools:tools': {
         kind: 'tools', icon: '🛠️', label: 'Tools',
@@ -118,7 +118,7 @@ const CATALOG = {
             'Each suite runs independently and live-streams results.',
             'Pass/fail history is retained for trend analysis.',
         ],
-        links: [{ label: 'Wiki: Diagnostics', href: 'https://github.com/kirklasalle/Prism/wiki/Diagnostics' }],
+        links: [{ label: 'Wiki: Diagnostics', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Diagnostics' }],
     },
     'tools:demo': {
         kind: 'tools', icon: '🎬', label: 'Demo Scenarios',
@@ -147,7 +147,7 @@ const CATALOG = {
         ],
         links: [
             { label: 'PAD Whitepaper', href: '/docs/PAD_WHITEPAPER.md' },
-            { label: 'Wiki: Guardian', href: 'https://github.com/kirklasalle/Prism/wiki/Guardian-Agent' },
+            { label: 'Wiki: Guardian', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Guardian-Agent' },
         ],
     },
     'agentic:agent-list': {
@@ -168,7 +168,7 @@ const CATALOG = {
         kind: 'agentic', icon: '🐝', label: 'Swarm Control',
         summary: 'Coordinate multiple agents on a single objective.',
         lore: ['Swarm members share context but execute in parallel.'],
-        links: [{ label: 'Wiki: Swarms', href: 'https://github.com/kirklasalle/Prism/wiki/Swarms' }],
+        links: [{ label: 'Wiki: Swarms', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Swarms' }],
     },
     'agentic:hardware-swarm': {
         kind: 'agentic', icon: '🖥️', label: 'Local Hardware Swarm',
@@ -204,7 +204,7 @@ const CATALOG = {
             'Auto-Refresh updates the viewer every 2 seconds.',
             'Click the image to open it full-size.',
         ],
-        links: [{ label: 'Wiki: Vision', href: 'https://github.com/kirklasalle/Prism/wiki/Vision-Framebuffer' }],
+        links: [{ label: 'Wiki: Vision', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Vision-Framebuffer' }],
     },
     'computer:env': {
         kind: 'computer', icon: '🌐', label: 'Environment Variables',
@@ -309,7 +309,7 @@ const CATALOG = {
     'network:vrgc': {
         kind: 'network', icon: '🛡️', label: 'VRGC Intelligence',
         summary: 'Verified Routing & Governance Channel — policy-aware routing for sensitive traffic.',
-        links: [{ label: 'Wiki: VRGC', href: 'https://github.com/kirklasalle/Prism/wiki/VRGC' }],
+        links: [{ label: 'Wiki: VRGC', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/VRGC' }],
     },
 
     // ── Telemetry tab ───────────────────────────────────────────────────────
@@ -411,7 +411,7 @@ const CATALOG = {
     'scheduler:header': {
         kind: 'scheduler', icon: '🗓️', label: 'Scheduler',
         summary: 'Calendar, projects, Kanban, timeline, and cron jobs.',
-        links: [{ label: 'Wiki: Scheduler', href: 'https://github.com/kirklasalle/Prism/wiki/Scheduler' }],
+        links: [{ label: 'Wiki: Scheduler', href: 'https://github.com/kirklasalle/PrismRefraction/wiki/Scheduler' }],
     },
     'scheduler:add-event': { kind: 'scheduler', icon: '➕', label: 'Add Event', summary: 'Create a calendar event with title, time, and description.' },
     'scheduler:add-task': { kind: 'scheduler', icon: '➕', label: 'Add Task', summary: 'Create a task that flows through the Kanban board.' },

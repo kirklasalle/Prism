@@ -2,7 +2,7 @@
 
 [![Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](../../LICENSE)
 
-Official Python client for the [PRISM](https://github.com/kirklasalle/Prism) governance-native Agents-as-a-Service runtime. Wraps the dashboard HTTP/SSE surface so Python applications, notebooks, and automation scripts can drive PRISM the same way the operator dashboard does.
+Official Python client for the [PRISM](https://github.com/kirklasalle/PrismRefraction) governance-native Agents-as-a-Service runtime. Wraps the dashboard HTTP/SSE surface so Python applications, notebooks, and automation scripts can drive PRISM the same way the operator dashboard does.
 
 > **Status:** v0.2.0 — adds the v0.21 autonomous-loop helpers (`chat_autonomous`, `watch_events`, `status`). Stable surface for `chat`, `chat_stream`, providers, Spectrum Refraction, approvals, events, and readiness. See the [PRISM full audit](../../docs/PRISM_FULL_AUDIT_2026_Q2.md) for the roadmap.
 

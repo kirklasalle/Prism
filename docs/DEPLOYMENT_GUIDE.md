@@ -50,8 +50,8 @@ Never deploy with `PRISM_AUTH_DISABLED=true` in production. The server will refu
 ### Windows
 
 ```powershell
-git clone https://github.com/kirklasalle/prism.git
-cd prism
+git clone https://github.com/kirklasalle/PrismRefraction.git
+cd PrismRefraction
 .\start_web.bat
 ```
 
@@ -60,8 +60,8 @@ cd prism
 ### Unix
 
 ```bash
-git clone https://github.com/kirklasalle/prism.git
-cd prism
+git clone https://github.com/kirklasalle/PrismRefraction.git
+cd PrismRefraction
 ./start_web.sh
 ```
 

@@ -6,12 +6,12 @@
     "author": {
         "name": "Prism OS Integration Team",
         "email": "support@prism-os.internal",
-        "url": "https://github.com/kirklasalle/Prism"
+        "url": "https://github.com/kirklasalle/PrismRefraction"
     },
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/kirklasalle/Prism.git"
+        "url": "https://github.com/kirklasalle/PrismRefraction.git"
     },
     "adapters": [
         {

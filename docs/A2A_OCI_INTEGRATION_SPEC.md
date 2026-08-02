@@ -229,6 +229,8 @@ Steps:
 
 ### Distribution Targets
 
+Branding note: the public repository identity is now `PrismRefraction`, but OCI image namespaces below intentionally retain `prism` for compatibility with existing publish workflows and consumers.
+
 | Registry | Path | Audience |
 |----------|------|----------|
 | Docker Hub | `docker.io/prism/aria-business:latest` | Docker Agent users |
