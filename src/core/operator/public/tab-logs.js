@@ -586,6 +586,7 @@ export function toggleSupportItem(id) {
   state.expandedSupportItems[id] = !state.expandedSupportItems[id];
   filterSupportCatalog();
   renderSupportTickets();
+  renderSupportSuggestions();
 }
 
 export async function triggerSelfHealingSweep() {
@@ -882,6 +883,82 @@ export async function loadSupportTickets() {
   }
 }
 
+export function toggleSuggestionForm(show) {
+  const form = document.getElementById('suggestion-inbox-form');
+  if (form) form.style.display = show ? 'flex' : 'none';
+}
+
+export async function submitSupportSuggestion() {
+  const title = document.getElementById('suggestion-title');
+  const description = document.getElementById('suggestion-description');
+  const requestType = document.getElementById('suggestion-request-type');
+  const priority = document.getElementById('suggestion-priority');
+  const owner = document.getElementById('suggestion-owner');
+  if (!title || !description || !requestType || !priority || !owner) return;
+  if (!title.value.trim() || !description.value.trim()) {
+    showTransientNotice('Suggestion title and description are required.', 'error');
+    return;
+  }
+  try {
+    await request('/api/support/suggestions', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: title.value.trim(),
+        description: description.value.trim(),
+        requestType: requestType.value,
+        priority: priority.value,
+        owner: owner.value.trim(),
+        source: 'operator'
+      })
+    });
+    title.value = '';
+    description.value = '';
+    owner.value = '';
+    toggleSuggestionForm(false);
+    await loadSupportSuggestions();
+    showTransientNotice('Suggestion added to the Micro Support Desk inbox.', 'success');
+  } catch (err) {
+    showTransientNotice('Failed to submit suggestion: ' + err, 'error');
+  }
+}
+
+export async function loadSupportSuggestions() {
+  try {
+    const suggestions = await request('/api/support/suggestions');
+    state.supportSuggestions = Array.isArray(suggestions) ? suggestions : [];
+    renderSupportSuggestions();
+  } catch (err) {
+    console.error('Failed to load support suggestions:', err);
+  }
+}
+
+export function renderSupportSuggestions() {
+  const container = document.getElementById('suggestion-inbox-container');
+  if (!container) return;
+  const suggestions = state.supportSuggestions || [];
+  if (!suggestions.length) {
+    container.innerHTML = '<div class="muted" style="font-size:11px;padding:8px 0">No suggestions awaiting review.</div>';
+    return;
+  }
+  container.innerHTML = suggestions.map(function (item) {
+    const metadata = item.metadata || {};
+    const expanded = !!state.expandedSupportItems[item.ticketId];
+    const requestType = String(metadata.requestType || 'improvement').replace('-', ' ');
+    const detail = expanded
+      ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);font-size:11px;color:var(--muted)">' +
+      '<div>' + escapeHtml(item.description) + '</div>' +
+      '<div style="margin-top:6px">Owner: <strong>' + escapeHtml(metadata.owner || 'unassigned') + '</strong> · Source: ' + escapeHtml(item.source) + '</div>' +
+      '<div style="display:flex;gap:6px;margin-top:8px">' +
+      (item.status !== 'resolved' ? '<button class="secondary-button mini suggestion-action-btn" data-suggestion-action="review" data-ticket-id="' + item.ticketId + '">Review</button><button class="secondary-button mini suggestion-action-btn" data-suggestion-action="resolve" data-ticket-id="' + item.ticketId + '">Resolve</button>' : '') +
+      '<button class="secondary-button mini suggestion-action-btn" data-suggestion-action="delete" data-ticket-id="' + item.ticketId + '">Delete</button></div></div>'
+      : '';
+    return '<div class="panel" style="padding:10px;background:rgba(255,255,255,.01);border:1px solid rgba(56,189,248,.12);border-radius:6px">' +
+      '<div class="suggestion-inbox-header" data-ticket-id="' + item.ticketId + '" style="display:flex;justify-content:space-between;gap:8px;cursor:pointer">' +
+      '<strong style="font-size:11.5px">' + (expanded ? '▼ ' : '► ') + escapeHtml(item.title) + '</strong>' +
+      '<span style="font-size:9px;text-transform:uppercase;color:#38bdf8">' + escapeHtml(requestType) + ' · ' + escapeHtml(metadata.priority || item.severity) + '</span></div>' + detail + '</div>';
+  }).join('');
+}
+
 export function renderSupportTickets() {
   const container = document.getElementById('support-tickets-container');
   if (!container) return;
@@ -1047,6 +1124,7 @@ export function initLogsTab() {
   if (_logsWired) {
     refreshMcpServers();
     loadSupportTickets();
+    loadSupportSuggestions();
     return;
   }
   _logsWired = true;
@@ -1058,7 +1136,7 @@ export function initLogsTab() {
   }
 
   // Register P0 Delegated Event Listeners (No inline onclick/XSS injection vectors)
-  
+
   // 1. Trace View Container
   const traceContainer = document.getElementById('trace-view');
   if (traceContainer) {
@@ -1146,6 +1224,23 @@ export function initLogsTab() {
     });
   }
 
+  const suggestionContainer = document.getElementById('suggestion-inbox-container');
+  if (suggestionContainer) {
+    suggestionContainer.addEventListener('click', function (e) {
+      const header = e.target.closest('.suggestion-inbox-header');
+      if (header) {
+        toggleSupportItem(header.dataset.ticketId);
+        return;
+      }
+      const button = e.target.closest('.suggestion-action-btn');
+      if (!button) return;
+      const id = button.dataset.ticketId;
+      if (button.dataset.suggestionAction === 'review') investigateSupportTicket(id).then(loadSupportSuggestions);
+      if (button.dataset.suggestionAction === 'resolve') resolveSupportTicketPrompt(id).then(loadSupportSuggestions);
+      if (button.dataset.suggestionAction === 'delete') deleteSupportTicket(id).then(loadSupportSuggestions);
+    });
+  }
+
   // Refresh MCP Servers immediately, and set interval
   refreshMcpServers();
   if (_mcpInterval) clearInterval(_mcpInterval);
@@ -1153,6 +1248,7 @@ export function initLogsTab() {
 
   // Load support tickets immediately
   loadSupportTickets();
+  loadSupportSuggestions();
 
   // Hydrate live console from REST
   const consoleStatus = document.getElementById('live-console-status');

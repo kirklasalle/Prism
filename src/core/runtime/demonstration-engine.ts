@@ -9,10 +9,26 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import * as path from "node:path";
-import { workspacePath } from "../config/workspace-resolver.js";
+import { fileURLToPath } from "node:url";
+import { workspacePath, workspaceLogsDir, resolveWorkspaceRoot } from "../config/workspace-resolver.js";
 import type { ActivityBus } from "../activity/bus.js";
-import type { ToolRegistry } from "../tools/registry.js";
+import { ToolRegistry } from "../tools/registry.js";
+import { builtinTools } from "../tools/builtin-tools.js";
+import { defineScenarios } from "../../benchmarks/demo-scenario-runner.js";
+
+function resolveInstallationFile(fileName: string): string {
+    let current = path.dirname(fileURLToPath(import.meta.url));
+    for (let depth = 0; depth < 8; depth++) {
+        const candidate = path.join(current, fileName);
+        if (existsSync(candidate) && existsSync(path.join(current, "package.json"))) return candidate;
+        const parent = path.dirname(current);
+        if (parent === current) break;
+        current = parent;
+    }
+    throw new Error(`PRISM installation file not found: ${fileName}`);
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +45,7 @@ export interface DemoPrompt {
 export interface DemoDefinition {
     id: string;
     title: string;
-    category: "self-control" | "browser-control" | "computer-control";
+    category: "self-control" | "browser-control" | "computer-control" | "scenario-suite";
     icon: string;
     description: string;
     prompts: DemoPrompt[];
@@ -51,13 +67,18 @@ export interface DemoLogEntry {
     demoId: string;
     stepId: string;
     narration: string;
-    status: "running" | "succeeded" | "failed" | "skipped";
+    action?: string;
+    args?: Record<string, unknown>;
+    status: "running" | "succeeded" | "failed" | "skipped" | "timed_out";
     durationMs: number;
     output?: string;
+    screenshotPath?: string;
 }
 
 export interface DemoState {
     status: DemoStatus;
+    playbackMode: "step-through" | "auto";
+    stepTimeoutMs: number;
     currentDemoIndex: number;
     currentStepIndex: number;
     totalDemos: number;
@@ -69,12 +90,21 @@ export interface DemoState {
     pausedAt: string | null;
     speedMs: number;
     error: string | null;
+    reports?: {
+        mdPath: string;
+        htmlPath: string;
+    };
+}
+
+interface DemoOutputPublication {
+    sessionId: string;
+    title: string;
 }
 
 // ── Demo Definitions ─────────────────────────────────────────────────────────
 
 function buildDemoDefinitions(): DemoDefinition[] {
-    return [
+    const baseDefs: DemoDefinition[] = [
         // ═══ SELF CONTROL ═══
         {
             id: "self-1",
@@ -270,28 +300,28 @@ function buildDemoDefinitions(): DemoDefinition[] {
                 },
                 {
                     id: "b1-2",
-                    narration: "Opening browser session...",
+                    narration: "Launching headed and headless browser sessions for side-by-side verification...",
                     action: "demo:browser_open",
                     args: {},
                     automated: true,
                 },
                 {
                     id: "b1-3",
-                    narration: "Navigating to {{research_url}}...",
+                    narration: "Navigating both browser sessions to {{research_url}} and waiting for the page DOM...",
                     action: "demo:browser_navigate",
                     args: { url: "{{research_url}}" },
                     automated: true,
                 },
                 {
                     id: "b1-4",
-                    narration: "Extracting accessibility tree (page structure)...",
+                    narration: "Extracting and comparing accessibility trees from both sessions...",
                     action: "demo:browser_a11y",
                     args: {},
                     automated: true,
                 },
                 {
                     id: "b1-5",
-                    narration: "Capturing screenshot...",
+                    narration: "Capturing and saving headed and headless screenshots as execution evidence...",
                     action: "demo:browser_screenshot",
                     args: {},
                     automated: true,
@@ -316,7 +346,7 @@ function buildDemoDefinitions(): DemoDefinition[] {
             steps: [
                 {
                     id: "b2-1",
-                    narration: "Opening browser session for multi-page research...",
+                    narration: "Verifying headed and headless sessions for multi-page research...",
                     action: "demo:browser_open",
                     args: {},
                     automated: true,
@@ -337,9 +367,9 @@ function buildDemoDefinitions(): DemoDefinition[] {
                 },
                 {
                     id: "b2-4",
-                    narration: "Navigating to page 2: httpbin.org...",
+                    narration: "Navigating to page 2: example.org...",
                     action: "demo:browser_navigate",
-                    args: { url: "https://httpbin.org" },
+                    args: { url: "https://example.org" },
                     automated: true,
                 },
                 {
@@ -369,7 +399,7 @@ function buildDemoDefinitions(): DemoDefinition[] {
             steps: [
                 {
                     id: "b3-1",
-                    narration: "Opening browser session...",
+                    narration: "Verifying headed and headless sessions for page interaction...",
                     action: "demo:browser_open",
                     args: {},
                     automated: true,
@@ -531,7 +561,7 @@ function buildDemoDefinitions(): DemoDefinition[] {
                     id: "c3-2",
                     narration: "Inspecting start_web.bat contents...",
                     action: "tool:file_read",
-                    args: { path: "D:\\Projects\\Prism\\start_web.bat" },
+                    args: { path: "start_web.bat" },
                     automated: true,
                 },
                 {
@@ -605,6 +635,43 @@ function buildDemoDefinitions(): DemoDefinition[] {
             ],
         },
     ];
+
+    try {
+        const scenarios = defineScenarios();
+        const categoryIcons: Record<string, string> = {
+            A: "⚖️", B: "🖥️", C: "🌐", D: "🧠", E: "🛡️", F: "⚙️", G: "🔌", H: "🚀"
+        };
+        const categoryTitles: Record<string, string> = {
+            A: "Governance & Policy", B: "Computer Use", C: "Browser Use", D: "Memory & Context",
+            E: "Security & CAC", F: "System & Workflow", G: "Integration & MCP", H: "Release & CI"
+        };
+
+        for (const sc of scenarios) {
+            const catIcon = categoryIcons[sc.category] ?? "🧪";
+            const catTitle = categoryTitles[sc.category] ?? `Category ${sc.category}`;
+            baseDefs.push({
+                id: `scenario-${sc.id}`,
+                title: `[${sc.id}] ${sc.title}`,
+                category: "scenario-suite",
+                icon: catIcon,
+                description: `${catTitle} — Scenario ${sc.id} (Tier ${sc.tier}, Profile: ${sc.profile})`,
+                prompts: [],
+                steps: [
+                    {
+                        id: `${sc.id}-step1`,
+                        narration: `Executing Scenario ${sc.id}: ${sc.title}`,
+                        action: `scenario:${sc.id}`,
+                        args: { scenarioId: sc.id },
+                        automated: true,
+                    },
+                ],
+            });
+        }
+    } catch (err) {
+        console.warn("[PRISM][demo] Failed to load benchmark scenarios:", err);
+    }
+
+    return baseDefs;
 }
 
 /** Tab tour order with descriptions. */
@@ -675,12 +742,20 @@ export class DemonstrationEngine {
     private state: DemoState;
     private abortController: AbortController | null = null;
     private pauseResolve: (() => void) | null = null;
+    private stepAdvanceResolve: (() => void) | null = null;
     private broadcastFn: ((msg: Record<string, unknown>) => void) | null = null;
-    private demoSessionId: string | null = null;
+    private onCompleteCallback: ((reports: { mdPath: string; htmlPath: string; summary: any }) => Promise<DemoOutputPublication | void>) | null = null;
+    private demoOutputPublication: DemoOutputPublication | null = null;
+    private demoBrowserSessions: Array<{ id: string; headless: boolean; owned: boolean }> = [];
 
     constructor(activityBus: ActivityBus, registry?: ToolRegistry) {
         this.activityBus = activityBus;
-        this.registry = registry ?? null;
+        this.registry = registry ?? new ToolRegistry();
+        for (const tool of builtinTools()) {
+            if (!this.registry.has(tool.name)) {
+                this.registry.register(tool);
+            }
+        }
         this.demos = buildDemoDefinitions();
         this.state = this.freshState();
     }
@@ -688,6 +763,11 @@ export class DemonstrationEngine {
     /** Bind WebSocket broadcast function for real-time UI updates. */
     setBroadcast(fn: (msg: Record<string, unknown>) => void): void {
         this.broadcastFn = fn;
+    }
+
+    /** Set callback triggered upon demo completion. */
+    setOnCompleteCallback(fn: (reports: { mdPath: string; htmlPath: string; summary: any }) => Promise<DemoOutputPublication | void>): void {
+        this.onCompleteCallback = fn;
     }
 
     /** Get all demo definitions (for UI rendering). */
@@ -720,11 +800,34 @@ export class DemonstrationEngine {
         this.state.speedMs = Math.max(500, Math.min(10000, ms));
     }
 
+    /** Set playback mode ("step-through" | "auto"). */
+    setPlaybackMode(mode: "step-through" | "auto"): void {
+        this.state.playbackMode = mode;
+        console.log(`[PRISM][demo] Playback mode set to: ${mode}`);
+    }
+
+    /** Set step timeout in ms. */
+    setStepTimeout(ms: number): void {
+        this.state.stepTimeoutMs = Math.max(5000, ms);
+    }
+
+    /** Advance to the next step when in Step-Through mode. */
+    advanceStep(): void {
+        if (this.stepAdvanceResolve) {
+            const resolve = this.stepAdvanceResolve;
+            this.stepAdvanceResolve = null;
+            resolve();
+        }
+    }
+
     /** Start the full demonstration sequence. */
-    async start(answers?: Record<string, string>, categories?: string[]): Promise<void> {
+    async start(answers?: Record<string, string>, categories?: string[], playbackMode?: "step-through" | "auto"): Promise<void> {
         if (this.state.status === "running") return;
+        await this.cleanupBrowserSessions();
+        this.demoOutputPublication = null;
         this.state = this.freshState();
         if (answers) this.state.promptAnswers = answers;
+        if (playbackMode) this.state.playbackMode = playbackMode;
         this.state.status = "running";
         this.state.startedAt = new Date().toISOString();
 
@@ -737,10 +840,10 @@ export class DemonstrationEngine {
         this.abortController = new AbortController();
 
         console.log(
-            `[PRISM][demo] [INFO] Demo sequence started with scope: categories=[${(categories ?? []).join(", ")}]`,
+            `[PRISM][demo] [INFO] Demo sequence started with scope: categories=[${(categories ?? []).join(", ")}] playbackMode=${this.state.playbackMode}`,
         );
         console.log(`[PRISM][demo] [INFO] Loaded ${activeDemos.length} targeted demonstrations for playback.`);
-        this.emit("demo.started", "succeeded", { totalDemos: activeDemos.length, categories });
+        this.emit("demo.started", "succeeded", { totalDemos: activeDemos.length, categories, playbackMode: this.state.playbackMode });
         this.broadcast({ type: "demo_started", state: this.getState() });
 
         try {
@@ -754,20 +857,67 @@ export class DemonstrationEngine {
                     this.state.currentDemoIndex = i;
                     await this.runDemo(activeDemos[i]);
                     this.state.completedDemos.push(activeDemos[i].id);
+
+                    const nextDemo = activeDemos[i + 1];
+                    if (activeDemos[i].category === "browser-control" && nextDemo?.category !== "browser-control") {
+                        const browserDemoIds = new Set(
+                            activeDemos.filter((demo) => demo.category === "browser-control").map((demo) => demo.id),
+                        );
+                        const browserEntries = this.state.log.filter((entry) => browserDemoIds.has(entry.demoId));
+                        if (browserEntries.length > 0 && browserEntries.every((entry) => entry.status === "succeeded")) {
+                            await this.closeOwnedHeadedBrowserSessions();
+                        } else {
+                            this.broadcast({
+                                type: "demo_operator_action",
+                                action: "close_headed_browser",
+                                status: "skipped",
+                                detail: "Headed browser retained because one or more browser steps did not succeed.",
+                            });
+                        }
+                    }
                 }
 
-                // Tab tour
+                // Publish durable output before the optional tab tour.
+                if (!this.abortController.signal.aborted) {
+                    console.log(
+                        `[PRISM][demo] [INFO] Demonstration actions finished. Publishing reports for ${this.state.completedDemos.length} runs...`,
+                    );
+                    const reports = this.generateReports();
+
+                    if (this.onCompleteCallback) {
+                        try {
+                            this.demoOutputPublication = await this.onCompleteCallback(reports) ?? null;
+                        } catch (cbErr) {
+                            console.error("[PRISM][demo] Error in onCompleteCallback:", cbErr);
+                            throw cbErr;
+                        }
+                    }
+                    this.broadcast({
+                        type: "demo_output_published",
+                        reports,
+                        outputSession: this.demoOutputPublication,
+                    });
+                }
+
+                // Tab tour is optional — abort or prior Stop will skip it gracefully.
                 if (!this.abortController.signal.aborted) {
                     await this.runTabTour();
                 }
 
                 if (!this.abortController.signal.aborted) {
                     this.state.status = "completed";
-                    console.log(
-                        `[PRISM][demo] [INFO] Demonstration sequence completed successfully. Total runs: ${this.state.completedDemos.length}`,
-                    );
-                    this.emit("demo.completed", "succeeded", { completedDemos: this.state.completedDemos.length });
-                    this.broadcast({ type: "demo_completed", state: this.getState() });
+                    const reports = this.state.reports;
+                    this.emit("demo.completed", "succeeded", {
+                        completedDemos: this.state.completedDemos.length,
+                        reports,
+                        outputSession: this.demoOutputPublication,
+                    });
+                    this.broadcast({
+                        type: "demo_completed",
+                        state: this.getState(),
+                        reports,
+                        outputSession: this.demoOutputPublication,
+                    });
                 }
             } catch (err) {
                 if (!this.abortController.signal.aborted) {
@@ -778,7 +928,9 @@ export class DemonstrationEngine {
                 }
             }
         } finally {
-            await this.cleanupBrowserSession();
+            if (this.state.status === "error" || this.abortController.signal.aborted) {
+                await this.cleanupBrowserSessions();
+            }
         }
     }
 
@@ -810,41 +962,140 @@ export class DemonstrationEngine {
 
     /** Stop the demo entirely. */
     stop(): void {
+        const substantiveDemoComplete = Boolean(
+            this.state.reports &&
+            this.state.totalDemos > 0 &&
+            this.state.completedDemos.length === this.state.totalDemos,
+        );
         this.abortController?.abort();
         if (this.pauseResolve) {
             this.pauseResolve();
             this.pauseResolve = null;
         }
-        this.state.status = "idle";
+        if (this.stepAdvanceResolve) {
+            const resolve = this.stepAdvanceResolve;
+            this.stepAdvanceResolve = null;
+            resolve();
+        }
+        this.state.status = substantiveDemoComplete ? "completed" : "idle";
         console.log(
-            `[PRISM][demo] [INFO] Operator stopped the demonstration sequence. Completed runs: ${this.state.completedDemos.length}`,
+            substantiveDemoComplete
+                ? `[PRISM][demo] [INFO] Optional tour stopped after Demo completion. Completed runs: ${this.state.completedDemos.length}`
+                : `[PRISM][demo] [INFO] Operator stopped the demonstration sequence. Completed runs: ${this.state.completedDemos.length}`,
         );
-        this.emit("demo.stopped", "succeeded", { completedDemos: this.state.completedDemos.length });
-        this.broadcast({ type: "demo_stopped", state: this.getState() });
-
-        this.cleanupBrowserSession().catch((err) => {
-            console.error("[PRISM][demo] [ERROR] Stop cleanup failed:", err);
-        });
+        if (substantiveDemoComplete) {
+            this.emit("demo.completed", "succeeded", {
+                completedDemos: this.state.completedDemos.length,
+                reports: this.state.reports,
+                outputSession: this.demoOutputPublication,
+                tourSkipped: true,
+            });
+            this.broadcast({
+                type: "demo_completed",
+                state: this.getState(),
+                reports: this.state.reports,
+                outputSession: this.demoOutputPublication,
+                tourSkipped: true,
+            });
+        } else {
+            this.emit("demo.stopped", "succeeded", { completedDemos: this.state.completedDemos.length });
+            this.broadcast({ type: "demo_stopped", state: this.getState() });
+        }
     }
 
-    private async cleanupBrowserSession(): Promise<void> {
-        if (this.demoSessionId) {
-            const sid = this.demoSessionId;
-            this.demoSessionId = null;
+    private async cleanupBrowserSessions(): Promise<void> {
+        const sessions = this.demoBrowserSessions.splice(0);
+        for (const session of sessions) {
+            if (!session.owned) continue;
             try {
-                console.log(`[PRISM][demo] [INFO] Cleaning up demo browser session ${sid}...`);
+                console.log(`[PRISM][demo] [INFO] Cleaning up demo browser session ${session.id}...`);
                 const tool = this.registry?.get("browser_control");
                 if (tool) {
                     await tool.execute({
                         operation: "browser_control",
-                        args: { action: "close_session", sessionId: sid },
+                        args: { action: "close_session", sessionId: session.id },
                         risk: "low",
                         mutatesState: true,
                     });
                 }
             } catch (err) {
-                console.error(`[PRISM][demo] [ERROR] Failed to close demo browser session ${sid}:`, err);
+                console.error(`[PRISM][demo] [ERROR] Failed to close demo browser session ${session.id}:`, err);
             }
+        }
+    }
+
+    private async closeOwnedHeadedBrowserSessions(): Promise<void> {
+        const headedSessions = this.demoBrowserSessions.filter((session) => !session.headless && session.owned);
+        if (headedSessions.length === 0) return;
+
+        const startedAt = Date.now();
+        const narration = "Closing Demo-owned headed browser after successful browser demonstrations...";
+        this.broadcast({
+            type: "demo_operator_action",
+            action: "close_headed_browser",
+            status: "running",
+            detail: narration,
+            sessionIds: headedSessions.map((session) => session.id),
+        });
+
+        try {
+            const tool = this.registry?.get("browser_control");
+            if (!tool) throw new Error("Browser Control tool is unavailable");
+
+            for (const session of headedSessions) {
+                const result = await tool.execute({
+                    operation: "browser_control",
+                    args: { action: "close_session", sessionId: session.id },
+                    risk: "low",
+                    mutatesState: true,
+                });
+                if (!result.ok) {
+                    throw new Error(typeof result.output?.error === "string" ? result.output.error : JSON.stringify(result.output));
+                }
+            }
+
+            const closedIds = new Set(headedSessions.map((session) => session.id));
+            this.demoBrowserSessions = this.demoBrowserSessions.filter((session) => !closedIds.has(session.id));
+            const output = `Closed Demo-owned headed browser session(s): ${Array.from(closedIds).join(", ")}`;
+            this.state.log.push({
+                timestamp: new Date().toISOString(),
+                demoId: "browser-cleanup",
+                stepId: "close-headed-browser",
+                narration,
+                action: "browser_control:close_session",
+                args: { sessionIds: Array.from(closedIds), ownership: "demo" },
+                status: "succeeded",
+                durationMs: Date.now() - startedAt,
+                output,
+            });
+            this.emit("demo.browser_headed.closed", "succeeded", { sessionIds: Array.from(closedIds) });
+            this.broadcast({
+                type: "demo_operator_action",
+                action: "close_headed_browser",
+                status: "succeeded",
+                detail: output,
+                sessionIds: Array.from(closedIds),
+            });
+        } catch (error) {
+            const output = `Failed to close Demo-owned headed browser: ${String(error)}`;
+            this.state.log.push({
+                timestamp: new Date().toISOString(),
+                demoId: "browser-cleanup",
+                stepId: "close-headed-browser",
+                narration,
+                action: "browser_control:close_session",
+                args: { sessionIds: headedSessions.map((session) => session.id), ownership: "demo" },
+                status: "failed",
+                durationMs: Date.now() - startedAt,
+                output,
+            });
+            this.broadcast({
+                type: "demo_operator_action",
+                action: "close_headed_browser",
+                status: "failed",
+                detail: output,
+            });
+            throw error;
         }
     }
 
@@ -852,6 +1103,144 @@ export class DemonstrationEngine {
     skipTo(demoId: string): void {
         const idx = this.demos.findIndex((d) => d.id === demoId);
         if (idx >= 0) this.state.currentDemoIndex = idx;
+    }
+
+    /** Generate Markdown and HTML reports in <workspaceRoot>/workspace/Demo_results/ */
+    public generateReports(): { mdPath: string; htmlPath: string; summary: { total: number; passed: number; failed: number; durationMs: number } } {
+        const root = resolveWorkspaceRoot();
+        const demoResultsDir = workspacePath("workspace", "Demo_results");
+        const screenshotsDir = path.join(demoResultsDir, "screenshots");
+        const logsDir = workspaceLogsDir();
+
+        if (!existsSync(demoResultsDir)) mkdirSync(demoResultsDir, { recursive: true });
+        if (!existsSync(screenshotsDir)) mkdirSync(screenshotsDir, { recursive: true });
+        if (!existsSync(logsDir)) mkdirSync(logsDir, { recursive: true });
+
+        const now = new Date();
+        const isoNow = now.toISOString();
+        const fileTag = isoNow.replace(/[:.]/g, "-");
+
+        const mdPath = path.join(demoResultsDir, `prism_demo_report_${fileTag}.md`);
+        const htmlPath = path.join(demoResultsDir, `prism_demo_report_${fileTag}.html`);
+
+        const passedCount = this.state.log.filter((l) => l.status === "succeeded").length;
+        const failedCount = this.state.log.filter((l) => l.status === "failed" || l.status === "timed_out").length;
+        const totalCount = this.state.log.length;
+        const durationMs = this.state.startedAt ? Date.now() - new Date(this.state.startedAt).getTime() : 0;
+
+        // Build Markdown Report
+        let md = `# 🎬 PRISM Demonstration Executive Report\n\n`;
+        md += `**Operator**: Kirk LaSalle  \n`;
+        md += `**Timestamp**: ${isoNow}  \n`;
+        md += `**Playback Mode**: ${this.state.playbackMode.toUpperCase()}  \n`;
+        md += `**Workspace Root**: \`${root}\`  \n`;
+        md += `**Demo Results Path**: \`${demoResultsDir}\`  \n\n`;
+        md += `---\n\n`;
+        md += `## Executive Summary\n\n`;
+        md += `| Metric | Value |\n|---|---|\n`;
+        md += `| Total Demonstrated Steps | **${totalCount}** |\n`;
+        md += `| Succeeded Steps | **${passedCount}** |\n`;
+        md += `| Failed / Timed Out Steps | **${failedCount}** |\n`;
+        md += `| Total Execution Duration | **${(durationMs / 1000).toFixed(2)}s** |\n\n`;
+
+        md += `## Step-by-Step Narrative & Execution Log\n\n`;
+        for (let i = 0; i < this.state.log.length; i++) {
+            const entry = this.state.log[i];
+            const icon = entry.status === "succeeded" ? "✅" : "❌";
+            md += `### ${icon} Step ${i + 1}: ${entry.narration}\n`;
+            md += `- **Demo / Scenario ID**: \`${entry.demoId}\` (\`${entry.stepId}\`)\n`;
+            md += `- **Status**: **${entry.status.toUpperCase()}** (${entry.durationMs}ms)\n`;
+            md += `- **Timestamp**: ${entry.timestamp}\n`;
+            if (entry.action) {
+                md += `- **Action**: \`${entry.action}\`\n`;
+                md += `- **Arguments**: \`${JSON.stringify(entry.args ?? {})}\`\n`;
+            }
+            if (entry.output) {
+                md += `\n**Real Execution Output:**\n\`\`\`\n${entry.output}\n\`\`\`\n`;
+            }
+            if (entry.screenshotPath) {
+                md += `\n**Captured Screenshot:**  \n![Screenshot](file:///${entry.screenshotPath.replace(/\\/g, "/")})\n`;
+            }
+            md += `\n---\n\n`;
+        }
+
+        writeFileSync(mdPath, md, "utf-8");
+
+        // Build HTML Report
+        let html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PRISM Demonstration Executive Report</title>
+<style>
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 32px; max-width: 1000px; margin: 0 auto; line-height: 1.6; }
+  h1 { color: #a371f7; border-bottom: 2px solid #30363d; padding-bottom: 12px; }
+  h2, h3 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 6px; }
+  .meta-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+  .badge-pass { background: #238636; color: #fff; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+  .badge-fail { background: #da3633; color: #fff; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { border: 1px solid #30363d; padding: 10px 14px; text-align: left; }
+  th { background: #161b22; color: #8b949e; }
+  pre { background: #161b22; border: 1px solid #30363d; padding: 12px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 13px; color: #79c0ff; }
+  img { max-width: 100%; border-radius: 6px; border: 1px solid #30363d; margin-top: 12px; }
+  .step-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 16px; margin: 16px 0; }
+</style>
+</head>
+<body>
+  <h1>🎬 PRISM Demonstration Executive Report</h1>
+  <div class="meta-card">
+    <p><strong>Operator:</strong> Kirk LaSalle</p>
+    <p><strong>Timestamp:</strong> ${isoNow}</p>
+    <p><strong>Playback Mode:</strong> ${this.state.playbackMode.toUpperCase()}</p>
+    <p><strong>Workspace Root:</strong> <code>${root}</code></p>
+    <p><strong>Demo Results Directory:</strong> <code>${demoResultsDir}</code></p>
+  </div>
+
+  <h2>Executive Summary</h2>
+  <table>
+    <tr><th>Total Steps Demonstrated</th><td><strong>${totalCount}</strong></td></tr>
+    <tr><th>Succeeded</th><td><span class="badge-pass">${passedCount} PASS</span></td></tr>
+    <tr><th>Failed / Timed Out</th><td><span class="badge-fail">${failedCount} FAIL</span></td></tr>
+    <tr><th>Total Execution Duration</th><td><strong>${(durationMs / 1000).toFixed(2)}s</strong></td></tr>
+  </table>
+
+  <h2>Step-by-Step Narrative & Execution Log</h2>
+`;
+        for (let i = 0; i < this.state.log.length; i++) {
+            const entry = this.state.log[i];
+            const badge = entry.status === "succeeded" ? `<span class="badge-pass">PASS</span>` : `<span class="badge-fail">FAIL</span>`;
+            html += `
+  <div class="step-card">
+    <h3>Step ${i + 1}: ${entry.narration} ${badge}</h3>
+    <p><strong>Demo / Scenario:</strong> <code>${entry.demoId}</code> (<code>${entry.stepId}</code>) &bull; <strong>Duration:</strong> ${entry.durationMs}ms &bull; <strong>Time:</strong> ${entry.timestamp}</p>
+`;
+            if (entry.action) {
+                html += `<p><strong>Action:</strong> <code>${entry.action}</code> &bull; <strong>Arguments:</strong> <code>${JSON.stringify(entry.args ?? {}).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></p>`;
+            }
+            if (entry.output) {
+                html += `<pre>${entry.output.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+            }
+            if (entry.screenshotPath) {
+                try {
+                    const screenshotBase64 = readFileSync(entry.screenshotPath).toString("base64");
+                    html += `<p><strong>Captured Screenshot:</strong></p><img src="data:image/png;base64,${screenshotBase64}" alt="Screenshot">`;
+                } catch {
+                    html += `<p><strong>Captured Screenshot:</strong> <code>${entry.screenshotPath}</code></p>`;
+                }
+            }
+            html += `</div>`;
+        }
+
+        html += `</body></html>`;
+        writeFileSync(htmlPath, html, "utf-8");
+
+        this.state.reports = { mdPath, htmlPath };
+        return {
+            mdPath,
+            htmlPath,
+            summary: { total: totalCount, passed: passedCount, failed: failedCount, durationMs },
+        };
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────
@@ -892,18 +1281,43 @@ export class DemonstrationEngine {
                 totalSteps: demo.steps.length,
                 narration,
                 action: step.action,
+                args: this.interpolateArgs(step.args),
                 automated: step.automated,
+                playbackMode: this.state.playbackMode,
             });
 
             const start = Date.now();
-            let status: "succeeded" | "failed" = "succeeded";
+            let status: "succeeded" | "failed" | "timed_out" = "succeeded";
             let output: string | undefined;
+            let screenshotPath: string | undefined;
+            let screenshotDataUrl: string | undefined;
 
             try {
-                output = await this.executeStep(step);
+                // Execute step with configurable timeout
+                const stepPromise = this.executeStep(step);
+                const timeoutPromise = new Promise<never>((_, reject) => {
+                    setTimeout(() => reject(new Error(`Step execution timed out after ${this.state.stepTimeoutMs}ms`)), this.state.stepTimeoutMs);
+                });
+
+                const res = await Promise.race([stepPromise, timeoutPromise]);
+                output = res.output;
+                screenshotPath = res.screenshotPath;
+                screenshotDataUrl = res.screenshotDataUrl;
             } catch (err) {
-                status = "failed";
-                output = String(err);
+                const errStr = String(err);
+                if (errStr.includes("timed out")) {
+                    status = "timed_out";
+                    output = `TIMEOUT ERROR: ${errStr}`;
+                } else {
+                    status = "failed";
+                    output = `EXECUTION ERROR: ${errStr}`;
+                }
+
+                // Log timeouts/errors to workspace logs directory
+                try {
+                    const logFile = path.join(workspaceLogsDir(), "demo-errors.log");
+                    appendFileSync(logFile, `[${new Date().toISOString()}] [${status.toUpperCase()}] Demo ${demo.id} Step ${step.id}: ${output}\n`, "utf-8");
+                } catch { /* ignore */ }
             }
 
             const entry: DemoLogEntry = {
@@ -911,36 +1325,55 @@ export class DemonstrationEngine {
                 demoId: demo.id,
                 stepId: step.id,
                 narration,
+                action: step.action,
+                args: this.interpolateArgs(step.args),
                 status,
                 durationMs: Date.now() - start,
                 output,
+                screenshotPath,
             };
             this.state.log.push(entry);
 
-            if (status === "succeeded") {
-                console.log(
-                    `[PRISM][demo] [TRACE] Step ${step.id} succeeded in ${Date.now() - start}ms. Output preview: "${output ? (output.length > 150 ? output.slice(0, 150) + "..." : output) : "none"}"`,
-                );
-            } else {
-                console.error(
-                    `[PRISM][demo] [ERROR] Step ${step.id} failed in ${Date.now() - start}ms. Error: ${output}`,
-                );
-            }
+            this.broadcast({
+                type: "demo_step_result",
+                demoId: demo.id,
+                stepIndex: i,
+                totalSteps: demo.steps.length,
+                narration,
+                status,
+                output,
+                screenshotPath,
+                screenshotDataUrl,
+            });
 
             this.emit(`demo.step.${status}`, status === "succeeded" ? "succeeded" : "failed", {
                 demoId: demo.id,
                 stepId: step.id,
                 narration,
+                output,
             });
 
-            // Delay between steps for visual pacing (actual agent task runtime runs in real-time)
-            const isAgentAction = step.action.startsWith("tool:") || step.action.startsWith("demo:");
-            const pacingMs = isAgentAction ? Math.max(3000, this.state.speedMs) : this.state.speedMs;
-            await this.delay(pacingMs);
+            if (this.abortController?.signal.aborted) return;
+
+            // Step-Through pacing wait OR auto pacing
+            if (this.state.playbackMode === "step-through" && i < demo.steps.length - 1) {
+                this.broadcast({
+                    type: "demo_awaiting_advance",
+                    stepIndex: i,
+                    totalSteps: demo.steps.length,
+                });
+                await new Promise<void>((resolve) => {
+                    this.stepAdvanceResolve = resolve;
+                });
+            } else {
+                const isAgentAction = step.action.startsWith("tool:") || step.action.startsWith("demo:") || step.action.startsWith("scenario:");
+                const pacingMs = isAgentAction ? Math.max(3000, this.state.speedMs) : this.state.speedMs;
+                await this.delay(pacingMs);
+            }
         }
     }
 
-    private async executeStep(step: DemoStepDef): Promise<string | undefined> {
+    private async executeStep(step: DemoStepDef): Promise<{ output?: string; screenshotPath?: string; screenshotDataUrl?: string }> {
         const action = step.action;
         const args = this.interpolateArgs(step.args);
 
@@ -949,7 +1382,7 @@ export class DemonstrationEngine {
             const tabId = action.slice(4);
             console.log(`[PRISM][demo] [INFO] Requesting visual layout switch to dashboard tab: "${tabId}"`);
             this.broadcast({ type: "demo_switch_tab", tabId });
-            return `Switched to tab: ${tabId}`;
+            return { output: `Switched to tab: ${tabId}` };
         }
 
         // Delay
@@ -957,7 +1390,62 @@ export class DemonstrationEngine {
             const ms = parseInt(action.slice(6), 10) || 1000;
             console.log(`[PRISM][demo] [TRACE] Pacing delay for ${ms}ms...`);
             await this.delay(ms);
-            return "Delayed";
+            return { output: `Delayed ${ms}ms` };
+        }
+
+        // Benchmark Scenario Execution
+        if (action.startsWith("scenario:")) {
+            const scenarioId = action.slice(9);
+            const scenarios = defineScenarios();
+            const targetSc = scenarios.find((s) => s.id === scenarioId);
+            if (!targetSc) return { output: `Scenario ${scenarioId} not found` };
+
+            console.log(`[PRISM][demo] Executing benchmark scenario ${scenarioId}: "${targetSc.title}"...`);
+
+            const mockCtx: any = {
+                sessionId: randomUUID(),
+                activityBus: this.activityBus,
+                policyEngine: new (await import("../policy/engine.js")).PolicyEngine(),
+                orchestrator: new (await import("./orchestrator.js")).Orchestrator(
+                    randomUUID(),
+                    this.activityBus,
+                    new (await import("../policy/engine.js")).PolicyEngine(),
+                    this.registry ?? new (await import("../tools/registry.js")).ToolRegistry(),
+                ),
+                workflowExecutor: new (await import("./workflow.js")).WorkflowExecutor(),
+                approvalQueue: new (await import("../approval/approval-queue.js")).ApprovalQueue(),
+                episodicMemory: new (await import("../memory/episodic-memory.js")).EpisodicMemory(600),
+                semanticIndex: new (await import("../memory/semantic-memory.js")).SemanticMemoryIndex(),
+                sessionMemory: new (await import("../memory/session-memory.js")).SessionMemoryStore(":memory:"),
+                metricsCollector: new (await import("../memory/retrieval-metrics.js")).RetrievalMetricsCollector(1000, 100, {}),
+                agentPool: new (await import("../agents/agent-pool.js")).AgentPool(null),
+                agentLifecycle: new (await import("../agents/agent-lifecycle.js")).AgentLifecycleManager(),
+                agentTelemetry: new (await import("../agents/agent-telemetry-collector.js")).AgentTelemetryCollector(),
+                swarmCoordinator: new (await import("../agents/swarm-coordinator.js")).SwarmCoordinator(
+                    new (await import("../agents/agent-pool.js")).AgentPool(null),
+                    () => { },
+                ),
+                toolRegistry: this.registry ?? new (await import("../tools/registry.js")).ToolRegistry(),
+                executionProfile: (await import("../policy/execution-profiles.js")).INDIVIDUAL_PROFILE,
+                logFile: path.join(workspaceLogsDir(), "demo-scenarios.log"),
+                log: (sid: string, stepNum: number, msg: string) => {
+                    console.log(`[PRISM][demo][scenario:${sid}:${stepNum}] ${msg}`);
+                },
+                emitDemo: (sid: string, stepNum: number, op: string, status: string, details: any) => {
+                    this.emit(op, status as any, { scenarioId: sid, step: stepNum, ...(details ?? {}) });
+                },
+            };
+
+            try {
+                const scenarioSteps = await targetSc.run(mockCtx);
+                const passCount = scenarioSteps.filter((s) => s.status === "pass").length;
+                const failCount = scenarioSteps.filter((s) => s.status === "fail").length;
+                const outSummary = `Scenario ${scenarioId} (${targetSc.title}) completed.\nSteps Passed: ${passCount}, Steps Failed: ${failCount}\n\nStep Breakdown:\n` +
+                    scenarioSteps.map(s => ` - Step ${s.step}: ${s.description} -> ${s.status.toUpperCase()} (${s.durationMs}ms)`).join("\n");
+                return { output: outSummary };
+            } catch (err) {
+                return { output: `Scenario ${scenarioId} failed with error: ${String(err)}` };
+            }
         }
 
         // Tool execution
@@ -967,14 +1455,16 @@ export class DemonstrationEngine {
                 console.warn(
                     `[PRISM][demo] [WARN] Cannot execute tool "${toolName}" because Tool Registry is unavailable.`,
                 );
-                return "Tool registry not available";
+                return { output: "Tool registry not available" };
             }
             try {
                 let resolvedArgs = { ...args };
                 if (["file_write", "file_read", "file_delete", "file_list"].includes(toolName)) {
                     const rawPath = String(args.path ?? "");
                     if (rawPath) {
-                        if (rawPath.startsWith("./prism-output/") || rawPath.startsWith("prism-output/")) {
+                        if (toolName === "file_read" && rawPath === "start_web.bat") {
+                            resolvedArgs.path = resolveInstallationFile(rawPath);
+                        } else if (rawPath.startsWith("./prism-output/") || rawPath.startsWith("prism-output/")) {
                             const base = rawPath.replace(/^\.?\/?prism-output\//, "");
                             resolvedArgs.path = workspacePath("workspace", base);
                         } else if (rawPath === "./prism-output" || rawPath === "prism-output") {
@@ -998,15 +1488,18 @@ export class DemonstrationEngine {
                     risk: "low",
                     mutatesState: toolName.includes("write"),
                 });
+                if (!result.ok) {
+                    throw new Error(typeof result.output?.error === "string" ? result.output.error : JSON.stringify(result.output));
+                }
                 const out = typeof result.output === "string" ? result.output : JSON.stringify(result.output, null, 2);
-                return out.length > 500 ? out.slice(0, 500) + "..." : out;
+                return { output: out.length > 1000 ? out.slice(0, 1000) + "..." : out };
             } catch (err) {
                 console.error(`[PRISM][demo] [ERROR] Error calling tool "${toolName}": ${String(err)}`);
-                return `Tool error: ${String(err)}`;
+                throw err;
             }
         }
 
-        // Demo-specific actions (simulated with activity events + optional real browser control)
+        // Demo-specific actions (simulated with activity events + real browser control)
         if (action.startsWith("demo:")) {
             const demoAction = action.slice(5);
             console.log(
@@ -1014,13 +1507,24 @@ export class DemonstrationEngine {
             );
 
             let realResult: string | undefined;
+            let screenshotPath: string | undefined;
+            let screenshotDataUrl: string | undefined;
 
             if (this.registry && this.registry.has("browser_control")) {
                 const browserTool = this.registry.get("browser_control");
+                const requireSuccess = (result: { ok: boolean; output: Record<string, unknown> }, operation: string) => {
+                    if (!result.ok) {
+                        const detail = typeof result.output?.error === "string"
+                            ? result.output.error
+                            : JSON.stringify(result.output);
+                        throw new Error(`${operation} failed: ${detail}`);
+                    }
+                    return result.output;
+                };
                 try {
                     if (demoAction === "browser_open") {
                         console.log(
-                            "[PRISM][demo] [INFO] DEMO ACTION: Searching for existing active browser session from Browser Tab...",
+                            "[PRISM][demo] [INFO] DEMO ACTION: Verifying headed and headless browser sessions...",
                         );
                         const listRes = await browserTool.execute({
                             operation: "browser_control",
@@ -1028,93 +1532,162 @@ export class DemonstrationEngine {
                             risk: "low",
                             mutatesState: false,
                         });
-                        let existingSessionId: string | null = null;
-                        if (listRes.ok && listRes.output && typeof listRes.output === "object") {
-                            const sessions = (listRes.output as any).sessions || [];
-                            if (sessions.length > 0) {
-                                existingSessionId = sessions[0].id;
-                            }
-                        }
+                        const listed = requireSuccess(listRes, "list_sessions");
+                        const existing = Array.isArray(listed.sessions) ? listed.sessions as Array<Record<string, unknown>> : [];
+                        const previouslyTracked = new Map(this.demoBrowserSessions.map((session) => [session.id, session]));
+                        const verified: Array<{ id: string; headless: boolean; owned: boolean; source: string }> = [];
 
-                        if (existingSessionId) {
-                            this.demoSessionId = existingSessionId;
-                            console.log(
-                                `[PRISM][demo] [INFO] Reused existing active browser session ID: ${this.demoSessionId}`,
-                            );
-                            realResult = `Reused existing active browser session: ${this.demoSessionId}`;
-                        } else {
-                            const errMsg =
-                                "No active browser session detected. For audit safety, please go to the Browser Tab and click 'Launch Headed' first to establish a controlled session.";
-                            console.error(`[PRISM][demo] [ERROR] ${errMsg}`);
-                            throw new Error(errMsg);
-                        }
-                    } else if (demoAction === "browser_navigate") {
-                        if (this.demoSessionId) {
-                            const url = String(args.url ?? "about:blank");
-                            console.log(
-                                `[PRISM][demo] [INFO] DEMO ACTION: Navigating session ${this.demoSessionId} to ${url}...`,
-                            );
-                            await browserTool.execute({
+                        for (const headless of [false, true]) {
+                            const active = existing.find((session) => session.headless === headless && typeof session.id === "string");
+                            if (active) {
+                                const id = String(active.id);
+                                verified.push({ id, headless, owned: previouslyTracked.get(id)?.owned ?? false, source: "reused" });
+                                continue;
+                            }
+                            const launchRes = await browserTool.execute({
                                 operation: "browser_control",
-                                args: { action: "navigate", sessionId: this.demoSessionId, url },
+                                args: {
+                                    action: "launch_session",
+                                    headless,
+                                    alwaysOnTop: !headless && this.state.promptAnswers.browser_always_on_top !== "false",
+                                    idleTimeoutMs: 0,
+                                },
                                 risk: "medium",
-                                mutatesState: false,
+                                mutatesState: true,
                             });
-                            realResult = `Navigated to ${url}`;
+                            const launched = requireSuccess(launchRes, `launch_session (${headless ? "headless" : "headed"})`);
+                            const id = typeof launched.id === "string" ? launched.id : launched.sessionId;
+                            if (typeof id !== "string" || !id) {
+                                throw new Error(`launch_session (${headless ? "headless" : "headed"}) returned no session ID`);
+                            }
+                            verified.push({ id, headless, owned: true, source: "launched" });
+                        }
+                        this.demoBrowserSessions = verified.map(({ id, headless, owned }) => ({ id, headless, owned }));
+                        realResult = verified.map((session) =>
+                            `${session.headless ? "Headless" : "Headed"} session ${session.source}: ${session.id}`,
+                        ).join("\n");
+                    } else if (demoAction === "browser_navigate") {
+                        if (this.demoBrowserSessions.length > 0) {
+                            const url = String(args.url ?? "about:blank");
+                            const results: string[] = [];
+                            for (const session of this.demoBrowserSessions) {
+                                this.broadcastBrowserSessionFocus(session, "navigate", "started");
+                                const navRes = await browserTool.execute({
+                                    operation: "browser_control",
+                                    args: { action: "navigate", sessionId: session.id, url },
+                                    risk: "medium",
+                                    mutatesState: false,
+                                });
+                                const navigated = requireSuccess(navRes, `navigate (${session.id})`);
+                                results.push(`${session.headless ? "Headless" : "Headed"} ${session.id}: loaded ${String(navigated.url ?? url)} (${String(navigated.title ?? "untitled")})`);
+                                this.broadcastBrowserSessionFocus(session, "navigate", "succeeded");
+                            }
+                            realResult = results.join("\n");
                         } else {
-                            realResult = "No active demo session ID to navigate";
+                            throw new Error("No verified headed/headless browser sessions for navigation");
                         }
                     } else if (demoAction === "browser_a11y") {
-                        if (this.demoSessionId) {
-                            console.log(`[PRISM][demo] [INFO] DEMO ACTION: Retrieving accessibility tree...`);
-                            await browserTool.execute({
-                                operation: "browser_control",
-                                args: { action: "get_accessibility_tree", sessionId: this.demoSessionId },
-                                risk: "low",
-                                mutatesState: false,
-                            });
-                            realResult = `Accessibility tree retrieved.`;
+                        if (this.demoBrowserSessions.length > 0) {
+                            const results: string[] = [];
+                            for (const session of this.demoBrowserSessions) {
+                                this.broadcastBrowserSessionFocus(session, "get_accessibility_tree", "started");
+                                const a11yRes = await browserTool.execute({
+                                    operation: "browser_control",
+                                    args: { action: "get_accessibility_tree", sessionId: session.id },
+                                    risk: "low",
+                                    mutatesState: false,
+                                });
+                                const tree = requireSuccess(a11yRes, `get_accessibility_tree (${session.id})`);
+                                results.push(`${session.headless ? "Headless" : "Headed"} ${session.id}: ${JSON.stringify(tree).slice(0, 800)}`);
+                                this.broadcastBrowserSessionFocus(session, "get_accessibility_tree", "succeeded");
+                            }
+                            realResult = results.join("\n");
                         } else {
-                            realResult = "No active demo session ID";
+                            throw new Error("No verified browser sessions for accessibility extraction");
                         }
                     } else if (demoAction === "browser_screenshot") {
-                        if (this.demoSessionId) {
-                            console.log(`[PRISM][demo] [INFO] DEMO ACTION: Capturing screenshot...`);
-                            await browserTool.execute({
-                                operation: "browser_control",
-                                args: { action: "screenshot", sessionId: this.demoSessionId },
-                                risk: "low",
-                                mutatesState: false,
-                            });
-                            realResult = `Screenshot captured.`;
+                        if (this.demoBrowserSessions.length > 0) {
+                            const resultsDir = workspacePath("workspace", "Demo_results", "screenshots");
+                            if (!existsSync(resultsDir)) mkdirSync(resultsDir, { recursive: true });
+                            const captured: string[] = [];
+                            for (const session of this.demoBrowserSessions) {
+                                const mode = session.headless ? "headless" : "headed";
+                                const snapFile = path.join(resultsDir, `demo-${mode}-${Date.now()}.png`);
+                                this.broadcastBrowserSessionFocus(session, "screenshot", "started");
+                                const screenshotRes = await browserTool.execute({
+                                    operation: "browser_control",
+                                    args: { action: "screenshot", sessionId: session.id },
+                                    risk: "low",
+                                    mutatesState: false,
+                                });
+                                const screenshot = requireSuccess(screenshotRes, `screenshot (${session.id})`);
+                                if (typeof screenshot.base64 !== "string" || !screenshot.base64) {
+                                    throw new Error(`screenshot (${session.id}) returned no PNG bytes`);
+                                }
+                                writeFileSync(snapFile, Buffer.from(screenshot.base64, "base64"));
+                                if (!session.headless) {
+                                    screenshotPath = snapFile;
+                                    screenshotDataUrl = `data:image/png;base64,${screenshot.base64}`;
+                                }
+                                captured.push(`${session.headless ? "Headless" : "Headed"} ${session.id}: ${snapFile} (${String(screenshot.sizeBytes ?? "unknown")} bytes)`);
+                                this.broadcastBrowserSessionFocus(session, "screenshot", "succeeded");
+                            }
+                            realResult = `Verified screenshots saved:\n${captured.join("\n")}`;
                         } else {
-                            realResult = "No active demo session ID";
+                            throw new Error("No verified browser sessions for screenshot capture");
                         }
                     } else if (demoAction === "browser_interact") {
-                        if (this.demoSessionId) {
-                            console.log(`[PRISM][demo] [INFO] DEMO ACTION: Scrolling page dynamically...`);
-                            await browserTool.execute({
-                                operation: "browser_control",
-                                args: { action: "scroll", sessionId: this.demoSessionId, x: 0, y: 300 },
-                                risk: "low",
-                                mutatesState: false,
-                            });
-                            realResult = `Interaction completed (scrolled to y=300).`;
+                        if (this.demoBrowserSessions.length > 0) {
+                            const interaction = String(args.interaction ?? "Extract all links");
+                            const results: string[] = [];
+                            for (const session of this.demoBrowserSessions) {
+                                let actionArgs: Record<string, unknown>;
+                                if (interaction === "Click the main heading") actionArgs = { action: "click", sessionId: session.id, selector: "h1" };
+                                else if (interaction === "Read page metadata") actionArgs = { action: "get_page_info", sessionId: session.id };
+                                else if (interaction === "Capture full page") actionArgs = { action: "screenshot_full_page", sessionId: session.id };
+                                else actionArgs = { action: "get_links", sessionId: session.id };
+                                this.broadcastBrowserSessionFocus(session, String(actionArgs.action), "started");
+                                const interactionRes = await browserTool.execute({
+                                    operation: "browser_control",
+                                    args: actionArgs,
+                                    risk: interaction === "Click the main heading" ? "medium" : "low",
+                                    mutatesState: interaction === "Click the main heading",
+                                });
+                                const interactionOutput = requireSuccess(interactionRes, `${String(actionArgs.action)} (${session.id})`);
+                                results.push(`${session.headless ? "Headless" : "Headed"} ${session.id}: ${interaction} completed; ${JSON.stringify(interactionOutput).slice(0, 500)}`);
+                                this.broadcastBrowserSessionFocus(session, String(actionArgs.action), "succeeded");
+                            }
+                            realResult = results.join("\n");
                         } else {
-                            realResult = "No active demo session ID";
+                            throw new Error("No verified browser sessions for interaction");
                         }
                     }
                 } catch (err) {
                     console.error(`[PRISM][demo] [ERROR] Failed executing real browser action ${demoAction}:`, err);
-                    realResult = `Real execution error: ${String(err)}`;
+                    throw err;
                 }
             }
 
-            this.emit(`demo.action.${demoAction}`, "succeeded", { ...args, action: demoAction, realResult });
-            return realResult ?? `Demo action: ${demoAction}`;
+            this.emit(`demo.action.${demoAction}`, "succeeded", { ...args, action: demoAction, realResult, screenshotPath });
+            return { output: realResult ?? `Demo action: ${demoAction}`, screenshotPath, screenshotDataUrl };
         }
 
-        return undefined;
+        return {};
+    }
+
+    private broadcastBrowserSessionFocus(
+        session: { id: string; headless: boolean },
+        operation: string,
+        phase: "started" | "succeeded",
+    ): void {
+        this.broadcast({
+            type: "demo_browser_session_focus",
+            sessionId: session.id,
+            headless: session.headless,
+            mode: session.headless ? "headless" : "headed",
+            operation,
+            phase,
+        });
     }
 
     private async runTabTour(): Promise<void> {
@@ -1147,7 +1720,19 @@ export class DemonstrationEngine {
                 total: TAB_TOUR.length,
             });
             this.broadcast({ type: "demo_switch_tab", tabId: tab.tabId });
-            await this.delay(this.state.speedMs);
+
+            if (this.state.playbackMode === "step-through" && i < TAB_TOUR.length - 1) {
+                this.broadcast({
+                    type: "demo_awaiting_advance",
+                    stepIndex: i,
+                    totalSteps: TAB_TOUR.length,
+                });
+                await new Promise<void>((resolve) => {
+                    this.stepAdvanceResolve = resolve;
+                });
+            } else {
+                await this.delay(this.state.speedMs);
+            }
         }
     }
 
@@ -1191,6 +1776,8 @@ export class DemonstrationEngine {
     private freshState(): DemoState {
         return {
             status: "idle",
+            playbackMode: "step-through",
+            stepTimeoutMs: 30000,
             currentDemoIndex: 0,
             currentStepIndex: 0,
             totalDemos: 0,

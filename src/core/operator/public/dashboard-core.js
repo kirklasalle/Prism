@@ -472,6 +472,11 @@ export
         + (anchor ? ' data-prism-anchor="' + anchor + '"' : '')
         + '>' + escapeHtml(label) + '</a>';
     }
+    // file:// links → open via the local-path handler (same as bare-path auto-links)
+    if (/^file:\/\/\//i.test(href)) {
+      var localPath = decodeURIComponent(href.replace(/^file:\/\/\//i, '').replace(/\//g, '\\'));
+      return '<a href="#" class="local-path-link" onclick="window.openLocalPath(\'' + escapeHtml(localPath.replace(/\\/g, '\\\\')) + '\'); return false;" title="Open file">' + escapeHtml(label) + '</a>';
+    }
     if (!/^https?:\/\//i.test(href)) return escapeHtml(label);
     return '<a href="' + safeHref + '" target="_blank" rel="noopener">' + escapeHtml(label) + '</a>';
   });
@@ -589,6 +594,7 @@ export
   if (summary) {
     summary.style.display = state[stateKey] ? '' : 'none';
   }
+  updateCollapseStateInfo(body, state[stateKey]);
   // Dispatch custom event so tab-tools can refresh summary badges
   try { document.dispatchEvent(new CustomEvent('panel-collapse-toggle', { detail: { panelKey: panelKey, collapsed: state[stateKey] } })); } catch (_) { }
 }
@@ -608,6 +614,7 @@ export function applyPanelCollapseState(panelKey) {
   if (summary) {
     summary.style.display = collapsed ? '' : 'none';
   }
+  updateCollapseStateInfo(body, collapsed);
 }
 
 export function applyAllPanelCollapseStates() {
@@ -615,6 +622,55 @@ export function applyAllPanelCollapseStates() {
     if (!stateKey.endsWith('Collapsed')) continue;
     var panelKey = stateKey.slice(0, -9);
     applyPanelCollapseState(panelKey);
+  }
+  annotateCollapseStates();
+}
+
+function updateCollapseStateInfo(body, collapsed) {
+  if (!body) return;
+  var owner = body.closest('section, .panel') || body.parentElement;
+  var header = owner ? owner.querySelector('.rail-header, .panel-header') : null;
+  if (!header) return;
+  header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  var label = header.querySelector('[data-collapse-state-info]');
+  if (!label) {
+    label = document.createElement('span');
+    label.setAttribute('data-collapse-state-info', 'true');
+    label.className = 'collapse-state-info muted';
+    var icon = header.querySelector('.collapse-icon');
+    if (icon) header.insertBefore(label, icon);
+    else header.appendChild(label);
+  }
+  label.textContent = collapsed ? 'Collapsed' : 'Expanded';
+}
+
+function annotateCollapseStates() {
+  document.querySelectorAll('.collapsible-body').forEach(function (body) {
+    updateCollapseStateInfo(body, body.classList.contains('collapsed'));
+  });
+  document.querySelectorAll('main details').forEach(function (details) {
+    var summary = details.querySelector(':scope > summary');
+    if (!summary) return;
+    details.setAttribute('aria-expanded', details.open ? 'true' : 'false');
+    var label = summary.querySelector('[data-collapse-state-info]');
+    if (!label) {
+      label = document.createElement('span');
+      label.setAttribute('data-collapse-state-info', 'true');
+      label.className = 'collapse-state-info muted';
+      summary.appendChild(label);
+    }
+    label.textContent = details.open ? 'Expanded' : 'Collapsed';
+  });
+  if (!document.documentElement.dataset.collapseStateListener) {
+    document.documentElement.dataset.collapseStateListener = 'true';
+    document.addEventListener('toggle', function (event) {
+      var details = event.target;
+      if (!(details instanceof HTMLDetailsElement)) return;
+      var summary = details.querySelector(':scope > summary');
+      var label = summary ? summary.querySelector('[data-collapse-state-info]') : null;
+      details.setAttribute('aria-expanded', details.open ? 'true' : 'false');
+      if (label) label.textContent = details.open ? 'Expanded' : 'Collapsed';
+    }, true);
   }
 }
 

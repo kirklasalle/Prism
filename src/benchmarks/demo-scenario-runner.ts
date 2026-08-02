@@ -39,6 +39,8 @@ import { builtinTools } from "../core/tools/builtin-tools.js";
 import { ToolRegistry } from "../core/tools/registry.js";
 import { MemoryQueryTool, SemanticQueryTool } from "../adapters/application/semantic-query-tool.js";
 import { nexusBridgeTools } from "../adapters/application/nexus-bridge-tool.js";
+import { ComputerUseTool } from "../adapters/system/computer-use-tool.js";
+import { FramebufferCapture } from "../core/operator/framebuffer-capture.js";
 import { AgentPool } from "../core/agents/agent-pool.js";
 import { AgentLifecycleManager } from "../core/agents/agent-lifecycle.js";
 import { AgentTelemetryCollector } from "../core/agents/agent-telemetry-collector.js";
@@ -48,7 +50,7 @@ import type { SubAgentResult } from "../core/agents/agent-types.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface DemoStep {
+export interface DemoStep {
     step: number;
     description: string;
     status: "pass" | "fail" | "skip";
@@ -57,7 +59,7 @@ interface DemoStep {
     error?: string;
 }
 
-interface DemoResult {
+export interface DemoResult {
     id: string;
     title: string;
     category: string;
@@ -71,7 +73,7 @@ interface DemoResult {
     error?: string;
 }
 
-interface DemoReport {
+export interface DemoReport {
     generatedAt: string;
     sessionId: string;
     profileSegment: string;
@@ -86,7 +88,7 @@ interface DemoReport {
     scenarios: DemoResult[];
 }
 
-interface DemoContext {
+export interface DemoContext {
     sessionId: string;
     activityBus: ActivityBus;
     policyEngine: PolicyEngine;
@@ -114,7 +116,7 @@ interface DemoContext {
     ) => void;
 }
 
-interface Scenario {
+export interface Scenario {
     id: string;
     title: string;
     category: string;
@@ -169,7 +171,7 @@ function emitProgress(payload: Record<string, unknown>): void {
 
 // ─── Scenario Definitions ─────────────────────────────────────────────────────
 
-function defineScenarios(): Scenario[] {
+export function defineScenarios(): Scenario[] {
     return [
         // ─── Category A: Governance & Policy ───
         {
@@ -2047,9 +2049,9 @@ async function main(): Promise<void> {
     const categoryArg = process.argv.find((a) => a.startsWith("--category="));
     const selectedCategories = categoryArg
         ? categoryArg
-              .split("=")[1]
-              .split(",")
-              .map((c) => c.trim().toUpperCase())
+            .split("=")[1]
+            .split(",")
+            .map((c) => c.trim().toUpperCase())
         : null;
     const profileArg = process.argv.find((a) => a.startsWith("--profile="));
     const profileMode = profileArg ? profileArg.split("=")[1].trim().toLowerCase() : null;
@@ -2080,6 +2082,7 @@ async function main(): Promise<void> {
     const policyEngine = new PolicyEngine();
     const toolRegistry = new ToolRegistry();
     for (const tool of builtinTools()) toolRegistry.register(tool);
+    toolRegistry.register(new ComputerUseTool(new FramebufferCapture()));
     toolRegistry.register(new SemanticQueryTool(semanticIndex, episodicMemory, sessionMemory, metricsCollector));
     toolRegistry.register(
         new MemoryQueryTool(semanticIndex, episodicMemory, sessionMemory, "memory_query", metricsCollector),
@@ -2101,10 +2104,10 @@ async function main(): Promise<void> {
     const orchestrator = runAllProfiles
         ? orchestratorIndividual
         : new Orchestrator(sessionId, activityBus, policyEngine, toolRegistry, {
-              approvalQueue,
-              approvalTimeoutMs: 30_000,
-              executionProfile,
-          });
+            approvalQueue,
+            approvalTimeoutMs: 30_000,
+            executionProfile,
+        });
     const workflowExecutor = new WorkflowExecutor();
 
     const agentTelemetry = new AgentTelemetryCollector();
@@ -2319,6 +2322,30 @@ async function main(): Promise<void> {
             `END — ${scenarioStatus.toUpperCase()} ${passed}p/${failed}f ${scenarioDuration.toFixed(0)}ms`,
         );
 
+        if (scenarioStatus === "fail") {
+            const failedStepDetails = scenarioSteps
+                .filter((scenarioStep) => scenarioStep.status === "fail")
+                .map((scenarioStep) => `step ${scenarioStep.step}: ${scenarioStep.description}${scenarioStep.error ? ` (${scenarioStep.error})` : ""}`);
+            const errorSummary = scenarioError ?? (failedStepDetails.join("; ") || "Unknown scenario failure");
+            const scenarioErrorLog = join(resolveWorkspaceRoot(), "logs", "demo-scenario-errors.log");
+            mkdirSync(join(resolveWorkspaceRoot(), "logs"), { recursive: true });
+            appendFileSync(
+                scenarioErrorLog,
+                `[${ts()}] [FAILED] Scenario ${scenario.id} (${scenario.title}): ${errorSummary}` +
+                `${failedStepDetails.length > 0 ? ` | ${failedStepDetails.join("; ")}` : ""}\n`,
+                "utf-8",
+            );
+            emitProgress({
+                type: "demo_diagnostics_log",
+                level: "error",
+                scenario: scenario.id,
+                title: scenario.title,
+                message: errorSummary,
+                failedSteps: failedStepDetails,
+                logPath: scenarioErrorLog,
+            });
+        }
+
         if (scenarioStatus === "pass") totalPassed++;
         else if (scenarioStatus === "fail") totalFailed++;
         else totalSkipped++;
@@ -2396,10 +2423,14 @@ async function main(): Promise<void> {
     sqliteStore.close();
     sessionMemory.close();
 
-    if (totalFailed > 0) process.exitCode = 1;
+    if (totalFailed > 0 && process.argv[1]?.includes("demo-scenario-runner")) {
+        process.exitCode = 1;
+    }
 }
 
-main().catch((error: unknown) => {
-    console.error("Demo scenario runner failed:", error);
-    process.exitCode = 1;
-});
+if (process.argv[1]?.includes("demo-scenario-runner")) {
+    main().catch((error: unknown) => {
+        console.error("Demo scenario runner failed:", error);
+        process.exitCode = 1;
+    });
+}

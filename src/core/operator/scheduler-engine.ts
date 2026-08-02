@@ -391,19 +391,17 @@ export class SchedulerEngine {
     private fire(entry: ScheduleEntry): void {
         entry.lastRunAt = new Date().toISOString();
         this.emitAudit("scheduler.action_fired", entry);
-        try {
-            this.onAction?.(entry);
-        } catch {
-            this.emitAudit("scheduler.action_error", entry);
-        }
+        Promise.resolve()
+            .then(() => this.onAction?.(entry))
+            .catch((error) => this.emitAudit("scheduler.action_error", entry, error));
     }
 
-    private emitAudit(operation: string, entry: ScheduleEntry): void {
+    private emitAudit(operation: string, entry: ScheduleEntry, error?: unknown): void {
         this.activityBus.emit({
             sessionId: this.sessionId,
             layer: "causal",
             operation,
-            status: "succeeded",
+            status: operation === "scheduler.action_error" ? "failed" : "succeeded",
             details: {
                 scheduleId: entry.id,
                 label: entry.label,
@@ -412,6 +410,7 @@ export class SchedulerEngine {
                 cronExpression: entry.cronExpression,
                 nextRunAt: entry.nextRunAt,
                 lastRunAt: entry.lastRunAt,
+                ...(error === undefined ? {} : { error: String(error) }),
             },
         });
     }

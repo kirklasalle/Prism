@@ -89,6 +89,7 @@ import { ComputerUseTool } from "../../adapters/system/computer-use-tool.js";
 import { ImageGenerateTool } from "../../adapters/application/image-generate-tool.js";
 import { VideoGenerateTool, AudioGenerateTool, AudioTranscribeTool } from "../../adapters/application/media-tools.js";
 import { SchedulerEngine, parseCronExpression, getNextNCronOccurrences } from "./scheduler-engine.js";
+import { SupportLogAuditor } from "./support-log-auditor.js";
 
 import { AutonomousAgentLoop } from "../runtime/autonomous-agent-loop.js";
 import { AutonomousBrowserAgent } from "../runtime/autonomous-browser-agent.js";
@@ -448,6 +449,7 @@ export class DashboardService {
         }
     >();
     private readonly schedulerEngine: SchedulerEngine;
+    private readonly supportLogAuditor: SupportLogAuditor;
 
     constructor(
         private readonly queue: ApprovalQueue,
@@ -1206,11 +1208,12 @@ export class DashboardService {
             },
         });
 
+        this.supportLogAuditor = new SupportLogAuditor(this.activityBus, this.chatStore, this.status.sessionId);
         this.schedulerEngine = new SchedulerEngine({
             activityBus: this.activityBus,
             sessionId: this.status.sessionId,
             persistencePath: workspacePath("state", "schedules.json"),
-            onAction: (entry) => {
+            onAction: async (entry) => {
                 this.broadcastEvent({
                     type: "scheduler:action-fired",
                     id: entry.id,
@@ -1220,8 +1223,20 @@ export class DashboardService {
                     payload: entry.payload,
                     firedAt: new Date().toISOString(),
                 });
+                if (entry.action === "support.audit-logs") {
+                    const result = this.supportLogAuditor.audit("scheduled");
+                    this.broadcastEvent({ type: "support:log-audit-completed", result });
+                }
             },
         });
+        this.supportLogAuditor.audit("initialization");
+        if (!this.schedulerEngine.list().some((entry) => entry.action === "support.audit-logs")) {
+            this.schedulerEngine.scheduleRecurring(
+                "Micro Support Desk log audit",
+                process.env.PRISM_SUPPORT_LOG_AUDIT_CRON || "*/5 * * * *",
+                "support.audit-logs",
+            );
+        }
         for (const action of actions) {
             this.actionsByName.set(action.name, action);
             this.actionStates.set(action.name, {
@@ -3278,8 +3293,41 @@ export class DashboardService {
     private _browserAgent: import("../runtime/autonomous-browser-agent.js").AutonomousBrowserAgent | null = null;
     private _computerAgent: import("../runtime/autonomous-computer-agent.js").AutonomousComputerAgent | null = null;
     private _demoEngine: import("../runtime/demonstration-engine.js").DemonstrationEngine | null = null;
+    private _demoOperatorEmail: string | null = null;
     // Cache for expensive model matrix computation to avoid repeated work
     private modelMatrixCache: { ts: number; matrix: any } | null = null;
+
+    private createDemoOutputSession(reports: {
+        mdPath: string;
+        htmlPath: string;
+        summary: { passed: number; failed: number; durationMs: number };
+    }): ChatSessionSummary {
+        const title = "Demo Output Session";
+        const session = this.createChatSession({
+            title,
+            characterId: null,
+            cacAssignmentId: null,
+            operatorEmail: this._demoOperatorEmail,
+            allowUnbound: true,
+        });
+        const reportHtml = readFileSync(reports.htmlPath, "utf-8");
+        const content = `## 🎬 PRISM Demonstration Complete!\n\n` +
+            `**Operator**: ${session.operatorEmail ?? "Authenticated operator"}  \n` +
+            `**Execution Summary**: ${reports.summary.passed} Succeeded, ${reports.summary.failed} Failed / Timed Out (${(reports.summary.durationMs / 1000).toFixed(2)}s duration)  \n\n` +
+            `### Executive Report\n` +
+            `The complete HTML report is embedded below and saved at ${reports.htmlPath}.  \n` +
+            `The Markdown report is saved at ${reports.mdPath}.  \n` +
+            `All Demo artifacts are stored under ${workspacePath("workspace", "Demo_results")}.\n\n` +
+            `*All actions executed with real operations and verified outputs logged to the workspace.*`;
+
+        this.chatStore.appendMessage(session.sessionId, "assistant", content, {
+            source: "demonstration-engine",
+            intent: "demo_report",
+            demoReportHtml: reportHtml,
+            reports,
+        });
+        return session;
+    }
 
     /**
      * Wire autonomous control dependencies after construction.
@@ -3595,6 +3643,7 @@ export class DashboardService {
 
     stop(): Promise<void> {
         this.inboundPoller.stop();
+        this.schedulerEngine.stop();
         this.pkgStore?.close();
         this.characterAccountabilityStore.close();
         for (const ws of this.wsClients) {
@@ -4528,6 +4577,35 @@ export class DashboardService {
                         }
                     }
                 });
+                this._demoEngine.setOnCompleteCallback(async (reports) => {
+                    try {
+                        const session = this.createDemoOutputSession(reports);
+
+                        const eventMsg = JSON.stringify({
+                            type: "demo_event",
+                            typeInner: "demo_chat_session_created",
+                            sessionId: session.sessionId,
+                            title: session.title,
+                            reports,
+                        });
+                        for (const ws of this.wsClients) {
+                            try { ws.send(eventMsg); } catch { }
+                        }
+                        return { sessionId: session.sessionId, title: session.title };
+                    } catch (err) {
+                        console.error("[PRISM][dashboard] Failed creating demo chat session:", err);
+                        const eventMsg = JSON.stringify({
+                            type: "demo_event",
+                            typeInner: "demo_chat_session_failed",
+                            error: err instanceof Error ? err.message : String(err),
+                            reports,
+                        });
+                        for (const ws of this.wsClients) {
+                            try { ws.send(eventMsg); } catch { }
+                        }
+                        throw err;
+                    }
+                });
             }
             if (method === "GET" && url === "/api/demo/status") {
                 return this.json(res, 200, this._demoEngine.getState());
@@ -4541,8 +4619,15 @@ export class DashboardService {
             if (method === "POST" && url === "/api/demo/start") {
                 const body = await this.readBody(req).catch(() => "{}");
                 const parsed = JSON.parse(body);
-                void this._demoEngine.start(parsed.answers, parsed.categories);
+                this._demoOperatorEmail = authResult.principal?.email ?? null;
+                if (parsed.playbackMode) this._demoEngine.setPlaybackMode(parsed.playbackMode);
+                if (parsed.timeoutMs) this._demoEngine.setStepTimeout(parsed.timeoutMs);
+                void this._demoEngine.start(parsed.answers, parsed.categories, parsed.playbackMode);
                 return this.json(res, 200, { ok: true, state: this._demoEngine.getState() });
+            }
+            if (method === "POST" && url === "/api/demo/advance") {
+                this._demoEngine.advanceStep();
+                return this.json(res, 200, { ok: true });
             }
             if (method === "POST" && url === "/api/demo/pause") {
                 this._demoEngine.pause();
@@ -4561,6 +4646,8 @@ export class DashboardService {
                 const parsed = JSON.parse(body);
                 if (parsed.answers) this._demoEngine.setPromptAnswers(parsed.answers);
                 if (parsed.speedMs) this._demoEngine.setSpeed(parsed.speedMs);
+                if (parsed.playbackMode) this._demoEngine.setPlaybackMode(parsed.playbackMode);
+                if (parsed.timeoutMs) this._demoEngine.setStepTimeout(parsed.timeoutMs);
                 return this.json(res, 200, { ok: true });
             }
         }

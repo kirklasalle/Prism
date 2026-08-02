@@ -1038,6 +1038,35 @@ export
       }
       extraHtml += '</div>';
     }
+    if (message.role === 'assistant' && message.metadata && message.metadata.intent === 'demo_report' && message.metadata.reports) {
+      var rpts = message.metadata.reports;
+      var htmlPath = rpts.htmlPath || '';
+      var mdPath = rpts.mdPath || '';
+      var summary = rpts.summary || {};
+      var passed = summary.passed != null ? summary.passed : '?';
+      var failed = summary.failed != null ? summary.failed : '?';
+      var total = (summary.total != null ? summary.total : (passed + failed));
+      var dur = summary.durationMs ? (summary.durationMs / 1000).toFixed(1) + 's' : '—';
+      var passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+      var barColor = failed === 0 ? '#2da44e' : failed > passed ? '#f85149' : '#d29922';
+      var winPath = function (p) { return p.replace(/\//g, '\\'); };
+      extraHtml += '<div style="margin-top:14px;background:linear-gradient(135deg,rgba(45,164,78,0.08),rgba(88,166,255,0.05));border:1px solid rgba(45,164,78,0.3);border-radius:10px;padding:16px 18px;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+        + '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">🎬</span><span style="font-weight:700;font-size:14px;color:#c9d1d9;">Demonstration Executive Report</span></div>'
+        + '<span style="font-size:11px;color:#8b949e;font-family:monospace;">' + escapeHtml(dur) + ' duration</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:10px;margin-bottom:12px;">'
+        + '<div style="flex:1;background:rgba(45,164,78,0.12);border:1px solid rgba(45,164,78,0.25);border-radius:6px;padding:8px 12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#2da44e;">' + escapeHtml(String(passed)) + '</div><div style="font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;">Passed</div></div>'
+        + '<div style="flex:1;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);border-radius:6px;padding:8px 12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#f85149;">' + escapeHtml(String(failed)) + '</div><div style="font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;">Failed</div></div>'
+        + '<div style="flex:1;background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.2);border-radius:6px;padding:8px 12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#58a6ff;">' + escapeHtml(String(total)) + '</div><div style="font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;">Total Steps</div></div>'
+        + '</div>'
+        + '<div style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e;margin-bottom:4px;"><span>Pass rate</span><span>' + escapeHtml(String(passRate)) + '%</span></div><div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + escapeHtml(String(passRate)) + '%;background:' + barColor + ';border-radius:3px;transition:width .4s;"></div></div></div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        + (htmlPath ? '<button onclick="window.openLocalPath(\'' + escapeHtml(winPath(htmlPath).replace(/\\/g, '\\\\')) + '\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(88,166,255,0.12);border:1px solid rgba(88,166,255,0.3);border-radius:6px;color:#58a6ff;font-size:12px;font-weight:600;cursor:pointer;">🌐 Open HTML Report</button>' : '')
+        + (mdPath ? '<button onclick="window.openLocalPath(\'' + escapeHtml(winPath(mdPath).replace(/\\/g, '\\\\')) + '\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.2);border-radius:6px;color:#94a3b8;font-size:12px;font-weight:600;cursor:pointer;">📄 Open Markdown Report</button>' : '')
+        + '</div>'
+        + '</div>';
+    }
 
     const contentHtml = message.role === 'assistant' ? renderMarkdown(message.content) : renderMarkdown(escapeHtml(message.content));
 
@@ -1095,7 +1124,6 @@ export
       + extraHtml
       + actionBtns
       + '<div class="message-time" title="' + escapeHtml(isoTime) + '" style="cursor:default;">' + escapeHtml(formatRelativeTime(message.createdAt)) + '</div>';
-
     return { key, el, reuse: false };
   });
 

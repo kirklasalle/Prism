@@ -270,9 +270,11 @@ export async function browserLaunchSession(headless) {
   var btnId = headless ? '#browser-launch-headless-btn' : '#browser-launch-headed-btn';
   var profileSelect = document.getElementById('browser-launch-profile');
   var profileId = profileSelect ? profileSelect.value : '';
+  var alwaysOnTopInput = document.getElementById('browser-always-on-top');
+  var alwaysOnTop = !headless && (!alwaysOnTopInput || alwaysOnTopInput.checked);
   browserLogAction('launch', (headless ? 'Headless' : 'Headed') + ' session' + (profileId ? ' [profile: ' + profileId + ']' : ''));
   await withButtonFeedback(btnId, async function () {
-    var body = { headless: headless };
+    var body = { headless: headless, alwaysOnTop: alwaysOnTop };
     if (profileId) body.profileId = profileId;
     var session = await request('/api/browser/launch', {
       method: 'POST',
@@ -313,6 +315,9 @@ export function renderBrowserSessions(sessions) {
     var s = sessions[i];
     var sid = escapeHtml(s.sessionId || s.id || '');
     var modeLabel = s.headless ? 'Headless' : 'Headed';
+    var topmostLabel = !s.headless && s.alwaysOnTop
+      ? (s.alwaysOnTopApplied ? ' • Always on top' : ' • Always on top requested')
+      : '';
     var modeBadge = s.headless
       ? '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;background:rgba(105,210,255,0.12);color:#69d2ff;">' + modeLabel + '</span>'
       : '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;background:rgba(126,207,126,0.12);color:#7ecf7e;">' + modeLabel + '</span>';
@@ -320,7 +325,7 @@ export function renderBrowserSessions(sessions) {
     html += '<div class="panel" style="padding:10px;margin-bottom:6px;">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">';
     html += '<div style="display:flex;align-items:center;gap:8px;">';
-    html += '<span style="font-weight:600;font-size:13px;font-family:monospace;">' + sid + '</span>';
+    html += '<span style="font-weight:600;font-size:13px;font-family:monospace;">' + sid + topmostLabel + '</span>';
     html += modeBadge;
     if (s.profileId) {
       html += '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;background:rgba(192,132,252,0.12);color:#c084fc;">Profile: ' + escapeHtml(s.profileId) + '</span>';
@@ -963,7 +968,7 @@ export function cleanupBrowserTab() {
     window._browserWsRefreshTimer = null;
   }
   if (_lastScreenshotBlobUrl) {
-    try { URL.revokeObjectURL(_lastScreenshotBlobUrl); } catch (_) {}
+    try { URL.revokeObjectURL(_lastScreenshotBlobUrl); } catch (_) { }
     _lastScreenshotBlobUrl = null;
   }
 }

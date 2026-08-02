@@ -97,6 +97,7 @@ export class BrowserHandler implements IRouteHandler {
             try {
                 const body = await service.readJsonBody<{
                     headless?: boolean;
+                    alwaysOnTop?: boolean;
                     profileId?: string;
                     sessionId?: string;
                     assignmentId?: string;

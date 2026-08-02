@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import type { ActivityBus } from "../activity/bus.js";
 import type { BrowserProfileManager } from "./browser-profile-manager.js";
 
@@ -48,16 +49,20 @@ export interface BrowserSession {
     viewportWidth?: number;
     viewportHeight?: number;
     sessionToken?: string;
+    alwaysOnTop?: boolean;
+    alwaysOnTopApplied?: boolean;
 }
 
 // ── Launch options ───────────────────────────────────────────────────────
 export interface BrowserLaunchOptions {
     headless?: boolean;
     sessionId?: string;
+    idleTimeoutMs?: number;
     profileId?: string;
     assignmentId?: string;
     prismUserEmail?: string;
     characterId?: string;
+    alwaysOnTop?: boolean;
 }
 
 // ── Serialized session info (no Playwright internals) ───────────────────
@@ -80,6 +85,8 @@ export interface BrowserSessionInfo {
     viewportWidth?: number;
     viewportHeight?: number;
     sessionToken?: string;
+    alwaysOnTop?: boolean;
+    alwaysOnTopApplied?: boolean;
 }
 
 // ── Internal record holding Playwright handles ──────────────────────────
@@ -88,6 +95,7 @@ interface InternalSession {
     browser: unknown; // playwright Browser
     context: unknown; // playwright BrowserContext
     page: unknown; // playwright Page
+    idleTimeoutMs: number;
 }
 
 const MAX_NETWORK_LOG = 500;
@@ -108,7 +116,7 @@ export class BrowserSessionManager {
     constructor(
         private readonly activityBus?: ActivityBus,
         private readonly sessionId?: string,
-    ) {}
+    ) { }
 
     /** Attach a BrowserProfileManager for persistent profile support. */
     setProfileManager(pm: BrowserProfileManager): void {
@@ -151,6 +159,10 @@ export class BrowserSessionManager {
         const pw = await this.playwright();
         const id = options?.sessionId ?? `browser-${randomUUID().slice(0, 8)}`;
         const headless = options?.headless ?? false;
+        const alwaysOnTop = !headless && options?.alwaysOnTop === true;
+        const idleTimeoutMs = typeof options?.idleTimeoutMs === "number" && options.idleTimeoutMs >= 0
+            ? options.idleTimeoutMs
+            : IDLE_TIMEOUT_MS;
         const now = new Date().toISOString();
 
         const meta: BrowserSession = {
@@ -167,6 +179,8 @@ export class BrowserSessionManager {
             assignmentId: options?.assignmentId,
             prismUserEmail: options?.prismUserEmail,
             characterId: options?.characterId,
+            alwaysOnTop,
+            alwaysOnTopApplied: false,
         };
 
         const browser = await pw.chromium.launch({ headless });
@@ -184,6 +198,16 @@ export class BrowserSessionManager {
 
         const context = await (browser as any).newContext(contextOptions);
         const page = await (context as any).newPage();
+
+        if (alwaysOnTop) {
+            const windowTitle = `PRISM Browser ${id}`;
+            try {
+                await (page as any).evaluate((title: string) => { document.title = title; }, windowTitle);
+                meta.alwaysOnTopApplied = await this.setWindowsAlwaysOnTop(windowTitle);
+            } catch {
+                meta.alwaysOnTopApplied = false;
+            }
+        }
 
         // Network interception — log all responses
         (page as any).on("response", (response: any) => {
@@ -250,7 +274,7 @@ export class BrowserSessionManager {
         }
         meta.sessionToken = randomUUID();
 
-        this.sessions.set(id, { meta, browser, context, page });
+        this.sessions.set(id, { meta, browser, context, page, idleTimeoutMs });
         this.resetIdleTimer(id);
         this.emit("browser.session.started", {
             sessionId: id,
@@ -262,6 +286,8 @@ export class BrowserSessionManager {
             viewportWidth: meta.viewportWidth,
             viewportHeight: meta.viewportHeight,
             sessionToken: meta.sessionToken,
+            alwaysOnTop: meta.alwaysOnTop,
+            alwaysOnTopApplied: meta.alwaysOnTopApplied,
         });
 
         return { ...meta };
@@ -372,6 +398,8 @@ export class BrowserSessionManager {
             viewportWidth: s.meta.viewportWidth,
             viewportHeight: s.meta.viewportHeight,
             sessionToken: s.meta.sessionToken,
+            alwaysOnTop: s.meta.alwaysOnTop,
+            alwaysOnTopApplied: s.meta.alwaysOnTopApplied,
         }));
     }
 
@@ -397,7 +425,31 @@ export class BrowserSessionManager {
             viewportWidth: s.meta.viewportWidth,
             viewportHeight: s.meta.viewportHeight,
             sessionToken: s.meta.sessionToken,
+            alwaysOnTop: s.meta.alwaysOnTop,
+            alwaysOnTopApplied: s.meta.alwaysOnTopApplied,
         };
+    }
+
+    private async setWindowsAlwaysOnTop(windowTitle: string): Promise<boolean> {
+        if (process.platform !== "win32") return false;
+        const escapedTitle = windowTitle.replace(/'/g, "''");
+        const script = [
+            "$sig='[DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);'",
+            "Add-Type -MemberDefinition $sig -Name PrismWindow -Namespace Native -ErrorAction SilentlyContinue",
+            `$p=Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like '*${escapedTitle}*' } | Select-Object -First 1`,
+            "if(-not $p){exit 2}",
+            "$ok=[Native.PrismWindow]::SetWindowPos($p.MainWindowHandle,[IntPtr](-1),0,0,0,0,0x0001 -bor 0x0002 -bor 0x0010)",
+            "if($ok){exit 0}else{exit 3}",
+        ].join("; ");
+
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const applied = await new Promise<boolean>((resolve) => {
+                execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], (error) => resolve(!error));
+            });
+            if (applied) return true;
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return false;
     }
 
     // ── Close Session ───────────────────────────────────────────────────
@@ -550,7 +602,8 @@ export class BrowserSessionManager {
 
     async getAccessibilityTree(sessionId: string): Promise<unknown> {
         const s = this.requireSession(sessionId);
-        const snapshot = await (s.page as any).accessibility.snapshot();
+        const page = s.page as any;
+        const snapshot = await page.locator("body").ariaSnapshot({ timeout: 10000 });
         this.resetIdleTimer(sessionId);
         this.emit("browser.accessibility.captured", { sessionId });
         return snapshot;
@@ -614,11 +667,13 @@ export class BrowserSessionManager {
 
     private resetIdleTimer(sessionId: string): void {
         this.clearIdleTimer(sessionId);
+        const idleTimeoutMs = this.sessions.get(sessionId)?.idleTimeoutMs ?? IDLE_TIMEOUT_MS;
+        if (idleTimeoutMs === 0) return;
         this.idleTimers.set(
             sessionId,
             setTimeout(() => {
                 void this.closeSession(sessionId);
-            }, IDLE_TIMEOUT_MS),
+            }, idleTimeoutMs),
         );
     }
 

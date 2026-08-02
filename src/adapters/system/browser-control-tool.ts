@@ -101,6 +101,8 @@ export class BrowserControlTool implements Tool {
             text: { type: "string" },
             expression: { type: "string" },
             headless: { type: "boolean" },
+            alwaysOnTop: { type: "boolean" },
+            idleTimeoutMs: { type: "number" },
             profileId: { type: "string" },
             values: { type: "string" },
             x: { type: "number" },
@@ -161,9 +163,15 @@ export class BrowserControlTool implements Tool {
 
                 case "launch_session": {
                     const headless = request.args.headless === true;
+                    const alwaysOnTop = !headless && request.args.alwaysOnTop === true;
+                    const idleTimeoutMs = typeof request.args.idleTimeoutMs === "number"
+                        ? request.args.idleTimeoutMs
+                        : undefined;
                     const profileId = request.args.profileId ? String(request.args.profileId) : undefined;
                     const session = await this.manager.launch({
                         headless,
+                        alwaysOnTop,
+                        idleTimeoutMs,
                         profileId,
                         assignmentId: request.args.assignmentId ? String(request.args.assignmentId) : undefined,
                         prismUserEmail: request.args.email ? String(request.args.email) : undefined,

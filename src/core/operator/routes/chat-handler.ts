@@ -443,7 +443,59 @@ export class ChatHandler implements IRouteHandler {
 
         // 15. GET /api/support/tickets
         if (method === "GET" && url === "/api/support/tickets") {
-            return this.json(res, 200, service.getChatStore().listSupportTickets());
+            const incidents = service
+                .getChatStore()
+                .listSupportTickets()
+                .filter((ticket) => ticket.metadata.itemType !== "suggestion");
+            return this.json(res, 200, incidents);
+        }
+
+        if (method === "GET" && url === "/api/support/suggestions") {
+            const suggestions = service
+                .getChatStore()
+                .listSupportTickets()
+                .filter((ticket) => ticket.metadata.itemType === "suggestion");
+            return this.json(res, 200, suggestions);
+        }
+
+        if (method === "POST" && url === "/api/support/suggestions") {
+            try {
+                const body = await service.readJsonBody<{
+                    title?: string;
+                    description?: string;
+                    requestType?: string;
+                    priority?: string;
+                    owner?: string;
+                    source?: string;
+                }>(req);
+                const requestTypes = ["improvement", "sota-research", "development"];
+                const priorities = ["low", "medium", "high", "critical"];
+                if (!body.title || !body.description) {
+                    return this.json(res, 400, { error: "Missing title or description" });
+                }
+                if (!body.requestType || !requestTypes.includes(body.requestType)) {
+                    return this.json(res, 400, { error: "Invalid suggestion requestType" });
+                }
+                const priority = priorities.includes(body.priority || "") ? body.priority! : "medium";
+                const now = new Date().toISOString();
+                const suggestion = service.getChatStore().createSupportTicket({
+                    title: body.title,
+                    description: body.description,
+                    source: body.source || "operator-suggestion-inbox",
+                    severity: priority as "low" | "medium" | "high" | "critical",
+                    metadata: {
+                        itemType: "suggestion",
+                        requestType: body.requestType,
+                        priority,
+                        owner: body.owner?.trim() || "unassigned",
+                        auditTrace: [{ action: "submitted", timestamp: now, source: body.source || "operator" }],
+                    },
+                });
+                service.broadcastEvent({ type: "support:ticket-created", ticket: suggestion });
+                return this.json(res, 201, suggestion);
+            } catch (err) {
+                return this.json(res, 500, { error: String(err) });
+            }
         }
 
         // 16. POST /api/support/tickets

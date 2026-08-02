@@ -1724,7 +1724,7 @@ export class ChatSessionStore implements ISessionStore {
         status?: "open" | "investigating" | "self-healing" | "resolved";
         metadata?: Record<string, unknown>;
     }): SupportTicket {
-        const ticketId = "TKT-" + Math.floor(1000 + Math.random() * 9000);
+        const ticketId = `TKT-${randomUUID().slice(0, 8).toUpperCase()}`;
         const status = ticket.status || "open";
         const now = new Date().toISOString();
         const metaJson = JSON.stringify(ticket.metadata || {});

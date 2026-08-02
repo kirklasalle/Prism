@@ -1,3 +1,35 @@
+.collapse-state-info {
+    margin-left: auto;
+    padding: 2px 7px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+summary .collapse-state-info {
+    float: right;
+    margin-left: 10px;
+}
+
+.browser-always-on-top-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 6px;
+    color: var(--fg-muted);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.browser-always-on-top-option input {
+    accent-color: var(--accent);
+}
+
 :root {
     /* PRISM Refraction + TRON 16-Color Emissive Array */
     --c-red: #ff3333;

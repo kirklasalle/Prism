@@ -89,6 +89,29 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
         assert.strictEqual(found.state, "active");
     });
 
+    it("should support custom and disabled idle timeouts", async function () {
+        const expiring = await tool.execute(makeRequest({ action: "launch_session", headless: true, idleTimeoutMs: 50 }));
+        const persistent = await tool.execute(makeRequest({ action: "launch_session", headless: true, idleTimeoutMs: 0 }));
+        assert.strictEqual(expiring.ok, true);
+        assert.strictEqual(persistent.ok, true);
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const listed = await tool.execute(makeRequest({ action: "list_sessions" }));
+        const sessions = (listed.output as any).sessions || [];
+        const expiringSession = sessions.find((session: any) => session.id === (expiring.output as any).id);
+        const persistentSession = sessions.find((session: any) => session.id === (persistent.output as any).id);
+        assert.ok(!expiringSession || expiringSession.state === "terminated");
+        assert.strictEqual(persistentSession?.state, "active");
+
+        const expiredOperation = await tool.execute(makeRequest({
+            action: "get_page_info",
+            sessionId: (expiring.output as any).id,
+        }));
+        assert.strictEqual(expiredOperation.ok, false);
+
+        await tool.execute(makeRequest({ action: "close_session", sessionId: (persistent.output as any).id }));
+    });
+
     /* ── Evaluate (basic, before page injection) ───────────────────────── */
 
     it("should evaluate and return computed values", async function () {
@@ -111,6 +134,13 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
         const result = await tool.execute(makeRequest({ action: "navigate", sessionId, url: "https://example.com" }));
         assert.strictEqual(result.ok, true, `Navigate failed: ${JSON.stringify(result.output)}`);
         assert.ok((result.output as any).url.includes("example.com"));
+        assert.ok((result.output as any).title);
+    });
+
+    it("should navigate to the deterministic multi-page demo target", async function () {
+        const result = await tool.execute(makeRequest({ action: "navigate", sessionId, url: "https://example.org" }));
+        assert.strictEqual(result.ok, true, `Navigate failed: ${JSON.stringify(result.output)}`);
+        assert.ok((result.output as any).url.includes("example.org"));
         assert.ok((result.output as any).title);
     });
 
@@ -224,11 +254,11 @@ describeOrSkip("Browser Integration (live Playwright)", function () {
 
     /* ── Accessibility Tree ────────────────────────────────────────────── */
 
-    it("should attempt accessibility tree snapshot without crashing", async function () {
+    it("should capture an accessibility snapshot containing page semantics", async function () {
         const result = await tool.execute(makeRequest({ action: "get_accessibility_tree", sessionId }));
-        // page.accessibility.snapshot() may not be supported in all Playwright versions/browsers.
-        // The key assertion is that the tool handles this gracefully (ok: true with data, or ok: false with error).
-        assert.ok(typeof result.ok === "boolean");
+        assert.strictEqual(result.ok, true);
+        assert.strictEqual(typeof (result.output as any).tree, "string");
+        assert.ok((result.output as any).tree.includes("Hello PRISM"));
     });
 
     /* ── Hover ─────────────────────────────────────────────────────────── */

@@ -1,0 +1,299 @@
+# Prism Demonstration Mode — Critical Audit & Enhancement Plan
+
+Kirk, here is the full audit. I've read every line of the demo system. The picture is clear — and your instincts are exactly right.
+
+---
+
+## Executive Summary
+
+The Prism Demonstration Mode has **solid architectural bones** (types, WebSocket plumbing, pause/resume/abort, prompt UI, progress tracking) but suffers from **three systemic failures** that make it appear as a non-functional tab-switcher to the operator:
+
+| Problem | Severity | Root Cause |
+|---------|----------|------------|
+| **Speed: Too fast for humans** | 🔴 Critical | Default `speedMs = 3000` but tab tour uses `speedMs` directly (~3s per tab); browser demos run even faster because they don't wait for real tool results to render |
+| **No visible output** | 🔴 Critical | Demo actions either emit simulated ActivityBus events or call tools whose output is never surfaced to the operator; screenshots are captured but never shown in the overlay |
+| **No final report** | 🟡 Major | Demo completes with a generic "Demonstration Complete!" toast — no MD/HTML report, no workspace artifacts, no clickable links, no proof of work |
+
+Additionally, the `demo-scenario-runner.ts` (43 scenarios) is a **separate CLI benchmark** — it doesn't integrate with the interactive dashboard Demo Mode at all, so its thorough scenarios never run in the UI.
+
+---
+
+## Architecture Map
+
+```mermaid
+graph TD
+    A["Demo Mode Button<br/>(dashboard.ts L89)"] -->|"window.prismDemo.open()"| B["demo-mode.js<br/>(Client JS IIFE)"]
+    B -->|"POST /api/demo/start"| C["dashboard-service.ts<br/>(L4516-4565)"]
+    C -->|"lazy-init"| D["DemonstrationEngine<br/>(demonstration-engine.ts)"]
+    D -->|"WebSocket broadcast"| B
+    D -->|"executeStep()"| E["Real Tool Calls<br/>(tool:* actions)"]
+    D -->|"demo:* actions"| F["Simulated Events<br/>(ActivityBus.emit)"]
+    D -->|"tab:* actions"| G["Tab Switch<br/>(WS → client click)"]
+    D -->|"runTabTour()"| H["11-Tab Speed Tour"]
+    
+    I["demo-scenario-runner.ts<br/>(43 scenarios, CLI only)"] -.->|"NOT connected"| D
+
+    style A fill:#a371f7,color:#fff
+    style I fill:#f85149,color:#fff,stroke-dasharray: 5 5
+    style F fill:#d29922,color:#000
+```
+
+---
+
+## Critical Findings — Full Breakdown
+
+### 🔴 Finding 1: Tab Tour Runs at Machine Speed
+
+**File**: [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts#L1120-L1151)
+
+The `runTabTour()` at line 1120 iterates 11 tabs with `this.delay(this.state.speedMs)` between each. At 3000ms default, that's 33 seconds for 11 tabs — which sounds okay, but the **actual experience** is worse because:
+
+1. The tab tour runs *after* the 9 demos, so by the time it starts, the operator has already seen ~27 steps fly by
+2. Each tab shows for exactly `speedMs` with **no explanation pause** — the narration changes and the tab changes simultaneously, giving the operator no time to read the highlight text
+3. There is **no "Step Through" or "Click to Continue" mode** — it's either full-auto or paused globally
+
+**Evidence from screenshot**: "Tab 11/11" visible with "COMPLETED ✓" — the tour finished before the operator could process it.
+
+---
+
+### 🔴 Finding 2: Browser Demos Show Nothing Visible
+
+**File**: [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts#L1018-L1111)
+
+The browser demo actions (`demo:browser_open`, `demo:browser_navigate`, `demo:browser_screenshot`, etc.) at L1018-L1111 do call real `browser_control` tool operations, **but**:
+
+1. **`browser_open` doesn't create a session** — it tries to reuse an existing session (L1025-1050). If no session exists, it throws an error and the step fails silently
+2. **`browser_navigate` calls navigate but doesn't wait for page load completion** — there's no confirmation the page rendered
+3. **`browser_screenshot` captures a screenshot but discards the result** — the screenshot path/base64 is never surfaced to the UI overlay or saved to a visible location
+4. **`browser_interact` only scrolls to y=300** (L1096-1101) — regardless of what the operator chose ("Click the main heading", "Extract all links", etc.)
+
+**Net effect**: The operator sees narration text like "Navigating to example.com..." but never sees the actual page, screenshot, or any browser content.
+
+---
+
+### 🔴 Finding 3: No Operator-Visible Output
+
+**File**: [demo-mode.js](file:///d:/Projects/PrismRefraction/src/core/operator/public/demo-mode.js#L198-L265)
+
+The client-side handler at `handleDemoEvent()` (L199-265) processes these event types:
+- `demo_step` → updates narration text + progress bar
+- `demo_section` → shows section title
+- `demo_switch_tab` → clicks tab button
+- `demo_tab_tour` → shows tour highlight text
+- `demo_completed` → shows completion message
+
+**Missing**: There is **no handler** for displaying:
+- Tool execution results (file contents, command output)
+- Browser screenshots
+- Agent spawn confirmations
+- Governance decision details
+- Any actual proof of work
+
+The overlay is purely a "narration ticker" — it tells the operator what's *supposed* to happen but never shows what *actually* happened.
+
+---
+
+### 🟡 Finding 4: "demo:" Actions Are Mostly Simulated
+
+**File**: [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts#L1009-L1115)
+
+Actions prefixed with `demo:` (L1010) fall into the catch-all at L1113:
+```typescript
+this.emit(`demo.action.${demoAction}`, "succeeded", { ...args, action: demoAction, realResult });
+return realResult ?? `Demo action: ${demoAction}`;
+```
+
+For non-browser demo actions like `demo:spawn_agents`, `demo:create_swarm`, `demo:dispatch_swarm`, `demo:guardian_check`, `demo:check_aab`, `demo:trigger_fault`, `demo:guardian_audit`, `demo:healing_success`, `demo:analyze_batch`, `demo:cleanup_swarm` — **none of these have real implementations**. They just emit an ActivityBus event and return a string that nobody displays.
+
+---
+
+### 🟡 Finding 5: demo-scenario-runner.ts Is Disconnected
+
+**File**: [demo-scenario-runner.ts](file:///d:/Projects/PrismRefraction/src/benchmarks/demo-scenario-runner.ts)
+
+This 2406-line file contains **43 real scenarios** across 8 categories (A-H) that **actually exercise** real orchestrator runs, agent spawning, swarm topologies, workflow DAGs, memory systems, and more. But:
+
+1. It's a **standalone CLI** (`node dist/src/benchmarks/demo-scenario-runner.js`)
+2. It creates its **own ActivityBus, Orchestrator, ToolRegistry** — completely separate from the running server
+3. Its results write to `prism-output/demo-scenario-report.json` and `demo-scenario-full.log` but the dashboard Demo Mode **never reads these**
+4. Many of its "browser" scenarios (C1, C2) are **also simulated** — they emit events instead of using real Playwright
+
+---
+
+### 🟡 Finding 6: No Step-Through / Manual Advance Mode
+
+Your request is exactly right — there is no option for the operator to click through each task one at a time. The current controls are:
+- ▶ Start (auto-runs everything)
+- ⏸ Pause (global freeze)
+- ⏹ Stop (abort entirely)
+
+There is no "▶ Next Step" button.
+
+---
+
+### 🟡 Finding 7: No Final Report Generation
+
+When the demo completes, the only output is a WebSocket event `demo_completed` which renders:
+```
+🎉 Demonstration Complete!
+Prism showcased self-control, browser control, and computer control across 9 demonstrations.
+```
+
+**Missing**:
+- No MD report written to workspace
+- No HTML report generated
+- No clickable links to artifacts
+- No screenshot gallery
+- No pass/fail summary
+- No proof that any actions actually executed
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Playback Mode**: Should the default mode be "Step-Through" (operator clicks Next for each step) with an option to switch to Auto? Or should Auto remain default with Step-Through as an option?
+
+> [!IMPORTANT]
+> **Demo Scope**: The `demo-scenario-runner.ts` has 43 scenarios. Should those be integrated into the interactive Demo Mode, or should the interactive Demo Mode keep its current 9+tour format but with real execution + visible output?
+
+> [!WARNING]
+> **Browser Requirement**: Real browser demos require an active Playwright/Chromium browser session. If no browser session exists, should the demo auto-launch one (headless), or should it prompt the operator to go to Browser Tab and launch one first?
+
+## Open Questions
+
+1. **Speed defaults**: Current default is 3000ms per step. For "Auto" mode, should we increase to 6000-8000ms? For step-through, it's moot (operator controls pacing).
+2. **Report destination**: You mentioned `Demo Results/` directory in workspace. Should this be at `d:\Projects\PrismRefraction\prism-output\demo-results\` or at the workspace root?
+3. **Chat window integration**: You mentioned clickable links from the main chat window. Should the demo completion message be injected as a chat message in the active session?
+
+---
+
+## Proposed Changes
+
+### Component 1: Step-Through Mode & Speed Control
+
+#### [MODIFY] [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts)
+
+1. Add `playbackMode: "auto" | "step-through"` to `DemoState`
+2. Add `advanceStep()` method that resolves a pending promise (like pause/resume pattern)
+3. In `runDemo()`, when in step-through mode, wait for `advanceStep()` between each step instead of `delay(speedMs)`
+4. Increase default `speedMs` from 3000 to 6000
+5. For agent/tool actions, use `Math.max(5000, speedMs)` pacing
+6. Add step output capture — `DemoLogEntry.output` already exists but is never broadcast
+
+#### [MODIFY] [demo-mode.js](file:///d:/Projects/PrismRefraction/src/core/operator/public/demo-mode.js)
+
+1. Add "Auto | Step-Through" toggle to the prompt UI
+2. Add "▶ Next Step" button visible in step-through mode
+3. Wire Next Step to `POST /api/demo/advance`
+4. Add speed slider (500ms – 10000ms range)
+5. Display step output (tool results, screenshots) in a collapsible output panel below the narration
+
+#### [MODIFY] [dashboard-service.ts](file:///d:/Projects/PrismRefraction/src/core/operator/dashboard-service.ts)
+
+1. Add `POST /api/demo/advance` route for step-through
+2. Add `playbackMode` parameter to `POST /api/demo/start`
+
+---
+
+### Component 2: Real Action Execution & Visible Output
+
+#### [MODIFY] [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts)
+
+1. **Browser demos**: Auto-launch a headed session if none exists (using `browser_control` tool's `create_session` with `headless: false`)
+2. **Screenshot capture**: Save screenshots to `prism-output/demo-results/screenshots/` with timestamped filenames; broadcast the file path to the UI
+3. **Step output**: Broadcast full tool output in `demo_step_result` WebSocket events (new event type)
+4. **Agent demos**: Use real `AgentPool.dispatch()` + `AgentLifecycleManager.spawn()` (inject these via constructor)
+5. **Swarm demos**: Use real `SwarmCoordinator.create()` + `execute()`
+6. **All `demo:*` stubs**: Replace simulated emits with actual subsystem calls or clearly mark as "simulation" in the narration with an explanation
+
+#### [MODIFY] [demo-mode.js](file:///d:/Projects/PrismRefraction/src/core/operator/public/demo-mode.js)
+
+1. Add `demo_step_result` handler to display tool output in the overlay
+2. Add inline screenshot preview (thumbnail) for captured screenshots
+3. Add collapsible "Output" panel below narration that shows the raw result
+
+#### [MODIFY] [demo-mode.css](file:///d:/Projects/PrismRefraction/src/core/operator/public/demo-mode.css)
+
+1. Add styles for output panel, screenshot thumbnails, step-through controls
+
+---
+
+### Component 3: Demo Results Report (MD + HTML)
+
+#### [NEW] Report generator in [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts)
+
+Add `generateReport()` method that produces:
+
+1. **Markdown report** at `prism-output/demo-results/demo-report-{timestamp}.md`
+   - Header with session info, timestamp, duration
+   - Summary table: total demos, passed/failed steps, categories exercised
+   - Per-demo sections with narration log, tool outputs, screenshots (embedded as `![screenshot](path)`)
+   - Footer with system info
+
+2. **HTML report** at `prism-output/demo-results/demo-report-{timestamp}.html`
+   - Premium styled report matching Prism aesthetic
+   - Embedded screenshots
+   - Interactive collapsible sections
+   - Clickable workspace file links
+
+3. **Report broadcast** — send `demo_report_ready` WebSocket event with file paths
+
+#### [MODIFY] [demo-mode.js](file:///d:/Projects/PrismRefraction/src/core/operator/public/demo-mode.js)
+
+1. Handle `demo_report_ready` event
+2. Show clickable links to MD and HTML reports in the completion panel
+3. Add "📄 View Report" and "🌐 Open HTML Report" buttons
+
+#### [MODIFY] [dashboard-service.ts](file:///d:/Projects/PrismRefraction/src/core/operator/dashboard-service.ts)
+
+1. Add `GET /api/demo/report` endpoint to serve the latest report
+
+---
+
+### Component 4: Chat Session Integration
+
+#### [MODIFY] [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts)
+
+1. On demo completion, emit a summary message to the chat session via WebSocket
+2. Include clickable links to report files in the workspace
+3. Include pass/fail summary and screenshot gallery links
+
+---
+
+## File Summary
+
+| File | Action | Description |
+|------|--------|-------------|
+| [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts) | MODIFY | Step-through mode, real actions, report generation, chat integration |
+| [demo-mode.js](file:///d:/Projects/PrismRefraction/src/core/operator/public/demo-mode.js) | MODIFY | Step-through UI, output display, report links, screenshot previews |
+| [demo-mode.css](file:///d:/Projects/PrismRefraction/src/core/operator/public/demo-mode.css) | MODIFY | Output panel, step-through controls, screenshot thumbnail styles |
+| [dashboard-service.ts](file:///d:/Projects/PrismRefraction/src/core/operator/dashboard-service.ts) | MODIFY | `/api/demo/advance` route, report endpoint |
+| [dashboard.ts](file:///d:/Projects/PrismRefraction/src/core/operator/templates/dashboard.ts) | NO CHANGE | Button already wired correctly |
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```bash
+# Build the project
+npm run build
+
+# Run existing tests to ensure no regressions
+npm test
+```
+
+### Manual Verification
+1. Start PRISM server via `start_web.bat`
+2. Navigate to `localhost:7070/dashboard`
+3. Click "Demo Mode" button
+4. Verify prompt UI appears with scope picker and Mad Libs options
+5. Select "Step-Through" mode
+6. Click "Launch Demo"
+7. Verify each step waits for operator "Next Step" click
+8. Verify tool output appears in the overlay after each step
+9. Verify browser tab shows actual navigation/screenshots when browser demos run
+10. Verify "Demo Results" directory created in workspace after completion
+11. Verify MD and HTML reports contain real data, screenshots, and clickable links
+12. Verify chat session receives completion summary with workspace links

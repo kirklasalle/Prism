@@ -4,162 +4,86 @@
             <h3>🌐 Browser Control</h3>
             <div style="display: flex; gap: 8px; align-items: center">
                 <span id="browser-default" class="muted" style="font-size: 12px">Detecting...</span>
-                <span
-                    id="browser-sshp-status"
-                    style="
+                <span id="browser-sshp-status" style="
                         font-size: 11px;
                         padding: 2px 8px;
                         border-radius: 10px;
                         font-weight: 600;
                         background: rgba(34, 197, 94, 0.15);
                         color: #4ade80;
-                    "
-                    title="Sovereign Sentinel Visual/DOM PII masking is fully armed."
-                    >🛡️ SSHP ACTIVE</span
-                >
-                <button
-                    id="browser-f12-btn"
-                    class="secondary-button"
-                    onclick="toggleBrowserDevTools()"
-                    style="font-size: 12px; padding: 4px 10px"
-                >
+                    " title="Sovereign Sentinel Visual/DOM PII masking is fully armed.">🛡️ SSHP ACTIVE</span>
+                <button id="browser-f12-btn" class="secondary-button" onclick="toggleBrowserDevTools()"
+                    style="font-size: 12px; padding: 4px 10px">
                     F12 Dev Tools
                 </button>
-                <button
-                    class="secondary-button"
-                    onclick="browserRunDiagnostics()"
-                    style="font-size: 12px; padding: 4px 10px"
-                >
+                <button class="secondary-button" onclick="browserRunDiagnostics()"
+                    style="font-size: 12px; padding: 4px 10px">
                     🔍 Diagnostics
                 </button>
             </div>
         </div>
-        <div
-            id="browser-diagnostics-result"
-            style="
+        <div id="browser-diagnostics-result" style="
                 display: none;
                 padding: 10px;
                 background: rgba(255, 255, 255, 0.04);
                 border-radius: 8px;
                 margin: 8px 0;
                 font-size: 12px;
-            "
-        ></div>
+            "></div>
         <div class="tabs panel" style="margin: 10px 0; padding: 6px" role="tablist" aria-label="Browser sub-views">
-            <button
-                id="bv-sessions"
-                class="tab-button active"
-                onclick="setBrowserView('sessions')"
-                style="font-size: 12px"
-                role="tab"
-                aria-selected="true"
-                aria-controls="browser-sessions-panel"
-                tabindex="0"
-            >
+            <button id="bv-sessions" class="tab-button active" onclick="setBrowserView('sessions')"
+                style="font-size: 12px" role="tab" aria-selected="true" aria-controls="browser-sessions-panel"
+                tabindex="0">
                 Sessions
             </button>
-            <button
-                id="bv-viewport"
-                class="tab-button"
-                onclick="setBrowserView('viewport')"
-                style="font-size: 12px"
-                role="tab"
-                aria-selected="false"
-                aria-controls="browser-viewport-panel"
-                tabindex="-1"
-            >
+            <button id="bv-viewport" class="tab-button" onclick="setBrowserView('viewport')" style="font-size: 12px"
+                role="tab" aria-selected="false" aria-controls="browser-viewport-panel" tabindex="-1">
                 Viewport
             </button>
-            <button
-                id="bv-network"
-                class="tab-button"
-                onclick="setBrowserView('network')"
-                style="font-size: 12px"
-                role="tab"
-                aria-selected="false"
-                aria-controls="browser-network-panel"
-                tabindex="-1"
-            >
+            <button id="bv-network" class="tab-button" onclick="setBrowserView('network')" style="font-size: 12px"
+                role="tab" aria-selected="false" aria-controls="browser-network-panel" tabindex="-1">
                 Network
             </button>
-            <button
-                id="bv-console"
-                class="tab-button"
-                onclick="setBrowserView('console')"
-                style="font-size: 12px"
-                role="tab"
-                aria-selected="false"
-                aria-controls="browser-console-panel"
-                tabindex="-1"
-            >
+            <button id="bv-console" class="tab-button" onclick="setBrowserView('console')" style="font-size: 12px"
+                role="tab" aria-selected="false" aria-controls="browser-console-panel" tabindex="-1">
                 Console
             </button>
-            <button
-                id="bv-dom"
-                class="tab-button"
-                onclick="setBrowserView('dom')"
-                style="font-size: 12px"
-                role="tab"
-                aria-selected="false"
-                aria-controls="browser-dom-panel"
-                tabindex="-1"
-            >
+            <button id="bv-dom" class="tab-button" onclick="setBrowserView('dom')" style="font-size: 12px" role="tab"
+                aria-selected="false" aria-controls="browser-dom-panel" tabindex="-1">
                 DOM
             </button>
-            <button
-                id="bv-storage"
-                class="tab-button"
-                onclick="setBrowserView('storage')"
-                style="font-size: 12px"
-                role="tab"
-                aria-selected="false"
-                aria-controls="browser-storage-panel"
-                tabindex="-1"
-            >
+            <button id="bv-storage" class="tab-button" onclick="setBrowserView('storage')" style="font-size: 12px"
+                role="tab" aria-selected="false" aria-controls="browser-storage-panel" tabindex="-1">
                 Storage
             </button>
-            <button
-                id="bv-profiles"
-                class="tab-button"
-                onclick="setBrowserView('profiles')"
-                style="font-size: 12px"
-                role="tab"
-                aria-selected="false"
-                aria-controls="browser-profiles-panel"
-                tabindex="-1"
-            >
+            <button id="bv-profiles" class="tab-button" onclick="setBrowserView('profiles')" style="font-size: 12px"
+                role="tab" aria-selected="false" aria-controls="browser-profiles-panel" tabindex="-1">
                 Profiles
             </button>
         </div>
         <div id="browser-sessions-panel" data-tip-id="browser:sessions" data-tip-kind="browser">
             <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center">
-                <select
-                    id="browser-launch-profile"
-                    style="
+                <select id="browser-launch-profile" style="
                         padding: 6px 10px;
                         border-radius: 6px;
                         border: 1px solid rgba(148, 163, 184, 0.18);
                         background: var(--bg-input);
                         color: var(--fg);
                         font-size: 12px;
-                    "
-                >
+                    ">
                     <option value="">No profile (ephemeral)</option>
                 </select>
-                <button
-                    id="browser-launch-headed-btn"
-                    class="primary-button"
-                    onclick="browserLaunchSession(false)"
-                    style="font-size: 12px"
-                >
+                <label class="browser-always-on-top-option"
+                    title="Keep headed Chrome above other windows while it is active">
+                    <input id="browser-always-on-top" type="checkbox" checked />
+                    Always on top
+                </label>
+                <button id="browser-launch-headed-btn" class="primary-button" onclick="browserLaunchSession(false)"
+                    style="font-size: 12px">
                     🚀 Launch Headed
                 </button>
-                <button
-                    id="browser-launch-headless-btn"
-                    class="primary-button"
-                    onclick="browserLaunchSession(true)"
-                    style="font-size: 12px"
-                >
+                <button id="browser-launch-headless-btn" class="primary-button" onclick="browserLaunchSession(true)"
+                    style="font-size: 12px">
                     🤖 Launch Headless
                 </button>
                 <button class="secondary-button" onclick="refreshSessionsList()" style="font-size: 12px">
@@ -172,9 +96,7 @@
         </div>
         <div id="browser-viewport-panel" data-tip-id="browser:viewport" data-tip-kind="browser" style="display: none">
             <!-- ⚠️ CSH Handoff Banner -->
-            <div
-                id="browser-csh-handoff-banner"
-                style="
+            <div id="browser-csh-handoff-banner" style="
                     display: none;
                     padding: 12px;
                     background: rgba(139, 92, 246, 0.15);
@@ -186,8 +108,7 @@
                     gap: 12px;
                     width: 100%;
                     box-sizing: border-box;
-                "
-            >
+                ">
                 <div style="display: flex; align-items: center; gap: 10px">
                     <span style="font-size: 18px">🤝</span>
                     <div>
@@ -200,11 +121,7 @@
                     </div>
                 </div>
                 <div style="display: flex; gap: 8px">
-                    <button
-                        class="primary-button"
-                        id="browser-csh-resume-btn"
-                        onclick="resumeActiveCsh()"
-                        style="
+                    <button class="primary-button" id="browser-csh-resume-btn" onclick="resumeActiveCsh()" style="
                             background: #8b5cf6;
                             border: none;
                             font-weight: 600;
@@ -213,17 +130,13 @@
                             border-radius: 6px;
                             cursor: pointer;
                             color: #fff;
-                        "
-                    >
+                        ">
                         Resume Agent
                     </button>
                 </div>
             </div>
             <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center">
-                <select
-                    id="browser-active-session"
-                    onchange="browserSessionChanged()"
-                    style="
+                <select id="browser-active-session" onchange="browserSessionChanged()" style="
                         padding: 6px 10px;
                         border-radius: 6px;
                         border: 1px solid rgba(148, 163, 184, 0.18);
@@ -231,42 +144,22 @@
                         color: var(--fg);
                         font-size: 12px;
                         min-width: 180px;
-                    "
-                >
+                    ">
                     <option value="">Select session...</option>
                 </select>
-                <button
-                    id="browser-back-btn"
-                    class="secondary-button"
-                    onclick="browserGoBack()"
-                    style="font-size: 12px; padding: 4px 8px"
-                    title="Go Back"
-                >
+                <button id="browser-back-btn" class="secondary-button" onclick="browserGoBack()"
+                    style="font-size: 12px; padding: 4px 8px" title="Go Back">
                     ◀
                 </button>
-                <button
-                    id="browser-forward-btn"
-                    class="secondary-button"
-                    onclick="browserGoForward()"
-                    style="font-size: 12px; padding: 4px 8px"
-                    title="Go Forward"
-                >
+                <button id="browser-forward-btn" class="secondary-button" onclick="browserGoForward()"
+                    style="font-size: 12px; padding: 4px 8px" title="Go Forward">
                     ▶
                 </button>
-                <button
-                    id="browser-reload-btn"
-                    class="secondary-button"
-                    onclick="browserReload()"
-                    style="font-size: 12px; padding: 4px 8px"
-                    title="Reload Page"
-                >
+                <button id="browser-reload-btn" class="secondary-button" onclick="browserReload()"
+                    style="font-size: 12px; padding: 4px 8px" title="Reload Page">
                     🔄
                 </button>
-                <input
-                    id="browser-url-input"
-                    type="text"
-                    placeholder="https://example.com"
-                    style="
+                <input id="browser-url-input" type="text" placeholder="https://example.com" style="
                         flex: 1;
                         min-width: 180px;
                         padding: 6px 10px;
@@ -275,47 +168,29 @@
                         background: var(--bg-input);
                         color: var(--fg);
                         font-size: 12px;
-                    "
-                    onkeydown="if (event.key === 'Enter') browserNavigate();"
-                />
+                    " onkeydown="if (event.key === 'Enter') browserNavigate();" />
                 <button id="browser-go-btn" class="primary-button" onclick="browserNavigate()" style="font-size: 12px">
                     Go
                 </button>
-                <button
-                    id="browser-screenshot-btn"
-                    class="secondary-button"
-                    onclick="browserTakeScreenshot()"
-                    style="font-size: 12px"
-                >
+                <button id="browser-screenshot-btn" class="secondary-button" onclick="browserTakeScreenshot()"
+                    style="font-size: 12px">
                     📸 Screenshot
                 </button>
-                <button
-                    id="browser-scroll-btn"
-                    class="secondary-button"
-                    onclick="browserScrollDown()"
-                    style="font-size: 12px; padding: 4px 8px"
-                    title="Scroll Down"
-                >
+                <button id="browser-scroll-btn" class="secondary-button" onclick="browserScrollDown()"
+                    style="font-size: 12px; padding: 4px 8px" title="Scroll Down">
                     ⬇ Scroll
                 </button>
             </div>
             <div id="browser-page-info" class="muted" style="font-size: 12px; margin-bottom: 8px"></div>
-            <div
-                id="browser-viewport-container"
-                class="panel"
-                style="min-height: 200px; display: flex; align-items: center; justify-content: center"
-            >
+            <div id="browser-viewport-container" class="panel"
+                style="min-height: 200px; display: flex; align-items: center; justify-content: center">
                 <span class="muted">No screenshot yet. Navigate to a URL.</span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px">
                 <div class="panel" style="padding: 12px">
                     <div class="muted" style="font-size: 11px; margin-bottom: 6px">Click Element</div>
                     <div style="display: flex; gap: 6px">
-                        <input
-                            id="browser-click-selector"
-                            type="text"
-                            placeholder="CSS selector"
-                            style="
+                        <input id="browser-click-selector" type="text" placeholder="CSS selector" style="
                                 flex: 1;
                                 padding: 5px 8px;
                                 border-radius: 5px;
@@ -323,14 +198,9 @@
                                 background: var(--bg-input);
                                 color: var(--fg);
                                 font-size: 12px;
-                            "
-                        />
-                        <button
-                            id="browser-click-btn"
-                            class="primary-button"
-                            onclick="browserClickElement()"
-                            style="font-size: 12px"
-                        >
+                            " />
+                        <button id="browser-click-btn" class="primary-button" onclick="browserClickElement()"
+                            style="font-size: 12px">
                             Click
                         </button>
                     </div>
@@ -338,11 +208,7 @@
                 <div class="panel" style="padding: 12px">
                     <div class="muted" style="font-size: 11px; margin-bottom: 6px">Type Text</div>
                     <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                        <input
-                            id="browser-type-selector"
-                            type="text"
-                            placeholder="CSS selector"
-                            style="
+                        <input id="browser-type-selector" type="text" placeholder="CSS selector" style="
                                 flex: 1;
                                 min-width: 100px;
                                 padding: 5px 8px;
@@ -351,13 +217,8 @@
                                 background: var(--bg-input);
                                 color: var(--fg);
                                 font-size: 12px;
-                            "
-                        />
-                        <input
-                            id="browser-type-text"
-                            type="text"
-                            placeholder="Text to type"
-                            style="
+                            " />
+                        <input id="browser-type-text" type="text" placeholder="Text to type" style="
                                 flex: 1;
                                 min-width: 100px;
                                 padding: 5px 8px;
@@ -366,14 +227,9 @@
                                 background: var(--bg-input);
                                 color: var(--fg);
                                 font-size: 12px;
-                            "
-                        />
-                        <button
-                            id="browser-type-btn"
-                            class="primary-button"
-                            onclick="browserTypeText()"
-                            style="font-size: 12px"
-                        >
+                            " />
+                        <button id="browser-type-btn" class="primary-button" onclick="browserTypeText()"
+                            style="font-size: 12px">
                             Type
                         </button>
                     </div>
@@ -382,11 +238,7 @@
             <div class="panel" style="padding: 12px; margin-top: 12px">
                 <div class="muted" style="font-size: 11px; margin-bottom: 6px">Evaluate JS</div>
                 <div style="display: flex; gap: 6px">
-                    <input
-                        id="browser-eval-input"
-                        type="text"
-                        placeholder="document.title"
-                        style="
+                    <input id="browser-eval-input" type="text" placeholder="document.title" style="
                             flex: 1;
                             padding: 5px 8px;
                             border-radius: 5px;
@@ -394,37 +246,25 @@
                             background: var(--bg-input);
                             color: var(--fg);
                             font-size: 12px;
-                        "
-                        onkeydown="if (event.key === 'Enter') browserEvaluate();"
-                    />
-                    <button
-                        id="browser-eval-btn"
-                        class="primary-button"
-                        onclick="browserEvaluate()"
-                        style="font-size: 12px"
-                    >
+                        " onkeydown="if (event.key === 'Enter') browserEvaluate();" />
+                    <button id="browser-eval-btn" class="primary-button" onclick="browserEvaluate()"
+                        style="font-size: 12px">
                         Eval
                     </button>
                 </div>
-                <div
-                    id="browser-eval-result"
-                    style="
+                <div id="browser-eval-result" style="
                         display: none;
                         margin-top: 6px;
                         padding: 6px;
                         background: rgba(0, 0, 0, 0.2);
                         border-radius: 5px;
                         font-size: 12px;
-                    "
-                ></div>
+                    "></div>
             </div>
         </div>
         <div id="browser-network-panel" data-tip-id="browser:network" data-tip-kind="browser" style="display: none">
             <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap">
-                <select
-                    id="browser-network-session"
-                    onchange="browserRefreshNetwork()"
-                    style="
+                <select id="browser-network-session" onchange="browserRefreshNetwork()" style="
                         padding: 6px 10px;
                         border-radius: 6px;
                         border: 1px solid rgba(148, 163, 184, 0.18);
@@ -432,8 +272,7 @@
                         color: var(--fg);
                         font-size: 12px;
                         min-width: 180px;
-                    "
-                >
+                    ">
                     <option value="">Select session...</option>
                 </select>
                 <button class="secondary-button" onclick="browserRefreshNetwork()" style="font-size: 12px">
@@ -459,10 +298,7 @@
         </div>
         <div id="browser-console-panel" data-tip-id="browser:console" data-tip-kind="browser" style="display: none">
             <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap">
-                <select
-                    id="browser-console-session"
-                    onchange="browserRefreshConsole()"
-                    style="
+                <select id="browser-console-session" onchange="browserRefreshConsole()" style="
                         padding: 6px 10px;
                         border-radius: 6px;
                         border: 1px solid rgba(148, 163, 184, 0.18);
@@ -470,8 +306,7 @@
                         color: var(--fg);
                         font-size: 12px;
                         min-width: 180px;
-                    "
-                >
+                    ">
                     <option value="">Select session...</option>
                 </select>
                 <button class="secondary-button" onclick="browserRefreshConsole()" style="font-size: 12px">
@@ -484,10 +319,7 @@
         </div>
         <div id="browser-dom-panel" data-tip-id="browser:dom" data-tip-kind="browser" style="display: none">
             <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap">
-                <select
-                    id="browser-dom-session"
-                    onchange="browserRefreshDom()"
-                    style="
+                <select id="browser-dom-session" onchange="browserRefreshDom()" style="
                         padding: 6px 10px;
                         border-radius: 6px;
                         border: 1px solid rgba(148, 163, 184, 0.18);
@@ -495,17 +327,14 @@
                         color: var(--fg);
                         font-size: 12px;
                         min-width: 180px;
-                    "
-                >
+                    ">
                     <option value="">Select session...</option>
                 </select>
                 <button class="secondary-button" onclick="browserRefreshDom()" style="font-size: 12px">
                     🔄 Refresh
                 </button>
             </div>
-            <pre
-                id="browser-dom-content"
-                style="
+            <pre id="browser-dom-content" style="
                     max-height: 500px;
                     overflow: auto;
                     white-space: pre-wrap;
@@ -514,17 +343,12 @@
                     background: rgba(0, 0, 0, 0.2);
                     padding: 10px;
                     border-radius: 6px;
-                "
-            >
-Select a session first.</pre
-            >
+                ">
+Select a session first.</pre>
         </div>
         <div id="browser-storage-panel" data-tip-id="browser:storage" data-tip-kind="browser" style="display: none">
             <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap">
-                <select
-                    id="browser-storage-session"
-                    onchange="browserRefreshStorage()"
-                    style="
+                <select id="browser-storage-session" onchange="browserRefreshStorage()" style="
                         padding: 6px 10px;
                         border-radius: 6px;
                         border: 1px solid rgba(148, 163, 184, 0.18);
@@ -532,8 +356,7 @@ Select a session first.</pre
                         color: var(--fg);
                         font-size: 12px;
                         min-width: 180px;
-                    "
-                >
+                    ">
                     <option value="">Select session...</option>
                 </select>
                 <button class="secondary-button" onclick="browserRefreshStorage()" style="font-size: 12px">
@@ -541,28 +364,16 @@ Select a session first.</pre
                 </button>
             </div>
             <div style="display: flex; gap: 4px; margin-bottom: 8px">
-                <button
-                    id="storage-tab-cookies"
-                    class="tab-button active"
-                    onclick="setStorageSubView('cookies')"
-                    style="font-size: 11px; padding: 4px 10px"
-                >
+                <button id="storage-tab-cookies" class="tab-button active" onclick="setStorageSubView('cookies')"
+                    style="font-size: 11px; padding: 4px 10px">
                     Cookies
                 </button>
-                <button
-                    id="storage-tab-local"
-                    class="tab-button"
-                    onclick="setStorageSubView('local')"
-                    style="font-size: 11px; padding: 4px 10px"
-                >
+                <button id="storage-tab-local" class="tab-button" onclick="setStorageSubView('local')"
+                    style="font-size: 11px; padding: 4px 10px">
                     localStorage
                 </button>
-                <button
-                    id="storage-tab-session"
-                    class="tab-button"
-                    onclick="setStorageSubView('session')"
-                    style="font-size: 11px; padding: 4px 10px"
-                >
+                <button id="storage-tab-session" class="tab-button" onclick="setStorageSubView('session')"
+                    style="font-size: 11px; padding: 4px 10px">
                     sessionStorage
                 </button>
             </div>
@@ -574,11 +385,7 @@ Select a session first.</pre
             <div class="panel" style="padding: 12px; margin-bottom: 12px">
                 <div class="muted" style="font-size: 11px; margin-bottom: 8px">Create New Profile</div>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-                    <input
-                        id="browser-profile-email"
-                        type="email"
-                        placeholder="user@example.com"
-                        style="
+                    <input id="browser-profile-email" type="email" placeholder="user@example.com" style="
                             flex: 1;
                             min-width: 160px;
                             padding: 6px 10px;
@@ -587,19 +394,15 @@ Select a session first.</pre
                             background: var(--bg-input);
                             color: var(--fg);
                             font-size: 12px;
-                        "
-                    />
-                    <select
-                        id="browser-profile-segment"
-                        style="
+                        " />
+                    <select id="browser-profile-segment" style="
                             padding: 6px 10px;
                             border-radius: 6px;
                             border: 1px solid rgba(148, 163, 184, 0.18);
                             background: var(--bg-input);
                             color: var(--fg);
                             font-size: 12px;
-                        "
-                    >
+                        ">
                         <option value="individual">Individual</option>
                         <option value="business">Business</option>
                     </select>
@@ -615,12 +418,8 @@ Select a session first.</pre
         </div>
         <div class="panel" style="margin-top: 16px; padding: 10px">
             <div class="muted" style="font-size: 11px; font-weight: 600; margin-bottom: 6px">Action Log</div>
-            <div
-                id="browser-action-history"
-                data-tip-id="browser:action-log"
-                data-tip-kind="browser"
-                style="max-height: 150px; overflow-y: auto"
-            >
+            <div id="browser-action-history" data-tip-id="browser:action-log" data-tip-kind="browser"
+                style="max-height: 150px; overflow-y: auto">
                 <span class="muted" style="font-size: 12px">No actions yet.</span>
             </div>
         </div>
@@ -630,31 +429,19 @@ Select a session first.</pre
        Browser Auto-Pilot — Phase A2B
        Autonomous browser goal execution via AutonomousBrowserAgent.
        ═══════════════════════════════════════════════════════════════════════ -->
-    <section
-        class="rail-section panel"
-        style="grid-column: 1/-1"
-        data-tip-id="browser:autopilot"
-        data-tip-kind="browser"
-    >
-        <div
-            class="rail-header"
-            style="cursor: pointer; user-select: none"
-            onclick="togglePanelCollapse('browserAutopilot')"
-        >
+    <section class="rail-section panel" style="grid-column: 1/-1" data-tip-id="browser:autopilot"
+        data-tip-kind="browser">
+        <div class="rail-header" style="cursor: pointer; user-select: none"
+            onclick="togglePanelCollapse('browserAutopilot')">
             <h3>🤖 Browser Auto-Pilot</h3>
-            <span
-                id="browser-autopilot-status"
-                class="muted"
-                style="
+            <span id="browser-autopilot-status" class="muted" style="
                     margin-left: 8px;
                     font-size: 11px;
                     padding: 2px 8px;
                     border-radius: 10px;
                     background: rgba(62, 196, 109, 0.1);
                     color: #3ec46d;
-                "
-                >idle</span
-            >
+                ">idle</span>
             <span id="browserAutopilot-collapse-icon" class="collapse-icon">▼</span>
         </div>
         <div id="browserAutopilot-collapsible" class="collapsible-body">
@@ -663,9 +450,7 @@ Select a session first.</pre
                 Uses accessibility-first perception for cost efficiency.
             </div>
             <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center">
-                <select
-                    id="browser-autopilot-session"
-                    style="
+                <select id="browser-autopilot-session" style="
                         padding: 6px 10px;
                         border-radius: 6px;
                         border: 1px solid rgba(148, 163, 184, 0.18);
@@ -673,15 +458,11 @@ Select a session first.</pre
                         color: var(--fg);
                         font-size: 12px;
                         min-width: 180px;
-                    "
-                >
+                    ">
                     <option value="">Select session…</option>
                 </select>
-                <input
-                    id="browser-autopilot-objective"
-                    type="text"
-                    placeholder="e.g. Search for 'Prism AI' and extract top 3 results"
-                    style="
+                <input id="browser-autopilot-objective" type="text"
+                    placeholder="e.g. Search for 'Prism AI' and extract top 3 results" style="
                         flex: 1;
                         min-width: 200px;
                         padding: 6px 10px;
@@ -690,9 +471,7 @@ Select a session first.</pre
                         background: var(--bg-input);
                         color: var(--fg);
                         font-size: 12px;
-                    "
-                    onkeydown="if (event.key === 'Enter') submitBrowserAutopilot();"
-                />
+                    " onkeydown="if (event.key === 'Enter') submitBrowserAutopilot();" />
                 <button class="primary-button" onclick="submitBrowserAutopilot()" style="font-size: 12px">🚀 Go</button>
                 <button class="secondary-button" onclick="stopBrowserAutopilot()" style="font-size: 12px">
                     ⏹ Stop
@@ -701,17 +480,14 @@ Select a session first.</pre
             <div style="display: flex; gap: 12px; margin-bottom: 10px; align-items: center">
                 <label class="muted" style="font-size: 11px; display: flex; align-items: center; gap: 4px">
                     Perception:
-                    <select
-                        id="browser-autopilot-perception"
-                        style="
+                    <select id="browser-autopilot-perception" style="
                             font-size: 11px;
                             padding: 3px 6px;
                             background: var(--surface-2, #222);
                             color: var(--text);
                             border: 1px solid var(--border);
                             border-radius: 4px;
-                        "
-                    >
+                        ">
                         <option value="accessibility">Accessibility tree (fast)</option>
                         <option value="screenshot">Screenshot (visual)</option>
                         <option value="hybrid">Hybrid (both)</option>
@@ -719,13 +495,7 @@ Select a session first.</pre
                 </label>
                 <label class="muted" style="font-size: 11px; display: flex; align-items: center; gap: 4px">
                     Max actions:
-                    <input
-                        id="browser-autopilot-max"
-                        type="number"
-                        value="20"
-                        min="1"
-                        max="100"
-                        style="
+                    <input id="browser-autopilot-max" type="number" value="20" min="1" max="100" style="
                             width: 50px;
                             font-size: 11px;
                             padding: 3px 6px;
@@ -733,13 +503,10 @@ Select a session first.</pre
                             color: var(--text);
                             border: 1px solid var(--border);
                             border-radius: 4px;
-                        "
-                    />
+                        " />
                 </label>
             </div>
-            <div
-                id="browser-autopilot-actions"
-                style="
+            <div id="browser-autopilot-actions" style="
                     max-height: 300px;
                     overflow-y: auto;
                     border: 1px solid var(--border);
@@ -747,8 +514,7 @@ Select a session first.</pre
                     background: rgba(0, 0, 0, 0.2);
                     padding: 8px;
                     font-size: 12px;
-                "
-            >
+                ">
                 <span class="muted">No auto-pilot actions yet. Assign an objective to start.</span>
             </div>
         </div>

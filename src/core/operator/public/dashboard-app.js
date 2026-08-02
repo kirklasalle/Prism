@@ -9,7 +9,7 @@ import { renderLocalSystemInfo, renderUsageMetrics, drawSparkline, runLocalComma
 import { getCurrentBrowserView, launchBrowserPreview, openBrowserDevTools, refreshBrowserInfo, setBrowserView, toggleBrowserDevTools, browserRefreshStorage, setStorageSubView, renderStorageContent, browserRefreshProfiles, renderBrowserProfiles, browserRefreshLaunchProfiles, browserCreateProfile, browserDeleteProfile, browserLaunchSession, browserCloseSession, browserNavigate, browserTakeScreenshot, browserClickElement, browserTypeText, browserEvaluate, browserRefreshNetwork, browserRefreshConsole, browserRefreshDom, browserRunDiagnostics, browserSessionChanged, populateBrowserSessionDropdowns, renderBrowserSessions, browserLogAction, initBrowserTab, refreshSessionsList, submitBrowserAutopilot, stopBrowserAutopilot, resumeActiveCsh, updateSshpShieldIndicator, cleanupBrowserTab, browserGoBack, browserGoForward, browserReload, browserScrollDown } from './tab-browser.js';
 import { renderSelfReview, renderRetrievalObservability, setTelemetryWindow, renderRuntimeExcellence, renderReleaseReadiness, renderWhatChanged, deltaLabel, pct, renderPackageHistory, renderChatTelemetry, renderUsagePanel, refreshUsagePanel, setUsageSort, saveUsageCaps, clearUsageCaps, refreshSloGauges, startSloAutoRefresh, stopSloAutoRefresh } from './tab-telemetry.js';
 import { initChannelsTab, onPresenceStatusChanged, toggleAutoAway, onAutoAwayTimeoutChanged, saveSmsGatewayConfig, sendTestSms, clearChannelLogs, connectChannel, disconnectChannel, startIdleTracker, stopIdleTracker } from './tab-channels.js';
-import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, copyActivityLogs, copyUnifiedTelemetry, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket, loadSupportTickets } from './tab-logs.js';
+import { renderEvents, renderTraceView, loadTrace, renderActions, renderApprovals, renderActionHistory, renderToolCallLog, captureIncidentBundle, clearUnifiedTelemetry, hydrateUnifiedTelemetry, handleTelemetryWsMessage, refreshIdentityPanel, refreshTabSessions, initializeSupportDesk, filterSupportCatalog, triggerSelfHealingSweep, toggleSupportItem, initLogsTab, reconnectMcpServer, pushConsoleEntry, toggleLiveConsolePause, clearLiveConsole, copyLiveConsole, copyActivityLogs, copyUnifiedTelemetry, toggleCreateTicketForm, submitSupportTicket, investigateSupportTicket, selfHealSupportTicket, resolveSupportTicketPrompt, deleteSupportTicket, loadSupportTickets, toggleSuggestionForm, submitSupportSuggestion, loadSupportSuggestions } from './tab-logs.js';
 import { initSchedulerTab, refreshSchedulerData, switchSchedulerView, renderSchedulerPanel, setCalMode, schedCalNav, daysInMonth, eventsForDate, formatDateStr, isToday, renderSchedulerCalendar, mondayOfWeek, renderMiniMonth, renderFullMonth, renderWeekView, renderDayView, renderSchedulerProjects, openProjectDetail, renderSchedulerBoard, initBoardDragDrop, renderSchedulerGantt, openSchedulerModal, closeSchedulerModal, saveSchedulerModal } from './tab-scheduler.js';
 import { refreshWorkspaceInfo, refreshGitStatus, refreshWorkspaceFiles, renderWorkspaceFileTree, formatFileSize, filterWorkspaceFiles, openWorkspaceInExplorer, changeWorkspaceLocation, showImportStatus, triggerWorkspaceImport, triggerGeneralImport, triggerRegisteredImport, triggerFolderImport, readFileAsBase64, refreshImportHistory, renderImportHistory, initWorkspaceTab, downloadWorkspaceFile, renameWorkspaceFile, deleteWorkspaceFile } from './tab-workspace.js';
 import { clearCharacterPanelStatus, renderCharacterSummary, renderCharacterDefinitionPreview, filterCharacterAssignments, toggleCharacterAssignmentDetails, renderCharacterRoster, renderCharacterAuditLog, renderCharacterAssignmentForm, loadAvailableCharacters, loadWorkspaceHub, refreshCharacterAssignments, refreshCharacterAuditLog, refreshCharacterPanel, submitCharacterAssignment, dispatchCharacterAssignment, suspendCharacterAssignment, resumeCharacterAssignment, revokeCharacterAssignment, onCharacterDefinitionChanged, onProfileChanged, onWorkspaceHubBlur, initCharacterPanel, onCharacterChipClick, showCustomCharacterModal, closeCustomCharacterModal, onCustomCharProfileChange, submitCustomCharacter } from './tab-characters.js';
@@ -749,6 +749,7 @@ function connectWebSocket() {
       if (data.type === 'support:ticket-created' || data.type === 'support:ticket-updated' || data.type === 'support:ticket-deleted') {
         dashboardLog('logs', 'support.ticket.realtime', data.type);
         loadSupportTickets().catch(function () { /* best-effort */ });
+        loadSupportSuggestions().catch(function () { /* best-effort */ });
         if (state.activeTab === 'scheduler') {
           refreshSchedulerData().catch(function () { /* best-effort */ });
         }
@@ -809,6 +810,49 @@ function connectWebSocket() {
       // Demo diagnostics progress/completion/logs from test runner
       if (data.type === 'demo_diagnostics_progress' || data.type === 'demo_diagnostics_complete' || data.type === 'demo_diagnostics_log') {
         handleDemoDiagnosticsWsMessage(data);
+        if (data.type === 'demo_diagnostics_log' && data.level === 'error') {
+          const failedSteps = Array.isArray(data.failedSteps) && data.failedSteps.length
+            ? ' | ' + data.failedSteps.join('; ')
+            : '';
+          const logPath = data.logPath ? ' | log: ' + data.logPath : '';
+          pushConsoleEntry({
+            ts: new Date().toISOString(),
+            stream: 'stderr',
+            line: `[DEMO][ERROR] Scenario ${data.scenario || 'unknown'}: ${data.message || 'Unknown failure'}${failedSteps}${logPath}`
+          });
+        }
+      }
+      if (data.type === 'demo_step_result' && data.status && data.status !== 'succeeded') {
+        pushConsoleEntry({
+          ts: new Date().toISOString(),
+          stream: 'stderr',
+          line: `[DEMO][${String(data.status).toUpperCase()}] ${data.demoId || 'unknown'} step ${Number(data.stepIndex || 0) + 1}: ${data.output || data.narration || 'No error detail'}`
+        });
+      }
+      const demoEventType = data.type === 'demo_event' ? data.typeInner : data.type;
+      if (demoEventType === 'demo_chat_session_created' && data.sessionId) {
+        pushConsoleEntry({
+          ts: new Date().toISOString(),
+          stream: 'stdout',
+          line: `[DEMO][OUTPUT] Created session "${data.title || 'Demo Output Session'}" (${data.sessionId})`
+        });
+        Promise.resolve(setActiveTab('chat'))
+          .then(() => loadSessions())
+          .then(() => selectSession(data.sessionId))
+          .catch((error) => {
+            pushConsoleEntry({
+              ts: new Date().toISOString(),
+              stream: 'stderr',
+              line: `[DEMO][ERROR] Failed to open output session ${data.sessionId}: ${String(error)}`
+            });
+          });
+      }
+      if (demoEventType === 'demo_chat_session_failed') {
+        pushConsoleEntry({
+          ts: new Date().toISOString(),
+          stream: 'stderr',
+          line: `[DEMO][ERROR] Output session creation failed: ${data.error || 'Unknown error'}`
+        });
       }
       // Phase A3B: Unified telemetry real-time stream from server
       if (data.type === 'telemetry') {
@@ -983,6 +1027,7 @@ Object.assign(window, {
   togglePanelCollapse,
   safeRenderStep,
   dashboardLog,
+  pushConsoleEntry,
   renderLogsPanel,
   filterLogs,
   clearLogs,
@@ -1568,6 +1613,8 @@ window.copyActivityLogs = copyActivityLogs;
 window.copyUnifiedTelemetry = copyUnifiedTelemetry;
 window.toggleCreateTicketForm = toggleCreateTicketForm;
 window.submitSupportTicket = submitSupportTicket;
+window.toggleSuggestionForm = toggleSuggestionForm;
+window.submitSupportSuggestion = submitSupportSuggestion;
 window.investigateSupportTicket = investigateSupportTicket;
 window.selfHealSupportTicket = selfHealSupportTicket;
 window.resolveSupportTicketPrompt = resolveSupportTicketPrompt;
