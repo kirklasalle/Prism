@@ -1,7 +1,7 @@
 {
     "format": "prism-governance-erratum",
     "formatVersion": 1,
-    "status": "approved_pending_signature",
+    "status": "effective",
     "proposal": {
         "erratumId": "E-2026-001",
         "lawId": 4,
@@ -18,6 +18,14 @@
     },
     "expectedGovernanceKeyId": "prism-governance-pad-2026-08-r1",
     "keyRotationId": "R-2026-001",
-    "signatureEvidence": null,
-    "releaseCommit": null
+    "signatureEvidence": {
+        "governanceKeyId": "prism-governance-pad-2026-08-r1",
+        "detachedSignatureDigest": "d5447fa3ae314aa478340729dd5ccab0c9afb25fe2e92fef0b148bb4c1004d54",
+        "detachedSignatureVerified": true,
+        "releaseCommitSigner": "11468565+kirklasalle@users.noreply.github.com",
+        "releaseCommitSignatureStatus": "G",
+        "verifiedAt": "2026-08-08T22:25:12.126Z"
+    },
+    "releaseCommit": "a74086657e956f21a45ee9293ae400fa75437ff9",
+    "effectiveAt": "2026-08-08T22:25:12.126Z"
 }

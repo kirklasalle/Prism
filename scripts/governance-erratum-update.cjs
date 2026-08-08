@@ -213,6 +213,85 @@ function npmCommand(args) {
     command(process.platform === "win32" ? "npm.cmd" : "npm", args);
 }
 
+function verifyAuthorizedReleaseCommit(commit) {
+    if (!/^[a-f0-9]{40}$/i.test(commit ?? "")) throw new Error("--commit must be a full 40-character Git commit hash.");
+    const allowedSigners = (process.env.PRISM_GOVERNANCE_ALLOWED_SIGNERS ?? "")
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+    if (allowedSigners.length === 0) throw new Error("PRISM_GOVERNANCE_ALLOWED_SIGNERS is not configured.");
+
+    const output = execFileSync("git", ["show", "-s", "--format=%H%n%G?%n%GS%n%ae", commit], {
+        cwd: root,
+        encoding: "utf8",
+        windowsHide: true,
+    }).trimEnd();
+    const [resolvedCommit, signatureStatus, signerIdentity, authorEmail] = output.split(/\r?\n/);
+    if (resolvedCommit.toLowerCase() !== commit.toLowerCase()) throw new Error("Git did not resolve the requested release commit.");
+    if (signatureStatus !== "G" && signatureStatus !== "U") {
+        throw new Error(`Release commit signature status is '${signatureStatus || "unknown"}'.`);
+    }
+    const signerLower = signerIdentity.toLowerCase();
+    const authorLower = authorEmail.toLowerCase();
+    if (!allowedSigners.some((allowed) => signerLower.includes(allowed) || authorLower === allowed)) {
+        throw new Error(`Release commit signer '${signerIdentity}' is not authorized.`);
+    }
+
+    const changedPaths = new Set(execFileSync("git", ["diff-tree", "--no-commit-id", "--name-only", "-r", commit], {
+        cwd: root,
+        encoding: "utf8",
+        windowsHide: true,
+    }).split(/\r?\n/).filter(Boolean));
+    for (const requiredPath of [
+        "Permanent_Active_Directives.txt",
+        "config/permanent-active-directives.signature.json",
+        "config/governance-errata/E-2026-001.json",
+        "config/governance-key-rotations/R-2026-001.json",
+    ]) {
+        if (!changedPaths.has(requiredPath)) throw new Error(`Release commit does not contain ${requiredPath}.`);
+    }
+    return { commit: resolvedCommit, signerIdentity, signatureStatus };
+}
+
+function effectuate(releaseCommit) {
+    const status = inspectCurrentState(defaultCandidatePath);
+    if (!status.ready) throw new Error(`Applied erratum is not ready: ${status.errors.join("; ")}`);
+    const record = readJson(erratumPath);
+    const rotation = readJson(rotationPath);
+    if (record.status === "effective" && record.releaseCommit === releaseCommit) {
+        console.log(`[governance:erratum] ${expectedErratumId} is already effective at ${releaseCommit}.`);
+        return;
+    }
+    if (record.status !== "approved_pending_signature") throw new Error("Erratum is not pending effectuation.");
+    if (rotation.status !== "effective_pending_release_commit") throw new Error("Key rotation is not pending release commit.");
+    command(process.execPath, [join(root, "scripts", "verify-governance-key-rotation.cjs")]);
+    const commitEvidence = verifyAuthorizedReleaseCommit(releaseCommit);
+    const signatureBytes = readFileSync(signaturePath);
+    const signature = readJson(signaturePath);
+    const effectiveAt = new Date().toISOString();
+
+    record.status = "effective";
+    record.signatureEvidence = {
+        governanceKeyId: signature.keyId,
+        detachedSignatureDigest: sha256(signatureBytes),
+        detachedSignatureVerified: true,
+        releaseCommitSigner: commitEvidence.signerIdentity,
+        releaseCommitSignatureStatus: commitEvidence.signatureStatus,
+        verifiedAt: effectiveAt,
+    };
+    record.releaseCommit = commitEvidence.commit;
+    record.effectiveAt = effectiveAt;
+    rotation.status = "effective";
+    rotation.releaseCommit = commitEvidence.commit;
+    rotation.releaseCommitSigner = commitEvidence.signerIdentity;
+    rotation.releaseCommitVerifiedAt = effectiveAt;
+
+    writeFileSync(erratumPath, `${JSON.stringify(record, null, 4)}\n`, "utf8");
+    writeFileSync(rotationPath, `${JSON.stringify(rotation, null, 4)}\n`, "utf8");
+    npmCommand(["run", "governance:artifacts:generate"]);
+    console.log(`[governance:erratum] ${expectedErratumId} and R-2026-001 are effective at ${commitEvidence.commit}.`);
+}
+
 function replaceActiveFile(sourcePath, transactionSuffix) {
     const displacedActive = `${activePath}.${transactionSuffix}-${process.pid}.rollback`;
     renameSync(activePath, displacedActive);
@@ -537,8 +616,12 @@ function main() {
         emergencyRotateAndApply(candidatePath, arg("private-key") ? resolve(root, arg("private-key")) : undefined);
         return;
     }
+    if (action === "effectuate") {
+        effectuate(arg("commit"));
+        return;
+    }
     throw new Error(
-        "Usage: governance-erratum-update.cjs <status|check|locate-base|restore-base|apply|rotate-apply> " +
+        "Usage: governance-erratum-update.cjs <status|check|locate-base|restore-base|apply|rotate-apply|effectuate> " +
         "[--candidate path] [--commit hash] [--private-key path] [--confirm-founder-authorization]",
     );
 }

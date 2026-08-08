@@ -1,7 +1,7 @@
 {
     "format": "prism-governance-key-rotation",
     "formatVersion": 1,
-    "status": "effective_pending_release_commit",
+    "status": "effective",
     "payload": {
         "rotationId": "R-2026-001",
         "previousKeyId": "prism-governance-pad-2026-07",
@@ -22,5 +22,8 @@
     },
     "successorPublicKeyBase64": "MCowBQYDK2VwAyEATLe24H63b2rGu8ffreTqfDKRQxF6naSLRswewzSTy/c=",
     "successorSelfSignatureBase64": "czl3vqLLSHNuX+QEj44PC1TOMCwvygBSrbW8zCPaZgm/IB5pdLpo0fxnvwuPk05cCcPGTYP9TCWJ2NmJ8f8jCQ==",
-    "effectiveAt": "2026-08-08T20:32:58.253Z"
+    "effectiveAt": "2026-08-08T20:32:58.253Z",
+    "releaseCommit": "a74086657e956f21a45ee9293ae400fa75437ff9",
+    "releaseCommitSigner": "11468565+kirklasalle@users.noreply.github.com",
+    "releaseCommitVerifiedAt": "2026-08-08T22:25:12.126Z"
 }

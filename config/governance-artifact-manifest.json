@@ -13,14 +13,14 @@
       "artifactId": "governance-erratum-e-2026-001",
       "version": "2026-08-02",
       "path": "config/governance-errata/E-2026-001.json",
-      "sha256": "569487ea19561b28e13582982cfdd0c44a34440c18b2031baec5750c0de05e0e",
+      "sha256": "2400370c2489c69a0774250c06168ba1c0b87def5b1e34d8bc07b1dbf2fe8964",
       "relationship": "governance-reference"
     },
     {
       "artifactId": "governance-key-rotation-r-2026-001",
       "version": "2026-08-08",
       "path": "config/governance-key-rotations/R-2026-001.json",
-      "sha256": "c99c2852dbf54a9ed0eefacba9d75f89e1357fae0992f1aa34c6f53b9033905f",
+      "sha256": "a84ff9551581ea62261e0a04c5573725e72fc66af231bc85ae73e062b284cb7b",
       "relationship": "governance-reference"
     },
     {

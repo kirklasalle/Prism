@@ -61,6 +61,7 @@
         "governance:erratum:restore-base": "node scripts/governance-erratum-update.cjs restore-base",
         "governance:erratum:apply": "node scripts/governance-erratum-update.cjs apply",
         "governance:erratum:rotate-apply": "node scripts/governance-erratum-update.cjs rotate-apply",
+        "governance:erratum:effectuate": "node scripts/governance-erratum-update.cjs effectuate",
         "governance:key-rotation:verify": "node scripts/verify-governance-key-rotation.cjs",
         "governance:probes:run": "node dist/src/core/governance/probe-runner.js",
         "governance:probes": "npm run build && npm run governance:probes:run",
