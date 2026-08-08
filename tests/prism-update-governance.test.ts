@@ -30,4 +30,9 @@ describe("PRISM update governance integration", () => {
         assert.match(windowsWrapper, /node scripts\/prism-update\.cjs %\*/);
         assert.match(posixWrapper, /node scripts\/prism-update\.cjs "\$@"/);
     });
+
+    it("accepts successful commands whose output is inherited", () => {
+        assert.match(orchestrator, /typeof output === "string" \? output\.trim\(\) : ""/);
+        assert.doesNotMatch(orchestrator, /execSync\([^;]+\)\.trim\(\)/s);
+    });
 });

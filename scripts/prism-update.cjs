@@ -92,7 +92,12 @@ function logToActivityBus(operation, status, details) {
 
 function runCmd(cmd, options = {}) {
     try {
-        return execSync(cmd, { cwd: repoRoot, encoding: "utf8", stdio: options.silent ? "pipe" : "inherit" }).trim();
+        const output = execSync(cmd, {
+            cwd: repoRoot,
+            encoding: "utf8",
+            stdio: options.silent ? "pipe" : "inherit",
+        });
+        return typeof output === "string" ? output.trim() : "";
     } catch (e) {
         if (options.allowFail) return null;
         throw e;
