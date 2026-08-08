@@ -14,9 +14,9 @@ import os from "node:os";
 import { PrismClient } from "./api/prism-client.js";
 import { PrismWsClient } from "./api/ws-client.js";
 import { LoginTab } from "./tabs/LoginTab.js";
-import { colors, symbols, TABS, PRISM_LOGO, TAB_SHORTCUTS } from "./theme.js";
+import { colors, symbols, TABS, TAB_IDS, PRISM_LOGO, TAB_SHORTCUTS } from "./theme.js";
 import { Header, TabBar, StatusBar, HelpOverlay, Loading } from "./components/ui.js";
-import { useConnection, useTabNavigation, useQuit } from "./hooks.js";
+import { useConnection, useQuit } from "./hooks.js";
 
 // Tab components
 import { ChatTab } from "./tabs/ChatTab.js";
@@ -68,9 +68,10 @@ function App({ client, wsClient }: { client: PrismClient; wsClient: PrismWsClien
     const [activeTab, setActiveTab] = useState("chat");
     const [showHelp, setShowHelp] = useState(false);
     const [profile, setProfile] = useState("individual");
+    const [version, setVersion] = useState("0.2.0");
     const connected = useConnection(wsClient);
 
-    // Detect execution profile from server health
+    // Detect execution profile and version from server health
     useEffect(() => {
         client
             .getHealth()
@@ -78,6 +79,9 @@ function App({ client, wsClient }: { client: PrismClient; wsClient: PrismWsClien
                 const obj = h as unknown as Record<string, unknown>;
                 if (obj && "executionProfile" in obj) {
                     setProfile(String(obj.executionProfile ?? "individual"));
+                }
+                if (obj && "version" in obj) {
+                    setVersion(String(obj.version ?? "0.2.0"));
                 }
             })
             .catch(() => {
@@ -87,12 +91,28 @@ function App({ client, wsClient }: { client: PrismClient; wsClient: PrismWsClien
 
     // Global keyboard
     useInput((input, key) => {
-        // Tab shortcuts (1-9, 0, -, =)
+        // Tab / Shift+Tab — cycle top-level tabs sequentially
+        if (key.tab && !showHelp) {
+            const currentIdx = TAB_IDS.indexOf(activeTab);
+            if (key.shift) {
+                // Shift+Tab — previous tab
+                const prevIdx = (currentIdx - 1 + TAB_IDS.length) % TAB_IDS.length;
+                setActiveTab(TAB_IDS[prevIdx]!);
+            } else {
+                // Tab — next tab
+                const nextIdx = (currentIdx + 1) % TAB_IDS.length;
+                setActiveTab(TAB_IDS[nextIdx]!);
+            }
+            return;
+        }
+
+        // Number-key shortcuts (1-9, 0, -, =)
         const tabId = TAB_SHORTCUTS[input];
         if (tabId && !showHelp) {
             setActiveTab(tabId);
             return;
         }
+
         // Help toggle
         if (input === "?") {
             setShowHelp((h) => !h);
@@ -100,7 +120,8 @@ function App({ client, wsClient }: { client: PrismClient; wsClient: PrismWsClien
         }
     });
 
-    useQuit();
+    // NOTE: useQuit() is NOT called here — Root owns the quit lifecycle
+    // to prevent the double-exit race condition.
 
     // Render active tab content
     const renderTab = () => {
@@ -140,7 +161,7 @@ function App({ client, wsClient }: { client: PrismClient; wsClient: PrismWsClien
     return (
         <Box flexDirection="column" flexGrow={1}>
             {/* Header */}
-            <Header profile={profile} connected={connected} version="0.2.0" />
+            <Header profile={profile} connected={connected} version={version} />
 
             {/* Tab bar */}
             <TabBar tabs={TABS} activeTab={activeTab} onSelect={setActiveTab} />

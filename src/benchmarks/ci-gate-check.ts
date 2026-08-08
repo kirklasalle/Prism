@@ -37,6 +37,7 @@ function run(): void {
     const sbomCveSummaryPath = path.join(outputDir, "security", "sbom-cve-gate-summary.json");
     const directiveIntegritySummaryPath = path.join(outputDir, "security", "directive-integrity-gate-summary.json");
     const secretsScanSummaryPath = path.join(outputDir, "secrets-scan-summary.json");
+    const governanceEvidencePath = path.join(outputDir, "security", "governance-evidence-manifest.json");
 
     checks.push({
         id: "artifact-perf",
@@ -100,6 +101,14 @@ function run(): void {
         required: true,
         passed: exists(secretsScanSummaryPath),
         details: secretsScanSummaryPath,
+    });
+
+    checks.push({
+        id: "artifact-governance-evidence",
+        description: "Governance evidence manifest exists",
+        required: true,
+        passed: exists(governanceEvidencePath),
+        details: governanceEvidencePath,
     });
 
     if (exists(perfPath)) {
@@ -180,6 +189,22 @@ function run(): void {
             required: true,
             passed: secretsScanSummary.clean === true,
             details: `clean=${secretsScanSummary.clean === true}, findings=${secretsScanSummary.findingsCount ?? 0}`,
+        });
+    }
+
+    if (exists(governanceEvidencePath)) {
+        const governanceEvidence = readJson<{
+            records?: Array<{ probeId?: string; probeVersion?: number; result?: string }>;
+        }>(governanceEvidencePath);
+        const records = governanceEvidence.records ?? [];
+        const failed = records.filter((record) => record.result === "failed");
+        const notEvaluated = records.filter((record) => record.result === "not_evaluated");
+        checks.push({
+            id: "gate-governance-probes",
+            description: "Registered governance probes completed without a failed result",
+            required: true,
+            passed: records.length > 0 && failed.length === 0,
+            details: `records=${records.length}, failed=${failed.length}, notEvaluated=${notEvaluated.length}`,
         });
     }
 

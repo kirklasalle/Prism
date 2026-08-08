@@ -23,6 +23,21 @@ class InvalidContractTool implements Tool {
     }
 }
 
+class GovernedActionTool implements Tool {
+    readonly name = "governed_action_tool";
+    readonly governance = {
+        actions: {
+            inspect: { minimumRisk: "low" as const, mutating: false, rollbackRequired: false },
+        },
+    };
+    executed = false;
+
+    async execute(_request: ToolRequest): Promise<ToolResult> {
+        this.executed = true;
+        return { ok: true, output: { ok: true } };
+    }
+}
+
 export async function testToolContracts(): Promise<void> {
     await testContractVersionValidation();
     await testRuntimeSchemaValidationBlocksExecution();
@@ -34,8 +49,46 @@ export async function testToolContracts(): Promise<void> {
     await testRequestTypeMismatch();
     await testRequestEnumViolation();
     await testRequestPassesValidContract();
+    await testUnknownToolInterdictedBeforePolicy();
+    await testUnknownActionInterdictedBeforePolicy();
 
     console.log("✓ Tool contract tests passed");
+}
+
+async function testUnknownToolInterdictedBeforePolicy(): Promise<void> {
+    const bus = new ActivityBus();
+    const orchestrator = new Orchestrator(randomUUID(), bus, new PolicyEngine(), new ToolRegistry());
+    const result = await orchestrator.run({
+        operation: "unknown_tool",
+        args: { action: "run" },
+        risk: "low",
+        mutatesState: false,
+    });
+
+    assert.strictEqual(result.ok, false);
+    assert.ok(bus.listEvents().some((event) => event.operation === "unknown_tool.interdicted"));
+    assert.ok(!bus.listEvents().some((event) => event.operation.endsWith(".policy_check")));
+    assert.ok(!bus.listEvents().some((event) => event.operation.endsWith(".approval_requested")));
+}
+
+async function testUnknownActionInterdictedBeforePolicy(): Promise<void> {
+    const bus = new ActivityBus();
+    const registry = new ToolRegistry();
+    const tool = new GovernedActionTool();
+    registry.register(tool);
+    const orchestrator = new Orchestrator(randomUUID(), bus, new PolicyEngine(), registry);
+    const result = await orchestrator.run({
+        operation: tool.name,
+        args: { action: "delete" },
+        risk: "low",
+        mutatesState: false,
+    });
+
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(tool.executed, false);
+    assert.ok(bus.listEvents().some((event) => event.operation === `${tool.name}.interdicted`));
+    assert.ok(!bus.listEvents().some((event) => event.operation.endsWith(".policy_check")));
+    assert.ok(!bus.listEvents().some((event) => event.operation.endsWith(".approval_requested")));
 }
 
 async function testContractVersionValidation(): Promise<void> {

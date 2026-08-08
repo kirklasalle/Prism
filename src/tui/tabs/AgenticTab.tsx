@@ -6,7 +6,7 @@ import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { PrismClient } from "../api/prism-client.js";
 import type { PrismWsClient } from "../api/ws-client.js";
-import { useApi, useListNavigation } from "../hooks.js";
+import { useApi, useListNavigation, useSubTabNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
     Panel,
@@ -39,13 +39,11 @@ export function AgenticTab({
     const [spawnRole, setSpawnRole] = useState("");
     const [actionMsg, setActionMsg] = useState<string | null>(null);
 
+    const SUBTABS = ["agents", "swarms", "telemetry", "characters"];
+    useSubTabNavigation(SUBTABS, subTab, setSubTab, focused && !spawnMode);
+
     useInput((input, key) => {
         if (!focused) return;
-        if (key.tab && !spawnMode) {
-            const tabs = ["agents", "swarms", "telemetry", "characters"];
-            const idx = tabs.indexOf(subTab);
-            setSubTab(tabs[(idx + 1) % tabs.length]!);
-        }
         if (subTab === "agents" && !spawnMode) {
             if (input === "n") {
                 setSpawnMode(true);
@@ -217,10 +215,49 @@ export function AgenticTab({
                     {telemetry.loading && <Loading />}
                     {telemetry.error && <ErrorBox message={telemetry.error} />}
                     {telemetry.data && (
-                        <Box flexDirection="column">
-                            <Text color={colors.muted}>Agent Telemetry Data:</Text>
-                            <Text wrap="wrap">{JSON.stringify(telemetry.data, null, 2).slice(0, 1000)}</Text>
-                        </Box>
+                        <Panel title="Agent Telemetry">
+                            <Box gap={4}>
+                                <Box flexDirection="column">
+                                    {typeof (telemetry.data as Record<string, unknown>).totalDispatches !== "undefined" && (
+                                        <KeyValue label="Total Dispatches" value={String((telemetry.data as Record<string, unknown>).totalDispatches)} />
+                                    )}
+                                    {typeof (telemetry.data as Record<string, unknown>).activeAgents !== "undefined" && (
+                                        <KeyValue label="Active Agents" value={String((telemetry.data as Record<string, unknown>).activeAgents)} valueColor={colors.success} />
+                                    )}
+                                    {typeof (telemetry.data as Record<string, unknown>).idleAgents !== "undefined" && (
+                                        <KeyValue label="Idle Agents" value={String((telemetry.data as Record<string, unknown>).idleAgents)} valueColor={colors.warning} />
+                                    )}
+                                    {typeof (telemetry.data as Record<string, unknown>).totalErrors !== "undefined" && (
+                                        <KeyValue label="Errors" value={String((telemetry.data as Record<string, unknown>).totalErrors)}
+                                            valueColor={Number((telemetry.data as Record<string, unknown>).totalErrors) > 0 ? colors.error : colors.success} />
+                                    )}
+                                </Box>
+                                <Box flexDirection="column">
+                                    {typeof (telemetry.data as Record<string, unknown>).avgDispatchMs !== "undefined" && (
+                                        <KeyValue label="Avg Dispatch" value={`${Number((telemetry.data as Record<string, unknown>).avgDispatchMs).toFixed(0)} ms`} />
+                                    )}
+                                    {typeof (telemetry.data as Record<string, unknown>).p95DispatchMs !== "undefined" && (
+                                        <KeyValue label="P95 Dispatch" value={`${Number((telemetry.data as Record<string, unknown>).p95DispatchMs).toFixed(0)} ms`} />
+                                    )}
+                                    {typeof (telemetry.data as Record<string, unknown>).uptimeSeconds !== "undefined" && (
+                                        <KeyValue label="Uptime" value={`${(Number((telemetry.data as Record<string, unknown>).uptimeSeconds) / 3600).toFixed(1)} hours`} />
+                                    )}
+                                </Box>
+                            </Box>
+                            {/* Render remaining unknown keys */}
+                            {(() => {
+                                const known = new Set(["totalDispatches", "activeAgents", "idleAgents", "totalErrors", "avgDispatchMs", "p95DispatchMs", "uptimeSeconds"]);
+                                const rest = Object.entries(telemetry.data as Record<string, unknown>).filter(([k]) => !known.has(k));
+                                if (rest.length === 0) return null;
+                                return (
+                                    <Box flexDirection="column" marginTop={1}>
+                                        {rest.map(([k, v]) => (
+                                            <KeyValue key={k} label={k} value={typeof v === "object" ? JSON.stringify(v) : String(v ?? "")} />
+                                        ))}
+                                    </Box>
+                                );
+                            })()}
+                        </Panel>
                     )}
                 </Box>
             )}

@@ -1,5 +1,10 @@
 import assert from "node:assert";
-import { evaluateReleaseGates } from "../src/benchmarks/release-validation.js";
+import {
+    createReleaseValidationEvidence,
+    evaluateReleaseGates,
+    mergeCurrentEvidence,
+} from "../src/benchmarks/release-validation.js";
+import type { EvidenceManifest } from "../src/core/governance/evidence-manifest.js";
 
 export async function testReleaseValidationGates(): Promise<void> {
     const permissive = evaluateReleaseGates({
@@ -65,6 +70,35 @@ export async function testReleaseValidationGates(): Promise<void> {
     const testsGate = candidateFail.gates.find((gate) => gate.id === "candidate-tests");
     assert.ok(testsGate);
     assert.strictEqual(testsGate!.status, "failed");
+
+    const releaseEvidence = createReleaseValidationEvidence([], "commit-abc", "build-123", "2026-08-08T00:00:00.000Z");
+    const governanceEvidence: EvidenceManifest = {
+        format: "prism-governance-evidence",
+        version: 1,
+        commit: "commit-abc",
+        buildId: "build-123",
+        generatedAt: "2026-08-08T00:00:00.000Z",
+        records: [
+            {
+                evidenceId: "evidence-envelope",
+                probeId: "security.certificate-envelope",
+                probeVersion: 1,
+                result: "passed",
+                commit: "commit-abc",
+                buildId: "build-123",
+                evaluatedAt: "2026-08-08T00:00:00.000Z",
+                inputDigest: "a".repeat(64),
+                outputDigest: "b".repeat(64),
+            },
+        ],
+    };
+    const merged = mergeCurrentEvidence(releaseEvidence, governanceEvidence);
+    assert.deepEqual(merged.errors, []);
+    assert.equal(merged.manifest.records.length, 1);
+
+    const stale = mergeCurrentEvidence(releaseEvidence, { ...governanceEvidence, buildId: "old-build" });
+    assert.ok(stale.errors.some((error) => error.includes("does not match")));
+    assert.equal(stale.manifest.records.length, 0);
 
     console.log("✓ Release validation gates tests passed");
 }

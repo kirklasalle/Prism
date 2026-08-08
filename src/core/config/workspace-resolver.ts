@@ -160,27 +160,22 @@ export function writePreferences(prefs: Partial<PrismPreferences>): void {
 
 /**
  * Resolve the workspace root path.
- * Priority: persisted preference (most recent user choice) > PRISM_WORKSPACE_ROOT env var > OS default.
+ * Priority: cached runtime choice > persisted preference > PRISM_WORKSPACE_ROOT env var > OS default.
  * Result is cached for the process lifetime.
  */
-function isTempWorkspaceDir(p: string): boolean {
-    const lower = p.toLowerCase();
-    return lower.includes("prism-ws-test") || lower.includes("appdata\\local\\temp") || lower.includes("appdata/local/temp") || lower.includes("/tmp/") || lower.includes("\\tmp\\");
-}
-
 export function resolveWorkspaceRoot(): string {
-    if (_resolvedRoot !== undefined && !isTempWorkspaceDir(_resolvedRoot)) {
+    if (_resolvedRoot !== undefined) {
         return _resolvedRoot;
     }
     // Check persisted preference first (most recent user choice in dashboard)
     const prefs = readPreferences();
-    if (prefs?.workspaceRoot && isAbsolute(prefs.workspaceRoot) && existsSync(prefs.workspaceRoot) && !isTempWorkspaceDir(prefs.workspaceRoot)) {
+    if (prefs?.workspaceRoot && isAbsolute(prefs.workspaceRoot) && existsSync(prefs.workspaceRoot)) {
         _resolvedRoot = prefs.workspaceRoot;
         return _resolvedRoot;
     }
     // Fall back to env var
     const envOverride = process.env.PRISM_WORKSPACE_ROOT?.trim();
-    if (envOverride && !isTempWorkspaceDir(envOverride)) {
+    if (envOverride) {
         _resolvedRoot = envOverride;
         return _resolvedRoot;
     }

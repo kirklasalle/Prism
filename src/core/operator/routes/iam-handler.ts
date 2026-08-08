@@ -128,7 +128,7 @@ export class IamRouteHandler implements IRouteHandler {
     resolvePrincipalFromCookie(req: IncomingMessage): IamPrincipal | null {
         const cookieValue = this.sessions.readCookie(req);
         if (!cookieValue) return null;
-        const session = this.sessions.verify(cookieValue);
+        const session = this.sessions.verifyOperational(cookieValue);
         if (!session) return null;
         const user = this.store.getUser(session.userId);
         if (!user || user.status !== "active") return null;
@@ -481,7 +481,8 @@ export class IamRouteHandler implements IRouteHandler {
             });
         }
 
-        const { cookie, session } = this.sessions.issue(user.id, tenantId);
+        const activationState = parsed.setupToken ? "authenticated" : undefined;
+        const { cookie, session } = this.sessions.issue(user.id, tenantId, 8 * 3600, activationState);
         this.sessions.writeCookie(res, cookie);
 
         const durationMs = Date.now() - loginStartMs;
@@ -518,7 +519,7 @@ export class IamRouteHandler implements IRouteHandler {
 
             const { readPreferences } = await import("../../config/workspace-resolver.js");
             const prefs = readPreferences();
-            const tokenMatches = !prefs?.setupToken || prefs.setupToken === parsed.setupToken;
+            const tokenMatches = Boolean(prefs?.setupToken && prefs.setupToken === parsed.setupToken);
 
             if (!tokenMatches) {
                 this.emitAuthEvent("iam.login.session_claim_failed", "failed", {
@@ -549,15 +550,18 @@ export class IamRouteHandler implements IRouteHandler {
 
                     // If the session has an associated character assignment, update its operatorEmail too
                     if (target.cacAssignmentId) {
-                        try {
-                            const cam = service.getCharacterAccountabilityManager();
-                            cam.updateAssignmentEmails(target.cacAssignmentId, email);
-                        } catch (cacErr) {
-                            console.warn(
-                                "[PRISM][login] Failed to update character assignment operator email on session claim:",
-                                cacErr,
-                            );
-                        }
+                        const cam = service.getCharacterAccountabilityManager();
+                        cam.updateAssignmentEmails(target.cacAssignmentId, email);
+                    }
+
+                    const activated = this.store.activateSessionWithEnrollment(
+                        session.id,
+                        prefs!.setupToken!,
+                        parsed.setupToken ?? "",
+                        target.sessionId,
+                    );
+                    if (!activated) {
+                        throw new Error("Enrollment token was already consumed or session activation failed");
                     }
 
                     this.emitAuthEvent("iam.login.session_claimed", "succeeded", {
@@ -569,8 +573,12 @@ export class IamRouteHandler implements IRouteHandler {
                 }
             }
         } catch (claimErr) {
-            // Non-fatal — session claiming must not block login
-            console.warn("[PRISM][login] Failed to claim Init Certificate sessions:", claimErr);
+            this.emitAuthEvent("iam.login.session_activation_failed", "failed", {
+                email,
+                sessionId: session.id,
+                reason: String(claimErr),
+                message: "Operator authenticated, but privileged session activation was blocked",
+            });
         }
 
         // ── Post-login: apply wizard LLM provider preferences ─────────────

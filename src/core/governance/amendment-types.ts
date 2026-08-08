@@ -119,16 +119,19 @@ export interface AmendmentLedgerEntry {
     timestamp: string;
     /** The type of governance event being recorded. */
     eventType:
-        | "genesis" // Ledger creation
-        | "amendment_proposed" // New amendment submitted
-        | "cac_evaluation" // CAC completed its evaluation
-        | "operator_decision" // Operator rendered their decision
-        | "amendment_approved" // Dual-binary approval granted
-        | "amendment_rejected" // Either party rejected
-        | "amendment_applied" // Amendment applied to PAD
-        | "amendment_withdrawn" // Amendment withdrawn by proposer
-        | "integrity_check" // Periodic integrity verification
-        | "pad_hash_recorded"; // PAD hash snapshot for provenance
+    | "genesis" // Ledger creation
+    | "amendment_proposed" // New amendment submitted
+    | "cac_evaluation" // CAC completed its evaluation
+    | "operator_decision" // Operator rendered their decision
+    | "amendment_approved" // Dual-binary approval granted
+    | "amendment_rejected" // Either party rejected
+    | "amendment_applied" // Amendment applied to PAD
+    | "amendment_withdrawn" // Amendment withdrawn by proposer
+    | "erratum_approved_pending_signature" // Exact registered correction approved
+    | "erratum_rejected" // Proposed correction failed closed validation
+    | "erratum_effective" // Signed PAD artifact made effective
+    | "integrity_check" // Periodic integrity verification
+    | "pad_hash_recorded"; // PAD hash snapshot for provenance
     /** The proposal ID this entry relates to (null for genesis/integrity events). */
     proposalId: string | null;
     /** Snapshot of the relevant data at the time of recording. */
@@ -164,6 +167,37 @@ export interface LawsImmutabilityCheckResult {
     }>;
     /** SHA-256 hash of the proposal text that was evaluated. */
     proposalHash: string;
+}
+
+/* ── Governance Errata ─────────────────────────────────────────────── */
+
+export type GovernanceErratumStatus = "rejected" | "approved_pending_signature" | "effective";
+
+/**
+ * A proposed correction to canonical Law text. Errata are not amendments:
+ * they must match a registered, invariant-preserving text transition exactly.
+ */
+export interface GovernanceErratumProposal {
+    erratumId: string;
+    lawId: number;
+    previousText: string;
+    correctedText: string;
+    previousTextHash: string;
+    correctedTextHash: string;
+    previousPadHash: string;
+    correctedPadHash: string;
+    rationale: string;
+    machineInvariant: string;
+    approvedBy: string;
+    effectiveVersion: string;
+}
+
+export interface GovernanceErratumValidationResult {
+    valid: boolean;
+    status: GovernanceErratumStatus;
+    checkedAt: string;
+    errors: string[];
+    erratumHash: string;
 }
 
 /* ── Governance Council ─────────────────────────────────────────────── */

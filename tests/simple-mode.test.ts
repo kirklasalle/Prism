@@ -36,8 +36,10 @@ let service: DashboardService;
 let port: number;
 let tmpDir: string;
 let chatStore: ChatSessionStore;
-/** Original content of the real .prism-preferences.json, to restore after tests. */
-let originalPrefs: string | null = null;
+let authToken = "";
+let savedAuthDisabled: string | undefined;
+let savedWorkspaceRoot: string | undefined;
+let savedPreferencesPath: string | undefined;
 
 /**
  * Write the prefs file ATOMICALLY (no merge) so tests start from a known clean state.
@@ -61,6 +63,7 @@ function fetchRaw(
                 path,
                 method,
                 headers: {
+                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
                     ...(bodyStr != null ? { "Content-Type": "application/json" } : {}),
                 },
             },
@@ -100,16 +103,15 @@ describe("Simple Mode (E3a)", function () {
     this.timeout(60_000);
 
     before(async () => {
+        savedAuthDisabled = process.env.PRISM_AUTH_DISABLED;
+        savedWorkspaceRoot = process.env.PRISM_WORKSPACE_ROOT;
+        savedPreferencesPath = process.env.PRISM_PREFERENCES_PATH;
         tmpDir = mkdtempSync(join(tmpdir(), "prism-simple-mode-"));
         mkdirSync(join(tmpDir, "state"), { recursive: true });
         mkdirSync(join(tmpDir, "characters"), { recursive: true });
 
         _setWorkspaceRootForTest(tmpDir);
-
-        // Save + overwrite the real prefs file so tests start from a clean state.
-        // writePreferences() merges, so we use writeFileSync directly.
-        const realPrefsPath = preferencesPath();
-        originalPrefs = existsSync(realPrefsPath) ? readFileSync(realPrefsPath, "utf-8") : null;
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
         setPrefs({ setupComplete: true });
 
         const bus = new ActivityBus();
@@ -135,25 +137,35 @@ describe("Simple Mode (E3a)", function () {
             new InMemoryProviderSecretStore(),
         );
 
+        const certificateSession = chatStore.createSession({
+            title: "Simple Mode Test Certificate Chapter",
+        });
+        service.createSessionPackage({
+            title: "Initialization Certificate",
+            sessionIds: [certificateSession.sessionId],
+            status: "complete",
+            source: "test-fixture",
+        });
+
         service.start();
         await new Promise((resolve) => setTimeout(resolve, 60));
 
         const addr = (service as unknown as { server: { address(): { port: number } | null } }).server.address();
         port = addr ? addr.port : 0;
         assert.ok(port > 0, "DashboardService must bind to an ephemeral port");
+        authToken = service.getAuthGate().getToken();
     });
 
     after(async () => {
-        await service.stop();
-        chatStore.close();
-        delete process.env.PRISM_AUTH_DISABLED;
+        if (port > 0) await service.stop();
+        chatStore?.close();
         _resetWorkspaceRootCache();
-
-        // Restore original prefs
-        const realPrefsPath = preferencesPath();
-        if (originalPrefs !== null) {
-            writeFileSync(realPrefsPath, originalPrefs, "utf-8");
-        }
+        if (savedAuthDisabled === undefined) delete process.env.PRISM_AUTH_DISABLED;
+        else process.env.PRISM_AUTH_DISABLED = savedAuthDisabled;
+        if (savedWorkspaceRoot === undefined) delete process.env.PRISM_WORKSPACE_ROOT;
+        else process.env.PRISM_WORKSPACE_ROOT = savedWorkspaceRoot;
+        if (savedPreferencesPath === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = savedPreferencesPath;
 
         // Cleanup temp dir — on Windows a brief delay helps release file handles
         await new Promise((resolve) => setTimeout(resolve, 100));

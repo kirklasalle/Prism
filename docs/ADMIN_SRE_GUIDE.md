@@ -50,20 +50,50 @@ The activity bus is the authoritative audit log. Useful SQL:
 
 ```sql
 -- Denials in the last hour
-SELECT ts, op, reason FROM activity_events
- WHERE decision='deny' AND ts > datetime('now','-1 hour')
- ORDER BY ts DESC;
+SELECT timestamp, operation, policy_decision, details
+  FROM activity_events
+ WHERE policy_decision='deny'
+   AND timestamp > datetime('now','-1 hour')
+ ORDER BY timestamp DESC;
 
 -- Top tools by invocation count
-SELECT op, count(*) AS n FROM activity_events
- WHERE decision='allow' GROUP BY op ORDER BY n DESC LIMIT 20;
+SELECT operation, count(*) AS n
+  FROM activity_events
+ WHERE policy_decision='allow'
+ GROUP BY operation
+ ORDER BY n DESC
+ LIMIT 20;
 
--- Hash-chain continuity check
-SELECT count(*) FROM activity_events WHERE prev_hash IS NULL;
--- expect exactly 1 (genesis row)
+-- Chain metadata inventory only; use the verifier below for cryptographic validation.
+SELECT
+  count(*) AS total_rows,
+  sum(CASE WHEN sequence_number IS NULL THEN 1 ELSE 0 END) AS pre_migration_unprovable,
+  min(sequence_number) AS first_retained_sequence,
+  max(sequence_number) AS last_retained_sequence
+FROM activity_events;
 ```
 
-Any discontinuity in the hash chain is a critical incident — escalate and see §8.
+Do not infer chain integrity from counts alone. Verify every predecessor link and
+recompute every retained event digest with:
+
+```powershell
+npm run security:verify-audit-chain
+
+# Explicit database and JSON output:
+node scripts/verify-audit-chain.cjs --db "C:\path\to\prism-activity.db" --json
+```
+
+The verifier writes `prism-output/security/audit-chain-verification.json`. Exit 0 means all
+available evidence verifies, exit 1 means invalid/broken evidence, and exit 2 means the
+result is indeterminate. Rows written before the IC-11 migration are **unprovable**, not
+verified, and therefore produce an indeterminate overall result. Governed retention records
+the last pruned sequence/hash transactionally; the retained segment is verified against
+that boundary and marked `rootedAfterPrune`, while history before it still requires an
+independently stored signed checkpoint.
+
+Any chain verification failure is a critical incident — preserve the database read-only,
+retain the verifier artifact, compare against the latest independently stored signed
+checkpoint, and escalate under §8. Do not repair or backfill chain fields in place.
 
 ---
 

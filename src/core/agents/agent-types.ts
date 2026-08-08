@@ -123,6 +123,19 @@ export interface SubAgentRequest {
     timeoutMs?: number;
     /** Risk level for governance decisions. Default: "low". */
     risk?: OperationRisk;
+    /** Shared limits inherited by every dispatch in one delegation lineage. */
+    delegationBudget?: DelegationBudget;
+}
+
+export interface DelegationBudget {
+    lineageId: string;
+    ancestry: string[];
+    parentAgentId: string;
+    maxDepth: number;
+    maxFanOut: number;
+    maxPopulation: number;
+    authorityCeiling: 1 | 2 | 3;
+    requestedAuthorityTier: 1 | 2 | 3;
 }
 
 /** Result returned from a sub-agent invocation. */

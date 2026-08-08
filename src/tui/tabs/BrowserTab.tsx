@@ -59,8 +59,13 @@ export function BrowserTab({ client, focused }: { client: PrismClient; focused: 
         }
     }, [client]);
 
+    // Only fire shortcut keys when the URL text input is NOT focused
+    const urlInputFocused = focused && session.data?.active === true;
+
     useInput((input, key) => {
         if (!focused) return;
+        // Don't fire browser action shortcuts when typing in URL input
+        if (urlInputFocused) return;
         if (input === "l") launchBrowser(true);
         if (input === "L") launchBrowser(false);
         if (input === "c") closeBrowser();

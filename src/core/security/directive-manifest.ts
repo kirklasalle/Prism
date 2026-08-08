@@ -12,7 +12,7 @@
 /* ── Constants ───────────────────────────────────────────────────────── */
 
 /** PAD document version (matches "Updated" field in the PAD header). */
-export const PAD_VERSION = "2026-02-23";
+export const PAD_VERSION = "2026-08-02";
 
 /** PAD creation date. */
 export const PAD_CREATED = "2025-03-08";

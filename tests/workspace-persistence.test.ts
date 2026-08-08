@@ -1,7 +1,7 @@
 /**
  * Tests for workspace persistence — resolveWorkspaceRoot priority, setWorkspaceRoot verification.
  */
-import { describe, it, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,6 +20,13 @@ describe("Workspace Persistence", () => {
     const originalPrefsPath = process.env.PRISM_PREFERENCES_PATH;
     let tempDir: string | undefined;
     let tempPrefsFile: string | undefined;
+    let tempPrefsDir: string | undefined;
+
+    beforeEach(() => {
+        tempPrefsDir = mkdtempSync(join(tmpdir(), "prism-prefs-test-"));
+        tempPrefsFile = join(tempPrefsDir, "preferences.json");
+        process.env.PRISM_PREFERENCES_PATH = tempPrefsFile;
+    });
 
     afterEach(() => {
         _resetWorkspaceRootCache();
@@ -34,8 +41,12 @@ describe("Workspace Persistence", () => {
             delete process.env.PRISM_PREFERENCES_PATH;
         }
         if (tempPrefsFile && existsSync(tempPrefsFile)) {
-            try { rmSync(tempPrefsFile, { force: true }); } catch {}
+            try { rmSync(tempPrefsFile, { force: true }); } catch { }
             tempPrefsFile = undefined;
+        }
+        if (tempPrefsDir && existsSync(tempPrefsDir)) {
+            try { rmSync(tempPrefsDir, { recursive: true, force: true }); } catch { }
+            tempPrefsDir = undefined;
         }
         if (tempDir && existsSync(tempDir)) {
             try {

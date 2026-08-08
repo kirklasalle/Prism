@@ -606,7 +606,7 @@ Respond ONLY with a JSON object in the following format:
 
     /**
      * Resolves a manifest ID (e.g. "prism.addon.vrgc-robotics") to the actual
-     * addon directory on disk (e.g. "D:\\Projects\\Prism\\addons\\prism-addon-vrgc-robotics").
+     * addon directory on disk (e.g. "D:\\Projects\\PrismRefraction\\addons\\prism-addon-vrgc-robotics").
      * The directory name and the manifest ID may differ, so we scan all addon
      * directories and read each manifest to find the match.
      */

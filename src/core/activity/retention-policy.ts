@@ -39,6 +39,10 @@ export interface ActivityRetentionSweepResult {
     cutoffIso: string;
     /** Wall-clock duration of the sweep in milliseconds. */
     durationMs: number;
+    /** Highest chained sequence pruned, when chain metadata exists. */
+    prunedThroughSequence?: number;
+    /** Hash at the prune boundary, required to continue the durable chain. */
+    prunedThroughHash?: string;
 }
 
 const DEFAULT_SWEEP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -128,15 +132,75 @@ export class ActivityRetentionPolicy {
         const cutoff = new Date(this.now().getTime() - this.retentionMs);
         const cutoffIso = cutoff.toISOString();
 
-        const db = new DatabaseSync(this.config.dbPath);
+        const db = new DatabaseSync(this.config.dbPath, { timeout: 5_000 });
         let deleted = 0;
+        let prunedThroughSequence: number | undefined;
+        let prunedThroughHash: string | undefined;
         try {
-            const stmt = db.prepare("DELETE FROM activity_events WHERE timestamp < :cutoff");
-            const info = stmt.run({ cutoff: cutoffIso });
-            // node:sqlite returns { changes, lastInsertRowid }; coerce defensively.
-            const changes = (info as { changes?: number | bigint }).changes;
-            if (typeof changes === "bigint") deleted = Number(changes);
-            else if (typeof changes === "number") deleted = changes;
+            // IC-11: activity_events is append-only. The delete trigger yields only while this
+            // guard is raised, so a governed sweep succeeds and ad-hoc SQL does not.
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS audit_chain_guard (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    retention_active INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO audit_chain_guard (id, retention_active) VALUES (1, 0);
+                CREATE TABLE IF NOT EXISTS audit_chain_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    last_pruned_sequence INTEGER NOT NULL DEFAULT 0,
+                    last_pruned_hash TEXT NOT NULL DEFAULT '${"0".repeat(64)}'
+                );
+                INSERT OR IGNORE INTO audit_chain_state
+                    (id, last_pruned_sequence, last_pruned_hash)
+                VALUES (1, 0, '${"0".repeat(64)}');
+                UPDATE audit_chain_guard SET retention_active = 0 WHERE id = 1;
+            `);
+            db.exec("BEGIN IMMEDIATE");
+            try {
+                const columns = db.prepare("PRAGMA table_info(activity_events)").all() as Array<{ name: string }>;
+                const hasSequence = columns.some((column) => column.name === "sequence_number");
+
+                if (hasSequence) {
+                    const rows = db
+                        .prepare(`
+                            SELECT sequence_number, timestamp, hash
+                            FROM activity_events
+                            WHERE sequence_number IS NOT NULL
+                            ORDER BY sequence_number ASC
+                        `)
+                        .all() as Array<{ sequence_number: number | bigint; timestamp: string; hash: string }>;
+                    for (const row of rows) {
+                        if (row.timestamp >= cutoffIso) break;
+                        prunedThroughSequence = Number(row.sequence_number);
+                        prunedThroughHash = row.hash;
+                    }
+                    if (prunedThroughSequence !== undefined && prunedThroughHash) {
+                        db.prepare(`
+                            UPDATE audit_chain_state
+                            SET last_pruned_sequence = :sequence, last_pruned_hash = :hash
+                            WHERE id = 1
+                        `).run({ sequence: prunedThroughSequence, hash: prunedThroughHash });
+                    }
+                }
+
+                db.exec("UPDATE audit_chain_guard SET retention_active = 1 WHERE id = 1");
+                const info = hasSequence
+                    ? db.prepare(`
+                          DELETE FROM activity_events
+                          WHERE (sequence_number IS NULL AND timestamp < :cutoff)
+                             OR (sequence_number IS NOT NULL AND sequence_number <= :prunedThrough)
+                      `).run({ cutoff: cutoffIso, prunedThrough: prunedThroughSequence ?? 0 })
+                    : db.prepare("DELETE FROM activity_events WHERE timestamp < :cutoff").run({ cutoff: cutoffIso });
+                // node:sqlite returns { changes, lastInsertRowid }; coerce defensively.
+                const changes = (info as { changes?: number | bigint }).changes;
+                if (typeof changes === "bigint") deleted = Number(changes);
+                else if (typeof changes === "number") deleted = changes;
+                db.exec("UPDATE audit_chain_guard SET retention_active = 0 WHERE id = 1");
+                db.exec("COMMIT");
+            } catch (error) {
+                db.exec("ROLLBACK");
+                throw error;
+            }
         } finally {
             db.close();
         }
@@ -145,6 +209,8 @@ export class ActivityRetentionPolicy {
             deleted,
             cutoffIso,
             durationMs: Date.now() - start,
+            prunedThroughSequence,
+            prunedThroughHash,
         };
         this.lastSweep = result;
         this.lastSweepAt = new Date().toISOString();
@@ -159,19 +225,21 @@ export class ActivityRetentionPolicy {
                 cutoffIso,
                 durationMs: result.durationMs,
                 retentionDays: this.config.retentionDays,
+                prunedThroughSequence,
+                prunedThroughHash,
             },
             sideEffects:
                 deleted > 0
                     ? [
-                          {
-                              type: "database",
-                              description: `deleted ${deleted} activity_events row(s) older than ${cutoffIso}`,
-                              action: "delete",
-                              resource: "activity_events",
-                              mutating: true,
-                              reversible: false,
-                          },
-                      ]
+                        {
+                            type: "database",
+                            description: `deleted ${deleted} activity_events row(s) older than ${cutoffIso}`,
+                            action: "delete",
+                            resource: "activity_events",
+                            mutating: true,
+                            reversible: false,
+                        },
+                    ]
                     : [],
         });
 

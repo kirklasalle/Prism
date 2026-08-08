@@ -12,6 +12,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { IncomingMessage } from "node:http";
 import type { IamPrincipal } from "../iam/rbac.js";
+import { readPreferences } from "../config/workspace-resolver.js";
 
 export interface AuthConfig {
     /** Path to token file on disk */
@@ -42,7 +43,7 @@ export interface AuthResult {
     principal?: IamPrincipal;
 }
 
-const DEFAULT_PUBLIC_ROUTES = ["/health", "/api/health"];
+const DEFAULT_PUBLIC_ROUTES = ["/health", "/api/health", "/api/setup/status"];
 
 const DEFAULT_PUBLIC_PREFIXES = ["/public/"];
 
@@ -193,9 +194,6 @@ export class AuthGate {
     }
 
     private isBootstrapAuthBypassEnabled(): boolean {
-        // Wizard endpoints must always be reachable so operators can be created,
-        // reconfigured, or re-provisioned at any time. Per-handler validation
-        // enforces destructive-action safety (cert verification, email checks, etc.).
-        return true;
+        return readPreferences()?.setupComplete !== true;
     }
 }

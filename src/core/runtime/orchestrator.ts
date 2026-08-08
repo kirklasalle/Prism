@@ -11,7 +11,7 @@ import type { AgentPool } from "../agents/agent-pool.js";
 import type { SubAgentRequest, SubAgentResult } from "../agents/agent-types.js";
 import { TaskDecomposer } from "../agents/task-decomposer.js";
 import type { DecomposedPlan } from "../agents/task-decomposer.js";
-import { normalizeRequestByGovernance } from "../tools/governance-normalizer.js";
+import { normalizeRequestByGovernance, validateRequestAgainstGovernance } from "../tools/governance-normalizer.js";
 import type { ExecutionProfile } from "../policy/execution-profiles.js";
 import { INDIVIDUAL_PROFILE, BUSINESS_PROFILE, resolveExecutionProfile } from "../policy/execution-profiles.js";
 
@@ -79,6 +79,7 @@ export class Orchestrator {
     private readonly workflowExecutor = new WorkflowExecutor();
 
     async run(request: ToolRequest): Promise<import("../tools/types.js").ToolResult> {
+        request = structuredClone(request);
         const start = Date.now();
 
         this.activityBus.emit({
@@ -89,24 +90,58 @@ export class Orchestrator {
             details: { args: request.args },
         });
 
-        // Resolve tool and normalize governance before policy evaluation
+        if (!this.toolRegistry.has(request.operation)) {
+            this.activityBus.emit({
+                sessionId: this.sessionId,
+                layer: "governance",
+                operation: `${request.operation}.interdicted`,
+                status: "failed",
+                policyDecision: "deny",
+                details: { message: `Unknown tool '${request.operation}' quarantined before policy evaluation.` },
+            });
+            return { ok: false, output: { error: `Tool '${request.operation}' is not registered; request quarantined` } };
+        }
+
         const tool = this.toolRegistry.get(request.operation);
-        let normalizedRequest = request;
-        if (tool) {
-            const result = normalizeRequestByGovernance(request, tool.governance);
-            normalizedRequest = result.normalized;
-            if (result.normalizations.length > 0) {
-                this.activityBus.emit({
-                    sessionId: this.sessionId,
-                    layer: "governance",
-                    operation: `${request.operation}.governance_normalized`,
-                    status: "succeeded",
-                    details: {
-                        message: "Request normalized based on tool governance schema.",
-                        normalizations: result.normalizations,
-                    },
-                });
-            }
+        const contractErrors = this.toolRegistry.validateRequest(request);
+        if (contractErrors.length > 0) {
+            this.activityBus.emit({
+                sessionId: this.sessionId,
+                layer: "governance",
+                operation: `${request.operation}.contract_validation`,
+                status: "failed",
+                policyDecision: "deny",
+                details: { errors: contractErrors },
+            });
+            return { ok: false, output: { error: "Contract validation failed", details: contractErrors } };
+        }
+
+        const governanceResult = normalizeRequestByGovernance(request, tool.governance);
+        const normalizedRequest = governanceResult.normalized;
+        if (governanceResult.normalizations.length > 0) {
+            this.activityBus.emit({
+                sessionId: this.sessionId,
+                layer: "governance",
+                operation: `${request.operation}.governance_normalized`,
+                status: "succeeded",
+                details: {
+                    message: "Request normalized based on tool governance schema.",
+                    normalizations: governanceResult.normalizations,
+                },
+            });
+        }
+
+        const governanceError = validateRequestAgainstGovernance(normalizedRequest, tool.governance);
+        if (governanceError) {
+            this.activityBus.emit({
+                sessionId: this.sessionId,
+                layer: "governance",
+                operation: `${request.operation}.interdicted`,
+                status: "failed",
+                policyDecision: "deny",
+                details: { message: governanceError },
+            });
+            return { ok: false, output: { error: governanceError } };
         }
 
         const policy = this.policyEngine.evaluate({
@@ -194,34 +229,6 @@ export class Orchestrator {
                 policyDecision: "allow",
                 details: { message: "Operation approved by Kirk. Proceeding." },
             });
-        }
-
-        // Execute tool — reached by tier1/tier2 directly, or tier3 after approval
-        if (!tool) {
-            this.activityBus.emit({
-                sessionId: this.sessionId,
-                layer: "tool_execution",
-                operation: `${request.operation}.not_found`,
-                status: "failed",
-                authorityTier: policy.tier,
-                policyDecision: policy.decision,
-                details: { message: `Tool "${request.operation}" not found in registry.` },
-            });
-            return { ok: false, output: { error: `Tool "${request.operation}" not found` } };
-        }
-
-        const contractErrors = this.toolRegistry.validateRequest(normalizedRequest);
-        if (contractErrors.length > 0) {
-            this.activityBus.emit({
-                sessionId: this.sessionId,
-                layer: "governance",
-                operation: `${request.operation}.contract_validation`,
-                status: "failed",
-                authorityTier: policy.tier,
-                policyDecision: policy.decision,
-                details: { errors: contractErrors },
-            });
-            return { ok: false, output: { error: "Contract validation failed", details: contractErrors } };
         }
 
         const result = await tool.execute(normalizedRequest);

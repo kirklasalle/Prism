@@ -7,7 +7,7 @@
 import { describe, it, before, after } from "mocha";
 import assert from "node:assert";
 import http from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -16,6 +16,11 @@ import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
+import {
+    _resetWorkspaceRootCache,
+    _setWorkspaceRootForTest,
+    workspaceDbPath,
+} from "../src/core/config/workspace-resolver.js";
 
 let service: DashboardService;
 let port: number;
@@ -80,9 +85,12 @@ describe("Robotics Add-on Integration", function () {
 
     before(async () => {
         tmpDir = mkdtempSync(join(tmpdir(), "prism-robotics-addon-"));
+        mkdirSync(join(tmpDir, "state"), { recursive: true });
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
 
         const bus = new ActivityBus();
-        chatStore = new ChatSessionStore(":memory:");
+        chatStore = new ChatSessionStore(workspaceDbPath());
         const registry = new ToolRegistry();
 
         service = new DashboardService(
@@ -119,8 +127,10 @@ describe("Robotics Add-on Integration", function () {
     });
 
     after(async () => {
-        await service.stop();
-        chatStore.close();
+        await service?.stop();
+        chatStore?.close();
+        _resetWorkspaceRootCache();
+        delete process.env.PRISM_PREFERENCES_PATH;
 
         try {
             rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

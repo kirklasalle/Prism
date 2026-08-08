@@ -16,16 +16,22 @@
 
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { createPrivateKey, createSign, generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, createSign, generateKeyPairSync, sign } from "node:crypto";
 import { ServerResponse } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { Socket } from "node:net";
+import { Readable } from "node:stream";
 
-import { IamStore } from "../src/core/iam/store.js";
+import {
+    IamStore,
+    canonicalPadAdoptionPayload,
+    type RecordPadAdoptionReceiptInput,
+} from "../src/core/iam/store.js";
 import { SessionManager } from "../src/core/iam/sso/session.js";
 import { OidcError, OidcProvider } from "../src/core/iam/sso/oidc.js";
 import { SamlError, SamlProvider } from "../src/core/iam/sso/saml.js";
 import { IamRouteHandler } from "../src/core/operator/routes/iam-handler.js";
+import { hashPassword } from "../src/core/security/password-util.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +41,14 @@ function makeReq(method: string, url: string, headers: Record<string, string> = 
     (emitter as unknown as { url: string }).url = url;
     (emitter as unknown as { headers: Record<string, string> }).headers = headers;
     return emitter;
+}
+
+function makeJsonReq(url: string, body: Record<string, unknown>): IncomingMessage {
+    const req = Readable.from([JSON.stringify(body)]) as IncomingMessage;
+    (req as unknown as { method: string }).method = "POST";
+    (req as unknown as { url: string }).url = url;
+    (req as unknown as { headers: Record<string, string> }).headers = { "content-type": "application/json" };
+    return req;
 }
 
 class FakeRes extends EventEmitter {
@@ -130,6 +144,66 @@ export async function testIamSsoSession(): Promise<void> {
         const verified = mgr.verify(cookie);
         assert.ok(verified, "valid cookie verifies");
         assert.equal(verified!.userId, user.id);
+        assert.ok(mgr.verifyOperational(cookie), "operational session passes privileged verification");
+
+        const pending = mgr.issue(user.id, "default", 60, "authenticated");
+        assert.ok(mgr.verify(pending.cookie), "authenticated-only session retains identity authentication");
+        assert.equal(
+            mgr.verifyOperational(pending.cookie),
+            null,
+            "authenticated-only session cannot pass privileged verification",
+        );
+
+        const activePad = { digest: "4".repeat(64), version: "2026-08-02" };
+        const gatedManager = new SessionManager(store, {
+            secret: "x".repeat(32),
+            secure: false,
+            activePad,
+        });
+        assert.equal(
+            gatedManager.verifyOperational(cookie),
+            null,
+            "existing operational cookie is blocked without current PAD adoption",
+        );
+
+        const { privateKey: receiptPrivateKey, publicKey: receiptPublicKey } = generateKeyPairSync("ed25519");
+        const adoptionPayload = {
+            tenantId: "default",
+            userId: user.id,
+            activePadDigest: activePad.digest,
+            activePadVersion: activePad.version,
+            previousPadDigest: "a".repeat(64),
+            governanceKeyId: "prism-governance-pad-2026-07",
+            governanceSignatureDigest: "b".repeat(64),
+            releaseCommit: "c".repeat(40),
+            sessionId: session.id,
+            decision: "accept" as const,
+            nonce: "session-adoption-001",
+            decidedAt: new Date().toISOString(),
+        };
+        const adoptionReceipt: RecordPadAdoptionReceiptInput = {
+            ...adoptionPayload,
+            localSignatureBase64: sign(
+                null,
+                Buffer.from(canonicalPadAdoptionPayload(adoptionPayload), "utf8"),
+                receiptPrivateKey,
+            ).toString("base64"),
+            localPublicKeyBase64: receiptPublicKey.export({ type: "spki", format: "der" }).toString("base64"),
+        };
+        store.recordPadAdoptionReceipt(adoptionReceipt);
+        assert.ok(gatedManager.verifyOperational(cookie), "matching PAD adoption restores privileged verification");
+
+        const nextPadManager = new SessionManager(store, {
+            secret: "x".repeat(32),
+            secure: false,
+            activePad: { digest: "5".repeat(64), version: "2026-09-01" },
+        });
+        assert.equal(nextPadManager.verifyOperational(cookie), null, "receipt becomes stale after another PAD revision");
+        assert.equal(
+            gatedManager.issue(user.id, "default", 60).session.activationState,
+            "authenticated",
+            "new sessions remain authenticated-only until adoption",
+        );
 
         // Tampered cookie does NOT verify. Decode the signature half, flip a
         // byte, re-encode — deterministic, unlike a base64url char swap.
@@ -161,6 +235,33 @@ export async function testIamSsoSession(): Promise<void> {
         assert.equal(mgr.verify(""), null);
         assert.equal(mgr.verify(null), null);
         assert.equal(mgr.verify("no-dot-anywhere"), null);
+
+        const localUser = store.createUser({
+            tenantId: "default",
+            email: "local@example.com",
+            attrs: { passwordHash: hashPassword("local-password") },
+        });
+        const localHandler = new IamRouteHandler({ iamStore: store, sessionManager: mgr });
+        const loginReq = makeJsonReq("/api/iam/login", {
+            email: localUser.email,
+            password: "local-password",
+        });
+        const loginRes = new FakeRes();
+        await localHandler.handle(
+            loginReq,
+            asRes(loginRes),
+            {
+                getChatStore: () => ({ listSessions: () => [] }),
+                getAuthGate: () => ({ getToken: () => "dashboard-token" }),
+            } as never,
+        );
+        assert.equal(loginRes.statusCode, 200);
+        const loginBody = JSON.parse(loginRes.body) as { session: { activationState: string } };
+        assert.equal(loginBody.session.activationState, "operational");
+        const setCookie = String(loginRes.getHeader("set-cookie"));
+        const cookieHeader = setCookie.split(";", 1)[0]!;
+        const principal = localHandler.resolvePrincipalFromCookie(makeReq("GET", "/dashboard", { cookie: cookieHeader }));
+        assert.equal(principal?.email, localUser.email);
     } finally {
         store.close();
     }

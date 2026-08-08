@@ -14,7 +14,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, existsSync, rmSync, readFileSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -22,6 +22,16 @@ import { ActivityBus } from "../src/core/activity/bus.js";
 import { checkLawsImmutability, wouldModifyLaws } from "../src/core/governance/laws-immutability-guard.js";
 import { AmendmentLedger, createAmendmentLedger } from "../src/core/governance/amendment-ledger.js";
 import { AmendmentValidator } from "../src/core/governance/amendment-validator.js";
+import {
+    GovernanceErratumLifecycle,
+    hashErratumText,
+    LAW_4_CORRECTED_TEXT,
+    LAW_4_MACHINE_INVARIANT,
+    LAW_4_PREVIOUS_TEXT,
+    validateGovernanceErratum,
+    type GovernanceErratumVerificationDependencies,
+} from "../src/core/governance/erratum-validator.js";
+import type { GovernanceErratumProposal } from "../src/core/governance/amendment-types.js";
 
 const TEST_PAD_HASH = "a8d594d70d50286a55a490dfdabef4e4b20dcb09495178a7c4d2b3314d0600df";
 
@@ -29,11 +39,124 @@ export async function testGovernanceAmendments(): Promise<void> {
     console.log("\n── Governance Amendment Infrastructure Tests ──\n");
 
     await testLawsImmutabilityGuard();
+    await testGovernanceErratumValidator();
     await testAmendmentLedger();
     await testAmendmentValidator();
     await testDualBinaryGate();
 
     console.log("\n✓ All governance amendment tests passed\n");
+}
+
+/* ── Governance Erratum Validator ──────────────────────────────────── */
+
+async function testGovernanceErratumValidator(): Promise<void> {
+    console.log("  Governance Erratum Validator:");
+
+    const proposal: GovernanceErratumProposal = {
+        erratumId: "E-2026-001",
+        lawId: 4,
+        previousText: LAW_4_PREVIOUS_TEXT,
+        correctedText: LAW_4_CORRECTED_TEXT,
+        previousTextHash: hashErratumText(LAW_4_PREVIOUS_TEXT),
+        correctedTextHash: hashErratumText(LAW_4_CORRECTED_TEXT),
+        previousPadHash: TEST_PAD_HASH,
+        correctedPadHash: "4b4a00789fb703b6f5a909a07027aae90d4b9632fda73f67b1b056a79d6910c8",
+        rationale: "Correct an inverted predicate while preserving the Law 4 safety invariant.",
+        machineInvariant: LAW_4_MACHINE_INVARIANT,
+        approvedBy: "governance-founder:kirk-lasalle",
+        effectiveVersion: "2026-08-02",
+    };
+
+    const validResult = validateGovernanceErratum(proposal);
+    assert.ok(validResult.valid, "Exact registered Law 4 correction should pass");
+    assert.equal(validResult.status, "approved_pending_signature");
+    console.log("    ✓ Exact Law 4 correction is approved pending detached signature");
+
+    const substantiveChange = validateGovernanceErratum({
+        ...proposal,
+        correctedText: `${LAW_4_CORRECTED_TEXT} Exceptions may be approved by an operator.`,
+    });
+    assert.ok(!substantiveChange.valid, "Substantive additions must be rejected");
+    assert.equal(substantiveChange.status, "rejected");
+
+    const mismatchedHash = validateGovernanceErratum({ ...proposal, correctedTextHash: TEST_PAD_HASH });
+    assert.ok(!mismatchedHash.valid, "Mismatched text hashes must be rejected");
+
+    const wrongLaw = validateGovernanceErratum({ ...proposal, lawId: 1 });
+    assert.ok(!wrongLaw.valid, "An erratum must not authorize changes to another Law");
+    console.log("    ✓ Substantive, hash-mismatched, and wrong-Law changes are rejected");
+
+    const ratification = JSON.parse(
+        readFileSync(join(process.cwd(), "config", "governance-errata", "E-2026-001.json"), "utf8"),
+    ) as { status: string; proposal: GovernanceErratumProposal; signatureEvidence: unknown };
+    assert.equal(ratification.status, "approved_pending_signature");
+    assert.equal(ratification.signatureEvidence, null);
+    assert.ok(validateGovernanceErratum(ratification.proposal).valid, "Ratification artifact must validate");
+    console.log("    ✓ Source-controlled ratification binds exact text and PAD artifacts");
+
+    const tempDir = join(tmpdir(), `prism-test-erratum-${randomUUID().slice(0, 8)}`);
+    mkdirSync(tempDir, { recursive: true });
+    try {
+        const releaseCommit = "a".repeat(40);
+        const verifiedDependencies: GovernanceErratumVerificationDependencies = {
+            verifyDirectiveSignature: () => ({
+                valid: true,
+                signatureVerified: true,
+                hashMatches: true,
+                keyId: "prism-governance-pad-2026-07",
+                currentHash: proposal.correctedPadHash,
+                expectedHash: proposal.correctedPadHash,
+                signatureDigest: "0".repeat(64),
+                directivePath: "test-pad",
+                signaturePath: "test-signature",
+                keysPath: "test-keys",
+                verifiedAt: new Date().toISOString(),
+            }),
+            verifyCommitSignature: (commit) => ({
+                valid: true,
+                commit,
+                signerIdentity: "governance-founder:kirk-lasalle",
+                signerAuthorized: true,
+                signatureStatus: "G",
+                verifiedAt: new Date().toISOString(),
+            }),
+        };
+        const ledger = createAmendmentLedger(tempDir, TEST_PAD_HASH);
+        const lifecycle = new GovernanceErratumLifecycle(ledger, verifiedDependencies);
+
+        const unreviewedLedger = createAmendmentLedger(join(tempDir, "unreviewed"), TEST_PAD_HASH);
+        const unreviewedLifecycle = new GovernanceErratumLifecycle(unreviewedLedger, verifiedDependencies);
+        const unreviewed = unreviewedLifecycle.markEffective(proposal, releaseCommit);
+        assert.equal(unreviewed.status, "rejected", "Unreviewed erratum must not become effective");
+
+        assert.equal(lifecycle.review(proposal, TEST_PAD_HASH).status, "approved_pending_signature");
+
+        const unsignedLifecycle = new GovernanceErratumLifecycle(ledger, {
+            ...verifiedDependencies,
+            verifyDirectiveSignature: () => ({
+                ...verifiedDependencies.verifyDirectiveSignature(),
+                valid: false,
+                signatureVerified: false,
+                error: "test signature mismatch",
+            }),
+        });
+        const unsigned = unsignedLifecycle.markEffective(proposal, releaseCommit);
+        assert.equal(unsigned.status, "rejected", "Unsigned PAD must not become effective");
+
+        const effective = lifecycle.markEffective(proposal, releaseCommit);
+        assert.equal(effective.status, "effective");
+        assert.equal(ledger.getLatestEntry()!.eventType, "erratum_effective");
+        assert.ok(ledger.verifyChain().valid, "Erratum lifecycle must preserve ledger integrity");
+
+        const pendingLedger = createAmendmentLedger(join(tempDir, "pending"), TEST_PAD_HASH);
+        const pendingLifecycle = new GovernanceErratumLifecycle(pendingLedger);
+        pendingLifecycle.review(proposal, TEST_PAD_HASH);
+        const pending = pendingLifecycle.markEffective(proposal, releaseCommit, process.cwd());
+        assert.equal(pending.status, "rejected", "Current stale detached signature must fail closed");
+        console.log("    ✓ Effectuation invokes artifact and commit verifiers and fails closed");
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
 }
 
 /* ── Laws Immutability Guard ────────────────────────────────────────── */
@@ -45,7 +168,7 @@ async function testLawsImmutabilityGuard(): Promise<void> {
     {
         const result = checkLawsImmutability(
             "Amendment A-001: All Prism instances shall implement quarterly security audits " +
-                "to strengthen the platform's compliance posture.",
+            "to strengthen the platform's compliance posture.",
         );
         assert.ok(result.passed, "Safe amendment should pass immutability check");
         assert.equal(result.conflictingLaws.length, 0, "No laws should be conflicting");

@@ -30,12 +30,15 @@ export interface SessionCookieOptions {
     cookieName?: string;
     /** Force `Secure` flag on/off for tests. */
     secure?: boolean;
+    /** Active signed PAD identity; when set, privileged sessions require a matching adoption receipt. */
+    activePad?: { digest: string; version: string };
 }
 
 export class SessionManager {
     private readonly secret: Buffer;
     private readonly cookieName: string;
     private readonly forceSecure: boolean | undefined;
+    private readonly activePad: { digest: string; version: string } | undefined;
 
     constructor(
         private readonly store: IamStore,
@@ -45,11 +48,18 @@ export class SessionManager {
         this.secret = raw.length >= 32 ? Buffer.from(raw, "utf-8") : randomBytes(32);
         this.cookieName = opts.cookieName ?? COOKIE_NAME;
         this.forceSecure = opts.secure;
+        this.activePad = opts.activePad;
     }
 
     /** Create a fresh session for `userId@tenantId` and return the cookie value. */
-    issue(userId: string, tenantId: string, ttlSeconds = 8 * 3600): { cookie: string; session: IamSsoSession } {
-        const session = this.store.createSession(userId, tenantId, ttlSeconds);
+    issue(
+        userId: string,
+        tenantId: string,
+        ttlSeconds = 8 * 3600,
+        activationState?: "authenticated" | "operational",
+    ): { cookie: string; session: IamSsoSession } {
+        const resolvedState = activationState ?? (this.activePad ? "authenticated" : "operational");
+        const session = this.store.createSession(userId, tenantId, ttlSeconds, resolvedState);
         const cookie = this.signSessionId(session.id);
         return { cookie, session };
     }
@@ -60,6 +70,18 @@ export class SessionManager {
         const sessionId = this.unsignSessionId(cookieValue);
         if (!sessionId) return null;
         return this.store.getSession(sessionId);
+    }
+
+    verifyOperational(cookieValue: string | undefined | null): IamSsoSession | null {
+        const session = this.verify(cookieValue);
+        if (!session || session.activationState !== "operational") return null;
+        if (
+            this.activePad &&
+            !this.store.hasAcceptedPadAdoption(session.tenantId, session.userId, this.activePad.digest)
+        ) {
+            return null;
+        }
+        return session;
     }
 
     /** Revoke the session referenced by a cookie (logout). */

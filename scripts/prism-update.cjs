@@ -474,6 +474,22 @@ async function main() {
             );
         }
 
+        console.log("[PRISM][update] Verifying coordinated governance artifacts...");
+        log("security.governance_verification", "Running post-update governance integrity gates");
+        try {
+            runCmd("npm run security:directive-integrity");
+            runCmd("npm run governance:artifacts:check");
+            if (fs.existsSync(path.join(repoRoot, "config", "governance-key-rotations", "R-2026-001.json"))) {
+                runCmd("npm run governance:key-rotation:verify");
+            }
+            if (fs.existsSync(path.join(repoRoot, "config", "governance-errata", "E-2026-001.json"))) {
+                runCmd("npm run governance:erratum:check");
+            }
+            log("security.governance_verified", "Post-update governance integrity gates passed");
+        } catch (_) {
+            throw new Error("Post-update governance verification failed. Refusing to restart updated runtime.");
+        }
+
         log(
             "completed",
             `Prism update completed successfully. System advanced to commit ${runCmd("git rev-parse HEAD", { silent: true }).slice(0, 8)}`,

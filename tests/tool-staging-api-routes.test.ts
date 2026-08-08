@@ -10,7 +10,7 @@
 import { describe, it, before, after } from "mocha";
 import assert from "node:assert";
 import http from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -19,6 +19,11 @@ import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
+import {
+    _resetWorkspaceRootCache,
+    _setWorkspaceRootForTest,
+    workspaceDbPath,
+} from "../src/core/config/workspace-resolver.js";
 
 /* ── Test helpers ─────────────────────────────────────────────────────── */
 
@@ -26,6 +31,9 @@ let service: DashboardService;
 let port: number;
 let tmpDir: string;
 let authToken = "";
+let chatStore: ChatSessionStore;
+let savedWorkspaceRoot: string | undefined;
+let savedPreferencesPath: string | undefined;
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
     return authToken ? { Authorization: `Bearer ${authToken}`, ...extra } : { ...extra };
@@ -67,9 +75,14 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
     this.timeout(60_000);
 
     before(async () => {
+        savedWorkspaceRoot = process.env.PRISM_WORKSPACE_ROOT;
+        savedPreferencesPath = process.env.PRISM_PREFERENCES_PATH;
         tmpDir = mkdtempSync(join(tmpdir(), "prism-tool-staging-api-"));
+        mkdirSync(join(tmpDir, "state"), { recursive: true });
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         const bus = new ActivityBus();
-        const chatStore = new ChatSessionStore(":memory:");
+        chatStore = new ChatSessionStore(workspaceDbPath());
         const registry = new ToolRegistry();
 
         service = new DashboardService(
@@ -104,7 +117,13 @@ describe("Tool Staging API Routes (POST /api/tools/stage)", function () {
     });
 
     after(async () => {
-        await service.stop();
+        await service?.stop();
+        chatStore?.close();
+        _resetWorkspaceRootCache();
+        if (savedWorkspaceRoot === undefined) delete process.env.PRISM_WORKSPACE_ROOT;
+        else process.env.PRISM_WORKSPACE_ROOT = savedWorkspaceRoot;
+        if (savedPreferencesPath === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = savedPreferencesPath;
         try {
             rmSync(tmpDir, { recursive: true, force: true });
         } catch {

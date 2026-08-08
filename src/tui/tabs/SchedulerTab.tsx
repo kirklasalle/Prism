@@ -5,7 +5,7 @@ import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { PrismClient } from "../api/prism-client.js";
-import { useApi, useListNavigation } from "../hooks.js";
+import { useApi, useListNavigation, useSubTabNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
     Panel,
@@ -28,13 +28,11 @@ export function SchedulerTab({ client, focused }: { client: PrismClient; focused
     const [actionMsg, setActionMsg] = useState<string | null>(null);
     const eventNav = useListNavigation(events.data?.length ?? 0, focused && subTab === "calendar");
 
+    const SUBTABS = ["calendar", "projects", "board", "timeline"];
+    useSubTabNavigation(SUBTABS, subTab, setSubTab, focused);
+
     useInput((input, key) => {
         if (!focused) return;
-        if (key.tab) {
-            const tabs = ["calendar", "projects", "board", "timeline"];
-            const idx = tabs.indexOf(subTab);
-            setSubTab(tabs[(idx + 1) % tabs.length]!);
-        }
         if (subTab === "calendar" && input === "d" && events.data?.[eventNav.selectedIndex]) {
             const evt = events.data[eventNav.selectedIndex]!;
             client

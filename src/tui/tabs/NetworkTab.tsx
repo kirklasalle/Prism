@@ -5,7 +5,7 @@ import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { PrismClient } from "../api/prism-client.js";
-import { useApi, useListNavigation } from "../hooks.js";
+import { useApi, useListNavigation, useSubTabNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, DataTable, SubTabBar, Loading, ErrorBox, KeyValue, SectionHeader } from "../components/ui.js";
 
@@ -33,13 +33,11 @@ export function NetworkTab({ client, focused }: { client: PrismClient; focused: 
         }
     }, [cmdInput, cmdRunning, client]);
 
-    useInput((input, key) => {
+    const SUBTABS = ["interfaces", "commands", "console"];
+    useSubTabNavigation(SUBTABS, subTab, setSubTab, focused && subTab !== "console");
+
+    useInput((_input, _key) => {
         if (!focused) return;
-        if (key.tab) {
-            const tabs = ["interfaces", "commands", "console"];
-            const idx = tabs.indexOf(subTab);
-            setSubTab(tabs[(idx + 1) % tabs.length]!);
-        }
     });
 
     return (

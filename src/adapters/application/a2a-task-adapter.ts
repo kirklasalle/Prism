@@ -95,6 +95,13 @@ export class A2ATaskAdapter {
         this.initializationPromise = this.initializeDatabase();
     }
 
+    async close(): Promise<void> {
+        await this.initializationPromise.catch(() => { });
+        await new Promise<void>((resolve, reject) => {
+            this.db.close((error) => (error ? reject(error) : resolve()));
+        });
+    }
+
     // ── Database setup ──────────────────────────────────────────────────────
 
     private initializeDatabase(): Promise<void> {

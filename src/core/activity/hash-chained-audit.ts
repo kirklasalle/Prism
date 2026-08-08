@@ -18,12 +18,15 @@ import { signCertificateContent, verifyCertificateContent } from "../security/in
 
 /** Genesis block hash for event #0 in a chain. */
 export const GENESIS_PREVIOUS_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
+export const CURRENT_AUDIT_HASH_VERSION = 2;
 
 export interface HashChainedEvent extends ActivityEvent {
     /** SHA-256 digest of the immediately preceding event in sequence. */
     readonly previousHash: string;
     /** Monotonically increasing 1-indexed sequence number. */
     readonly sequenceNumber: number;
+    /** Version of the canonical payload covered by `hash`. */
+    readonly hashVersion: number;
 }
 
 export interface SignedAuditCheckpoint {
@@ -41,8 +44,18 @@ export interface SignedAuditCheckpoint {
  * Compute the cryptographic SHA-256 hash for a chained event:
  * `SHA-256(previousHash + ":" + JSON.stringify(payload))`
  */
-export function computeChainedEventHash(previousHash: string, event: Omit<ActivityEvent, "hash">): string {
-    const canonicalPayload = JSON.stringify({
+function canonicalJson(value: unknown): string {
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+        .join(",")}}`;
+}
+
+function legacyPayload(event: Omit<ActivityEvent, "hash">): Record<string, unknown> {
+    return {
         id: event.id,
         sessionId: event.sessionId,
         timestamp: event.timestamp,
@@ -53,11 +66,48 @@ export function computeChainedEventHash(previousHash: string, event: Omit<Activi
         characterId: event.characterId,
         operatorEmail: event.operatorEmail,
         assignmentId: event.assignmentId,
-    });
+    };
+}
 
-    return createHash("sha256")
-        .update(`${previousHash}:${canonicalPayload}`)
-        .digest("hex");
+function completePayload(event: Omit<ActivityEvent, "hash">): Record<string, unknown> {
+    return {
+        id: event.id,
+        sessionId: event.sessionId,
+        timestamp: event.timestamp,
+        layer: event.layer,
+        operation: event.operation,
+        status: event.status,
+        confidence: event.confidence ?? null,
+        durationMs: event.durationMs ?? null,
+        details: event.details ?? {},
+        authorityTier: event.authorityTier ?? null,
+        policyDecision: event.policyDecision ?? null,
+        sideEffects: event.sideEffects ?? [],
+        characterId: event.characterId ?? null,
+        prismUserId: event.prismUserId ?? null,
+        prismUserEmail: event.prismUserEmail ?? null,
+        operatorId: event.operatorId ?? null,
+        operatorEmail: event.operatorEmail ?? null,
+        clientId: event.clientId ?? null,
+        executionProfileSegment: event.executionProfileSegment ?? null,
+        assignmentId: event.assignmentId ?? null,
+        accountabilityChain: event.accountabilityChain ?? null,
+        rollbackPlan: event.rollbackPlan ?? null,
+    };
+}
+
+export function computeChainedEventHash(
+    previousHash: string,
+    event: Omit<ActivityEvent, "hash">,
+    hashVersion: number = CURRENT_AUDIT_HASH_VERSION,
+): string {
+    const payload = hashVersion === 1 ? legacyPayload(event) : completePayload(event);
+    const canonicalPayload = hashVersion === 1 ? JSON.stringify(payload) : canonicalJson(payload);
+
+    const hashInput = hashVersion === 1
+        ? `${previousHash}:${canonicalPayload}`
+        : `${hashVersion}:${previousHash}:${canonicalPayload}`;
+    return createHash("sha256").update(hashInput).digest("hex");
 }
 
 /**
@@ -97,7 +147,7 @@ export function verifyEventChain(events: HashChainedEvent[]): {
         }
 
         // 3. Re-evaluate self hash
-        const calculatedHash = computeChainedEventHash(evt.previousHash, evt);
+        const calculatedHash = computeChainedEventHash(evt.previousHash, evt, evt.hashVersion);
         if (evt.hash !== calculatedHash) {
             return {
                 valid: false,

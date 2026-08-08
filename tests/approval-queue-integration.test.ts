@@ -4,7 +4,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ApprovalQueue } from "../src/core/approval/approval-queue.js";
+import { ApprovalQueue, approvalActionDigest } from "../src/core/approval/approval-queue.js";
 
 describe("ApprovalQueue", () => {
     // ── list ──────────────────────────────────────────────────────────────
@@ -55,6 +55,26 @@ describe("ApprovalQueue", () => {
         q.approve(id);
         await p;
         assert.equal(q.list().length, 0);
+    });
+
+    it("binds a signed decision to an immutable action snapshot and rejects replay", async () => {
+        const q = new ApprovalQueue();
+        const context = { args: { path: "original" }, risk: "high" };
+        const resultPromise = q.request("session-bound", "file.write", context, 5000);
+        context.args.path = "substituted";
+        const pending = q.list()[0];
+
+        assert.equal((pending.context.args as { path: string }).path, "original");
+        assert.equal(
+            pending.actionDigest,
+            approvalActionDigest("session-bound", "file.write", { args: { path: "original" }, risk: "high" }),
+        );
+        assert.equal(q.approve(pending.id), true);
+        assert.equal(await resultPromise, true);
+        const decision = q.getDecision(pending.id);
+        assert.ok(decision?.signature);
+        assert.equal(decision?.actionDigest, pending.actionDigest);
+        assert.equal(q.approve(pending.id), false, "settled approval cannot be replayed");
     });
 
     // ── deny ──────────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@
 import { describe, it, before, after } from "mocha";
 import assert from "node:assert";
 import http from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -22,6 +22,11 @@ import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
+import {
+    _resetWorkspaceRootCache,
+    _setWorkspaceRootForTest,
+    workspaceDbPath,
+} from "../src/core/config/workspace-resolver.js";
 
 /* ── Test helpers ─────────────────────────────────────────────────────── */
 
@@ -90,9 +95,12 @@ describe("Logs & Debug API Routes", function () {
     before(async () => {
         process.env.PRISM_AUTH_DISABLED = "true";
         tmpDir = mkdtempSync(join(tmpdir(), "prism-logs-api-"));
+        mkdirSync(join(tmpDir, "state"), { recursive: true });
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         bus = new ActivityBus();
         approvalQueue = new ApprovalQueue();
-        chatStore = new ChatSessionStore(":memory:");
+        chatStore = new ChatSessionStore(workspaceDbPath());
 
         const registry = new ToolRegistry();
 
@@ -134,9 +142,11 @@ describe("Logs & Debug API Routes", function () {
     });
 
     after(async () => {
-        await service.stop();
-        chatStore.close();
+        await service?.stop();
+        chatStore?.close();
+        _resetWorkspaceRootCache();
         rmSync(tmpDir, { recursive: true, force: true });
+        delete process.env.PRISM_PREFERENCES_PATH;
         if (savedAuth === undefined) {
             delete process.env.PRISM_AUTH_DISABLED;
         } else {

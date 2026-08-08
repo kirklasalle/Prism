@@ -1,8 +1,21 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { workspacePath } from "../core/config/workspace-resolver.js";
+import { resolveBuildIdentity } from "../core/governance/build-identity.js";
+import {
+    evidenceManifestDigest,
+    evidenceValueDigest,
+    validateEvidenceManifest,
+    type EvidenceManifest,
+    type EvidenceRecord,
+} from "../core/governance/evidence-manifest.js";
+import {
+    evaluateReleaseAcceptanceGates,
+    type SystemReleaseCertificate,
+} from "../core/security/release-acceptance-verification.js";
 
 type GateStatus = "passed" | "failed" | "manual_required";
 
@@ -32,10 +45,67 @@ interface ReleaseValidationArtifact {
         perfQualification: string;
         contractSnapshot: string;
         cuBgValidation: string;
+        governanceEvidence: string;
         releaseValidation: string;
     };
     gates: ReleaseGateResult[];
+    evidenceManifest: EvidenceManifest;
+    evidenceManifestDigest: string;
+    governanceEvidenceErrors: string[];
+    governanceAcceptance: SystemReleaseCertificate;
     passed: boolean;
+}
+
+export function createReleaseValidationEvidence(
+    gates: readonly ReleaseGateResult[],
+    commit: string,
+    buildId: string,
+    evaluatedAt: string,
+): EvidenceManifest {
+    const records: EvidenceRecord[] = gates.map((gate) => ({
+        evidenceId: `release-validation:${gate.id}:${buildId}`,
+        probeId: `release-validation.${gate.id}`,
+        probeVersion: 1,
+        result: gate.status === "manual_required" ? "not_evaluated" : gate.status,
+        commit,
+        buildId,
+        evaluatedAt,
+        inputDigest: evidenceValueDigest({ gateId: gate.id, commit, buildId }),
+        outputDigest: evidenceValueDigest(gate),
+        failureReason: gate.status === "failed" ? gate.details ?? `${gate.label} failed` : undefined,
+    }));
+    return {
+        format: "prism-governance-evidence",
+        version: 1,
+        commit,
+        buildId,
+        generatedAt: evaluatedAt,
+        records,
+    };
+}
+
+export function mergeCurrentEvidence(
+    releaseEvidence: EvidenceManifest,
+    governanceEvidence: EvidenceManifest | null,
+): { manifest: EvidenceManifest; errors: string[] } {
+    if (!governanceEvidence) return { manifest: releaseEvidence, errors: ["Governance evidence manifest is missing"] };
+    const errors = validateEvidenceManifest(governanceEvidence, {
+        commit: releaseEvidence.commit,
+        buildId: releaseEvidence.buildId,
+    });
+    if (errors.length > 0) return { manifest: releaseEvidence, errors };
+
+    const records = [...releaseEvidence.records];
+    const evidenceIds = new Set(records.map((record) => record.evidenceId));
+    for (const record of governanceEvidence.records) {
+        if (evidenceIds.has(record.evidenceId)) {
+            errors.push(`Duplicate evidenceId while merging manifests: ${record.evidenceId}`);
+            continue;
+        }
+        evidenceIds.add(record.evidenceId);
+        records.push(record);
+    }
+    return { manifest: { ...releaseEvidence, records }, errors };
 }
 
 export interface ReleaseGateEvaluationInput {
@@ -137,6 +207,10 @@ async function main(): Promise<void> {
     const cuBgValidationPath =
         process.env.PRISM_CU_BG_VALIDATION_OUTPUT_PATH ??
         workspacePath("artifacts", "ci-gates", "computer-use-business-gate-validation.json");
+    const governanceEvidencePath = resolve(
+        process.env.PRISM_GOVERNANCE_EVIDENCE_PATH ??
+        "prism-output/security/governance-evidence-manifest.json",
+    );
     const latestReleaseCandidate = resolveLatestReleaseCandidateDir();
     const releasePacketManifestPath = latestReleaseCandidate
         ? `${latestReleaseCandidate}/release-packet-manifest.md`
@@ -181,12 +255,30 @@ async function main(): Promise<void> {
         strictMode,
     });
 
+    const generatedAt = new Date().toISOString();
+    const { buildId, commit } = resolveBuildIdentity();
+    const releaseEvidence = createReleaseValidationEvidence(evaluation.gates, commit, buildId, generatedAt);
+    let governanceEvidence: EvidenceManifest | null = null;
+    if (existsSync(governanceEvidencePath)) {
+        try {
+            governanceEvidence = JSON.parse(readFileSync(governanceEvidencePath, "utf-8")) as EvidenceManifest;
+        } catch {
+            governanceEvidence = null;
+        }
+    }
+    const mergedEvidence = mergeCurrentEvidence(releaseEvidence, governanceEvidence);
+    const evidenceManifest = mergedEvidence.manifest;
+    const governanceAcceptance = evaluateReleaseAcceptanceGates(evidenceManifest, {
+        commit,
+        buildId,
+        now: new Date(generatedAt),
+    });
     const artifact: ReleaseValidationArtifact = {
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         strictMode,
         metadata: {
-            buildId: process.env.PRISM_BUILD_ID ?? resolveBuildId(),
-            commit: resolveCommitHash(),
+            buildId,
+            commit,
             environmentProfile: process.env.PRISM_ENV_PROFILE ?? "dev",
             nodeVersion: process.version,
         },
@@ -195,10 +287,15 @@ async function main(): Promise<void> {
             perfQualification: perfPath,
             contractSnapshot: contractPath,
             cuBgValidation: cuBgValidationPath,
+            governanceEvidence: governanceEvidencePath,
             releaseValidation: outputPath,
         },
         gates: evaluation.gates,
-        passed: evaluation.passed,
+        evidenceManifest,
+        evidenceManifestDigest: evidenceManifestDigest(evidenceManifest),
+        governanceEvidenceErrors: mergedEvidence.errors,
+        governanceAcceptance,
+        passed: evaluation.passed && (!strictMode || governanceAcceptance.certified),
     };
 
     await writeArtifact(outputPath, artifact);
@@ -208,6 +305,9 @@ async function main(): Promise<void> {
         const marker = gate.status === "passed" ? "PASS" : gate.status === "failed" ? "FAIL" : "MANUAL";
         console.log(`- [${marker}] ${gate.label}`);
     }
+    console.log(
+        `- Governance acceptance: ${artifact.governanceAcceptance.passedCount}/${artifact.governanceAcceptance.totalGates} gates passed`,
+    );
     console.log(`- Artifact: ${outputPath}`);
 
     if (!artifact.passed) {
@@ -302,31 +402,6 @@ function runCommand(command: string): { command: string; ok: boolean; exitCode: 
     });
     const exitCode = typeof result.status === "number" ? result.status : 1;
     return { command, ok: exitCode === 0, exitCode };
-}
-
-function resolveBuildId(): string {
-    const dateStamp = new Date().toISOString().replace(/[:.]/g, "-");
-    return `build-${dateStamp}`;
-}
-
-function resolveCommitHash(): string {
-    const command = process.platform === "win32" ? "cmd.exe" : "git";
-    const args =
-        process.platform === "win32"
-            ? ["/d", "/s", "/c", "git rev-parse --short HEAD"]
-            : ["rev-parse", "--short", "HEAD"];
-    const result = spawnSync(command, args, {
-        cwd: process.cwd(),
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-    });
-    if (result.status === 0 && typeof result.stdout === "string") {
-        const value = result.stdout.trim();
-        if (value.length > 0) {
-            return value;
-        }
-    }
-    return "unknown";
 }
 
 async function writeArtifact(pathValue: string, payload: unknown): Promise<void> {

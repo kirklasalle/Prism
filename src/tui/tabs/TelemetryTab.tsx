@@ -4,7 +4,7 @@
 import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import type { PrismClient } from "../api/prism-client.js";
-import { useApi, useListNavigation } from "../hooks.js";
+import { useApi, useListNavigation, useSubTabNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
     Panel,
@@ -29,13 +29,11 @@ export function TelemetryTab({ client, focused }: { client: PrismClient; focused
     const approvalNav = useListNavigation(approvals.data?.length ?? 0, focused && subTab === "approvals");
     const [actionMsg, setActionMsg] = useState<string | null>(null);
 
+    const SUBTABS = ["overview", "cohorts", "alerts", "approvals"];
+    useSubTabNavigation(SUBTABS, subTab, setSubTab, focused);
+
     useInput((input, key) => {
         if (!focused) return;
-        if (key.tab) {
-            const tabs = ["overview", "cohorts", "alerts", "approvals"];
-            const idx = tabs.indexOf(subTab);
-            setSubTab(tabs[(idx + 1) % tabs.length]!);
-        }
         if (subTab === "approvals" && approvals.data?.[approvalNav.selectedIndex]) {
             const item = approvals.data[approvalNav.selectedIndex]!;
             if (input === "a") {

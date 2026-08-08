@@ -10,7 +10,7 @@
 import { describe, it, before, after } from "mocha";
 import assert from "node:assert";
 import http from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -20,6 +20,11 @@ import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
 import { BrowserControlTool } from "../src/adapters/system/browser-control-tool.js";
+import {
+    _resetWorkspaceRootCache,
+    _setWorkspaceRootForTest,
+    workspaceDbPath,
+} from "../src/core/config/workspace-resolver.js";
 
 /* ── Test helpers ─────────────────────────────────────────────────────── */
 
@@ -114,8 +119,11 @@ describeOrSkip("Browser API Routes (/api/browser/*)", function () {
     before(async () => {
         process.env.PRISM_AUTH_DISABLED = "true";
         tmpDir = mkdtempSync(join(tmpdir(), "prism-browser-api-"));
+        mkdirSync(join(tmpDir, "state"), { recursive: true });
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         const bus = new ActivityBus();
-        chatStore = new ChatSessionStore(":memory:");
+        chatStore = new ChatSessionStore(workspaceDbPath());
         browserTool = new BrowserControlTool(bus, "api-test-session");
 
         const registry = new ToolRegistry();
@@ -153,13 +161,15 @@ describeOrSkip("Browser API Routes (/api/browser/*)", function () {
 
     after(async () => {
         // Close any remaining browser sessions
-        const mgr = browserTool.getManager();
-        await mgr.closeAll();
+        const mgr = browserTool?.getManager();
+        await mgr?.closeAll();
 
-        await service.stop();
-        chatStore.close();
+        await service?.stop();
+        chatStore?.close();
+        _resetWorkspaceRootCache();
         rmSync(tmpDir, { recursive: true, force: true });
         delete process.env.PRISM_AUTH_DISABLED;
+        delete process.env.PRISM_PREFERENCES_PATH;
     });
 
     /* ── GET /api/browser/sessions (empty) ─────────────────────────────── */

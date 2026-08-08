@@ -107,8 +107,11 @@ export function DataTable({
             {/* Rows */}
             {data.map((row, ri) => (
                 <Box key={ri}>
-                    {selectedIndex === ri && <Text color={colors.brand}>{symbols.arrow} </Text>}
-                    {selectedIndex !== ri && selectedIndex !== undefined && <Text> </Text>}
+                    {selectedIndex !== undefined && (
+                        <Text color={selectedIndex === ri ? colors.brand : undefined}>
+                            {selectedIndex === ri ? `${symbols.arrow} ` : "  "}
+                        </Text>
+                    )}
                     {columns.map((col, ci) => (
                         <Box key={ci} width={col.width ?? 16}>
                             <Text color={getColor(row, col)} wrap="truncate">
@@ -314,15 +317,21 @@ export function HelpOverlay(): React.JSX.Element {
                 Keyboard Shortcuts
             </Text>
             <Text> </Text>
-            <Text color={colors.text}>1-9, 0, -, = Switch tabs</Text>
-            <Text color={colors.text}>Tab / Shift+Tab Focus cycle</Text>
-            <Text color={colors.text}>j / k / ↑ / ↓ Navigate lists</Text>
-            <Text color={colors.text}>g / G Jump to top/bottom</Text>
-            <Text color={colors.text}>Enter Select / Confirm</Text>
-            <Text color={colors.text}>Escape Back / Dismiss</Text>
-            <Text color={colors.text}>r Refresh current view</Text>
-            <Text color={colors.text}>? Toggle this help</Text>
-            <Text color={colors.text}>q Quit PRISM TUI</Text>
+            <Text bold color={colors.info}>Navigation</Text>
+            <Text color={colors.text}>  1-9, 0, -, =     Switch to tab by number</Text>
+            <Text color={colors.text}>  Tab / Shift+Tab   Cycle top-level tabs</Text>
+            <Text color={colors.text}>  [ / ]             Cycle sub-tabs</Text>
+            <Text color={colors.text}>  Shift+← / →       Cycle sub-tabs (alt)</Text>
+            <Text> </Text>
+            <Text bold color={colors.info}>Lists & Data</Text>
+            <Text color={colors.text}>  j / k / ↑ / ↓     Navigate lists</Text>
+            <Text color={colors.text}>  g / G              Jump to top / bottom</Text>
+            <Text color={colors.text}>  Enter              Select / Confirm</Text>
+            <Text color={colors.text}>  Escape             Back / Dismiss</Text>
+            <Text> </Text>
+            <Text bold color={colors.info}>Global</Text>
+            <Text color={colors.text}>  ?                  Toggle this help</Text>
+            <Text color={colors.text}>  q                  Quit PRISM TUI</Text>
         </Box>
     );
 }
@@ -332,12 +341,16 @@ export function HelpOverlay(): React.JSX.Element {
 /* ------------------------------------------------------------------ */
 
 export function SectionHeader({ title }: { title: string }): React.JSX.Element {
+    const termWidth = process.stdout.columns ?? 80;
+    const prefixLen = 4; // ├── + space
+    const titleLen = title.length + 2; // space + title + space
+    const trailLen = Math.max(4, termWidth - prefixLen - titleLen - 4);
     return (
         <Box marginTop={1} marginBottom={0}>
             <Text bold color={colors.brand}>
                 {borders.teeLeft}
                 {borders.top}
-                {borders.top} {title} {borders.top.repeat(30)}
+                {borders.top} {title} {borders.top.repeat(trailLen)}
             </Text>
         </Box>
     );

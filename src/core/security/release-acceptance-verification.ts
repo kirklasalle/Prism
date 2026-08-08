@@ -1,27 +1,28 @@
-/**
- * Programmatic Release Acceptance Verification — Phase 4 (Section 11)
- *
- * Programmatically evaluates all 15 Release Acceptance Criteria defined in
- * Section 11 of the Initialization Certificate v1.0 Security Audit Document.
- *
- * Releases a signed `RELEASE_ACCEPTANCE_CERTIFICATE.md` artifact only when
- * ALL 15 acceptance criteria pass with 100% compliance.
- *
- * @module core/security/release-acceptance-verification
- */
+/** Evidence-driven release acceptance evaluation and certificate issuance. */
 
-import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { workspacePath } from "../config/workspace-resolver.js";
-import { signCertificateContent } from "./initialization-signature.js";
-import { loadOrCreateRegistry } from "./key-registry.js";
-import { getCanonicalCovenantDigest } from "../governance/canonical-covenant.js";
+import {
+    GOVERNANCE_CONTROLS,
+    type GovernanceControlDefinition,
+    validateControlRegistry,
+} from "../governance/control-registry.js";
+import {
+    evidenceManifestDigest,
+    findCurrentEvidence,
+    validateEvidenceManifest,
+    type EvidenceManifest,
+    type EvidenceResult,
+    type EvidenceValidationContext,
+} from "../governance/evidence-manifest.js";
+import { signArtifact, type ArtifactSignatureManifest } from "./artifact-signature.js";
 
 export interface AcceptanceGateResult {
     readonly gateNumber: number;
+    readonly controlId: string;
     readonly title: string;
+    readonly status: EvidenceResult;
     readonly passed: boolean;
     readonly evidence: string;
+    readonly evidenceIds: readonly string[];
 }
 
 export interface SystemReleaseCertificate {
@@ -29,182 +30,159 @@ export interface SystemReleaseCertificate {
     readonly passedCount: number;
     readonly certified: boolean;
     readonly evaluatedAt: string;
+    readonly evidenceManifestDigest: string;
     readonly gateResults: AcceptanceGateResult[];
     readonly certificateMarkdown: string;
     readonly signatureBase64: string;
 }
 
-/**
- * Evaluate all 15 Release Acceptance Criteria (Section 11) against active system state.
- */
-export function evaluateReleaseAcceptanceGates(): SystemReleaseCertificate {
-    const results: AcceptanceGateResult[] = [];
+export interface IssuedReleaseAcceptanceCertificate extends SystemReleaseCertificate {
+    readonly signatureManifest: ArtifactSignatureManifest;
+}
 
-    // Gate 1: No exportable plaintext certificate issuer private key
-    const encPath = workspacePath("config", "initialization_keys.enc");
-    const rawKeysPath = workspacePath("config", "initialization_keys.json");
-    const hasEnc = existsSync(encPath);
-    const hasRaw = existsSync(rawKeysPath);
-    results.push({
-        gateNumber: 1,
-        title: "No exportable plaintext certificate issuer private key exists in application-managed files",
-        passed: hasEnc && !hasRaw,
-        evidence: hasEnc
-            ? `Protected DPAPI key store present at ${encPath}${hasRaw ? " (WARNING: raw JSON key still present)" : ""}`
-            : "DPAPI encrypted key store initialization required",
-    });
-
-    // Gate 2: Issuer key is independently pinned; self-declared public keys are rejected
-    const registry = loadOrCreateRegistry();
-    const hasActiveKey = registry.keys.some((k) => k.status === "active");
-    results.push({
-        gateNumber: 2,
-        title: "Issuer key is independently pinned; self-declared public keys are rejected",
-        passed: hasActiveKey && registry.keys.length > 0,
-        evidence: `Key registry active with ${registry.keys.length} pinned key entry(ies)`,
-    });
-
-    // Gate 3: Exposed legacy key is revoked and active certificates migrated
-    results.push({
-        gateNumber: 3,
-        title: "Exposed legacy key is revoked and all active certificates reissued/migrated",
-        passed: true,
-        evidence: "Legacy placeholder records quarantined via signed migration manifest",
-    });
-
-    // Gate 4: Canonical signed v1.0 envelope contains required identity tuple & digests
-    results.push({
-        gateNumber: 4,
-        title: "Canonical signed v1.0 envelope contains complete required identity tuple and governance artifact digests",
-        passed: true,
-        evidence: "InitializationCertificateEnvelopeV1 schema binds operator/CAC tuple, PAD digest, and Covenant digest",
-    });
-
-    // Gate 5: Certificate update/delete is impossible
-    results.push({
-        gateNumber: 5,
-        title: "Certificate update/delete is impossible through application APIs and normal runtime DB access",
-        passed: true,
-        evidence: "Database triggers prevent_cert_message_delete/update and prevent_cert_session_delete/update active",
-    });
-
-    // Gate 6: Exactly one active certificate and CAC assignment enforced
-    results.push({
-        gateNumber: 6,
-        title: "Exactly one active certificate and one active CAC assignment are enforced per tenant/operator",
-        passed: true,
-        evidence: "SQLite unique index idx_unique_active_operator_cert active on chat_sessions (operator_email)",
-    });
-
-    // Gate 7: Every execution path requires a valid server-resolved authority context
-    results.push({
-        gateNumber: 7,
-        title: "Every execution path requires a valid server-resolved authority context before policy evaluation and side effects",
-        passed: true,
-        evidence: "ExecutionAuthorityContext validateAuthorityContext/enforceAuthorityContext hard gates active",
-    });
-
-    // Gate 8: Every action event persists certificate, operator, CAC, assignment, PAD, Covenant, policy provenance
-    results.push({
-        gateNumber: 8,
-        title: "Every action event persists certificate, operator, CAC, assignment, PAD, Covenant, policy, approval, and result provenance",
-        passed: true,
-        evidence: "ActivityBus.emit() attaches operatorEmail and assignmentId context metadata",
-    });
-
-    // Gate 9: Guardian validates the specific binding used by each action and fails closed
-    results.push({
-        gateNumber: 9,
-        title: "Guardian validates the specific binding used by each action and fails closed on ambiguity or drift",
-        passed: true,
-        evidence: "GuardianAgent.verifyOperatorAuthorityBinding() checks operator certificate integrity and key trust",
-    });
-
-    // Gate 10: Login cannot become operational when certificate claim/verification fails
-    results.push({
-        gateNumber: 10,
-        title: "Login cannot become operational when certificate claim/verification fails",
-        passed: true,
-        evidence: "resolveAuthorityContextForSession enforces server certificate resolution prior to operational status",
-    });
-
-    // Gate 11: Runtime Covenant and published Covenant derive from one signed canonical artifact
-    const covenantDigest = getCanonicalCovenantDigest();
-    results.push({
-        gateNumber: 11,
-        title: "Runtime Covenant and published Covenant derive from one signed canonical artifact",
-        passed: covenantDigest.length === 64,
-        evidence: `CANONICAL_COVENANT_V1 machine artifact active (SHA-256: ${covenantDigest.slice(0, 16)}...)`,
-    });
-
-    // Gate 12: Audit history is append-only, hash-chained, checkpoint-signed, and externally anchored
-    results.push({
-        gateNumber: 12,
-        title: "Audit history is append-only, hash-chained, checkpoint-signed, and externally anchored",
-        passed: true,
-        evidence: "HashChainedEvent previousHash linking and createAuditCheckpoint signed manifest generator active",
-    });
-
-    // Gate 13: Production-migration tests prove unconditional immutability and cardinality constraints
-    results.push({
-        gateNumber: 13,
-        title: "Production-migration tests prove unconditional immutability and cardinality constraints",
-        passed: true,
-        evidence: "Automated test suites tests/chat-session-store.test.ts and tests/certificate-cardinality.test.ts passed",
-    });
-
-    // Gate 14: Tests cannot access live preferences, live keys, operator databases, or external providers
-    results.push({
-        gateNumber: 14,
-        title: "Tests cannot access live preferences, live keys, operator databases, or external providers",
-        passed: true,
-        evidence: "Test isolation via PRISM_CONFIG_DIR and isolated temporary test directory trees",
-    });
-
-    // Gate 15: Independent red-team tests cannot forge, replace, delete, downgrade, duplicate, or bypass a certificate binding
-    results.push({
-        gateNumber: 15,
-        title: "Independent red-team tests cannot forge, replace, delete, downgrade, duplicate, or bypass a certificate binding",
-        passed: true,
-        evidence: "Negative test suite tests/security-negative-tests.test.ts covering all 5 attack scenarios passed",
-    });
-
-    const passedCount = results.filter((r) => r.passed).length;
-    const certified = passedCount === results.length;
-    const evaluatedAt = new Date().toISOString();
-
+function renderAssessment(
+    results: readonly AcceptanceGateResult[],
+    evaluatedAt: string,
+    manifestDigest: string,
+): string {
+    const passedCount = results.filter((result) => result.status === "passed").length;
+    const certified = results.length > 0 && passedCount === results.length;
     const gateSummary = results
-        .map((r) => `- **Gate ${r.gateNumber}:** ${r.passed ? "✅ PASS" : "❌ FAIL"} — ${r.title}\n  *Evidence:* ${r.evidence}`)
+        .map((result) => {
+            const marker = result.status === "passed" ? "PASS" : result.status === "failed" ? "FAIL" : "NOT EVALUATED";
+            return `- **Gate ${result.gateNumber} [${result.controlId}]: ${marker}** — ${result.title}\n  *Evidence:* ${result.evidence}`;
+        })
         .join("\n\n");
 
-    const markdownPayload = `# PRISM System Production Release Acceptance Certificate
+    return `# PRISM System Production Release Acceptance Certificate
 
-> **STATUS:** ${certified ? "SYSTEM CERTIFIED FOR PRODUCTION RELEASE" : "RELEASE BLOCKED — UNMET ACCEPTANCE GATES"}
+> **STATUS:** ${certified ? "SYSTEM ELIGIBLE FOR CERTIFICATE ISSUANCE" : "RELEASE BLOCKED — UNMET ACCEPTANCE GATES"}
 > **Evaluated At:** ${evaluatedAt}
-> **Compliance Score:** ${passedCount}/${results.length} Gates Passed (${Math.round((passedCount / results.length) * 100)}%)
+> **Evidence Manifest SHA-256:** ${manifestDigest || "NOT SUPPLIED"}
+> **Compliance Score:** ${passedCount}/${results.length} Gates Passed (${results.length === 0 ? 0 : Math.round((passedCount / results.length) * 100)}%)
 
 ## Acceptance Gate Audit Summary
 
 ${gateSummary}
 `;
+}
 
-    const { signatureBase64 } = signCertificateContent(markdownPayload);
+/** Evaluate controls using only current, structurally valid evidence. No I/O occurs. */
+export function evaluateReleaseAcceptanceGates(
+    manifest?: EvidenceManifest,
+    context?: EvidenceValidationContext,
+    controls: readonly GovernanceControlDefinition[] = GOVERNANCE_CONTROLS,
+): SystemReleaseCertificate {
+    const evaluatedAt = (context?.now ?? new Date()).toISOString();
+    const manifestDigest = manifest ? evidenceManifestDigest(manifest) : "";
+    const registryErrors = validateControlRegistry(controls);
+    const manifestErrors = manifest && context ? validateEvidenceManifest(manifest, context) : [];
+    const globalErrors = [...registryErrors, ...manifestErrors];
 
-    const fullMarkdown = markdownPayload + `\n\n## Certification Signature\n\n- **Signature:** ${signatureBase64}\n`;
+    const results = [...controls]
+        .sort((left, right) => left.gateNumber - right.gateNumber)
+        .map<AcceptanceGateResult>((control) => {
+            if (!manifest || !context) {
+                return {
+                    gateNumber: control.gateNumber,
+                    controlId: control.controlId,
+                    title: control.title,
+                    status: "not_evaluated",
+                    passed: false,
+                    evidence: "NOT EVALUATED: no current-build evidence manifest was supplied",
+                    evidenceIds: [],
+                };
+            }
+            if (globalErrors.length > 0) {
+                return {
+                    gateNumber: control.gateNumber,
+                    controlId: control.controlId,
+                    title: control.title,
+                    status: "not_evaluated",
+                    passed: false,
+                    evidence: `NOT EVALUATED: ${globalErrors.join("; ")}`,
+                    evidenceIds: [],
+                };
+            }
 
-    // Write to workspace artifacts if certified
-    try {
-        const certPath = workspacePath("artifacts", "RELEASE_ACCEPTANCE_CERTIFICATE.md");
-        writeFileSync(certPath, fullMarkdown, "utf-8");
-    } catch {}
+            const records = control.evidenceRequirements.map((requirement) =>
+                findCurrentEvidence(
+                    manifest,
+                    requirement.probeId,
+                    requirement.probeVersion,
+                    requirement.maxAgeMs,
+                    context,
+                ),
+            );
+            const missing = control.evidenceRequirements.filter((_, index) => records[index] === null);
+            if (missing.length > 0) {
+                return {
+                    gateNumber: control.gateNumber,
+                    controlId: control.controlId,
+                    title: control.title,
+                    status: "not_evaluated",
+                    passed: false,
+                    evidence: `NOT EVALUATED: missing current evidence for ${missing.map((item) => `${item.probeId}@${item.probeVersion}`).join(", ")}`,
+                    evidenceIds: records.flatMap((record) => (record ? [record.evidenceId] : [])),
+                };
+            }
 
+            const currentRecords = records.filter((record) => record !== null);
+            const failed = currentRecords.find((record) => record.result === "failed");
+            const unevaluated = currentRecords.find((record) => record.result === "not_evaluated");
+            const status: EvidenceResult = failed ? "failed" : unevaluated ? "not_evaluated" : "passed";
+            const evidence = failed
+                ? `FAILED: ${failed.failureReason ?? failed.evidenceId}`
+                : unevaluated
+                    ? `NOT EVALUATED: probe ${unevaluated.probeId}`
+                    : `Passed with evidence ${currentRecords.map((record) => record.evidenceId).join(", ")}`;
+            return {
+                gateNumber: control.gateNumber,
+                controlId: control.controlId,
+                title: control.title,
+                status,
+                passed: status === "passed",
+                evidence,
+                evidenceIds: currentRecords.map((record) => record.evidenceId),
+            };
+        });
+
+    const passedCount = results.filter((result) => result.passed).length;
+    const certified = results.length > 0 && passedCount === results.length;
     return {
         totalGates: results.length,
         passedCount,
         certified,
         evaluatedAt,
+        evidenceManifestDigest: manifestDigest,
         gateResults: results,
-        certificateMarkdown: fullMarkdown,
+        certificateMarkdown: renderAssessment(results, evaluatedAt, manifestDigest),
+        signatureBase64: "",
+    };
+}
+
+/** Sign a passing assessment with an explicitly supplied release signing key. */
+export function issueReleaseAcceptanceCertificate(
+    assessment: SystemReleaseCertificate,
+    privateKeyPem: string,
+    keyId: string,
+): IssuedReleaseAcceptanceCertificate {
+    if (!assessment.certified || assessment.gateResults.some((gate) => gate.status !== "passed")) {
+        throw new Error("Release acceptance certificate cannot be issued until every gate passes");
+    }
+    const { signature, manifest } = signArtifact(
+        Buffer.from(assessment.certificateMarkdown, "utf-8"),
+        privateKeyPem,
+        keyId,
+        "RELEASE_ACCEPTANCE_CERTIFICATE.md",
+    );
+    const signatureBase64 = signature.toString("base64");
+    return {
+        ...assessment,
         signatureBase64,
+        signatureManifest: manifest,
+        certificateMarkdown:
+            assessment.certificateMarkdown +
+            `\n## Certification Signature\n\n- **Release Key ID:** ${keyId}\n- **Signature:** ${signatureBase64}\n`,
     };
 }

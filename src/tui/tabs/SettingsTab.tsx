@@ -5,7 +5,7 @@ import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { PrismClient } from "../api/prism-client.js";
-import { useApi } from "../hooks.js";
+import { useApi, useSubTabNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, KeyValue, Loading, ErrorBox, DataTable, SectionHeader, SubTabBar } from "../components/ui.js";
 
@@ -15,13 +15,10 @@ export function SettingsTab({ client, focused }: { client: PrismClient; focused:
     const modelMatrix = useApi(client, (c) => c.getModelMatrix(), 15000);
     const auditTrail = useApi(client, (c) => c.getAuditTrail(), 10000);
 
-    useInput((input, key) => {
+    useSubTabNavigation(["llm", "models", "audit"], subTab, setSubTab, focused);
+
+    useInput((_input, _key) => {
         if (!focused) return;
-        if (key.tab) {
-            const tabs = ["llm", "models", "audit"];
-            const idx = tabs.indexOf(subTab);
-            setSubTab(tabs[(idx + 1) % tabs.length]!);
-        }
     });
 
     return (

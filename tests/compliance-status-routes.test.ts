@@ -10,7 +10,7 @@
 import { describe, it, before, after } from "mocha";
 import assert from "node:assert";
 import http from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -18,6 +18,11 @@ import { ApprovalQueue } from "../src/core/approval/approval-queue.js";
 import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
+import {
+    _resetWorkspaceRootCache,
+    _setWorkspaceRootForTest,
+    workspaceDbPath,
+} from "../src/core/config/workspace-resolver.js";
 
 let service: DashboardService;
 let port: number;
@@ -52,8 +57,11 @@ describe("Compliance & Retention status routes", function () {
         delete process.env.PRISM_ACTIVITY_RETENTION_DAYS;
 
         tmpDir = mkdtempSync(join(tmpdir(), "prism-compliance-status-"));
+        mkdirSync(join(tmpDir, "state"), { recursive: true });
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         const bus = new ActivityBus();
-        chatStore = new ChatSessionStore(":memory:");
+        chatStore = new ChatSessionStore(workspaceDbPath());
 
         service = new DashboardService(
             new ApprovalQueue(),
@@ -84,10 +92,12 @@ describe("Compliance & Retention status routes", function () {
     });
 
     after(async () => {
-        await service.stop();
-        chatStore.close();
+        await service?.stop();
+        chatStore?.close();
+        _resetWorkspaceRootCache();
         rmSync(tmpDir, { recursive: true, force: true });
         delete process.env.PRISM_AUTH_DISABLED;
+        delete process.env.PRISM_PREFERENCES_PATH;
     });
 
     describe("SOC 2 exporter status", () => {

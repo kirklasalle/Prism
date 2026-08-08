@@ -179,7 +179,7 @@ export class ConsoleInterceptor {
 
         // Write to persistent logs folder on disk in real time
         try {
-            const logDir = "D:\\Projects\\Prism\\logs";
+            const logDir = "D:\\Projects\\PrismRefraction\\logs";
             if (!fs.existsSync(logDir)) {
                 fs.mkdirSync(logDir, { recursive: true });
             }

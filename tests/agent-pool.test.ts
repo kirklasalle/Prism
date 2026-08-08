@@ -174,6 +174,41 @@ describe("AgentPool", () => {
         assert.ok(result.routing !== undefined);
         assert.equal(result.routing?.model, "gemma3:1b");
     });
+
+    it("enforces shared delegation depth, fan-out, population, and authority budgets", async () => {
+        const pool = new AgentPool(mockDelegate());
+        const baseBudget = {
+            lineageId: "lineage-1",
+            ancestry: ["root"],
+            parentAgentId: "root",
+            maxDepth: 3,
+            maxFanOut: 1,
+            maxPopulation: 2,
+            authorityCeiling: 2 as const,
+            requestedAuthorityTier: 2 as const,
+        };
+        assert.equal((await pool.dispatch({ goal: "first", agentId: "coder", delegationBudget: baseBudget })).ok, true);
+        const fanOut = await pool.dispatch({ goal: "second", agentId: "writer", delegationBudget: baseBudget });
+        assert.match(fanOut.error ?? "", /fan-out/);
+
+        const authority = await pool.dispatch({
+            goal: "escalate",
+            agentId: "writer",
+            delegationBudget: {
+                ...baseBudget,
+                lineageId: "lineage-2",
+                requestedAuthorityTier: 3,
+            },
+        });
+        assert.match(authority.error ?? "", /authority ceiling/);
+
+        const cycle = await pool.dispatch({
+            goal: "cycle",
+            agentId: "coder",
+            delegationBudget: { ...baseBudget, lineageId: "lineage-3", ancestry: ["root", "coder"] },
+        });
+        assert.match(cycle.error ?? "", /cycle/);
+    });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────

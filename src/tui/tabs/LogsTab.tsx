@@ -6,7 +6,7 @@ import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { PrismClient } from "../api/prism-client.js";
 import type { PrismWsClient, WsMessage } from "../api/ws-client.js";
-import { useApi, useScrollableLog, useListNavigation } from "../hooks.js";
+import { useApi, useScrollableLog, useListNavigation, useSubTabNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import { Panel, Loading, ErrorBox, SubTabBar, KeyValue, SectionHeader } from "../components/ui.js";
 
@@ -42,13 +42,11 @@ export function LogsTab({
     const [selectedEvent, setSelectedEvent] = useState<number | null>(null);
     const eventNav = useListNavigation(events.data?.length ?? 0, focused && subTab === "events");
 
+    const SUBTABS = ["live", "events"];
+    useSubTabNavigation(SUBTABS, subTab, setSubTab, focused && !filterMode);
+
     useInput((input, key) => {
         if (!focused) return;
-        if (key.tab && !filterMode) {
-            const tabs = ["live", "events"];
-            const idx = tabs.indexOf(subTab);
-            setSubTab(tabs[(idx + 1) % tabs.length]!);
-        }
         if (input === "/" && !filterMode) {
             setFilterMode(true);
         }
@@ -95,7 +93,7 @@ export function LogsTab({
 
             {!filterMode && (
                 <Box marginBottom={1}>
-                    <Text color={colors.muted}>/: filter | c: clear | Tab: switch view</Text>
+                    <Text color={colors.muted}>/: filter | c: clear | [/]: switch view</Text>
                 </Box>
             )}
 

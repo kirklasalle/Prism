@@ -3641,11 +3641,13 @@ export class DashboardService {
         });
     }
 
-    stop(): Promise<void> {
+    async stop(): Promise<void> {
         this.inboundPoller.stop();
         this.schedulerEngine.stop();
         this.pkgStore?.close();
+        this.iamStore.close();
         this.characterAccountabilityStore.close();
+        await this.a2aTaskAdapter?.close();
         for (const ws of this.wsClients) {
             ws.close();
         }

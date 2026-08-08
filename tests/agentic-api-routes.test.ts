@@ -11,7 +11,7 @@
 import { describe, it, before, after } from "mocha";
 import assert from "node:assert";
 import http from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -27,6 +27,11 @@ import { AgentRouter } from "../src/core/agents/agent-router.js";
 import { SwarmCoordinator } from "../src/core/agents/swarm-coordinator.js";
 import type { LlmDelegate } from "../src/core/agents/agent-types.js";
 import type { ModelRouterSelection, ModelModality } from "../src/core/operator/model-capability-matrix.js";
+import {
+    _resetWorkspaceRootCache,
+    _setWorkspaceRootForTest,
+    workspaceDbPath,
+} from "../src/core/config/workspace-resolver.js";
 
 /* ── Test helpers ─────────────────────────────────────────────────────── */
 
@@ -124,8 +129,11 @@ describe("Agent Control API Routes (/api/agents/*, /api/swarms/*, /api/guardian/
     before(async () => {
         process.env.PRISM_AUTH_DISABLED = "true";
         tmpDir = mkdtempSync(join(tmpdir(), "prism-agentic-api-"));
+        mkdirSync(join(tmpDir, "state"), { recursive: true });
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         const bus = new ActivityBus();
-        chatStore = new ChatSessionStore(":memory:");
+        chatStore = new ChatSessionStore(workspaceDbPath());
         const registry = new ToolRegistry();
 
         service = new DashboardService(
@@ -170,10 +178,12 @@ describe("Agent Control API Routes (/api/agents/*, /api/swarms/*, /api/guardian/
     });
 
     after(async () => {
-        await service.stop();
-        chatStore.close();
+        await service?.stop();
+        chatStore?.close();
+        _resetWorkspaceRootCache();
         rmSync(tmpDir, { recursive: true, force: true });
         delete process.env.PRISM_AUTH_DISABLED;
+        delete process.env.PRISM_PREFERENCES_PATH;
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -18,6 +18,7 @@ import { ApprovalQueue } from "../src/core/approval/approval-queue.js";
 import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
+import { _resetWorkspaceRootCache, _setWorkspaceRootForTest } from "../src/core/config/workspace-resolver.js";
 
 /* ── Test helpers ─────────────────────────────────────────────────────── */
 
@@ -25,6 +26,9 @@ let service: DashboardService;
 let port: number;
 let tmpDir: string;
 let chatStore: ChatSessionStore;
+let savedAuthDisabled: string | undefined;
+let savedWorkspaceRoot: string | undefined;
+let savedPreferencesPath: string | undefined;
 
 function fetchJson(path: string): Promise<{ status: number; body: any }> {
     return new Promise((resolve, reject) => {
@@ -80,8 +84,13 @@ describe("Scheduler API Routes (/api/scheduler/*)", function () {
     this.timeout(60_000);
 
     before(async () => {
+        savedAuthDisabled = process.env.PRISM_AUTH_DISABLED;
+        savedWorkspaceRoot = process.env.PRISM_WORKSPACE_ROOT;
+        savedPreferencesPath = process.env.PRISM_PREFERENCES_PATH;
         process.env.PRISM_AUTH_DISABLED = "true";
         tmpDir = mkdtempSync(join(tmpdir(), "prism-scheduler-api-"));
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         const bus = new ActivityBus();
         chatStore = new ChatSessionStore(":memory:");
 
@@ -106,6 +115,10 @@ describe("Scheduler API Routes (/api/scheduler/*)", function () {
             join(tmpDir, "exports"), // sessionPackageExportDir
         );
 
+        for (const entry of service.getSchedulerEngine().list()) {
+            service.getSchedulerEngine().cancel(entry.id);
+        }
+
         service.start();
         await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -118,7 +131,13 @@ describe("Scheduler API Routes (/api/scheduler/*)", function () {
         await service.stop();
         chatStore.close();
         rmSync(tmpDir, { recursive: true, force: true });
-        delete process.env.PRISM_AUTH_DISABLED;
+        _resetWorkspaceRootCache();
+        if (savedAuthDisabled === undefined) delete process.env.PRISM_AUTH_DISABLED;
+        else process.env.PRISM_AUTH_DISABLED = savedAuthDisabled;
+        if (savedWorkspaceRoot === undefined) delete process.env.PRISM_WORKSPACE_ROOT;
+        else process.env.PRISM_WORKSPACE_ROOT = savedWorkspaceRoot;
+        if (savedPreferencesPath === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = savedPreferencesPath;
     });
 
     /* ── Events ───────────────────────────────────────────────────────── */

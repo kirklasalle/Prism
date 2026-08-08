@@ -34,7 +34,7 @@
  */
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, timingSafeEqual, verify } from "node:crypto";
 
 export type IamUserStatus = "active" | "suspended" | "deprovisioned";
 export type IamIdpKind = "oidc" | "saml";
@@ -94,8 +94,39 @@ export interface IamSsoSession {
     id: string;
     userId: string;
     tenantId: string;
+    activationState: "authenticated" | "operational";
+    enrollmentBindingId: string | null;
     expiresAt: string;
     createdAt: string;
+}
+
+export type PadAdoptionDecision = "accept" | "reject";
+
+export interface PadAdoptionReceiptPayload {
+    tenantId: string;
+    userId: string;
+    activePadDigest: string;
+    activePadVersion: string;
+    previousPadDigest: string | null;
+    governanceKeyId: string;
+    governanceSignatureDigest: string;
+    releaseCommit: string;
+    sessionId: string;
+    decision: PadAdoptionDecision;
+    nonce: string;
+    decidedAt: string;
+}
+
+export interface PadAdoptionReceipt extends PadAdoptionReceiptPayload {
+    id: string;
+    payloadHash: string;
+    localSignatureBase64: string;
+    localPublicKeyBase64: string;
+}
+
+export interface RecordPadAdoptionReceiptInput extends PadAdoptionReceiptPayload {
+    localSignatureBase64: string;
+    localPublicKeyBase64: string;
 }
 
 /** Default seeded role names, in descending privilege order. */
@@ -167,6 +198,9 @@ export class IamStore {
         insertSession: StatementSync;
         getSession: StatementSync;
         deleteSession: StatementSync;
+        insertPadAdoptionReceipt: StatementSync;
+        getAcceptedPadAdoption: StatementSync;
+        listPadAdoptionReceipts: StatementSync;
     };
 
     constructor(dbOrPath: DatabaseSync | string = ":memory:") {
@@ -261,11 +295,52 @@ export class IamStore {
         id         TEXT PRIMARY KEY,
         user_id    TEXT NOT NULL,
         tenant_id  TEXT NOT NULL,
+                activation_state TEXT NOT NULL DEFAULT 'operational',
+                enrollment_binding_id TEXT,
         expires_at TEXT NOT NULL,
         created_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES iam_users(id) ON DELETE CASCADE
       );
+            CREATE TABLE IF NOT EXISTS pad_adoption_receipts (
+                id                          TEXT PRIMARY KEY,
+                tenant_id                   TEXT NOT NULL,
+                user_id                     TEXT NOT NULL,
+                active_pad_digest           TEXT NOT NULL,
+                active_pad_version          TEXT NOT NULL,
+                previous_pad_digest         TEXT,
+                governance_key_id           TEXT NOT NULL,
+                governance_signature_digest TEXT NOT NULL,
+                release_commit              TEXT NOT NULL,
+                session_id                  TEXT NOT NULL,
+                decision                    TEXT NOT NULL CHECK (decision IN ('accept', 'reject')),
+                nonce                       TEXT NOT NULL UNIQUE,
+                decided_at                  TEXT NOT NULL,
+                payload_hash                TEXT NOT NULL,
+                local_signature_base64      TEXT NOT NULL,
+                local_public_key_base64     TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_pad_adoption_unique_acceptance
+                ON pad_adoption_receipts (tenant_id, user_id, active_pad_digest)
+                WHERE decision = 'accept';
+            CREATE INDEX IF NOT EXISTS idx_pad_adoption_operator
+                ON pad_adoption_receipts (tenant_id, user_id, decided_at DESC);
+            CREATE TABLE IF NOT EXISTS iam_enrollment_tokens (
+                token_hash TEXT PRIMARY KEY,
+                binding_id TEXT NOT NULL,
+                consumed_by_session_id TEXT,
+                consumed_at TEXT,
+                created_at TEXT NOT NULL
+            );
     `);
+        this.ensureColumn("iam_sso_sessions", "activation_state", "TEXT NOT NULL DEFAULT 'operational'");
+        this.ensureColumn("iam_sso_sessions", "enrollment_binding_id", "TEXT");
+    }
+
+    private ensureColumn(table: string, column: string, definition: string): void {
+        const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+        if (!columns.some((existing) => existing.name === column)) {
+            this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        }
     }
 
     private prepareStatements() {
@@ -360,13 +435,36 @@ export class IamStore {
             `),
 
             insertSession: this.db.prepare(`
-                INSERT INTO iam_sso_sessions (id, user_id, tenant_id, expires_at, created_at)
-                VALUES (:id, :user_id, :tenant_id, :expires_at, :created_at)
+                INSERT INTO iam_sso_sessions
+                    (id, user_id, tenant_id, activation_state, enrollment_binding_id, expires_at, created_at)
+                VALUES
+                    (:id, :user_id, :tenant_id, :activation_state, NULL, :expires_at, :created_at)
             `),
             getSession: this.db.prepare(`
                 SELECT * FROM iam_sso_sessions WHERE id = :id AND expires_at > :now
             `),
             deleteSession: this.db.prepare(`DELETE FROM iam_sso_sessions WHERE id = :id`),
+            insertPadAdoptionReceipt: this.db.prepare(`
+                INSERT INTO pad_adoption_receipts
+                    (id, tenant_id, user_id, active_pad_digest, active_pad_version, previous_pad_digest,
+                     governance_key_id, governance_signature_digest, release_commit, session_id, decision,
+                     nonce, decided_at, payload_hash, local_signature_base64, local_public_key_base64)
+                VALUES
+                    (:id, :tenant_id, :user_id, :active_pad_digest, :active_pad_version, :previous_pad_digest,
+                     :governance_key_id, :governance_signature_digest, :release_commit, :session_id, :decision,
+                     :nonce, :decided_at, :payload_hash, :local_signature_base64, :local_public_key_base64)
+            `),
+            getAcceptedPadAdoption: this.db.prepare(`
+                SELECT * FROM pad_adoption_receipts
+                WHERE tenant_id = :tenant_id AND user_id = :user_id
+                  AND active_pad_digest = :active_pad_digest AND decision = 'accept'
+                LIMIT 1
+            `),
+            listPadAdoptionReceipts: this.db.prepare(`
+                SELECT * FROM pad_adoption_receipts
+                WHERE tenant_id = :tenant_id AND user_id = :user_id
+                ORDER BY decided_at ASC, id ASC
+            `),
         };
     }
 
@@ -623,7 +721,12 @@ export class IamStore {
 
     // ── sessions ────────────────────────────────────────────────────────────
 
-    createSession(userId: string, tenantId: string, ttlSeconds = 8 * 3600): IamSsoSession {
+    createSession(
+        userId: string,
+        tenantId: string,
+        ttlSeconds = 8 * 3600,
+        activationState: "authenticated" | "operational" = "operational",
+    ): IamSsoSession {
         const id = newId("sess");
         const now = new Date();
         const expires = new Date(now.getTime() + ttlSeconds * 1000);
@@ -631,6 +734,8 @@ export class IamStore {
             id,
             userId,
             tenantId,
+            activationState,
+            enrollmentBindingId: null,
             createdAt: now.toISOString(),
             expiresAt: expires.toISOString(),
         };
@@ -638,6 +743,7 @@ export class IamStore {
             id,
             user_id: userId,
             tenant_id: tenantId,
+            activation_state: activationState,
             expires_at: session.expiresAt,
             created_at: session.createdAt,
         });
@@ -651,6 +757,8 @@ export class IamStore {
             id: String(row["id"]),
             userId: String(row["user_id"]),
             tenantId: String(row["tenant_id"]),
+            activationState: String(row["activation_state"]) as "authenticated" | "operational",
+            enrollmentBindingId: row["enrollment_binding_id"] ? String(row["enrollment_binding_id"]) : null,
             expiresAt: String(row["expires_at"]),
             createdAt: String(row["created_at"]),
         };
@@ -658,6 +766,148 @@ export class IamStore {
 
     deleteSession(id: string): void {
         this.stmts.deleteSession.run({ id });
+    }
+
+    // ── PAD adoption receipts ──────────────────────────────────────────────
+
+    recordPadAdoptionReceipt(input: RecordPadAdoptionReceiptInput): PadAdoptionReceipt {
+        if (!/^[a-f0-9]{64}$/.test(input.activePadDigest)) throw new Error("Invalid active PAD digest");
+        if (input.previousPadDigest !== null && !/^[a-f0-9]{64}$/.test(input.previousPadDigest)) {
+            throw new Error("Invalid previous PAD digest");
+        }
+        if (!/^[a-f0-9]{64}$/.test(input.governanceSignatureDigest)) {
+            throw new Error("Invalid governance signature digest");
+        }
+        if (!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(input.releaseCommit)) {
+            throw new Error("Invalid release commit");
+        }
+        if (!input.nonce.trim() || !input.sessionId.trim() || !input.governanceKeyId.trim()) {
+            throw new Error("Receipt nonce, session ID, and governance key ID are required");
+        }
+        if (Number.isNaN(Date.parse(input.decidedAt))) throw new Error("Invalid receipt decision timestamp");
+
+        const payload = canonicalPadAdoptionPayload(input);
+        const payloadHash = sha256Hex(payload);
+        let signatureValid = false;
+        try {
+            const publicKey = createPublicKey({
+                key: Buffer.from(input.localPublicKeyBase64, "base64"),
+                format: "der",
+                type: "spki",
+            });
+            signatureValid = verify(
+                null,
+                Buffer.from(payload, "utf8"),
+                publicKey,
+                Buffer.from(input.localSignatureBase64, "base64"),
+            );
+        } catch {
+            signatureValid = false;
+        }
+        if (!signatureValid) throw new Error("PAD adoption receipt signature is invalid");
+
+        const receipt: PadAdoptionReceipt = {
+            id: newId("padrec"),
+            ...input,
+            payloadHash,
+        };
+        this.stmts.insertPadAdoptionReceipt.run({
+            id: receipt.id,
+            tenant_id: receipt.tenantId,
+            user_id: receipt.userId,
+            active_pad_digest: receipt.activePadDigest,
+            active_pad_version: receipt.activePadVersion,
+            previous_pad_digest: receipt.previousPadDigest,
+            governance_key_id: receipt.governanceKeyId,
+            governance_signature_digest: receipt.governanceSignatureDigest,
+            release_commit: receipt.releaseCommit,
+            session_id: receipt.sessionId,
+            decision: receipt.decision,
+            nonce: receipt.nonce,
+            decided_at: receipt.decidedAt,
+            payload_hash: receipt.payloadHash,
+            local_signature_base64: receipt.localSignatureBase64,
+            local_public_key_base64: receipt.localPublicKeyBase64,
+        });
+        return receipt;
+    }
+
+    hasAcceptedPadAdoption(tenantId: string, userId: string, activePadDigest: string): boolean {
+        return Boolean(
+            this.stmts.getAcceptedPadAdoption.get({
+                tenant_id: tenantId,
+                user_id: userId,
+                active_pad_digest: activePadDigest,
+            }),
+        );
+    }
+
+    listPadAdoptionReceipts(tenantId: string, userId: string): PadAdoptionReceipt[] {
+        const rows = this.stmts.listPadAdoptionReceipts.all({ tenant_id: tenantId, user_id: userId }) as Record<
+            string,
+            unknown
+        >[];
+        return rows.map(rowToPadAdoptionReceipt);
+    }
+
+    activateSessionWithEnrollment(
+        sessionId: string,
+        expectedToken: string,
+        presentedToken: string,
+        bindingId: string,
+    ): boolean {
+        const expectedHash = createHash("sha256").update(expectedToken).digest();
+        const presentedHash = createHash("sha256").update(presentedToken).digest();
+        if (!expectedToken || !presentedToken || !bindingId || !timingSafeEqual(expectedHash, presentedHash)) {
+            return false;
+        }
+
+        const tokenHash = expectedHash.toString("hex");
+        const now = nowIso();
+        this.db.exec("BEGIN IMMEDIATE");
+        try {
+            this.db
+                .prepare(
+                    `INSERT OR IGNORE INTO iam_enrollment_tokens
+                        (token_hash, binding_id, consumed_by_session_id, consumed_at, created_at)
+                     VALUES (:tokenHash, :bindingId, NULL, NULL, :createdAt)`,
+                )
+                .run({ tokenHash, bindingId, createdAt: now });
+            const token = this.db
+                .prepare(
+                    `SELECT binding_id, consumed_by_session_id
+                     FROM iam_enrollment_tokens WHERE token_hash = :tokenHash`,
+                )
+                .get({ tokenHash }) as { binding_id: string; consumed_by_session_id: string | null } | undefined;
+            if (!token || token.binding_id !== bindingId || token.consumed_by_session_id) {
+                this.db.exec("ROLLBACK");
+                return false;
+            }
+
+            const sessionUpdate = this.db
+                .prepare(
+                    `UPDATE iam_sso_sessions
+                     SET activation_state = 'operational', enrollment_binding_id = :bindingId
+                     WHERE id = :sessionId AND activation_state = 'authenticated' AND expires_at > :now`,
+                )
+                .run({ bindingId, sessionId, now });
+            if (sessionUpdate.changes !== 1) {
+                this.db.exec("ROLLBACK");
+                return false;
+            }
+            this.db
+                .prepare(
+                    `UPDATE iam_enrollment_tokens
+                     SET consumed_by_session_id = :sessionId, consumed_at = :now
+                     WHERE token_hash = :tokenHash AND consumed_by_session_id IS NULL`,
+                )
+                .run({ sessionId, now, tokenHash });
+            this.db.exec("COMMIT");
+            return true;
+        } catch (error) {
+            this.db.exec("ROLLBACK");
+            throw error;
+        }
     }
 
     // ── row mappers ─────────────────────────────────────────────────────────
@@ -690,6 +940,44 @@ export class IamStore {
             createdAt: String(r["created_at"]),
         };
     }
+}
+
+export function canonicalPadAdoptionPayload(input: PadAdoptionReceiptPayload): string {
+    return JSON.stringify({
+        tenantId: input.tenantId,
+        userId: input.userId,
+        activePadDigest: input.activePadDigest,
+        activePadVersion: input.activePadVersion,
+        previousPadDigest: input.previousPadDigest,
+        governanceKeyId: input.governanceKeyId,
+        governanceSignatureDigest: input.governanceSignatureDigest,
+        releaseCommit: input.releaseCommit,
+        sessionId: input.sessionId,
+        decision: input.decision,
+        nonce: input.nonce,
+        decidedAt: input.decidedAt,
+    });
+}
+
+function rowToPadAdoptionReceipt(row: Record<string, unknown>): PadAdoptionReceipt {
+    return {
+        id: String(row["id"]),
+        tenantId: String(row["tenant_id"]),
+        userId: String(row["user_id"]),
+        activePadDigest: String(row["active_pad_digest"]),
+        activePadVersion: String(row["active_pad_version"]),
+        previousPadDigest: row["previous_pad_digest"] ? String(row["previous_pad_digest"]) : null,
+        governanceKeyId: String(row["governance_key_id"]),
+        governanceSignatureDigest: String(row["governance_signature_digest"]),
+        releaseCommit: String(row["release_commit"]),
+        sessionId: String(row["session_id"]),
+        decision: String(row["decision"]) as PadAdoptionDecision,
+        nonce: String(row["nonce"]),
+        decidedAt: String(row["decided_at"]),
+        payloadHash: String(row["payload_hash"]),
+        localSignatureBase64: String(row["local_signature_base64"]),
+        localPublicKeyBase64: String(row["local_public_key_base64"]),
+    };
 }
 
 function rowToApiKey(r: Record<string, unknown>): IamApiKey {

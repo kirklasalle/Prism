@@ -99,7 +99,13 @@ export function ChatTab({
                 }
             }
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : String(e));
+            const errMsg = e instanceof Error ? e.message : String(e);
+            setError(errMsg);
+            // Show error inline in chat so it appears next to the failed message
+            setMessages((prev) => [
+                ...prev,
+                { role: "system", content: `⚠ Send failed: ${errMsg}` },
+            ]);
         } finally {
             setSending(false);
         }

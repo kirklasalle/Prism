@@ -3,6 +3,7 @@ import type { ActivityEvent, ActivitySubscriber } from "./types.js";
 import { type ExecutionAuthorityContext } from "../security/execution-authority-context.js";
 import {
     type HashChainedEvent,
+    CURRENT_AUDIT_HASH_VERSION,
     GENESIS_PREVIOUS_HASH,
     computeChainedEventHash,
 } from "./hash-chained-audit.js";
@@ -32,13 +33,14 @@ export class ActivityBus {
         };
 
         // IC-11 Phase 4: Compute blockchain-style chained hash
-        const hash = computeChainedEventHash(previousHash, baseEvent);
+        const hash = computeChainedEventHash(previousHash, baseEvent, CURRENT_AUDIT_HASH_VERSION);
 
         const chainedEvent: HashChainedEvent = {
             ...baseEvent,
             hash,
             previousHash,
             sequenceNumber,
+            hashVersion: CURRENT_AUDIT_HASH_VERSION,
         };
 
         this.lastHash = hash;

@@ -1,0 +1,26 @@
+{
+    "format": "prism-governance-key-rotation",
+    "formatVersion": 1,
+    "status": "effective_pending_release_commit",
+    "payload": {
+        "rotationId": "R-2026-001",
+        "previousKeyId": "prism-governance-pad-2026-07",
+        "successorKeyId": "prism-governance-pad-2026-08-r1",
+        "previousPublicKeySha256": "b3baced327f9fb22807b5bfb4d7307533ae067678643a5c190583748309e75e8",
+        "successorPublicKeySha256": "0c504717d9465da46232c618fbf02a7d4d8572c2a1b7914bd4d1ae843a63f784",
+        "reason": "Original PAD private signing key is unavailable after exhaustive local, history, backup, and GitHub recovery checks.",
+        "authorizedBy": "governance-founder:kirk-lasalle",
+        "authorizedAt": "2026-08-08T20:32:58.055Z",
+        "authorizationBasis": "Founder emergency authorization on 2026-08-08 for E-2026-001 and a durable lost-key contingency.",
+        "scope": [
+            "E-2026-001",
+            "future PAD detached signatures"
+        ],
+        "priorKeySignatureAvailable": false,
+        "continuityPadHash": "a8d594d70d50286a55a490dfdabef4e4b20dcb09495178a7c4d2b3314d0600df",
+        "correctedPadHash": "4b4a00789fb703b6f5a909a07027aae90d4b9632fda73f67b1b056a79d6910c8"
+    },
+    "successorPublicKeyBase64": "MCowBQYDK2VwAyEATLe24H63b2rGu8ffreTqfDKRQxF6naSLRswewzSTy/c=",
+    "successorSelfSignatureBase64": "czl3vqLLSHNuX+QEj44PC1TOMCwvygBSrbW8zCPaZgm/IB5pdLpo0fxnvwuPk05cCcPGTYP9TCWJ2NmJ8f8jCQ==",
+    "effectiveAt": "2026-08-08T20:32:58.253Z"
+}

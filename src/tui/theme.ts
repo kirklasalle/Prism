@@ -141,3 +141,6 @@ export const TABS: TabDefinition[] = [
     { id: "scheduler", label: "Scheduler", shortcut: "-" },
     { id: "characters", label: "Characters", shortcut: "=" },
 ];
+
+/** Ordered tab IDs for Tab/Shift+Tab sequential cycling. */
+export const TAB_IDS: string[] = TABS.map((t) => t.id);

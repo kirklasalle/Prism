@@ -23,14 +23,21 @@ import {
     isKeyTrusted,
 } from "../src/core/security/key-registry.js";
 import { validateAuthorityContext } from "../src/core/security/execution-authority-context.js";
+import { _resetWorkspaceRootCache, _setWorkspaceRootForTest } from "../src/core/config/workspace-resolver.js";
 
 describe("PRISM Initialization Certificate Security Suite", () => {
+    const originalWorkspaceRoot = process.env.PRISM_WORKSPACE_ROOT;
+    const originalPreferencesPath = process.env.PRISM_PREFERENCES_PATH;
     let tmpDir: string;
     let dbPath: string;
     let db: DatabaseSync;
+    let services: DashboardService[];
 
     beforeEach(() => {
+        services = [];
         tmpDir = mkdtempSync(join(tmpdir(), "prism-cert-test-"));
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         dbPath = join(tmpDir, "prism-activity.db");
         db = new DatabaseSync(dbPath);
 
@@ -110,7 +117,11 @@ describe("PRISM Initialization Certificate Security Suite", () => {
         `);
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+        for (const service of services) {
+            await service.stop().catch(() => { });
+            service.getChatStore().close();
+        }
         try {
             db.close();
         } catch {
@@ -119,6 +130,11 @@ describe("PRISM Initialization Certificate Security Suite", () => {
         if (existsSync(tmpDir)) {
             rmSync(tmpDir, { recursive: true, force: true });
         }
+        _resetWorkspaceRootCache();
+        if (originalWorkspaceRoot === undefined) delete process.env.PRISM_WORKSPACE_ROOT;
+        else process.env.PRISM_WORKSPACE_ROOT = originalWorkspaceRoot;
+        if (originalPreferencesPath === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = originalPreferencesPath;
     });
 
     describe("1. Cryptographic Signatures", () => {
@@ -295,7 +311,7 @@ describe("PRISM Initialization Certificate Security Suite", () => {
 
     describe("3. Certificate Session Lock", () => {
         function createService(): DashboardService {
-            return new DashboardService(
+            const service = new DashboardService(
                 new ApprovalQueue(),
                 new ActivityBus(),
                 {
@@ -312,11 +328,14 @@ describe("PRISM Initialization Certificate Security Suite", () => {
                 undefined,
                 new InMemoryProviderSecretStore(),
             );
+            services.push(service);
+            return service;
         }
 
         function createCertificateSession(service: DashboardService): string {
             const session = service.createChatSession({
                 title: "PRISM Initialization Certificate — Locked",
+                operatorEmail: "certificate-test@example.com",
                 allowUnbound: true,
             });
             service.getChatStore().appendMessage(
@@ -404,7 +423,7 @@ describe("PRISM Initialization Certificate Security Suite", () => {
         it("verifyMarkdownCertificateWithPin returns valid=false for malformed markdown", () => {
             const result = verifyMarkdownCertificateWithPin("not a valid certificate");
             assert.strictEqual(result.valid, false);
-            assert.ok(result.reason.includes("marker not found"));
+            assert.match(result.reason, /verification failed/i);
         });
 
         it("verifyMarkdownCertificateWithPin returns valid=false when signature is wrong", () => {
@@ -455,12 +474,12 @@ describe("PRISM Initialization Certificate Security Suite", () => {
         });
     });
 
-    describe("7. Phase 0 Execution Authority Context (IC-05)", () => {
-        it("validateAuthorityContext warns on missing context but returns valid in Phase 0", () => {
+    describe("7. Execution Authority Context (IC-05)", () => {
+        it("validateAuthorityContext blocks missing context", () => {
             const result = validateAuthorityContext(null);
-            assert.strictEqual(result.valid, true, "Phase 0 is warn-only, so null context is 'valid'");
+            assert.strictEqual(result.valid, false, "Missing authority context must fail closed");
             assert.ok(result.missingFields.length > 0, "Should report missing fields");
-            assert.ok(result.reason.includes("PHASE0_WARN"));
+            assert.ok(result.reason.includes("EXECUTION_BLOCKED"));
         });
 
         it("validateAuthorityContext returns no missing fields for complete context", () => {

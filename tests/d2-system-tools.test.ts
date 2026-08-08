@@ -1,7 +1,11 @@
 import assert from "node:assert";
 import { ContainerSandboxTool } from "../src/adapters/system/container-sandbox-tool.js";
 import { TerminalSessionTool } from "../src/adapters/system/terminal-session-tool.js";
-import { normalizeRequestByGovernance, extractActionFromRequest } from "../src/core/tools/governance-normalizer.js";
+import {
+    normalizeRequestByGovernance,
+    extractActionFromRequest,
+    validateRequestAgainstGovernance,
+} from "../src/core/tools/governance-normalizer.js";
 
 const base = {
     operation: "",
@@ -205,4 +209,15 @@ async function testGovernanceNormalization(): Promise<void> {
     );
     assert.strictEqual(statusNorm.risk, "low", "Status should remain low");
     assert.strictEqual(statusNorms.length, 0, "Status should have no normalizations");
+
+    const unknownAction = { ...base, operation: "terminal_session", args: { action: "unknown" } };
+    const unknownResult = normalizeRequestByGovernance(unknownAction, terminalTool.governance);
+    assert.strictEqual(unknownResult.normalized.risk, "high");
+    assert.strictEqual(unknownResult.normalized.mutatesState, true);
+    assert.match(validateRequestAgainstGovernance(unknownResult.normalized, terminalTool.governance) ?? "", /quarantined/);
+
+    const undeclaredTool = { ...base, operation: "unclassified_tool", args: { action: "run" } };
+    const undeclaredResult = normalizeRequestByGovernance(undeclaredTool, undefined);
+    assert.strictEqual(undeclaredResult.normalized.risk, "high");
+    assert.match(validateRequestAgainstGovernance(undeclaredResult.normalized, undefined) ?? "", /quarantined/);
 }

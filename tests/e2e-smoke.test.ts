@@ -132,6 +132,24 @@ describe("AuthGate", () => {
         assert.equal(gate.check(req).authenticated, false);
     });
 
+    it("keeps setup status public after setup while protecting other setup APIs", () => {
+        process.env.PRISM_PREFERENCES_PATH = prefsPath;
+        writeFileSync(
+            prefsPath,
+            JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }, null, 2) + "\n",
+            "utf-8",
+        );
+
+        const gate = new AuthGate({
+            tokenFilePath: tokenPath,
+            bootstrapPrefixes: ["/api/setup/"],
+        });
+        assert.equal(gate.check({ headers: {}, url: "/api/setup/status" } as any).authenticated, true);
+        assert.equal(gate.check({ headers: {}, url: "/api/v1/setup/status" } as any).authenticated, true);
+        assert.equal(gate.check({ headers: {}, url: "/api/setup/prerequisites" } as any).authenticated, false);
+        assert.equal(gate.check({ headers: {}, url: "/api/setup/profile" } as any).authenticated, false);
+    });
+
     it("rejects missing auth header on protected routes", () => {
         const gate = new AuthGate({ tokenFilePath: tokenPath });
         const req = { headers: {}, url: "/api/chat/message" } as any;

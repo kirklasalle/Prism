@@ -98,6 +98,7 @@ export function SetupWizardTab({
             setSubmitting(true);
             try {
                 await client.postSetupProfile(wizard.profile);
+                setSelectedIndex(0);
                 setStep(2);
             } catch (e: unknown) {
                 setError(e instanceof Error ? e.message : String(e));

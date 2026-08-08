@@ -16,7 +16,7 @@ export function extractActionFromRequest(request: ToolRequest): string | null {
     if (typeof actionArg === "string") {
         return actionArg.toLowerCase();
     }
-    return null;
+    return request.operation.toLowerCase() || null;
 }
 
 /**
@@ -34,19 +34,41 @@ export function normalizeRequestByGovernance(
     const normalized = { ...request };
 
     if (!schema) {
+        normalized.risk = "high";
+        normalized.mutatesState = true;
+        normalizations.push({
+            field: "governance",
+            oldValue: "undeclared",
+            newValue: "quarantined",
+            reason: `Tool '${request.operation}' has no governance schema; classified conservatively pending review.`,
+        });
         return { normalized, normalizations };
     }
 
     // Extract action from request
     const action = extractActionFromRequest(request);
     if (!action) {
-        // No action specified, can't normalize
+        normalized.risk = "high";
+        normalized.mutatesState = true;
+        normalizations.push({
+            field: "action",
+            oldValue: null,
+            newValue: "quarantined",
+            reason: `Tool '${request.operation}' requires an explicit governed action.`,
+        });
         return { normalized, normalizations };
     }
 
     const rule = schema.actions[action];
     if (!rule) {
-        // No governance rule for this action, use defaults
+        normalized.risk = "high";
+        normalized.mutatesState = true;
+        normalizations.push({
+            field: "action",
+            oldValue: action,
+            newValue: "quarantined",
+            reason: `Action '${action}' is not declared by '${request.operation}' and requires classification.`,
+        });
         return { normalized, normalizations };
     }
 
@@ -99,17 +121,17 @@ export function validateRequestAgainstGovernance(
     schema: GovernanceSchema | undefined,
 ): string | null {
     if (!schema) {
-        return null;
+        return `Tool '${request.operation}' has no governance schema; request quarantined.`;
     }
 
     const action = extractActionFromRequest(request);
     if (!action) {
-        return null; // No action to validate
+        return `Tool '${request.operation}' has no explicit governed action; request quarantined.`;
     }
 
     const rule = schema.actions[action];
     if (!rule) {
-        return null; // No rule for this action
+        return `Action '${action}' is not declared by '${request.operation}'; request quarantined.`;
     }
 
     const currentRiskRank = riskRank[request.risk as OperationRisk] ?? 0;

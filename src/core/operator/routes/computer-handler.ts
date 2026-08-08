@@ -478,7 +478,11 @@ export class ComputerHandler implements IRouteHandler {
 
                 const governed = await orchestrator.run({
                     operation: "shell_exec",
-                    args: { command: `${binary}${args.length ? ` ${args.join(" ")}` : ""}`, timeoutMs: 15_000 },
+                    args: {
+                        action: "read_only",
+                        command: `${binary}${args.length ? ` ${args.join(" ")}` : ""}`,
+                        timeoutMs: 15_000,
+                    },
                     risk: "medium",
                     mutatesState: false,
                 });
@@ -492,7 +496,7 @@ export class ComputerHandler implements IRouteHandler {
                 service
                     .getFramebufferCapture()
                     .captureSingle()
-                    .catch(() => {});
+                    .catch(() => { });
                 const output = (governed.output ?? {}) as {
                     stdout?: unknown;
                     stderr?: unknown;
@@ -654,8 +658,8 @@ export class ComputerHandler implements IRouteHandler {
                     devices[cat] = Array.isArray(items)
                         ? (items as Array<{ name: string; status: string; props: Record<string, string> }>)
                         : items
-                          ? [items as { name: string; status: string; props: Record<string, string> }]
-                          : [];
+                            ? [items as { name: string; status: string; props: Record<string, string> }]
+                            : [];
                 }
                 return this.json(res, 200, { devices });
             } catch (e: unknown) {
@@ -669,16 +673,16 @@ export class ComputerHandler implements IRouteHandler {
                     Processors:
                         cpus.length > 0
                             ? [
-                                  {
-                                      name: cpus[0]!.model + " (" + cpus.length + " cores)",
-                                      status: "OK",
-                                      props: {
-                                          model: cpus[0]!.model,
-                                          cores: String(cpus.length),
-                                          speed: cpus[0]!.speed + " MHz",
-                                      },
-                                  },
-                              ]
+                                {
+                                    name: cpus[0]!.model + " (" + cpus.length + " cores)",
+                                    status: "OK",
+                                    props: {
+                                        model: cpus[0]!.model,
+                                        cores: String(cpus.length),
+                                        speed: cpus[0]!.speed + " MHz",
+                                    },
+                                },
+                            ]
                             : [],
                     "Network Adapters": Object.entries(nets).map(([name, addrs]) => ({
                         name,

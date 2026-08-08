@@ -1,14 +1,25 @@
 {
-    "version": 1,
-    "description": "PRISM governance signing key registry for PAD signature verification.",
-    "keys": [
-        {
-            "keyId": "prism-governance-pad-2026-07",
-            "algorithm": "ed25519",
-            "label": "PRISM Governance PAD Signing Key",
-            "publicKeyBase64": "MCowBQYDK2VwAyEAbJjLy1ZnvqnVBkBMz9QlsD+H8u7GiDFilM5qhqAGzLE=",
-            "addedAt": "2026-07-13T23:30:20.767Z",
-            "expiresAt": null
-        }
-    ]
+  "version": 1,
+  "description": "PRISM governance signing key registry for PAD signature verification.",
+  "keys": [
+    {
+      "keyId": "prism-governance-pad-2026-07",
+      "algorithm": "ed25519",
+      "label": "PRISM Governance PAD Signing Key",
+      "publicKeyBase64": "MCowBQYDK2VwAyEAbJjLy1ZnvqnVBkBMz9QlsD+H8u7GiDFilM5qhqAGzLE=",
+      "addedAt": "2026-07-13T23:30:20.767Z",
+      "expiresAt": null,
+      "revokedAt": "2026-08-08T20:32:58.055Z",
+      "revocationReason": "Private key unavailable; Founder-authorized emergency rotation R-2026-001."
+    },
+    {
+      "keyId": "prism-governance-pad-2026-08-r1",
+      "algorithm": "ed25519",
+      "label": "PRISM Governance PAD Signing Key (Emergency Rotation R-2026-001)",
+      "publicKeyBase64": "MCowBQYDK2VwAyEATLe24H63b2rGu8ffreTqfDKRQxF6naSLRswewzSTy/c=",
+      "addedAt": "2026-08-08T20:32:58.055Z",
+      "expiresAt": null,
+      "rotationId": "R-2026-001"
+    }
+  ]
 }

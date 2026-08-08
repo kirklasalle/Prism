@@ -1,9 +1,10 @@
 # Governance Council Charter
 
 **Created:** July 8, 2026
+**Updated:** August 2, 2026
 **Author:** Kirk LaSalle, Founder
 **Status:** Active
-**Version:** 1.0
+**Version:** 1.2
 **Tags:** #governance #charter #permanent #official #security
 
 ---
@@ -22,7 +23,7 @@ This charter formally constitutes the **ImpressionCore Governance Council** and 
 - **Cryptographically** — by SHA-256 integrity verification at boot, runtime, and CI
 - **Procedurally** — by the dual-binary amendment gate requiring both system and human approval
 
-The Council's amendment authority extends **only** to the Amendments section of the PAD, and only for changes that strengthen, clarify, or extend protections — never weaken them.
+The Council's amendment authority extends **only** to the Amendments section of the PAD, and only for changes that strengthen, clarify, or extend protections — never weaken them. A governance erratum under §5.6 is not an amendment and may correct canonical Law wording only when the correction preserves the already-established machine invariant exactly.
 
 ---
 
@@ -140,6 +141,27 @@ All Prism operators and stakeholders have advisory voice:
     - CI Gate 9 verifies the hash matches
     - The governance signature verification script validates the signer
 2. The amendment ledger records the application event with both the old and new PAD hashes
+
+### 5.6 Governance Errata
+
+A governance erratum is an exceptional correction of a clerical defect, transcription error, or logically inverted predicate in canonical Law text. It cannot create, remove, narrow, weaken, or substantively reinterpret a Law and does not use the ordinary amendment lifecycle.
+
+An erratum is valid only when all of the following are recorded and verified:
+
+1. The exact previous and corrected Law text and their SHA-256 hashes
+2. The exact previous and corrected complete PAD artifact hashes
+3. The affected Law identifier, correction rationale, preserved machine invariant, governance approval identity, and effective PAD version
+4. Automated validation against a closed registry of invariant-preserving corrections
+5. An authorized signed Git commit and a detached signature over the exact corrected PAD bytes
+6. An append-only ledger event that remains `approved_pending_signature` until both signatures verify
+
+Any mismatch or additional textual change is rejected. Ordinary operators cannot submit an erratum, and neither the Council nor Founder may use this path to bypass the immutable-Laws clause. Each operator must separately acknowledge an effective signed PAD revision before privileged operation resumes; an Initialization Certificate remains immutable issuance-time identity and provenance and is not reissued solely because a PAD revision becomes effective.
+
+### 5.7 Emergency Governance Key Rotation
+
+If a PAD private signing key is unavailable or reasonably believed compromised, it must never be reconstructed, substituted silently, or reused. The Founder may authorize an emergency successor key only through a public, auditable rotation record that identifies the prior and successor keys, reason, scope, authorization identity, continuity PAD hash, and affected governance action.
+
+The prior public key remains registered for historical verification but is revoked for new signatures. The successor private key must be generated outside the repository, must never be committed or logged, and must self-sign the canonical rotation payload. A rotation becomes operational only when the successor key signs the exact authorized PAD artifact, all integrity gates pass, and an authorized cryptographically signed Git commit records the coordinated rotation and governance artifacts. Failure at any step must restore the prior authoritative PAD and public artifacts.
 
 ---
 

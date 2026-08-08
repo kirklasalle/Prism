@@ -1,0 +1,63 @@
+{
+  "format": "prism-governance-artifact-manifest",
+  "version": 1,
+  "artifacts": [
+    {
+      "artifactId": "permanent-active-directives",
+      "version": "2026-08-02",
+      "path": "Permanent_Active_Directives.txt",
+      "sha256": "4b4a00789fb703b6f5a909a07027aae90d4b9632fda73f67b1b056a79d6910c8",
+      "relationship": "authority-source"
+    },
+    {
+      "artifactId": "governance-erratum-e-2026-001",
+      "version": "2026-08-02",
+      "path": "config/governance-errata/E-2026-001.json",
+      "sha256": "569487ea19561b28e13582982cfdd0c44a34440c18b2031baec5750c0de05e0e",
+      "relationship": "governance-reference"
+    },
+    {
+      "artifactId": "governance-key-rotation-r-2026-001",
+      "version": "2026-08-08",
+      "path": "config/governance-key-rotations/R-2026-001.json",
+      "sha256": "c99c2852dbf54a9ed0eefacba9d75f89e1357fae0992f1aa34c6f53b9033905f",
+      "relationship": "governance-reference"
+    },
+    {
+      "artifactId": "governance-signing-key-registry",
+      "version": "current",
+      "path": "config/governance-signing-keys.json",
+      "sha256": "275a67c6df49d1312ada786b8a6cb2f404670ce551d8ea5b4a4d36c57d0f8c9e",
+      "relationship": "governance-reference"
+    },
+    {
+      "artifactId": "agentic-prime-directive",
+      "version": "current",
+      "path": "AGENTIC_PRIME_DIRECTIVE.md",
+      "sha256": "24ba2110ad1ab1989da0b9745629a81dc6b070c1be5ba68d51ab2d23fc2de9f7",
+      "relationship": "authority-source"
+    },
+    {
+      "artifactId": "agentic-sacred-covenant",
+      "version": "current",
+      "path": "AGENTIC_SACRED_COVENANT.md",
+      "sha256": "2f937b0caee6f56c483abd94b451c058c1394fed41c357532d3d1e5f07a1035f",
+      "relationship": "governance-reference"
+    },
+    {
+      "artifactId": "governance-council-charter",
+      "version": "current",
+      "path": "GOVERNANCE_COUNCIL_CHARTER.md",
+      "sha256": "cdfe3b5d3529920e9f2188e7b3dca8fe4923fa42eb49f6d975a211f29b8f33bc",
+      "relationship": "governance-reference"
+    },
+    {
+      "artifactId": "canonical-covenant-publication",
+      "version": "1.0",
+      "path": "docs/PRISM_SACRED_COVENANT_GENERATED.md",
+      "sha256": "d8ba49d3a09e2e5c2303b10d743b95209691e58be4774204e366466594835a56",
+      "relationship": "generated-publication"
+    }
+  ],
+  "canonicalCovenantDigest": "95d3575a139858e0789a5d2d1dff88ad9a4d2d56506438fb1a7ca5908f13ba37"
+}

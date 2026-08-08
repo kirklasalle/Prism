@@ -141,6 +141,8 @@ export class AgentPool {
     private onDispatch?: (agentId: string) => void;
     private onDispatchComplete?: (agentId: string, result: SubAgentResult) => void;
     private josephineMode = true;
+    private readonly delegationPopulation = new Map<string, number>();
+    private readonly delegationFanOut = new Map<string, number>();
 
     constructor(delegate: LlmDelegate | null = null) {
         this.llmDelegate = delegate;
@@ -232,6 +234,9 @@ export class AgentPool {
             return failure(traceId, start, "unknown", "No suitable agent found in pool");
         }
 
+        const budgetError = this.consumeDelegationBudget(request, agent.agentId);
+        if (budgetError) return failure(traceId, start, agent.agentId, budgetError);
+
         // ── Guard: LLM delegate must be configured ───────────────────────────
         if (!this.llmDelegate) {
             return failure(traceId, start, agent.agentId, "AgentPool has no LLM delegate configured");
@@ -284,15 +289,34 @@ export class AgentPool {
         if (this.josephineMode) {
             parts.push(
                 `[COGNITIVE DIRECTIVE: JOSEPHINE MODE ENABLED]\n` +
-                    `1. Absolute Precision: You are Josephine, the hallmark of flawless execution. You produce fully complete, ready-to-use solutions with zero placeholders, zero hand-waving, and fully realized logic.\n` +
-                    `2. Proactive Rigor & Verification: Self-correct intermediate thoughts. Verify all edge cases, imports, syntax, and safety policies before returning your final answer.\n` +
-                    `3. Premium Delight: Communicate with warm, helpful, encouraging, yet highly professional and crisp clarity. Emphasize micro-optimizations, elegant structures, and premium typography.`,
+                `1. Absolute Precision: You are Josephine, the hallmark of flawless execution. You produce fully complete, ready-to-use solutions with zero placeholders, zero hand-waving, and fully realized logic.\n` +
+                `2. Proactive Rigor & Verification: Self-correct intermediate thoughts. Verify all edge cases, imports, syntax, and safety policies before returning your final answer.\n` +
+                `3. Premium Delight: Communicate with warm, helpful, encouraging, yet highly professional and crisp clarity. Emphasize micro-optimizations, elegant structures, and premium typography.`,
             );
         }
 
         if (agent.systemContext) parts.push(agent.systemContext);
         if (extraContext?.trim()) parts.push(`Context:\n${extraContext.trim()}`);
         return parts.join("\n\n");
+    }
+
+    private consumeDelegationBudget(request: SubAgentRequest, agentId: string): string | null {
+        const budget = request.delegationBudget;
+        if (!budget) return null;
+        if (!budget.lineageId || !budget.parentAgentId) return "Delegation budget requires lineageId and parentAgentId";
+        if (budget.ancestry.includes(agentId)) return `Delegation cycle rejected for agent: ${agentId}`;
+        if (budget.ancestry.length + 1 > budget.maxDepth) return "Delegation depth budget exhausted";
+        if (budget.requestedAuthorityTier > budget.authorityCeiling) {
+            return "Delegated authority exceeds the lineage authority ceiling";
+        }
+        const population = this.delegationPopulation.get(budget.lineageId) ?? 0;
+        if (population >= budget.maxPopulation) return "Delegation population budget exhausted";
+        const parentKey = `${budget.lineageId}:${budget.parentAgentId}`;
+        const fanOut = this.delegationFanOut.get(parentKey) ?? 0;
+        if (fanOut >= budget.maxFanOut) return "Delegation fan-out budget exhausted";
+        this.delegationPopulation.set(budget.lineageId, population + 1);
+        this.delegationFanOut.set(parentKey, fanOut + 1);
+        return null;
     }
 }
 

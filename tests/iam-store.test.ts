@@ -6,7 +6,13 @@
  */
 
 import assert from "node:assert/strict";
-import { IamStore, DEFAULT_ROLE_NAMES } from "../src/core/iam/store.js";
+import { generateKeyPairSync, sign } from "node:crypto";
+import {
+    IamStore,
+    DEFAULT_ROLE_NAMES,
+    canonicalPadAdoptionPayload,
+    type RecordPadAdoptionReceiptInput,
+} from "../src/core/iam/store.js";
 
 export async function testIamStore(): Promise<void> {
     const store = new IamStore(":memory:");
@@ -120,6 +126,100 @@ export async function testIamStore(): Promise<void> {
         // expired session is filtered
         const expired = store.createSession(u1.id, "default", -1);
         assert.equal(store.getSession(expired.id), null, "expired sessions are not returned");
+
+        const pending = store.createSession(u1.id, "default", 60, "authenticated");
+        assert.equal(store.getSession(pending.id)?.activationState, "authenticated");
+        assert.equal(store.activateSessionWithEnrollment(pending.id, "setup-token", "wrong-token", "cert-1"), false);
+        assert.equal(store.getSession(pending.id)?.activationState, "authenticated");
+        assert.equal(store.activateSessionWithEnrollment(pending.id, "setup-token", "setup-token", "cert-1"), true);
+        assert.equal(store.getSession(pending.id)?.activationState, "operational");
+        assert.equal(store.getSession(pending.id)?.enrollmentBindingId, "cert-1");
+
+        const replay = store.createSession(u1.id, "default", 60, "authenticated");
+        assert.equal(
+            store.activateSessionWithEnrollment(replay.id, "setup-token", "setup-token", "cert-1"),
+            false,
+            "an enrollment token can activate only one session",
+        );
+        assert.equal(store.getSession(replay.id)?.activationState, "authenticated");
+
+        // ── PAD adoption receipts ─────────────────────────────────────────
+        const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+        const receiptPayload = {
+            tenantId: "default",
+            userId: u1.id,
+            activePadDigest: "4".repeat(64),
+            activePadVersion: "2026-08-02",
+            previousPadDigest: "a".repeat(64),
+            governanceKeyId: "prism-governance-pad-2026-07",
+            governanceSignatureDigest: "b".repeat(64),
+            releaseCommit: "c".repeat(40),
+            sessionId: pending.id,
+            decision: "accept" as const,
+            nonce: "nonce-accept-001",
+            decidedAt: new Date().toISOString(),
+        };
+        const signedReceipt: RecordPadAdoptionReceiptInput = {
+            ...receiptPayload,
+            localSignatureBase64: sign(
+                null,
+                Buffer.from(canonicalPadAdoptionPayload(receiptPayload), "utf8"),
+                privateKey,
+            ).toString("base64"),
+            localPublicKeyBase64: publicKey.export({ type: "spki", format: "der" }).toString("base64"),
+        };
+
+        const receipt = store.recordPadAdoptionReceipt(signedReceipt);
+        assert.ok(receipt.id.startsWith("padrec_"));
+        assert.ok(store.hasAcceptedPadAdoption("default", u1.id, receiptPayload.activePadDigest));
+        assert.equal(store.listPadAdoptionReceipts("default", u1.id).length, 1);
+
+        const duplicatePayload = { ...receiptPayload, nonce: "nonce-duplicate-acceptance" };
+        const duplicateAcceptance: RecordPadAdoptionReceiptInput = {
+            ...duplicatePayload,
+            localSignatureBase64: sign(
+                null,
+                Buffer.from(canonicalPadAdoptionPayload(duplicatePayload), "utf8"),
+                privateKey,
+            ).toString("base64"),
+            localPublicKeyBase64: signedReceipt.localPublicKeyBase64,
+        };
+        assert.throws(
+            () => store.recordPadAdoptionReceipt(duplicateAcceptance),
+            /UNIQUE constraint failed/,
+            "one acceptance is allowed per operator and PAD revision",
+        );
+        assert.throws(
+            () =>
+                store.recordPadAdoptionReceipt({
+                    ...signedReceipt,
+                    activePadDigest: "5".repeat(64),
+                }),
+            /signature is invalid/,
+            "altered receipt payload must fail signature verification",
+        );
+
+        const rejectionPayload = {
+            ...receiptPayload,
+            activePadDigest: "6".repeat(64),
+            decision: "reject" as const,
+            nonce: receiptPayload.nonce,
+        };
+        const signedRejection: RecordPadAdoptionReceiptInput = {
+            ...rejectionPayload,
+            localSignatureBase64: sign(
+                null,
+                Buffer.from(canonicalPadAdoptionPayload(rejectionPayload), "utf8"),
+                privateKey,
+            ).toString("base64"),
+            localPublicKeyBase64: signedReceipt.localPublicKeyBase64,
+        };
+        assert.throws(
+            () => store.recordPadAdoptionReceipt(signedRejection),
+            /UNIQUE constraint failed: pad_adoption_receipts.nonce/,
+            "receipt nonce replay must fail",
+        );
+        assert.equal(store.hasAcceptedPadAdoption("default", u1.id, rejectionPayload.activePadDigest), false);
     } finally {
         store.close();
     }

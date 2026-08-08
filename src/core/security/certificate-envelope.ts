@@ -57,6 +57,69 @@ export interface InitializationCertificateEnvelopeV1 {
     };
 }
 
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/i;
+
+export function validateCertificateEnvelopeV1(envelope: unknown): string[] {
+    const errors: string[] = [];
+    if (!envelope || typeof envelope !== "object") return ["Envelope must be an object"];
+    const candidate = envelope as Partial<InitializationCertificateEnvelopeV1>;
+    if (candidate.format !== "prism-initialization-certificate") errors.push("Unsupported certificate format");
+    if (candidate.version !== "1.0") errors.push("Unsupported certificate version");
+    if (typeof candidate.issuerKeyId !== "string" || candidate.issuerKeyId.trim() === "") {
+        errors.push("issuerKeyId is required");
+    }
+    if (!Number.isInteger(candidate.sequence) || Number(candidate.sequence) < 1) {
+        errors.push("sequence must be a positive integer");
+    }
+    if (typeof candidate.createdAt !== "string" || !Number.isFinite(Date.parse(candidate.createdAt))) {
+        errors.push("createdAt must be an ISO-8601 timestamp");
+    }
+
+    const identity = candidate.identity;
+    if (!identity || typeof identity !== "object") {
+        errors.push("identity is required");
+    } else {
+        if (typeof identity.operatorEmail !== "string" || identity.operatorEmail.trim() === "") {
+            errors.push("identity.operatorEmail is required");
+        } else if (identity.operatorEmail !== identity.operatorEmail.toLowerCase()) {
+            errors.push("identity.operatorEmail must be normalized lowercase");
+        }
+        if (typeof identity.operatorName !== "string" || identity.operatorName.trim() === "") {
+            errors.push("identity.operatorName is required");
+        }
+        if (typeof identity.cacEmail !== "string" || identity.cacEmail.trim() === "") {
+            errors.push("identity.cacEmail is required");
+        } else if (identity.cacEmail !== identity.cacEmail.toLowerCase()) {
+            errors.push("identity.cacEmail must be normalized lowercase");
+        }
+        if (typeof identity.cacName !== "string" || identity.cacName.trim() === "") {
+            errors.push("identity.cacName is required");
+        }
+        if (identity.locationName !== null && typeof identity.locationName !== "string") {
+            errors.push("identity.locationName must be a string or null");
+        }
+    }
+
+    const provenance = candidate.provenance;
+    if (!provenance || typeof provenance !== "object") {
+        errors.push("provenance is required");
+    } else {
+        if (provenance.padDigest !== null && !SHA256_HEX_PATTERN.test(String(provenance.padDigest))) {
+            errors.push("provenance.padDigest must be a SHA-256 digest or null");
+        }
+        if (typeof provenance.covenantVersion !== "string" || provenance.covenantVersion.trim() === "") {
+            errors.push("provenance.covenantVersion is required");
+        }
+        if (!SHA256_HEX_PATTERN.test(String(provenance.covenantDigest))) {
+            errors.push("provenance.covenantDigest must be a SHA-256 digest");
+        }
+        if (typeof provenance.workspaceRoot !== "string" || provenance.workspaceRoot.trim() === "") {
+            errors.push("provenance.workspaceRoot is required");
+        }
+    }
+    return errors;
+}
+
 /**
  * Deterministically serialize a JavaScript object according to JCS rules (RFC 8785):
  * - Keys are sorted lexicographically by UTF-16 code units.
@@ -96,7 +159,6 @@ export function generateMarkdownCertificateV1(
     signatureBase64: string,
     publicKeyBase64: string,
 ): string {
-    const canonicalJson = serializeCanonicalCertificate(envelope);
     const prettyJson = JSON.stringify(envelope, null, 2);
 
     return `# PRISM System Initialization Certificate (v1.0)
@@ -165,13 +227,7 @@ export function parseCertificateEnvelopeV1(markdown: string): ParsedCertificateV
 function parseFromRawJson(jsonStr: string, markdown: string): ParsedCertificateV1 | null {
     const rawObj = JSON.parse(jsonStr) as InitializationCertificateEnvelopeV1;
 
-    // Enforce v1.0 protocol discriminator checks (IC-09)
-    if (rawObj.format !== "prism-initialization-certificate" || rawObj.version !== "1.0") {
-        return null;
-    }
-    if (!rawObj.identity || !rawObj.provenance) {
-        return null;
-    }
+    if (validateCertificateEnvelopeV1(rawObj).length > 0) return null;
 
     // Extract signature section
     const pubKeyMatch = /- \*\*Public Key:\*\* ([A-Za-z0-9+/=]+)/.exec(markdown);

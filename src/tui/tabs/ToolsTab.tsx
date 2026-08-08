@@ -5,7 +5,7 @@ import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import type { PrismClient } from "../api/prism-client.js";
 import type { PrismWsClient } from "../api/ws-client.js";
-import { useApi, useWsEvent, useListNavigation } from "../hooks.js";
+import { useApi, useWsEvent, useListNavigation, useSubTabNavigation } from "../hooks.js";
 import { colors, symbols } from "../theme.js";
 import {
     Panel,
@@ -41,13 +41,11 @@ export function ToolsTab({
 
     const toolNav = useListNavigation(tools.data?.length ?? 0, focused && subTab === "tools");
 
+    const SUBTABS = ["tools", "plugins", "utilities", "diagnostics"];
+    useSubTabNavigation(SUBTABS, subTab, setSubTab, focused);
+
     useInput((input, key) => {
         if (!focused) return;
-        if (key.tab) {
-            const tabs = ["tools", "plugins", "utilities", "diagnostics"];
-            const idx = tabs.indexOf(subTab);
-            setSubTab(tabs[(idx + 1) % tabs.length]!);
-        }
         if (subTab === "diagnostics" && input === "r" && !diagRunning) {
             setDiagRunning(true);
             setDiagLog([]);

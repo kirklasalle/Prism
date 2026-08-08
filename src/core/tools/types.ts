@@ -41,7 +41,7 @@ export interface ActionGovernanceRule {
  * Maps action names to their governance rules.
  */
 export interface GovernanceSchema {
-    /** Maps action name -> governance rule. If action not listed, defaults apply (low risk, non-mutating). */
+    /** Maps action name -> governance rule. Unlisted or missing actions are quarantined. */
     actions: Record<string, ActionGovernanceRule>;
 }
 

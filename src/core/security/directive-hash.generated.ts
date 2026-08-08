@@ -8,9 +8,9 @@
  * the on-disk PAD content.
  *
  * Source file:  Permanent_Active_Directives.txt
- * Hashed bytes: 6335
- * Generated at: 2026-08-01T21:11:34.250Z
+ * Hashed bytes: 6328
+ * Generated at: 2026-08-08T22:10:17.009Z
  */
-export const DIRECTIVE_SHA256_GENERATED = "a8d594d70d50286a55a490dfdabef4e4b20dcb09495178a7c4d2b3314d0600df";
-export const DIRECTIVE_HASH_GENERATED_AT = "2026-08-01T21:11:34.250Z";
-export const DIRECTIVE_HASH_SOURCE_BYTES = 6335;
+export const DIRECTIVE_SHA256_GENERATED = "4b4a00789fb703b6f5a909a07027aae90d4b9632fda73f67b1b056a79d6910c8";
+export const DIRECTIVE_HASH_GENERATED_AT = "2026-08-08T22:10:17.009Z";
+export const DIRECTIVE_HASH_SOURCE_BYTES = 6328;

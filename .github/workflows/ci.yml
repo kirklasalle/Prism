@@ -17,8 +17,11 @@
 #   7. The release-validation test suite is green.
 #   8. Plugin-pack validator + business trust validator + policy engine
 #      tests are green (governance core).
+#   9. The PAD hash and detached governance signature verify.
+#  10. The coordinated governance artifact manifest has no drift.
+#  11. Emergency governance key-rotation evidence verifies.
 #
-# These eight gates are the production minimum for "merge-ready". A red
+# These eleven gates are the production minimum for "merge-ready". A red
 # light here means the runtime would refuse to boot in production
 # (NODE_ENV=production) or a governance subsystem regressed.
 
@@ -62,6 +65,15 @@ jobs:
 
       - name: Build (runs prebuild PAD hash compute)
         run: npm run build
+
+      - name: Verify PAD hash and detached signature
+        run: npm run security:directive-integrity
+
+      - name: Verify governance artifact manifest
+        run: npm run governance:artifacts:check
+
+      - name: Verify governance key rotation evidence
+        run: npm run governance:key-rotation:verify
 
       - name: Check for compiled artifacts in src/
         run: |
@@ -206,6 +218,15 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify PAD hash and detached signature
+        run: npm run security:directive-integrity
+
+      - name: Verify governance artifact manifest
+        run: npm run governance:artifacts:check
+
+      - name: Verify governance key rotation evidence
+        run: npm run governance:key-rotation:verify
 
       - name: Run directive integrity tests
         run: node ./node_modules/mocha/bin/mocha.js --exit --timeout 30000 "dist/tests/directive-integrity.test.js"

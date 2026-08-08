@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityBus } from "../src/core/activity/bus.js";
@@ -8,6 +8,11 @@ import { ApprovalQueue } from "../src/core/approval/approval-queue.js";
 import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
+import {
+    _resetWorkspaceRootCache,
+    _setWorkspaceRootForTest,
+    workspaceDbPath,
+} from "../src/core/config/workspace-resolver.js";
 
 // Simple integration test: enqueue an approval and verify the background
 // handler runs the agentic executor when approved.
@@ -16,6 +21,11 @@ describe("Approval auto-run flow", () => {
         // Isolate prefs/env similar to other tests
         const isolatedPrefsDir = mkdtempSync(join(tmpdir(), "prism-prefs-test-"));
         const isolatedPrefsFile = join(isolatedPrefsDir, "prefs.json");
+        const savedPreferencesPath = process.env.PRISM_PREFERENCES_PATH;
+        const savedWorkspaceRoot = process.env.PRISM_WORKSPACE_ROOT;
+        mkdirSync(join(isolatedPrefsDir, "state"), { recursive: true });
+        process.env.PRISM_PREFERENCES_PATH = isolatedPrefsFile;
+        _setWorkspaceRootForTest(isolatedPrefsDir);
         writeFileSync(
             isolatedPrefsFile,
             JSON.stringify({ setupComplete: true, lastModified: new Date().toISOString() }) + "\n",
@@ -23,7 +33,7 @@ describe("Approval auto-run flow", () => {
         );
         const activityBus = new ActivityBus();
         const approvalQueue = new ApprovalQueue();
-        const chatSessionStore = new ChatSessionStore(":memory:");
+        const chatSessionStore = new ChatSessionStore(workspaceDbPath());
         const providerSecretStore = new InMemoryProviderSecretStore();
 
         const dashboardService = new DashboardService(
@@ -43,6 +53,7 @@ describe("Approval auto-run flow", () => {
             undefined,
             providerSecretStore,
         );
+        dashboardService.start();
 
         // Capture broadcasted events
         const events: any[] = [];
@@ -97,8 +108,15 @@ describe("Approval auto-run flow", () => {
         const agentic = events.find((e) => e.type === "agentic_event");
         assert.ok(agentic, "agentic_event should be broadcast");
         // Cleanup
+        await dashboardService.stop();
+        chatSessionStore.close();
+        _resetWorkspaceRootCache();
+        if (savedPreferencesPath === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = savedPreferencesPath;
+        if (savedWorkspaceRoot === undefined) delete process.env.PRISM_WORKSPACE_ROOT;
+        else process.env.PRISM_WORKSPACE_ROOT = savedWorkspaceRoot;
         try {
             rmSync(isolatedPrefsDir, { recursive: true, force: true });
-        } catch {}
+        } catch { }
     });
 });

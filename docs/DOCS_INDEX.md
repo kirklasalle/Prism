@@ -9,6 +9,7 @@
 - **[PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md](PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md)** — Master SAP approval package (code, docs, market, critical audit)
 - **[PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md](PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md)** — Single three-state matrix (Accomplished/In Progress/Not Yet)
 - **[INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md](INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md)** — Initialization Certificate v1.0 trust-root audit and release gates
+- **[ORRERY_GOVERNANCE_TRANSFER_PLAN.md](ORRERY_GOVERNANCE_TRANSFER_PLAN.md)** — Orrery ⇄ Prism governance transfer: closes the five remaining audit findings (WP-1…WP-5)
 - **[MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md](MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md)** — MCP IDS runtime awareness operating model
 - **[../audit.md](../audit.md)** — World-Class Complete Codebase Audit (2026-06-17)
 - **[AUDIT_TASK_LIST.md](AUDIT_TASK_LIST.md)** — Prioritized remediation task list
@@ -33,6 +34,7 @@
 ## Governance & Security
 
 - PAD_WHITEPAPER.md: Permanent Active Directives — purpose, philosophy, market impact
+- ORRERY_GOVERNANCE_TRANSFER_PLAN.md: cross-project governance transfer from `orrery` — chained ledger, charter manifest, policy registry, configuration attestation, execution authority
 - TERMS_AND_GOVERNANCE_FRAMEWORK.md: 4-tier governance hierarchy, ToS/AoS
 - BUSINESS_TRUST_PROVENANCE_POLICY.md: trust provenance policy
 - CI_GATING_POLICY.md: CI gating policy

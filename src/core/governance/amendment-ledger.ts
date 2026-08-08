@@ -105,7 +105,7 @@ export class AmendmentLedger {
             {
                 event: "Governance Amendment Ledger initialized",
                 instanceId: this.instanceId,
-                charterVersion: "1.0",
+                charterVersion: "1.1",
                 lawsImmutable: true,
                 dualBinaryRequired: true,
             },

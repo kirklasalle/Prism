@@ -13,6 +13,7 @@ export interface GovernanceSigningKey {
     publicKeyBase64: string;
     addedAt?: string;
     expiresAt?: string | null;
+    revokedAt?: string | null;
 }
 
 export interface GovernanceSigningKeySet {
@@ -37,6 +38,7 @@ export interface DirectiveSignatureResult {
     keyId: string | null;
     currentHash: string;
     expectedHash: string;
+    signatureDigest: string;
     directivePath: string;
     signaturePath: string;
     keysPath: string;
@@ -86,6 +88,9 @@ function getActiveKey(keySet: GovernanceSigningKeySet, keyId: string): Governanc
     if (key.expiresAt && Date.parse(key.expiresAt) <= Date.now()) {
         return undefined;
     }
+    if (key.revokedAt) {
+        return undefined;
+    }
     return key;
 }
 
@@ -100,6 +105,7 @@ export function verifyDirectiveSignature(workspaceRoot?: string): DirectiveSigna
         keyId: null,
         currentHash: "",
         expectedHash: "",
+        signatureDigest: "",
         directivePath,
         signaturePath,
         keysPath,
@@ -139,7 +145,9 @@ export function verifyDirectiveSignature(workspaceRoot?: string): DirectiveSigna
     try {
         const directiveContent = readFileSync(directivePath, "utf8");
         const currentHash = computeSha256(directiveContent);
-        const signatureFile = readJsonFile<DirectiveSignatureFile>(signaturePath);
+        const signatureContent = readFileSync(signaturePath, "utf8");
+        const signatureDigest = computeSha256(signatureContent);
+        const signatureFile = JSON.parse(signatureContent) as DirectiveSignatureFile;
         const keySet = readJsonFile<GovernanceSigningKeySet>(keysPath);
         const key = getActiveKey(keySet, signatureFile.keyId);
 
@@ -152,6 +160,7 @@ export function verifyDirectiveSignature(workspaceRoot?: string): DirectiveSigna
                 keyId: signatureFile.keyId,
                 currentHash,
                 expectedHash: signatureFile.sha256,
+                signatureDigest,
                 error: `No active governance key found for keyId=${signatureFile.keyId}`,
             };
         }
@@ -166,6 +175,7 @@ export function verifyDirectiveSignature(workspaceRoot?: string): DirectiveSigna
                 keyId: signatureFile.keyId,
                 currentHash,
                 expectedHash: signatureFile.sha256,
+                signatureDigest,
                 error: "Directive hash mismatch against signed payload.",
             };
         }
@@ -184,6 +194,7 @@ export function verifyDirectiveSignature(workspaceRoot?: string): DirectiveSigna
             keyId: signatureFile.keyId,
             currentHash,
             expectedHash: signatureFile.sha256,
+            signatureDigest,
             error: signatureVerified ? undefined : "Directive signature verification failed.",
         };
     } catch (err) {

@@ -19,6 +19,8 @@ import { ChatSessionStore } from "../src/core/operator/chat-session-store.js";
 import { DashboardService } from "../src/core/operator/dashboard-service.js";
 import { InMemoryProviderSecretStore } from "../src/core/operator/provider-secret-store.js";
 import { ToolRegistry } from "../src/core/tools/registry.js";
+import { ShellTool } from "../src/adapters/system/shell-tool.js";
+import { _resetWorkspaceRootCache, _setWorkspaceRootForTest } from "../src/core/config/workspace-resolver.js";
 
 /* ── Test helpers ─────────────────────────────────────────────────────── */
 
@@ -27,6 +29,8 @@ let port: number;
 let tmpDir: string;
 let chatStore: ChatSessionStore;
 let authToken = "";
+let savedWorkspaceRoot: string | undefined;
+let savedPreferencesPath: string | undefined;
 
 const isWindows = process.platform === "win32";
 const describeWindows = isWindows ? describe : describe.skip;
@@ -107,10 +111,15 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
 
     before(async () => {
         tmpDir = mkdtempSync(join(tmpdir(), "prism-computer-api-"));
+        savedWorkspaceRoot = process.env.PRISM_WORKSPACE_ROOT;
+        savedPreferencesPath = process.env.PRISM_PREFERENCES_PATH;
+        process.env.PRISM_PREFERENCES_PATH = join(tmpDir, "preferences.json");
+        _setWorkspaceRootForTest(tmpDir);
         const bus = new ActivityBus();
         chatStore = new ChatSessionStore(":memory:");
 
         const registry = new ToolRegistry();
+        registry.register(new ShellTool());
 
         service = new DashboardService(
             new ApprovalQueue(),
@@ -150,6 +159,11 @@ describe("Computer Control API Routes (/api/computer/*)", function () {
         await service.stop();
         chatStore.close();
         rmSync(tmpDir, { recursive: true, force: true });
+        _resetWorkspaceRootCache();
+        if (savedWorkspaceRoot === undefined) delete process.env.PRISM_WORKSPACE_ROOT;
+        else process.env.PRISM_WORKSPACE_ROOT = savedWorkspaceRoot;
+        if (savedPreferencesPath === undefined) delete process.env.PRISM_PREFERENCES_PATH;
+        else process.env.PRISM_PREFERENCES_PATH = savedPreferencesPath;
     });
 
     /* ── GET /api/computer/system-info ────────────────────────────────── */

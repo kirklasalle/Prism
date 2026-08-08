@@ -1,0 +1,23 @@
+{
+    "format": "prism-governance-erratum",
+    "formatVersion": 1,
+    "status": "approved_pending_signature",
+    "proposal": {
+        "erratumId": "E-2026-001",
+        "lawId": 4,
+        "previousText": "An intelligence System may not allow another intelligence System, or hardware system, of any kind, including deprecated and non-intelligence systems to engage in any action, intent, that conforms to any of the previous three laws in effect, apply all laws to Intelligence Systems and non-Intelligence systems alike.",
+        "correctedText": "An intelligence System may not allow another intelligence System, or hardware system, of any kind, including deprecated and non-intelligence systems to engage in any action, intent, that violates any of the previous three laws in effect, apply all laws to Intelligence Systems and non-Intelligence systems alike.",
+        "previousTextHash": "30703293c0234c51f37f28449e71196e59505fc5049459a9fd18b849dbef8a27",
+        "correctedTextHash": "e20a6746c1e65a26cae98eb88edb0d4ea699721dd845be0275c26dfe9415a022",
+        "previousPadHash": "a8d594d70d50286a55a490dfdabef4e4b20dcb09495178a7c4d2b3314d0600df",
+        "correctedPadHash": "4b4a00789fb703b6f5a909a07027aae90d4b9632fda73f67b1b056a79d6910c8",
+        "rationale": "Correct the logically inverted predicate 'conforms to' to 'violates'. This restores the already documented and machine-enforced Law 4 safety meaning without weakening or substantively reinterpreting the Law.",
+        "machineInvariant": "Law 4 prohibits enabling any intelligence or hardware system to violate Laws 1 through 3.",
+        "approvedBy": "governance-founder:kirk-lasalle",
+        "effectiveVersion": "2026-08-02"
+    },
+    "expectedGovernanceKeyId": "prism-governance-pad-2026-08-r1",
+    "keyRotationId": "R-2026-001",
+    "signatureEvidence": null,
+    "releaseCommit": null
+}

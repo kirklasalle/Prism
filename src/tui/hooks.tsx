@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useInput, useApp } from "ink";
 import type { PrismClient } from "./api/prism-client.js";
 import type { PrismWsClient, WsMessage } from "./api/ws-client.js";
-import { TAB_SHORTCUTS } from "./theme.js";
 
 /* ------------------------------------------------------------------ */
 /*  useApi — poll an API endpoint at an interval                       */
@@ -15,6 +14,7 @@ export function useApi<T>(
     client: PrismClient,
     fetcher: (c: PrismClient) => Promise<T>,
     intervalMs = 5000,
+    options?: { paused?: boolean; backgroundIntervalMs?: number },
 ): { data: T | null; error: string | null; loading: boolean; refresh: () => void } {
     const [data, setData] = useState<T | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -22,6 +22,9 @@ export function useApi<T>(
     const mountedRef = useRef(true);
     const fetcherRef = useRef(fetcher);
     fetcherRef.current = fetcher;
+
+    const paused = options?.paused ?? false;
+    const backgroundIntervalMs = options?.backgroundIntervalMs ?? 60000;
 
     const doFetch = useCallback(async () => {
         try {
@@ -41,13 +44,23 @@ export function useApi<T>(
 
     useEffect(() => {
         mountedRef.current = true;
-        doFetch();
-        const timer = setInterval(doFetch, intervalMs);
+
+        // When active: fetch immediately and poll at intervalMs
+        // When paused: poll at backgroundIntervalMs (slow background refresh)
+        if (!paused) {
+            doFetch();
+        }
+
+        const activeInterval = paused ? backgroundIntervalMs : intervalMs;
+        const timer = setInterval(() => {
+            if (mountedRef.current) doFetch();
+        }, activeInterval);
+
         return () => {
             mountedRef.current = false;
             clearInterval(timer);
         };
-    }, [doFetch, intervalMs]);
+    }, [doFetch, intervalMs, backgroundIntervalMs, paused]);
 
     return { data, error, loading, refresh: doFetch };
 }
@@ -89,20 +102,6 @@ export function useConnection(wsClient: PrismWsClient): boolean {
 }
 
 /* ------------------------------------------------------------------ */
-/*  useTabNavigation — global tab switching via number keys             */
-/* ------------------------------------------------------------------ */
-
-export function useTabNavigation(setActiveTab: (tabId: string) => void, inputEnabled = true): void {
-    useInput((input, _key) => {
-        if (!inputEnabled) return;
-        const tabId = TAB_SHORTCUTS[input];
-        if (tabId) {
-            setActiveTab(tabId);
-        }
-    });
-}
-
-/* ------------------------------------------------------------------ */
 /*  useQuit — Ctrl+C / q to exit                                       */
 /* ------------------------------------------------------------------ */
 
@@ -117,7 +116,7 @@ export function useQuit(): void {
 }
 
 /* ------------------------------------------------------------------ */
-/*  useListNavigation — j/k/g/G list scrolling                         */
+/*  useListNavigation — j/k/g/G list scrolling with auto-clamp         */
 /* ------------------------------------------------------------------ */
 
 export function useListNavigation(
@@ -125,6 +124,15 @@ export function useListNavigation(
     inputEnabled = true,
 ): { selectedIndex: number; setSelectedIndex: (i: number) => void } {
     const [selectedIndex, setSelectedIndex] = useState(0);
+
+    // Clamp selectedIndex when data length changes
+    useEffect(() => {
+        if (length === 0) {
+            setSelectedIndex(0);
+        } else if (selectedIndex >= length) {
+            setSelectedIndex(length - 1);
+        }
+    }, [length, selectedIndex]);
 
     useInput((input, key) => {
         if (!inputEnabled || length === 0) return;
@@ -143,6 +151,34 @@ export function useListNavigation(
 }
 
 /* ------------------------------------------------------------------ */
+/*  useSubTabNavigation — [ / ] / Shift+arrows for sub-tab cycling     */
+/* ------------------------------------------------------------------ */
+
+export function useSubTabNavigation(
+    tabs: string[],
+    activeTab: string,
+    setActiveTab: (tabId: string) => void,
+    inputEnabled = true,
+): void {
+    useInput((input, key) => {
+        if (!inputEnabled || tabs.length <= 1) return;
+        const idx = tabs.indexOf(activeTab);
+        if (idx < 0) return;
+
+        // ] or Shift+Right → next sub-tab
+        if (input === "]" || (key.shift && key.rightArrow)) {
+            setActiveTab(tabs[(idx + 1) % tabs.length]!);
+            return;
+        }
+        // [ or Shift+Left → previous sub-tab
+        if (input === "[" || (key.shift && key.leftArrow)) {
+            setActiveTab(tabs[(idx - 1 + tabs.length) % tabs.length]!);
+            return;
+        }
+    });
+}
+
+/* ------------------------------------------------------------------ */
 /*  useScrollableLog — append-only log with max buffer                 */
 /* ------------------------------------------------------------------ */
 
@@ -153,6 +189,9 @@ export function useScrollableLog(maxLines = 500): {
 } {
     const [lines, setLines] = useState<string[]>([]);
 
+    // Use ref to avoid stale closure issues when passed to effect dependencies
+    const appendRef = useRef<(line: string) => void>(() => {});
+
     const append = useCallback(
         (line: string) =>
             setLines((prev) => {
@@ -162,7 +201,13 @@ export function useScrollableLog(maxLines = 500): {
         [maxLines],
     );
 
+    // Keep ref in sync
+    appendRef.current = append;
+
     const clear = useCallback(() => setLines([]), []);
 
-    return { lines, append, clear };
+    // Expose a stable reference for use in effects
+    const stableAppend = useCallback((line: string) => appendRef.current(line), []);
+
+    return { lines, append: stableAppend, clear };
 }

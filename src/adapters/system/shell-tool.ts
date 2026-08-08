@@ -88,8 +88,15 @@ export class ShellTool implements Tool {
         version: "1.1.0",
         args: {
             command: { type: "string", required: true },
+            action: { type: "string" },
             timeoutMs: { type: "number" },
             cwd: { type: "string" },
+        },
+    } as const;
+    readonly governance = {
+        actions: {
+            shell_exec: { minimumRisk: "high", mutating: true, rollbackRequired: true },
+            read_only: { minimumRisk: "medium", mutating: false, rollbackRequired: false },
         },
     } as const;
 
