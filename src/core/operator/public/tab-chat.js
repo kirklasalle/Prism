@@ -2247,19 +2247,27 @@ if (typeof window !== 'undefined') {
 
       // Reconnection check
       let attempt = 0;
+      let gatewayStopped = false;
       const checkOnline = async () => {
         try {
           const res = await fetch('/api/v1/status', { method: 'GET', cache: 'no-store' });
-          if (res.ok) {
+          if (res.ok && gatewayStopped) {
             clearInterval(interval);
             if (progressBar) progressBar.style.width = '100%';
-            if (statusMsg) statusMsg.innerHTML = '<span style="color:#34d399">✓ Update Successful! Reconnection established. Reloading console...</span>';
+            if (statusMsg) statusMsg.innerHTML = '<span style="color:#34d399">✓ Update Successful! Backend restarted. Returning to login...</span>';
             setTimeout(() => {
-              window.location.reload();
+              window.location.assign('/login');
             }, 1000);
             return;
           }
-        } catch (_) { }
+          if (res.ok && statusMsg) {
+            statusMsg.textContent = 'Update accepted. Waiting for the existing gateway to stop...';
+          } else {
+            gatewayStopped = true;
+          }
+        } catch (_) {
+          gatewayStopped = true;
+        }
 
         attempt++;
         if (reconnectCountdown) reconnectCountdown.style.display = 'block';

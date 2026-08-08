@@ -24,6 +24,7 @@ const prefsPath = path.join(repoRoot, ".prism-preferences.json");
 const args = process.argv.slice(2);
 const forceBranch = args.includes("--force-branch");
 const fromGuardian = args.includes("--from-guardian");
+const fromDashboard = args.includes("--from-dashboard");
 
 // Load current configuration
 let dashboardPort = 7070;
@@ -513,13 +514,20 @@ async function main() {
         } catch (_) {}
 
         if (!started) {
-            // Spawn normal start command detached
-            console.log("[PRISM][update] Starting Prism server via background dev server...");
-            const child = spawn("npm", ["run", "dev"], {
+            const dashboardEntry = path.join(repoRoot, "dist", "src", "index.js");
+            const command = fromDashboard ? process.execPath : process.platform === "win32" ? "npm.cmd" : "npm";
+            const commandArgs = fromDashboard ? [dashboardEntry] : ["run", "dev"];
+            console.log(
+                fromDashboard
+                    ? "[PRISM][update] Starting headless backend for dashboard reconnection..."
+                    : "[PRISM][update] Starting Prism server via background dev server...",
+            );
+            const child = spawn(command, commandArgs, {
                 cwd: repoRoot,
                 detached: true,
                 stdio: "ignore",
                 env: { ...process.env, PRISM_MODE: "server" },
+                windowsHide: true,
             });
             child.unref();
         }

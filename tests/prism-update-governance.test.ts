@@ -6,6 +6,8 @@ import { join } from "node:path";
 describe("PRISM update governance integration", () => {
     const root = process.cwd();
     const orchestrator = readFileSync(join(root, "scripts", "prism-update.cjs"), "utf8");
+    const apiHandler = readFileSync(join(root, "src", "core", "operator", "routes", "api-handler.ts"), "utf8");
+    const dashboardClient = readFileSync(join(root, "src", "core", "operator", "public", "tab-chat.js"), "utf8");
 
     it("runs every coordinated governance gate before restart", () => {
         const requiredCommands = [
@@ -34,5 +36,15 @@ describe("PRISM update governance integration", () => {
     it("accepts successful commands whose output is inherited", () => {
         assert.match(orchestrator, /typeof output === "string" \? output\.trim\(\) : ""/);
         assert.doesNotMatch(orchestrator, /execSync\([^;]+\)\.trim\(\)/s);
+    });
+
+    it("restarts dashboard updates as a headless backend and returns the browser to login", () => {
+        assert.match(apiHandler, /"--from-dashboard"/);
+        assert.match(orchestrator, /fromDashboard \? \[dashboardEntry\] : \["run", "dev"\]/);
+        assert.match(orchestrator, /env: \{ \.\.\.process\.env, PRISM_MODE: "server" \}/);
+        assert.doesNotMatch(orchestrator, /fromDashboard[^;]+\.bat/s);
+        assert.match(dashboardClient, /let gatewayStopped = false/);
+        assert.match(dashboardClient, /res\.ok && gatewayStopped/);
+        assert.match(dashboardClient, /window\.location\.assign\('\/login'\)/);
     });
 });

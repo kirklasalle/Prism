@@ -160,10 +160,11 @@ export class ApiHandler implements IRouteHandler {
                 message: "Update process spawned. Server is shutting down.",
             });
             setTimeout(() => {
-                const child = spawn("node", [join(process.cwd(), "scripts", "prism-update.cjs")], {
+                const child = spawn(process.execPath, [join(process.cwd(), "scripts", "prism-update.cjs"), "--from-dashboard"], {
                     cwd: process.cwd(),
                     detached: true,
                     stdio: "ignore",
+                    windowsHide: true,
                 });
                 child.unref();
             }, 500);
