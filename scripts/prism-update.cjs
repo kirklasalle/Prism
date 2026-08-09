@@ -36,7 +36,7 @@ try {
             dashboardPort = parseInt(match[1], 10);
         }
     }
-} catch (_) {}
+} catch (_) { }
 
 function log(phase, msg, details) {
     const status = "succeeded";
@@ -265,7 +265,7 @@ function createBackup(stamp) {
     try {
         const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
         backupManifest.prismVersion = pkg.version || "unknown";
-    } catch (_) {}
+    } catch (_) { }
 
     for (const item of filesToBackup) {
         if (!fs.existsSync(item.path)) continue;
@@ -341,7 +341,7 @@ function restoreFromBackup(backupPath) {
                         if (fs.existsSync(side)) {
                             try {
                                 fs.unlinkSync(side);
-                            } catch (_) {}
+                            } catch (_) { }
                         }
                     }
                 }
@@ -511,7 +511,7 @@ async function main() {
                 runCmd("npx pm2 start prism");
                 started = true;
             }
-        } catch (_) {}
+        } catch (_) { }
 
         if (!started) {
             const dashboardEntry = path.join(repoRoot, "dist", "src", "index.js");

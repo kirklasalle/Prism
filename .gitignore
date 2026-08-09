@@ -47,6 +47,8 @@ config/plugin-private-key*.pem
 client_secret*.json
 *.bak
 *.tmp*
+/backups/
+/state/
 
 # Large media files
 *.mp4

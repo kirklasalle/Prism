@@ -1,7 +1,18 @@
 {
     "cSpell.words": [
+        "Alertmanager",
+        "DPAPI",
+        "inspectable",
+        "keypair",
+        "Merkle",
+        "Meso",
         "multimodal",
-        "PTAC"
+        "operationalization",
+        "preflights",
+        "PTAC",
+        "transactionally",
+        "unwired",
+        "upstreamed"
     ],
     "python-envs.defaultEnvManager": "ms-python.python:system"
 }
