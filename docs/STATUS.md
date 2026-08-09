@@ -1,4 +1,4 @@
-# PRISM — Authoritative Status (v0.22.4)
+# PRISM — Authoritative Status (v0.23.0)
 
 > Single source of truth for what's shipped, what's pending, and what's gated.
 > Replaces the audit-doc maze for operator and investor reading. Linked from
@@ -9,7 +9,11 @@
 PRISM is an **open-source, self-hostable, governance-native Agents-as-a-Service
 runtime**. It runs on a single laptop or a Kubernetes cluster, ships with a
 provable Permanent Active Directives integrity gate, a tiered approval queue, a
-self-driving test harness (PTAC), and — as of v0.22 — an additive **VRGC Robotics Add-on** and **Boot-time Add-on Management Panel** for managing and studying add-on components under full PRISM governance.
+self-driving test harness (PTAC), and an additive **VRGC Robotics Add-on** and
+**Boot-time Add-on Management Panel**. As of the 2026-08-08 maintenance line,
+the governed PAD correction and successor-key rotation are effective, npm audit
+is clean, and dashboard updates restart the backend headlessly before returning
+the operator to login.
 
 The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
@@ -17,7 +21,7 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.22.4`                                       |
+| Current version  | `0.23.0`                                       |
 | Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
 | Doctor           | `npm run doctor`                               |
@@ -26,7 +30,21 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 Operators are expected to run `npm run doctor` before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.21.0 → v0.22.4)
+## What's Shipped (v0.21.0 → v0.23.0)
+
+### Governance, Authentication, and Update Reliability (2026-08-08)
+
+- PAD Law 4 is corrected through the effective signed erratum lifecycle, with
+  detached Ed25519 verification and an effective emergency successor-key
+  rotation.
+- Setup authentication, JWT persistence, local-login operational sessions, and
+  dashboard redirection are stabilized.
+- The updater accepts successful inherited-output commands, runs governance
+  gates before restart, and completes clean npm-audit and SBOM/CVE checks.
+- Dashboard-triggered updates use `--from-dashboard`, restart the compiled
+  backend directly, require an observed stop/start cycle, and redirect to
+  `/login` after health recovery instead of launching the batch menu.
+- Focused update-governance and update API integration suites pass.
 
 ### Guardian MSD & Self-Healing (v0.22.4)
 

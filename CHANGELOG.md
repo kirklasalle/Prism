@@ -2,9 +2,18 @@
 
 All notable changes to the PRISM project are documented in this file.
 
-## Unreleased — Prism Refraction Repository Reference Alignment
+## v0.23.0 — 2026-08-08 — Governance, Authentication & Update Reliability
 
-Aligns public-facing repository and documentation references from the legacy `Prism` GitHub path to `PrismRefraction` while intentionally preserving compatible runtime namespaces and published image coordinates.
+Effectuates the governed PAD correction and successor-key rotation, stabilizes authentication and update execution, restores clean dependency-security gates, and aligns public-facing repository references with `PrismRefraction` while preserving compatible runtime namespaces and published image coordinates.
+
+### Governance and Runtime Maintenance — 2026-08-08
+
+- **Governed PAD Law 4 Correction and Successor-Key Rotation**: Corrected Law 4 from "conforms to" to "violates" through the signed erratum lifecycle, rotated the lost PAD signing key through the emergency successor-key process, and published effective cryptographic evidence for both actions.
+- **Authentication and Session Activation Stabilization**: Corrected setup-route authentication, empty data-directory JWT persistence, and ordinary local-login session activation so authenticated operators can reliably reach the dashboard.
+- **Updater Command Reliability**: Corrected inherited-output command handling so successful `execSync` calls no longer fail when they return `null`; governance verification gates now complete before restart.
+- **Dashboard Headless Restart Contract**: Dashboard-triggered updates now pass `--from-dashboard`, restart the compiled backend directly with `node dist/src/index.js`, wait until the previous gateway has stopped and the replacement is healthy, then return the browser to `/login`. The batch/menu startup path remains available only for operator-launched workflows.
+- **Dependency and SBOM Remediation**: Resolved the remaining high-severity transitive dependency advisories, preserved `gray-matter` compatibility through a scoped `js-yaml` override, repaired the stale lockfile alias, and restored clean npm-audit and SBOM/CVE gates.
+- **Regression Coverage**: Added update-governance contract assertions for dashboard launch context, headless backend startup, stop/start observation, and login redirection. Focused updater and API integration suites pass.
 
 ### Changed
 

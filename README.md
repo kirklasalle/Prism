@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.22.8-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.23.0-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
   <img src="https://img.shields.io/badge/tests-217_discovered_suites_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
@@ -207,7 +207,8 @@ Production-ready skills that agents use to interact with the world:
 PRISM features a secure, operator-controlled, and autonomously monitored update orchestration framework integrated directly into the operator dashboard and the Guardian Agent's background cycle:
 
 - **Guardian-Assisted Update Detection**: The Guardian Agent schedules periodic remote checks to query for update availability and alerts the operator on the console in real-time.
-- **One-Click Secure Execution**: Operators can invoke updating via a single click in the sidebar, which spawns the out-of-process update orchestrator (`scripts/prism-update.cjs`).
+- **One-Click Secure Execution**: Operators can invoke updating via a single click in the sidebar, which spawns the out-of-process update orchestrator (`scripts/prism-update.cjs`) with an explicit dashboard launch context.
+- **Headless Restart & Login Recovery**: Dashboard updates restart the compiled backend directly instead of opening the batch menu. The page confirms that the old gateway stopped, waits for the replacement backend to become healthy, and then returns the operator to `/login`.
 - **Safety First (Backup, Auditing, & Fallback)**:
   - Automatically backs up all sensitive configuration databases, keys, and session data before downloading code.
   - Executes a pre-flight system health audit using the PRISM Doctor suite to ensure baseline readiness.

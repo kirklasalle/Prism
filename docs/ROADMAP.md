@@ -1,7 +1,19 @@
 # PRISM Roadmap
 
-**Date:** 2026-06-18 (updated — see Phase S: Skills)
+**Date:** 2026-08-08 (updated — governance and updater maintenance)
 **Previous:** 2026-06-17
+
+## August 2026 Governance and Update Reliability Addendum (Complete)
+
+- [x] Effectuate PAD Law 4 erratum with exact-byte SHA-256 binding and detached Ed25519 verification.
+- [x] Complete emergency successor-key rotation after loss of the original PAD private key.
+- [x] Stabilize setup authentication, JWT persistence, local-login operational sessions, and dashboard access.
+- [x] Correct updater handling of successful commands whose inherited output returns no string value.
+- [x] Restore zero-vulnerability npm audit and passing SBOM/CVE generation with narrow compatibility overrides.
+- [x] Add a dashboard-specific update contract that restarts `dist/src/index.js` headlessly, observes a real gateway stop/start cycle, and redirects to `/login`.
+- [x] Add focused regression coverage for governance gates, wrapper forwarding, inherited-output handling, and dashboard restart behavior.
+
+**Next release action:** Keep dashboard update behavior under the existing governance and API integration suites; no additional batch-menu or frontend replacement work is planned for this milestone.
 
 ## SAP Program Addendum (2026-07-20)
 

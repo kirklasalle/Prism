@@ -1,11 +1,11 @@
 # PRISM Documentation Index
 
-**Last updated:** 2026-06-18 — Post-audit curation
+**Last updated:** 2026-08-08 — Governance and updater maintenance synchronization
 **Active docs:** 91 files | **Archived:** 66 files → `archive/`
 
 ## Quick Links — Start Here
 
-- **[STATUS.md](STATUS.md)** — Authoritative status: what's shipped, pending, gated
+- **[STATUS.md](STATUS.md)** — Authoritative v0.23.0 status: what's shipped, pending, gated
 - **[PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md](PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md)** — Master SAP approval package (code, docs, market, critical audit)
 - **[PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md](PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md)** — Single three-state matrix (Accomplished/In Progress/Not Yet)
 - **[INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md](INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md)** — Initialization Certificate v1.0 trust-root audit and release gates
@@ -13,7 +13,7 @@
 - **[MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md](MCP_IDS_RUNTIME_AWARENESS_FRAMEWORK.md)** — MCP IDS runtime awareness operating model
 - **[../audit.md](../audit.md)** — World-Class Complete Codebase Audit (2026-06-17)
 - **[AUDIT_TASK_LIST.md](AUDIT_TASK_LIST.md)** — Prioritized remediation task list
-- **[ROADMAP.md](ROADMAP.md)** — Updated with Phase R (Readiness) + Phase S (Skills)
+- **[ROADMAP.md](ROADMAP.md)** — Phase R/S roadmap plus completed August 2026 governance and updater reliability addendum
 - **[PRISM_SKILLS_ARCHITECTURE.md](PRISM_SKILLS_ARCHITECTURE.md)** — Guardian + CAC-native Skills architecture
 - **[../README.md](../README.md)** — Strategy, architecture, current capabilities
 - **[../CHANGELOG.md](../CHANGELOG.md)** — Version history
