@@ -101,6 +101,8 @@ export interface PrismPreferences {
     guardianConfig?: Record<string, unknown>;
     /** Phase 4: Dynamic power mode preference for LLM execution routing. */
     powerMode?: "performance" | "eco" | "adaptive";
+    /** Refraction Spectrum: default spend profile for cost-aware routing (Economy→Frontier). */
+    spendProfile?: "economy" | "value" | "balanced" | "premium" | "frontier";
     activeLlmProviderId?: string;
     activeLlmModel?: string;
     setupToken?: string;

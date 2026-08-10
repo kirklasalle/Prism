@@ -71,8 +71,26 @@ function contractToolToDefinition(name: string, contract: ToolContract): LlmTool
 
 function contractArgToSchema(arg: ToolArgSchema): LlmToolParameterSchema {
     const schema: LlmToolParameterSchema = { type: arg.type };
+    if (arg.description) {
+        schema.description = arg.description;
+    }
     if (arg.enum?.length) {
         schema.enum = [...arg.enum];
+    }
+    // Gemini (and OpenAI strict mode) require `items` on every array schema.
+    // Emit the declared element type, defaulting to string when unspecified.
+    if (arg.type === "array") {
+        if (arg.items && typeof arg.items === "object") {
+            schema.items = { type: arg.items.type };
+            if (arg.items.description) {
+                schema.items.description = arg.items.description;
+            }
+            if (arg.items.enum?.length) {
+                schema.items.enum = [...arg.items.enum];
+            }
+        } else {
+            schema.items = { type: "string" };
+        }
     }
     return schema;
 }

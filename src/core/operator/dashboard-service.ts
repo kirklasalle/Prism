@@ -1227,6 +1227,19 @@ export class DashboardService {
                     const result = this.supportLogAuditor.audit("scheduled");
                     this.broadcastEvent({ type: "support:log-audit-completed", result });
                 }
+                if (entry.action === "models.evaluate") {
+                    const taskId = (entry.payload?.taskId as string) || "jeans";
+                    try {
+                        const run = await this.llmProviders.runModelEvaluation(taskId);
+                        this.broadcastEvent({ type: "models:evaluation-completed", taskId, run });
+                    } catch (err) {
+                        this.broadcastEvent({
+                            type: "models:evaluation-failed",
+                            taskId,
+                            error: err instanceof Error ? err.message : String(err),
+                        });
+                    }
+                }
             },
         });
         this.supportLogAuditor.audit("initialization");
@@ -4997,6 +5010,37 @@ export class DashboardService {
                 const parsedUrl = new URL(url, "http://localhost");
                 const leftProviderId = parsedUrl.searchParams.get("leftProviderId");
                 const rightProviderId = parsedUrl.searchParams.get("rightProviderId");
+                const spend = parsedUrl.searchParams.get("spend");
+
+                // ── Budget-aware, isolation-preserving triad (Refraction Spectrum) ──
+                if (spend) {
+                    const validSpend = ["economy", "value", "balanced", "premium", "frontier"];
+                    if (!validSpend.includes(spend)) {
+                        return this.json(res, 400, { error: `Invalid spend profile: ${spend}` });
+                    }
+                    const triad = await this.llmProviders.suggestBudgetTriad(spend as never);
+                    const shape = (p: typeof triad.left) =>
+                        p
+                            ? {
+                                providerId: p.providerId,
+                                model: p.model,
+                                tier: p.tier,
+                                level: p.budgetClass,
+                                valueScore: p.valueScore,
+                                estCostPerTurnUsd: p.estCostPerTurnUsd,
+                                advisory: p.reason,
+                            }
+                            : null;
+                    return this.json(res, 200, {
+                        left: shape(triad.left),
+                        right: shape(triad.right),
+                        main: shape(triad.main),
+                        isolationLevel: triad.isolationLevel,
+                        estCostPerTurnUsd: triad.estCostPerTurnUsd,
+                        spend,
+                        reasoning: triad.reason,
+                    });
+                }
 
                 const candidates = await this.llmProviders.getSRModelCandidates();
 

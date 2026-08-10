@@ -192,7 +192,30 @@ export interface ModelCapabilityProfile {
     successor?: string;
     /** Human-readable deprecation reason or message. */
     deprecationReason?: string;
+
+    // ── Cost & Value axis (Refraction Spectrum) ─────────────────────
+    /** USD per 1M input tokens. 0 = truly free (local / subscription). */
+    costInputPer1M?: number;
+    /** USD per 1M output tokens. 0 = truly free (local / subscription). */
+    costOutputPer1M?: number;
+    /** Whether pricing is actually known (false ⇒ "unknown", not "free"). */
+    costKnown?: boolean;
+    /** How the model is billed. */
+    billingModel?: "per-token" | "subscription" | "local-free" | "unknown";
+    /** ISO date the pricing was last verified. */
+    pricingVerifiedAt?: string;
+    /** Spend classification derived from blended cost. */
+    budgetClass?: BudgetClass;
+    /** 0-100 normalized capability (price-independent). */
+    qualityIndex?: number;
+    /** 0-100 quality-per-dollar (knee of the price/quality curve). */
+    valueScore?: number;
+    /** Coarse latency class. */
+    latencyClass?: "instant" | "fast" | "standard" | "slow";
 }
+
+/** Spend classification along the cost axis: Economy → Frontier. */
+export type BudgetClass = "economy" | "value" | "balanced" | "premium" | "frontier";
 
 // ---------------------------------------------------------------------------
 // Deprecation Lifecycle
@@ -2969,54 +2992,72 @@ export function validateSRLeftModel(profile: ModelCapabilityProfile): SRValidati
     const level: SRValidationResult["level"] = !valid
         ? "insufficient"
         : profile.tier >= 5 && profile.strengths.includes("agentic")
-          ? "optimal"
-          : profile.tier >= 4
-            ? "standard"
-            : "minimum";
+            ? "optimal"
+            : profile.tier >= 4
+                ? "standard"
+                : "minimum";
 
     const advisoryText = !valid
         ? `Not qualified for Logic hemisphere. ${missing.join(". ")}.`
         : level === "optimal"
-          ? `Optimal: T${profile.tier} with full agentic capability.`
-          : level === "standard"
-            ? `Standard: T${profile.tier} logic model. T5 agentic recommended for best results.`
-            : `Minimum: T${profile.tier}. T4+ recommended for production SR workflows.`;
+            ? `Optimal: T${profile.tier} with full agentic capability.`
+            : level === "standard"
+                ? `Standard: T${profile.tier} logic model. T5 agentic recommended for best results.`
+                : `Minimum: T${profile.tier}. T4+ recommended for production SR workflows.`;
 
     return { valid, tier: profile.tier, level, missingCapabilities: missing, advisoryText };
 }
 
 /**
  * Validate a model profile for the SR Right (Creative) hemisphere.
- * Requires image-generation or video-generation modality at minimum; optimal includes video + audio.
+ *
+ * The Creative hemisphere's job is DIVERGENT COGNITION — lateral, exploratory,
+ * high-variance text reasoning — not necessarily media generation. So any
+ * capable text model (T3+) qualifies; media-generation modalities (image /
+ * video / audio) are an OPTIONAL bonus that lifts the qualification level,
+ * never a hard gate. This makes budget refraction possible: a cheap T3 text
+ * model can serve as the Creative hemisphere.
  */
 export function validateSRRightModel(profile: ModelCapabilityProfile): SRValidationResult {
     const missing: string[] = [];
     const modalities = profile.modalities ?? [];
+    const strengths = profile.strengths ?? [];
     const hasImageGen = modalities.includes("image-generation");
     const hasVideoGen = modalities.includes("video-generation");
     const hasAudioOut = modalities.includes("voice-output") || modalities.includes("tts");
+    const hasMediaGen = hasImageGen || hasVideoGen;
 
-    if (!hasImageGen && !hasVideoGen) {
-        missing.push("Requires image-generation or video-generation modality");
+    // Divergent-text capability: a capable text model with creative/reasoning range.
+    const divergentStrengths: ModelStrength[] = ["reasoning", "long-context", "multilingual", "multimodal"];
+    const hasDivergentText =
+        profile.tier >= 3 || strengths.some((s) => divergentStrengths.includes(s)) || strengths.includes("instruction-following");
+
+    const valid = hasDivergentText || hasMediaGen;
+    if (!valid) {
+        missing.push("Needs a capable text model (T3+) or an image/video generation modality");
     }
 
-    const valid = hasImageGen || hasVideoGen;
-    const optimalCount = [hasImageGen, hasVideoGen, hasAudioOut].filter(Boolean).length;
+    // Level: media generation is a bonus that raises the ceiling.
+    const mediaCount = [hasImageGen, hasVideoGen, hasAudioOut].filter(Boolean).length;
     const level: SRValidationResult["level"] = !valid
         ? "insufficient"
-        : optimalCount >= 3
-          ? "optimal"
-          : optimalCount >= 2
-            ? "standard"
-            : "minimum";
+        : mediaCount >= 3
+            ? "optimal"
+            : mediaCount === 2 || (mediaCount >= 1 && profile.tier >= 4)
+                ? "standard"
+                : "minimum";
 
     const advisoryText = !valid
         ? `Not qualified for Creative hemisphere. ${missing.join(". ")}.`
         : level === "optimal"
-          ? `Optimal: Image + video + audio generation at T${profile.tier}.`
-          : level === "standard"
-            ? `Standard: ${hasImageGen ? "Image" : "Video"} generation + ${hasVideoGen && hasImageGen ? "video" : hasAudioOut ? "audio" : "image"}.`
-            : `Minimum: ${hasImageGen ? "Image" : "Video"} generation only.`;
+            ? `Optimal: T${profile.tier} divergent reasoning + rich media generation.`
+            : level === "standard"
+                ? hasMediaGen
+                    ? `Standard: T${profile.tier} divergent text + ${hasImageGen ? "image" : "video"} generation.`
+                    : `Standard: T${profile.tier} divergent-text creative model.`
+                : hasMediaGen
+                    ? `Minimum: T${profile.tier} with ${hasImageGen ? "image" : hasVideoGen ? "video" : "audio"} generation.`
+                    : `Minimum: T${profile.tier} divergent-text model. T4+ or a media modality recommended for richer creativity.`;
 
     return { valid, tier: profile.tier, level, missingCapabilities: missing, advisoryText };
 }

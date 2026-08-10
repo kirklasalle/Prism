@@ -598,15 +598,188 @@ export
   state.matrixRefreshing = true;
   safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
   try {
-    await request('/api/models/matrix/refresh', { method: 'POST' });
+    var res = await request('/api/models/matrix/refresh', { method: 'POST' });
     await refreshChrome();
-    state.notice = 'Model matrix updated successfully.';
+    if (res && res.spectrum) {
+      state.matrixSpectrum = res.spectrum;
+      var s = res.spectrum;
+      state.notice = 'Matrix updated \u00b7 ' + (s.total || 0) + ' models \u00b7 pricing ' + (s.pricingCoveragePct != null ? s.pricingCoveragePct + '%' : 'n/a') + ' known \u00b7 verified ' + (s.verifiedAt || 'n/a');
+    } else {
+      state.notice = 'Model matrix updated successfully.';
+    }
   } catch (error) {
     state.notice = { type: 'error', message: 'Failed to update model matrix: ' + String(error) };
   }
   state.matrixRefreshing = false;
   safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
   render();
+}
+
+// ── Model Evaluation Panel (fixed tasks × changing Matrix = live telemetry) ──
+
+export
+  async function initModelEvalPanel() {
+  try {
+    var t = await request('/api/models/evaluate/tasks');
+    state.evalTasks = (t && t.tasks) || [];
+  } catch (e) { state.evalTasks = []; }
+  if (!state.evalTaskId) state.evalTaskId = (state.evalTasks[0] && state.evalTasks[0].id) || 'jeans';
+  await loadModelEvalHistory();
+  safeRenderStep('modelEvalPanel', renderModelEvalPanel);
+}
+
+export
+  async function loadModelEvalHistory() {
+  try {
+    var data = await request('/api/models/evaluate/history?limit=10&taskId=' + encodeURIComponent(state.evalTaskId || 'jeans'));
+    var hist = (data && data.history) || [];
+    state.evalLatestRun = hist.length > 0 ? hist[hist.length - 1] : null;
+    var tr = await request('/api/models/evaluate/trend?taskId=' + encodeURIComponent(state.evalTaskId || 'jeans'));
+    state.evalTrend = tr || null;
+  } catch (e) { /* non-critical */ }
+}
+
+export
+  function setEvalTask(taskId) {
+  state.evalTaskId = taskId;
+  loadModelEvalHistory().then(function () { safeRenderStep('modelEvalPanel', renderModelEvalPanel); });
+}
+
+export
+  async function runModelEval() {
+  var taskId = state.evalTaskId || 'jeans';
+  state.evalRunning = true;
+  safeRenderStep('modelEvalPanel', renderModelEvalPanel);
+  try {
+    var data = await request('/api/models/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: taskId })
+    });
+    if (data && data.run) {
+      state.evalLatestRun = data.run;
+      await loadModelEvalHistory();
+      showTransientNotice('Evaluation complete for "' + taskId + '" \u2014 ' + (data.run.results ? data.run.results.length : 0) + ' models measured.', 'info');
+    } else if (data && data.error) {
+      showTransientNotice('Evaluation failed: ' + data.error, 'error');
+    }
+  } catch (e) {
+    showTransientNotice('Evaluation failed: ' + e, 'error');
+  }
+  state.evalRunning = false;
+  safeRenderStep('modelEvalPanel', renderModelEvalPanel);
+}
+
+export
+  async function scheduleModelEval() {
+  var taskId = state.evalTaskId || 'jeans';
+  try {
+    await request('/api/scheduler/cron', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        label: 'Weekly model evaluation: ' + taskId,
+        type: 'recurring',
+        cronExpression: '0 6 * * 1',
+        action: 'models.evaluate',
+        payload: { taskId: taskId }
+      })
+    });
+    showTransientNotice('Scheduled weekly evaluation for "' + taskId + '" (Mondays 06:00). Telemetry will accrue automatically.', 'info');
+  } catch (e) {
+    showTransientNotice('Failed to schedule evaluation: ' + e, 'error');
+  }
+}
+
+var EVAL_BAND_COLORS = { economy: '#22c55e', value: '#3b82f6', balanced: '#94a3b8', premium: '#a855f7', frontier: '#ef4444' };
+
+export
+  function renderModelEvalPanel() {
+  var container = document.getElementById('model-eval-panel');
+  if (!container) return;
+  var tasks = state.evalTasks || [];
+  var run = state.evalLatestRun || null;
+  var html = '';
+
+  html += '<div style="border:1px solid var(--border,#30363d);border-radius:10px;padding:12px;background:rgba(255,255,255,0.015);">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
+  html += '<div style="font-size:13px;font-weight:700;">\u{1F4CA} Model Evaluation <span class="muted" style="font-weight:400;font-size:11px;">fixed task \u00d7 today\u2019s Matrix = live telemetry</span></div>';
+  html += '</div>';
+
+  // Task chips
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">';
+  for (var i = 0; i < tasks.length; i++) {
+    var tk = tasks[i];
+    var active = (state.evalTaskId || 'jeans') === tk.id;
+    html += '<button class="secondary-button" onclick="setEvalTask(&#39;' + escapeHtml(tk.id) + '&#39;)" style="font-size:11px;padding:4px 12px;border-radius:14px;'
+      + (active ? 'border-color:rgba(99,179,237,0.6);background:rgba(99,179,237,0.12);color:#63b3ed;font-weight:600;' : '') + '">'
+      + escapeHtml(tk.label || tk.id) + '</button>';
+  }
+  html += '</div>';
+
+  // Actions
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">';
+  html += '<button class="primary-button" onclick="runModelEval()" ' + (state.evalRunning ? 'disabled' : '') + ' style="font-size:11px;padding:5px 14px;">'
+    + (state.evalRunning ? '\u23F3 Running\u2026' : '\u25B6 Run Evaluation') + '</button>';
+  html += '<button class="secondary-button" onclick="scheduleModelEval()" style="font-size:11px;padding:5px 12px;" title="Create a recurring weekly scheduler job">\u{1F5D3} Schedule weekly</button>';
+  html += '</div>';
+
+  if (!run) {
+    html += '<div class="muted" style="font-size:12px;">No evaluation runs yet for this task. Click <strong>Run Evaluation</strong> to measure the current spectrum of models on this fixed task.</div>';
+    html += '</div>';
+    container.innerHTML = html;
+    return;
+  }
+
+  // Winners
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;">';
+  if (run.bestValue) html += '<span style="padding:2px 8px;border-radius:6px;background:rgba(59,130,246,0.12);color:#60a5fa;">\u{1F4B0} Best value: ' + escapeHtml(run.bestValue.model) + ' (' + run.bestValue.valuePerCent + '/\u00a2)</span>';
+  if (run.bestQuality) html += '<span style="padding:2px 8px;border-radius:6px;background:rgba(168,85,247,0.12);color:#c4b5fd;">\u2B50 Best quality: ' + escapeHtml(run.bestQuality.model) + ' (' + run.bestQuality.score + ')</span>';
+  if (run.cheapest) html += '<span style="padding:2px 8px;border-radius:6px;background:rgba(34,197,94,0.12);color:#22c55e;">\u{1F4B5} Cheapest: ' + escapeHtml(run.cheapest.model) + ' ($' + Number(run.cheapest.costUsd).toFixed(4) + ')</span>';
+  html += '</div>';
+
+  html += '<div class="muted" style="font-size:10px;margin-bottom:6px;">Run ' + escapeHtml((run.completedAt || '').slice(0, 19).replace('T', ' ')) + ' \u00b7 ' + (run.catalogModelCount || 0) + ' models in catalog \u00b7 ' + (run.totalMs || 0) + 'ms</div>';
+
+  // Results table
+  html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">';
+  html += '<thead><tr style="text-align:left;color:var(--fg-muted,#8b949e);">'
+    + '<th style="padding:3px 6px;">Band</th><th style="padding:3px 6px;">Model</th><th style="padding:3px 6px;">T</th>'
+    + '<th style="padding:3px 6px;">Latency</th><th style="padding:3px 6px;">Tokens</th><th style="padding:3px 6px;">Cost</th>'
+    + '<th style="padding:3px 6px;">Score</th><th style="padding:3px 6px;">Value/\u00a2</th></tr></thead><tbody>';
+  var results = run.results || [];
+  for (var r = 0; r < results.length; r++) {
+    var row = results[r];
+    var bc = EVAL_BAND_COLORS[row.budgetClass] || '#94a3b8';
+    var costStr = row.ok ? ('$' + Number(row.costUsd).toFixed(4) + (row.costEstimated ? '*' : '')) : '\u2014';
+    html += '<tr style="border-top:1px solid rgba(148,163,184,0.1);' + (row.ok ? '' : 'opacity:0.55;') + '">';
+    html += '<td style="padding:3px 6px;"><span style="color:' + bc + ';font-weight:700;">\u25CF</span> ' + escapeHtml(row.budgetClass) + '</td>';
+    html += '<td style="padding:3px 6px;" class="mono">' + escapeHtml(row.model) + (row.ok ? '' : ' <span style="color:#ef4444;">\u2717</span>') + '</td>';
+    html += '<td style="padding:3px 6px;">T' + row.tier + '</td>';
+    html += '<td style="padding:3px 6px;">' + (row.ok ? row.latencyMs + 'ms' : '\u2014') + '</td>';
+    html += '<td style="padding:3px 6px;">' + (row.ok ? (row.inputTokens + '/' + row.outputTokens) : '\u2014') + '</td>';
+    html += '<td style="padding:3px 6px;">' + costStr + '</td>';
+    html += '<td style="padding:3px 6px;">' + (row.ok ? row.score : '\u2014') + '</td>';
+    html += '<td style="padding:3px 6px;font-weight:600;">' + (row.ok ? row.valuePerCent : '\u2014') + '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  html += '<div class="muted" style="font-size:9px;margin-top:4px;">* estimated cost (provider did not report usage). Score is a deterministic keyword/structure signal.</div>';
+
+  // Trend vs previous run
+  var trend = state.evalTrend;
+  if (trend && trend.deltas && trend.deltas.length > 0) {
+    html += '<div style="margin-top:8px;font-size:11px;"><span class="muted">Since previous run: </span>';
+    for (var d = 0; d < trend.deltas.length; d++) {
+      var dl = trend.deltas[d];
+      var costArrow = dl.costDeltaUsd > 0 ? '\u25B2' : dl.costDeltaUsd < 0 ? '\u25BC' : '\u2192';
+      var costColor = dl.costDeltaUsd > 0 ? '#ef4444' : dl.costDeltaUsd < 0 ? '#22c55e' : '#8b949e';
+      html += '<span style="margin-right:10px;" class="mono">' + escapeHtml(dl.model) + ' <span style="color:' + costColor + ';">' + costArrow + '$' + Math.abs(dl.costDeltaUsd).toFixed(4) + '</span> \u0394score ' + (dl.scoreDelta >= 0 ? '+' : '') + dl.scoreDelta + '</span>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 export
@@ -3249,6 +3422,21 @@ function renderSRPanel() {
 
   html += '</div>';
 
+  // ── Refraction Spectrum strip: cheapest → money-no-object (additive) ──
+  html += '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
+  html += '<span class="muted" style="font-size:10px;">Spectrum:</span>';
+  var srSpendChips = [
+    { id: 'economy', label: '\u{1F7E2} Economy' },
+    { id: 'value', label: '\u{1F535} Value' },
+    { id: 'balanced', label: '\u26AA Balanced' },
+    { id: 'premium', label: '\u{1F7E3} Premium' },
+    { id: 'frontier', label: '\u{1F534} Frontier' }
+  ];
+  srSpendChips.forEach(function (c) {
+    html += '<button class="secondary-button" onclick="suggestSRSpectrum(&#39;' + c.id + '&#39;)" style="font-size:10px;padding:3px 10px;border-radius:14px;" title="Budget-aware, isolation-preserving triad in the ' + c.id + ' band">' + c.label + '</button>';
+  });
+  html += '</div>';
+
   // Inline preset name input (hidden by default)
   html += '<div id="sr-preset-save-row" style="display:none;margin-top:8px;display:none;align-items:center;gap:8px;">';
   html += '<input id="sr-preset-name-input" type="text" placeholder="Preset name\u2026" style="font-size:12px;padding:4px 10px;background:var(--bg-card);color:var(--fg);border:1px solid var(--border);border-radius:8px;width:200px;" maxlength="80">';
@@ -3586,6 +3774,35 @@ export
   }
 }
 
+// ── SR Refraction Spectrum: budget-aware, isolation-preserving triad ──
+export
+  async function suggestSRSpectrum(spend) {
+  try {
+    var data = await request('/api/sr/suggest?spend=' + encodeURIComponent(spend));
+    if (!data.left && !data.right) {
+      state.notice = { message: data.reasoning || 'No qualified models in this spend band.', type: 'error' };
+      showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), 'error');
+      return;
+    }
+    if (!state.srConfig) state.srConfig = { enabled: false, leftProviderId: null, leftModel: null, rightProviderId: null, rightModel: null };
+    if (data.left) {
+      state.srConfig.leftProviderId = data.left.providerId;
+      state.srConfig.leftModel = data.left.model;
+    }
+    if (data.right) {
+      state.srConfig.rightProviderId = data.right.providerId;
+      state.srConfig.rightModel = data.right.model;
+    }
+    var cost = (typeof data.estCostPerTurnUsd === 'number') ? ' \u00b7 ~$' + data.estCostPerTurnUsd.toFixed(4) + '/turn' : '';
+    state.notice = { message: '\u2728 ' + (data.reasoning || (spend + ' refraction applied')) + cost, type: 'success' };
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), 'info');
+    safeRenderStep('srPanel', renderSRPanel);
+  } catch (e) {
+    state.notice = { message: 'Spectrum suggest failed: ' + e, type: 'error' };
+    showTransientNotice(typeof state.notice === 'object' ? state.notice.message : String(state.notice || ''), 'error');
+  }
+}
+
 var _settingsTabInitialized = false;
 export function initSettingsTab() {
   if (_settingsTabInitialized) return;
@@ -3595,6 +3812,9 @@ export function initSettingsTab() {
   if (!divider || !leftPanel || !row) return;
   _settingsTabInitialized = true;
   refreshCacChain();
+
+  // Model evaluation panel (fixed tasks × changing Matrix)
+  initModelEvalPanel();
 
   // Periodically refresh LLRE Telemetry
   refreshLlreTelemetry();

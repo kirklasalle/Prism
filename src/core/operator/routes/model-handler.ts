@@ -22,126 +22,126 @@ const BUILTIN_RECOMMENDED_CATALOG: Array<{
     mmprojName: string;
     ollamaTag: string;
 }> = [
-    {
-        name: "Qwen2.5-VL 3B Q8 (Vision, High Quality)",
-        fileName: "Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
-        size: "3.3 GB",
-        url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
-        mmprojUrl:
-            "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-        mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-        ollamaTag: "qwen2.5-vl:3b-q8_0",
-    },
-    {
-        name: "Qwen2.5-VL 3B Q4 (Vision, Efficient)",
-        fileName: "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
-        size: "1.9 GB",
-        url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
-        mmprojUrl:
-            "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-        mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
-        ollamaTag: "qwen2.5-vl:3b-q4_K_M",
-    },
-    {
-        name: "Gemma 3 1B (Low VRAM ≤4 GB)",
-        fileName: "google_gemma-3-1b-it-Q4_K_M.gguf",
-        size: "0.8 GB",
-        url: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "gemma3:1b",
-    },
-    {
-        name: "Gemma 3 4B (Balanced)",
-        fileName: "google_gemma-3-4b-it-Q4_K_M.gguf",
-        size: "2.8 GB",
-        url: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "gemma3:4b",
-    },
-    {
-        name: "Gemma 2 2B Q4 (Agentic, 6 GB VRAM)",
-        fileName: "gemma-2-2b-it-Q4_K_M.gguf",
-        size: "1.6 GB",
-        url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "gemma2:2b",
-    },
-    {
-        name: "Gemma 2 2B Q8 (Agentic, High Quality)",
-        fileName: "gemma-2-2b-it-Q8_0.gguf",
-        size: "2.9 GB",
-        url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "gemma2:2b-instruct-q8_0",
-    },
-    {
-        name: "Phi-3.5 Mini 3.8B Q4 (Reasoning)",
-        fileName: "Phi-3.5-mini-instruct-Q4_K_M.gguf",
-        size: "2.4 GB",
-        url: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "phi4:mini",
-    },
-    {
-        name: "Llama 3.2 3B Q4 (General)",
-        fileName: "llama-3.2-3b-instruct-q4_k_m.gguf",
-        size: "2.2 GB",
-        url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "llama3.2:3b",
-    },
-    {
-        name: "Qwen2.5 1.5B Q4 (Compact Agent)",
-        fileName: "qwen-2.5-1.5b-instruct-q4_k_m.gguf",
-        size: "1.1 GB",
-        url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "qwen2.5:1.5b",
-    },
-    {
-        name: "Qwen2.5 3B Q4 (Highly Recommended)",
-        fileName: "qwen-2.5-3b-instruct-q4_k_m.gguf",
-        size: "1.9 GB",
-        url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "qwen2.5:3b",
-    },
-    {
-        name: "Qwen2.5 3B Q8 (Strong Performance)",
-        fileName: "qwen-2.5-3b-instruct-q8_0.gguf",
-        size: "3.4 GB",
-        url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q8_0.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "qwen2.5:3b-instruct-q8_0",
-    },
-    {
-        name: "Ministral 3B Q4 (128k Context)",
-        fileName: "mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
-        size: "2.1 GB",
-        url: "https://huggingface.co/bartowski/mistralai_Ministral-3-3B-Instruct-2512-GGUF/resolve/main/mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "ministral:3b",
-    },
-    {
-        name: "Granite 3.1 3B Q4 (128k Context)",
-        fileName: "granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
-        size: "2.0 GB",
-        url: "https://huggingface.co/bartowski/granite-3.1-3b-a800m-instruct-GGUF/resolve/main/granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
-        mmprojUrl: "",
-        mmprojName: "",
-        ollamaTag: "granite3.1-dense:3b",
-    },
-];
+        {
+            name: "Qwen2.5-VL 3B Q8 (Vision, High Quality)",
+            fileName: "Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
+            size: "3.3 GB",
+            url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
+            mmprojUrl:
+                "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+            mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+            ollamaTag: "qwen2.5-vl:3b-q8_0",
+        },
+        {
+            name: "Qwen2.5-VL 3B Q4 (Vision, Efficient)",
+            fileName: "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+            size: "1.9 GB",
+            url: "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+            mmprojUrl:
+                "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+            mmprojName: "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+            ollamaTag: "qwen2.5-vl:3b-q4_K_M",
+        },
+        {
+            name: "Gemma 3 1B (Low VRAM ≤4 GB)",
+            fileName: "google_gemma-3-1b-it-Q4_K_M.gguf",
+            size: "0.8 GB",
+            url: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "gemma3:1b",
+        },
+        {
+            name: "Gemma 3 4B (Balanced)",
+            fileName: "google_gemma-3-4b-it-Q4_K_M.gguf",
+            size: "2.8 GB",
+            url: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "gemma3:4b",
+        },
+        {
+            name: "Gemma 2 2B Q4 (Agentic, 6 GB VRAM)",
+            fileName: "gemma-2-2b-it-Q4_K_M.gguf",
+            size: "1.6 GB",
+            url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "gemma2:2b",
+        },
+        {
+            name: "Gemma 2 2B Q8 (Agentic, High Quality)",
+            fileName: "gemma-2-2b-it-Q8_0.gguf",
+            size: "2.9 GB",
+            url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "gemma2:2b-instruct-q8_0",
+        },
+        {
+            name: "Phi-3.5 Mini 3.8B Q4 (Reasoning)",
+            fileName: "Phi-3.5-mini-instruct-Q4_K_M.gguf",
+            size: "2.4 GB",
+            url: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "phi4:mini",
+        },
+        {
+            name: "Llama 3.2 3B Q4 (General)",
+            fileName: "llama-3.2-3b-instruct-q4_k_m.gguf",
+            size: "2.2 GB",
+            url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "llama3.2:3b",
+        },
+        {
+            name: "Qwen2.5 1.5B Q4 (Compact Agent)",
+            fileName: "qwen-2.5-1.5b-instruct-q4_k_m.gguf",
+            size: "1.1 GB",
+            url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "qwen2.5:1.5b",
+        },
+        {
+            name: "Qwen2.5 3B Q4 (Highly Recommended)",
+            fileName: "qwen-2.5-3b-instruct-q4_k_m.gguf",
+            size: "1.9 GB",
+            url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "qwen2.5:3b",
+        },
+        {
+            name: "Qwen2.5 3B Q8 (Strong Performance)",
+            fileName: "qwen-2.5-3b-instruct-q8_0.gguf",
+            size: "3.4 GB",
+            url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q8_0.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "qwen2.5:3b-instruct-q8_0",
+        },
+        {
+            name: "Ministral 3B Q4 (128k Context)",
+            fileName: "mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+            size: "2.1 GB",
+            url: "https://huggingface.co/bartowski/mistralai_Ministral-3-3B-Instruct-2512-GGUF/resolve/main/mistralai_Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "ministral:3b",
+        },
+        {
+            name: "Granite 3.1 3B Q4 (128k Context)",
+            fileName: "granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
+            size: "2.0 GB",
+            url: "https://huggingface.co/bartowski/granite-3.1-3b-a800m-instruct-GGUF/resolve/main/granite-3.1-3b-a800m-instruct-Q4_K_M.gguf",
+            mmprojUrl: "",
+            mmprojName: "",
+            ollamaTag: "granite3.1-dense:3b",
+        },
+    ];
 
 export class ModelHandler implements IRouteHandler {
     match(req: IncomingMessage): boolean {
@@ -502,7 +502,14 @@ export class ModelHandler implements IRouteHandler {
                     }
                 }
                 const matrix = service.getLlmProviders().getFullModelMatrix();
-                return this.json(res, 200, { refreshed: true, providers: results, matrix });
+                // Refraction Spectrum: recompute cost/value coverage (numbers, dates, percentages).
+                let spectrum: unknown = null;
+                try {
+                    spectrum = await service.getLlmProviders().computeSpectrumCoverage();
+                } catch (e) {
+                    logger.warn("[models] spectrum coverage failed during refresh", { error: String(e) });
+                }
+                return this.json(res, 200, { refreshed: true, providers: results, matrix, spectrum });
             } catch (error) {
                 return this.json(res, 500, { error: String(error) });
             }
@@ -516,6 +523,78 @@ export class ModelHandler implements IRouteHandler {
                 return this.json(res, 200, { removed, pattern });
             } catch (error) {
                 return this.json(res, 400, { error: String(error) });
+            }
+        }
+
+        // ── Refraction Spectrum — per-role Economy→Frontier picks + coverage ──
+        if (method === "GET" && url === "/api/models/spectrum") {
+            try {
+                const [spectrum, stats] = await Promise.all([
+                    service.getLlmProviders().buildRoutingSpectrum(),
+                    service.getLlmProviders().computeSpectrumCoverage(),
+                ]);
+                return this.json(res, 200, { spectrum, stats });
+            } catch (error) {
+                return this.json(res, 500, { error: String(error) });
+            }
+        }
+
+        // ── Primary single-model per-turn cost preview ──
+        if (method === "GET" && url.startsWith("/api/models/cost-estimate")) {
+            try {
+                const parsed = new URL(url, "http://localhost");
+                const providerId = parsed.searchParams.get("providerId") ?? "";
+                const model = parsed.searchParams.get("model") ?? "";
+                if (!providerId || !model) {
+                    return this.json(res, 400, { error: "providerId and model are required" });
+                }
+                const inTok = parseInt(parsed.searchParams.get("inputTokens") ?? "2000", 10);
+                const outTok = parseInt(parsed.searchParams.get("outputTokens") ?? "1000", 10);
+                const estimate = service
+                    .getLlmProviders()
+                    .estimatePrimaryCost(providerId, model, isNaN(inTok) ? 2000 : inTok, isNaN(outTok) ? 1000 : outTok);
+                return this.json(res, 200, estimate);
+            } catch (error) {
+                return this.json(res, 500, { error: String(error) });
+            }
+        }
+
+        // ── Model Evaluation — fixed tasks × changing Matrix = fresh telemetry ──
+        if (method === "GET" && url === "/api/models/evaluate/tasks") {
+            return this.json(res, 200, { tasks: service.getLlmProviders().getEvaluationTasks() });
+        }
+
+        if (method === "POST" && url === "/api/models/evaluate") {
+            try {
+                const body = await service.readJsonBody<{ taskId?: string }>(req);
+                const taskId = body.taskId ?? "jeans";
+                const run = await service.getLlmProviders().runModelEvaluation(taskId);
+                if ("error" in run) return this.json(res, 400, run);
+                return this.json(res, 200, { run });
+            } catch (error) {
+                return this.json(res, 500, { error: String(error) });
+            }
+        }
+
+        if (method === "GET" && url.startsWith("/api/models/evaluate/history")) {
+            try {
+                const parsed = new URL(url, "http://localhost");
+                const taskId = parsed.searchParams.get("taskId") ?? undefined;
+                const limit = parseInt(parsed.searchParams.get("limit") ?? "50", 10);
+                const history = service.getLlmProviders().getEvaluationHistory(isNaN(limit) ? 50 : limit, taskId);
+                return this.json(res, 200, { history });
+            } catch (error) {
+                return this.json(res, 500, { error: String(error) });
+            }
+        }
+
+        if (method === "GET" && url.startsWith("/api/models/evaluate/trend")) {
+            try {
+                const parsed = new URL(url, "http://localhost");
+                const taskId = parsed.searchParams.get("taskId") ?? "jeans";
+                return this.json(res, 200, service.getLlmProviders().getEvaluationTrend(taskId));
+            } catch (error) {
+                return this.json(res, 500, { error: String(error) });
             }
         }
 

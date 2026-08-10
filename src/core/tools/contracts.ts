@@ -6,6 +6,10 @@ export interface ToolArgSchema {
     type: ToolArgSchemaType;
     required?: boolean;
     enum?: readonly string[];
+    /** Element schema for array-typed args. Required by Gemini for `type: "array"`. */
+    items?: { type: ToolArgSchemaType; enum?: readonly string[]; description?: string };
+    /** Optional human-readable description surfaced to the LLM. */
+    description?: string;
 }
 
 export interface ToolContract {

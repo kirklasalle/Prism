@@ -64,6 +64,24 @@ import type {
     SRIsolationLevel,
 } from "./model-capability-matrix.js";
 import { computeCostUsd } from "./usage-pricing-catalog.js";
+import {
+    enrichProfile,
+    estimateTurnCostUsd,
+    buildRoleSpectrum,
+    selectModelForRoleWithBudget,
+    buildBudgetTriad,
+    computeSpectrumStats,
+} from "./model-spectrum.js";
+import type { BudgetClass, RoleSpectrum, BudgetTriad, SpectrumStats } from "./model-spectrum.js";
+import {
+    EVAL_TASKS,
+    getEvalTask,
+    runSpectrumEvaluation,
+    persistEvaluationRun,
+    loadEvaluationHistory,
+    computeTrend,
+} from "./model-evaluation.js";
+import type { EvaluationRun, GenerateFn } from "./model-evaluation.js";
 import type { ActivityBus } from "../activity/bus.js";
 import type { UsageMeteringService } from "./usage-metering-service.js";
 
@@ -1789,6 +1807,114 @@ export class LlmProviderManager {
             avgOutputTokens,
             advisory,
         };
+    }
+
+    // ── Refraction Spectrum (cost/value axis) ──────────────────────────
+
+    /** Build the flat list of enabled provider/model pairs for spectrum math. */
+    private async getAvailableModelsList(): Promise<AvailableModel[]> {
+        const catalog = await this.getCatalog();
+        const available: AvailableModel[] = [];
+        for (const provider of catalog.providers) {
+            if (!provider.enabled) continue;
+            for (const model of provider.models) {
+                available.push({
+                    providerId: provider.id,
+                    model,
+                    locality: provider.kind === "local" ? "local" : "cloud",
+                });
+            }
+        }
+        return available;
+    }
+
+    /** Per-role Economy→Frontier spectrum of picks (drives the spectrum "Suggest"). */
+    async buildRoutingSpectrum(): Promise<Record<string, RoleSpectrum>> {
+        const available = await this.getAvailableModelsList();
+        const result: Record<string, RoleSpectrum> = {};
+        for (const role of ALL_TASK_ROLES) {
+            result[role] = buildRoleSpectrum(role, available);
+        }
+        return result;
+    }
+
+    /** Cost-aware pick for a single role at a given spend profile, with neighbors. */
+    async selectRoleAtBudget(role: TaskRole, spend: BudgetClass, maxCostPer1M?: number) {
+        const available = await this.getAvailableModelsList();
+        return selectModelForRoleWithBudget(role, available, { spendProfile: spend, maxCostPer1M });
+    }
+
+    /** Budget-aware, isolation-preserving SR triad suggestion. */
+    async suggestBudgetTriad(spend: BudgetClass): Promise<BudgetTriad> {
+        const available = await this.getAvailableModelsList();
+        return buildBudgetTriad(available, spend);
+    }
+
+    /** Per-turn cost preview for the Primary single-model path (mirrors estimateSRCost). */
+    estimatePrimaryCost(
+        providerId: string,
+        model: string,
+        avgInputTokens = 2_000,
+        avgOutputTokens = 1_000,
+    ): { estimatedCostUsd: number; costKnown: boolean; budgetClass: BudgetClass; currency: "USD" } {
+        const profile = enrichProfile(providerId, resolveProfile(model));
+        return {
+            estimatedCostUsd: estimateTurnCostUsd(profile, avgInputTokens, avgOutputTokens),
+            costKnown: profile.costKnown ?? false,
+            budgetClass: profile.budgetClass ?? "balanced",
+            currency: "USD",
+        };
+    }
+
+    /** Compute spectrum coverage stats across the enabled catalog (Update-button summary). */
+    async computeSpectrumCoverage(): Promise<SpectrumStats> {
+        const available = await this.getAvailableModelsList();
+        return computeSpectrumStats(available);
+    }
+
+    // ── Model Evaluation (fixed tasks × changing Matrix = fresh telemetry) ──
+
+    /** List the fixed evaluation tasks. */
+    getEvaluationTasks(): ReadonlyArray<{ id: string; label: string }> {
+        return EVAL_TASKS.map((t) => ({ id: t.id, label: t.label }));
+    }
+
+    /**
+     * Run a fixed eval task against one representative model per budget class,
+     * capturing real latency/tokens/cost, and persist the run to the time-series.
+     */
+    async runModelEvaluation(taskId: string): Promise<EvaluationRun | { error: string }> {
+        const task = getEvalTask(taskId);
+        if (!task) return { error: `Unknown eval task: ${taskId}` };
+        const available = await this.getAvailableModelsList();
+        if (available.length === 0) return { error: "No enabled models available to evaluate." };
+
+        const generate: GenerateFn = async (prompt, selection, _maxOutputTokens) => {
+            const out = await this.generate(
+                {
+                    message: prompt,
+                    conversation: [],
+                    systemPrompt: "You are a concise, helpful assistant. Answer directly and briefly.",
+                },
+                { providerId: selection.providerId, model: selection.model },
+            );
+            if (!out) return null;
+            return { content: out.content, tokensUsed: out.tokensUsed };
+        };
+
+        const run = await runSpectrumEvaluation(task, available, generate);
+        persistEvaluationRun(run);
+        return run;
+    }
+
+    /** Load the evaluation time-series (most recent last). */
+    getEvaluationHistory(limit = 50, taskId?: string): EvaluationRun[] {
+        return loadEvaluationHistory(limit, taskId);
+    }
+
+    /** Latest vs previous run deltas for a task. */
+    getEvaluationTrend(taskId: string) {
+        return computeTrend(taskId);
     }
 
     /**

@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Model Matrix — Critical Audit &amp; World-Class Roadmap · Prism Refraction</title>
+    <style>
+        :root {
+            --bg: #0b0f17;
+            --panel: #111827;
+            --panel2: #0e1420;
+            --fg: #e6edf6;
+            --muted: #93a1b5;
+            --line: rgba(148, 163, 184, .16);
+            --accent: #63b3ed;
+            --econ: #22c55e;
+            --value: #3b82f6;
+            --bal: #94a3b8;
+            --prem: #a855f7;
+            --front: #ef4444;
+            --warn: #fbbf24;
+            --ok: #34d399;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html {
+            scroll-behavior: smooth
+        }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #0b0f17, #0d1320 60%, #0b0f17);
+            color: var(--fg);
+            font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .wrap {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding: 0 22px 96px
+        }
+
+        header.hero {
+            padding: 64px 0 34px;
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 36px
+        }
+
+        .kicker {
+            color: var(--accent);
+            font-weight: 700;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            font-size: 12px
+        }
+
+        h1 {
+            font-size: 38px;
+            line-height: 1.12;
+            margin: .35em 0 .2em;
+            letter-spacing: -.5px
+        }
+
+        h2 {
+            font-size: 25px;
+            margin: 52px 0 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--line)
+        }
+
+        h3 {
+            font-size: 18px;
+            margin: 30px 0 10px;
+            color: #cdd9e8
+        }
+
+        p {
+            color: #d3ddea
+        }
+
+        .sub {
+            color: var(--muted);
+            font-size: 16px;
+            max-width: 74ch
+        }
+
+        .meta {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 16px
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, .03);
+            color: var(--muted)
+        }
+
+        .badge.ok {
+            color: var(--ok);
+            border-color: rgba(52, 211, 153, .35);
+            background: rgba(52, 211, 153, .08)
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none
+        }
+
+        a:hover {
+            text-decoration: underline
+        }
+
+        code {
+            background: rgba(148, 163, 184, .14);
+            padding: .1em .4em;
+            border-radius: 5px;
+            font-size: .9em;
+            font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace
+        }
+
+        pre {
+            background: var(--panel2);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 16px 18px;
+            overflow: auto;
+            font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+            font-size: 13px
+        }
+
+        .card {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(255, 255, 255, 0));
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 22px 24px;
+            margin: 18px 0
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 14px 0;
+            font-size: 14px
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--line);
+            vertical-align: top
+        }
+
+        th {
+            color: #cdd9e8;
+            font-size: 12px;
+            letter-spacing: .04em;
+            text-transform: uppercase
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, .02)
+        }
+
+        .sev {
+            font-weight: 800;
+            border-radius: 6px;
+            padding: 1px 7px;
+            font-size: 12px;
+            white-space: nowrap
+        }
+
+        .crit {
+            color: #fecaca;
+            background: rgba(239, 68, 68, .16)
+        }
+
+        .maj {
+            color: #fed7aa;
+            background: rgba(251, 146, 60, .16)
+        }
+
+        .mod {
+            color: #fde68a;
+            background: rgba(250, 204, 21, .14)
+        }
+
+        figure {
+            margin: 22px 0;
+            text-align: center
+        }
+
+        figcaption {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 8px
+        }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px
+        }
+
+        @media(max-width:760px) {
+            .grid2 {
+                grid-template-columns: 1fr
+            }
+
+            h1 {
+                font-size: 30px
+            }
+        }
+
+        .toc {
+            columns: 2;
+            column-gap: 26px;
+            font-size: 14px
+        }
+
+        .toc a {
+            display: block;
+            padding: 3px 0;
+            color: #c3d0e0
+        }
+
+        @media(max-width:640px) {
+            .toc {
+                columns: 1
+            }
+        }
+
+        .lead {
+            font-size: 17px;
+            color: #e6edf6
+        }
+
+        blockquote {
+            margin: 26px 0;
+            padding: 14px 20px;
+            border-left: 3px solid var(--accent);
+            background: rgba(99, 179, 237, .06);
+            border-radius: 0 12px 12px 0;
+            color: #cfe0f2;
+            font-style: italic
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700
+        }
+
+        .p-econ {
+            color: #052e16;
+            background: var(--econ)
+        }
+
+        .p-value {
+            color: #eff6ff;
+            background: var(--value)
+        }
+
+        .p-bal {
+            color: #0b1220;
+            background: var(--bal)
+        }
+
+        .p-prem {
+            color: #faf5ff;
+            background: var(--prem)
+        }
+
+        .p-front {
+            color: #fff;
+            background: var(--front)
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--line);
+            margin: 40px 0
+        }
+
+        .foot {
+            color: var(--muted);
+            font-size: 13px;
+            text-align: center;
+            margin-top: 40px
+        }
+
+        svg {
+            max-width: 100%;
+            height: auto
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+
+        <header class="hero">
+            <div class="kicker">Prism Refraction · Cognitive Routing</div>
+            <h1>The Model Matrix<br />Critical Audit &amp; World-Class Roadmap</h1>
+            <p class="sub">Turning the Matrix from a single-axis <em>capability maximizer</em> into a two-axis
+                <strong>Refraction Spectrum engine</strong> — pick any point from <em>"cheapest that still does the
+                    job"</em>
+                to <em>"money is no object,"</em> for both the Primary model and the SR Left/Right refraction.
+            </p>
+            <div class="meta">
+                Prepared for <strong>Kirk LaSalle</strong> &nbsp;·&nbsp; <span class="badge ok">Phases 0–4
+                    implemented</span>
+                &nbsp;·&nbsp; <span class="badge">Additive only · Frontend Protection honored</span>
+            </div>
+        </header>
+
+        <div class="card">
+            <strong>Contents</strong>
+            <nav class="toc" style="margin-top:10px">
+                <a href="#exec">0 · Executive Summary</a>
+                <a href="#today">1 · What the Matrix Is Today</a>
+                <a href="#findings">2 · Critical Audit Findings</a>
+                <a href="#vision">3 · The Refraction Spectrum</a>
+                <a href="#data">4 · New Data Model</a>
+                <a href="#classes">5 · Budget Classes</a>
+                <a href="#value">6 · Value Score</a>
+                <a href="#routing">7 · Cost-Aware Routing</a>
+                <a href="#suggest">8 · Redesigned "Suggest"</a>
+                <a href="#sr">9 · SR Budget Refraction</a>
+                <a href="#update">10 · The Update Button Does More</a>
+                <a href="#phases">11 · Phased Roadmap</a>
+                <a href="#metrics">12 · Success Metrics</a>
+                <a href="#status">13 · Implementation Status</a>
+            </nav>
+        </div>
+
+        <!-- ═══════════════ 0 EXEC ═══════════════ -->
+        <h2 id="exec">0 · Executive Summary</h2>
+        <p class="lead">The Model Matrix is Prism's brain-stem: it maps every reachable model — from a 1B local Gemma
+            to a trillion-parameter frontier cloud model — to a capability profile, and routes each task (and each
+            Spectrum Refraction hemisphere) to a model.</p>
+        <p>The engineering underneath is strong: tiering, modality routing, deprecation lifecycle, VRAM-awareness,
+            SR isolation invariants, and a kinship model to prevent cognitive homogenization. But it optimized for
+            <strong>one axis only: capability tier</strong>. It was <em>tier-maximizing</em>, not <em>value-aware</em>.
+            Cost lived in a <strong>separate, stale catalog</strong> with its <strong>own duplicate tier field</strong>.
+        </p>
+
+        <blockquote>Today the Matrix answered "what is the <em>best</em> model?"<br />
+            Now it answers "what is the best model <em>for this budget, this task, and this refraction</em> —
+            and what do I gain or lose by spending more or less?"</blockquote>
+
+        <figure>
+            <!-- TWO-AXIS SPECTRUM -->
+            <svg viewBox="0 0 920 430" role="img" aria-label="Two-axis spectrum: capability vs cost">
+                <defs>
+                    <linearGradient id="bandGrad" x1="0" y1="1" x2="1" y2="0">
+                        <stop offset="0" stop-color="#22c55e" />
+                        <stop offset=".28" stop-color="#3b82f6" />
+                        <stop offset=".52" stop-color="#94a3b8" />
+                        <stop offset=".76" stop-color="#a855f7" />
+                        <stop offset="1" stop-color="#ef4444" />
+                    </linearGradient>
+                </defs>
+                <rect x="0" y="0" width="920" height="430" fill="#0e1420" rx="14" />
+                <!-- axes -->
+                <line x1="90" y1="360" x2="880" y2="360" stroke="#334155" stroke-width="1.5" />
+                <line x1="90" y1="360" x2="90" y2="40" stroke="#334155" stroke-width="1.5" />
+                <text x="470" y="400" fill="#93a1b5" font-size="13" text-anchor="middle">COST → blended $ / 1M
+                    tokens</text>
+                <text x="34" y="200" fill="#93a1b5" font-size="13" text-anchor="middle"
+                    transform="rotate(-90 34 200)">CAPABILITY → tier T1…T5</text>
+                <!-- value curve -->
+                <path d="M110,330 C240,150 430,120 640,95 780,80 850,70 860,66" fill="none" stroke="url(#bandGrad)"
+                    stroke-width="4" />
+                <!-- band dots -->
+                <g font-size="12" font-weight="700">
+                    <circle cx="150" cy="312" r="8" fill="#22c55e" /><text x="150" y="300" fill="#22c55e"
+                        text-anchor="middle">Economy</text>
+                    <circle cx="300" cy="212" r="8" fill="#3b82f6" /><text x="300" y="200" fill="#3b82f6"
+                        text-anchor="middle">Value</text>
+                    <circle cx="470" cy="150" r="9" fill="#cbd5e1" stroke="#94a3b8" /><text x="470" y="138"
+                        fill="#cbd5e1" text-anchor="middle">Balanced ★</text>
+                    <circle cx="650" cy="108" r="8" fill="#a855f7" /><text x="650" y="96" fill="#c4b5fd"
+                        text-anchor="middle">Premium</text>
+                    <circle cx="835" cy="74" r="8" fill="#ef4444" /><text x="835" y="60" fill="#fca5a5"
+                        text-anchor="middle">Frontier</text>
+                </g>
+                <text x="470" y="250" fill="#64748b" font-size="12" text-anchor="middle" font-style="italic">★ the value
+                    knee — "smart money" default</text>
+            </svg>
+            <figcaption>The Refraction Spectrum: the operator picks a point on the cost axis; the Matrix returns the
+                best model at-or-above the task's capability floor, at-or-below the spend ceiling — plus the neighbors.
+            </figcaption>
+        </figure>
+
+        <!-- ═══════════════ 1 TODAY ═══════════════ -->
+        <h2 id="today">1 · What the Model Matrix Is Today</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Layer</th>
+                    <th>File</th>
+                    <th>Responsibility</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Capability core</td>
+                    <td><code>model-capability-matrix.ts</code></td>
+                    <td>Profiles, <code>resolveProfile()</code>, <code>selectModelForRole()</code>, role requirements,
+                        modality routing, SR validation / kinship / triad</td>
+                </tr>
+                <tr>
+                    <td>Pricing <em>(was separate)</em></td>
+                    <td><code>usage-pricing-catalog.ts</code></td>
+                    <td><code>PRICING_CATALOG</code>, <code>lookupPricing()</code>, <code>computeCostUsd()</code> — its
+                        own <code>tier</code></td>
+                </tr>
+                <tr>
+                    <td>Orchestration</td>
+                    <td><code>llm-provider-manager.ts</code></td>
+                    <td><code>generateSR()</code>, <code>estimateSRCost()</code>, routing suggestions, SR candidates
+                    </td>
+                </tr>
+                <tr>
+                    <td>HTTP surface</td>
+                    <td><code>dashboard-service.ts</code></td>
+                    <td><code>/api/sr/suggest</code>, <code>/api/sr/cost-estimate</code></td>
+                </tr>
+                <tr>
+                    <td>Web UI</td>
+                    <td><code>public/tab-settings.js</code></td>
+                    <td>routing pills, "✨ Suggest Optimal", SR panel, Matrix registry editor + <strong>Update</strong>
+                        button</td>
+                </tr>
+                <tr>
+                    <td>Power mode</td>
+                    <td><code>workspace-resolver.ts</code></td>
+                    <td><code>performance | eco | adaptive</code></td>
+                </tr>
+            </tbody>
+        </table>
+        <p>Selection walked a 5-step ladder (local-ideal → cloud-ideal → local-min → cloud-min → best-available),
+            sorted fundamentally by <code>tier DESC</code>. <code>eco</code> merely subtracted one tier and preferred
+            local.
+            <strong>No dollar figure ever entered the decision.</strong>
+        </p>
+
+        <!-- ═══════════════ 2 FINDINGS ═══════════════ -->
+        <h2 id="findings">2 · Critical Audit Findings</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Sev</th>
+                    <th>Finding</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>F1</td>
+                    <td><span class="sev crit">critical</span></td>
+                    <td><strong>No cost dimension in the routing brain.</strong> The only budget lever
+                        (<code>eco</code>) drops a whole capability tier instead of finding a cheaper model <em>at the
+                            same tier</em>.</td>
+                </tr>
+                <tr>
+                    <td>F2</td>
+                    <td><span class="sev crit">critical</span></td>
+                    <td><strong>Two sources of truth for tier</strong> — capability matrix vs pricing catalog, already
+                        diverging.</td>
+                </tr>
+                <tr>
+                    <td>F3</td>
+                    <td><span class="sev crit">critical</span></td>
+                    <td><strong>"Suggest" returns a point, not a spectrum.</strong> Both paths return the maximal pick,
+                        no cost annotation, no trade-off framing.</td>
+                </tr>
+                <tr>
+                    <td>F4</td>
+                    <td><span class="sev maj">major</span></td>
+                    <td><strong>SR "Creative" required media-generation modality</strong> — disqualifying nearly all
+                        text models and killing budget refraction.</td>
+                </tr>
+                <tr>
+                    <td>F5</td>
+                    <td><span class="sev maj">major</span></td>
+                    <td><strong>Pricing catalog stale &amp; silently zeroing</strong> — any lookup miss returns cost 0,
+                        conflating "unknown" with "free."</td>
+                </tr>
+                <tr>
+                    <td>F6</td>
+                    <td><span class="sev maj">major</span></td>
+                    <td><strong><code>powerMode</code> is a 3-way toggle</strong>, not an Economy→Frontier spend
+                        spectrum.</td>
+                </tr>
+                <tr>
+                    <td>F7</td>
+                    <td><span class="sev mod">moderate</span></td>
+                    <td><strong>No value / efficiency metric</strong> — "cheap" and "good value" are different
+                        questions.</td>
+                </tr>
+                <tr>
+                    <td>F8</td>
+                    <td><span class="sev mod">moderate</span></td>
+                    <td><strong>Cost preview is SR-only and coarse</strong> — no Primary-path per-turn estimate.</td>
+                </tr>
+                <tr>
+                    <td>F9</td>
+                    <td><span class="sev mod">moderate</span></td>
+                    <td><strong>Isolation suggestion is not budget-aware.</strong></td>
+                </tr>
+                <tr>
+                    <td>F10</td>
+                    <td><span class="sev mod">moderate</span></td>
+                    <td><strong>Unknown-model fallback</strong> defaults to mid-tier cloud with no cost — expensive
+                        unknowns look free.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- ═══════════════ 3 VISION ═══════════════ -->
+        <h2 id="vision">3 · The Vision — The Refraction Spectrum</h2>
+        <p>Prism already refracts a prompt through a spectrum of cognition (Logic / Creative / Primary).
+            The Matrix now refracts <strong>model choice</strong> through a <strong>spend spectrum</strong> — two
+            orthogonal axes.
+            Kirk's correction was exactly right: <em>a full spectrum from cheapest to money-no-object is just numbers,
+                dates, percentages and easy math.</em> That math now lives in <code>model-spectrum.ts</code>.</p>
+
+        <!-- ═══════════════ 4 DATA ═══════════════ -->
+        <h2 id="data">4 · New Data Model — One Profile, Two Axes</h2>
+        <p>Pricing is merged <strong>into</strong> the capability profile (kills F2), with cost + value fields (kills
+            F1/F7):</p>
+        <pre>interface ModelCapabilityProfile {
+  /* …existing capability fields… */
+  costInputPer1M?: number;      // USD; 0 = truly free
+  costOutputPer1M?: number;
+  costKnown?: boolean;          // false ⇒ "unknown", NOT "free"  (fixes F5)
+  billingModel?: "per-token" | "subscription" | "local-free" | "unknown";
+  pricingVerifiedAt?: string;   // ISO date  (the "dates" Kirk means)
+  budgetClass?: BudgetClass;    // economy | value | balanced | premium | frontier
+  qualityIndex?: number;        // 0-100 price-independent capability
+  valueScore?: number;          // 0-100 quality-per-dollar
+  latencyClass?: "instant" | "fast" | "standard" | "slow";
+}</pre>
+
+        <!-- ═══════════════ 5 CLASSES ═══════════════ -->
+        <h2 id="classes">5 · Budget Classes — "Spend Profiles"</h2>
+        <figure>
+            <!-- 5 BAND STRIP -->
+            <svg viewBox="0 0 920 210" role="img" aria-label="Five spend bands">
+                <rect x="0" y="0" width="920" height="210" fill="#0e1420" rx="14" />
+                <g font-size="13" text-anchor="middle">
+                    <!-- econ -->
+                    <rect x="24" y="34" width="160" height="120" rx="12" fill="rgba(34,197,94,.12)" stroke="#22c55e" />
+                    <text x="104" y="64" fill="#22c55e" font-weight="800">🟢 Economy</text>
+                    <text x="104" y="88" fill="#cbd5e1" font-size="11">$0 – $0.20 / 1M</text>
+                    <text x="104" y="112" fill="#93a1b5" font-size="11">local Ollama,</text>
+                    <text x="104" y="128" fill="#93a1b5" font-size="11">Llama 8B, Flash 8B</text>
+                    <!-- value -->
+                    <rect x="200" y="34" width="160" height="120" rx="12" fill="rgba(59,130,246,.12)"
+                        stroke="#3b82f6" />
+                    <text x="280" y="64" fill="#60a5fa" font-weight="800">🔵 Value</text>
+                    <text x="280" y="88" fill="#cbd5e1" font-size="11">$0.20 – $1.00</text>
+                    <text x="280" y="112" fill="#93a1b5" font-size="11">4o-mini, Haiku,</text>
+                    <text x="280" y="128" fill="#93a1b5" font-size="11">Flash, DeepSeek</text>
+                    <!-- bal -->
+                    <rect x="376" y="24" width="168" height="140" rx="12" fill="rgba(148,163,184,.14)" stroke="#cbd5e1"
+                        stroke-width="2" />
+                    <text x="460" y="56" fill="#e2e8f0" font-weight="800">⚪ Balanced ★</text>
+                    <text x="460" y="80" fill="#cbd5e1" font-size="11">$1 – $5 · default</text>
+                    <text x="460" y="104" fill="#93a1b5" font-size="11">o4-mini, Mistral</text>
+                    <text x="460" y="120" fill="#93a1b5" font-size="11">Large, Command R+</text>
+                    <text x="460" y="146" fill="#64748b" font-size="10" font-style="italic">the value knee</text>
+                    <!-- prem -->
+                    <rect x="560" y="34" width="160" height="120" rx="12" fill="rgba(168,85,247,.12)"
+                        stroke="#a855f7" />
+                    <text x="640" y="64" fill="#c4b5fd" font-weight="800">🟣 Premium</text>
+                    <text x="640" y="88" fill="#cbd5e1" font-size="11">$5 – $20</text>
+                    <text x="640" y="112" fill="#93a1b5" font-size="11">Sonnet, GPT-4o,</text>
+                    <text x="640" y="128" fill="#93a1b5" font-size="11">o1-mini, Gemini Pro</text>
+                    <!-- front -->
+                    <rect x="736" y="34" width="160" height="120" rx="12" fill="rgba(239,68,68,.12)" stroke="#ef4444" />
+                    <text x="816" y="64" fill="#fca5a5" font-weight="800">🔴 Frontier</text>
+                    <text x="816" y="88" fill="#cbd5e1" font-size="11">$20+ / best</text>
+                    <text x="816" y="112" fill="#93a1b5" font-size="11">o1, o3, GPT-4,</text>
+                    <text x="816" y="128" fill="#93a1b5" font-size="11">Opus, GPT-5</text>
+                </g>
+                <text x="460" y="192" fill="#64748b" font-size="12" text-anchor="middle">cheapest ◀───────────────────
+                    spend ───────────────────▶ money is no object</text>
+            </svg>
+            <figcaption>Bands are <em>config, not hard-code</em> (<code>SPEND_BANDS</code> in
+                <code>model-spectrum.ts</code>), so they age gracefully.</figcaption>
+        </figure>
+
+        <!-- ═══════════════ 6 VALUE ═══════════════ -->
+        <h2 id="value">6 · Value Score — the "Smart Money" Signal</h2>
+        <p>The knee of the price/quality curve, so budget bands pick <em>good value</em>, not merely <em>cheapest</em>:
+        </p>
+        <pre>qualityIndex = tier×18 + strengthBonus + contextBonus          // 0-100, price-independent
+priceFactor  = 1 / (1 + blendedCostPer1M)                      // → 1 as cost → 0
+valueScore   = round(100 · quality/100 · priceFactor^α)        // α tunes price sensitivity</pre>
+        <div class="grid2">
+            <div class="card"><strong>Economy · Value · Balanced</strong><br /><span class="sub">rank by
+                    <code>valueScore</code> — best bang-per-buck above the floor.</span></div>
+            <div class="card"><strong>Premium · Frontier</strong><br /><span class="sub">rank by
+                    <code>qualityIndex</code> — spend for capability; value is secondary.</span></div>
+        </div>
+
+        <!-- ═══════════════ 7 ROUTING ═══════════════ -->
+        <h2 id="routing">7 · Cost-Aware Routing</h2>
+        <figure>
+            <!-- ROUTING FLOW -->
+            <svg viewBox="0 0 920 260" role="img" aria-label="Cost-aware routing pipeline">
+                <rect x="0" y="0" width="920" height="260" fill="#0e1420" rx="14" />
+                <g font-size="13" text-anchor="middle">
+                    <rect x="24" y="96" width="150" height="66" rx="12" fill="#111827" stroke="#334155" />
+                    <text x="99" y="126" fill="#e6edf6" font-weight="700">Task / Role</text>
+                    <text x="99" y="146" fill="#93a1b5" font-size="11">+ Spend Profile</text>
+
+                    <rect x="214" y="96" width="150" height="66" rx="12" fill="#111827" stroke="#3b82f6" />
+                    <text x="289" y="122" fill="#e6edf6" font-weight="700">FLOOR</text>
+                    <text x="289" y="142" fill="#93a1b5" font-size="11">quality ≥ role min</text>
+
+                    <rect x="404" y="96" width="150" height="66" rx="12" fill="#111827" stroke="#a855f7" />
+                    <text x="479" y="122" fill="#e6edf6" font-weight="700">CEILING</text>
+                    <text x="479" y="142" fill="#93a1b5" font-size="11">cost ≤ band max</text>
+
+                    <rect x="594" y="96" width="150" height="66" rx="12" fill="#111827" stroke="#22c55e" />
+                    <text x="669" y="122" fill="#e6edf6" font-weight="700">RANK</text>
+                    <text x="669" y="142" fill="#93a1b5" font-size="11">value or quality</text>
+
+                    <rect x="774" y="82" width="126" height="94" rx="12" fill="#0b1220" stroke="#63b3ed"
+                        stroke-width="2" />
+                    <text x="837" y="110" fill="#63b3ed" font-weight="800">CHOSEN</text>
+                    <text x="837" y="132" fill="#93a1b5" font-size="11">+ cheaper ◀</text>
+                    <text x="837" y="150" fill="#93a1b5" font-size="11">+ premium ▶</text>
+                </g>
+                <g stroke="#475569" stroke-width="1.5" marker-end="url(#ah)">
+                    <line x1="174" y1="129" x2="210" y2="129" />
+                    <line x1="364" y1="129" x2="400" y2="129" />
+                    <line x1="554" y1="129" x2="590" y2="129" />
+                    <line x1="744" y1="129" x2="770" y2="129" />
+                </g>
+                <defs>
+                    <marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L6,3 L0,6 Z" fill="#475569" />
+                    </marker>
+                </defs>
+                <text x="460" y="220" fill="#64748b" font-size="12" text-anchor="middle" font-style="italic">
+                    Empty band? Relax the ceiling one class, flag <tspan fill="#fbbf24">budgetRelaxed</tspan> with a
+                    reason.</text>
+            </svg>
+            <figcaption><code>selectModelForRoleWithBudget()</code> returns the chosen pick plus the "spend less / spend
+                more" neighbors.</figcaption>
+        </figure>
+
+        <!-- ═══════════════ 8 SUGGEST ═══════════════ -->
+        <h2 id="suggest">8 · Redesigned "Suggest from AI"</h2>
+        <figure>
+            <!-- BEFORE / AFTER -->
+            <svg viewBox="0 0 920 260" role="img" aria-label="Suggest before and after">
+                <rect x="0" y="0" width="920" height="260" fill="#0e1420" rx="14" />
+                <text x="220" y="34" fill="#93a1b5" font-size="13" text-anchor="middle" font-weight="700">BEFORE — one
+                    maximal pick</text>
+                <rect x="150" y="52" width="140" height="52" rx="10" fill="rgba(239,68,68,.12)" stroke="#ef4444" />
+                <text x="220" y="82" fill="#fca5a5" font-size="13" text-anchor="middle" font-weight="700">o1 · T5</text>
+                <text x="220" y="130" fill="#64748b" font-size="11" text-anchor="middle">"the most capable" — no cost,
+                    no choice</text>
+
+                <line x1="460" y1="40" x2="460" y2="230" stroke="#334155" stroke-dasharray="4 4" />
+
+                <text x="690" y="34" fill="#93a1b5" font-size="13" text-anchor="middle" font-weight="700">AFTER — the
+                    whole spectrum</text>
+                <g font-size="10" text-anchor="middle">
+                    <rect x="500" y="52" width="76" height="60" rx="9" fill="rgba(34,197,94,.12)" stroke="#22c55e" />
+                    <text x="538" y="72" fill="#22c55e" font-weight="700">Economy</text>
+                    <text x="538" y="90" fill="#cbd5e1">llama3</text><text x="538" y="104" fill="#93a1b5">$0.000</text>
+                    <rect x="584" y="52" width="76" height="60" rx="9" fill="rgba(59,130,246,.12)" stroke="#3b82f6" />
+                    <text x="622" y="72" fill="#60a5fa" font-weight="700">Value ★</text>
+                    <text x="622" y="90" fill="#cbd5e1">4o-mini</text><text x="622" y="104" fill="#93a1b5">$0.001</text>
+                    <rect x="668" y="52" width="76" height="60" rx="9" fill="rgba(148,163,184,.14)" stroke="#cbd5e1" />
+                    <text x="706" y="72" fill="#e2e8f0" font-weight="700">Balanced</text>
+                    <text x="706" y="90" fill="#cbd5e1">haiku</text><text x="706" y="104" fill="#93a1b5">$0.004</text>
+                    <rect x="752" y="52" width="76" height="60" rx="9" fill="rgba(168,85,247,.12)" stroke="#a855f7" />
+                    <text x="790" y="72" fill="#c4b5fd" font-weight="700">Premium</text>
+                    <text x="790" y="90" fill="#cbd5e1">gpt-4o</text><text x="790" y="104" fill="#93a1b5">$0.015</text>
+                    <rect x="836" y="52" width="60" height="60" rx="9" fill="rgba(239,68,68,.12)" stroke="#ef4444" />
+                    <text x="866" y="72" fill="#fca5a5" font-weight="700">Frontier</text>
+                    <text x="866" y="90" fill="#cbd5e1">o1</text><text x="866" y="104" fill="#93a1b5">$0.090</text>
+                </g>
+                <text x="690" y="150" fill="#64748b" font-size="11" text-anchor="middle">live $/turn · value badge · ★
+                    recommended "smart money"</text>
+                <text x="690" y="172" fill="#34d399" font-size="11" text-anchor="middle">"pick Value → save 94%, lose
+                    ~8% quality"</text>
+            </svg>
+            <figcaption>Endpoints: <code>/api/llm/routing/suggest?spectrum=1</code> and
+                <code>/api/models/spectrum</code>.
+                The existing "✨ Suggest Optimal" button is untouched; the spectrum strip sits beside it.</figcaption>
+        </figure>
+
+        <!-- ═══════════════ 9 SR ═══════════════ -->
+        <h2 id="sr">9 · Spectrum Refraction — Budget Profiling End-to-End</h2>
+        <p><strong>F4 fixed:</strong> the Creative hemisphere now qualifies on <em>divergent-text</em> capability
+            (reasoning / long-context / creativity at T3+); media generation is an <em>optional optimal bonus</em>, not
+            a gate.
+            <strong>F9 fixed:</strong> <code>buildBudgetTriad()</code> picks Left + Right + Main inside a spend band
+            while
+            preserving isolation (Left ≠ Right, low kinship) and minimizing cost across all 3 fan-out passes +
+            aggregation.
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Refraction preset</th>
+                    <th>Left (Logic)</th>
+                    <th>Right (Creative)</th>
+                    <th>Main</th>
+                    <th>~ $/turn</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="pill p-econ">Economy</span></td>
+                    <td>local Llama 3</td>
+                    <td>local Mistral</td>
+                    <td>local Phi-3</td>
+                    <td>~$0.00</td>
+                </tr>
+                <tr>
+                    <td><span class="pill p-value">Value</span></td>
+                    <td>GPT-4o-mini</td>
+                    <td>Claude 3.5 Haiku</td>
+                    <td>Gemini Flash</td>
+                    <td>~$0.01</td>
+                </tr>
+                <tr>
+                    <td><span class="pill p-bal">Balanced</span></td>
+                    <td>o4-mini</td>
+                    <td>Mistral Large</td>
+                    <td>GPT-4o-mini</td>
+                    <td>~$0.05</td>
+                </tr>
+                <tr>
+                    <td><span class="pill p-prem">Premium</span></td>
+                    <td>Claude 3.5 Sonnet</td>
+                    <td>GPT-4o</td>
+                    <td>Claude 3.5 Haiku</td>
+                    <td>~$0.20</td>
+                </tr>
+                <tr>
+                    <td><span class="pill p-front">Frontier</span></td>
+                    <td>o1</td>
+                    <td>Claude 3 Opus</td>
+                    <td>GPT-4o</td>
+                    <td>~$0.80</td>
+                </tr>
+            </tbody>
+        </table>
+        <figcaption style="text-align:left;color:var(--muted);font-size:13px">Illustrative — computed live from the
+            unified profile via <code>/api/sr/suggest?spend=&lt;band&gt;</code>. The SR panel gains a 5-chip spectrum
+            strip.</figcaption>
+
+        <!-- ═══════════════ 10 UPDATE ═══════════════ -->
+        <h2 id="update">10 · The Update Button Does More</h2>
+        <p>Kirk's insight: <em>"You have an update button for the Matrix. This button does much and needs to do
+                more."</em>
+            It did discovery + profile upsert. It now <strong>also</strong> computes the whole spectrum — the numbers,
+            dates and percentages — in one press.</p>
+        <figure>
+            <svg viewBox="0 0 920 250" role="img" aria-label="Enhanced update button">
+                <rect x="0" y="0" width="920" height="250" fill="#0e1420" rx="14" />
+                <rect x="40" y="98" width="150" height="54" rx="10" fill="#0b1220" stroke="#63b3ed" stroke-width="2" />
+                <text x="115" y="122" fill="#63b3ed" font-weight="800" font-size="14" text-anchor="middle">⟳
+                    Update</text>
+                <text x="115" y="140" fill="#93a1b5" font-size="10" text-anchor="middle">/matrix/refresh</text>
+                <g font-size="12">
+                    <rect x="250" y="26" width="200" height="40" rx="9" fill="#111827" stroke="#334155" /><text x="264"
+                        y="51" fill="#cbd5e1">1 · Discover provider models</text>
+                    <rect x="250" y="74" width="200" height="40" rx="9" fill="#111827" stroke="#334155" /><text x="264"
+                        y="99" fill="#cbd5e1">2 · Upsert capability profiles</text>
+                    <rect x="250" y="122" width="200" height="40" rx="9" fill="#111827" stroke="#22c55e" /><text x="264"
+                        y="147" fill="#86efac">3 · Enrich cost from catalog</text>
+                    <rect x="250" y="170" width="200" height="40" rx="9" fill="#111827" stroke="#22c55e" /><text x="264"
+                        y="195" fill="#86efac">4 · Derive class · quality · value</text>
+                </g>
+                <g font-size="12">
+                    <rect x="510" y="60" width="370" height="130" rx="12" fill="#0b1220" stroke="#334155" />
+                    <text x="530" y="86" fill="#e6edf6" font-weight="700">Spectrum coverage returned</text>
+                    <text x="530" y="112" fill="#93a1b5">total: 41 · pricingKnown: 38 (<tspan fill="#34d399">93%</tspan>
+                        )</text>
+                    <text x="530" y="134" fill="#93a1b5">byBudgetClass: economy 12 · value 9 · balanced 7 …</text>
+                    <text x="530" y="156" fill="#93a1b5">verifiedAt: <tspan fill="#fbbf24">2026-08-10</tspan> ·
+                        computedAt: now</text>
+                    <text x="530" y="178" fill="#64748b" font-style="italic">numbers · dates · percentages · easy
+                        math</text>
+                </g>
+                <defs>
+                    <marker id="ah2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L6,3 L0,6 Z" fill="#475569" />
+                    </marker>
+                </defs>
+                <g stroke="#475569" stroke-width="1.5" marker-end="url(#ah2)">
+                    <line x1="190" y1="125" x2="246" y2="95" />
+                    <line x1="450" y1="140" x2="506" y2="125" />
+                </g>
+            </svg>
+            <figcaption>One press → discovery + enrichment + <code>computeSpectrumStats()</code>. The button's toast now
+                reports
+                coverage % and the pricing-verified date.</figcaption>
+        </figure>
+
+        <!-- ═══════════════ 11 PHASES ═══════════════ -->
+        <h2 id="phases">11 · Phased Roadmap</h2>
+        <figure>
+            <svg viewBox="0 0 920 150" role="img" aria-label="Phase timeline">
+                <rect x="0" y="0" width="920" height="150" fill="#0e1420" rx="14" />
+                <line x1="60" y1="80" x2="860" y2="80" stroke="#334155" stroke-width="2" />
+                <g font-size="11" text-anchor="middle">
+                    <circle cx="90" cy="80" r="12" fill="#22c55e" /><text x="90" y="50" fill="#e6edf6"
+                        font-weight="700">P0</text><text x="90" y="112" fill="#93a1b5">Unify cost</text>
+                    <circle cx="230" cy="80" r="12" fill="#22c55e" /><text x="230" y="50" fill="#e6edf6"
+                        font-weight="700">P1</text><text x="230" y="112" fill="#93a1b5">Classes+Value</text>
+                    <circle cx="380" cy="80" r="12" fill="#22c55e" /><text x="380" y="50" fill="#e6edf6"
+                        font-weight="700">P2</text><text x="380" y="112" fill="#93a1b5">Cost routing</text>
+                    <circle cx="530" cy="80" r="12" fill="#22c55e" /><text x="530" y="50" fill="#e6edf6"
+                        font-weight="700">P3</text><text x="530" y="112" fill="#93a1b5">Spectrum UX</text>
+                    <circle cx="680" cy="80" r="12" fill="#22c55e" /><text x="680" y="50" fill="#e6edf6"
+                        font-weight="700">P4</text><text x="680" y="112" fill="#93a1b5">SR refraction</text>
+                    <circle cx="830" cy="80" r="12" fill="#334155" stroke="#64748b" /><text x="830" y="50"
+                        fill="#e6edf6" font-weight="700">P5</text><text x="830" y="112" fill="#93a1b5">Learning</text>
+                </g>
+                <text x="460" y="138" fill="#64748b" font-size="11" text-anchor="middle">🟢 implemented · ⚪
+                    planned</text>
+            </svg>
+        </figure>
+        <table>
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Delivers</th>
+                    <th>Fixes</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>P0</strong> Foundation</td>
+                    <td>Cost merged into profile; unknown≠free; 2026 models + verified date</td>
+                    <td>F2 F5 F10</td>
+                    <td><span class="badge ok">done</span></td>
+                </tr>
+                <tr>
+                    <td><strong>P1</strong> Classes &amp; value</td>
+                    <td><code>budgetClass</code>, <code>qualityIndex</code>, <code>valueScore</code>,
+                        <code>spendProfile</code> pref</td>
+                    <td>F6 F7</td>
+                    <td><span class="badge ok">done</span></td>
+                </tr>
+                <tr>
+                    <td><strong>P2</strong> Cost-aware routing</td>
+                    <td><code>selectModelForRoleWithBudget()</code>, <code>estimatePrimaryCost()</code></td>
+                    <td>F1 F8</td>
+                    <td><span class="badge ok">done</span></td>
+                </tr>
+                <tr>
+                    <td><strong>P3</strong> Spectrum UX</td>
+                    <td>spend endpoints + SR spectrum chips (additive)</td>
+                    <td>F3</td>
+                    <td><span class="badge ok">done</span></td>
+                </tr>
+                <tr>
+                    <td><strong>P4</strong> SR refraction</td>
+                    <td>divergent-text creative gate; <code>buildBudgetTriad()</code></td>
+                    <td>F4 F9</td>
+                    <td><span class="badge ok">done</span></td>
+                </tr>
+                <tr>
+                    <td><strong>P5</strong> Learning</td>
+                    <td>feed real usage → value; budget ceilings; auto-downshift</td>
+                    <td>—</td>
+                    <td><span class="badge">planned</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- ═══════════════ 12 METRICS ═══════════════ -->
+        <h2 id="metrics">12 · Success Metrics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>KPI</th>
+                    <th>Baseline</th>
+                    <th>Target</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Models with known cost in profile</td>
+                    <td>~40% (catalog only)</td>
+                    <td>100% or flagged unknown</td>
+                </tr>
+                <tr>
+                    <td>Tier sources of truth</td>
+                    <td>2 (drifting)</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>"Suggest" options presented</td>
+                    <td>1 (max)</td>
+                    <td>5 (Economy→Frontier)</td>
+                </tr>
+                <tr>
+                    <td>Cost visible before a turn</td>
+                    <td>SR only</td>
+                    <td>Primary + SR</td>
+                </tr>
+                <tr>
+                    <td>Text models eligible for SR Right</td>
+                    <td>~0</td>
+                    <td>all divergent-text capable</td>
+                </tr>
+                <tr>
+                    <td>Avg $/task after "Value" adoption</td>
+                    <td>—</td>
+                    <td>≥80% reduction at ≤~10% quality delta</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- ═══════════════ 13 STATUS ═══════════════ -->
+        <h2 id="status">13 · Implementation Status — What Shipped</h2>
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Change</th>
+                        <th>File</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Cost/value fields on the profile</td>
+                        <td><code>model-capability-matrix.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td>Spectrum engine — bands, blended cost, quality index, value score, role spectrum, budget
+                            router, SR triad, coverage stats</td>
+                        <td><code>model-spectrum.ts</code> <span class="badge ok">new</span></td>
+                    </tr>
+                    <tr>
+                        <td>Verified date, 2026 frontier models, <code>hasPricing()</code> (unknown≠free)</td>
+                        <td><code>usage-pricing-catalog.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td>Divergent-text creative gate (F4)</td>
+                        <td><code>validateSRRightModel()</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>buildRoutingSpectrum()</code>, <code>estimatePrimaryCost()</code>,
+                            <code>suggestBudgetTriad()</code>, <code>computeSpectrumCoverage()</code></td>
+                        <td><code>llm-provider-manager.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td>Enhanced Update button → enrich + return spectrum coverage</td>
+                        <td><code>routes/model-handler.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/models/spectrum</code>, <code>/api/models/cost-estimate</code></td>
+                        <td><code>routes/model-handler.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/llm/routing/suggest?spectrum=1</code></td>
+                        <td><code>routes/llm-handler.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/sr/suggest?spend=&lt;band&gt;</code> budget triad</td>
+                        <td><code>dashboard-service.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td>SR spectrum chips + spectrum-aware Update toast (additive)</td>
+                        <td><code>public/tab-settings.js</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>spendProfile</code> preference</td>
+                        <td><code>config/workspace-resolver.ts</code></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <blockquote>"The Matrix should not just find the sharpest lens — it should show you the whole spectrum of
+            lenses and the price of light through each."</blockquote>
+
+        <div class="foot">Prism Refraction · Model Matrix · prepared for Kirk LaSalle · additive-only, Frontend
+            Protection Guarantee honored</div>
+
+    </div>
+</body>
+
+</html>

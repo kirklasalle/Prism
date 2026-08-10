@@ -49,8 +49,8 @@ export class ComputerUseTool implements Tool {
                 required: true,
             },
             text: { type: "string", required: false },
-            coordinate: { type: "array", items: { type: "number" }, required: false } as any,
-            coordinate_to: { type: "array", items: { type: "number" }, required: false } as any,
+            coordinate: { type: "array", items: { type: "number" }, required: false },
+            coordinate_to: { type: "array", items: { type: "number" }, required: false },
         },
     } as const;
 

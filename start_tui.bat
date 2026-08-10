@@ -50,9 +50,9 @@ if not defined PRISM_TUI_AUTOSTART set "PRISM_TUI_AUTOSTART=1"
 
 :: ---- Check if server is running ----
 echo [PRISM TUI] Checking PRISM server on port %TUI_PORT%...
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%TUI_PORT%/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>nul
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%TUI_PORT%/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200 -or $r.StatusCode -eq 503) { exit 0 } else { exit 1 } } catch { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $code = [int]$_.Exception.Response.StatusCode; if ($code -eq 503) { exit 0 } }; exit 1 }" >nul 2>nul
 if %ERRORLEVEL% equ 0 (
-    echo [OK] Server is running.
+    echo [OK] Server is reachable.
     goto :launch_tui
 )
 
@@ -98,9 +98,9 @@ if %WAIT_COUNT% gtr 45 (
     exit /b 1
 )
 timeout /t 1 /nobreak >nul
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%TUI_PORT%/api/health' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>nul
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%TUI_PORT%/api/health' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200 -or $r.StatusCode -eq 503) { exit 0 } else { exit 1 } } catch { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $code = [int]$_.Exception.Response.StatusCode; if ($code -eq 503) { exit 0 } }; exit 1 }" >nul 2>nul
 if %ERRORLEVEL% neq 0 goto :wait_backend
-echo [OK] Backend is healthy.
+echo [OK] Backend is reachable.
 
 :launch_tui
 echo.
@@ -110,7 +110,14 @@ echo   Press ? for help, q to quit
 echo.
 
 :: ---- Launch TUI ----
-npx tsx src/tui/app.tsx --port %TUI_PORT%
+:: Prefer the precompiled bundle (fast, no on-the-fly transpile). Fall back to
+:: tsx only when the build artifact is missing.
+if exist "dist\src\tui\app.js" (
+    node dist\src\tui\app.js --port %TUI_PORT%
+) else (
+    echo [PRISM TUI] Compiled TUI not found; running via tsx ^(slower^)...
+    npx tsx src/tui/app.tsx --port %TUI_PORT%
+)
 
 pause
 endlocal

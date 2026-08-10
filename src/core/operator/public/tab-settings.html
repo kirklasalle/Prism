@@ -1,27 +1,21 @@
 <div class="tab-grid" style="grid-template-columns: 1fr">
-    <section
-        class="rail-section panel llre-cognitive-widget"
-        style="
+    <section class="rail-section panel llre-cognitive-widget" style="
             border: 1px solid var(--llre-border);
             background: var(--llre-bg);
             margin-bottom: 24px;
             padding: 18px;
             border-radius: 12px;
             box-shadow: var(--shadow);
-        "
-    >
-        <div
-            style="
+        ">
+        <div style="
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 border-bottom: 1px solid var(--llre-divider);
                 padding-bottom: 12px;
                 margin-bottom: 16px;
-            "
-        >
-            <h3
-                style="
+            ">
+            <h3 style="
                     margin: 0;
                     color: var(--llre-text-header);
                     font-weight: 700;
@@ -31,12 +25,9 @@
                     gap: 8px;
                     text-transform: uppercase;
                     letter-spacing: 0.5px;
-                "
-            >
+                ">
                 ⚡ Cognitive Economics & Prompt Efficacy
-                <span
-                    id="llre-active-status-badge"
-                    style="
+                <span id="llre-active-status-badge" style="
                         background: #4f46e5;
                         font-size: 10px;
                         color: #fff;
@@ -44,16 +35,12 @@
                         border-radius: 9999px;
                         font-weight: 600;
                         transition: background-color 0.3s ease;
-                    "
-                    >LLRE Port Active</span
-                >
+                    ">LLRE Port Active</span>
             </h3>
             <div style="display: flex; align-items: center; gap: 14px">
-                <span id="llre-last-sync" style="color: var(--fg-muted); font-size: 11px; font-weight: 500"
-                    >Last synced: Just now</span
-                >
-                <label
-                    style="
+                <span id="llre-last-sync" style="color: var(--fg-muted); font-size: 11px; font-weight: 500">Last synced:
+                    Just now</span>
+                <label style="
                         display: inline-flex;
                         align-items: center;
                         cursor: pointer;
@@ -64,182 +51,142 @@
                         border-radius: 20px;
                         border: 1px solid var(--llre-border);
                         transition: all 0.3s ease;
-                    "
-                >
-                    <input
-                        type="checkbox"
-                        id="llre-toggle"
-                        onchange="toggleLlrePreference(this.checked)"
-                        style="
+                    ">
+                    <input type="checkbox" id="llre-toggle" onchange="toggleLlrePreference(this.checked)" style="
                             accent-color: #6366f1;
                             width: 14px;
                             height: 14px;
                             cursor: pointer;
                             margin: 0;
                             filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.5));
-                        "
-                    />
-                    <span style="font-size: 11px; font-weight: 600; color: var(--llre-text-header); letter-spacing: 0.3px"
-                        >Enable Telemetry</span
-                    >
+                        " />
+                    <span
+                        style="font-size: 11px; font-weight: 600; color: var(--llre-text-header); letter-spacing: 0.3px">Enable
+                        Telemetry</span>
                 </label>
             </div>
         </div>
 
         <!-- Metric Dial Grid -->
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px">
-            <div
-                style="
+            <div style="
                     background: var(--llre-card-bg);
                     border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                "
-            >
-                <div
-                    style="
+                ">
+                <div style="
                         color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
                         letter-spacing: 0.5px;
-                    "
-                >
+                    ">
                     Token Efficacy (TEQ)
                 </div>
-                <div
-                    id="llre-teq-value"
-                    style="font-size: 26px; font-weight: 800; color: #38bdf8; margin: 4px 0; font-family: monospace"
-                >
+                <div id="llre-teq-value"
+                    style="font-size: 26px; font-weight: 800; color: #38bdf8; margin: 4px 0; font-family: monospace">
                     --
                 </div>
                 <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Quality / ($ * Latency)</div>
             </div>
 
-            <div
-                style="
+            <div style="
                     background: var(--llre-card-bg);
                     border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                "
-            >
-                <div
-                    style="
+                ">
+                <div style="
                         color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
                         letter-spacing: 0.5px;
-                    "
-                >
+                    ">
                     Satisfaction Index (RSI)
                 </div>
-                <div
-                    id="llre-rsi-value"
-                    style="font-size: 26px; font-weight: 800; color: #34d399; margin: 4px 0; font-family: monospace"
-                >
+                <div id="llre-rsi-value"
+                    style="font-size: 26px; font-weight: 800; color: #34d399; margin: 4px 0; font-family: monospace">
                     --
                 </div>
                 <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Goal criteria passed</div>
             </div>
 
-            <div
-                style="
+            <div style="
                     background: var(--llre-card-bg);
                     border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                "
-            >
-                <div
-                    style="
+                ">
+                <div style="
                         color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
                         letter-spacing: 0.5px;
-                    "
-                >
+                    ">
                     Context Saturation (CSR)
                 </div>
-                <div
-                    id="llre-csr-value"
-                    style="font-size: 26px; font-weight: 800; color: #fbbf24; margin: 4px 0; font-family: monospace"
-                >
+                <div id="llre-csr-value"
+                    style="font-size: 26px; font-weight: 800; color: #fbbf24; margin: 4px 0; font-family: monospace">
                     --
                 </div>
                 <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Instruction SNR Density</div>
             </div>
 
-            <div
-                style="
+            <div style="
                     background: var(--llre-card-bg);
                     border: 1px solid var(--llre-card-border);
                     border-radius: 8px;
                     padding: 12px 8px;
                     text-align: center;
-                "
-            >
-                <div
-                    style="
+                ">
+                <div style="
                         color: var(--fg-muted);
                         font-size: 10px;
                         font-weight: 700;
                         text-transform: uppercase;
                         letter-spacing: 0.5px;
-                    "
-                >
+                    ">
                     Tool Call Accuracy (TCA)
                 </div>
-                <div
-                    id="llre-tca-value"
-                    style="font-size: 26px; font-weight: 800; color: #f87171; margin: 4px 0; font-family: monospace"
-                >
+                <div id="llre-tca-value"
+                    style="font-size: 26px; font-weight: 800; color: #f87171; margin: 4px 0; font-family: monospace">
                     --
                 </div>
                 <div style="color: var(--fg-muted); font-size: 9px; font-weight: 500">Valid tool executions</div>
             </div>
         </div>
 
-        <div
-            style="
+        <div style="
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 color: var(--fg-muted);
                 font-size: 12px;
                 padding: 4px 4px 0;
-            "
-        >
+            ">
             <div>
                 <strong>Accumulated Session Cost:</strong>
-                <span
-                    id="llre-cost-accumulated"
-                    style="color: var(--llre-text-value); font-weight: 700; font-family: monospace; font-size: 13px"
-                    >$0.0000</span
-                >
+                <span id="llre-cost-accumulated"
+                    style="color: var(--llre-text-value); font-weight: 700; font-family: monospace; font-size: 13px">$0.0000</span>
             </div>
             <div>
                 <strong>Signal-to-Noise Rating:</strong>
-                <span id="llre-snr-rating" style="color: var(--llre-text-header); font-weight: 700">No Active Runs</span>
+                <span id="llre-snr-rating" style="color: var(--llre-text-header); font-weight: 700">No Active
+                    Runs</span>
             </div>
         </div>
     </section>
 
-    <section
-        class="rail-section panel"
-        id="sr-section"
-        data-tip-id="settings:sr-toggle"
-        data-tip-kind="settings"
-        style="
+    <section class="rail-section panel" id="sr-section" data-tip-id="settings:sr-toggle" data-tip-kind="settings" style="
             border: 1px solid var(--sr-border);
             background: var(--sr-bg);
-        "
-    >
+        ">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 8px">
             <div style="display: flex; align-items: center; gap: 10px">
                 <span style="font-size: 18px">🌈</span>
@@ -250,10 +197,7 @@
                     </div>
                 </div>
             </div>
-            <button
-                class="btn btn-primary btn-sm"
-                onclick="toggleSRPanel()"
-            >
+            <button class="btn btn-primary btn-sm" onclick="toggleSRPanel()">
                 Spectrum Refraction
             </button>
         </div>
@@ -263,12 +207,8 @@
     </section>
 
     <section class="rail-section panel">
-        <div
-            class="collapsible-header"
-            onclick="togglePanelCollapse('sessionProvider')"
-            data-tip-id="settings:session-provider"
-            data-tip-kind="settings"
-        >
+        <div class="collapsible-header" onclick="togglePanelCollapse('sessionProvider')"
+            data-tip-id="settings:session-provider" data-tip-kind="settings">
             <h3>Session Provider Assignment</h3>
             <span class="collapse-chevron" id="chevron-sessionProvider">▼</span>
         </div>
@@ -278,12 +218,8 @@
     </section>
 
     <section class="rail-section panel">
-        <div
-            class="collapsible-header"
-            onclick="togglePanelCollapse('modelRouting')"
-            data-tip-id="settings:model-routing"
-            data-tip-kind="settings"
-        >
+        <div class="collapsible-header" onclick="togglePanelCollapse('modelRouting')"
+            data-tip-id="settings:model-routing" data-tip-kind="settings">
             <h3>🔀 Model Routing</h3>
             <span class="collapse-chevron" id="chevron-modelRouting">▶</span>
         </div>
@@ -297,17 +233,10 @@
     </section>
 
     <div id="provider-matrix-row" style="display: flex; align-items: stretch; gap: 0; min-width: 0">
-        <section
-            id="provider-config-panel"
-            class="rail-section panel"
-            style="flex: 0 0 50%; min-width: 200px; overflow: hidden; box-sizing: border-box"
-        >
-            <div
-                class="collapsible-header"
-                onclick="togglePanelCollapse('providerConfig')"
-                data-tip-id="settings:provider-config"
-                data-tip-kind="settings"
-            >
+        <section id="provider-config-panel" class="rail-section panel"
+            style="flex: 0 0 50%; min-width: 200px; overflow: hidden; box-sizing: border-box">
+            <div class="collapsible-header" onclick="togglePanelCollapse('providerConfig')"
+                data-tip-id="settings:provider-config" data-tip-kind="settings">
                 <h3>Provider Configuration</h3>
                 <span class="collapse-chevron" id="chevron-providerConfig">▶</span>
             </div>
@@ -319,15 +248,9 @@
             </div>
             <div id="providerConfig-summary" style="padding: 8px 12px"></div>
         </section>
-        <div
-            id="provider-matrix-divider"
-            title="Drag to resize"
-            data-tip-id="settings:divider"
-            data-tip-kind="settings"
-            style="width: 8px; cursor: col-resize; flex-shrink: 0; position: relative; user-select: none; z-index: 1"
-        >
-            <div
-                style="
+        <div id="provider-matrix-divider" title="Drag to resize" data-tip-id="settings:divider" data-tip-kind="settings"
+            style="width: 8px; cursor: col-resize; flex-shrink: 0; position: relative; user-select: none; z-index: 1">
+            <div style="
                     position: absolute;
                     top: 8%;
                     bottom: 8%;
@@ -337,20 +260,12 @@
                     background: rgba(148, 163, 184, 0.15);
                     border-radius: 2px;
                     pointer-events: none;
-                "
-            ></div>
+                "></div>
         </div>
-        <section
-            id="model-matrix-panel"
-            class="rail-section panel"
-            style="flex: 1 1 0; min-width: 200px; overflow: hidden; box-sizing: border-box"
-        >
-            <div
-                class="collapsible-header"
-                onclick="togglePanelCollapse('modelMatrix')"
-                data-tip-id="settings:capability-matrix"
-                data-tip-kind="settings"
-            >
+        <section id="model-matrix-panel" class="rail-section panel"
+            style="flex: 1 1 0; min-width: 200px; overflow: hidden; box-sizing: border-box">
+            <div class="collapsible-header" onclick="togglePanelCollapse('modelMatrix')"
+                data-tip-id="settings:capability-matrix" data-tip-kind="settings">
                 <h3>Model Capability Matrix</h3>
                 <span class="collapse-chevron" id="chevron-modelMatrix">▼</span>
             </div>
@@ -360,17 +275,14 @@
                     model for each task.
                 </div>
                 <div id="capability-matrix" class="stack"></div>
+                <div id="model-eval-panel" class="stack" style="margin-top: 14px"></div>
             </div>
         </section>
     </div>
 
     <section class="rail-section panel">
-        <div
-            class="collapsible-header"
-            onclick="togglePanelCollapse('settingsPanel')"
-            data-tip-id="settings:settings-panel"
-            data-tip-kind="settings"
-        >
+        <div class="collapsible-header" onclick="togglePanelCollapse('settingsPanel')"
+            data-tip-id="settings:settings-panel" data-tip-kind="settings">
             <h3>Settings</h3>
             <span class="collapse-chevron" id="chevron-settingsPanel">▼</span>
         </div>
@@ -381,12 +293,8 @@
     </section>
 
     <section class="rail-section panel">
-        <div
-            class="collapsible-header"
-            onclick="togglePanelCollapse('llmAudit')"
-            data-tip-id="settings:llm-audit"
-            data-tip-kind="settings"
-        >
+        <div class="collapsible-header" onclick="togglePanelCollapse('llmAudit')" data-tip-id="settings:llm-audit"
+            data-tip-kind="settings">
             <h3>LLM Audit Trail</h3>
             <span class="collapse-chevron" id="chevron-llmAudit">▼</span>
         </div>

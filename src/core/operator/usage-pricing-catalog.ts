@@ -1,20 +1,26 @@
 /**
  * Usage Pricing Catalog
  * USD rates per 1,000,000 tokens (input / output) for known providers + models.
- * Pricing sourced from public provider pages as of March 2026.
+ * Pricing sourced from public provider pages.
  * Extend as needed — `lookupPricing()` does fuzzy prefix matching.
  */
+
+/** ISO date the pricing figures below were last verified. Surfaced by the Matrix "Update" button. */
+export const PRICING_VERIFIED_AT = "2026-08-10";
 
 export interface ModelPricing {
     inputPer1M: number; // USD per 1M input tokens
     outputPer1M: number; // USD per 1M output tokens
     label?: string; // friendly label for UI
     tier?: number; // capability tier 1-5 (matches model-capability-matrix)
+    verifiedAt?: string; // ISO date this row was last verified (defaults to PRICING_VERIFIED_AT)
 }
 
 /** Catalog keyed by "<providerId>/<modelPattern>" — patterns are prefix-matched. */
 export const PRICING_CATALOG: Record<string, ModelPricing> = {
     // ── OpenAI ────────────────────────────────────────────────────────────────
+    "openai/gpt-5": { inputPer1M: 1.25, outputPer1M: 10.0, label: "GPT-5", tier: 5 },
+    "openai/gpt-5-mini": { inputPer1M: 0.25, outputPer1M: 2.0, label: "GPT-5 mini", tier: 4 },
     "openai/gpt-4o": { inputPer1M: 2.5, outputPer1M: 10.0, label: "GPT-4o", tier: 5 },
     "openai/gpt-4o-mini": { inputPer1M: 0.15, outputPer1M: 0.6, label: "GPT-4o mini", tier: 3 },
     "openai/gpt-4-turbo": { inputPer1M: 10.0, outputPer1M: 30.0, label: "GPT-4 Turbo", tier: 5 },
@@ -27,6 +33,8 @@ export const PRICING_CATALOG: Record<string, ModelPricing> = {
     "openai/o4-mini": { inputPer1M: 1.1, outputPer1M: 4.4, label: "o4 mini", tier: 4 },
 
     // ── Anthropic ─────────────────────────────────────────────────────────────
+    "anthropic/claude-opus-4": { inputPer1M: 15.0, outputPer1M: 75.0, label: "Claude Opus 4", tier: 5 },
+    "anthropic/claude-sonnet-4": { inputPer1M: 3.0, outputPer1M: 15.0, label: "Claude Sonnet 4", tier: 5 },
     "anthropic/claude-3-5-sonnet": { inputPer1M: 3.0, outputPer1M: 15.0, label: "Claude 3.5 Sonnet", tier: 5 },
     "anthropic/claude-3-5-haiku": { inputPer1M: 0.8, outputPer1M: 4.0, label: "Claude 3.5 Haiku", tier: 3 },
     "anthropic/claude-3-opus": { inputPer1M: 15.0, outputPer1M: 75.0, label: "Claude 3 Opus", tier: 5 },
@@ -148,4 +156,18 @@ export function computeCostUsd(provider: string, model: string, inputTokens: num
     const pricing = lookupPricing(provider, model);
     if (!pricing) return 0;
     return (inputTokens / 1_000_000) * pricing.inputPer1M + (outputTokens / 1_000_000) * pricing.outputPer1M;
+}
+
+/**
+ * Whether we have a pricing row for this provider/model at all.
+ * Distinguishes "pricing unknown" (no row) from "free" (row with $0), which
+ * `computeCostUsd` conflates by returning 0 for both.
+ */
+export function hasPricing(provider: string, model: string): boolean {
+    return lookupPricing(provider, model) !== null;
+}
+
+/** Count of catalog rows — surfaced by the Matrix "Update" button. */
+export function getPricingCatalogSize(): number {
+    return Object.keys(PRICING_CATALOG).length;
 }

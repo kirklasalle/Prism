@@ -346,6 +346,12 @@ export class LlmHandler implements IRouteHandler {
             try {
                 const parsedUrl = new URL(url, "http://localhost");
                 const providerId = parsedUrl.searchParams.get("providerId") || "";
+                // Spectrum mode: return per-role Economy→Frontier ladders + coverage stats.
+                if (parsedUrl.searchParams.get("spectrum") === "1") {
+                    const spectrum = await service.getLlmProviders().buildRoutingSpectrum();
+                    const stats = await service.getLlmProviders().computeSpectrumCoverage();
+                    return this.json(res, 200, { spectrum, stats });
+                }
                 const suggestions = await service.getLlmProviders().suggestRoutingForAllRoles(providerId);
                 return this.json(res, 200, { suggestions });
             } catch (error) {

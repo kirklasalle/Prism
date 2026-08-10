@@ -38,7 +38,7 @@ export class SpectrumRefractionTool implements Tool {
         args: {
             message: { type: "string", required: true },
             role: { type: "string" },
-            hemispheres: { type: "array" },
+            hemispheres: { type: "array", items: { type: "object" } },
             force: { type: "boolean" },
             avgInputTokens: { type: "number" },
             avgOutputTokens: { type: "number" },

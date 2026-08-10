@@ -172,7 +172,7 @@ describe("Spectrum Refraction — Right (Creative) Hemisphere Validation", () =>
         assert.strictEqual(result.level, "minimum");
     });
 
-    it("rejects a text-only model (no image-generation)", () => {
+    it("qualifies a capable text-only model as divergent-text (F4: media is a bonus, not a gate)", () => {
         const profile = mkProfile({
             pattern: "llama3-text",
             tier: 5,
@@ -182,9 +182,22 @@ describe("Spectrum Refraction — Right (Creative) Hemisphere Validation", () =>
             maxOutputTokens: 16_000,
         });
         const result = validateSRRightModel(profile);
+        assert.strictEqual(result.valid, true);
+        assert.strictEqual(result.level, "minimum");
+    });
+
+    it("rejects a weak text model below T3 with no media", () => {
+        const profile = mkProfile({
+            pattern: "tiny-text",
+            tier: 2,
+            strengths: [],
+            modalities: ["text"],
+            contextWindow: 2_048,
+            maxOutputTokens: 512,
+        });
+        const result = validateSRRightModel(profile);
         assert.strictEqual(result.valid, false);
         assert.strictEqual(result.level, "insufficient");
-        assert.ok(result.missingCapabilities.some((c) => c.includes("image-generation")));
     });
 });
 
@@ -269,11 +282,15 @@ describe("Spectrum Refraction — Model Candidate Filtering", () => {
         }
     });
 
-    it("filters creative models by image-generation modality", () => {
+    it("filters creative models by divergent-text capability (F4: text models qualify)", () => {
         const creativeCandidates = filterSRCreativeModels(available);
+        assert.ok(creativeCandidates.length > 0);
         for (const c of creativeCandidates) {
             assert.strictEqual(c.validation.valid, true);
-            assert.ok(c.profile.modalities?.includes("image-generation"));
+            const modalities = c.profile.modalities ?? [];
+            const hasMedia = modalities.includes("image-generation") || modalities.includes("video-generation");
+            // Qualifies as either a capable text model (T3+) or a media-generation model.
+            assert.ok(c.profile.tier >= 3 || hasMedia);
         }
     });
 });
@@ -301,7 +318,7 @@ describe("Spectrum Refraction — System Prompts", () => {
     it("aggregation prompt mentions synthesis/coordinator", () => {
         assert.ok(
             SR_SYSTEM_PROMPTS.aggregation.includes("Coordinator") ||
-                SR_SYSTEM_PROMPTS.aggregation.includes("Synthesize"),
+            SR_SYSTEM_PROMPTS.aggregation.includes("Synthesize"),
         );
     });
 });

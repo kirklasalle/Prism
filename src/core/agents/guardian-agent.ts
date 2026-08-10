@@ -275,6 +275,10 @@ export class GuardianAgent extends EventEmitter {
     private config: GuardianConfig;
     private tasks: GuardianTask[] = [];
     private taskTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+    private taskFailureStreak: Map<string, number> = new Map();
+    private taskBackoffUntil: Map<string, number> = new Map();
+    private selfHealFailureStreak: Map<string, number> = new Map();
+    private selfHealBackoffUntil: Map<string, number> = new Map();
     private agentListFn?: () => { agents: Array<{ id: string; state: string; role: string; lifecycle: string }> };
     private logEntriesFn?: () => Array<{ severity: string; timestamp: string }>;
     /** Optional MCP recovery hook — supplies the live adapter at runtime. */
@@ -545,7 +549,7 @@ export class GuardianAgent extends EventEmitter {
             const targetPath =
                 this.config.modelPath === "active-chat-model"
                     ? (this.supervisor.getSnapshot().find((s) => s.status === "ready")?.modelPath ??
-                      "active-chat-model")
+                        "active-chat-model")
                     : this.config.modelPath;
 
             const slot = this.supervisor
@@ -587,6 +591,11 @@ export class GuardianAgent extends EventEmitter {
     }
 
     private async attemptSelfHeal(issue: string): Promise<void> {
+        const selfHealBackoffUntil = this.selfHealBackoffUntil.get(issue) ?? 0;
+        if (selfHealBackoffUntil > Date.now()) {
+            return;
+        }
+
         this._state = "healing";
         this.emitEvent("guardian.healing", `Attempting self-heal: ${issue}`);
 
@@ -606,6 +615,7 @@ export class GuardianAgent extends EventEmitter {
                         }
                         if (session.status === "completed") {
                             this.issuesResolved++;
+                            this.resetSelfHealFailure(issue);
                             this._state = "running";
                             this.recordAction(
                                 "self_heal",
@@ -621,6 +631,7 @@ export class GuardianAgent extends EventEmitter {
                             throw new Error(`Self-healing workflow ended with state: ${session.status}`);
                         }
                     } catch (skillErr) {
+                        this.registerSelfHealFailure(issue);
                         this.emitEvent(
                             "guardian.skills_heal.failed",
                             `Skills-engine recovery failed: ${String(skillErr)}. Falling back to default routines...`,
@@ -649,6 +660,7 @@ export class GuardianAgent extends EventEmitter {
                     flashAttn: this.config.flashAttn,
                 });
                 this.issuesResolved++;
+                this.resetSelfHealFailure(issue);
                 this._state = "running";
                 this.recordAction("self_heal", "success", `Recovered model slot: ${targetAlias}. Josephine knows!`);
                 this.emitEvent("guardian.healed", `Model slot recovered: ${targetAlias}. Josephine knows!`);
@@ -656,10 +668,12 @@ export class GuardianAgent extends EventEmitter {
             }
 
             // Unknown issue — cannot self-heal, escalate
+            this.registerSelfHealFailure(issue);
             this._state = "running";
             this.recordAction("self_heal", "escalated", `Cannot auto-fix: ${issue}`);
             this.emitEvent("guardian.escalation", `Guardian cannot auto-fix: ${issue}. Operator attention required.`);
         } catch (error) {
+            this.registerSelfHealFailure(issue);
             this._state = "error";
             this.recordAction("self_heal", "failure", String(error));
             this.emitEvent("guardian.heal_failed", String(error));
@@ -808,10 +822,10 @@ export class GuardianAgent extends EventEmitter {
         const existing = this.taskTimers.get(task.id);
         if (existing) clearInterval(existing);
 
-        const stagger = Math.random() * 5000;
+        const initialDelayMs = Math.min(task.intervalMs, 30_000) + Math.floor(Math.random() * 5000);
         setTimeout(() => {
             if (this._state === "running" && task.enabled) void this.executeTask(task);
-        }, stagger);
+        }, initialDelayMs);
 
         const timer = setInterval(() => {
             if (this._state === "running" && task.enabled) void this.executeTask(task);
@@ -827,11 +841,38 @@ export class GuardianAgent extends EventEmitter {
     }
 
     private async executeTask(task: GuardianTask): Promise<void> {
+        const taskBackoffUntil = this.taskBackoffUntil.get(task.id) ?? 0;
+        if (taskBackoffUntil > Date.now()) {
+            return;
+        }
+
         try {
             // Check if this task maps to a custodian skill
             const skillId = this.taskToSkillId(task.id);
             if (skillId && this.skillsEngine) {
-                const result = await this.executeCustodianSkill(skillId, task);
+                let result = await this.executeCustodianSkill(skillId, task);
+                if (result.status === "failure") {
+                    // If a dynamic skill fails, attempt the deterministic built-in task implementation
+                    // before surfacing a failure event.
+                    const fallback = await this.runTaskImpl(task.id);
+                    if (fallback.status !== "failure") {
+                        this.emitEvent(
+                            "guardian.custodian_skill.fallback",
+                            `Custodian skill fallback succeeded for ${task.id}: ${fallback.detail}`,
+                        );
+                        result = fallback;
+                    }
+                }
+
+                if (result.status === "failure") {
+                    result = {
+                        ...result,
+                        detail: this.registerTaskFailure(task.id, result.detail),
+                    };
+                } else {
+                    this.resetTaskFailure(task.id);
+                }
+
                 task.lastRunAt = new Date().toISOString();
                 task.lastResult = result.status;
                 task.lastDetail = result.detail;
@@ -845,7 +886,16 @@ export class GuardianAgent extends EventEmitter {
             }
 
             // Fallback to existing task implementation
-            const result = await this.runTaskImpl(task.id);
+            let result = await this.runTaskImpl(task.id);
+            if (result.status === "failure") {
+                result = {
+                    ...result,
+                    detail: this.registerTaskFailure(task.id, result.detail),
+                };
+            } else {
+                this.resetTaskFailure(task.id);
+            }
+
             task.lastRunAt = new Date().toISOString();
             task.lastResult = result.status;
             task.lastDetail = result.detail;
@@ -858,10 +908,42 @@ export class GuardianAgent extends EventEmitter {
         } catch (error) {
             task.lastRunAt = new Date().toISOString();
             task.lastResult = "failure";
-            task.lastDetail = String(error);
-            this.recordAction(`task.${task.id}`, "failure", String(error));
-            this.emitEvent(`guardian.task.${task.id}`, `Task error: ${String(error)}`);
+            const detail = this.registerTaskFailure(task.id, String(error));
+            task.lastDetail = detail;
+            this.recordAction(`task.${task.id}`, "failure", detail);
+            this.emitEvent(`guardian.task.${task.id}`, `Task error: ${detail}`);
         }
+    }
+
+    private computeFailureBackoffMs(streak: number): number {
+        const baseMs = 30_000;
+        const maxMs = 15 * 60_000;
+        return Math.min(maxMs, baseMs * Math.pow(2, Math.max(0, streak - 1)));
+    }
+
+    private registerTaskFailure(taskId: string, detail: string): string {
+        const streak = (this.taskFailureStreak.get(taskId) ?? 0) + 1;
+        this.taskFailureStreak.set(taskId, streak);
+        const cooldownMs = this.computeFailureBackoffMs(streak);
+        this.taskBackoffUntil.set(taskId, Date.now() + cooldownMs);
+        return `${detail} (cooldown ${Math.round(cooldownMs / 1000)}s after ${streak} consecutive failure(s))`;
+    }
+
+    private resetTaskFailure(taskId: string): void {
+        this.taskFailureStreak.delete(taskId);
+        this.taskBackoffUntil.delete(taskId);
+    }
+
+    private registerSelfHealFailure(issue: string): void {
+        const streak = (this.selfHealFailureStreak.get(issue) ?? 0) + 1;
+        this.selfHealFailureStreak.set(issue, streak);
+        const cooldownMs = this.computeFailureBackoffMs(streak);
+        this.selfHealBackoffUntil.set(issue, Date.now() + cooldownMs);
+    }
+
+    private resetSelfHealFailure(issue: string): void {
+        this.selfHealFailureStreak.delete(issue);
+        this.selfHealBackoffUntil.delete(issue);
     }
 
     private async runTaskImpl(taskId: string): Promise<{ status: "success" | "warning" | "failure"; detail: string }> {
@@ -2067,7 +2149,7 @@ export class GuardianAgent extends EventEmitter {
                         stdio: "pipe",
                     }).trim();
                     updateAvailable = localCommit !== remoteCommit;
-                } catch (_) {}
+                } catch (_) { }
             }
 
             if (remoteVersion !== currentVersion) {
