@@ -59,6 +59,7 @@
 
 ## Architecture & Design
 
+- GOVERNED_VISUAL_DESKTOP_SANDBOX_DESIGN_AND_AUDIT.md: Governed Visual Desktop Sandbox architecture design specification & critical production security audit (Phase V)
 - CAC_GUARDIAN_AGENT_ARCHITECTURE.md: canonical roles for the operator-facing CAC Main Agent and permanent secondary Guardian
 - COMPUTER_USE_COMPREHENSIVE_DEEP_DIVE.md: canonical computer-use architecture
 - COMPUTER_USE_BUSINESS_GATE_STATUS_SCHEMA.json: business gate schema

@@ -832,7 +832,20 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
 
 ---
 
-## Phase V — Sovereign, Air-Gapped & Defense AaaS Packaging (Q4 2026 – Q1 2027)
+## Phase V — Governed Visual Desktop Sandbox & Lightweight Linux OS Runtime (Q4 2026)
+
+> **Objective:** Deliver a turnkey, disposable, containerized graphical Linux workstation (`prism-sandbox-desktop:debian-slim`) with an "open-face" live WebRTC stream in a dedicated dashboard tab and instantaneous human takeover co-pilot engine.
+> **Architecture & Audit Reference:** [`docs/GOVERNED_VISUAL_DESKTOP_SANDBOX_DESIGN_AND_AUDIT.md`](GOVERNED_VISUAL_DESKTOP_SANDBOX_DESIGN_AND_AUDIT.md)
+
+- [ ] **V1 — Disposable Desktop Container Image Packaging:** Official Debian Bookworm Slim + Openbox + KasmVNC WebRTC stream image (`~380MB`) with Chromium, Python 3.12, Node.js, and non-root execution (`prism:prism`).
+- [ ] **V2 — Desktop Sandbox Manager Backend:** `DesktopSandboxManager` (`src/core/operator/desktop-sandbox-manager.ts`) providing lifecycle control (spawn, pause, snapshot, revert, terminate) and dynamic WebRTC port routing.
+- [ ] **V3 — Dedicated Dashboard Tab & Co-Pilot Takeover:** Mount dedicated **`🖥️ Sandbox Desktop`** tab with full-viewport 60fps canvas, one-click **Autonomous / Takeover** co-pilot switch, and floating Picture-in-Picture (PiP) mini-view in Chat.
+- [ ] **V4 — Agent Computer-Use Tool Adapter:** Implement `DesktopControlTool` (`src/adapters/system/desktop-control-tool.ts`) for mouse, keyboard, and window automation gated under 3-Tier Policy Interceptors.
+- [ ] **V5 — OSWorld & Production Audit Qualification:** Execute OSWorld benchmark suite against the sandboxed Linux desktop and verify zero host leakage under 10 Laws compliance.
+
+---
+
+## Phase W — Sovereign, Air-Gapped & Defense AaaS Packaging (Q1 2027)
 
 > **Objective:** Turnkey delivery of PRISM as the premier self-hosted, air-gapped Agents-as-a-Service (AaaS) platform for defense, intelligence, healthcare, and enterprise.
 
