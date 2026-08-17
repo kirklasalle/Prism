@@ -33,6 +33,7 @@ export type TabId =
     | "agentic"
     | "browser"
     | "computer"
+    | "desktop"
     | "watch"
     | "logs"
     | "telemetry"
@@ -78,6 +79,7 @@ export const ALL_TAB_IDS: readonly TabId[] = [
     "agentic",
     "browser",
     "computer",
+    "desktop",
     "watch",
     "logs",
     "telemetry",
@@ -100,6 +102,7 @@ const TAB_DISPLAY_NAMES: Record<TabId, string> = {
     agentic: "Agentic Control",
     browser: "Browser Control",
     computer: "Computer Control",
+    desktop: "Sandbox Desktop",
     watch: "Watch Me",
     logs: "Logs & Debug",
     telemetry: "Telemetry",

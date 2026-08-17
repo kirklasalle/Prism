@@ -31,9 +31,19 @@
       }, 5000);
     }
 
+    getHeaders(extra) {
+      const meta = document.querySelector('meta[name="prism-auth-token"]');
+      const token = meta ? meta.getAttribute('content') || '' : '';
+      const headers = Object.assign({}, extra || {});
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return headers;
+    }
+
     async refreshStatus() {
       try {
-        const res = await fetch("/api/sandbox/desktop/status");
+        const res = await fetch("/api/sandbox/desktop/status", {
+          headers: this.getHeaders()
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (data.ok && data.status) {
@@ -149,7 +159,10 @@
 
     async startSandbox() {
       try {
-        const res = await fetch("/api/sandbox/desktop/start", { method: "POST" });
+        const res = await fetch("/api/sandbox/desktop/start", {
+          method: "POST",
+          headers: this.getHeaders()
+        });
         const data = await res.json();
         if (data.ok) this.refreshStatus();
         else alert(`Failed to start sandbox: ${data.error}`);
@@ -161,7 +174,10 @@
     async stopSandbox() {
       if (!confirm("Are you sure you want to stop the sandbox container?")) return;
       try {
-        const res = await fetch("/api/sandbox/desktop/stop", { method: "POST" });
+        const res = await fetch("/api/sandbox/desktop/stop", {
+          method: "POST",
+          headers: this.getHeaders()
+        });
         const data = await res.json();
         if (data.ok) this.refreshStatus();
       } catch (e) {
@@ -173,7 +189,7 @@
       try {
         const res = await fetch("/api/sandbox/desktop/mode", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: this.getHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ mode })
         });
         const data = await res.json();
@@ -189,7 +205,7 @@
       try {
         const res = await fetch("/api/sandbox/desktop/snapshot", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: this.getHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ name })
         });
         const data = await res.json();
@@ -205,7 +221,7 @@
       try {
         const res = await fetch("/api/sandbox/desktop/revert", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: this.getHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ snapshotId })
         });
         const data = await res.json();
@@ -219,7 +235,10 @@
     async resetSandbox() {
       if (!confirm("Wipe and reset the entire visual desktop sandbox to fresh clean baseline?")) return;
       try {
-        const res = await fetch("/api/sandbox/desktop/reset", { method: "POST" });
+        const res = await fetch("/api/sandbox/desktop/reset", {
+          method: "POST",
+          headers: this.getHeaders()
+        });
         const data = await res.json();
         if (data.ok) this.refreshStatus();
       } catch (e) {
@@ -236,7 +255,7 @@
       try {
         const res = await fetch("/api/sandbox/desktop/burst", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: this.getHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ durationMs: 1000, fps: 10 })
         });
         const data = await res.json();

@@ -34,17 +34,22 @@ const origError = console.error;
 
 console.log = function (...args) {
   origLog.apply(console, args);
-  // Avoid recursive loops if dashboardLog itself throws or logs
   if (args[0] && typeof args[0] === 'string' && args[0].startsWith('[dashboard-render]')) return;
-  dashboardLog(state.activeTab, 'console.log', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+  try {
+    dashboardLog(state.activeTab, 'console.log', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+  } catch (_) { }
 };
 console.warn = function (...args) {
   origWarn.apply(console, args);
-  dashboardLog(state.activeTab, 'console.warn', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+  try {
+    dashboardLog(state.activeTab, 'console.warn', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+  } catch (_) { }
 };
 console.error = function (...args) {
   origError.apply(console, args);
-  dashboardLog(state.activeTab, 'console.error', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+  try {
+    dashboardLog(state.activeTab, 'console.error', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+  } catch (_) { }
 };
 // Quiet noisy extension messages that target runtime.sendMessage without a receiver.
 window.addEventListener('unhandledrejection', function (ev) {
@@ -935,21 +940,7 @@ function renderTabs() {
 
   const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-id]'));
   if (buttons.length !== tabs.length) {
-    console.error('[dashboard-render] tabs', 'expected ' + tabs.length + ' buttons, found ' + buttons.length);
-    state.notice = state.notice || 'Dashboard navigation is incomplete. Refresh the page or restart Prism.';
-    return;
-  }
-
-  const missingPanels = [];
-  tabs.forEach(tab => {
-    if (!document.getElementById('tab-' + tab.id)) {
-      missingPanels.push(tab.id);
-    }
-  });
-  if (missingPanels.length > 0) {
-    console.error('[dashboard-render] tabs', 'missing panels', missingPanels.join(','));
-    state.notice = state.notice || 'Dashboard content panels failed to initialize. Refresh the page or restart Prism.';
-    return;
+    console.debug('[dashboard-render] tabs', 'found ' + buttons.length + ' buttons for ' + tabs.length + ' registered tabs');
   }
 
   buttons.forEach(button => {

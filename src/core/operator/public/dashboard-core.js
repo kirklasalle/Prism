@@ -252,6 +252,7 @@ export const tabs = [
   { id: 'tools', label: 'Tools & Plugins' },
   { id: 'agentic', label: 'Agentic Control' },
   { id: 'computer', label: 'Computer Control' },
+  { id: 'desktop', label: 'Sandbox Desktop' },
   { id: 'browser', label: 'Browser Control' },
   { id: 'workspace', label: 'Workspace' },
   { id: 'network', label: 'Network' },
@@ -683,8 +684,8 @@ export
   }
 }
 
-export
-  function dashboardLog(source, operation, detail, severity) {
+export function dashboardLog(source, operation, detail, severity) {
+  if (!state.logEntries) state.logEntries = [];
   var entry = {
     type: 'log_entry',
     timestamp: new Date().toISOString(),
@@ -695,7 +696,9 @@ export
   };
   state.logEntries.push(entry);
   if (state.logEntries.length > 2000) state.logEntries = state.logEntries.slice(-2000);
-  if (state.activeTab === 'logs') safeRenderStep('logsPanel', renderLogsPanel);
+  if (state.activeTab === 'logs' && typeof window !== 'undefined' && typeof window.renderLogsPanel === 'function') {
+    safeRenderStep('logsPanel', window.renderLogsPanel);
+  }
 }
 
 export function showTransientNotice(message, severity = 'info', timeout = 4000) {
