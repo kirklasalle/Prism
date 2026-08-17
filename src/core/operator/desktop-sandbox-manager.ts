@@ -108,6 +108,56 @@ export interface SandboxStatus {
   memoryUsageMb: number;
   cpuPercent: number;
   lastError: string | null;
+  isMock: boolean;
+}
+
+/**
+ * Helper to generate visual simulated desktop SVG frames in base64
+ */
+export function generateMockDesktopSvg(actionText = 'Debian 12 Bookworm (Simulation Mode)', frameNum = 1): string {
+  const time = new Date().toLocaleTimeString();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <defs>
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#0b0f19"/>
+        <stop offset="100%" stop-color="#1e1b4b"/>
+      </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="url(#bg)"/>
+    <rect width="1280" height="34" fill="#090d16" opacity="0.95"/>
+    <text x="16" y="22" fill="#38bdf8" font-family="system-ui, sans-serif" font-size="13" font-weight="bold">◇ PRISM Refraction OS · Debian 12 Slim [SIMULATION]</text>
+    <text x="360" y="22" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="12">Terminal</text>
+    <text x="440" y="22" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="12">Chromium</text>
+    <text x="520" y="22" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="12">Files</text>
+    <text x="1160" y="22" fill="#34d399" font-family="monospace" font-size="12">${time}</text>
+    
+    <!-- Openbox Terminal Window -->
+    <rect x="120" y="70" width="840" height="490" rx="8" fill="#030712" stroke="#1e293b" stroke-width="1.5"/>
+    <rect x="120" y="70" width="840" height="34" rx="8" fill="#0f172a"/>
+    <circle cx="142" cy="87" r="6" fill="#ef4444"/>
+    <circle cx="160" cy="87" r="6" fill="#f59e0b"/>
+    <circle cx="178" cy="87" r="6" fill="#10b981"/>
+    <text x="204" y="92" fill="#cbd5e1" font-family="monospace" font-size="12">prism@sandbox:~ (openbox-desktop-session)</text>
+    
+    <text x="145" y="140" fill="#34d399" font-family="monospace" font-size="13">prism@sandbox:~$ neofetch --stdout</text>
+    <text x="145" y="170" fill="#38bdf8" font-family="monospace" font-size="12">OS: Debian GNU/Linux 12 (bookworm) x86_64</text>
+    <text x="145" y="190" fill="#38bdf8" font-family="monospace" font-size="12">Host: Prism Governed Virtual Workstation (KasmVNC 60fps)</text>
+    <text x="145" y="210" fill="#38bdf8" font-family="monospace" font-size="12">Kernel: 6.6.137-prism-hardened</text>
+    <text x="145" y="230" fill="#38bdf8" font-family="monospace" font-size="12">WM: Openbox + Xvfb / Direct Framebuffer Grabber</text>
+    <text x="145" y="250" fill="#38bdf8" font-family="monospace" font-size="12">Memory: 340MiB / 2048MiB (cgroups enforced)</text>
+    <text x="145" y="270" fill="#38bdf8" font-family="monospace" font-size="12">Security: Tier 2 Sandboxed · Rootless (UID 1000)</text>
+    <text x="145" y="310" fill="#a855f7" font-family="monospace" font-size="13">prism@sandbox:~$ [Action Log] ${actionText} (Frame #${frameNum})</text>
+    <text x="145" y="340" fill="#facc15" font-family="monospace" font-size="13">prism@sandbox:~$ _</text>
+
+    <!-- Side Status HUD -->
+    <rect x="980" y="70" width="240" height="260" rx="8" fill="rgba(15,23,42,0.8)" stroke="#1e293b" stroke-width="1"/>
+    <text x="1000" y="100" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="13" font-weight="bold">HUD Telemetry</text>
+    <text x="1000" y="130" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="11">Frame Grabber: Active</text>
+    <text x="1000" y="155" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="11">Latency: ~4ms</text>
+    <text x="1000" y="180" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="11">Digest: SHA-256 Valid</text>
+    <text x="1000" y="205" fill="#34d399" font-family="system-ui, sans-serif" font-size="11">Governance: Gated Egress</text>
+  </svg>`;
+  return Buffer.from(svg).toString('base64');
 }
 
 /**
@@ -131,9 +181,13 @@ export interface IContainerExecutor {
 export class MockContainerExecutor implements IContainerExecutor {
   private running = false;
   private snapshots = new Map<string, string>();
+  private lastAction = 'Initialized simulation session';
+  private frameCount = 0;
 
   async start(_config: DesktopSandboxConfig): Promise<{ containerId: string }> {
     this.running = true;
+    this.frameCount = 0;
+    this.lastAction = 'Desktop Sandbox Started in Simulation Mode';
     return { containerId: `mock-sandbox-${randomUUID().slice(0, 8)}` };
   }
 
@@ -147,25 +201,31 @@ export class MockContainerExecutor implements IContainerExecutor {
   async commit(containerId: string, tag: string): Promise<{ snapshotId: string }> {
     const snapId = `snap-${randomUUID().slice(0, 8)}`;
     this.snapshots.set(tag, containerId);
+    this.lastAction = `Created snapshot checkpoint ${snapId}`;
     return { snapshotId: snapId };
   }
 
   async revert(tag: string): Promise<{ containerId: string }> {
+    this.lastAction = `Reverted container to ${tag}`;
     return { containerId: `reverted-${tag}-${randomUUID().slice(0, 6)}` };
   }
 
-  async execInput(_containerId: string, _action: DesktopInputAction, _display: string): Promise<void> {
+  async execInput(_containerId: string, action: DesktopInputAction, _display: string): Promise<void> {
     if (!this.running) throw new Error('Cannot execute input: container is not running');
+    this.lastAction = `Input: ${action.type}${action.text ? ` "${action.text}"` : ''}${action.x != null ? ` at (${action.x},${action.y})` : ''}`;
+    this.frameCount++;
   }
 
   async captureScreenshot(_containerId: string, _display: string): Promise<string> {
-    // 1x1 transparent PNG base64 for deterministic testing
-    return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    this.frameCount++;
+    return generateMockDesktopSvg(this.lastAction, this.frameCount);
   }
 
   async captureBurst(_containerId: string, count: number, _intervalMs: number, _display: string): Promise<string[]> {
-    const frame = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-    return Array.from({ length: count }, () => frame);
+    return Array.from({ length: count }, (_, i) => {
+      this.frameCount++;
+      return generateMockDesktopSvg(`Burst Frame ${i + 1}/${count} - ${this.lastAction}`, this.frameCount);
+    });
   }
 }
 
@@ -357,6 +417,35 @@ export class DesktopSandboxManager extends EventEmitter {
   }
 
   /**
+   * Dynamically toggle Mock / Simulation mode
+   */
+  setMockMode(enable: boolean): void {
+    this.config.mockProvider = enable;
+    this.executor = enable ? new MockContainerExecutor() : new DockerCliExecutor();
+  }
+
+  isMockMode(): boolean {
+    return this.config.mockProvider;
+  }
+
+  /**
+   * Check Docker daemon availability and container image status
+   */
+  async checkDocker(): Promise<{ available: boolean; imageBuilt: boolean; error?: string }> {
+    try {
+      await execFileAsync('docker', ['info']);
+      try {
+        await execFileAsync('docker', ['image', 'inspect', this.config.imageName]);
+        return { available: true, imageBuilt: true };
+      } catch {
+        return { available: true, imageBuilt: false };
+      }
+    } catch (err: any) {
+      return { available: false, imageBuilt: false, error: err?.message || String(err) };
+    }
+  }
+
+  /**
    * Current status of the Visual Desktop Sandbox
    */
   getStatus(): SandboxStatus {
@@ -376,7 +465,8 @@ export class DesktopSandboxManager extends EventEmitter {
       activeActionCount: this.activeActionCount,
       memoryUsageMb: this.state === 'RUNNING' ? 340 : 0,
       cpuPercent: this.state === 'RUNNING' ? 2.4 : 0.0,
-      lastError: this.lastError
+      lastError: this.lastError,
+      isMock: this.config.mockProvider
     };
   }
 
@@ -409,12 +499,20 @@ export class DesktopSandboxManager extends EventEmitter {
       return this.getStatus();
     } catch (err: any) {
       this.state = 'ERROR';
-      this.lastError = err?.message || String(err);
+      const rawMsg = err?.message || String(err);
+      if (rawMsg.includes('dockerDesktopLinuxEngine') || rawMsg.includes('connect to the docker API') || rawMsg.includes('Cannot connect to the Docker daemon')) {
+        this.lastError = 'Docker Desktop Engine is not currently running. Please start Docker Desktop, or switch to Sandbox Simulation Mode to test controls & actions.';
+      } else if (rawMsg.includes('Unable to find image') || rawMsg.includes('No such image')) {
+        this.lastError = `Sandbox container image (${this.config.imageName}) not built. Run docker build or switch to Simulation Mode.`;
+      } else {
+        this.lastError = rawMsg;
+      }
+
       this.emitEvent('sandbox.desktop.error', {
         reasonCode: 'DSK-SBX-ERR-START',
         error: this.lastError
       });
-      throw new Error(`Failed to start Desktop Sandbox: ${this.lastError}`);
+      throw new Error(this.lastError || 'Failed to start Desktop Sandbox');
     }
   }
 

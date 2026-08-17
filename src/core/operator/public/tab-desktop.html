@@ -1,5 +1,16 @@
-<!-- Tab: Governed Visual Desktop Sandbox (Phase V) -->
-<div class="desktop-sandbox-tab" style="display:flex; flex-direction:column; height:100%; gap:12px; padding:16px; box-sizing:border-box;">
+  <!-- Inline Notification & Docker Status Warning Banner -->
+  <div id="sandbox-alert-banner" style="display:none; padding:10px 14px; background:rgba(239, 68, 68, 0.12); border:1px solid rgba(239, 68, 68, 0.35); border-radius:8px; align-items:center; justify-content:space-between; gap:10px; font-size:12px;">
+    <div style="display:flex; align-items:center; gap:8px; color:#fca5a5;">
+      <span style="font-size:16px;">⚠️</span>
+      <span id="sandbox-alert-message">Docker Engine is offline.</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button id="btn-toggle-simulation" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.toggleSimulationMode()" style="font-size:11px; padding:4px 10px; border-color:#38bdf8; color:#38bdf8;">
+        🧪 Enable Simulation Mode
+      </button>
+      <button class="secondary-button" onclick="document.getElementById('sandbox-alert-banner').style.display='none'" style="font-size:10px; padding:3px 6px;">✕</button>
+    </div>
+  </div>
 
   <!-- Top Co-Pilot & Governance Control Bar -->
   <div class="panel" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; flex-wrap:wrap; gap:10px;">
@@ -23,6 +34,11 @@
       <span class="badge" style="font-size:10px; padding:3px 8px; border-radius:6px; background:rgba(99, 102, 241, 0.15); border:1px solid rgba(99, 102, 241, 0.4); color:#a5b4fc;">
         🛡️ TIER-2 SANDBOX | GATED EGRESS
       </span>
+
+      <!-- Simulation Badge -->
+      <span id="sbx-simulation-badge" class="badge" style="display:none; font-size:10px; padding:3px 8px; border-radius:6px; background:rgba(234, 179, 8, 0.15); border:1px solid rgba(234, 179, 8, 0.4); color:#fde047;">
+        🧪 SIMULATION MODE
+      </span>
     </div>
 
     <!-- Quick Action Buttons -->
@@ -45,6 +61,9 @@
       <button id="btn-toggle-pip" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.togglePiP()" style="font-size:11px; padding:6px 12px;" title="Toggle Floating Picture-in-Picture">
         🗖 PiP
       </button>
+      <button id="btn-mode-sim-toggle" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.toggleSimulationMode()" style="font-size:11px; padding:6px 10px;" title="Toggle between Real Docker Container & Simulation Mode">
+        🧪 Sim Mode
+      </button>
     </div>
   </div>
 
@@ -65,6 +84,7 @@
       </div>
 
       <iframe id="desktop-vnc-frame" style="width:100%; height:100%; border:none; display:none; background:#000;" src="about:blank" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
+      <img id="desktop-sim-canvas" style="width:100%; height:100%; object-fit:contain; display:none; background:#000;" alt="Simulated Desktop" />
 
       <!-- Takeover Overlay Banner -->
       <div id="takeover-active-banner" style="display:none; position:absolute; top:12px; right:12px; background:rgba(239, 68, 68, 0.9); color:#fff; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:700; letter-spacing:0.5px; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:10;">

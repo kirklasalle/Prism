@@ -23,7 +23,6 @@
     startPolling() {
       if (this.pollInterval) clearInterval(this.pollInterval);
       this.pollInterval = setInterval(() => {
-        // Poll every 5s if tab is active or PiP is active
         const desktopTab = document.getElementById("tab-desktop");
         if ((desktopTab && desktopTab.classList.contains("active")) || this.isPiPActive) {
           this.refreshStatus();
@@ -37,6 +36,20 @@
       const headers = Object.assign({}, extra || {});
       if (token) headers['Authorization'] = 'Bearer ' + token;
       return headers;
+    }
+
+    showAlert(message) {
+      const banner = document.getElementById("sandbox-alert-banner");
+      const msgEl = document.getElementById("sandbox-alert-message");
+      if (banner && msgEl) {
+        msgEl.innerText = message;
+        banner.style.display = "flex";
+      }
+    }
+
+    hideAlert() {
+      const banner = document.getElementById("sandbox-alert-banner");
+      if (banner) banner.style.display = "none";
     }
 
     async refreshStatus() {
@@ -61,22 +74,36 @@
       const startBtn = document.getElementById("btn-sandbox-start");
       const stopBtn = document.getElementById("btn-sandbox-stop");
       const vncFrame = document.getElementById("desktop-vnc-frame");
+      const simCanvas = document.getElementById("desktop-sim-canvas");
       const placeholder = document.getElementById("desktop-placeholder");
       const takeoverBanner = document.getElementById("takeover-active-banner");
+      const simBadge = document.getElementById("sbx-simulation-badge");
 
       const autoBtn = document.getElementById("btn-mode-autonomous");
       const takeoverBtn = document.getElementById("btn-mode-takeover");
 
+      if (simBadge) {
+        simBadge.style.display = status.isMock ? "inline-block" : "none";
+      }
+
+      if (status.lastError) {
+        this.showAlert(status.lastError);
+      } else {
+        this.hideAlert();
+      }
+
       if (indicator) {
         indicator.style.background = status.state === "RUNNING" ? "#22c55e" :
           status.state === "HELD_FOR_OPERATOR" ? "#ef4444" :
-          status.state === "STARTING" ? "#f59e0b" : "#94a3b8";
+          status.state === "STARTING" ? "#f59e0b" :
+          status.state === "ERROR" ? "#f87171" : "#94a3b8";
       }
 
       if (statusText) {
         statusText.innerText = status.state;
         statusText.style.color = status.state === "RUNNING" ? "#34d399" :
-          status.state === "HELD_FOR_OPERATOR" ? "#f87171" : "#cbd5e1";
+          status.state === "HELD_FOR_OPERATOR" ? "#f87171" :
+          status.state === "ERROR" ? "#f87171" : "#cbd5e1";
       }
 
       if (startBtn && stopBtn) {
@@ -89,17 +116,27 @@
         }
       }
 
-      if (vncFrame && placeholder) {
-        if (status.state === "RUNNING" || status.state === "HELD_FOR_OPERATOR") {
-          placeholder.style.display = "none";
-          vncFrame.style.display = "block";
-          if (vncFrame.src === "about:blank" || !vncFrame.src.includes(String(status.webRtcPort))) {
-            vncFrame.src = status.streamUrl;
+      if (status.state === "RUNNING" || status.state === "HELD_FOR_OPERATOR") {
+        if (placeholder) placeholder.style.display = "none";
+        if (status.isMock) {
+          if (vncFrame) vncFrame.style.display = "none";
+          if (simCanvas) {
+            simCanvas.style.display = "block";
+            this.refreshSimScreenshot();
           }
         } else {
-          vncFrame.style.display = "none";
-          placeholder.style.display = "flex";
+          if (simCanvas) simCanvas.style.display = "none";
+          if (vncFrame) {
+            vncFrame.style.display = "block";
+            if (vncFrame.src === "about:blank" || !vncFrame.src.includes(String(status.webRtcPort))) {
+              vncFrame.src = status.streamUrl;
+            }
+          }
         }
+      } else {
+        if (vncFrame) vncFrame.style.display = "none";
+        if (simCanvas) simCanvas.style.display = "none";
+        if (placeholder) placeholder.style.display = "flex";
       }
 
       if (takeoverBanner) {
@@ -130,9 +167,29 @@
       if (resEl) resEl.innerText = status.resolution;
       if (cidEl) cidEl.innerText = status.containerId || "--";
       if (upEl) upEl.innerText = `${status.uptimeSeconds}s`;
-      if (portEl) portEl.innerText = `${status.webRtcPort} (WebRTC) / ${status.vncPort} (VNC)`;
+      if (portEl) portEl.innerText = status.isMock ? "Mock Loopback (Simulation)" : `${status.webRtcPort} (WebRTC) / ${status.vncPort} (VNC)`;
 
       this.renderSnapshots(status.snapshots || []);
+    }
+
+    async refreshSimScreenshot() {
+      try {
+        const res = await fetch("/api/sandbox/desktop/screenshot", {
+          method: "POST",
+          headers: this.getHeaders()
+        });
+        const data = await res.json();
+        if (data.ok && data.base64) {
+          const simCanvas = document.getElementById("desktop-sim-canvas");
+          if (simCanvas) {
+            simCanvas.src = data.base64.startsWith("data:") ? data.base64 : (
+              data.base64.startsWith("PHN2Zy") || data.base64.startsWith("PD94b")
+                ? `data:image/svg+xml;base64,${data.base64}`
+                : `data:image/png;base64,${data.base64}`
+            );
+          }
+        }
+      } catch (_) {}
     }
 
     renderSnapshots(snapshots) {
@@ -157,6 +214,23 @@
       `).join("");
     }
 
+    async toggleSimulationMode() {
+      try {
+        const res = await fetch("/api/sandbox/desktop/toggle-mock", {
+          method: "POST",
+          headers: this.getHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (data.ok) {
+          this.hideAlert();
+          this.refreshStatus();
+        }
+      } catch (e) {
+        console.error("Failed to toggle simulation mode:", e);
+      }
+    }
+
     async startSandbox() {
       try {
         const res = await fetch("/api/sandbox/desktop/start", {
@@ -164,10 +238,15 @@
           headers: this.getHeaders()
         });
         const data = await res.json();
-        if (data.ok) this.refreshStatus();
-        else alert(`Failed to start sandbox: ${data.error}`);
+        if (data.ok) {
+          this.hideAlert();
+          this.refreshStatus();
+        } else {
+          this.showAlert(data.error || "Failed to start desktop sandbox");
+          if (data.status) this.renderStatus(data.status);
+        }
       } catch (e) {
-        alert(`Error: ${e.message}`);
+        this.showAlert(`Error: ${e.message}`);
       }
     }
 
@@ -179,9 +258,12 @@
           headers: this.getHeaders()
         });
         const data = await res.json();
-        if (data.ok) this.refreshStatus();
+        if (data.ok) {
+          this.hideAlert();
+          this.refreshStatus();
+        }
       } catch (e) {
-        alert(`Error: ${e.message}`);
+        this.showAlert(`Error: ${e.message}`);
       }
     }
 
@@ -210,9 +292,9 @@
         });
         const data = await res.json();
         if (data.ok) this.refreshStatus();
-        else alert(`Snapshot failed: ${data.error}`);
+        else this.showAlert(`Snapshot failed: ${data.error}`);
       } catch (e) {
-        alert(`Error: ${e.message}`);
+        this.showAlert(`Error: ${e.message}`);
       }
     }
 
@@ -226,9 +308,9 @@
         });
         const data = await res.json();
         if (data.ok) this.refreshStatus();
-        else alert(`Revert failed: ${data.error}`);
+        else this.showAlert(`Revert failed: ${data.error}`);
       } catch (e) {
-        alert(`Error: ${e.message}`);
+        this.showAlert(`Error: ${e.message}`);
       }
     }
 
@@ -242,7 +324,7 @@
         const data = await res.json();
         if (data.ok) this.refreshStatus();
       } catch (e) {
-        alert(`Error: ${e.message}`);
+        this.showAlert(`Error: ${e.message}`);
       }
     }
 
@@ -277,13 +359,19 @@
       if (this.burstAnimationInterval) clearInterval(this.burstAnimationInterval);
       if (!container || !this.burstFrames.length) return;
 
+      const formatSrc = (raw) => {
+        if (raw.startsWith("data:")) return raw;
+        if (raw.startsWith("PHN2Zy") || raw.startsWith("PD94b")) return `data:image/svg+xml;base64,${raw}`;
+        return `data:image/png;base64,${raw}`;
+      };
+
       this.currentFrameIdx = 0;
-      container.innerHTML = `<img id="burst-anim-img" src="data:image/png;base64,${this.burstFrames[0]}" style="width:100%; height:100%; object-fit:contain;" />`;
+      container.innerHTML = `<img id="burst-anim-img" src="${formatSrc(this.burstFrames[0])}" style="width:100%; height:100%; object-fit:contain;" />`;
       const img = document.getElementById("burst-anim-img");
 
       this.burstAnimationInterval = setInterval(() => {
         this.currentFrameIdx = (this.currentFrameIdx + 1) % this.burstFrames.length;
-        if (img) img.src = `data:image/png;base64,${this.burstFrames[this.currentFrameIdx]}`;
+        if (img) img.src = formatSrc(this.burstFrames[this.currentFrameIdx]);
       }, 100);
     }
 

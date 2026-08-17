@@ -56,10 +56,33 @@ export class DesktopHandler implements IRouteHandler {
         return this.json(res, 200, { ok: true, status: manager.getStatus() });
       }
 
+      // 1b. GET /api/sandbox/desktop/diagnostics
+      if (method === "GET" && pathname === "/api/sandbox/desktop/diagnostics") {
+        const diag = await manager.checkDocker();
+        return this.json(res, 200, { ok: true, diagnostics: diag, status: manager.getStatus() });
+      }
+
+      // 1c. POST /api/sandbox/desktop/toggle-mock
+      if (method === "POST" && pathname === "/api/sandbox/desktop/toggle-mock") {
+        const body = await parseBody();
+        const enable = body.enable !== undefined ? Boolean(body.enable) : !manager.isMockMode();
+        manager.setMockMode(enable);
+        return this.json(res, 200, { ok: true, isMock: manager.isMockMode(), status: manager.getStatus() });
+      }
+
       // 2. POST /api/sandbox/desktop/start
       if (method === "POST" && pathname === "/api/sandbox/desktop/start") {
-        const status = await manager.startSandbox();
-        return this.json(res, 200, { ok: true, message: "Sandbox started", status });
+        try {
+          const status = await manager.startSandbox();
+          return this.json(res, 200, { ok: true, message: "Sandbox started", status });
+        } catch (err: any) {
+          return this.json(res, 200, {
+            ok: false,
+            error: err?.message || String(err),
+            status: manager.getStatus(),
+            dockerUnavailable: true
+          });
+        }
       }
 
       // 3. POST /api/sandbox/desktop/stop
