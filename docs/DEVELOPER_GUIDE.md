@@ -1,6 +1,6 @@
 # PRISM Developer Guide
 
-Date: 2026-03-11
+Date: 2026-08-17 | Version: v0.23.1
 
 ## 1. Purpose
 
@@ -79,13 +79,17 @@ All per-artifact env var overrides (`PRISM_DATA_DIR`, `PRISM_PERF_OUTPUT_PATH`, 
 
 ## 4. Runtime Control Flow (Authoritative)
 
-1. Request enters orchestrator.
-2. Policy engine classifies risk and action constraints.
+<p align="center">
+  <img src="media/illustrations/prism_dev_runtime_control_pipeline.png" alt="PRISM Core Runtime Control Pipeline & Policy Interceptor Execution Flow" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" />
+</p>
+
+1. Request enters orchestrator (`src/core/runtime/orchestrator.ts`).
+2. Policy engine (`src/core/policy/policy-engine.ts`) classifies risk and action constraints.
 3. Governance decision emitted (`allow`, `deny`, `require_approval`).
-4. If approval required, request is queued and awaited.
-5. Tool executes (or is blocked).
-6. Outcome and side effects emitted to activity stream.
-7. Subscribers update storage/memory indexes.
+4. If approval required, request is queued in `ApprovalQueue` (`src/core/approval/approval-queue.ts`) and awaited.
+5. Tool adapter executes (or is blocked).
+6. Outcome and side effects emitted to `ActivityBus` (`src/core/activity/bus.ts`) with SHA-256 integrity hash.
+7. Memory subscribers update episodic, session, and semantic stores in SQLite.
 
 Workflow mode adds:
 
@@ -1374,7 +1378,52 @@ Unit test coverage in `tests/operator-presence-channels.test.ts` validates:
 - `SmsCommunicationTool` fallback mechanics using mock OAuth adapters.
 - Two-way inbound mail parsing: processing a simulated email containing a task correlation token and confirming it resolves the approval promise.
 
-## 17. References
+## 19. Spectrum Refraction 2.0 Consensus & Discrepancy Reconciliation Engine
+
+<p align="center">
+  <img src="media/illustrations/prism_dev_spectrum_consensus_engine.png" alt="PRISM Spectrum Consensus Engine and Discrepancy Reconciliation Loop" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" />
+</p>
+
+### 19.1 Architecture & Component Design
+
+Spectrum Refraction 2.0 (`src/core/operator/spectrum-consensus-engine.ts`) implements real-time tri-model cognitive triangulation, stemmed token consensus calculation, bias cancellation, and offline SLM emergency routing:
+
+- **`TriModelResponseInput`**: Ingests responses simultaneously from Left Hemisphere (Logic Engine), Right Hemisphere (Creative Engine), and Main Coordinator.
+- **`computeSimilarity(textA, textB)`**: Computes semantic token overlap using stemmed token matching (5-character prefix threshold) and calculates the harmonic consensus score (0.0 to 1.0).
+- **`DiscrepancyReconciliationLoop`** (`src/core/operator/discrepancy-reconciliation-loop.ts`): Autonomous sub-agent arbitration that evaluates divergent factual claims, ranks discrepancy severity (`low`, `medium`, `high`), and arbitrates against 9th Law reasoning ledgers.
+- **`OfflineSurvivalRoute`**: Automatically detects network partition or air-gapped defense requirements, gracefully falling back to embedded Ollama or `llama.cpp` local SLM inference.
+- **`BudgetGovernor`** (`src/core/operator/budget-governor.ts`): Manages departmental quotas with soft-cap downshifting (75%–99%) and hard-cap approval queue gating (>=100%).
+
+### 19.2 Verification
+
+Tested comprehensively in:
+- `tests/spectrum-consensus-engine.test.ts`
+- `tests/phase-u-cognitive-economics.test.ts`
+
+---
+
+## 20. Extensibility Framework: MCP Plugins vs Certified Add-ons Topology
+
+<p align="center">
+  <img src="media/illustrations/prism_dev_plugin_addon_sdk_topology.png" alt="PRISM Extensibility Framework: Core Kernel vs MCP Plugins vs Certified Add-ons" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" />
+</p>
+
+### 20.1 Three Concentric Extensibility Layers
+
+PRISM establishes a three-tier concentric architecture for extending platform functionality:
+
+1. **Inner Core (PRISM Kernel)**:
+   - Houses the Governance Plane, 3-Tier Policy Engine, Activity Event Bus, Multi-Tier Memory Fabric, and 19+ built-in system tool adapters.
+2. **Middle Layer (Sandboxed MCP Plugins)**:
+   - Communicates via the Model Context Protocol (MCP) client/server architecture.
+   - Enforces Ed25519 cryptographic code signing verification, schema manifest validation, and dynamic hot-loading/toggling without runtime restart.
+3. **Outer Layer (Certified System Add-ons)**:
+   - Deep subsystem integrations running with certified trust status (e.g., Robotics VRGC Workshop, WiFiVision CSI spatial sensing, BrainSim III / UKS neural bridges, ROS 2 middleware).
+   - Capable of mounting custom UI tabs, extending SQLite database schemas, and running continuous background hardware loops.
+
+---
+
+## 21. References
 
 1. <https://www.anthropic.com/engineering/building-effective-agents>
 2. <https://arxiv.org/abs/2210.03629>

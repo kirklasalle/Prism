@@ -1,0 +1,112 @@
+# Implementation Plan: Documentation Accuracy & World-Class Illustrations
+
+## Goal
+Ensure all PRISM documentation is 100% accurate, up to date with v0.23.1 features (Spectrum Refraction 2.0 Consensus Engine, LLRE Cognitive Economics Budget Governor, CAC Compliance Attestation, WiFiVision CSI Addon, Guardian Self-Healing), generate a comprehensive suite of world-class technical and architectural illustrations explaining the novel technology in detail, link all assets into `README.md`, `docs/USER_GUIDE.md`, and `docs/DEVELOPER_GUIDE.md`, verify tests and build health, and commit/upload to the remote repository.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Key Deliverables in this Plan:**
+> 1. **11 High-Definition Illustrations** generated via `generate_image` covering:
+>    - Global Hero Architecture (PRISM Governance-Native Agent OS)
+>    - Permanent Active Directives (PAD) SHA-256 Cryptographic Governance Engine
+>    - Spectrum Refraction 2.0 Tri-Model Cognitive Consensus & Discrepancy Reconciliation
+>    - LLRE Cognitive Economics & Dynamic Budget Governor (Soft/Hard Caps)
+>    - Governed Full-Stack Computer Use (Browser, Terminal PTY, Docker Sandboxing)
+>    - Operator Authority Tiers & 3-Way Approval Gate Workflow
+>    - Multi-Modal Operator Command Console Hub
+>    - Guided Setup Wizard & Dual Profile Architecture (Individual vs Business)
+>    - Developer Core Runtime & Policy Interceptor Execution Pipeline
+>    - Spectrum Consensus Engine Algorithmic & Discrepancy Arbiter Pipeline
+>    - Extensibility Topology (MCP Plugins vs Certified Add-ons vs Tool Registry)
+> 2. **Complete Document Refresh**:
+>    - `README.md` and `README.html`
+>    - `docs/USER_GUIDE.md` and `docs/USER_GUIDE.html`
+>    - `docs/DEVELOPER_GUIDE.md`
+>    - `docs/DOCS_INDEX.md`, `docs/STATUS.md`, and `docs/ROADMAP.md`
+> 3. **Git Commit & Push** to `origin/main`.
+
+---
+
+## Proposed Changes
+
+### 1. Image Generation (`docs/media/illustrations/`)
+
+Generate 11 high-resolution widescreen (`16:9`) illustrations with consistent, ultra-premium cyber-enterprise aesthetics (dark glassmorphism, neon cyan/indigo/amber accents, glowing nodes, crystal-clear typography, and technical precision):
+
+1. `prism_architecture_hero.png` — High-level operating system architecture showing Operator Dashboard -> Governance Plane -> Cognitive Runtime -> Tool Adapters -> Immutable Ledger.
+2. `prism_pad_cryptographic_governance.png` — Cryptographic enforcement of Kirk LaSalle's 10 Laws (SHA-256 boot gate, Guardian re-scan, 9th Law transparent fallback, CI gating).
+3. `prism_spectrum_refraction_consensus.png` — Tri-model parallel fan-out (Logic Left / Creative Right / Coordinator Main), stemmed token consensus scoring, and automated discrepancy arbitration.
+4. `prism_cognitive_economics_llre.png` — Dynamic budget governor with soft-cap downshifting (75%-99%), hard-cap gating (>=100%), and TEQ/RSI/TCA cognitive efficiency telemetry.
+5. `prism_governed_computer_use.png` — Full computer use triad: Playwright Browser vision, Terminal `node-pty`, and Docker sandboxing under 3-tier policy gates.
+6. `prism_user_guide_authority_workflow.png` — Operator workflow showing Tier 1 (Auto), Tier 2 (Conditional), and Tier 3 (Approval / Deny / Timeout) decision pathways.
+7. `prism_user_guide_operator_console_hub.png` — Complete interactive dashboard anatomy (11 tabs: Chat, Providers, Tools, Agents, Browser, Computer, Workspace, Network, Robotics, Telemetry, Logs).
+8. `prism_user_guide_setup_wizard_profiles.png` — Dual profile onboarding flow (Individual vs Business) with CAC identity binding and workspace structure.
+9. `prism_dev_runtime_control_pipeline.png` — End-to-end developer request lifecycle: Orchestrator -> Policy Interceptor -> Tool Execution -> Activity Event Bus -> SQLite Memory Sync.
+10. `prism_dev_spectrum_consensus_engine.png` — Internal algorithmic pipeline for `SpectrumConsensusEngine` (`computeSimilarity`, discrepancy severity scoring, offline SLM survival mode).
+11. `prism_dev_plugin_addon_sdk_topology.png` — Three-tier extensibility model: Core Kernel -> Sandboxed Ed25519 MCP Plugins -> Certified Add-on Layer (Robotics, WiFiVision CSI).
+
+---
+
+### 2. Documentation Updates
+
+#### [MODIFY] [README.md](file:///d:/Projects/PrismRefraction/README.md)
+- Embed illustrations into relevant architectural and feature sections:
+  - Global Hero banner under "Architecture at a Glance"
+  - Permanent Active Directives illustration under Section 1 (PAD)
+  - Spectrum Refraction 2.0 illustration under Section 2 (SR)
+  - Cognitive Economics illustration under Section 3 (LLRE)
+  - Governed Computer Use illustration under Section 4 (Full Computer Use)
+- Ensure all test counts, v0.23.1 version references, feature matrices, and links are synchronized.
+
+#### [MODIFY] [README.html](file:///d:/Projects/PrismRefraction/README.html)
+- Sync HTML companion with updated content and embed the new visual assets.
+
+#### [MODIFY] [docs/USER_GUIDE.md](file:///d:/Projects/PrismRefraction/docs/USER_GUIDE.md)
+- Embed Operator Authority Workflow illustration into Section 3 (Safety Model & Authority Tiers).
+- Embed Operator Console Hub illustration into Section 4 (Operator Dashboard Overview).
+- Embed Setup Wizard & Execution Profiles illustration into Section 4A (Setup Wizard & Profiles).
+- Update feature descriptions to include Cognitive Economics budget gauges, Spectrum consensus scoring indicators, and CAC Compliance export options.
+
+#### [MODIFY] [docs/USER_GUIDE.html](file:///d:/Projects/PrismRefraction/docs/USER_GUIDE.html)
+- Sync HTML version with the latest user guide text and embedded illustrations.
+
+#### [MODIFY] [docs/DEVELOPER_GUIDE.md](file:///d:/Projects/PrismRefraction/docs/DEVELOPER_GUIDE.md)
+- Embed Runtime Control Pipeline illustration in Section 4 (Runtime Control Flow).
+- Embed Spectrum Consensus Engine illustration in Section 6/8 (Multi-Model Orchestration & SR 2.0 Engine).
+- Embed Extensibility Topology illustration in Section 10/12 (Plugin SDK & Add-on Architecture).
+- Update code snippets, interfaces (`TriModelResponseInput`, `SpectrumSynthesisResult`, `DepartmentBudgetConfig`, `CacComplianceCertificateBundle`), and testing instructions.
+
+#### [MODIFY] [docs/DOCS_INDEX.md](file:///d:/Projects/PrismRefraction/docs/DOCS_INDEX.md)
+- Update version references to v0.23.1.
+- Ensure all newly added documentation and test manifests are properly cataloged with accurate descriptions.
+
+#### [MODIFY] [docs/STATUS.md](file:///d:/Projects/PrismRefraction/docs/STATUS.md) & [docs/ROADMAP.md](file:///d:/Projects/PrismRefraction/docs/ROADMAP.md)
+- Synchronize status tables and milestone achievements.
+
+---
+
+### 3. Verification & Deployment
+
+- Run `npm run build` and ensure TypeScript compilation + PAD hash verification passes cleanly.
+- Run discovered test suite to verify 100% passing tests.
+- Stage all modified files, new illustrations, and untracked code.
+- Commit with a descriptive conventional commit message.
+- Push changes to remote `origin/main`.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```bash
+npm run build
+npm test
+```
+
+### Manual Verification
+- Check all markdown files locally to verify image markdown syntax: `![Caption](path)` renders properly.
+- Verify that image file paths are valid relative paths in the repo (`docs/media/illustrations/*.png`).
+- Validate git status and git push confirmation.

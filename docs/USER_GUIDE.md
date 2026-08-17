@@ -1,6 +1,6 @@
 # PRISM User Guide
 
-Date: 2026-03-11
+Date: 2026-08-17 | Version: v0.23.1
 
 ## 1. What PRISM is
 
@@ -27,8 +27,13 @@ It is designed for high-trust operation:
 - bind character identities to operators with full accountability chains
 - enforce profile-aware email domain validation (business vs individual)
 - activate Spectrum Refraction (SR) for tri-model parallel generation with structured aggregation
+- monitor token budget quotas with the Cognitive Economics dynamic budget governor
 
 ## 3. Safety model you should understand
+
+<p align="center">
+  <img src="media/illustrations/prism_user_guide_authority_workflow.png" alt="PRISM Operator Authority Tiers and Human Approval Gate Workflow" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" />
+</p>
 
 ### 3.1 Authority tiers
 
@@ -53,6 +58,10 @@ Workflows may:
 
 ### 4.1 One-click dashboard startup (Windows)
 
+<p align="center">
+  <img src="media/illustrations/prism_user_guide_operator_console_hub.png" alt="PRISM Multi-Modal Operator Dashboard Command Hub" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" />
+</p>
+
 1. Double-click `start_web.bat`
 2. Wait for startup logs
 3. Browser opens automatically to `http://localhost:7070`
@@ -63,7 +72,8 @@ From the dashboard you can:
 - trigger built-in demo actions from the Actions panel,
 - review pending approvals,
 - approve/deny Tier-3 requests,
-- inspect recent activity events.
+- inspect recent activity events,
+- monitor live Spectrum Refraction consensus scores and budget utilization gauges.
 
 ### 4.2 CLI startup options
 
@@ -79,6 +89,10 @@ From the dashboard you can:
     - `npm test`
 
 ## 4A. Setup Wizard
+
+<p align="center">
+  <img src="media/illustrations/prism_user_guide_setup_wizard_profiles.png" alt="PRISM Setup Wizard and Dual Execution Profiles" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" />
+</p>
 
 PRISM includes guided setup wizards to help you configure the system on first run. Three wizard surfaces are available — choose whichever matches your workflow.
 

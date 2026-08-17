@@ -1,11 +1,12 @@
 # PRISM Documentation Index
 
-**Last updated:** 2026-08-08 — Governance and updater maintenance synchronization
-**Active docs:** 91 files | **Archived:** 66 files → `archive/`
+**Last updated:** 2026-08-17 — Documentation refresh, v0.23.1 architecture, and world-class illustrations
+**Active docs:** 95 files | **Archived:** 66 files → `archive/`
 
 ## Quick Links — Start Here
 
-- **[STATUS.md](STATUS.md)** — Authoritative v0.23.0 status: what's shipped, pending, gated
+- **[STATUS.md](STATUS.md)** — Authoritative v0.23.1 status: what's shipped, pending, gated
+- **[PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md](PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md)** ([HTML Version](PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.html)) — Master Critical Technical, Security, CAC Governance & Global Market Audit (2026)
 - **[PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md](PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md)** — Master SAP approval package (code, docs, market, critical audit)
 - **[PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md](PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md)** — Single three-state matrix (Accomplished/In Progress/Not Yet)
 - **[INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md](INITIALIZATION_CERTIFICATE_V1_CRITICAL_SECURITY_AUDIT_2026-07-31.md)** — Initialization Certificate v1.0 trust-root audit and release gates

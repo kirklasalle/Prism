@@ -545,21 +545,27 @@ export class GuardianAgent extends EventEmitter {
         this.lastHealthCheck = new Date().toISOString();
 
         try {
-            // 1. Verify the supervisor slot is still healthy
-            const targetPath =
-                this.config.modelPath === "active-chat-model"
-                    ? (this.supervisor.getSnapshot().find((s) => s.status === "ready")?.modelPath ??
-                        "active-chat-model")
-                    : this.config.modelPath;
+            // 1. Verify the supervisor slot is still healthy if a model is configured
+            const isModelConfigured = Boolean(
+                this.config.modelPath && this.config.modelPath !== "" && this.config.modelPath !== "active-chat-model" ||
+                (this.config.modelPath === "active-chat-model" && this.supervisor.getSnapshot().some((s) => s.status === "ready")),
+            );
 
-            const slot = this.supervisor
-                .getSnapshot()
-                .find((s) => s.modelAlias === this.config.modelAlias || (targetPath && s.modelPath === targetPath));
-            if (!slot || slot.status !== "ready") {
-                this.issuesDetected++;
-                this.recordAction("health_check", "failure", "Model slot not ready — attempting recovery");
-                await this.attemptSelfHeal("model_slot_down");
-                return;
+            if (isModelConfigured) {
+                const targetPath =
+                    this.config.modelPath === "active-chat-model"
+                        ? (this.supervisor.getSnapshot().find((s) => s.status === "ready")?.modelPath ?? "")
+                        : this.config.modelPath;
+
+                const slot = this.supervisor
+                    .getSnapshot()
+                    .find((s) => s.modelAlias === this.config.modelAlias || (targetPath && s.modelPath === targetPath));
+                if (!slot || slot.status !== "ready") {
+                    this.issuesDetected++;
+                    this.recordAction("health_check", "failure", "Model slot not ready — attempting recovery");
+                    await this.attemptSelfHeal("model_slot_down");
+                    return;
+                }
             }
 
             // 2. Check all supervisor slots for any crashed processes
@@ -649,21 +655,37 @@ export class GuardianAgent extends EventEmitter {
                     if (activeSlot) {
                         targetPath = activeSlot.modelPath || "";
                         targetAlias = activeSlot.modelAlias || "shared";
+                    } else {
+                        targetPath = "";
                     }
                 }
 
+                if (!targetPath) {
+                    this.registerSelfHealFailure(issue);
+                    this._state = "running";
+                    this.recordAction("self_heal", "escalated", "No model path configured for slot recovery");
+                    return;
+                }
+
                 // Re-load the model
-                await this.supervisor.loadModel(targetPath, targetAlias, {
+                const slot = await this.supervisor.loadModel(targetPath, targetAlias, {
                     ctxSize: this.config.contextSize,
                     draftModelPath: this.config.draftModelPath,
                     gpuLayers: this.config.gpuLayers,
                     flashAttn: this.config.flashAttn,
                 });
-                this.issuesResolved++;
-                this.resetSelfHealFailure(issue);
-                this._state = "running";
-                this.recordAction("self_heal", "success", `Recovered model slot: ${targetAlias}. Josephine knows!`);
-                this.emitEvent("guardian.healed", `Model slot recovered: ${targetAlias}. Josephine knows!`);
+                if (slot && slot.status === "ready") {
+                    this.issuesResolved++;
+                    this.resetSelfHealFailure(issue);
+                    this._state = "running";
+                    this.recordAction("self_heal", "success", `Recovered model slot: ${targetAlias}. Josephine knows!`);
+                    this.emitEvent("guardian.healed", `Model slot recovered: ${targetAlias}. Josephine knows!`);
+                } else {
+                    this.registerSelfHealFailure(issue);
+                    this._state = "running";
+                    this.recordAction("self_heal", "failure", `Model slot failed to load: ${slot?.error || targetAlias}`);
+                    this.emitEvent("guardian.heal_failed", `Model slot recovery failed for ${targetAlias}: ${slot?.error ?? "not ready"}`);
+                }
                 return;
             }
 

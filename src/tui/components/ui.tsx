@@ -75,7 +75,8 @@ export function DataTable({
     selectedIndex?: number;
     emptyMessage?: string;
 }): React.JSX.Element {
-    if (data.length === 0) {
+    const safeData = Array.isArray(data) ? data : [];
+    if (safeData.length === 0) {
         return <Text color={colors.muted}>{emptyMessage}</Text>;
     }
 
@@ -105,7 +106,7 @@ export function DataTable({
             </Box>
             <Text color={colors.border}>{columns.map((col) => borders.top.repeat(col.width ?? 16)).join(" ")}</Text>
             {/* Rows */}
-            {data.map((row, ri) => (
+            {safeData.map((row, ri) => (
                 <Box key={ri}>
                     {selectedIndex !== undefined && (
                         <Text color={selectedIndex === ri ? colors.brand : undefined}>

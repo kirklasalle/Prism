@@ -417,22 +417,86 @@ export class PrismClient {
     setLlmConfig(config: Partial<LlmConfig>): Promise<LlmConfig> {
         return this.post("/api/llm/config", config);
     }
-    getModelMatrix(): Promise<ModelProfile[]> {
-        return this.get("/api/models/matrix");
+    async getModelMatrix(): Promise<ModelProfile[]> {
+        const res = await this.get<any>("/api/models/matrix");
+        if (Array.isArray(res)) return res;
+        if (res && typeof res === "object") {
+            const list: ModelProfile[] = [];
+            if (Array.isArray(res.known)) list.push(...res.known);
+            if (Array.isArray(res.runtime)) {
+                for (const r of res.runtime) {
+                    if (!list.some((m) => m.model === r.model && m.provider === r.provider)) {
+                        list.push(r);
+                    }
+                }
+            }
+            if (Array.isArray(res.deprecated)) {
+                for (const d of res.deprecated) {
+                    if (!list.some((m) => m.model === d.model && m.provider === d.provider)) {
+                        list.push({ ...d, deprecated: true });
+                    }
+                }
+            }
+            return list;
+        }
+        return [];
     }
     getAuditTrail(): Promise<AuditEntry[]> {
         return this.get("/api/llm/audit-trail");
     }
 
     /* ---- Tools & Plugins ---- */
-    getToolsStatus(): Promise<ToolState[]> {
-        return this.get("/api/tools/status");
+    async getToolsStatus(): Promise<ToolState[]> {
+        const res = await this.get<any>("/api/tools/status");
+        if (Array.isArray(res)) return res;
+        if (res && res.tools) {
+            if (Array.isArray(res.tools)) return res.tools;
+            return Object.entries(res.tools).map(([name, val]: [string, any]) => ({
+                name,
+                category: val.category || "general",
+                description: val.description || "",
+                riskTier: val.riskTier ?? val.tier ?? 1,
+                enabled: val.enabled !== false,
+                invocations: val.invocations ?? 0,
+                successes: val.successes ?? 0,
+                failures: val.failures ?? 0,
+                avgLatencyMs: val.avgLatencyMs ?? 0,
+                lastInvoked: val.lastInvoked,
+                lastError: val.lastError,
+            }));
+        }
+        return [];
     }
-    getPluginsStatus(): Promise<PluginState[]> {
-        return this.get("/api/plugins/status");
+    async getPluginsStatus(): Promise<PluginState[]> {
+        const res = await this.get<any>("/api/plugins/status");
+        if (Array.isArray(res)) return res;
+        if (res && res.plugins) {
+            if (Array.isArray(res.plugins)) return res.plugins;
+            return Object.entries(res.plugins).map(([name, val]: [string, any]) => ({
+                name,
+                enabled: val.enabled !== false,
+                healthy: val.healthy !== false,
+                requests: val.requests ?? 0,
+                errors: val.errors ?? 0,
+                avgResponseMs: val.avgResponseMs ?? 0,
+                lastChecked: val.lastChecked,
+            }));
+        }
+        return [];
     }
-    getUtilitiesStatus(): Promise<UtilityState[]> {
-        return this.get("/api/utilities/status");
+    async getUtilitiesStatus(): Promise<UtilityState[]> {
+        const res = await this.get<any>("/api/utilities/status");
+        if (Array.isArray(res)) return res;
+        if (res && res.utilities) {
+            if (Array.isArray(res.utilities)) return res.utilities;
+            return Object.entries(res.utilities).map(([name, val]: [string, any]) => ({
+                name,
+                lastResult: val.lastResult,
+                runCount: val.runCount ?? 0,
+                lastRun: val.lastRun,
+            }));
+        }
+        return [];
     }
     testTool(name: string): Promise<{ result: string }> {
         return this.post(`/api/tools/${encodeURIComponent(name)}/test`);
@@ -450,8 +514,11 @@ export class PrismClient {
     }
 
     /* ---- Agents ---- */
-    getAgents(): Promise<AgentInfo[]> {
-        return this.get("/api/agents");
+    async getAgents(): Promise<AgentInfo[]> {
+        const res = await this.get<any>("/api/agents");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.agents)) return res.agents;
+        return [];
     }
     spawnAgent(role: string, tier?: string, model?: string): Promise<AgentInfo> {
         return this.post("/api/agents/spawn", { role, tier, model });
@@ -473,8 +540,17 @@ export class PrismClient {
     }
 
     /* ---- Swarms ---- */
-    getSwarms(): Promise<SwarmInfo[]> {
-        return this.get("/api/swarms");
+    async getSwarms(): Promise<SwarmInfo[]> {
+        const res = await this.get<any>("/api/swarms");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.swarms)) return res.swarms;
+        try {
+            const agentRes = await this.get<any>("/api/agents");
+            if (agentRes && Array.isArray(agentRes.swarms)) return agentRes.swarms;
+        } catch {
+            /* ignore */
+        }
+        return [];
     }
     createSwarm(topology: string, agents: string[]): Promise<SwarmInfo> {
         return this.post("/api/swarms", { topology, agents });
@@ -512,20 +588,44 @@ export class PrismClient {
     }
 
     /* ---- Workspace ---- */
-    getWorkspaceFiles(path?: string): Promise<WorkspaceFile[]> {
+    async getWorkspaceFiles(path?: string): Promise<WorkspaceFile[]> {
         const q = path ? `?path=${encodeURIComponent(path)}` : "";
-        return this.get(`/api/workspace/files${q}`);
+        const res = await this.get<any>(`/api/workspace/files${q}`);
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.entries)) {
+            return res.entries.map((e: any) => ({
+                name: e.name,
+                path: e.path,
+                isDirectory: e.type === "dir" || e.isDirectory,
+                size: e.size,
+            }));
+        }
+        return [];
     }
     getWorkspaceGit(): Promise<Record<string, unknown>> {
         return this.get("/api/workspace/git");
     }
 
     /* ---- Network ---- */
-    getNetworkInterfaces(): Promise<NetworkInterface[]> {
-        return this.get("/api/network/interfaces");
+    async getNetworkInterfaces(): Promise<NetworkInterface[]> {
+        const res = await this.get<any>("/api/network/interfaces");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.interfaces)) {
+            return res.interfaces.map((i: any) => ({
+                name: i.name,
+                address: i.address || i.ip || (typeof i.details === "string" ? i.details.split("\n")[0] : "") || "",
+                family: i.family || "IPv4",
+                mac: i.mac || "",
+                internal: !!i.internal,
+            }));
+        }
+        return [];
     }
-    getNetworkCommands(): Promise<Array<{ name: string; tier: number; platform: string; description: string }>> {
-        return this.get("/api/network/commands");
+    async getNetworkCommands(): Promise<Array<{ name: string; tier: number; platform: string; description: string }>> {
+        const res = await this.get<any>("/api/network/commands");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.commands)) return res.commands;
+        return [];
     }
     executeNetworkCommand(command: string): Promise<{ output: string }> {
         return this.post("/api/network/execute", { command });
@@ -542,16 +642,25 @@ export class PrismClient {
     getTelemetrySummary(): Promise<TelemetrySummary> {
         return this.get("/api/telemetry/summary");
     }
-    getRetrievalCohorts(): Promise<RetrievalCohort[]> {
-        return this.get("/api/retrieval/cohorts");
+    async getRetrievalCohorts(): Promise<RetrievalCohort[]> {
+        const res = await this.get<any>("/api/retrieval/cohorts");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.cohorts)) return res.cohorts;
+        return [];
     }
-    getRetrievalAlerts(): Promise<AlertInfo[]> {
-        return this.get("/api/retrieval/alerts");
+    async getRetrievalAlerts(): Promise<AlertInfo[]> {
+        const res = await this.get<any>("/api/retrieval/alerts");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.alerts)) return res.alerts;
+        return [];
     }
 
     /* ---- Approval Queue ---- */
-    getPendingApprovals(): Promise<ApprovalItem[]> {
-        return this.get("/api/approval/pending");
+    async getPendingApprovals(): Promise<ApprovalItem[]> {
+        const res = await this.get<any>("/api/approval/pending");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.pending)) return res.pending;
+        return [];
     }
     approveItem(id: string): Promise<void> {
         return this.post(`/api/approval/${encodeURIComponent(id)}/approve`);
@@ -561,8 +670,11 @@ export class PrismClient {
     }
 
     /* ---- Scheduler ---- */
-    getSchedulerEvents(): Promise<SchedulerEvent[]> {
-        return this.get("/api/scheduler/events");
+    async getSchedulerEvents(): Promise<SchedulerEvent[]> {
+        const res = await this.get<any>("/api/scheduler/events");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.events)) return res.events;
+        return [];
     }
     createSchedulerEvent(event: Partial<SchedulerEvent>): Promise<SchedulerEvent> {
         return this.post("/api/scheduler/events", event);
@@ -570,11 +682,17 @@ export class PrismClient {
     deleteSchedulerEvent(id: string): Promise<void> {
         return this.del(`/api/scheduler/events/${encodeURIComponent(id)}`);
     }
-    getProjects(): Promise<ProjectInfo[]> {
-        return this.get("/api/scheduler/projects");
+    async getProjects(): Promise<ProjectInfo[]> {
+        const res = await this.get<any>("/api/scheduler/projects");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.projects)) return res.projects;
+        return [];
     }
-    getSchedulerTasks(): Promise<Array<Record<string, unknown>>> {
-        return this.get("/api/scheduler/tasks");
+    async getSchedulerTasks(): Promise<Array<Record<string, unknown>>> {
+        const res = await this.get<any>("/api/scheduler/tasks");
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.tasks)) return res.tasks;
+        return [];
     }
 
     /* ---- Setup Wizard ---- */

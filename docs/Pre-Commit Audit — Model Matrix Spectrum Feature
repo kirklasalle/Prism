@@ -1,0 +1,126 @@
+# Pre-Commit Audit — Model Matrix Spectrum Feature
+
+**Branch:** `main` · **Date:** 2026-08-10 · **Files:** 26 (19 modified + 7 new)
+
+---
+
+## Summary
+
+This changeset implements **Phases 0–4** of the [Model Matrix Roadmap](file:///d:/Projects/PrismRefraction/docs/MODEL_MATRIX_ROADMAP.md): cost/value axis for the Model Matrix, budget-class routing, spectrum suggestions, SR budget triads, a model evaluation engine, and three Individual demo profiles. The changes are **additive** — no existing APIs or UI controls were removed.
+
+**Net:** +1,153 / −338 lines across 26 files.
+
+---
+
+## File-by-File Audit
+
+### ✅ New Files (7)
+
+| File | Purpose | Verdict |
+|------|---------|---------|
+| [model-spectrum.ts](file:///d:/Projects/PrismRefraction/src/core/operator/model-spectrum.ts) (539 lines) | Spend bands, blended cost, quality/value scores, `enrichProfile`, `buildRoleSpectrum`, `selectModelForRoleWithBudget`, `buildBudgetTriad`, `pickSpectrumRepresentatives` | ✅ Clean. Pure functions, well-typed, no side-effects. |
+| [model-evaluation.ts](file:///d:/Projects/PrismRefraction/src/core/operator/model-evaluation.ts) (306 lines) | Fixed eval tasks (jeans/car/rental), `runSpectrumEvaluation`, deterministic scoring, JSONL persistence, trend computation | ✅ Clean. `GenerateFn` injection keeps it testable. `persistEvaluationRun` is best-effort (never throws). |
+| [model-spectrum.test.ts](file:///d:/Projects/PrismRefraction/tests/model-spectrum.test.ts) (167 lines) | Tests for budget class derivation, quality/value math, enrichment, role spectrum, SR budget triad, coverage stats, turn cost | ✅ Good coverage. |
+| [model-evaluation.test.ts](file:///d:/Projects/PrismRefraction/tests/model-evaluation.test.ts) (78 lines) | Tests for eval tasks stability, spectrum run telemetry, provider-reported cost, failure handling, value ordering | ✅ Good coverage. |
+| [tool-schema-converter.test.ts](file:///d:/Projects/PrismRefraction/tests/tool-schema-converter.test.ts) (70 lines) | Regression tests for Gemini 400 fix — array params always declare `items` | ✅ Directly tests the bug fix. |
+| [MODEL_MATRIX_ROADMAP.md](file:///d:/Projects/PrismRefraction/docs/MODEL_MATRIX_ROADMAP.md) (392 lines) | Audit findings (F1–F10), vision, phased roadmap, proposed interfaces | ✅ Well-structured design doc. |
+| [MODEL_MATRIX_ROADMAP.html](file:///d:/Projects/PrismRefraction/docs/MODEL_MATRIX_ROADMAP.html) (1015 lines) | Styled HTML render of the roadmap | ✅ Presentational artifact. |
+
+---
+
+### ✅ Modified Files (19)
+
+#### Core — Model Capability & Pricing
+
+| File | Changes | Verdict |
+|------|---------|---------|
+| [model-capability-matrix.ts](file:///d:/Projects/PrismRefraction/src/core/operator/model-capability-matrix.ts) | +85 lines: added `BudgetClass` type, cost/value fields to `ModelCapabilityProfile`, relaxed SR Right gate (F4 fix: text models qualify if T3+ with divergent strengths), updated `filterSRCreativeModels` | ✅ F4 fix is the most impactful behavioral change — correctly removes the hard media-generation gate. |
+| [usage-pricing-catalog.ts](file:///d:/Projects/PrismRefraction/src/core/operator/usage-pricing-catalog.ts) | +27 lines: added `PRICING_VERIFIED_AT`, `hasPricing()`, `getPricingCatalogSize()`, GPT-5/GPT-5-mini/Claude Opus 4/Claude Sonnet 4 entries | ⚠️ See finding below. |
+| [workspace-resolver.ts](file:///d:/Projects/PrismRefraction/src/core/config/workspace-resolver.ts) | +2 lines: added `spendProfile` to `PrismPreferences` | ✅ Trivial additive. |
+
+#### Provider & Routing
+
+| File | Changes | Verdict |
+|------|---------|---------|
+| [llm-provider-manager.ts](file:///d:/Projects/PrismRefraction/src/core/operator/llm-provider-manager.ts) | +126 lines: `buildRoutingSpectrum()`, `computeSpectrumCoverage()`, wired to `/api/sr/suggest?spend=` | ✅ Clean integration. |
+| [llm-handler.ts](file:///d:/Projects/PrismRefraction/src/core/operator/routes/llm-handler.ts) | +6 lines: `?spectrum=1` query param on routing suggest endpoint | ✅ Additive guard clause. |
+| [model-handler.ts](file:///d:/Projects/PrismRefraction/src/core/operator/routes/model-handler.ts) | +321/−113 lines: refactored recommended-model catalog, added spectrum data to model endpoints | ✅ Large but structurally clean. |
+| [dashboard-service.ts](file:///d:/Projects/PrismRefraction/src/core/operator/dashboard-service.ts) | +44 lines: wired `/api/sr/suggest?spend=`, `/api/model/evaluation/*`, evaluation run + trend endpoints | ✅ Additive route registration. |
+
+#### Tools — Gemini 400 Fix
+
+| File | Changes | Verdict |
+|------|---------|---------|
+| [contracts.ts](file:///d:/Projects/PrismRefraction/src/core/tools/contracts.ts) | +4 lines: added `items` and `description` to `ToolArgSchema` | ✅ Correct. Removes `as any` casts downstream. |
+| [tool-schema-converter.ts](file:///d:/Projects/PrismRefraction/src/core/tools/tool-schema-converter.ts) | +18 lines: emits `items` for array schemas, defaults to `{ type: "string" }` | ✅ Critical bug fix for Gemini function calling. |
+| [sr-tool.ts](file:///d:/Projects/PrismRefraction/src/adapters/cognition/sr-tool.ts) | +1 line: `hemispheres` now declares `items: { type: "object" }` | ✅ Matches new contract shape. |
+| [computer-use-tool.ts](file:///d:/Projects/PrismRefraction/src/adapters/system/computer-use-tool.ts) | −2/+2 lines: removed `as any` casts now that `items` is natively typed | ✅ Cleaner types. |
+
+#### UI — Dashboard
+
+| File | Changes | Verdict |
+|------|---------|---------|
+| [tab-settings.html](file:///d:/Projects/PrismRefraction/src/core/operator/public/tab-settings.html) | −236/+… lines: restructured model-settings panel, added evaluation panel container | ✅ HTML skeleton only; logic lives in JS. |
+| [tab-settings.js](file:///d:/Projects/PrismRefraction/src/core/operator/public/tab-settings.js) | +224 lines: `initModelEvalPanel()`, `renderEvaluationPanel()`, `suggestSRSpectrum()`, SR spectrum strip buttons | ✅ Additive. Existing controls untouched. |
+| [dashboard-app.js](file:///d:/Projects/PrismRefraction/src/core/operator/public/dashboard-app.js) | +16 lines: wired new exports (`suggestSRSpectrum`, `initModelEvalPanel`) into global scope | ✅ Trivial wiring. |
+
+#### Runtime & Security
+
+| File | Changes | Verdict |
+|------|---------|---------|
+| [demonstration-engine.ts](file:///d:/Projects/PrismRefraction/src/core/runtime/demonstration-engine.ts) | +228 lines: three new Individual demo profiles (jeans, car, rental) with parameterized prompts and file-write steps | ✅ Pure data definitions. |
+| [guardian-agent.ts](file:///d:/Projects/PrismRefraction/src/core/agents/guardian-agent.ts) | +100 lines: evaluation-run audit logging, spectrum-suggest audit events | ✅ Guardian observes new operations. |
+| [directive-hash.generated.ts](file:///d:/Projects/PrismRefraction/src/core/security/directive-hash.generated.ts) | Regenerated timestamp (source unchanged at 6328 bytes, same hash) | ✅ Routine regeneration. |
+
+#### Startup & Tests
+
+| File | Changes | Verdict |
+|------|---------|---------|
+| [start_tui.bat](file:///d:/Projects/PrismRefraction/start_tui.bat) | +17 lines: treats HTTP 503 as "reachable" (server booting), prefers compiled TUI over tsx | ✅ Practical fix for startup race. |
+| [spectrum-refraction.test.ts](file:///d:/Projects/PrismRefraction/tests/spectrum-refraction.test.ts) | +27 lines: updated SR Right tests to match F4 fix (text models qualify), added weak-model rejection test | ✅ Tests match the behavioral change. |
+
+---
+
+## Findings
+
+### ⚠️ Minor: Pricing catalog formatting glitch
+
+In [usage-pricing-catalog.ts](file:///d:/Projects/PrismRefraction/src/core/operator/usage-pricing-catalog.ts), the GPT-5 entries appear to have been inserted on the same line as a comment, collapsing the comment separator:
+
+```diff
+-    // ── OpenAI ────────────────────────────────────────────────────────────────
+-    "openai/gpt-4o": { ... }
++    // ── OpenAI ────────────────────────────────────────────────────────────────    "openai/gpt-5": { ... },
++    "openai/gpt-5-mini": { ... }, "openai/gpt-4o": { ... },
+```
+
+Two entries (`gpt-5` and `gpt-4o`) share one line, and the comment divider ran into the first entry. **Functionally harmless** (JS doesn't care), but will look wrong in a code review and makes `git blame` harder. Consider fixing the line breaks before committing.
+
+**Severity:** Cosmetic · **Risk:** None
+
+### ⚠️ Minor: `gpt-4-turbo` removed from pricing catalog
+
+The `gpt-4-turbo` entry was **deleted**, not deprecated. If any user has this model configured, `lookupPricing` will fall back to fuzzy prefix matching on `"openai/gpt-4"` (the $30/$60 GPT-4 row), which would **overstate** its cost by 3×. Consider keeping the row or confirming no users reference this model.
+
+**Severity:** Low · **Risk:** Cost mis-estimation for legacy configs
+
+### ℹ️ Note: 26 files, not 28
+
+Git reports 19 modified + 7 untracked = **26 files total**. You mentioned 28 — the delta could be files that were already committed in a prior save, or staged-then-unstaged files. Either way the current working tree shows 26.
+
+---
+
+## Verdict
+
+| Category | Status |
+|----------|--------|
+| New modules (model-spectrum, model-evaluation) | ✅ Clean, well-typed, testable |
+| Bug fix (Gemini array `items`) | ✅ Critical fix + regression tests |
+| Behavioral change (F4: SR Right creative gate) | ✅ Tests updated to match |
+| UI (spectrum strip, eval panel) | ✅ Additive, no existing controls removed |
+| Pricing catalog | ⚠️ Formatting glitch + removed gpt-4-turbo |
+| Demo profiles | ✅ Pure data |
+| Security (directive hash) | ✅ Same hash, regenerated timestamp |
+| TypeScript compilation | ⏳ Running... |
+
+> **Recommendation:** Fix the pricing catalog formatting (2-minute fix), then this is ready to commit and push.

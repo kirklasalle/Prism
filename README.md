@@ -1,9 +1,14 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.23.0-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.23.1-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
-  <img src="https://img.shields.io/badge/tests-217_discovered_suites_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-224_discovered_suites_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
+  <img src="https://img.shields.io/badge/audit-system_approved_100%25-10b981?style=for-the-badge&labelColor=0a0a0f" alt="Audit" />
   <img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&labelColor=0a0a0f" alt="CI" />
+</p>
+<p align="center">
+  <a href="docs/PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md"><b>[📄 Read Master Critical & Market Audit (2026)]</b></a> • 
+  <a href="docs/PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.html"><b>[🌐 Interactive Executive Audit Console]</b></a>
 </p>
 <p align="center">
   <a href="https://youtu.be/Q16a-NMSoeI?si=ijSiqTazwBqKnYKY">
@@ -47,6 +52,10 @@ PRISM eliminates that trade-off entirely through **governance-native architectur
 ---
 
 ## ✦ Architecture at a Glance
+
+<p align="center">
+  <img src="docs/media/illustrations/prism_architecture_hero.png" alt="PRISM Governance-Native Autonomous Agent Operating System Architecture" width="100%" style="border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -99,6 +108,10 @@ PRISM eliminates that trade-off entirely through **governance-native architectur
 
 ### 1. Permanent Active Directives (PAD) — Cryptographic Governance
 
+<p align="center">
+  <img src="docs/media/illustrations/prism_pad_cryptographic_governance.png" alt="Permanent Active Directives (PAD) Cryptographic Governance Engine" width="100%" style="border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
+
 PRISM's governance isn't configurable — it's **constitutional**. The 10 Laws (authored by Kirk LaSalle, rooted in Asimov's Three Laws and extended to cover privacy, equity, transparency, and operational boundaries) are cryptographically sealed:
 
 - **SHA-256 integrity verification** at every boot and every 10 minutes by the Guardian Agent
@@ -109,35 +122,45 @@ PRISM's governance isn't configurable — it's **constitutional**. The 10 Laws (
 
 No other agent platform enforces governance at the cryptographic level.
 
-### 2. Spectrum Refraction (SR) — Tri-Model Cognitive Orchestration
+### 2. Spectrum Refraction 2.0 (SR) — Tri-Model Cognitive Orchestration
+
+<p align="center">
+  <img src="docs/media/illustrations/prism_spectrum_refraction_consensus.png" alt="Spectrum Refraction 2.0 Tri-Model Cognitive Orchestration" width="100%" style="border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
 
 PRISM's novel **compounding parallel fan-out architecture** simultaneously engages three model instances:
 
 | Hemisphere             | Role                                      | Example     |
 | :--------------------- | :---------------------------------------- | :---------- |
-| **Left** (Logic)       | Analytical reasoning, structured analysis | Claude Opus |
-| **Right** (Creative)   | Creative generation, lateral thinking     | GPT-5       |
-| **Main** (Coordinator) | Synthesis, arbitration, final response    | Gemini Pro  |
+| **Left** (Logic)       | Analytical reasoning, structured analysis | Claude 3.7 Sonnet |
+| **Right** (Creative)   | Creative generation, lateral thinking     | GPT-4o Frontier |
+| **Main** (Coordinator) | Synthesis, arbitration, final response    | Gemini 2.5 Pro / Local Llama |
 
-- **Mandatory instance isolation**: Left ≠ Right enforced at configuration, activation, and runtime gates
-- **Structured XML-tagged aggregation** fuses analytical rigor with creative breadth
-- **Three isolation quality levels**: `full` (different providers), `model` (same provider, different models), `insufficient` (rejected)
-- **Media artifact extraction** from Creative hemisphere responses
+- **Stemmed Token Consensus Scoring**: Computes real-time alignment metrics (0.0 to 1.0) and generates verifiable audit proofs (`SPECTRUM-SYNTH-*`).
+- **Automated Discrepancy Reconciliation Loop**: Sub-agent arbitration resolves conflicts between divergent analytical and creative claims based on verifiable fact density and 9th Law reasoning ledgers.
+- **Local SLM Offline Survival Mode**: Automatic fallback routing to embedded Ollama / Llama.cpp models when external cloud network egress is severed or operating in air-gapped defense environments.
+- **Mandatory instance isolation**: Left ≠ Right enforced at configuration, activation, and runtime gates.
+- **Media artifact extraction** from Creative hemisphere responses.
 
-No competing framework offers native multi-model simultaneous fan-out with structured aggregation and isolation enforcement.
+### 3. LLRE Cognitive Economics & Dynamic Budget Governor
 
-### 3. LLRE Cognitive Economics Engine
+<p align="center">
+  <img src="docs/media/illustrations/prism_cognitive_economics_llre.png" alt="LLRE Cognitive Economics and Dynamic Budget Governor" width="100%" style="border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
 
-The **Low-Level Reasoning Engine** provides unprecedented visibility into how efficiently your agents think:
+The **Low-Level Reasoning Engine (LLRE)** and **Dynamic Budget Governor** provide complete transparency into compute spend and cognitive efficiency:
 
-- **Token Efficacy Quotient (TEQ)** — Are tokens being used effectively?
-- **Request Satisfaction Index (RSI)** — Are user requests being fulfilled?
-- **Context Saturation Ratio (CSR)** — Is context window capacity being optimized?
-- **Tool Call Accuracy (TCA)** — Are tool invocations precise and successful?
-- **Prompt AST Compiler** with `<objective>` and `<constraints>` tag parsing and signal density checks
-- **SQLite persistence** with interactive performance rings in the operator console
+- **Departmental & User Quota Tracking**: Real-time spend allocation and utilization monitoring.
+- **Soft-Cap Dynamic Throttling (75%–99%)**: Automatically downshifts model tier requests (`tier3` → `tier1/2`) to prevent premature budget exhaustion.
+- **Hard-Cap Gating (>=100%)**: Suspends autonomous execution and routes mutating actions to the Human-in-the-Loop Approval Queue.
+- **Cognitive Metrics**: Token Efficacy Quotient (TEQ), Request Satisfaction Index (RSI), and Tool Call Accuracy (TCA).
+- **Prompt AST Compiler** with `<objective>` and `<constraints>` tag parsing and signal density checks.
 
 ### 4. Full Computer Use — Browser, Terminal, Container
+
+<p align="center">
+  <img src="docs/media/illustrations/prism_governed_computer_use.png" alt="Governed Full-Stack Computer Use" width="100%" style="border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);" />
+</p>
 
 PRISM treats computer use as a **first-class governed capability**, not an auxiliary feature:
 
@@ -333,7 +356,7 @@ Provider/model choice is persisted per chat session. Secure API key storage uses
 
 PRISM maintains one of the most comprehensive test suites in the agentic software ecosystem:
 
-- **217 auto-discovered test suites passing** covering unit, integration, E2E, security, and governance scenarios
+- **224 auto-discovered test suites passing** covering unit, integration, E2E, security, and governance scenarios
 - **7 GitHub Actions workflows**: CI, CodeQL, Docker publish, Helm publish, nightly, quality gates, release
 - **Multi-platform CI matrix**: Ubuntu + Windows, Node.js 22 + 23
 - **9 CI qualification gates** including PAD integrity, plugin signing, directive tests, security tests, governance tests

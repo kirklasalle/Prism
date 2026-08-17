@@ -1,4 +1,4 @@
-# PRISM — Authoritative Status (v0.23.0)
+# PRISM — Authoritative Status (v0.23.1)
 
 > Single source of truth for what's shipped, what's pending, and what's gated.
 > Replaces the audit-doc maze for operator and investor reading. Linked from
@@ -8,12 +8,10 @@
 
 PRISM is an **open-source, self-hostable, governance-native Agents-as-a-Service
 runtime**. It runs on a single laptop or a Kubernetes cluster, ships with a
-provable Permanent Active Directives integrity gate, a tiered approval queue, a
-self-driving test harness (PTAC), and an additive **VRGC Robotics Add-on** and
-**Boot-time Add-on Management Panel**. As of the 2026-08-08 maintenance line,
-the governed PAD correction and successor-key rotation are effective, npm audit
-is clean, and dashboard updates restart the backend headlessly before returning
-the operator to login.
+provable Permanent Active Directives (10 Laws) integrity gate, Character
+Accountability Control (CAC) durable identity chains, Spectrum Refraction 2.0
+tri-model cognitive consensus orchestration, and the LLRE Cognitive Economics
+dynamic budget governor.
 
 The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
@@ -21,16 +19,36 @@ The phrase "Agents As A Service" was coined by Kirk LaSalle.
 
 | Field            | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Current version  | `0.23.0`                                       |
+| Current version  | `0.23.1`                                       |
 | Branch           | `main`                                         |
 | Build script     | `npm run build` (auto-runs PAD prebuild hash)  |
-| Doctor           | `npm run doctor`                               |
+| Master Audit     | [`PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md`](PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md) |
 | Headline demo    | `npm run ptac:demo` and the `Watch Me` tab     |
 
-Operators are expected to run `npm run doctor` before every deployment. Any
+Operators are expected to run pre-flight diagnostics before every deployment. Any
 non-zero exit indicates an unresolved readiness issue.
 
-## What's Shipped (v0.21.0 → v0.23.0)
+## What's Shipped (v0.21.0 → v0.23.1)
+
+### Master Audit, CAC Governance & Spectrum Refraction 2.0 (2026-08-14)
+
+- **Master Critical Technical, Security, UI/UX & Market Audit**: Unified 10-section
+  audit document and self-contained interactive HTML executive console.
+- **Character Accountability Control (CAC) Compliance Exporter**: Automated export
+  of cryptographically signed JSON compliance bundles and executive Markdown
+  certificates with SHA-256 integrity proofs.
+- **Enterprise Smart Card & Hardware PKI Provider Tests**: Full test suite
+  validating Windows CAC provider, smart card reader listeners, DoD subject
+  extraction, and mock development authentication paths.
+- **Spectrum Refraction 2.0 Consensus & Discrepancy Engine**: Tri-model parallel
+  synthesis, stemmed token similarity matching, real-time consensus scoring (0.0 to 1.0),
+  bias cancellation, and local SLM offline survival mode routing.
+- **Cognitive Economics Dynamic Budget Governor**: Departmental and user-level token
+  quota enforcement with soft-cap throttling (`tier3` → `tier1/2` auto-downshifting)
+  and hard-cap authorization workflows.
+- **Automated Discrepancy Reconciliation Loop**: Autonomous sub-agent arbitration
+  for divergent analytical and creative claims based on verifiable fact density and
+  9th Law reasoning ledger proofs.
 
 ### Governance, Authentication, and Update Reliability (2026-08-08)
 

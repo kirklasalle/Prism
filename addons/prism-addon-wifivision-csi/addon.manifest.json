@@ -1,0 +1,45 @@
+{
+  "addonFormatVersion": 1,
+  "id": "prism.addon.wifivision-csi",
+  "name": "WifiVision Sub-GHz RF CSI Spatial Sensory Bridge",
+  "version": "1.0.0",
+  "author": {
+    "name": "Kirk LaSalle",
+    "publicKeyId": "ed25519-prism-core-2026"
+  },
+  "description": "Real-time RF Channel State Information (CSI) spatial sensory bridge. Ingests ESP32 sub-GHz RF human presence coordinates, contactless respiration waveforms, and motion activity streams to drive Three.js spatial avatars, particle ripples, and dynamic room lighting.",
+  "license": "Apache-2.0",
+  "minPrismVersion": "0.21.0",
+  "integrationPoints": {
+    "spatialSensoryEngine": true,
+    "dashboardTab": true,
+    "dashboardTabId": "wifivision",
+    "dashboardSubPanels": ["presence_heatmap", "respiration_monitor", "spatial_rf_nodes", "safety_alerts"],
+    "threeJsSceneExtensions": [
+      "rf_particle_ripples",
+      "respiration_ambient_pulse",
+      "presence_occupancy_gaze"
+    ],
+    "policyExtensions": [
+      "sensory.rf.ingest",
+      "sensory.rf.calibrate",
+      "sensory.rf.alert"
+    ],
+    "adapterBridges": [
+      "wifivision-websocket",
+      "esp32-csi-stream",
+      "threejs-spatial-bridge"
+    ]
+  },
+  "dependencies": {
+    "addons": [],
+    "plugins": [],
+    "systemCapabilities": ["websocket", "webgl"]
+  },
+  "trust": "certified",
+  "governanceCouncilSignoff": {
+    "councilMember": "kirk.lasalle@prism.local",
+    "signedAt": "2026-08-16T15:40:00Z",
+    "signatureId": "gc-sig-wifivision-csi-001"
+  }
+}

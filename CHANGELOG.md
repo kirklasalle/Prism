@@ -2,6 +2,25 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.23.1 — 2026-08-14 — Master Critical Audit, Character Accountability Control (CAC) & Spectrum 2.0 Hardening
+
+Delivers the approved Master Critical Technical, Security, UI/UX & Market Audit package, formalizes the Character Accountability Control (CAC) Main Agent and Guardian dual-agent architecture, implements automated CAC compliance certificate export with SHA-256 verification proofs, adds Windows CAC smart card reader test fixtures, and lands the Spectrum Refraction 2.0 consensus, discrepancy reconciliation, and cognitive economics dynamic budget governor engines.
+
+### Added
+
+- **Master Critical Technical, Security, UI/UX & Market Audit (`docs/PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md`, `.html`)**: Delivered unified 10-section master audit and self-contained executive HTML console covering the 10 Laws (PAD), CAC identity binding, 14-tab UI/UX evaluation, OWASP Top 10 for Agentic AI posture, and global AaaS competitive matrix (Agentforce, Copilot Studio, OpenHands, CrewAI, Docker Agent).
+- **Character Accountability Control (CAC) Compliance Exporter (`src/core/accountability/cac-compliance-exporter.ts`, `tests/cac-compliance-exporter.test.ts`)**: Implemented automated JSON compliance bundle and executive Markdown certificate export with cryptographic SHA-256 digest proofs, identity tuple verification (`operatorName`, `operatorEmail`, `cacName`, `cacEmail`, `characterId`, `locationName`), and activity event digest summaries.
+- **Enterprise Smart Card & Hardware PKI Provider Tests (`tests/windows-cac-provider.test.ts`)**: Added comprehensive test coverage for `WindowsCacProvider`, validating DoD subject parsing (`extractCacId`), smart card presence detection, certificate error handling, and mock development authentication paths.
+- **Spectrum Refraction 2.0 Consensus & Discrepancy Engine (`src/core/operator/spectrum-consensus-engine.ts`, `tests/spectrum-consensus-engine.test.ts`)**: Implemented tri-model parallel synthesis, stemmed token similarity matching, real-time consensus scoring (0.0 to 1.0), discrepancy detection with bias cancellation, and local SLM offline survival mode routing for air-gapped environments.
+- **Cognitive Economics Dynamic Budget Governor (`src/core/operator/budget-governor.ts`, `tests/phase-u-cognitive-economics.test.ts`)**: Implemented departmental token quota tracking with soft-cap throttling (`tier3` → `tier1/2` auto-downshifting) and hard-cap gating with human approval routing.
+- **Automated Discrepancy Reconciliation Loop (`src/core/operator/discrepancy-reconciliation-loop.ts`)**: Implemented sub-agent arbitration between divergent analytical (Left) and creative (Right) hemispheres based on verifiable fact density and 9th Law reasoning ledger proofs.
+- **Strategic Roadmap 2026–2027 Expansion (`docs/ROADMAP.md`)**: Appended Phase T (Master Audit & CAC Hardening), Phase U (Spectrum 2.0 & Cognitive Economics), and Phase V (Sovereign & Defense AaaS Packaging).
+
+### Changed
+
+- **Documentation Index (`docs/DOCS_INDEX.md`)**: Registered Master Audit and interactive HTML companion in Core Documents and Quick Links.
+- **Package Version**: Bumped `prism-core` to `v0.23.1`.
+
 ## v0.23.0 — 2026-08-08 — Governance, Authentication & Update Reliability
 
 Effectuates the governed PAD correction and successor-key rotation, stabilizes authentication and update execution, restores clean dependency-security gates, and aligns public-facing repository references with `PrismRefraction` while preserving compatible runtime namespaces and published image coordinates.

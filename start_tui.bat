@@ -36,7 +36,7 @@ if %ERRORLEVEL% neq 0 (
 :: ---- Port configuration ----
 set "TUI_PORT=%PRISM_DASHBOARD_PORT%"
 if "%TUI_PORT%"=="" (
-    powershell -Command "if (Get-NetTCPConnection -LocalPort 7071 -State Listen -ErrorAction SilentlyContinue) { exit 71 } else { exit 70 }"
+    powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 7071 -State Listen -ErrorAction SilentlyContinue) { exit 71 } else { exit 70 }"
     if !errorlevel! equ 71 (
         set "TUI_PORT=7071"
         echo [PRISM TUI] Detected active server on port 7071.
@@ -49,14 +49,14 @@ if "%TUI_PORT%"=="" (
 if not defined PRISM_TUI_AUTOSTART set "PRISM_TUI_AUTOSTART=1"
 
 :: ---- Check if server is running ----
-echo [PRISM TUI] Checking PRISM server on port %TUI_PORT%...
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%TUI_PORT%/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200 -or $r.StatusCode -eq 503) { exit 0 } else { exit 1 } } catch { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $code = [int]$_.Exception.Response.StatusCode; if ($code -eq 503) { exit 0 } }; exit 1 }" >nul 2>nul
-if %ERRORLEVEL% equ 0 (
+echo [PRISM TUI] Checking PRISM server on port !TUI_PORT!...
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:!TUI_PORT!/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200 -or $r.StatusCode -eq 503) { exit 0 } else { exit 1 } } catch { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $code = [int]$_.Exception.Response.StatusCode; if ($code -eq 503) { exit 0 } }; exit 1 }" >nul 2>nul
+if !errorlevel! equ 0 (
     echo [OK] Server is reachable.
     goto :launch_tui
 )
 
-echo [WARN] Server not reachable on port %TUI_PORT%.
+echo [WARN] Server not reachable on port !TUI_PORT!.
 if /I "%PRISM_TUI_AUTOSTART%"=="0" (
     echo [INFO] Auto-start disabled: PRISM_TUI_AUTOSTART=0. TUI will retry connection.
     goto :launch_tui
@@ -80,32 +80,44 @@ if not exist "dist\src\index.js" (
     )
 )
 
-set "PRISM_MODE=server"
 if not defined PRISM_ENV_PROFILE set "PRISM_ENV_PROFILE=dev"
-if not defined PRISM_DASHBOARD_PORT set "PRISM_DASHBOARD_PORT=%TUI_PORT%"
+if not defined PRISM_DASHBOARD_PORT set "PRISM_DASHBOARD_PORT=!TUI_PORT!"
 
 echo [PRISM TUI] Spawning backend server window...
-start "PRISM TUI Backend" cmd /c npm start
+start "PRISM TUI Backend" cmd /c "set PRISM_MODE=server&& set PRISM_ENV_PROFILE=!PRISM_ENV_PROFILE!&& set PRISM_DASHBOARD_PORT=!PRISM_DASHBOARD_PORT!&& node dist/src/index.js"
 
-echo [PRISM TUI] Waiting for backend health endpoint...
+echo [PRISM TUI] Waiting for backend server to become ready...
 set WAIT_COUNT=0
 :wait_backend
 set /a WAIT_COUNT+=1
-if %WAIT_COUNT% gtr 45 (
-    echo [ERROR] Backend did not become healthy within 45 seconds.
+if !WAIT_COUNT! gtr 90 (
+    echo.
+    echo [ERROR] Backend did not become healthy within 90 seconds.
     echo [HINT] Check the PRISM TUI Backend window for startup errors.
     pause
     exit /b 1
 )
 timeout /t 1 /nobreak >nul
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:%TUI_PORT%/api/health' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200 -or $r.StatusCode -eq 503) { exit 0 } else { exit 1 } } catch { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $code = [int]$_.Exception.Response.StatusCode; if ($code -eq 503) { exit 0 } }; exit 1 }" >nul 2>nul
-if %ERRORLEVEL% neq 0 goto :wait_backend
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:!TUI_PORT!/api/health' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200 -or $r.StatusCode -eq 503) { exit 0 } else { exit 1 } } catch { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $code = [int]$_.Exception.Response.StatusCode; if ($code -eq 503) { exit 0 } }; exit 1 }" >nul 2>nul
+if !errorlevel! equ 0 goto :backend_ready
+
+rem Fallback TCP listener check if HTTP isn't fully ready yet
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort !TUI_PORT! -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+if !errorlevel! equ 0 (
+    timeout /t 2 /nobreak >nul
+    goto :backend_ready
+)
+
+echo [PRISM TUI] Waiting for backend server on port !TUI_PORT! (!WAIT_COUNT!/90s)...
+goto :wait_backend
+
+:backend_ready
 echo [OK] Backend is reachable.
 
 :launch_tui
 echo.
 echo [PRISM TUI] Launching terminal dashboard...
-echo   Port: %TUI_PORT%
+echo   Port: !TUI_PORT!
 echo   Press ? for help, q to quit
 echo.
 
@@ -113,10 +125,10 @@ echo.
 :: Prefer the precompiled bundle (fast, no on-the-fly transpile). Fall back to
 :: tsx only when the build artifact is missing.
 if exist "dist\src\tui\app.js" (
-    node dist\src\tui\app.js --port %TUI_PORT%
+    node dist\src\tui\app.js --port !TUI_PORT!
 ) else (
     echo [PRISM TUI] Compiled TUI not found; running via tsx ^(slower^)...
-    npx tsx src/tui/app.tsx --port %TUI_PORT%
+    npx tsx src/tui/app.tsx --port !TUI_PORT!
 )
 
 pause

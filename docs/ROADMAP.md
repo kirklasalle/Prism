@@ -1,7 +1,7 @@
 # PRISM Roadmap
 
-**Date:** 2026-08-08 (updated — governance and updater maintenance)
-**Previous:** 2026-06-17
+**Date:** 2026-08-13 (updated — Master Critical Audit, Character Accountability Control & 2026–2027 Strategic Roadmap)
+**Previous:** 2026-08-08
 
 ## August 2026 Governance and Update Reliability Addendum (Complete)
 
@@ -802,19 +802,63 @@ Objective: Ensure all three PRISM interfaces (Web Dashboard, TUI, and headless C
   - Integrate the Causal Memory Fabric with the MSD ticket schema, enabling the system to reference prior failure contexts for second-chance retries. ✅
   - Ensure the Guardian Agent uses the MSD to its fullest extent: logging ticket items for diagnostic fallbacks, managing retry schedules, and recording systemic improvements in a learned-history ledger. ✅
 
-## Target Quality Gates (Updated 2026-07-12)
+---
 
-| Gate | Target | Current Estimate |
-|------|--------|-----------------|
-| Workflow success rate | >= 99.0% | ✅ Met |
-| Activity stream delivery p95 | <= 200ms | ✅ Met |
-| Policy decision latency p95 | <= 30ms | ✅ Met |
-| Retrieval latency p95 (hot) | <= 50ms | ✅ Met |
-| CI pipeline green on PR | 100% | ✅ Met |
-| Compiled artifacts in src/ | **ZERO** | ✅ Met |
-| Startup file length (index.ts) | < 500 lines | ✅ 476 lines |
-| CHANGELOG.md lint errors | **ZERO** | ✅ Met |
-| Security scan findings (critical) | **ZERO** | ✅ Met |
-| **Tab skills defined** | **12** | ✅ Met |
+## Phase T — Master Critical Audit, CAC Enterprise Hardening & Dual-Agent Protocol (Active — August 2026)
+
+> **Objective:** Institutionalize the approved Master Systems & Market Audit, establish the dual-agent architecture (CAC Main Agent + Guardian Sentinel), and solidify enterprise compliance (EU AI Act, NIST AI RMF, Defense Zero Trust).
+
+- [x] **Master Audit Formulation & Approval:** Deliver unified Critical Engineering, Security, UI/UX, and Market Audit (`docs/PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md` and HTML companion).
+- [x] **Character Accountability Control (CAC) Architecture Consolidation:**
+  - Codify the CAC Main Agent as the operator's permanent, durable assistant and companion.
+  - Enforce the 6-tuple identity binding (`operatorName`, `operatorEmail`, `cacName`, `cacEmail`, `characterId`, `locationName`) in the Initialization Certificate.
+  - Establish the permanent Guardian Secondary Agent as the platform-scoped health, security, and self-healing protector.
+  - Wire R3 runtime policy enforcement (`CAC_PLACEHOLDER_IDENTITY_DENY`) across all business profiles.
+- [x] **14-Tab Dashboard & TUI Accessibility Validation:** Complete end-to-end UX audit for all 14 Web Console tabs and React Ink TUI.
+- [x] **Dependency & Security Zero-Advisory Gate:** Maintain 0 npm vulnerabilities and clean SBOM/CVE gate checks.
+- [x] **CAC Chain Export Certification Tool:** Automated one-click JSON and Markdown compliance certificate export with cryptographic SHA-256 verification (`src/core/accountability/cac-compliance-exporter.ts`).
+- [x] **Enterprise Smart Card & Hardware PKI Provider Integration:** Validated Windows CAC provider, smart card reader listeners, DoD subject extraction, and mock development authentication paths (`tests/windows-cac-provider.test.ts`).
+
+---
+
+## Phase U — Spectrum Refraction 2.0 & LLRE Cognitive Economics Engine (Complete — August 2026)
+
+> **Objective:** Elevate multi-model cognitive triangulation into an adaptive, micro-metered intelligence mesh with sub-100ms local routing and real-time consensus streaming.
+
+- [x] **Streaming Spectrum Synthesis & Real-Time Consensus Scoring:** Implemented parallel tri-model consensus calculation, discrepancy detection, and synthesis scoring (`src/core/operator/spectrum-consensus-engine.ts`, `tests/spectrum-consensus-engine.test.ts`).
+- [x] **Local SLM Offline Survival Mode:** Automatic fallback routing to embedded Ollama / Llama.cpp models when external network egress is restricted or air-gapped.
+- [x] **Cognitive Economics Dynamic Budget Governor:** Real-time enforcement of department/user token budgets with soft-cap tier downshifting (`tier3` → `tier1/2`) and hard-cap authorization workflows (`src/core/operator/budget-governor.ts`).
+- [x] **Automated Discrepancy Reconciliation Loop:** Sub-agent arbitration when Left and Right hemispheres produce divergent factual conclusions (`src/core/operator/discrepancy-reconciliation-loop.ts`, `tests/phase-u-cognitive-economics.test.ts`).
+
+---
+
+## Phase V — Sovereign, Air-Gapped & Defense AaaS Packaging (Q4 2026 – Q1 2027)
+
+> **Objective:** Turnkey delivery of PRISM as the premier self-hosted, air-gapped Agents-as-a-Service (AaaS) platform for defense, intelligence, healthcare, and enterprise.
+
+- [ ] **Turnkey Sovereign OCI Container Bundles:** Published, cryptographically signed multi-arch container images (`ghcr.io/kirklasalle/prismrefraction`).
+- [ ] **Multi-Tenant SCIM / SAML 2.0 Directory Sync:** Enterprise IdP integration for automated user provisioning and CAC certificate mapping.
+- [ ] **OSWorld & GAIA Benchmark Publication:** Public verification and reproducibility suite demonstrating Spectrum Refraction's empirical performance on autonomous desktop tasks.
+- [ ] **PRISM Signed MCP Plugin Marketplace:** Curated ecosystem repository for Ed25519-signed agent skills and character personas.
+
+---
+
+## Target Quality Gates (Updated August 2026)
+
+| Gate | Target | Current Status |
+|------|--------|----------------|
+| **10 Laws Cryptographic Immutability** | 100% SHA-256 Match | ✅ Verified |
+| **Character Accountability (CAC) Binding**| Strict Identity Tuple | ✅ Enforced |
+| **Workflow success rate** | >= 99.0% | ✅ Met |
+| **Activity stream delivery p95** | <= 200ms | ✅ Met |
+| **Policy decision latency p95** | <= 30ms | ✅ Met |
+| **Retrieval latency p95 (hot)** | <= 50ms | ✅ Met |
+| **CI pipeline green on PR** | 100% | ✅ Met |
+| **Compiled artifacts in src/** | **ZERO** | ✅ Met |
+| **Startup file length (index.ts)** | < 500 lines | ✅ 476 lines |
+| **CHANGELOG.md lint errors** | **ZERO** | ✅ Met |
+| **Security scan findings (critical/high)**| **ZERO** (0 npm audit) | ✅ Met |
+| **Discovered test suites** | **195+ test files** | ✅ 100% Pass |
+| **Operator Console Tabs** | **14 functional tabs** | ✅ Verified |
 | **Guardian skills defined** | **11** (9 + 2 Self-Heal/Improve) | ✅ Met |
-| **Skill test coverage** | **43+ cases** (38 + 5 MSD-Healing) | ✅ Met |
+

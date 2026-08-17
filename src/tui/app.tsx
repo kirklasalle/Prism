@@ -106,7 +106,16 @@ function App({ client, wsClient }: { client: PrismClient; wsClient: PrismWsClien
             return;
         }
 
-        // Number-key shortcuts (1-9, 0, -, =)
+        // When in chat tab, allow all plain typed characters (digits, '-', '=', '?') to pass to the text input.
+        // Ctrl+<key> or Alt+<key> can still be used for shortcuts.
+        if (activeTab === "chat") {
+            if ((key.ctrl || key.meta) && TAB_SHORTCUTS[input] && !showHelp) {
+                setActiveTab(TAB_SHORTCUTS[input]!);
+            }
+            return;
+        }
+
+        // Number-key shortcuts (1-9, 0, -, =) for other non-input views
         const tabId = TAB_SHORTCUTS[input];
         if (tabId && !showHelp) {
             setActiveTab(tabId);

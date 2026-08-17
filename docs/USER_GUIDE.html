@@ -688,6 +688,14 @@
   <li class="toc-item toc-item-level-3"><a href="#135-action-visibility">135 Action visibility</a></li>
   <li class="toc-item toc-item-level-3"><a href="#136-approval-safeguards">136 Approval safeguards</a></li>
   <li class="toc-item toc-item-level-2"><a href="#14-where-to-learn-more">14 Where to learn more</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#16-operator-presence-availability-channels">16 Operator Presence  Availability Channels</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#161-presence-statuses">161 Presence Statuses</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#162-auto-away-idle-tracker">162 Auto-Away  Idle Tracker</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#163-sms-via-email-gateway-configuration">163 SMS-via-Email Gateway Configuration</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#164-two-way-inbound-channel-poller">164 Two-Way Inbound Channel Poller</a></li>
+  <li class="toc-item toc-item-level-2"><a href="#17-secure-operator-console-iam-management">17 Secure Operator Console  IAM Management</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#171-how-to-access-the-console">171 How to Access the Console</a></li>
+  <li class="toc-item toc-item-level-3"><a href="#172-core-management-features">172 Core Management Features</a></li>
   <li class="toc-item toc-item-level-2"><a href="#15-external-references">15 External references</a></li>
 </ul>
 
@@ -700,7 +708,7 @@
       <article>
         <h1 id="prism-user-guide">PRISM User Guide</h1>
 
-<p>Date: 2026-03-11</p>
+<p>Date: 2026-08-17 | Version: v0.23.1</p>
 
 <h2 id="1-what-prism-is">1. What PRISM is</h2>
 
@@ -730,8 +738,13 @@
   <li>bind character identities to operators with full accountability chains</li>
   <li>enforce profile-aware email domain validation (business vs individual)</li>
   <li>activate Spectrum Refraction (SR) for tri-model parallel generation with structured aggregation</li>
+  <li>monitor token budget quotas with the Cognitive Economics dynamic budget governor</li>
 </ul>
 <h2 id="3-safety-model-you-should-understand">3. Safety model you should understand</h2>
+
+<p>&lt;p align="center"&gt;</p>
+<p>  &lt;img src="media/illustrations/prism<em>user</em>guide<em>authority</em>workflow.png" alt="PRISM Operator Authority Tiers and Human Approval Gate Workflow" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" /&gt;</p>
+<p>&lt;/p&gt;</p>
 
 <h3 id="31-authority-tiers">3.1 Authority tiers</h3>
 
@@ -759,6 +772,10 @@
 
 <h3 id="41-one-click-dashboard-startup-windows">4.1 One-click dashboard startup (Windows)</h3>
 
+<p>&lt;p align="center"&gt;</p>
+<p>  &lt;img src="media/illustrations/prism<em>user</em>guide<em>operator</em>console_hub.png" alt="PRISM Multi-Modal Operator Dashboard Command Hub" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" /&gt;</p>
+<p>&lt;/p&gt;</p>
+
 <ol class="list-level-0">
   <li>Double-click <code>start_web.bat</code></li>
   <li>Wait for startup logs</li>
@@ -771,7 +788,8 @@
   <li>trigger built-in demo actions from the Actions panel,</li>
   <li>review pending approvals,</li>
   <li>approve/deny Tier-3 requests,</li>
-  <li>inspect recent activity events.</li>
+  <li>inspect recent activity events,</li>
+  <li>monitor live Spectrum Refraction consensus scores and budget utilization gauges.</li>
 </ul>
 <h3 id="42-cli-startup-options">4.2 CLI startup options</h3>
 
@@ -807,6 +825,10 @@
 </ul>
 <h2 id="4a-setup-wizard">4A. Setup Wizard</h2>
 
+<p>&lt;p align="center"&gt;</p>
+<p>  &lt;img src="media/illustrations/prism<em>user</em>guide<em>setup</em>wizard_profiles.png" alt="PRISM Setup Wizard and Dual Execution Profiles" width="100%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);" /&gt;</p>
+<p>&lt;/p&gt;</p>
+
 <p>PRISM includes guided setup wizards to help you configure the system on first run. Three wizard surfaces are available — choose whichever matches your workflow.</p>
 
 <h3 id="4a1-when-to-use-each-wizard">4A.1 When to use each wizard</h3>
@@ -821,9 +843,9 @@
 </thead>
 <tbody>
 <tr>
-  <td>:---</td>
-  <td>:---</td>
-  <td>:---</td>
+  <td>:----------------------</td>
+  <td>:----------------------------------------------------------------</td>
+  <td>:--------------------------------------------------------------</td>
 </tr>
 <tr>
   <td><strong>Web Wizard</strong></td>
@@ -893,12 +915,12 @@
 <div class="code-card">
   <div class="code-card-header">
     <span class="code-card-lang">BASH</span>
-    <button class="copy-btn" onclick="copyCode('code-9b85spr', this)">
+    <button class="copy-btn" onclick="copyCode('code-4pgho0e', this)">
       <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
       <span>Copy</span>
     </button>
   </div>
-  <pre><code id="code-9b85spr"># Interactive 4-step wizard (auto-detects server)
+  <pre><code id="code-4pgho0e"># Interactive 4-step wizard (auto-detects server)
 npm run setup
 
 # Via batch file (Windows)
@@ -940,12 +962,12 @@ npm run setup -- --standalone --non-interactive --profile individual --workspace
 <div class="code-card">
   <div class="code-card-header">
     <span class="code-card-lang">BASH</span>
-    <button class="copy-btn" onclick="copyCode('code-6tui49r', this)">
+    <button class="copy-btn" onclick="copyCode('code-g18akxg', this)">
       <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
       <span>Copy</span>
     </button>
   </div>
-  <pre><code id="code-6tui49r">npm run setup:advanced</code></pre>
+  <pre><code id="code-g18akxg">npm run setup:advanced</code></pre>
 </div>
 
 
@@ -981,8 +1003,8 @@ npm run setup -- --standalone --non-interactive --profile individual --workspace
 </thead>
 <tbody>
 <tr>
-  <td>:---</td>
-  <td>:---</td>
+  <td>:---------------------------------</td>
+  <td>:--------------------------------------------------------------------------------------------------------------</td>
 </tr>
 <tr>
   <td>Wizard page is blank</td>
@@ -1067,6 +1089,10 @@ npm run setup -- --standalone --non-interactive --profile individual --workspace
   <td><strong>Scheduler</strong></td>
   <td>Full-year calendar, project management, kanban board, and Gantt timeline for scheduling and tracking work.</td>
 </tr>
+<tr>
+  <td><strong>Channels</strong></td>
+  <td>Manage operator presence states, auto-away idle triggers, SMTP-to-SMS gateway configurations, Gmail/Outlook connections, and communication poller logs.</td>
+</tr>
 </tbody>
 </table></div>
 
@@ -1093,11 +1119,13 @@ npm run setup -- --standalone --non-interactive --profile individual --workspace
 <p>Use the <strong>Save</strong> button to persist non-secret settings. Use the <strong>Store API Key</strong> and <strong>Clear API Key</strong> buttons for secure credential management.</p>
 
 <p><strong>Model Capability Matrix &amp; Registry</strong> — A dynamically updated comparison grid displaying per-model capabilities (context window, vision, streaming, function-calling).</p>
+
 <ul class="list-level-0">
   <li><strong>Dynamic Updates</strong>: Displays built-in profiles alongside user-registered runtime models and auto-discovered local models (e.g., from your running Ollama instance).</li>
   <li><strong>Deprecation Warning Indicators</strong>: Models approaching sunset or marked deprecated display clear warnings, detailed deprecation reasons, and recommended successor models. Sunset/deprecated models are kept for legacy telemetry but de-prioritized for active tasks.</li>
 </ul>
 <p><strong>Advanced Model Routing Settings</strong> — Full operator configuration over how PRISM delegates tasks to models:</p>
+
 <ul class="list-level-0">
   <li><strong>Routing Topologies</strong>: Switch between Single-Provider, Multi-Provider, and Modality-Based routing.</li>
   <li><strong>AI-Assisted Routing</strong>: Enable AI suggestions to auto-assign the most qualified available model to specific task roles (e.g. Chat, Code-generation, Summarization, Research).</li>
@@ -1345,12 +1373,12 @@ npm run setup -- --standalone --non-interactive --profile individual --workspace
 <div class="code-card">
   <div class="code-card-header">
     <span class="code-card-lang">TEXT</span>
-    <button class="copy-btn" onclick="copyCode('code-vxfhriy', this)">
+    <button class="copy-btn" onclick="copyCode('code-mm6bkdc', this)">
       <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
       <span>Copy</span>
     </button>
   </div>
-  <pre><code id="code-vxfhriy">Prism_Refraction/
+  <pre><code id="code-mm6bkdc">Prism_Refraction/
   prism-workspace.json        # manifest (version, creation date, profile, platform)
   config/                     # MCP settings, runtime config
   artifacts/
@@ -1490,11 +1518,15 @@ npm run setup -- --standalone --non-interactive --profile individual --workspace
 </ol>
 <h2 id="12-character-accountability-identity">12. Character Accountability &amp; Identity</h2>
 
-<p>PRISM enforces a Character Accountability Control (CAC) model that links every agent action to a verifiable identity chain.</p>
+<p>Your Character Accountability Control (CAC) agent is your <strong>Main Agent</strong> in PRISM. This is the assistant, agent, companion, and primary identity you interact with. Your Initialization Certificate establishes this durable relationship, and every new chat reuses the same CAC Main Agent.</p>
+
+<p>Guardian is the permanent <strong>secondary agent</strong>. It supports your CAC Main Agent while monitoring and protecting the complete dashboard and every PRISM service, function, tool, and integration. Guardian does not replace your CAC Main Agent in conversations or operator workflows.</p>
+
+<p>PRISM links every action by or on behalf of the CAC Main Agent to a verifiable identity chain. See <a href="CAC<em>GUARDIAN</em>AGENT_ARCHITECTURE.html">CAC Main Agent and Guardian Architecture</a>.</p>
 
 <h3 id="121-identity-fields-you-provide">12.1 Identity fields you provide</h3>
 
-<p>When assigning a character to an agent session, the following identity fields are required:</p>
+<p>When establishing the CAC Main Agent, the following identity fields are required. Client and session fields record each interaction context without creating another CAC agent:</p>
 
 <div class="table-wrapper"><table>
 <thead>
@@ -1617,6 +1649,65 @@ npm run setup -- --standalone --non-interactive --profile individual --workspace
   <li>Product requirements and roadmap intent: <code>PRISM_PRD.md</code></li>
   <li>Engineering implementation standards: <code>DEVELOPER_GUIDE.md</code></li>
   <li>Milestone status: <code>ROADMAP.md</code></li>
+</ul>
+<h2 id="16-operator-presence-availability-channels">16. Operator Presence &amp; Availability Channels</h2>
+
+<p>PRISM features a dedicated <strong>Channels</strong> control center allowing operators to remain in command even when they step away from the primary workstation console.</p>
+
+<h3 id="161-presence-statuses">16.1 Presence Statuses</h3>
+
+<p>The system supports four distinct presence states:</p>
+
+<ul class="list-level-0">
+  <li><strong>Online (Active):</strong> Default mode. Notifications and tasks are managed locally through the workstation UI.</li>
+  <li><strong>Away (Forward Relays):</strong> Active notification mode. Critical tier-3 tasks and approval requests are immediately relayed to the operator via their configured SMS/Email gateway.</li>
+  <li><strong>Do Not Disturb (DND):</strong> Silences notifications and holds pending approvals silently in the queue.</li>
+  <li><strong>Offline:</strong> Suspends autonomous loops. No background dispatches are executed until the operator comes back online.</li>
+</ul>
+<h3 id="162-auto-away-idle-tracker">16.2 Auto-Away &amp; Idle Tracker</h3>
+
+<p>The dashboard includes a client-side idle tracking system. If enabled:</p>
+
+<ul class="list-level-0">
+  <li>The system monitors user activity (keypresses, mouse movement, scrolls, touch events) on the page.</li>
+  <li>If no activity is detected for the configured timeout (<code>5 min</code>, <code>10 min</code>, <code>20 min</code>, <code>30 min</code>, or <code>1 hr</code>), the presence automatically transitions to <strong>Away</strong>, and outbound notifications are routed to the mobile device.</li>
+  <li>Any subsequent user interaction resets the timer and restores the previous presence state.</li>
+</ul>
+<h3 id="163-sms-via-email-gateway-configuration">16.3 SMS-via-Email Gateway Configuration</h3>
+
+<p>PRISM forwards outbound notifications to carrier gateways:</p>
+
+<ul class="list-level-0">
+  <li><strong>Supported Carrier Gateways:</strong> AT&amp;T (<code>txt.att.net</code>), Verizon (<code>vtext.com</code>), T-Mobile (<code>tmomail.net</code>), and Sprint (<code>messaging.sprintpcs.com</code>).</li>
+  <li><strong>Formatting Constraints:</strong> Mobile numbers are automatically stripped of non-numeric characters before dispatch. Transmitted messages are limited to <strong>150 characters</strong> for SMS compatibility.</li>
+  <li><strong>Two-Way Subject Markers:</strong> Outbound messages contain <code>[PRISM-TASK:&lt;approvalId&gt;]</code> tags for task correlation.</li>
+</ul>
+<h3 id="164-two-way-inbound-channel-poller">16.4 Two-Way Inbound Channel Poller</h3>
+
+<p>A background poller checks configured mailboxes every 30 seconds for operator responses:</p>
+
+<ul class="list-level-0">
+  <li><strong>Remote Approvals:</strong> Replying <code>APPROVE</code> or <code>DENY</code> to a relayed message parses the subject's correlation tag and immediately resolves the corresponding tier-3 approval.</li>
+  <li><strong>Freeform Chat Relays:</strong> Any other response is treated as a remote chat contribution and injected into the active conversation.</li>
+</ul>
+<h2 id="17-secure-operator-console-iam-management">17. Secure Operator Console &amp; IAM Management</h2>
+
+<p>PRISM provides a world-class secure Operator Console and IAM Management dashboard at <code>/public/iam-admin.html</code> with high-end cyberpunk glassmorphism visual styling.</p>
+
+<h3 id="171-how-to-access-the-console">17.1 How to Access the Console</h3>
+
+<ul class="list-level-0">
+  <li>Log in with the standard operator credentials or input a developer bearer token in the console login screen.</li>
+  <li>Access the Console directly by clicking the <strong>Manage Operators</strong> link on the main login screen or navigating to <code>http://localhost:7070/public/iam-admin.html</code>.</li>
+  <li>To return to the chat interface, click the <strong>Launch Refraction Dashboard</strong> button.</li>
+</ul>
+<h3 id="172-core-management-features">17.2 Core Management Features</h3>
+
+<ul class="list-level-0">
+  <li><strong>Operator Directory</strong>: Manage operator accounts (Create accounts, Suspend/Activate status, Reset passwords, and Grant/Revoke the <code>admin</code> role). Self-deletion of the active admin account is restricted for safety.</li>
+  <li><strong>CAC Main Agents</strong>: Review each operator's single Initialization Certificate-bound primary assistant identity. Click an agent to verify email links, inspect its accountability timeline, or export its audit data as CSV/JSON.</li>
+  <li><strong>SCIM Directory Sync</strong>: Create, view, or revoke SCIM bearer tokens to integrate directory synchronization from identity providers like Okta or Azure AD.</li>
+  <li><strong>System Actions</strong>: Trigger an immediate system-wide shutdown of the PRISM server using the red <strong>Shutdown Server</strong> button in the console header.</li>
 </ul>
 <h2 id="15-external-references">15. External references</h2>
 
