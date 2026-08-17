@@ -2,6 +2,8 @@
 src/**/*.js
 src/**/*.d.ts
 src/**/*.js.map
+!src/core/operator/public/**/*.js
+!src/core/operator/scripts/**/*.js
 
 # Build artifacts
 node_modules/

@@ -98,6 +98,7 @@ export function dashboardHtml(port: number, authToken?: string): string {
         <button id="tab-button-tools" type="button" class="tab-button" data-tab-id="tools" role="tab" aria-selected="false" aria-controls="tab-tools" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:tools" data-tip-kind="shell-tab">Tools &amp; Plugins</button>
         <button id="tab-button-agentic" type="button" class="tab-button" data-tab-id="agentic" role="tab" aria-selected="false" aria-controls="tab-agentic" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:agentic" data-tip-kind="shell-tab">Agentic Control</button>
         <button id="tab-button-computer" type="button" class="tab-button" data-tab-id="computer" role="tab" aria-selected="false" aria-controls="tab-computer" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:computer" data-tip-kind="shell-tab">Computer Control</button>
+        <button id="tab-button-desktop" type="button" class="tab-button" data-tab-id="desktop" role="tab" aria-selected="false" aria-controls="tab-desktop" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:desktop" data-tip-kind="shell-tab">Sandbox Desktop</button>
         <button id="tab-button-browser" type="button" class="tab-button" data-tab-id="browser" role="tab" aria-selected="false" aria-controls="tab-browser" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:browser" data-tip-kind="shell-tab">Browser Control</button>
         <button id="tab-button-workspace" type="button" class="tab-button" data-tab-id="workspace" role="tab" aria-selected="false" aria-controls="tab-workspace" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:workspace" data-tip-kind="shell-tab">Workspace</button>
         <button id="tab-button-network" type="button" class="tab-button" data-tab-id="network" role="tab" aria-selected="false" aria-controls="tab-network" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:network" data-tip-kind="shell-tab">Network</button>
@@ -119,6 +120,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
       <section id="tab-agentic" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-agentic" aria-hidden="true"></section>
 
       <section id="tab-computer" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-computer" aria-hidden="true"></section>
+
+      <section id="tab-desktop" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-desktop" aria-hidden="true"></section>
 
       <section id="tab-browser" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-browser" aria-hidden="true"></section>
 
@@ -155,6 +158,8 @@ export function dashboardHtml(port: number, authToken?: string): string {
     </main>
   </div>
   <script type="module" src="/public/dashboard-app.js"></script>
+  <!-- Additive (v0.24.0): Governed Visual Desktop Sandbox (Phase V) controller -->
+  <script src="/public/tab-desktop.js"></script>
   <!-- Additive (v0.20): PTAC Operator Demo panel controller. Hydrates the
        additive panel injected into tab-computer.html. Self-hides when the
        feature gates are not set; never modifies existing dashboard state. -->

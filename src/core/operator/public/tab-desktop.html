@@ -1,0 +1,112 @@
+<!-- Tab: Governed Visual Desktop Sandbox (Phase V) -->
+<div class="desktop-sandbox-tab" style="display:flex; flex-direction:column; height:100%; gap:12px; padding:16px; box-sizing:border-box;">
+
+  <!-- Top Co-Pilot & Governance Control Bar -->
+  <div class="panel" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span id="sandbox-status-indicator" style="width:10px; height:10px; border-radius:50%; background:#94a3b8; display:inline-block;"></span>
+        <span id="sandbox-status-text" style="font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:#cbd5e1;">STOPPED</span>
+      </div>
+
+      <!-- Co-Pilot Mode Toggle Switch -->
+      <div style="display:flex; background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:8px; padding:2px;">
+        <button id="btn-mode-autonomous" onclick="window.prismDesktop && window.prismDesktop.setMode('autonomous')" style="padding:4px 10px; font-size:11px; font-weight:700; border:none; border-radius:6px; background:var(--accent, #3b82f6); color:#fff; cursor:pointer; transition:all 0.2s;">
+          🤖 Autonomous Driving
+        </button>
+        <button id="btn-mode-takeover" onclick="window.prismDesktop && window.prismDesktop.setMode('operator_takeover')" style="padding:4px 10px; font-size:11px; font-weight:700; border:none; border-radius:6px; background:transparent; color:#94a3b8; cursor:pointer; transition:all 0.2s;">
+          🕹️ Operator Takeover
+        </button>
+      </div>
+
+      <!-- Governance Badge -->
+      <span class="badge" style="font-size:10px; padding:3px 8px; border-radius:6px; background:rgba(99, 102, 241, 0.15); border:1px solid rgba(99, 102, 241, 0.4); color:#a5b4fc;">
+        🛡️ TIER-2 SANDBOX | GATED EGRESS
+      </span>
+    </div>
+
+    <!-- Quick Action Buttons -->
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button id="btn-sandbox-start" class="primary-button" onclick="window.prismDesktop && window.prismDesktop.startSandbox()" style="font-size:11px; padding:6px 12px;">
+        ▶️ Start Desktop
+      </button>
+      <button id="btn-sandbox-stop" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.stopSandbox()" style="font-size:11px; padding:6px 12px; display:none;">
+        ⏹️ Stop
+      </button>
+      <button class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.captureBurst()" style="font-size:11px; padding:6px 12px;" title="Direct Framebuffer Burst Grab (10 frames)">
+        🎬 Action Burst
+      </button>
+      <button class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.promptSnapshot()" style="font-size:11px; padding:6px 12px;" title="Create Checkpoint Snapshot">
+        📸 Snapshot
+      </button>
+      <button class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.resetSandbox()" style="font-size:11px; padding:6px 12px; color:#f87171;" title="Wipe and restart sandbox">
+        🔄 Reset
+      </button>
+      <button id="btn-toggle-pip" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.togglePiP()" style="font-size:11px; padding:6px 12px;" title="Toggle Floating Picture-in-Picture">
+        🗖 PiP
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Viewport + Sidebar Grid -->
+  <div style="display:flex; flex:1; gap:12px; min-height:0;">
+    
+    <!-- Virtual Desktop Canvas / WebRTC Stream Container -->
+    <div class="panel" style="flex:1; display:flex; flex-direction:column; background:#000; border:1px solid var(--border); border-radius:10px; overflow:hidden; position:relative;">
+      <div id="desktop-placeholder" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#64748b; gap:12px;">
+        <span style="font-size:48px;">🖥️</span>
+        <div style="font-size:16px; font-weight:600; color:#94a3b8;">Governed Visual Desktop Sandbox</div>
+        <div style="font-size:12px; max-width:400px; text-align:center; line-height:1.5;">
+          Debian Bookworm Slim + Openbox + KasmVNC WebRTC container with full agent automation and instant human takeover.
+        </div>
+        <button class="primary-button" onclick="window.prismDesktop && window.prismDesktop.startSandbox()" style="margin-top:8px;">
+          🚀 Launch Sandbox Environment
+        </button>
+      </div>
+
+      <iframe id="desktop-vnc-frame" style="width:100%; height:100%; border:none; display:none; background:#000;" src="about:blank" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
+
+      <!-- Takeover Overlay Banner -->
+      <div id="takeover-active-banner" style="display:none; position:absolute; top:12px; right:12px; background:rgba(239, 68, 68, 0.9); color:#fff; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:700; letter-spacing:0.5px; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:10;">
+        🕹️ OPERATOR MANUAL TAKEOVER ACTIVE
+      </div>
+    </div>
+
+    <!-- Right-Hand Snapshot Lineage & Forensic Burst Drawer -->
+    <div class="panel" style="width:320px; display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; gap:10px; overflow-y:auto;">
+      
+      <!-- Metrics Card -->
+      <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:10px; font-size:11px;">
+        <div style="font-weight:700; color:#ddd; text-transform:uppercase; margin-bottom:6px; font-size:10px; letter-spacing:0.5px;">Sandbox Telemetry</div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span class="muted">Resolution:</span> <span id="sbx-meta-res" style="font-weight:600;">1920x1080</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span class="muted">Container ID:</span> <span id="sbx-meta-cid" style="font-family:monospace; color:#38bdf8;">--</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span class="muted">Uptime:</span> <span id="sbx-meta-uptime">0s</span></div>
+        <div style="display:flex; justify-content:space-between;"><span class="muted">WebRTC Port:</span> <span id="sbx-meta-port">6080</span></div>
+      </div>
+
+      <!-- Action Burst Playback Panel -->
+      <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:10px; font-size:11px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div style="font-weight:700; color:#ddd; text-transform:uppercase; font-size:10px; letter-spacing:0.5px;">Latest Action Burst</div>
+          <span id="burst-frame-counter" class="badge" style="font-size:9px;">0 frames</span>
+        </div>
+        <div id="burst-preview-container" style="width:100%; height:120px; background:#0f172a; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid rgba(255,255,255,0.05);">
+          <span class="muted" style="font-size:10px;">No bursts captured yet</span>
+        </div>
+        <div id="burst-sha-digest" style="font-size:8px; font-family:monospace; color:var(--muted); margin-top:4px; word-break:break-all;"></div>
+      </div>
+
+      <!-- Checkpoint Snapshots List -->
+      <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight:700; color:#ddd; text-transform:uppercase; font-size:10px; letter-spacing:0.5px;">Checkpoint Snapshots</span>
+          <button class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.refreshStatus()" style="font-size:9px; padding:2px 6px;">↻ Refresh</button>
+        </div>
+        <div id="snapshot-list-container" style="display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto;">
+          <div class="muted" style="font-size:11px; text-align:center; padding:12px;">No checkpoints created</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

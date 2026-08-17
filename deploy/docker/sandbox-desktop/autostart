@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Openbox autostart script for PRISM Governed Visual Desktop Sandbox
+tint2 &
+feh --bg-fill /usr/share/backgrounds/default.png 2>/dev/null || xsetroot -solid "#111827" &
+xterm -geometry 100x30+50+50 -e "echo '=== PRISM Governed Visual Desktop Sandbox Initialized ==='; bash" &

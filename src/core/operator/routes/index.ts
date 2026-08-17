@@ -35,6 +35,7 @@ import { PresenceHandler } from "./presence-handler.js";
 import { RoboticsHandler } from "./robotics-handler.js";
 import { AddonsHandler } from "./addons-handler.js";
 import { TopologyRouteHandler } from "./topology-handler.js";
+import { DesktopHandler } from "./desktop-handler.js";
 
 export * from "./types.js";
 export * from "./dashboard-handler.js";
@@ -65,6 +66,7 @@ export * from "./presence-handler.js";
 export * from "./robotics-handler.js";
 export * from "./addons-handler.js";
 export * from "./topology-handler.js";
+export * from "./desktop-handler.js";
 
 export class Router {
     private handlers: IRouteHandler[] = [];
@@ -82,6 +84,7 @@ export class Router {
         this.handlers.push(new OpenAiCompatHandler());
         this.handlers.push(new BrowserHandler());
         this.handlers.push(new ComputerHandler());
+        this.handlers.push(new DesktopHandler());
         this.handlers.push(new AgenticHandler());
         this.handlers.push(new ChatHandler());
         this.handlers.push(new SettingsHandler());
