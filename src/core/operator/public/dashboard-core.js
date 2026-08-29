@@ -243,8 +243,12 @@ export const state = {
   roboticsEntities: [],
   roboticsStats: null,
   roboticsIntegrations: [],
+  // PRISM Dynamic Layout Engine state (Single / Split Canvas / Docked Multi-Panel)
+  layoutMode: (typeof localStorage !== 'undefined' ? localStorage.getItem('prism-layout-mode') : 'split') || 'split',
+  splitCanvasTab: (typeof localStorage !== 'undefined' ? localStorage.getItem('prism-split-tab') : 'workspace') || 'workspace',
+  dockedBottomTab: (typeof localStorage !== 'undefined' ? localStorage.getItem('prism-docked-bottom-tab') : 'telemetry') || 'telemetry',
+  splitRatio: parseFloat((typeof localStorage !== 'undefined' ? localStorage.getItem('prism-split-ratio') : '45') || '45'),
 };
-
 
 export const tabs = [
   { id: 'chat', label: 'Chat Interface' },

@@ -58,11 +58,23 @@ export class DesktopHandler implements IRouteHandler {
 
       // 1b. GET /api/sandbox/desktop/diagnostics
       if (method === "GET" && pathname === "/api/sandbox/desktop/diagnostics") {
-        const diag = await manager.checkDocker();
+        const diag = await manager.checkEngine();
         return this.json(res, 200, { ok: true, diagnostics: diag, status: manager.getStatus() });
       }
 
-      // 1c. POST /api/sandbox/desktop/toggle-mock
+      // 1c. POST /api/sandbox/desktop/build-image
+      if (method === "POST" && pathname === "/api/sandbox/desktop/build-image") {
+        try {
+          const body = await parseBody();
+          const result = await manager.buildSandboxImage(body.dockerfilePath, body.contextPath);
+          const diag = await manager.checkEngine();
+          return this.json(res, 200, { ok: true, message: "Sandbox image build succeeded", result, diagnostics: diag, status: manager.getStatus() });
+        } catch (err: any) {
+          return this.json(res, 500, { ok: false, error: err?.message || String(err), status: manager.getStatus() });
+        }
+      }
+
+      // 1d. POST /api/sandbox/desktop/toggle-mock
       if (method === "POST" && pathname === "/api/sandbox/desktop/toggle-mock") {
         const body = await parseBody();
         const enable = body.enable !== undefined ? Boolean(body.enable) : !manager.isMockMode();

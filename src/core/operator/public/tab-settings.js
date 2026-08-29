@@ -6,17 +6,18 @@ import { applyTooltipRuntimeSettings, getTooltipHelperVariants } from './prism-t
 
 
 var PROVIDER_META = {
-  openai: { icon: '\u{1F916}', desc: 'OpenAI \u2014 GPT-5-mini, GPT-5.1, GPT-3.5 and more.' },
-  anthropic: { icon: '\u2728', desc: 'Anthropic \u2014 Claude models.' },
+  openai: { icon: '\u{1F916}', desc: 'OpenAI \u2014 GPT-5.6 Sol, GPT-5.6 Terra, GPT-5, o3 Pro and more.' },
+  anthropic: { icon: '\u2728', desc: 'Anthropic \u2014 Claude 5-series (Fable 5, Opus 5, Sonnet 5).' },
+  xai: { icon: '\u{1F525}', desc: 'xAI \u2014 Grok models (Grok 4.6, Grok 4.3, Grok 4.1 Fast).', apiKeyUrl: 'https://console.x.ai/' },
   ollama: { icon: '\u{1F5A5}', desc: 'Ollama \u2014 Run open-source models locally.' },
   'ollama-cloud': { icon: '\u2601\uFE0F', desc: 'Ollama Cloud \u2014 Run large cloud models (GPT-OSS, DeepSeek V3.1, Kimi K2, Qwen3 Coder) via Ollama\u2019s hosted API.', apiKeyUrl: 'https://ollama.com/settings/keys' },
   custom: { icon: '\u{1F527}', desc: 'Custom \u2014 Any OpenAI-compatible endpoint.' },
-  google: { icon: '\u{1F50D}', desc: 'Google AI \u2014 Gemini models.' },
-  mistral: { icon: '\u{1F30A}', desc: 'Mistral AI \u2014 Mistral & Codestral models.' },
-  cohere: { icon: '\u{1F9EC}', desc: 'Cohere \u2014 Command and Embed models.' },
+  google: { icon: '\u{1F50D}', desc: 'Google AI \u2014 Gemini 3.7 Flash, 3.6 Flash, 3.1 Pro, and more.' },
+  mistral: { icon: '\u{1F30A}', desc: 'Mistral AI \u2014 Mistral Large 3, Codestral & Magistral models.' },
+  cohere: { icon: '\u{1F9EC}', desc: 'Cohere \u2014 Command A+, Command R+, and Embed models.' },
   groq: { icon: '\u26A1', desc: 'Groq \u2014 Ultra-fast inference.' },
   together: { icon: '\u{1F91D}', desc: 'Together AI \u2014 Open models hosted in the cloud.' },
-  deepseek: { icon: '\u{1F433}', desc: 'DeepSeek \u2014 DeepSeek reasoning models.' },
+  deepseek: { icon: '\u{1F433}', desc: 'DeepSeek \u2014 DeepSeek V4 & reasoning models.' },
   perplexity: { icon: '\u{1F50E}', desc: 'Perplexity \u2014 Search-augmented models.' },
   fireworks: { icon: '\u{1F386}', desc: 'Fireworks AI \u2014 Fast open-model hosting.' },
   openrouter: { icon: '\u{1F310}', desc: 'OpenRouter \u2014 Access hundreds of models via one API.' },
@@ -2501,11 +2502,42 @@ export
     html += '</select>';
     html += '</div>';
 
+    html += '<div style="margin-top:8px;text-align:right;">';
+    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\', \'' + 'verboseLogging' + '\'])">Save</button>';
+    html += '</div>';
+  });
+
+  /* ── Section 7b: PRISM Tooltips & Guardian Guidance Subsystem ── */
+  sec('tooltips', 'PRISM Tooltips & Guardian Guidance Subsystem', function () {
+    var enabled = state.runtimeSettings ? (state.runtimeSettings.tooltipsEnabled !== false) : true;
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Tooltips Subsystem';
+    html += ' <span class="stg-hint">Enable rich hover/focus tooltip popups across all console surfaces</span>';
+    html += '</span>';
+    html += '<span style="display:flex;align-items:center;">';
+    html += '<input type="checkbox" id="stg-tooltipsEnabled"' + (enabled ? ' checked' : '') + ' onchange="markSettingDirty(\'tooltipsEnabled\');previewTooltipPreferences()" style="width:16px;height:16px;cursor:pointer;" />';
+    html += '</span>';
+    html += '</div>';
+
+    var currentDelay = String((state.runtimeSettings && state.runtimeSettings.tooltipHoverDelayMs != null) ? state.runtimeSettings.tooltipHoverDelayMs : '250');
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Tooltip Hover Delay';
+    html += ' <span class="stg-hint">Time pointer must hover over an element before tooltip shows</span>';
+    html += '</span>';
+    html += '<select class="stg-select" id="stg-tooltipHoverDelayMs" onchange="markSettingDirty(\'tooltipHoverDelayMs\');previewTooltipPreferences()" style="width:240px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:4px;color:var(--fg);padding:4px 8px;font-size:12px;cursor:pointer;">';
+    html += '  <option value="0"' + (currentDelay === '0' ? ' selected' : '') + '>Instant (0 ms)</option>';
+    html += '  <option value="150"' + (currentDelay === '150' ? ' selected' : '') + '>Snappy (150 ms)</option>';
+    html += '  <option value="250"' + (currentDelay === '250' ? ' selected' : '') + '>Default (250 ms)</option>';
+    html += '  <option value="500"' + (currentDelay === '500' ? ' selected' : '') + '>Relaxed (500 ms)</option>';
+    html += '  <option value="1000"' + (currentDelay === '1000' ? ' selected' : '') + '>Slow (1000 ms)</option>';
+    html += '</select>';
+    html += '</div>';
+
     var helperOptions = getTooltipHelperVariants();
     var helperVariant = String((state.runtimeSettings && state.runtimeSettings.tooltipHelperVariant) || 'glass-prism');
     html += '<div class="stg-row">';
-    html += '<span class="stg-label">Tooltip Helper Persona';
-    html += ' <span class="stg-hint">Select the Prism helper style shown in rich tooltips</span>';
+    html += '<span class="stg-label">Floating Guide Persona';
+    html += ' <span class="stg-hint">Select the ambient floating companion style & glyph persona</span>';
     html += '</span>';
     html += '<select class="stg-select" id="stg-tooltipHelperVariant" onchange="markSettingDirty(\'tooltipHelperVariant\');previewTooltipPreferences()" style="width:240px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:4px;color:var(--fg);padding:4px 8px;font-size:12px;cursor:pointer;">';
     for (var h = 0; h < helperOptions.length; h++) {
@@ -2517,8 +2549,8 @@ export
 
     var helperVisible = state.runtimeSettings ? (state.runtimeSettings.tooltipHelperVisible !== false) : true;
     html += '<div class="stg-row">';
-    html += '<span class="stg-label">Tooltip Helper Visibility';
-    html += ' <span class="stg-hint">Show helper companion panel inside rich Prism tooltips</span>';
+    html += '<span class="stg-label">Floating Companion Visibility';
+    html += ' <span class="stg-hint">Show ambient floating helper orb in the viewport</span>';
     html += '</span>';
     html += '<span style="display:flex;align-items:center;">';
     html += '<input type="checkbox" id="stg-tooltipHelperVisible"' + (helperVisible ? ' checked' : '') + ' onchange="markSettingDirty(\'tooltipHelperVisible\');previewTooltipPreferences()" style="width:16px;height:16px;cursor:pointer;" />';
@@ -2527,16 +2559,23 @@ export
 
     var helperMotion = state.runtimeSettings ? (state.runtimeSettings.tooltipHelperMotionEnabled !== false) : true;
     html += '<div class="stg-row">';
-    html += '<span class="stg-label">Tooltip Helper Motion';
-    html += ' <span class="stg-hint">Enable avatar orbit and bob animations for helper companions</span>';
+    html += '<span class="stg-label">Companion Particle Motion';
+    html += ' <span class="stg-hint">Enable floating bob, shard orbits, and gentle pulse animations</span>';
     html += '</span>';
     html += '<span style="display:flex;align-items:center;">';
     html += '<input type="checkbox" id="stg-tooltipHelperMotionEnabled"' + (helperMotion ? ' checked' : '') + ' onchange="markSettingDirty(\'tooltipHelperMotionEnabled\');previewTooltipPreferences()" style="width:16px;height:16px;cursor:pointer;" />';
     html += '</span>';
     html += '</div>';
 
+    html += '<div class="stg-row">';
+    html += '<span class="stg-label">Guardian Live Connection';
+    html += ' <span class="stg-hint">Guardian suggestions and live watchpoints stream via WebSocket into dynamic guidance</span>';
+    html += '</span>';
+    html += '<span class="stg-badge stg-badge-green">CONNECTED</span>';
+    html += '</div>';
+
     html += '<div style="margin-top:8px;text-align:right;">';
-    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'telemetryWindow' + '\', \'' + 'actionHistoryLimit' + '\', \'' + 'sessionPackageHistoryLimit' + '\', \'' + 'verboseLogging' + '\', \'' + 'tooltipHelperVariant' + '\', \'' + 'tooltipHelperVisible' + '\', \'' + 'tooltipHelperMotionEnabled' + '\'])">Save</button>';
+    html += '<button class="stg-save-btn" onclick="saveSettings([\'' + 'tooltipsEnabled' + '\', \'' + 'tooltipHoverDelayMs' + '\', \'' + 'tooltipHelperVariant' + '\', \'' + 'tooltipHelperVisible' + '\', \'' + 'tooltipHelperMotionEnabled' + '\'])">Save Tooltip Settings</button>';
     html += '<button class="secondary-button" style="margin-left:8px;" onclick="resetTooltipPreferences()">Reset Tooltip Defaults</button>';
     html += '</div>';
   });
@@ -2985,11 +3024,15 @@ export
 
 export
   function previewTooltipPreferences() {
+  var enabledEl = document.getElementById('stg-tooltipsEnabled');
+  var delayEl = document.getElementById('stg-tooltipHoverDelayMs');
   var variantEl = document.getElementById('stg-tooltipHelperVariant');
   var visibleEl = document.getElementById('stg-tooltipHelperVisible');
   var motionEl = document.getElementById('stg-tooltipHelperMotionEnabled');
-  if (!variantEl && !visibleEl && !motionEl) return;
+  if (!enabledEl && !delayEl && !variantEl && !visibleEl && !motionEl) return;
   applyTooltipRuntimeSettings({
+    tooltipsEnabled: enabledEl ? !!enabledEl.checked : undefined,
+    tooltipHoverDelayMs: delayEl ? Number(delayEl.value) : undefined,
     tooltipHelperVariant: variantEl ? variantEl.value : undefined,
     tooltipHelperVisible: visibleEl ? !!visibleEl.checked : undefined,
     tooltipHelperMotionEnabled: motionEl ? !!motionEl.checked : undefined,
@@ -2999,14 +3042,20 @@ export
 export
   async function resetTooltipPreferences() {
   var defaults = {
+    tooltipsEnabled: true,
+    tooltipHoverDelayMs: 250,
     tooltipHelperVariant: 'glass-prism',
     tooltipHelperVisible: true,
     tooltipHelperMotionEnabled: true,
   };
 
+  var enabledEl = document.getElementById('stg-tooltipsEnabled');
+  var delayEl = document.getElementById('stg-tooltipHoverDelayMs');
   var variantEl = document.getElementById('stg-tooltipHelperVariant');
   var visibleEl = document.getElementById('stg-tooltipHelperVisible');
   var motionEl = document.getElementById('stg-tooltipHelperMotionEnabled');
+  if (enabledEl) enabledEl.checked = defaults.tooltipsEnabled;
+  if (delayEl) delayEl.value = String(defaults.tooltipHoverDelayMs);
   if (variantEl) variantEl.value = defaults.tooltipHelperVariant;
   if (visibleEl) visibleEl.checked = defaults.tooltipHelperVisible;
   if (motionEl) motionEl.checked = defaults.tooltipHelperMotionEnabled;

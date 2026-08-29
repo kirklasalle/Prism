@@ -78,12 +78,28 @@
       const placeholder = document.getElementById("desktop-placeholder");
       const takeoverBanner = document.getElementById("takeover-active-banner");
       const simBadge = document.getElementById("sbx-simulation-badge");
+      const engineBadge = document.getElementById("sbx-engine-badge");
+      const buildBtn = document.getElementById("btn-build-image");
 
       const autoBtn = document.getElementById("btn-mode-autonomous");
       const takeoverBtn = document.getElementById("btn-mode-takeover");
 
       if (simBadge) {
         simBadge.style.display = status.isMock ? "inline-block" : "none";
+      }
+
+      if (engineBadge) {
+        if (status.isMock) {
+          engineBadge.style.display = "none";
+        } else {
+          engineBadge.style.display = "inline-block";
+          const name = status.engineName || "OCI Engine";
+          engineBadge.innerText = name.includes("Podman") ? `🦭 ${name}` : `🐳 ${name}`;
+        }
+      }
+
+      if (buildBtn) {
+        buildBtn.style.display = (status.lastError && (status.lastError.includes("not built") || status.lastError.includes("image"))) ? "inline-block" : "none";
       }
 
       if (status.lastError) {
@@ -416,6 +432,37 @@
       this.togglePiP();
       const tabBtn = document.getElementById("tab-button-desktop");
       if (tabBtn) tabBtn.click();
+    }
+
+    async buildImage() {
+      const buildBtn = document.getElementById("btn-build-image");
+      if (buildBtn) {
+        buildBtn.disabled = true;
+        buildBtn.innerText = "⏳ Building...";
+      }
+      this.showAlert("Building sandbox container image (Debian 12 Bookworm + Openbox + KasmVNC)... this may take 1-2 minutes.");
+      try {
+        const res = await fetch("/api/sandbox/desktop/build-image", {
+          method: "POST",
+          headers: this.getHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (data.ok) {
+          this.hideAlert();
+          this.refreshStatus();
+          alert("Sandbox image built successfully!");
+        } else {
+          this.showAlert("Build failed: " + (data.error || "Unknown error"));
+        }
+      } catch (err) {
+        this.showAlert("Build request error: " + err.message);
+      } finally {
+        if (buildBtn) {
+          buildBtn.disabled = false;
+          buildBtn.innerText = "🔨 Build Image";
+        }
+      }
     }
   }
 

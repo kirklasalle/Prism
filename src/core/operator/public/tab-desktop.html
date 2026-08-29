@@ -2,9 +2,12 @@
   <div id="sandbox-alert-banner" style="display:none; padding:10px 14px; background:rgba(239, 68, 68, 0.12); border:1px solid rgba(239, 68, 68, 0.35); border-radius:8px; align-items:center; justify-content:space-between; gap:10px; font-size:12px;">
     <div style="display:flex; align-items:center; gap:8px; color:#fca5a5;">
       <span style="font-size:16px;">⚠️</span>
-      <span id="sandbox-alert-message">Docker Engine is offline.</span>
+      <span id="sandbox-alert-message">Container Engine offline.</span>
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
+      <button id="btn-build-image" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.buildImage()" style="display:none; font-size:11px; padding:4px 10px; border-color:#34d399; color:#34d399;">
+        🔨 Build Image
+      </button>
       <button id="btn-toggle-simulation" class="secondary-button" onclick="window.prismDesktop && window.prismDesktop.toggleSimulationMode()" style="font-size:11px; padding:4px 10px; border-color:#38bdf8; color:#38bdf8;">
         🧪 Enable Simulation Mode
       </button>
@@ -33,6 +36,11 @@
       <!-- Governance Badge -->
       <span class="badge" style="font-size:10px; padding:3px 8px; border-radius:6px; background:rgba(99, 102, 241, 0.15); border:1px solid rgba(99, 102, 241, 0.4); color:#a5b4fc;">
         🛡️ TIER-2 SANDBOX | GATED EGRESS
+      </span>
+
+      <!-- Container Engine Badge -->
+      <span id="sbx-engine-badge" class="badge" style="font-size:10px; padding:3px 8px; border-radius:6px; background:rgba(56, 189, 248, 0.15); border:1px solid rgba(56, 189, 248, 0.4); color:#38bdf8;">
+        🦭 Container Engine
       </span>
 
       <!-- Simulation Badge -->

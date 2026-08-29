@@ -109,6 +109,7 @@ export interface SandboxStatus {
   cpuPercent: number;
   lastError: string | null;
   isMock: boolean;
+  engineName?: string;
 }
 
 /**
@@ -230,9 +231,158 @@ export class MockContainerExecutor implements IContainerExecutor {
 }
 
 /**
- * Production Docker CLI Executor
+ * Convert Windows path to WSL /mnt/... path if needed
  */
-export class DockerCliExecutor implements IContainerExecutor {
+export function winPathToWsl(p: string): string {
+  if (/^[a-zA-Z]:[\\/]/.test(p)) {
+    const drive = p[0].toLowerCase();
+    const rest = p.slice(2).replace(/\\/g, '/');
+    return `/mnt/${drive}${rest.startsWith('/') ? '' : '/'}${rest}`;
+  }
+  return p.replace(/\\/g, '/');
+}
+
+export type OciEngineType = 'docker' | 'podman' | 'wsl-podman' | 'none';
+
+export interface OciEngineProbeResult {
+  available: boolean;
+  engine: OciEngineType;
+  engineName: string;
+  version?: string;
+  imageBuilt: boolean;
+  error?: string;
+}
+
+/**
+ * Universal Production OCI CLI Executor (Docker, Podman, WSL2 Podman)
+ */
+export class OciCliExecutor implements IContainerExecutor {
+  private activeEngine: OciEngineType | null = null;
+  private wslDistro = 'podman-machine-default';
+  private cachedProbe: OciEngineProbeResult | null = null;
+
+  constructor(preferredEngine?: OciEngineType) {
+    if (preferredEngine) {
+      this.activeEngine = preferredEngine;
+    }
+  }
+
+  /**
+   * Probe available container runtime engine
+   */
+  async probeEngine(imageName = 'prism-sandbox-desktop:debian-slim'): Promise<OciEngineProbeResult> {
+    const envOverride = (process.env.PRISM_CONTAINER_CLI || '').toLowerCase();
+
+    const checkImage = async (engine: OciEngineType): Promise<boolean> => {
+      try {
+        if (engine === 'wsl-podman') {
+          await execFileAsync('wsl', ['-d', this.wslDistro, '-u', 'root', '--', 'podman', 'image', 'inspect', imageName]);
+        } else {
+          await execFileAsync(engine, ['image', 'inspect', imageName]);
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    // 1. If explicit override requested
+    if (envOverride === 'wsl-podman') {
+      try {
+        const { stdout } = await execFileAsync('wsl', ['-d', this.wslDistro, '-u', 'root', '--', 'podman', 'version']);
+        const isBuilt = await checkImage('wsl-podman');
+        this.activeEngine = 'wsl-podman';
+        return { available: true, engine: 'wsl-podman', engineName: 'Podman (WSL2 Background)', version: stdout.split('\n')[0].trim(), imageBuilt: isBuilt };
+      } catch (e: any) {
+        return { available: false, engine: 'none', engineName: 'None', imageBuilt: false, error: e?.message };
+      }
+    }
+    if (envOverride === 'podman') {
+      try {
+        const { stdout } = await execFileAsync('podman', ['version']);
+        const isBuilt = await checkImage('podman');
+        this.activeEngine = 'podman';
+        return { available: true, engine: 'podman', engineName: 'Podman Engine', version: stdout.split('\n')[0].trim(), imageBuilt: isBuilt };
+      } catch (e: any) {
+        return { available: false, engine: 'none', engineName: 'None', imageBuilt: false, error: e?.message };
+      }
+    }
+    if (envOverride === 'docker') {
+      try {
+        const { stdout } = await execFileAsync('docker', ['info']);
+        const isBuilt = await checkImage('docker');
+        this.activeEngine = 'docker';
+        return { available: true, engine: 'docker', engineName: 'Docker Engine', version: stdout.split('\n')[0].trim(), imageBuilt: isBuilt };
+      } catch (e: any) {
+        return { available: false, engine: 'none', engineName: 'None', imageBuilt: false, error: e?.message };
+      }
+    }
+
+    // 2. Auto-probe: Docker CLI
+    try {
+      const { stdout } = await execFileAsync('docker', ['info']);
+      const isBuilt = await checkImage('docker');
+      this.activeEngine = 'docker';
+      this.cachedProbe = { available: true, engine: 'docker', engineName: 'Docker Engine', version: stdout.split('\n')[0].trim(), imageBuilt: isBuilt };
+      return this.cachedProbe;
+    } catch {}
+
+    // 3. Auto-probe: Windows Podman CLI
+    try {
+      const { stdout } = await execFileAsync('podman', ['info']);
+      const isBuilt = await checkImage('podman');
+      this.activeEngine = 'podman';
+      this.cachedProbe = { available: true, engine: 'podman', engineName: 'Podman Engine', version: stdout.split('\n')[0].trim(), imageBuilt: isBuilt };
+      return this.cachedProbe;
+    } catch {}
+
+    // 4. Auto-probe: WSL2 Podman Engine
+    if (process.platform === 'win32') {
+      try {
+        const { stdout } = await execFileAsync('wsl', ['-d', this.wslDistro, '-u', 'root', '--', 'podman', 'info']);
+        const isBuilt = await checkImage('wsl-podman');
+        this.activeEngine = 'wsl-podman';
+        this.cachedProbe = { available: true, engine: 'wsl-podman', engineName: 'Podman (WSL2 Background)', version: stdout.split('\n')[0].trim(), imageBuilt: isBuilt };
+        return this.cachedProbe;
+      } catch {}
+    }
+
+    this.activeEngine = 'none';
+    this.cachedProbe = {
+      available: false,
+      engine: 'none',
+      engineName: 'None',
+      imageBuilt: false,
+      error: 'No active container runtime found (Docker Engine, Podman, or WSL2 Podman).'
+    };
+    return this.cachedProbe;
+  }
+
+  async getActiveEngine(): Promise<OciEngineType> {
+    if (!this.activeEngine) {
+      const probe = await this.probeEngine();
+      this.activeEngine = probe.engine;
+    }
+    return this.activeEngine;
+  }
+
+  /**
+   * Execute an OCI command through the active engine
+   */
+  async execOci(args: string[]): Promise<{ stdout: string; stderr: string }> {
+    const engine = await this.getActiveEngine();
+    if (engine === 'wsl-podman') {
+      return execFileAsync('wsl', ['-d', this.wslDistro, '-u', 'root', '--', 'podman', ...args]);
+    }
+    if (engine === 'podman') {
+      return execFileAsync('podman', args);
+    }
+    if (engine === 'docker') {
+      return execFileAsync('docker', args);
+    }
+    throw new Error('No active container engine found. Start Docker Desktop, Podman, or WSL2 Podman.');
+  }
+
   async start(config: DesktopSandboxConfig): Promise<{ containerId: string }> {
     const containerName = config.containerName || 'prism-sandbox-desktop';
     const image = config.imageName || 'prism-sandbox-desktop:debian-slim';
@@ -260,34 +410,34 @@ export class DockerCliExecutor implements IContainerExecutor {
       image
     ];
 
-    const { stdout } = await execFileAsync('docker', args);
+    const { stdout } = await this.execOci(args);
     return { containerId: stdout.trim().slice(0, 12) };
   }
 
   async stop(containerId: string): Promise<void> {
     try {
-      await execFileAsync('docker', ['stop', '-t', '2', containerId]);
+      await this.execOci(['stop', '-t', '2', containerId]);
     } catch {
-      await execFileAsync('docker', ['kill', containerId]).catch(() => {});
+      await this.execOci(['kill', containerId]).catch(() => {});
     }
   }
 
   async pause(containerId: string): Promise<void> {
-    await execFileAsync('docker', ['pause', containerId]);
+    await this.execOci(['pause', containerId]);
   }
 
   async unpause(containerId: string): Promise<void> {
-    await execFileAsync('docker', ['unpause', containerId]);
+    await this.execOci(['unpause', containerId]);
   }
 
   async commit(containerId: string, tag: string): Promise<{ snapshotId: string }> {
-    const { stdout } = await execFileAsync('docker', ['commit', containerId, tag]);
+    const { stdout } = await this.execOci(['commit', containerId, tag]);
     return { snapshotId: stdout.trim().slice(0, 12) };
   }
 
   async revert(tag: string): Promise<{ containerId: string }> {
     const args = ['run', '-d', '--rm', '-p', '6080:6080', '-p', '5901:5901', tag];
-    const { stdout } = await execFileAsync('docker', args);
+    const { stdout } = await this.execOci(args);
     return { containerId: stdout.trim().slice(0, 12) };
   }
 
@@ -325,7 +475,7 @@ export class DockerCliExecutor implements IContainerExecutor {
     }
 
     if (script) {
-      await execFileAsync('docker', [
+      await this.execOci([
         'exec',
         '-e', `DISPLAY=${display}`,
         containerId,
@@ -335,8 +485,7 @@ export class DockerCliExecutor implements IContainerExecutor {
   }
 
   async captureScreenshot(containerId: string, display: string): Promise<string> {
-    // Fast memory grab via scrot to stdout or xwd
-    const { stdout } = await execFileAsync('docker', [
+    const { stdout } = await this.execOci([
       'exec',
       '-e', `DISPLAY=${display}`,
       containerId,
@@ -346,7 +495,6 @@ export class DockerCliExecutor implements IContainerExecutor {
   }
 
   async captureBurst(containerId: string, count: number, intervalMs: number, display: string): Promise<string[]> {
-    // Direct burst grab using xwd/scrot batch
     const script = `
       for i in $(seq 1 ${count}); do
         scrot -z /tmp/frame_$i.png
@@ -358,7 +506,7 @@ export class DockerCliExecutor implements IContainerExecutor {
         rm -f /tmp/frame_$i.png
       done
     `;
-    const { stdout } = await execFileAsync('docker', [
+    const { stdout } = await this.execOci([
       'exec',
       '-e', `DISPLAY=${display}`,
       containerId,
@@ -367,7 +515,29 @@ export class DockerCliExecutor implements IContainerExecutor {
 
     return stdout.split('---FRAME---').map(s => s.trim()).filter(s => s.length > 0);
   }
+
+  async buildImage(dockerfilePath: string, contextPath: string, imageName: string): Promise<string> {
+    const engine = await this.getActiveEngine();
+    let dfPath = dockerfilePath;
+    let ctxPath = contextPath;
+    if (engine === 'wsl-podman') {
+      dfPath = winPathToWsl(dfPath);
+      ctxPath = winPathToWsl(ctxPath);
+    }
+    const args = ['build', '-t', imageName];
+    if (engine === 'wsl-podman' || engine === 'podman') {
+      args.push('--network=host');
+    }
+    args.push('-f', dfPath, ctxPath);
+    const { stdout, stderr } = await this.execOci(args);
+    return stdout || stderr;
+  }
 }
+
+/**
+ * Backward compatibility alias for DockerCliExecutor
+ */
+export class DockerCliExecutor extends OciCliExecutor {}
 
 /**
  * Governed Desktop Sandbox Manager
@@ -384,6 +554,7 @@ export class DesktopSandboxManager extends EventEmitter {
   private snapshots: SnapshotRecord[] = [];
   private activeActionCount = 0;
   private lastError: string | null = null;
+  private detectedEngineName: string = 'Auto';
 
   constructor(config: DesktopSandboxConfig = {}, activityBus?: ActivityBus) {
     super();
@@ -404,7 +575,7 @@ export class DesktopSandboxManager extends EventEmitter {
 
     this.executor = this.config.mockProvider
       ? new MockContainerExecutor()
-      : new DockerCliExecutor();
+      : new OciCliExecutor();
 
     this.activityBus = activityBus;
   }
@@ -421,7 +592,7 @@ export class DesktopSandboxManager extends EventEmitter {
    */
   setMockMode(enable: boolean): void {
     this.config.mockProvider = enable;
-    this.executor = enable ? new MockContainerExecutor() : new DockerCliExecutor();
+    this.executor = enable ? new MockContainerExecutor() : new OciCliExecutor();
   }
 
   isMockMode(): boolean {
@@ -429,20 +600,47 @@ export class DesktopSandboxManager extends EventEmitter {
   }
 
   /**
-   * Check Docker daemon availability and container image status
+   * Comprehensive OCI Engine & Image Status Check
    */
-  async checkDocker(): Promise<{ available: boolean; imageBuilt: boolean; error?: string }> {
-    try {
-      await execFileAsync('docker', ['info']);
-      try {
-        await execFileAsync('docker', ['image', 'inspect', this.config.imageName]);
-        return { available: true, imageBuilt: true };
-      } catch {
-        return { available: true, imageBuilt: false };
-      }
-    } catch (err: any) {
-      return { available: false, imageBuilt: false, error: err?.message || String(err) };
+  async checkEngine(): Promise<OciEngineProbeResult> {
+    if (this.executor instanceof OciCliExecutor) {
+      const probe = await this.executor.probeEngine(this.config.imageName);
+      this.detectedEngineName = probe.engineName;
+      return probe;
     }
+    return {
+      available: true,
+      engine: 'none',
+      engineName: 'Simulation Provider',
+      imageBuilt: true
+    };
+  }
+
+  /**
+   * Check Docker/OCI daemon availability and container image status
+   */
+  async checkDocker(): Promise<{ available: boolean; imageBuilt: boolean; engine?: string; error?: string }> {
+    const probe = await this.checkEngine();
+    return {
+      available: probe.available,
+      imageBuilt: probe.imageBuilt,
+      engine: probe.engineName,
+      error: probe.error
+    };
+  }
+
+  /**
+   * Build the desktop sandbox container image
+   */
+  async buildSandboxImage(dockerfilePath?: string, contextPath?: string): Promise<{ success: boolean; output: string }> {
+    const df = dockerfilePath || 'deploy/docker/sandbox-desktop/Dockerfile';
+    const ctx = contextPath || 'deploy/docker/sandbox-desktop';
+
+    if (this.executor instanceof OciCliExecutor) {
+      const output = await this.executor.buildImage(df, ctx, this.config.imageName);
+      return { success: true, output };
+    }
+    return { success: true, output: 'Simulation image build acknowledged' };
   }
 
   /**
@@ -466,7 +664,8 @@ export class DesktopSandboxManager extends EventEmitter {
       memoryUsageMb: this.state === 'RUNNING' ? 340 : 0,
       cpuPercent: this.state === 'RUNNING' ? 2.4 : 0.0,
       lastError: this.lastError,
-      isMock: this.config.mockProvider
+      isMock: this.config.mockProvider,
+      engineName: this.detectedEngineName
     };
   }
 

@@ -91,56 +91,56 @@ export function dashboardHtml(port: number, authToken?: string): string {
     </aside>
     <div class="resize-handle" id="resize-handle"></div>
 
-    <main class="workspace">
-      <section class="tabs panel" id="tabs" role="tablist" aria-label="Dashboard sections">
-        <button id="tab-button-chat" type="button" class="tab-button active" data-tab-id="chat" role="tab" aria-selected="true" aria-controls="tab-chat" tabindex="0" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:chat" data-tip-kind="shell-tab">Chat Interface</button>
-        <button id="tab-button-settings" type="button" class="tab-button" data-tab-id="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:settings" data-tip-kind="shell-tab">Provider &amp; Settings</button>
-        <button id="tab-button-tools" type="button" class="tab-button" data-tab-id="tools" role="tab" aria-selected="false" aria-controls="tab-tools" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:tools" data-tip-kind="shell-tab">Tools &amp; Plugins</button>
-        <button id="tab-button-agentic" type="button" class="tab-button" data-tab-id="agentic" role="tab" aria-selected="false" aria-controls="tab-agentic" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:agentic" data-tip-kind="shell-tab">Agentic Control</button>
-        <button id="tab-button-computer" type="button" class="tab-button" data-tab-id="computer" role="tab" aria-selected="false" aria-controls="tab-computer" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:computer" data-tip-kind="shell-tab">Computer Control</button>
-        <button id="tab-button-desktop" type="button" class="tab-button" data-tab-id="desktop" role="tab" aria-selected="false" aria-controls="tab-desktop" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:desktop" data-tip-kind="shell-tab">Sandbox Desktop</button>
-        <button id="tab-button-browser" type="button" class="tab-button" data-tab-id="browser" role="tab" aria-selected="false" aria-controls="tab-browser" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:browser" data-tip-kind="shell-tab">Browser Control</button>
-        <button id="tab-button-workspace" type="button" class="tab-button" data-tab-id="workspace" role="tab" aria-selected="false" aria-controls="tab-workspace" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:workspace" data-tip-kind="shell-tab">Workspace</button>
-        <button id="tab-button-network" type="button" class="tab-button" data-tab-id="network" role="tab" aria-selected="false" aria-controls="tab-network" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:network" data-tip-kind="shell-tab">Network</button>
-        <button id="tab-button-robotics" type="button" class="tab-button addon-tab" data-tab-id="robotics" role="tab" aria-selected="false" aria-controls="tab-robotics" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:robotics" data-tip-kind="shell-tab">Robotics Entity</button>
+    <main class="workspace" id="main-workspace">
+      <div class="tabs-header-bar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+        <section class="tabs panel" id="tabs" role="tablist" aria-label="Dashboard sections" style="margin-bottom:0;flex:1;">
+          <button id="tab-button-chat" type="button" class="tab-button active" data-tab-id="chat" role="tab" aria-selected="true" aria-controls="tab-chat" tabindex="0" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:chat" data-tip-kind="shell-tab">Chat Interface</button>
+          <button id="tab-button-settings" type="button" class="tab-button" data-tab-id="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:settings" data-tip-kind="shell-tab">Provider &amp; Settings</button>
+          <button id="tab-button-tools" type="button" class="tab-button" data-tab-id="tools" role="tab" aria-selected="false" aria-controls="tab-tools" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:tools" data-tip-kind="shell-tab">Tools &amp; Plugins</button>
+          <button id="tab-button-agentic" type="button" class="tab-button" data-tab-id="agentic" role="tab" aria-selected="false" aria-controls="tab-agentic" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:agentic" data-tip-kind="shell-tab">Agentic Control</button>
+          <button id="tab-button-computer" type="button" class="tab-button" data-tab-id="computer" role="tab" aria-selected="false" aria-controls="tab-computer" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:computer" data-tip-kind="shell-tab">Computer Control</button>
+          <button id="tab-button-desktop" type="button" class="tab-button" data-tab-id="desktop" role="tab" aria-selected="false" aria-controls="tab-desktop" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:desktop" data-tip-kind="shell-tab">Sandbox Desktop</button>
+          <button id="tab-button-browser" type="button" class="tab-button" data-tab-id="browser" role="tab" aria-selected="false" aria-controls="tab-browser" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:browser" data-tip-kind="shell-tab">Browser Control</button>
+          <button id="tab-button-workspace" type="button" class="tab-button" data-tab-id="workspace" role="tab" aria-selected="false" aria-controls="tab-workspace" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:workspace" data-tip-kind="shell-tab">Workspace</button>
+          <button id="tab-button-network" type="button" class="tab-button" data-tab-id="network" role="tab" aria-selected="false" aria-controls="tab-network" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:network" data-tip-kind="shell-tab">Network</button>
+          <button id="tab-button-robotics" type="button" class="tab-button addon-tab" data-tab-id="robotics" role="tab" aria-selected="false" aria-controls="tab-robotics" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:robotics" data-tip-kind="shell-tab">Robotics Entity</button>
 
-        <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:telemetry" data-tip-kind="shell-tab">Telemetry</button>
-        <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:logs" data-tip-kind="shell-tab">Logs &amp; Debug</button>
-        <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:scheduler" data-tip-kind="shell-tab">Scheduler</button>
-        <button id="tab-button-channels" type="button" class="tab-button" data-tab-id="channels" role="tab" aria-selected="false" aria-controls="tab-channels" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:channels" data-tip-kind="shell-tab">Channels</button>
-        <button id="tab-button-wiki" type="button" class="tab-button" data-tab-id="wiki" role="tab" aria-selected="false" aria-controls="tab-wiki" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:wiki" data-tip-kind="shell-tab">Prism Wiki</button>
-      </section>
+          <button id="tab-button-telemetry" type="button" class="tab-button" data-tab-id="telemetry" role="tab" aria-selected="false" aria-controls="tab-telemetry" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:telemetry" data-tip-kind="shell-tab">Telemetry</button>
+          <button id="tab-button-logs" type="button" class="tab-button" data-tab-id="logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:logs" data-tip-kind="shell-tab">Logs &amp; Debug</button>
+          <button id="tab-button-scheduler" type="button" class="tab-button" data-tab-id="scheduler" role="tab" aria-selected="false" aria-controls="tab-scheduler" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:scheduler" data-tip-kind="shell-tab">Scheduler</button>
+          <button id="tab-button-channels" type="button" class="tab-button" data-tab-id="channels" role="tab" aria-selected="false" aria-controls="tab-channels" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:channels" data-tip-kind="shell-tab">Channels</button>
+          <button id="tab-button-wiki" type="button" class="tab-button" data-tab-id="wiki" role="tab" aria-selected="false" aria-controls="tab-wiki" tabindex="-1" onclick="setActiveTab(this.dataset.tabId)" data-tip-id="shell:tab:wiki" data-tip-kind="shell-tab">Prism Wiki</button>
+        </section>
 
-      <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat" aria-hidden="false"></section>
+        <!-- PRISM Layout Mode Selector -->
+        <div class="layout-mode-selector" id="layout-mode-selector">
+          <button id="layout-btn-single" class="layout-mode-btn" data-mode="single" onclick="setLayoutMode('single')" title="Single Full Tab Mode">⬚ Single</button>
+          <button id="layout-btn-split" class="layout-mode-btn active" data-mode="split" onclick="setLayoutMode('split')" title="Split Canvas (Side-by-Side)">◫ Split Canvas</button>
+          <button id="layout-btn-docked" class="layout-mode-btn" data-mode="docked" onclick="setLayoutMode('docked')" title="Docked Multi-Panel Grid">⊞ Docked</button>
+        </div>
+      </div>
 
-      <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true"></section>
+      <div id="workspace-viewport" class="workspace-viewport mode-split">
+        <section id="tab-chat" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-chat" aria-hidden="false"></section>
+        
+        <!-- Interactive Split Canvas Divider -->
+        <div class="split-viewport-resizer" id="split-viewport-resizer" title="Drag to resize Split Canvas"></div>
 
-      <section id="tab-tools" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-tools" aria-hidden="true"></section>
-
-      <section id="tab-agentic" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-agentic" aria-hidden="true"></section>
-
-      <section id="tab-computer" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-computer" aria-hidden="true"></section>
-
-      <section id="tab-desktop" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-desktop" aria-hidden="true"></section>
-
-      <section id="tab-browser" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-browser" aria-hidden="true"></section>
-
-      <section id="tab-workspace" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-workspace" aria-hidden="true"></section>
-
-      <section id="tab-network" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-network" aria-hidden="true"></section>
-
-      <section id="tab-robotics" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-robotics" aria-hidden="true"></section>
-
-
-      <section id="tab-telemetry" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-telemetry" aria-hidden="true"></section>
-
-      <section id="tab-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-logs" aria-hidden="true"></section>
-
-      <section id="tab-scheduler" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-scheduler" aria-hidden="true"></section>
-
-      <section id="tab-channels" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-channels" aria-hidden="true"></section>
-
-      <section id="tab-wiki" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-wiki" aria-hidden="true"></section>
+        <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true"></section>
+        <section id="tab-tools" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-tools" aria-hidden="true"></section>
+        <section id="tab-agentic" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-agentic" aria-hidden="true"></section>
+        <section id="tab-computer" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-computer" aria-hidden="true"></section>
+        <section id="tab-desktop" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-desktop" aria-hidden="true"></section>
+        <section id="tab-browser" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-browser" aria-hidden="true"></section>
+        <section id="tab-workspace" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-workspace" aria-hidden="true"></section>
+        <section id="tab-network" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-network" aria-hidden="true"></section>
+        <section id="tab-robotics" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-robotics" aria-hidden="true"></section>
+        <section id="tab-telemetry" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-telemetry" aria-hidden="true"></section>
+        <section id="tab-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-logs" aria-hidden="true"></section>
+        <section id="tab-scheduler" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-scheduler" aria-hidden="true"></section>
+        <section id="tab-channels" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-channels" aria-hidden="true"></section>
+        <section id="tab-wiki" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-wiki" aria-hidden="true"></section>
+      </div>
 
       <div id="sched-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:520px;width:90%;">
@@ -212,6 +212,47 @@ export function dashboardHtml(port: number, authToken?: string): string {
       if (!dragging) return;
       dragging = false;
       handle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  })();
+
+  // ── Split Canvas Interactive Resizer ──
+  (function() {
+    var resizer = document.getElementById('split-viewport-resizer');
+    var viewport = document.getElementById('workspace-viewport');
+    if (!resizer || !viewport) return;
+    var dragging = false;
+    var startX = 0;
+    var startLeftWidth = 0;
+    var totalWidth = 0;
+
+    resizer.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      dragging = true;
+      startX = e.clientX;
+      var chatPanel = document.getElementById('tab-chat');
+      startLeftWidth = chatPanel ? chatPanel.getBoundingClientRect().width : (viewport.getBoundingClientRect().width * 0.45);
+      totalWidth = viewport.getBoundingClientRect().width;
+      resizer.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (!dragging || !totalWidth) return;
+      var newLeftWidth = Math.max(300, Math.min(totalWidth - 340, startLeftWidth + (e.clientX - startX)));
+      var leftPct = Math.round((newLeftWidth / totalWidth) * 100);
+      var rightPct = 100 - leftPct;
+      viewport.style.setProperty('--split-left-flex', leftPct);
+      viewport.style.setProperty('--split-right-flex', rightPct);
+      try { localStorage.setItem('prism-split-ratio', leftPct); } catch(_) {}
+    });
+
+    document.addEventListener('mouseup', function() {
+      if (!dragging) return;
+      dragging = false;
+      resizer.classList.remove('active');
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     });

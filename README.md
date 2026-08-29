@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.23.1-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.24.0-06b6d4?style=for-the-badge&labelColor=0a0a0f" alt="Version" />
   <img src="https://img.shields.io/badge/license-Apache_2.0-6366f1?style=for-the-badge&labelColor=0a0a0f" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Node.js" />
-  <img src="https://img.shields.io/badge/tests-225_discovered_suites_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-226_discovered_suites_passing-22c55e?style=for-the-badge&labelColor=0a0a0f" alt="Tests" />
   <img src="https://img.shields.io/badge/audit-system_approved_100%25-10b981?style=for-the-badge&labelColor=0a0a0f" alt="Audit" />
   <img src="https://img.shields.io/badge/CI-7_workflows-f59e0b?style=for-the-badge&labelColor=0a0a0f" alt="CI" />
 </p>
@@ -356,7 +356,7 @@ Provider/model choice is persisted per chat session. Secure API key storage uses
 
 PRISM maintains one of the most comprehensive test suites in the agentic software ecosystem:
 
-- **225 auto-discovered test suites passing** covering unit, integration, E2E, security, and governance scenarios
+- **226 auto-discovered test suites passing** covering unit, integration, E2E, security, and governance scenarios
 - **7 GitHub Actions workflows**: CI, CodeQL, Docker publish, Helm publish, nightly, quality gates, release
 - **Multi-platform CI matrix**: Ubuntu + Windows, Node.js 22 + 23
 - **9 CI qualification gates** including PAD integrity, plugin signing, directive tests, security tests, governance tests

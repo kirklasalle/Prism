@@ -1,11 +1,15 @@
 # PRISM Documentation Index
 
-**Last updated:** 2026-08-17 — Documentation refresh, v0.23.1 architecture, and world-class illustrations
-**Active docs:** 95 files | **Archived:** 66 files → `archive/`
+**Last updated:** 2026-08-29 — Documentation refresh, v0.24.0 architecture, August 2026 Model Matrix & xAI Provider
+**Active docs:** 98 files | **Archived:** 66 files → `archive/`
 
 ## Quick Links — Start Here
 
-- **[STATUS.md](STATUS.md)** — Authoritative v0.23.1 status: what's shipped, pending, gated
+- **[STATUS.md](STATUS.md)** — Authoritative v0.24.0 status: what's shipped, pending, gated
+- **[MODEL_CAPABILITY_MATRIX_AUDIT_AUG_2026.md](MODEL_CAPABILITY_MATRIX_AUDIT_AUG_2026.md)** — Model Capability Matrix August 2026 Frontier Audit & Modernization
+- **[LLM_MODEL_MATRIX.md](LLM_MODEL_MATRIX.md)** — Canonical LLM Capability & Rate Limit Matrix (Google Gemini, OpenAI, Claude 5, xAI Grok, DeepSeek V4)
+- **[PRISM_CHAT_INTELLIGENT_AGGREGATOR_AND_CANVAS_ARCHITECTURE.md](PRISM_CHAT_INTELLIGENT_AGGREGATOR_AND_CANVAS_ARCHITECTURE.md)** — Split-Canvas & Multi-Panel Dockable Workspace
+- **[OCI_CONTAINER_ENGINE_DESKTOP_SANDBOX_PLAN.md](OCI_CONTAINER_ENGINE_DESKTOP_SANDBOX_PLAN.md)** — Multi-Tier OCI Container Engine Support for Governed Visual Desktop Sandbox
 - **[PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md](PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.md)** ([HTML Version](PRISM_MASTER_CRITICAL_AND_MARKET_AUDIT_2026.html)) — Master Critical Technical, Security, CAC Governance & Global Market Audit (2026)
 - **[PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md](PRISM_WORLD_CLASS_SAP_APPROVAL_PACKAGE_2026.md)** — Master SAP approval package (code, docs, market, critical audit)
 - **[PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md](PRISM_AUDIT_MASTER_MATRIX_2026-07-20.md)** — Single three-state matrix (Accomplished/In Progress/Not Yet)

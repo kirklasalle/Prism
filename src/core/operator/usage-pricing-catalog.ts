@@ -6,7 +6,7 @@
  */
 
 /** ISO date the pricing figures below were last verified. Surfaced by the Matrix "Update" button. */
-export const PRICING_VERIFIED_AT = "2026-08-10";
+export const PRICING_VERIFIED_AT = "2026-08-29";
 
 export interface ModelPricing {
     inputPer1M: number; // USD per 1M input tokens
@@ -19,8 +19,12 @@ export interface ModelPricing {
 /** Catalog keyed by "<providerId>/<modelPattern>" — patterns are prefix-matched. */
 export const PRICING_CATALOG: Record<string, ModelPricing> = {
     // ── OpenAI ────────────────────────────────────────────────────────────────
+    "openai/gpt-5.6-sol": { inputPer1M: 1.25, outputPer1M: 10.0, label: "GPT-5.6 Sol", tier: 5 },
+    "openai/gpt-5.6-terra": { inputPer1M: 0.5, outputPer1M: 3.0, label: "GPT-5.6 Terra", tier: 4 },
+    "openai/gpt-5.6-luna": { inputPer1M: 0.15, outputPer1M: 0.6, label: "GPT-5.6 Luna", tier: 3 },
     "openai/gpt-5": { inputPer1M: 1.25, outputPer1M: 10.0, label: "GPT-5", tier: 5 },
     "openai/gpt-5-mini": { inputPer1M: 0.25, outputPer1M: 2.0, label: "GPT-5 mini", tier: 4 },
+    "openai/o3-pro": { inputPer1M: 15.0, outputPer1M: 60.0, label: "o3 Pro", tier: 5 },
     "openai/gpt-4o": { inputPer1M: 2.5, outputPer1M: 10.0, label: "GPT-4o", tier: 5 },
     "openai/gpt-4o-mini": { inputPer1M: 0.15, outputPer1M: 0.6, label: "GPT-4o mini", tier: 3 },
     "openai/gpt-4-turbo": { inputPer1M: 10.0, outputPer1M: 30.0, label: "GPT-4 Turbo", tier: 5 },
@@ -33,6 +37,11 @@ export const PRICING_CATALOG: Record<string, ModelPricing> = {
     "openai/o4-mini": { inputPer1M: 1.1, outputPer1M: 4.4, label: "o4 mini", tier: 4 },
 
     // ── Anthropic ─────────────────────────────────────────────────────────────
+    "anthropic/claude-fable-5": { inputPer1M: 15.0, outputPer1M: 75.0, label: "Claude Fable 5", tier: 5 },
+    "anthropic/claude-opus-5": { inputPer1M: 15.0, outputPer1M: 75.0, label: "Claude Opus 5", tier: 5 },
+    "anthropic/claude-sonnet-5": { inputPer1M: 3.0, outputPer1M: 15.0, label: "Claude Sonnet 5", tier: 4 },
+    "anthropic/claude-mythos-5": { inputPer1M: 25.0, outputPer1M: 125.0, label: "Claude Mythos 5", tier: 5 },
+    "anthropic/claude-haiku-4-5": { inputPer1M: 0.8, outputPer1M: 4.0, label: "Claude Haiku 4.5", tier: 3 },
     "anthropic/claude-opus-4": { inputPer1M: 15.0, outputPer1M: 75.0, label: "Claude Opus 4", tier: 5 },
     "anthropic/claude-sonnet-4": { inputPer1M: 3.0, outputPer1M: 15.0, label: "Claude Sonnet 4", tier: 5 },
     "anthropic/claude-3-5-sonnet": { inputPer1M: 3.0, outputPer1M: 15.0, label: "Claude 3.5 Sonnet", tier: 5 },
@@ -43,6 +52,10 @@ export const PRICING_CATALOG: Record<string, ModelPricing> = {
     "anthropic/claude-2": { inputPer1M: 8.0, outputPer1M: 24.0, label: "Claude 2", tier: 4 },
 
     // ── Google ────────────────────────────────────────────────────────────────
+    "google/gemini-3.7-flash": { inputPer1M: 0.1, outputPer1M: 0.4, label: "Gemini 3.7 Flash", tier: 5 },
+    "google/gemini-3.6-flash": { inputPer1M: 0.1, outputPer1M: 0.4, label: "Gemini 3.6 Flash", tier: 4 },
+    "google/gemini-omni-1.1-flash": { inputPer1M: 0.15, outputPer1M: 0.6, label: "Gemini Omni 1.1 Flash", tier: 4 },
+    "google/gemini-3.1-pro": { inputPer1M: 3.5, outputPer1M: 10.5, label: "Gemini 3.1 Pro", tier: 5 },
     "google/gemini-3.0-flash": { inputPer1M: 0.1, outputPer1M: 0.4, label: "Gemini 3.0 Flash", tier: 4 },
     "google/gemini-3-flash": { inputPer1M: 0.1, outputPer1M: 0.4, label: "Gemini 3 Flash", tier: 4 },
     "google/gemini-2.5-flash": { inputPer1M: 0.1, outputPer1M: 0.4, label: "Gemini 2.5 Flash", tier: 4 },
@@ -52,11 +65,20 @@ export const PRICING_CATALOG: Record<string, ModelPricing> = {
     "google/gemini-1.5-flash": { inputPer1M: 0.075, outputPer1M: 0.3, label: "Gemini 1.5 Flash", tier: 3 },
     "google/gemini-1.5-flash-8b": { inputPer1M: 0.0375, outputPer1M: 0.15, label: "Gemini 1.5 Flash 8B", tier: 2 },
 
+    // ── xAI ───────────────────────────────────────────────────────────────────
+    "xai/grok-4.6": { inputPer1M: 3.0, outputPer1M: 15.0, label: "Grok 4.6", tier: 5 },
+    "xai/grok-4.3": { inputPer1M: 1.5, outputPer1M: 6.0, label: "Grok 4.3", tier: 4 },
+    "xai/grok-4.1-fast": { inputPer1M: 0.2, outputPer1M: 0.8, label: "Grok 4.1 Fast", tier: 3 },
+    "xai/grok-2": { inputPer1M: 2.0, outputPer1M: 10.0, label: "Grok 2", tier: 4 },
+
     // ── Mistral ───────────────────────────────────────────────────────────────
-    "mistral/mistral-large": { inputPer1M: 2.0, outputPer1M: 6.0, label: "Mistral Large", tier: 5 },
+    "mistral/mistral-large-3": { inputPer1M: 2.0, outputPer1M: 6.0, label: "Mistral Large 3", tier: 5 },
+    "mistral/mistral-large": { inputPer1M: 2.0, outputPer1M: 6.0, label: "Mistral Large", tier: 4 },
     "mistral/mistral-small": { inputPer1M: 0.2, outputPer1M: 0.6, label: "Mistral Small", tier: 3 },
     "mistral/mistral-medium": { inputPer1M: 2.7, outputPer1M: 8.1, label: "Mistral Medium", tier: 4 },
     "mistral/codestral": { inputPer1M: 0.2, outputPer1M: 0.6, label: "Codestral", tier: 4 },
+    "mistral/magistral": { inputPer1M: 1.5, outputPer1M: 4.5, label: "Magistral", tier: 4 },
+    "mistral/pixtral-large": { inputPer1M: 2.0, outputPer1M: 6.0, label: "Pixtral Large", tier: 4 },
     "mistral/mistral-7b": { inputPer1M: 0.25, outputPer1M: 0.25, label: "Mistral 7B", tier: 2 },
 
     // ── Groq ──────────────────────────────────────────────────────────────────
@@ -66,12 +88,16 @@ export const PRICING_CATALOG: Record<string, ModelPricing> = {
     "groq/mixtral-8x7b": { inputPer1M: 0.24, outputPer1M: 0.24, label: "Mixtral 8x7B (Groq)", tier: 3 },
 
     // ── DeepSeek ──────────────────────────────────────────────────────────────
-    "deepseek/deepseek-chat": { inputPer1M: 0.27, outputPer1M: 1.1, label: "DeepSeek V3", tier: 5 },
+    "deepseek/deepseek-v4-pro": { inputPer1M: 0.27, outputPer1M: 1.1, label: "DeepSeek V4 Pro", tier: 5 },
+    "deepseek/deepseek-v4-flash": { inputPer1M: 0.1, outputPer1M: 0.4, label: "DeepSeek V4 Flash", tier: 4 },
+    "deepseek/deepseek-chat": { inputPer1M: 0.27, outputPer1M: 1.1, label: "DeepSeek V3", tier: 4 },
     "deepseek/deepseek-reasoner": { inputPer1M: 0.55, outputPer1M: 2.19, label: "DeepSeek R1", tier: 5 },
 
     // ── Cohere ────────────────────────────────────────────────────────────────
+    "cohere/command-a-plus": { inputPer1M: 2.5, outputPer1M: 10.0, label: "Command A+", tier: 4 },
     "cohere/command-r-plus": { inputPer1M: 2.5, outputPer1M: 10.0, label: "Command R+", tier: 4 },
     "cohere/command-r": { inputPer1M: 0.15, outputPer1M: 0.6, label: "Command R", tier: 3 },
+    "cohere/north-mini-code": { inputPer1M: 0.2, outputPer1M: 0.8, label: "North Mini Code", tier: 3 },
 
     // ── Perplexity ────────────────────────────────────────────────────────────
     "perplexity/sonar-pro": { inputPer1M: 3.0, outputPer1M: 15.0, label: "Sonar Pro", tier: 4 },

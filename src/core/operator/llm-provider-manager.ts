@@ -158,6 +158,7 @@ export interface SRCostEstimate {
 export type PrismLlmProviderId =
     | "openai"
     | "anthropic"
+    | "xai"
     | "ollama"
     | "ollama-cloud"
     | "custom"
@@ -180,6 +181,7 @@ export const ALL_PROVIDER_IDS: PrismLlmProviderId[] = [
     "google",
     "openai",
     "anthropic",
+    "xai",
     "mistral",
     "cohere",
     "groq",
@@ -317,31 +319,41 @@ export type LlmStreamChunk =
     | { type: "tool_call_delta"; id: string; arguments: string }
     | { type: "done"; stopReason: string };
 
-const OPENAI_DEFAULT_MODELS = ["gpt-5", "gpt-5-mini", "o4-mini", "o3-mini", "gpt-4.1"];
+const OPENAI_DEFAULT_MODELS = [
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5",
+    "gpt-5-mini",
+    "o3-pro",
+];
 
 const ANTHROPIC_DEFAULT_MODELS = [
-    "claude-sonnet-4-5-20251022",
-    "claude-haiku-4-5-20251022",
-    "claude-opus-4-5-20251101",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
+    "claude-fable-5",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-8",
+    "claude-sonnet-4-6",
 ];
 
+const XAI_DEFAULT_MODELS = ["grok-4.6", "grok-4.3", "grok-4.1-fast", "grok-2"];
+
 const GOOGLE_DEFAULT_MODELS = [
-    "models/gemini-2.5-flash",
+    "models/gemini-3.7-flash",
+    "models/gemini-3.6-flash",
+    "models/gemini-3.1-pro",
     "models/gemini-3.0-flash",
-    "models/gemini-3-flash",
-    "models/gemini-2.5-pro",
-    "models/gemini-1.5-pro",
+    "models/gemini-2.5-flash",
 ];
-const MISTRAL_DEFAULT_MODELS = ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"];
-const COHERE_DEFAULT_MODELS = ["command-r-plus", "command-r", "command-light"];
+const MISTRAL_DEFAULT_MODELS = ["mistral-large-3", "mistral-large-latest", "codestral", "magistral", "mistral-small-latest"];
+const COHERE_DEFAULT_MODELS = ["command-a-plus", "command-r-plus", "command-r"];
 const GROQ_DEFAULT_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"];
 const TOGETHER_DEFAULT_MODELS = [
     "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
     "mistralai/Mixtral-8x7B-Instruct-v0.1",
 ];
-const DEEPSEEK_DEFAULT_MODELS = ["deepseek-chat", "deepseek-reasoner"];
+const DEEPSEEK_DEFAULT_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"];
 const PERPLEXITY_DEFAULT_MODELS = ["sonar-pro", "sonar"];
 const FIREWORKS_DEFAULT_MODELS = [
     "accounts/fireworks/models/llama-v3p1-70b-instruct",
@@ -353,6 +365,7 @@ const OPENROUTER_DEFAULT_MODELS = [
     "meta-llama/llama-3.3-70b-instruct:free",
     "openai/gpt-5",
     "anthropic/claude-3.5-sonnet",
+    "xai/grok-4.6",
 ];
 
 const OLLAMA_CLOUD_DEFAULT_MODELS = [
@@ -455,6 +468,11 @@ export function sortOpenRouterModels(models: string[]): string[] {
 function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null {
     const lower = modelPattern.toLowerCase();
 
+    // xAI Grok (check before openrouter if it has grok)
+    if (lower.startsWith("grok-") || lower.startsWith("grok") || lower.startsWith("xai/")) {
+        return "xai";
+    }
+
     // OpenAI Reasoning and GPT series
     if (
         lower.startsWith("gpt-") ||
@@ -464,6 +482,8 @@ function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null
         lower.startsWith("whisper-") ||
         lower.startsWith("tts-") ||
         lower.startsWith("sora-") ||
+        lower.startsWith("text-embedding-") ||
+        lower.startsWith("dall-e-") ||
         lower === "o1" ||
         lower === "o3" ||
         lower === "o4"
@@ -482,7 +502,12 @@ function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null
     }
 
     // Mistral AI
-    if (lower.startsWith("mistral-") || lower.startsWith("pixtral-") || lower.startsWith("codestral-")) {
+    if (
+        lower.startsWith("mistral-") ||
+        lower.startsWith("pixtral-") ||
+        lower.startsWith("codestral") ||
+        lower.startsWith("magistral")
+    ) {
         return "mistral";
     }
 
@@ -497,7 +522,7 @@ function detectProviderForModel(modelPattern: string): PrismLlmProviderId | null
     }
 
     // Cohere Command
-    if (lower.startsWith("cohere-") || lower.startsWith("command-")) {
+    if (lower.startsWith("cohere-") || lower.startsWith("command-") || lower.startsWith("north-mini-")) {
         return "cohere";
     }
 
@@ -605,6 +630,21 @@ export class LlmProviderManager {
                     this.env.PRISM_LLM_PROVIDER === "anthropic"
                         ? this.env.PRISM_LLM_MODEL?.trim() || ANTHROPIC_DEFAULT_MODELS[0] || null
                         : ANTHROPIC_DEFAULT_MODELS[0] || null,
+                requiresApiKey: true,
+                settingsSource: "environment",
+            },
+            xai: {
+                id: "xai",
+                label: "xAI (Grok)",
+                kind: "remote",
+                baseUrl: trimSlash(this.env.PRISM_XAI_BASE_URL?.trim() || "https://api.x.ai/v1"),
+                apiKey: this.env.XAI_API_KEY?.trim() || this.env.PRISM_XAI_API_KEY?.trim(),
+                apiKeyHeader: "Authorization",
+                defaultModels: parseModelList(this.env.PRISM_XAI_MODELS, XAI_DEFAULT_MODELS),
+                defaultModel:
+                    this.env.PRISM_LLM_PROVIDER === "xai"
+                        ? this.env.PRISM_LLM_MODEL?.trim() || XAI_DEFAULT_MODELS[0] || null
+                        : XAI_DEFAULT_MODELS[0] || null,
                 requiresApiKey: true,
                 settingsSource: "environment",
             },

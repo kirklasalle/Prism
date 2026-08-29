@@ -945,7 +945,21 @@ export
 
       var viewBtn = '';
       if (name === 'browser_control' || name === 'browser_create') {
-        viewBtn = '<button class="secondary-button" style="margin-left:10px;font-size:11px;padding:2px 8px;" onclick="event.stopPropagation(); try{ if(typeof setActiveTab===\'function\'){ setActiveTab(\'browser\'); } if(typeof setBrowserView===\'function\'){ setBrowserView(\'viewport\'); } }catch(e){console.error(e);} return false;">View in Browser Control</button>';
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'browser\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'browser\'); } if(typeof setBrowserView===\'function\'){ setBrowserView(\'viewport\'); } }catch(e){console.error(e);} return false;">🌐 Open Browser Canvas</button>';
+      } else if (name === 'computer' || name === 'screenshot' || name === 'mouse_move' || name === 'left_click' || name === 'right_click' || name === 'type') {
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'computer\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'computer\'); } }catch(e){console.error(e);} return false;">🖥️ Open Computer Canvas</button>';
+      } else if (name === 'desktop' || name === 'container_sandbox') {
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'desktop\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'desktop\'); } }catch(e){console.error(e);} return false;">💻 Open Desktop Sandbox</button>';
+      } else if (name.indexOf('file_') === 0 || name.indexOf('prism_ide') === 0 || name.indexOf('web_') === 0) {
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'workspace\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'workspace\'); } }catch(e){console.error(e);} return false;">📂 Open Workspace Canvas</button>';
+      } else if (name === 'email_ops' || name === 'calendar_plan' || name === 'sms_send' || name === 'notes_extract' || name === 'tasks_timeline') {
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'channels\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'channels\'); } }catch(e){console.error(e);} return false;">📫 Open in Channels</button>';
+      } else if (name.indexOf('robotics') >= 0 || name.indexOf('vrgc') >= 0 || name.indexOf('wifivision') >= 0) {
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'robotics\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'robotics\'); } }catch(e){console.error(e);} return false;">📡 Open Robotics Canvas</button>';
+      } else if (name.indexOf('network') >= 0 || name === 'http_request') {
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'network\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'network\'); } }catch(e){console.error(e);} return false;">⚡ Open Network Canvas</button>';
+      } else if (name.indexOf('telemetry') >= 0 || name.indexOf('usage') >= 0) {
+        viewBtn = '<button class="canvas-project-btn" onclick="event.stopPropagation(); try{ if(typeof openSplitCanvas===\'function\'){ openSplitCanvas(\'telemetry\'); }else if(typeof setActiveTab===\'function\'){ setActiveTab(\'telemetry\'); } }catch(e){console.error(e);} return false;">📊 Open Telemetry</button>';
       }
 
       blocks.push(

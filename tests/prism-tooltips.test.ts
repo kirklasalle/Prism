@@ -2,11 +2,14 @@
  * Frontend unit tests for prism-tooltips.js — the Prism Tooltips framework.
  *
  * Verifies:
- *   - initPrismTooltips() injects a single #prism-tooltip overlay
+ *   - initPrismTooltips() injects #prism-tooltip overlay and decoupled #prism-companion
  *   - registerTooltipById attaches descriptors that drive tooltip content
- *   - pushGuardianTip is observed on the next show via the rotation order
+ *   - pushGuardianTip is observed on the next show via the rotation order and updates companion
  *   - server tip cache, when primed, surfaces in the dynamic line
  *   - lore array rotates through descriptor.lore on subsequent shows
+ *   - master enable/disable setting suppresses tooltip overlay
+ *   - in-tooltip quick disable checkbox turns off tooltips
+ *   - persona variant switching updates companion glyph & themes
  *
  * Run: mocha dist/tests/prism-tooltips.test.js --timeout 30000
  */
@@ -18,6 +21,12 @@ import { join } from "node:path";
 
 interface PrismTooltipsModule {
     initPrismTooltips: () => void;
+    applyTooltipRuntimeSettings: (settings: any) => void;
+    setTooltipsEnabled: (enabled: boolean, persist?: boolean) => void;
+    isTooltipsEnabled: () => boolean;
+    getHoverDelayMs: () => number;
+    setHoverDelayMs: (ms: number, persist?: boolean) => void;
+    getTooltipHelperVariants: () => Array<{ value: string; label: string }>;
     registerTooltip: (el: any, descriptor: any) => void;
     registerTooltipById: (tipId: string, descriptor: any) => void;
     setDynamicProvider: (kind: string, fn: any) => void;
@@ -25,10 +34,15 @@ interface PrismTooltipsModule {
     primeServerTip: (tipId: string, payload: any) => void;
     autoCoverContainer: (root: any) => number;
     registerTooltipsByTab: (tabId: string) => number;
-    __TEST__: { reset: () => void; state: any };
+    renderFloatingCompanion: () => void;
+    __TEST__: {
+        reset: () => void;
+        state: any;
+        triggerQuickDisable: () => void;
+    };
 }
 
-describe("prism-tooltips.js — framework", function () {
+describe("prism-tooltips.js — framework & guidance subsystem", function () {
     this.timeout(30_000);
     let dom: InstanceType<typeof JSDOM>;
     let mod: PrismTooltipsModule;
@@ -64,14 +78,17 @@ describe("prism-tooltips.js — framework", function () {
         dom.window.document.body.innerHTML = "";
     });
 
-    it("injects a single #prism-tooltip overlay on init (idempotent)", () => {
+    it("injects a single #prism-tooltip overlay and #prism-companion on init (idempotent)", () => {
         mod.initPrismTooltips();
         mod.initPrismTooltips();
         const overlays = dom.window.document.querySelectorAll("#prism-tooltip");
-        assert.strictEqual(overlays.length, 1, "Exactly one overlay should be present");
+        assert.strictEqual(overlays.length, 1, "Exactly one tooltip overlay should be present");
         const overlay = overlays[0]!;
         assert.strictEqual(overlay.getAttribute("role"), "tooltip");
         assert.strictEqual(overlay.getAttribute("aria-hidden"), "true");
+
+        const companions = dom.window.document.querySelectorAll("#prism-companion");
+        assert.strictEqual(companions.length, 1, "Exactly one floating companion should be present");
     });
 
     it("registerTooltipById stores descriptor retrievable by tipId", () => {
@@ -86,12 +103,16 @@ describe("prism-tooltips.js — framework", function () {
         assert.strictEqual(stored.summary, "A test character");
     });
 
-    it("pushGuardianTip records the latest message per tipId", () => {
+    it("pushGuardianTip records the latest message per tipId and updates companion alert", () => {
         mod.initPrismTooltips();
         mod.pushGuardianTip({ tipId: "character:test", message: "guardian says hi" });
         const entry = mod.__TEST__.state.guardianTips.get("character:test");
         assert.ok(entry, "Guardian tip should be stored");
         assert.strictEqual(entry.message, "guardian says hi");
+
+        const alertState = mod.__TEST__.state.latestGuardianAlert;
+        assert.ok(alertState, "Companion should receive guardian alert");
+        assert.strictEqual(alertState.message, "guardian says hi");
     });
 
     it("primeServerTip seeds the server cache so descriptors can render server lines", () => {
@@ -129,7 +150,6 @@ describe("prism-tooltips.js — framework", function () {
         dom.window.document.body.appendChild(root);
         const count = mod.autoCoverContainer(root);
         assert.strictEqual(count, 4, "Should register 4 interactive elements");
-        // Verify a baseline title was placed on an element that lacked one.
         const btn = root.querySelector("button")!;
         assert.ok(btn.getAttribute("title"), "Button should gain a baseline title");
     });
@@ -156,5 +176,56 @@ describe("prism-tooltips.js — framework", function () {
         dom.window.document.body.appendChild(tab);
         const count = mod.registerTooltipsByTab("demo");
         assert.strictEqual(count, 2);
+    });
+
+    it("supports toggling master tooltipsEnabled state", () => {
+        mod.initPrismTooltips();
+        assert.strictEqual(mod.isTooltipsEnabled(), true, "Should be enabled by default");
+
+        mod.setTooltipsEnabled(false);
+        assert.strictEqual(mod.isTooltipsEnabled(), false, "Should be disabled after toggling off");
+
+        mod.setTooltipsEnabled(true);
+        assert.strictEqual(mod.isTooltipsEnabled(), true, "Should be re-enabled");
+    });
+
+    it("in-tooltip quick disable turns off tooltips and updates state", () => {
+        mod.initPrismTooltips();
+        assert.strictEqual(mod.isTooltipsEnabled(), true);
+
+        mod.__TEST__.triggerQuickDisable();
+        assert.strictEqual(mod.isTooltipsEnabled(), false, "Quick disable should toggle master state off");
+    });
+
+    it("applyTooltipRuntimeSettings updates variant, delay, visibility, and motion", () => {
+        mod.initPrismTooltips();
+        mod.applyTooltipRuntimeSettings({
+            tooltipsEnabled: true,
+            tooltipHoverDelayMs: 500,
+            tooltipHelperVariant: "signal-shard",
+            tooltipHelperVisible: true,
+            tooltipHelperMotionEnabled: false,
+        });
+
+        assert.strictEqual(mod.__TEST__.state.hoverDelayMs, 500);
+        assert.strictEqual(mod.__TEST__.state.helperVariant, "signal-shard");
+        assert.strictEqual(mod.__TEST__.state.helperMotionEnabled, false);
+
+        const companion = dom.window.document.getElementById("prism-companion");
+        assert.ok(companion, "Companion should exist");
+        assert.ok(companion.className.includes("prism-companion-signal-shard"), "Companion should have signal-shard class");
+    });
+
+    it("allows switching between all persona variants", () => {
+        mod.initPrismTooltips();
+        const variants = mod.getTooltipHelperVariants();
+        assert.strictEqual(variants.length, 5);
+
+        for (const v of variants) {
+            mod.applyTooltipRuntimeSettings({ tooltipHelperVariant: v.value });
+            assert.strictEqual(mod.__TEST__.state.helperVariant, v.value);
+            const companion = dom.window.document.getElementById("prism-companion");
+            assert.ok(companion!.className.includes(`prism-companion-${v.value}`));
+        }
     });
 });

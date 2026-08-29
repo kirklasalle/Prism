@@ -2,6 +2,36 @@
 
 All notable changes to the PRISM project are documented in this file.
 
+## v0.24.0 — 2026-08-29 — Model Capability Matrix Modernization, xAI (Grok) Integration & August 2026 Frontier Models
+
+Comprehensive audit and modernization of the PRISM Model Capability Matrix (`src/core/operator/model-capability-matrix.ts`), registering ~30 newly released frontier model families across Google, OpenAI, Anthropic, xAI, Meta, DeepSeek, Mistral, Qwen, and Cohere. Builds full first-class provider routing and authentication for xAI (Grok), updates Spectrum Refraction cognitive kinship matrices, establishes structured lifecycle deprecation tracking, and updates the token pricing catalog to current August 2026 rates.
+
+### Added
+
+- **Google Gemini Frontier Additions (`src/core/operator/model-capability-matrix.ts`)**: Added `gemini-3.7-flash` (Tier 5 frontier workhorse for agentic coding and reasoning, 2M context, 32K output), `gemini-3.6-flash` (Tier 4, 2M context), `gemini-omni-1.1-flash` (Tier 4, video generation and multimodal reasoning), and `gemini-3.5-transcribe` (Tier 2, dedicated speech-to-text STT modality).
+- **OpenAI GPT-5.6 Family (`src/core/operator/model-capability-matrix.ts`)**: Added `gpt-5.6-sol` (Tier 5 flagship, 256K context, 32K output, agentic/computer-use), `gpt-5.6-terra` (Tier 4 balanced, 256K context), `gpt-5.6-luna` (Tier 3 fast automation, 128K context), and `o3-pro` (Tier 5 reasoning with lifecycle migration metadata).
+- **Anthropic Claude 5-Series (`src/core/operator/model-capability-matrix.ts`)**: Added `claude-fable-5` (Tier 5 top-tier reasoning), `claude-opus-5` (Tier 5 agentic coding flagship, 1M context), `claude-sonnet-5` (Tier 4 balanced, 1M context), and `claude-mythos-5` (Tier 5 benchmark/research tier with documented access note).
+- **xAI (Grok) First-Class Provider Integration (`src/core/operator/llm-provider-manager.ts`, `src/core/operator/routes/settings-handler.ts`, `src/core/operator/public/tab-settings.js`)**: Integrated `xai` into `PrismLlmProviderId` and `ALL_PROVIDER_IDS`, added endpoint configuration (`https://api.x.ai/v1`) with `XAI_API_KEY` / `PRISM_XAI_API_KEY` resolution, and registered default models (`grok-4.6`, `grok-4.3`, `grok-4.1-fast`, `grok-2`). Added xAI provider metadata, settings UI cards, and setup wizard support.
+- **xAI Grok & Cohere Prompt Strategies (`src/core/operator/model-capability-matrix.ts`)**: Added explicit Markdown structure, configurable reasoning effort levels, and prompt token budget guidelines for Grok and Cohere Command families in `PROVIDER_PROMPT_STRATEGIES`.
+- **Meta, DeepSeek, Mistral, Qwen, & Cohere Frontier Models (`src/core/operator/model-capability-matrix.ts`)**:
+  - **Meta**: `llama-4-scout` (10M token context window, MoE multimodal), `llama-4-maverick` (128-expert MoE flagship), `muse-spark` (Tier 5 reasoning), `muse-glimmer` (Tier 3 open weights).
+  - **DeepSeek**: `deepseek-v4-pro` (1.6T MoE, 1M context, Tier 5), `deepseek-v4-flash` (284B MoE, 1M context, Tier 4).
+  - **Mistral**: `mistral-large-3` (675B MoE, Tier 5), `codestral` (256K context, Tier 4), `magistral` (reasoning, Tier 4), `pixtral-large` (multimodal, Tier 4).
+  - **Qwen**: `qwen3.8-max` (2.4T MoE, Tier 5), `qwen3.8-flash-next` (Gated DeltaNet hybrid, Tier 4), `qwen-2.5-coder-32b` (Tier 4).
+  - **Cohere**: `command-a-plus` (218B MoE, Tier 4), `command-r-plus` (Tier 4), `north-mini-code` (Tier 3).
+  - **OpenRouter**: Added `xai/grok-4.6`, `meta-llama/llama-4-scout`, `meta-llama/llama-4-maverick`, `cohere/command-a-plus`, `qwen/qwen3.8-max`, and `deepseek/deepseek-v4`.
+- **Spectrum Refraction Kinship Scoring Expansion (`src/core/operator/model-capability-matrix.ts`)**: Updated `KINSHIP_MATRIX` and `getModelFamily()` to compute cognitive isolation scores across `grok`, `cohere`, `muse`, and `mistral` model families, preventing cognitive homogenization during dual-hemisphere operations.
+- **August 2026 Model Matrix Test Suite (`tests/model-capability-matrix-aug2026.test.ts`)**: Added comprehensive unit test coverage (25 tests) verifying profile resolution, prompt strategy assignment, deprecation status, kinship scoring, and Spectrum Refraction triad isolation across all newly added models.
+- **Model Capability Matrix Documentation (`docs/MODEL_CAPABILITY_MATRIX_AUDIT_AUG_2026.md`, `docs/LLM_MODEL_MATRIX.md`)**: Published complete audit findings, architectural rationale, and rate limit / capability tables.
+
+### Changed
+
+- **Speculative Model Removal (`src/core/operator/model-capability-matrix.ts`)**: Surgically removed non-existent speculative entries (`gpt-5.5`, `gpt-5.5-pro`) to maintain 100% factual accuracy in the registry.
+- **Structured Deprecation Annotations (`src/core/operator/model-capability-matrix.ts`)**: Applied lifecycle deprecation metadata (`deprecated: true`, `deprecatedAt`, `sunsetDate`, `successor`, `deprecationReason`) to Claude 4-series (`claude-opus-4-8`, `claude-sonnet-4-6`, `claude-sonnet-4`, `claude-opus-4`), pre-4 Claude legacy models (`claude-3-5-sonnet`, `claude-3-7-sonnet`, `claude-3-5-haiku`), GPT-4o series (`gpt-4o`, `gpt-4o-mini`, `gpt-4o-audio`, `gpt-4o-realtime`), legacy o-series (`o1`, `o1-mini`, `o3`, `o3-mini`, `o4-mini`), and GPT-3.5/4 series.
+- **Context Window & Spec Refinements**: Corrected `deepseek-chat` and `deepseek-reasoner` to 128K context window and updated token budgets.
+- **Token Pricing Catalog Update (`src/core/operator/usage-pricing-catalog.ts`)**: Updated `PRICING_CATALOG` with verified August 2026 pricing rates across OpenAI (GPT-5.6 family), Anthropic (Claude 5-series), Google (Gemini 3.7 Flash), xAI (Grok 4.x), DeepSeek (V4), Mistral, and Cohere.
+- **Package Version**: Bumped `prism-core` to `v0.24.0`.
+
 ## v0.23.1 — 2026-08-14 — Master Critical Audit, Character Accountability Control (CAC) & Spectrum 2.0 Hardening
 
 Delivers the approved Master Critical Technical, Security, UI/UX & Market Audit package, formalizes the Character Accountability Control (CAC) Main Agent and Guardian dual-agent architecture, implements automated CAC compliance certificate export with SHA-256 verification proofs, adds Windows CAC smart card reader test fixtures, and lands the Spectrum Refraction 2.0 consensus, discrepancy reconciliation, and cognitive economics dynamic budget governor engines.

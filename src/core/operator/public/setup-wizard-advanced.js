@@ -3,7 +3,7 @@
 const TOTAL_STEPS = 9;
 let currentStep = 1;
 
-const PROVIDERS_NEEDING_KEY = ['custom', 'openai', 'anthropic', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
+const PROVIDERS_NEEDING_KEY = ['custom', 'openai', 'anthropic', 'xai', 'google', 'mistral', 'cohere', 'groq', 'together', 'deepseek', 'perplexity', 'fireworks', 'openrouter'];
 
 const ROUTING_ROLES = [
   'chat', 'code-generation', 'reasoning', 'tool-selection',

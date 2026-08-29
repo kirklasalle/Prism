@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdotool \
     wmctrl \
     x11-utils \
-    xwd \
+    x11-apps \
     scrot \
     ffmpeg \
     python3 \

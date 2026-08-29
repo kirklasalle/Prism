@@ -358,6 +358,8 @@ export class DashboardService {
         autoRunApprovedTier2: true,
         llreEnabled: true,
         verboseLogging: false,
+        tooltipsEnabled: true,
+        tooltipHoverDelayMs: 250,
         tooltipHelperVariant: "glass-prism",
         tooltipHelperVisible: true,
         tooltipHelperMotionEnabled: true,

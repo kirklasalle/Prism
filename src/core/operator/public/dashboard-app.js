@@ -367,48 +367,55 @@ async function hideDisabledAddonTabs() {
   }
 }
 
-async function setActiveTab(tabId) {
-  if (!tabs.some(tab => tab.id === tabId)) {
-    return;
-  }
-  dashboardLog(tabId, 'tab.switch', 'Switched to ' + tabId + ' tab');
-  // Stop any tab-specific auto-refresh timers before switching
-  stopSloAutoRefresh();
-  stopPluginHealthPolling();
-  if (state.computerPollInterval && tabId !== 'computer') {
-    clearInterval(state.computerPollInterval);
-    state.computerPollInterval = null;
-  }
-  if (state.framebufferPollInterval && tabId !== 'computer') {
-    clearInterval(state.framebufferPollInterval);
-    state.framebufferPollInterval = null;
-  }
-  if (state.settingsPollInterval && tabId !== 'settings') {
-    clearInterval(state.settingsPollInterval);
-    state.settingsPollInterval = null;
-  }
-  if (tabId !== 'browser') {
-    cleanupBrowserTab();
+export function setLayoutMode(mode) {
+  if (mode !== 'single' && mode !== 'split' && mode !== 'docked') return;
+  state.layoutMode = mode;
+  try { localStorage.setItem('prism-layout-mode', mode); } catch(_) {}
+
+  const viewport = document.getElementById('workspace-viewport');
+  if (viewport) {
+    viewport.className = 'workspace-viewport mode-' + mode;
   }
 
-  // Load the tab HTML dynamically if not loaded
-  try {
-    await loadTabHtml(tabId);
-  } catch (err) {
-    console.error("Failed to load tab HTML", err);
+  // Ensure chat is loaded and wired
+  loadTabHtml('chat').then(() => wireComposer()).catch(() => {});
+
+  // If in split or docked mode, ensure the canvas tab is loaded
+  const secondaryTab = state.splitCanvasTab || 'workspace';
+  loadTabHtml(secondaryTab).then(() => {
+    initTabModule(secondaryTab);
+  }).catch(() => {});
+
+  if (mode === 'docked') {
+    const bottomTab = state.dockedBottomTab || 'telemetry';
+    loadTabHtml(bottomTab).then(() => {
+      initTabModule(bottomTab);
+    }).catch(() => {});
   }
 
-  state.activeTab = tabId;
-  // Track tab visit counts for shell tooltip telemetry providers (no-op if state already has it).
-  if (!state.tabActivity) state.tabActivity = {};
-  state.tabActivity[tabId] = (state.tabActivity[tabId] || 0) + 1;
-  render(); // make the panel visible immediately while data loads
+  render();
+}
+window.setLayoutMode = setLayoutMode;
+
+export function openSplitCanvas(tabId, subView) {
+  if (!tabId) return;
+  state.splitCanvasTab = tabId;
+  try { localStorage.setItem('prism-split-tab', tabId); } catch(_) {}
+
+  if (state.layoutMode === 'single') {
+    state.layoutMode = 'split';
+    try { localStorage.setItem('prism-layout-mode', 'split'); } catch(_) {}
+  }
+
+  setActiveTab(tabId);
+}
+window.openSplitCanvas = openSplitCanvas;
+
+async function initTabModule(tabId) {
   if (tabId === 'chat') {
     wireComposer();
   }
   if (tabId === 'settings') {
-    // Re-fetch model profiles and routing state on every settings visit so
-    // the matrix and routing panels reflect any background changes.
     fetchModelProfiles().catch(function () { }).then(function () {
       safeRenderStep('capabilityMatrix', renderCapabilityMatrix);
       safeRenderStep('modelRouting', renderModelRouting);
@@ -445,9 +452,7 @@ async function setActiveTab(tabId) {
   if (tabId === 'robotics') {
     try { await initRoboticsTab(); } catch (e) { console.error('[tab] robotics init:', e); }
   }
-
   if (tabId === 'tools') {
-    // Lazy-load diagnostics report on first visit
     if (!state.diagnosticsReport) {
       loadDiagnosticsReport().then(function () {
         safeRenderStep('diagnosticsPanel', renderDiagnosticsPanel);
@@ -520,7 +525,6 @@ async function setActiveTab(tabId) {
     }
   }
   if (tabId === 'logs') {
-    /* Seed log panel from server if empty */
     if (state.logEntries.length === 0) {
       request('/api/logs?limit=500').then(function (data) {
         if (Array.isArray(data)) {
@@ -529,7 +533,6 @@ async function setActiveTab(tabId) {
         }
       }).catch(function () { /* best-effort */ });
     }
-    // Phase A3B: Hydrate unified telemetry + identity on Logs tab activation
     hydrateUnifiedTelemetry().catch(function (e) { console.error('[logs] telemetry hydrate:', e); });
     refreshIdentityPanel().catch(function (e) { console.error('[logs] identity load:', e); });
     refreshTabSessions().catch(function (e) { console.error('[logs] tab sessions load:', e); });
@@ -546,9 +549,57 @@ async function setActiveTab(tabId) {
     setTelemetryWindow(state.telemetryWindow);
     refreshUsagePanel().catch(() => null);
     startSloAutoRefresh();
-    return; // setTelemetryWindow calls render() — skip double render
   }
-  render();
+}
+
+async function setActiveTab(tabId) {
+  if (!tabs.some(tab => tab.id === tabId)) {
+    return;
+  }
+  dashboardLog(tabId, 'tab.switch', 'Switched to ' + tabId + ' tab');
+  
+  // Stop tab-specific auto-refresh timers if switching away from them
+  if (tabId !== 'computer') {
+    if (state.computerPollInterval) {
+      clearInterval(state.computerPollInterval);
+      state.computerPollInterval = null;
+    }
+    if (state.framebufferPollInterval) {
+      clearInterval(state.framebufferPollInterval);
+      state.framebufferPollInterval = null;
+    }
+  }
+  if (tabId !== 'settings' && state.settingsPollInterval) {
+    clearInterval(state.settingsPollInterval);
+    state.settingsPollInterval = null;
+  }
+  if (tabId !== 'browser' && state.layoutMode === 'single') {
+    cleanupBrowserTab();
+  }
+
+  // Load the tab HTML dynamically if not loaded
+  try {
+    await loadTabHtml(tabId);
+  } catch (err) {
+    console.error("Failed to load tab HTML", err);
+  }
+
+  const isSplitOrDocked = state.layoutMode === 'split' || state.layoutMode === 'docked';
+  if (isSplitOrDocked && tabId !== 'chat') {
+    state.splitCanvasTab = tabId;
+    try { localStorage.setItem('prism-split-tab', tabId); } catch(_) {}
+    // Ensure chat is also loaded on the left in split mode
+    loadTabHtml('chat').then(() => wireComposer()).catch(() => {});
+  } else {
+    state.activeTab = tabId;
+  }
+
+  // Track tab visit counts for shell tooltip telemetry
+  if (!state.tabActivity) state.tabActivity = {};
+  state.tabActivity[tabId] = (state.tabActivity[tabId] || 0) + 1;
+
+  render(); // make the panel visible immediately while data loads
+  await initTabModule(tabId);
 }
 
 /**
@@ -578,8 +629,11 @@ function deriveGuardianTooltipHint(data) {
   const message = String(data.message || data.detail || data.narration || data.operation || data.action || data.type || '').trim();
   if (!message) return null;
 
-  if (type === 'guardian_event' || bag.includes('guardian')) {
+  if (type === 'guardian_event' || bag.includes('guardian') || bag.includes('policy') || bag.includes('watchpoint')) {
     return { tipId: 'agentic:guardian', message };
+  }
+  if (bag.includes('spectrum') || bag.includes('routing') || bag.includes('multi-model')) {
+    return { tipId: 'settings:model-routing', message };
   }
   if (type.includes('diagnostics') || bag.includes('diagnostic')) {
     return { tipId: 'tools:diagnostics', message };
@@ -938,14 +992,34 @@ function renderTabs() {
     return;
   }
 
-  const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-id]'));
-  if (buttons.length !== tabs.length) {
-    console.debug('[dashboard-render] tabs', 'found ' + buttons.length + ' buttons for ' + tabs.length + ' registered tabs');
+  const layoutMode = state.layoutMode || 'split';
+  const workspaceViewport = document.getElementById('workspace-viewport');
+  if (workspaceViewport) {
+    workspaceViewport.className = 'workspace-viewport mode-' + layoutMode;
+    if (state.splitRatio) {
+      workspaceViewport.style.setProperty('--split-left-flex', state.splitRatio);
+      workspaceViewport.style.setProperty('--split-right-flex', (100 - state.splitRatio));
+    }
   }
 
+  // Update layout mode buttons
+  const layoutButtons = document.querySelectorAll('.layout-mode-btn');
+  layoutButtons.forEach(btn => {
+    const mode = btn.getAttribute('data-mode') || (btn.id.replace('layout-btn-', ''));
+    btn.classList.toggle('active', mode === layoutMode);
+  });
+
+  const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-id]'));
   buttons.forEach(button => {
     const tabId = button.dataset.tabId;
-    const isActive = state.activeTab === tabId;
+    let isActive = false;
+    if (layoutMode === 'single') {
+      isActive = state.activeTab === tabId;
+    } else if (layoutMode === 'split') {
+      isActive = (tabId === 'chat') || (tabId === (state.splitCanvasTab || 'workspace'));
+    } else if (layoutMode === 'docked') {
+      isActive = (tabId === 'chat') || (tabId === (state.splitCanvasTab || 'workspace')) || (tabId === (state.dockedBottomTab || 'telemetry'));
+    }
     button.classList.toggle('active', isActive);
     button.setAttribute('aria-selected', isActive ? 'true' : 'false');
     button.setAttribute('tabindex', isActive ? '0' : '-1');
@@ -956,9 +1030,27 @@ function renderTabs() {
     if (!panel) {
       return;
     }
-    const isActive = state.activeTab === tab.id;
-    panel.classList.toggle('active', isActive);
-    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+    if (layoutMode === 'single') {
+      const isActive = state.activeTab === tab.id;
+      panel.classList.toggle('active', isActive);
+      panel.classList.remove('canvas-active', 'canvas-docked-bottom');
+      panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+    } else if (layoutMode === 'split') {
+      const isChat = tab.id === 'chat';
+      const isCanvas = tab.id === (state.splitCanvasTab || 'workspace');
+      panel.classList.toggle('active', isChat);
+      panel.classList.toggle('canvas-active', isCanvas && !isChat);
+      panel.classList.remove('canvas-docked-bottom');
+      panel.setAttribute('aria-hidden', (isChat || isCanvas) ? 'false' : 'true');
+    } else if (layoutMode === 'docked') {
+      const isChat = tab.id === 'chat';
+      const isCanvas = tab.id === (state.splitCanvasTab || 'workspace');
+      const isDockedBottom = tab.id === (state.dockedBottomTab || 'telemetry');
+      panel.classList.toggle('active', isChat);
+      panel.classList.toggle('canvas-active', isCanvas && !isChat);
+      panel.classList.toggle('canvas-docked-bottom', isDockedBottom && !isChat && !isCanvas);
+      panel.setAttribute('aria-hidden', (isChat || isCanvas || isDockedBottom) ? 'false' : 'true');
+    }
   });
 
   if (document.body) {
